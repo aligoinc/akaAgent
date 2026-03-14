@@ -204,11 +204,21 @@ export class FlowRunner {
         let value = sourceOutput[source.sourceField]
         
         // Handle nested paths for JSON objects
-        if (source.sourcePath && value && typeof value === 'object') {
-          value = this.getNestedValue(value, source.sourcePath)
+        if (source.sourcePath) {
+          // If value is a string that looks like JSON, try to parse it before resolving path
+          if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
+            try { value = JSON.parse(value) } catch {}
+          }
+
+          if (value && typeof value === 'object') {
+            value = this.getNestedValue(value, source.sourcePath)
+          } else {
+            // Path was specified but value is not an object or couldn't be parsed
+            value = ''
+          }
         }
         
-        config[inputField] = value
+        config[inputField] = value ?? ''
       }
     }
 
@@ -271,9 +281,11 @@ export class FlowRunner {
   }
 
   private getNestedValue(obj: any, path: string): any {
+    if (!path || !path.trim()) return obj
     return path.split('.').reduce((acc, part) => {
-      if (acc && typeof acc === 'object' && part in acc) {
-        return acc[part]
+      const key = part.trim()
+      if (acc && typeof acc === 'object' && key in acc) {
+        return acc[key]
       }
       return undefined
     }, obj)

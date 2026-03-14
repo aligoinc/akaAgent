@@ -80,7 +80,7 @@ export class PlaywrightController {
         }
         case 'type': {
           const selector = input.selector as string
-          const text = input.text as string
+          const text = String(input.text ?? '')
           const delay = (input.delay as number) || 50
           if (input.clearFirst) {
             await page.fill(selector, '')
@@ -138,7 +138,7 @@ export class PlaywrightController {
           break
         }
         case 'setValue': {
-          await page.fill(input.selector as string, input.value as string)
+          await page.fill(input.selector as string, String(input.value ?? ''))
           output = { success: true }
           break
         }

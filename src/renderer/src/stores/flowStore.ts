@@ -90,33 +90,20 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   
   updateInputMapping: (nodeId, fieldName, mapping) => {
     set({
-      nodes: get().nodes.map(node =>
-        node.id === nodeId
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                inputMapping: {
-                  ...node.data.inputMapping,
-                  ...(mapping ? { [fieldName]: mapping } : {})
-                }
-              }
-            }
-          : node
-      )
-    })
-    
-    if (!mapping) {
-      // Remove field from mapping if null
-      set({
-        nodes: get().nodes.map(node => {
-          if (node.id !== nodeId) return node
-          const newMapping = { ...node.data.inputMapping }
+      nodes: get().nodes.map(node => {
+        if (node.id !== nodeId) return node
+        const newMapping = { ...(node.data.inputMapping || {}) }
+        if (mapping === null) {
           delete newMapping[fieldName]
-          return { ...node, data: { ...node.data, inputMapping: newMapping } }
-        })
+        } else {
+          newMapping[fieldName] = mapping
+        }
+        return {
+          ...node,
+          data: { ...node.data, inputMapping: newMapping }
+        }
       })
-    }
+    })
   },
 
   removeNode: (nodeId) => {
