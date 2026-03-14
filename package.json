@@ -1,0 +1,62 @@
+{
+  "name": "aka-biz-auto",
+  "version": "1.0.0",
+  "description": "Browser Automation Desktop App with Visual Flow Builder",
+  "main": "./out/main/index.js",
+  "author": "akaBiz",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "postinstall": "electron-builder install-app-deps",
+    "build:win": "npm run build && electron-builder --win --config",
+    "build:mac": "npm run build && electron-builder --mac --config"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "@xyflow/react": "^12.4.4",
+    "dotenv": "^17.3.1",
+    "lucide-react": "^0.469.0",
+    "playwright": "^1.58.2",
+    "uuid": "^11.1.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  },
+  "build": {
+    "appId": "com.akabiz.auto",
+    "productName": "akaBizAuto",
+    "directories": {
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "!node_modules"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.icns"
+    }
+  }
+}
