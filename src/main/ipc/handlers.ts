@@ -17,11 +17,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   // =========== BROWSER CONTROL ===========
-  ipcMain.handle(IPC_CHANNELS.BROWSER_LAUNCH, async (_, options?: { headless?: boolean }) => {
+  ipcMain.handle(IPC_CHANNELS.BROWSER_LAUNCH, async (_, options?: { headless?: boolean; profileName?: string }) => {
     if (!playwrightController) {
       playwrightController = new PlaywrightController()
     }
-    await playwrightController.launch(options?.headless ?? false)
+    await playwrightController.launch(options?.headless ?? false, options?.profileName ?? 'default')
     return { success: true }
   })
 

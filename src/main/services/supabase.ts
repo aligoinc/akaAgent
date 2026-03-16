@@ -70,6 +70,30 @@ export class SupabaseService {
   }
 
   async deleteFlow(flowId: string): Promise<void> {
+    // First get all runs for this flow
+    const { data: runs } = await this.client
+      .from('auto_runs')
+      .select('id')
+      .eq('flow_id', flowId)
+
+    // Delete run steps for each run
+    if (runs && runs.length > 0) {
+      const runIds = runs.map(r => r.id)
+      const { error: stepsError } = await this.client
+        .from('auto_run_steps')
+        .delete()
+        .in('run_id', runIds)
+      if (stepsError) console.error('Failed to delete run steps:', stepsError.message)
+
+      // Delete runs
+      const { error: runsError } = await this.client
+        .from('auto_runs')
+        .delete()
+        .eq('flow_id', flowId)
+      if (runsError) console.error('Failed to delete runs:', runsError.message)
+    }
+
+    // Finally delete the flow
     const { error } = await this.client
       .from('auto_flows')
       .delete()

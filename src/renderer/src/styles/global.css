@@ -600,6 +600,35 @@ body {
   stroke-width: 2.5 !important;
 }
 
+/* =========== LOOP NODE =========== */
+.flow-node.loop-node {
+  border-left: 3px solid var(--cat-control);
+  overflow: visible;
+}
+
+.loop-handle-labels {
+  display: flex;
+  justify-content: space-around;
+  padding: 4px 14px 8px;
+}
+
+.loop-handle-label-text {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+
+.loop-handle-body {
+  background: var(--accent-success) !important;
+  border-color: var(--accent-success) !important;
+}
+
+.loop-handle-done {
+  background: var(--accent-info) !important;
+  border-color: var(--accent-info) !important;
+}
+
 /* =========== CONFIG PANEL =========== */
 .config-panel {
   width: var(--config-panel-width);
@@ -609,6 +638,16 @@ body {
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 10;
+}
+
+.config-panel input,
+.config-panel textarea,
+.config-panel select {
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
 }
 
 .config-panel-header {
@@ -972,4 +1011,59 @@ body {
   padding: 16px;
   border-top: 1px solid var(--border-default);
   background: var(--bg-elevated);
+}
+
+/* =========== STEP DETAIL SECTIONS =========== */
+.step-detail-sections {
+  padding: 8px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-detail-section {
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+}
+
+.step-detail-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-info);
+  margin-bottom: 4px;
+}
+
+.step-json-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-json-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.step-json-key {
+  color: var(--cat-interaction);
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 60px;
+}
+
+.step-json-key::after {
+  content: ':';
+}
+
+.step-json-value {
+  color: var(--text-secondary);
+  word-break: break-all;
+  cursor: default;
 }

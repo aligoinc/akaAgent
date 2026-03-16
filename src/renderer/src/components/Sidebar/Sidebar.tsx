@@ -19,9 +19,10 @@ const categoryLabels: Record<ActionCategory, string> = {
 
 interface SidebarProps {
   onEditBlock?: (block: FlowData) => void
+  onDeleteFlow?: (flowId: string) => void
 }
 
-export default function Sidebar({ onEditBlock }: SidebarProps) {
+export default function Sidebar({ onEditBlock, onDeleteFlow }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'actions' | 'elements' | 'blocks'>('actions')
   const [search, setSearch] = useState('')
   const { elements, loadElements, deleteElement } = useElementStore()
@@ -233,32 +234,89 @@ export default function Sidebar({ onEditBlock }: SidebarProps) {
 
         {activeTab === 'blocks' && (
           <div className="sidebar-category">
+            {/* Workflows Section */}
             <div className="sidebar-category-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Workflows</span>
+            </div>
+            {filteredBlocks.filter((b: FlowData) => !b.isBlock).length === 0 ? (
+              <div className="empty-state" style={{ padding: '12px 0' }}><div className="empty-state-text">No workflows</div></div>
+            ) : (
+              filteredBlocks.filter((b: FlowData) => !b.isBlock).map(flow => (
+                <div key={flow.id} className="action-card element-card" onClick={() => onEditBlock?.(flow)} style={{ cursor: 'pointer' }}>
+                  <div className="action-card-icon navigation">
+                    <LucideIcons.Workflow size={15} />
+                  </div>
+                  <div className="action-card-info" style={{ flex: 1 }}>
+                    <div className="action-card-name">{flow.name}</div>
+                    <div className="action-card-desc">{flow.description || `${flow.nodes.length} nodes`}</div>
+                  </div>
+                  <button 
+                    className="btn-icon" 
+                    style={{ opacity: 0.5, padding: 4 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onEditBlock?.(flow)
+                    }}
+                    title="Open workflow"
+                  >
+                    <LucideIcons.ExternalLink size={12} />
+                  </button>
+                  <button 
+                    className="btn-icon" 
+                    style={{ opacity: 0.5, padding: 4 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm(`Delete workflow "${flow.name}"?`)) onDeleteFlow?.(flow.id)
+                    }}
+                    title="Delete workflow"
+                  >
+                    <Trash2 size={12} color="var(--danger)" />
+                  </button>
+                </div>
+              ))
+            )}
+
+            {/* Blocks Section */}
+            <div className="sidebar-category-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
               <span>Reusable Blocks</span>
             </div>
-            {filteredBlocks.map(block => (
-              <div key={block.id} className="action-card element-card" draggable onDragStart={(e) => onDragStartBlock(e, block)}>
-                <div className="action-card-icon block">
-                  <LucideIcons.Package size={15} />
+            {filteredBlocks.filter((b: FlowData) => b.isBlock).length === 0 ? (
+              <div className="empty-state" style={{ padding: '12px 0' }}><div className="empty-state-text">No blocks</div></div>
+            ) : (
+              filteredBlocks.filter((b: FlowData) => b.isBlock).map(block => (
+                <div key={block.id} className="action-card element-card" draggable onDragStart={(e) => onDragStartBlock(e, block)}>
+                  <div className="action-card-icon block">
+                    <LucideIcons.Package size={15} />
+                  </div>
+                  <div className="action-card-info" style={{ flex: 1 }}>
+                    <div className="action-card-name">{block.name}</div>
+                    <div className="action-card-desc">{block.description || `${block.nodes.length} nodes`}</div>
+                  </div>
+                  <button 
+                    className="btn-icon" 
+                    style={{ opacity: 0.5, padding: 4 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onEditBlock?.(block)
+                    }}
+                    title="Edit block flow"
+                  >
+                    <LucideIcons.Edit3 size={12} />
+                  </button>
+                  <button 
+                    className="btn-icon" 
+                    style={{ opacity: 0.5, padding: 4 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm(`Delete block "${block.name}"?`)) onDeleteFlow?.(block.id)
+                    }}
+                    title="Delete block"
+                  >
+                    <Trash2 size={12} color="var(--danger)" />
+                  </button>
                 </div>
-                <div className="action-card-info" style={{ flex: 1 }}>
-                  <div className="action-card-name">{block.name}</div>
-                  <div className="action-card-desc">{block.description || `${block.nodes.length} nodes`}</div>
-                </div>
-                <button 
-                  className="btn-icon" 
-                  style={{ opacity: 0.5, padding: 4 }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onEditBlock?.(block)
-                  }}
-                  title="Edit block flow"
-                >
-                  <LucideIcons.Edit3 size={12} />
-                </button>
-              </div>
-            ))}
-            {filteredBlocks.length === 0 && <div className="empty-state"><div className="empty-state-text">No reusable blocks found</div></div>}
+              ))
+            )}
           </div>
         )}
       </div>

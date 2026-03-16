@@ -1,26 +1,67 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright'
 import { ActionResult, ActionType } from '../../shared/types'
+import { app } from 'electron'
+import { join } from 'path'
+import { mkdirSync, existsSync, unlinkSync } from 'fs'
 
 export class PlaywrightController {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
   private page: Page | null = null
+  private launching: boolean = false
 
-  async launch(headless: boolean = false): Promise<void> {
-    // Use system-installed Chromium or download path
-    this.browser = await chromium.launch({
-      headless,
-      args: ['--start-maximized']
-    })
-    this.context = await this.browser.newContext({
-      viewport: null
-    })
-    this.page = await this.context.newPage()
+  private cleanProfileLocks(profileDir: string): void {
+    // Remove stale lock files from previous crashed sessions
+    const lockFiles = ['SingletonLock', 'SingletonSocket', 'SingletonCookie']
+    for (const lockFile of lockFiles) {
+      const lockPath = join(profileDir, lockFile)
+      try {
+        if (existsSync(lockPath)) unlinkSync(lockPath)
+      } catch {
+        // Ignore errors - file may be in use
+      }
+    }
+  }
+
+  async launch(headless: boolean = false, profileName: string = 'default'): Promise<void> {
+    if (this.launching) return
+    this.launching = true
+
+    try {
+      // Close existing context if any
+      if (this.context) {
+        try { await this.context.close() } catch {}
+        this.context = null
+        this.page = null
+      }
+
+      // Create persistent profile directory
+      const profileDir = join(app.getPath('userData'), 'browser-profiles', profileName)
+      mkdirSync(profileDir, { recursive: true })
+      this.cleanProfileLocks(profileDir)
+
+      // Use persistent context to save cookies, localStorage, sessions
+      this.context = await chromium.launchPersistentContext(profileDir, {
+        headless,
+        args: ['--start-maximized', '--no-sandbox'],
+        viewport: null
+      })
+
+      // Listen for context close (e.g. user closes all browser windows)
+      this.context.on('close', () => {
+        this.context = null
+        this.page = null
+      })
+
+      this.page = this.context.pages()[0] || await this.context.newPage()
+    } finally {
+      this.launching = false
+    }
   }
 
   async close(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close()
+    if (this.context) {
+      try { await this.context.close() } catch {}
       this.browser = null
       this.context = null
       this.page = null
@@ -28,7 +69,12 @@ export class PlaywrightController {
   }
 
   isConnected(): boolean {
-    return this.browser !== null && this.browser.isConnected()
+    if (!this.context || !this.page) return false
+    try {
+      return !this.page.isClosed()
+    } catch {
+      return false
+    }
   }
 
   getPage(): Page {

@@ -13,6 +13,9 @@ export class FlowRunner {
   private cancelled = false
   private nodeOutputs: Map<string, Record<string, unknown>> = new Map()
   private elementMap: Map<string, string> = new Map()
+  private edges: FlowEdgeSerialized[] = []
+  private nodeMap: Map<string, FlowNodeSerialized> = new Map()
+  private loopBodyNodeIds: Set<string> = new Set()
 
   constructor(controller: PlaywrightController, supabase: SupabaseService, onProgress: ProgressCallback) {
     this.controller = controller
@@ -28,6 +31,9 @@ export class FlowRunner {
     this.cancelled = false
     this.nodeOutputs.clear()
     this.elementMap.clear()
+    this.loopBodyNodeIds.clear()
+    this.edges = flowData.edges
+    this.nodeMap = new Map(flowData.nodes.map(n => [n.id, n]))
 
     // Pre-load elements to resolve XPaths
     try {
@@ -57,6 +63,16 @@ export class FlowRunner {
 
     const blockOutputs: Record<string, unknown> = {}
 
+    // Pre-scan: identify all loop body nodes so we can skip them in the main execution
+    for (const node of flowData.nodes) {
+      if (node.data.actionType === 'loop') {
+        const bodyNodes = this.collectLoopBody(node.id)
+        for (const id of bodyNodes) {
+          this.loopBodyNodeIds.add(id)
+        }
+      }
+    }
+
     try {
       // Topological sort of nodes based on edges
       const sortedNodes = this.topologicalSort(flowData.nodes, flowData.edges)
@@ -67,8 +83,22 @@ export class FlowRunner {
           break
         }
 
-        // Skip control flow nodes for now (Phase 4+)
-        if (['ifElse', 'loop', 'switch'].includes(node.data.actionType)) {
+        // Skip nodes that belong to a loop body (they are executed by the loop itself)
+        if (this.loopBodyNodeIds.has(node.id)) {
+          continue
+        }
+
+        // Skip ifElse and switch for now (Phase 4+)
+        if (['ifElse', 'switch'].includes(node.data.actionType)) {
+          continue
+        }
+
+        // Handle loop execution
+        if (node.data.actionType === 'loop') {
+          const loopResult = await this.executeLoop(node, flowData, run, blockOutputs)
+          if (!loopResult) {
+            console.warn(`Loop node ${node.id} failed. Skipping...`)
+          }
           continue
         }
 
@@ -156,11 +186,9 @@ export class FlowRunner {
           console.warn('Failed to insert run step log:', err)
         }
 
-        // Stop on error (configurable later)
+        // Skip on error: log and continue to next action
         if (!result.success) {
-          run.status = 'failed'
-          run.error = result.error
-          break
+          console.warn(`Action "${node.data.actionType}" failed on node ${node.id}: ${result.error}. Skipping...`)
         }
       }
 
@@ -191,6 +219,317 @@ export class FlowRunner {
     }
 
     return run
+  }
+
+  /**
+   * Collect all nodes in the loop body (connected from the loop node's `loop-body` handle).
+   * Stops when it encounters a node that is connected to the loop's `loop-done` handle.
+   */
+  private collectLoopBody(loopNodeId: string): string[] {
+    // Find nodes connected from the `loop-done` handle (these are NOT part of loop body)
+    const doneTargetIds = new Set<string>()
+    for (const edge of this.edges) {
+      if (edge.source === loopNodeId && edge.sourceHandle === 'loop-done') {
+        doneTargetIds.add(edge.target)
+      }
+    }
+
+    // BFS from `loop-body` handle edges
+    const bodyNodeIds: string[] = []
+    const visited = new Set<string>()
+    const queue: string[] = []
+
+    for (const edge of this.edges) {
+      if (edge.source === loopNodeId && edge.sourceHandle === 'loop-body') {
+        if (!doneTargetIds.has(edge.target)) {
+          queue.push(edge.target)
+        }
+      }
+    }
+
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!
+      if (visited.has(nodeId) || doneTargetIds.has(nodeId)) continue
+      visited.add(nodeId)
+      bodyNodeIds.push(nodeId)
+
+      // Follow downstream edges from this node
+      for (const edge of this.edges) {
+        if (edge.source === nodeId && !visited.has(edge.target) && !doneTargetIds.has(edge.target)) {
+          queue.push(edge.target)
+        }
+      }
+    }
+
+    return bodyNodeIds
+  }
+
+  /**
+   * Execute a loop node: iterate over items, count, or while condition,
+   * and execute the loop body nodes for each iteration.
+   */
+  private async executeLoop(
+    loopNode: FlowNodeSerialized,
+    flowData: FlowData,
+    run: ExecutionRun,
+    blockOutputs: Record<string, unknown>
+  ): Promise<boolean> {
+    const resolvedInput = this.resolveInputs(loopNode)
+    const loopType = String(resolvedInput.loopType || 'count')
+
+    // Build loop items based on type
+    let items: unknown[] = []
+
+    if (loopType === 'forEach') {
+      let rawItems = resolvedInput.items
+      // Parse JSON string if needed
+      if (typeof rawItems === 'string') {
+        try { rawItems = JSON.parse(rawItems) } catch {}
+      }
+      if (Array.isArray(rawItems)) {
+        items = rawItems
+      } else {
+        // Not a valid array
+        const step: ExecutionStep = {
+          nodeId: loopNode.id,
+          actionType: 'loop',
+          status: 'error',
+          input: resolvedInput,
+          output: {},
+          error: `Loop items is not an array. Got: ${typeof rawItems}`,
+          executedAt: new Date().toISOString()
+        }
+        this.onProgress({ ...step })
+        run.steps.push(step)
+        run.status = 'failed'
+        run.error = step.error
+        return false
+      }
+    } else if (loopType === 'count') {
+      const count = Number(resolvedInput.count) || 0
+      items = Array.from({ length: count }, (_, i) => i)
+    }
+    // 'while' is handled differently below
+
+    // Emit loop start step
+    const loopStep: ExecutionStep = {
+      nodeId: loopNode.id,
+      actionType: 'loop',
+      status: 'running',
+      input: resolvedInput,
+      output: { totalItems: items.length },
+      executedAt: new Date().toISOString()
+    }
+    this.onProgress({ ...loopStep })
+
+    // Collect loop body node IDs in topological order
+    const bodyNodeIds = this.collectLoopBody(loopNode.id)
+    const allNodes = Array.from(this.nodeMap.values())
+    const bodyNodes = this.topologicalSort(
+      allNodes.filter(n => bodyNodeIds.includes(n.id)),
+      this.edges.filter(e => bodyNodeIds.includes(e.source) && bodyNodeIds.includes(e.target))
+    )
+
+    // Execute iterations
+    if (loopType === 'while') {
+      // While loop
+      let index = 0
+      const maxIterations = 10000 // Safety limit
+      while (index < maxIterations) {
+        if (this.cancelled) {
+          run.status = 'cancelled'
+          return false
+        }
+
+        // Evaluate condition
+        const condition = String(resolvedInput.condition || 'false')
+        const condResult = this.evaluateCondition(condition)
+        if (!condResult) break
+
+        // Set loop output for this iteration
+        this.nodeOutputs.set(loopNode.id, { index, item: index, completed: false })
+
+        const success = await this.executeLoopBodyNodes(bodyNodes, loopNode, flowData, run, blockOutputs)
+        if (!success) return false
+
+        index++
+      }
+
+      this.nodeOutputs.set(loopNode.id, { index: index - 1, item: index - 1, completed: true })
+    } else {
+      // forEach and count loops
+      for (let i = 0; i < items.length; i++) {
+        if (this.cancelled) {
+          run.status = 'cancelled'
+          return false
+        }
+
+        const item = items[i]
+
+        // Set loop output for this iteration (child nodes can map from loop node's output)
+        this.nodeOutputs.set(loopNode.id, { index: i, item, completed: false })
+
+        const success = await this.executeLoopBodyNodes(bodyNodes, loopNode, flowData, run, blockOutputs)
+        if (!success) return false
+      }
+
+      const lastIndex = items.length > 0 ? items.length - 1 : 0
+      this.nodeOutputs.set(loopNode.id, {
+        index: lastIndex,
+        item: items.length > 0 ? items[lastIndex] : null,
+        completed: true
+      })
+    }
+
+    // Mark loop step as success
+    loopStep.status = 'success'
+    loopStep.output = this.nodeOutputs.get(loopNode.id) || {}
+    this.onProgress({ ...loopStep })
+    run.steps.push(loopStep)
+
+    try {
+      await this.supabase.createRunStep(run.id, loopStep)
+    } catch (err) {
+      console.warn('Failed to insert loop step log:', err)
+    }
+
+    return true
+  }
+
+  /**
+   * Execute all nodes in the loop body for a single iteration.
+   */
+  private async executeLoopBodyNodes(
+    bodyNodes: FlowNodeSerialized[],
+    loopNode: FlowNodeSerialized,
+    flowData: FlowData,
+    run: ExecutionRun,
+    blockOutputs: Record<string, unknown>
+  ): Promise<boolean> {
+    for (const bodyNode of bodyNodes) {
+      if (this.cancelled) {
+        run.status = 'cancelled'
+        return false
+      }
+
+      // Nested loops
+      if (bodyNode.data.actionType === 'loop') {
+        const success = await this.executeLoop(bodyNode, flowData, run, blockOutputs)
+        if (!success) return false
+        continue
+      }
+
+      // Skip ifElse, switch in loop body too
+      if (['ifElse', 'switch'].includes(bodyNode.data.actionType)) {
+        continue
+      }
+
+      const step: ExecutionStep = {
+        nodeId: bodyNode.id,
+        actionType: bodyNode.data.actionType,
+        status: 'running',
+        input: {},
+        output: {},
+        executedAt: new Date().toISOString()
+      }
+      this.onProgress({ ...step })
+
+      const resolvedInput = this.resolveInputs(bodyNode)
+      step.input = resolvedInput
+
+      let result: { success: boolean; output: Record<string, unknown>; error?: string; durationMs?: number; screenshotBase64?: string }
+
+      if (bodyNode.data.actionType === 'block') {
+        const blockId = String(resolvedInput.blockId)
+        const blockFlow = await this.supabase.loadFlow(blockId)
+        if (!blockFlow) {
+          result = { success: false, output: {}, error: 'Block not found in database', durationMs: 0 }
+        } else {
+          blockFlow.variables = resolvedInput
+          const subRunner = new FlowRunner(this.controller, this.supabase, () => {})
+          const startT = Date.now()
+          const subRun = await subRunner.run(blockFlow)
+          const durationMs = Date.now() - startT
+          if (subRun.status === 'completed') {
+            result = { success: true, output: subRun.output, durationMs }
+          } else {
+            result = { success: false, output: subRun.output, error: subRun.error || 'Block execution failed', durationMs }
+          }
+        }
+      } else if (bodyNode.data.actionType === 'blockInput') {
+        const fieldName = String(bodyNode.data.config.fieldName || 'input')
+        const defaultValue = bodyNode.data.config.defaultValue
+        let val = flowData.variables?.[fieldName] ?? defaultValue
+        if (typeof val === 'string' && (val.startsWith('{') || val.startsWith('['))) {
+          try { val = JSON.parse(val) } catch {}
+        }
+        result = { success: true, output: { value: val }, durationMs: 0 }
+      } else if (bodyNode.data.actionType === 'blockOutput') {
+        const val = resolvedInput.value
+        const fieldName = String(bodyNode.data.config.fieldName || 'output')
+        blockOutputs[fieldName] = val
+        result = { success: true, output: { [fieldName]: val }, durationMs: 0 }
+      } else {
+        result = await this.controller.executeAction(
+          bodyNode.data.actionType,
+          resolvedInput
+        )
+      }
+
+      step.output = result.output
+      step.durationMs = result.durationMs
+      step.screenshotUrl = result.screenshotBase64
+        ? `data:image/png;base64,${result.screenshotBase64}`
+        : undefined
+
+      if (result.success) {
+        step.status = 'success'
+        this.nodeOutputs.set(bodyNode.id, result.output)
+      } else {
+        step.status = 'error'
+        step.error = result.error
+      }
+
+      this.onProgress({ ...step })
+      run.steps.push(step)
+
+      try {
+        await this.supabase.createRunStep(run.id, step)
+      } catch (err) {
+        console.warn('Failed to insert run step log:', err)
+      }
+
+      if (!result.success) {
+        run.status = 'failed'
+        run.error = result.error
+        return false
+      }
+    }
+
+    return true
+  }
+
+  /**
+   * Simple condition evaluator for while loops.
+   * Replaces {{nodeId.field}} with actual values from nodeOutputs.
+   */
+  private evaluateCondition(condition: string): boolean {
+    try {
+      // Replace {{nodeId.field}} patterns
+      const resolved = condition.replace(/\{\{(\w+)\.(\w+)\}\}/g, (_, nodeId, field) => {
+        const output = this.nodeOutputs.get(nodeId)
+        if (output && field in output) {
+          const val = output[field]
+          return JSON.stringify(val)
+        }
+        return 'undefined'
+      })
+
+      // eslint-disable-next-line no-eval
+      return !!eval(resolved)
+    } catch {
+      return false
+    }
   }
 
   private resolveInputs(node: FlowNodeSerialized): Record<string, unknown> {
@@ -291,3 +630,4 @@ export class FlowRunner {
     }, obj)
   }
 }
+

@@ -249,7 +249,19 @@ export default function ConfigPanel() {
   const IconComponent = (LucideIcons as any)[actionDef.icon] || Package
 
   return (
-    <div className="config-panel">
+    <div 
+      className="config-panel nowheel nopan nodrag" 
+      tabIndex={-1}
+      onKeyDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onMouseDownCapture={(e) => {
+        // Prevent ReactFlow from stealing focus when clicking inputs
+        const tag = (e.target as HTMLElement).tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+          e.stopPropagation()
+        }
+      }}
+    >
       <div className="config-panel-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className={`action-icon ${actionDef.category}`} style={{ 

@@ -9,7 +9,7 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.ACTIONS_LIST),
 
   // Browser
-  launchBrowser: (options?: { headless?: boolean }): Promise<{ success: boolean }> =>
+  launchBrowser: (options?: { headless?: boolean; profileName?: string }): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.BROWSER_LAUNCH, options),
 
   closeBrowser: (): Promise<{ success: boolean }> =>

@@ -94,16 +94,23 @@ export default function Toolbar({
         </button>
         
         <div style={{ display: 'flex', alignItems: 'center', marginLeft: 12, gap: 8, borderLeft: '1px solid var(--border-default)', paddingLeft: 12 }}>
-          <input 
-            type="checkbox" 
-            id="isBlockToggle" 
-            checked={isBlock}
-            onChange={(e) => setIsBlock(e.target.checked)}
-            style={{ cursor: 'pointer' }}
-          />
-          <label htmlFor="isBlockToggle" style={{ fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
-            Reusable Block
-          </label>
+          <select
+            value={isBlock ? 'block' : 'workflow'}
+            onChange={(e) => setIsBlock(e.target.value === 'block')}
+            style={{ 
+              fontSize: 11, 
+              padding: '3px 6px', 
+              background: isBlock ? 'rgba(124, 92, 252, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+              border: `1px solid ${isBlock ? 'var(--accent-primary)' : 'var(--cat-navigation)'}`,
+              borderRadius: 4,
+              color: isBlock ? 'var(--accent-primary)' : 'var(--cat-navigation)',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <option value="workflow">⚡ Workflow</option>
+            <option value="block">📦 Block</option>
+          </select>
         </div>
       </div>
 

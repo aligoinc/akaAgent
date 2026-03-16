@@ -15,10 +15,9 @@ export const useBlockStore = create<BlockState>((set) => ({
     set({ isLoading: true })
     try {
       const allFlows = await window.electronAPI.listFlows()
-      const blocks = allFlows.filter(f => f.isBlock)
-      set({ blocks, isLoading: false })
+      set({ blocks: allFlows, isLoading: false })
     } catch (err) {
-      console.error('Failed to load blocks:', err)
+      console.error('Failed to load flows:', err)
       set({ isLoading: false })
     }
   }

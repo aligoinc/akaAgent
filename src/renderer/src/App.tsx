@@ -65,7 +65,7 @@ export default function App() {
         await window.electronAPI.closeBrowser()
         setBrowserConnected(false)
       } else {
-        await window.electronAPI.launchBrowser()
+        await window.electronAPI.launchBrowser({ profileName: 'default' })
         setBrowserConnected(true)
       }
     } catch (err) {
@@ -154,6 +154,16 @@ export default function App() {
     resetFlow()
   }, [resetFlow])
 
+  const handleDeleteFlow = useCallback(async (flowId: string) => {
+    if (!window.electronAPI) return
+    try {
+      await window.electronAPI.deleteFlow(flowId)
+      loadBlocks() // Refresh sidebar list
+    } catch (err) {
+      console.error('Delete flow error:', err)
+    }
+  }, [loadBlocks])
+
   return (
     <div className="app-layout">
       <Toolbar
@@ -166,7 +176,7 @@ export default function App() {
       />
 
       <div className="app-body">
-        <Sidebar onEditBlock={handleSelectFlow} />
+        <Sidebar onEditBlock={handleSelectFlow} onDeleteFlow={handleDeleteFlow} />
         <Canvas />
         {selectedNodeId && <ConfigPanel />}
       </div>
@@ -181,20 +191,22 @@ export default function App() {
                 ✕
               </button>
             </div>
-            <div className="modal-body">
-              {flows.length === 0 ? (
+           <div className="modal-body">
+              {flows.filter(f => !f.isBlock).length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-state-text">No saved flows found</div>
+                  <div className="empty-state-text">No saved workflows found</div>
                 </div>
               ) : (
-                flows.map(flow => (
+                flows.filter(f => !f.isBlock).map(flow => (
                   <div
                     key={flow.id}
                     className="flow-list-item"
                     onClick={() => handleSelectFlow(flow)}
                   >
                     <div className="flow-list-item-info">
-                      <div className="flow-list-item-name">{flow.name}</div>
+                      <div className="flow-list-item-name">
+                        {flow.name}
+                      </div>
                       <div className="flow-list-item-meta">
                         {flow.nodes.length} nodes · Updated {flow.updatedAt ? new Date(flow.updatedAt).toLocaleDateString() : 'N/A'}
                       </div>

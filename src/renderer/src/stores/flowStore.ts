@@ -124,7 +124,11 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       flowId: flow.id,
       flowName: flow.name,
       isBlock: flow.isBlock || false,
-      nodes: flow.nodes.map(n => ({ ...n, type: n.type || 'actionNode' })) as Node<FlowNodeData>[],
+      nodes: flow.nodes.map(n => ({
+        ...n,
+        type: n.type || 'actionNode',
+        data: { ...n.data, status: 'idle', output: undefined, error: undefined }
+      })) as Node<FlowNodeData>[],
       edges: flow.edges as Edge[],
       selectedNodeId: null
     })

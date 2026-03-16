@@ -10,12 +10,13 @@ function ActionNode({ data, selected }: NodeProps<ActionNodeType>) {
 
   const statusClass = data.status || ''
   const selectedClass = selected ? 'selected' : ''
+  const isLoop = data.actionType === 'loop'
 
   // Show key config values in node body
   const configEntries = Object.entries(data.config || {}).slice(0, 3)
 
   return (
-    <div className={`flow-node ${statusClass} ${selectedClass}`}>
+    <div className={`flow-node ${statusClass} ${selectedClass} ${isLoop ? 'loop-node' : ''}`}>
       <Handle
         type="target"
         position={Position.Top}
@@ -68,11 +69,34 @@ function ActionNode({ data, selected }: NodeProps<ActionNodeType>) {
         </div>
       )}
 
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="output"
-      />
+      {isLoop ? (
+        <>
+          <div className="loop-handle-labels">
+            <span className="loop-handle-label-text">BODY</span>
+            <span className="loop-handle-label-text">DONE</span>
+          </div>
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="loop-body"
+            className="loop-handle-body"
+            style={{ left: '30%' }}
+          />
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="loop-done"
+            className="loop-handle-done"
+            style={{ left: '70%' }}
+          />
+        </>
+      ) : (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="output"
+        />
+      )}
     </div>
   )
 }

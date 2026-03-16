@@ -143,6 +143,8 @@ function FlowCanvas() {
         fitView
         snapToGrid
         snapGrid={[16, 16]}
+        deleteKeyCode={['Backspace', 'Delete']}
+        edgesReconnectable
         defaultEdgeOptions={{
           type: 'smoothstep',
           animated: true,
