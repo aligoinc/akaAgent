@@ -12,7 +12,7 @@ export type ActionType =
   // Data
   | 'getValue' | 'setValue' | 'getText' | 'screenshot' | 'getAttribute'
   // Utility
-  | 'sleep' | 'waitForSelector' | 'waitForNavigation'
+  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog'
   // Control Flow
   | 'ifElse' | 'loop' | 'switch'
   // Block System
@@ -147,6 +147,65 @@ export interface ExecutionRun {
 }
 
 // ============================================
+// Campaign Automation Types
+// ============================================
+
+export interface FlatformAccount {
+  id: number
+  name: string
+  flatformType: string
+  loginStatus: string
+  status: string
+  isActive: boolean
+  isDelete: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CampaignAction {
+  id: string         // TEXT id e.g. 'facebook_group_post'
+  name: string
+  flatformType: string
+  isActive: boolean
+  workflowId?: string
+  isDelete: boolean
+  createdAt?: string
+}
+
+export interface Campaign {
+  id: number
+  name: string
+  actionId: string
+  flatformAccountId: number
+  status: string
+  schedule?: string
+  timeSleepBetween2: number   // seconds
+  log: string
+  content?: string
+  isDelete: boolean
+  createdAt?: string
+  updatedAt?: string
+  // Joined fields
+  actionName?: string
+  accountName?: string
+}
+
+export interface CampaignDetail {
+  id: number
+  campaignId: number
+  name?: string
+  phone?: string
+  uid?: string
+  email?: string
+  status: string
+  note?: string
+  schedule?: string
+  dateAction?: string
+  isDelete: boolean
+  createdAt?: string
+}
+
+// ============================================
 // IPC Channel Types
 // ============================================
 
@@ -156,10 +215,17 @@ export const IPC_CHANNELS = {
   FLOW_STOP: 'flow:stop',
   FLOW_PROGRESS: 'flow:progress',
 
-  // Browser control
+  // Browser control (legacy single browser for workflow editor)
   BROWSER_LAUNCH: 'browser:launch',
   BROWSER_CLOSE: 'browser:close',
   BROWSER_STATUS: 'browser:status',
+
+  // Multi-browser profile management
+  PROFILE_LAUNCH: 'profile:launch',
+  PROFILE_CLOSE: 'profile:close',
+  PROFILE_STATUS: 'profile:status',
+  PROFILE_LIST: 'profile:list',
+  PROFILE_FOCUS: 'profile:focus',
 
   // Database Flow
   DB_SAVE_FLOW: 'db:save-flow',
@@ -176,6 +242,40 @@ export const IPC_CHANNELS = {
   DB_SAVE_ELEMENT: 'db:save-element',
   DB_LIST_ELEMENTS: 'db:list-elements',
   DB_DELETE_ELEMENT: 'db:delete-element',
+
+  // Database Flatform Accounts
+  DB_LIST_ACCOUNTS: 'db:list-accounts',
+  DB_CREATE_ACCOUNT: 'db:create-account',
+  DB_UPDATE_ACCOUNT: 'db:update-account',
+  DB_DELETE_ACCOUNT: 'db:delete-account',
+
+  // Database Campaign Actions
+  DB_LIST_CAMPAIGN_ACTIONS: 'db:list-campaign-actions',
+  DB_GET_ALL_CAMPAIGN_ACTIONS: 'db:get-all-campaign-actions',
+  DB_CREATE_CAMPAIGN_ACTION: 'db:create-campaign-action',
+  DB_UPDATE_CAMPAIGN_ACTION: 'db:update-campaign-action',
+  DB_DELETE_CAMPAIGN_ACTION: 'db:delete-campaign-action',
+
+  // Database Campaigns
+  DB_LIST_CAMPAIGNS: 'db:list-campaigns',
+  DB_CREATE_CAMPAIGN: 'db:create-campaign',
+  DB_UPDATE_CAMPAIGN: 'db:update-campaign',
+  DB_DELETE_CAMPAIGN: 'db:delete-campaign',
+  DB_CLONE_CAMPAIGN: 'db:clone-campaign',
+
+  // Database Campaign Details
+  DB_LIST_CAMPAIGN_DETAILS: 'db:list-campaign-details',
+  DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
+  DB_UPDATE_CAMPAIGN_DETAIL: 'db:update-campaign-detail',
+  DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
+
+  // Campaign Scheduler
+  SCHEDULER_START: 'scheduler:start',
+  SCHEDULER_STOP: 'scheduler:stop',
+  SCHEDULER_STATUS: 'scheduler:status',
+
+  // Campaign Log (real-time)
+  CAMPAIGN_LOG: 'campaign:log',
 
   // Actions
   ACTIONS_LIST: 'actions:list',

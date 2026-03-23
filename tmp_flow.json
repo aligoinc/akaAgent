@@ -1,0 +1,254 @@
+{
+  "id": "b047eb2a-5d80-42b3-94f3-532810b360f0",
+  "name": "Chiến dịch đăng bài",
+  "description": "",
+  "nodes": [
+    {
+      "id": "01388df3-e1fe-44c8-bf9e-accb3722028b",
+      "data": {
+        "icon": "LogIn",
+        "label": "Block Input",
+        "config": {
+          "fieldName": "data",
+          "fieldType": "json",
+          "defaultValue": "{\n  \"uids\":[\"https://www.facebook.com/groups/2260804924238978\",\"https://www.facebook.com/groups/620686372835344\"],\n  \"content\": \"test đăng bài\",\n  \"sleep\": 10000\n}"
+        },
+        "output": {
+          "value": {
+            "uids": [
+              "https://www.facebook.com/groups/2260804924238978"
+            ],
+            "sleep": 10000,
+            "content": "test đăng bài"
+          }
+        },
+        "status": "success",
+        "category": "block",
+        "actionType": "blockInput",
+        "inputMapping": {}
+      },
+      "type": "actionNode",
+      "position": {
+        "x": 160,
+        "y": -80
+      }
+    },
+    {
+      "id": "00395427-fba1-403a-8838-48419a2a5232",
+      "data": {
+        "icon": "Repeat",
+        "label": "Loop",
+        "config": {
+          "count": 5,
+          "loopType": "forEach"
+        },
+        "output": {
+          "item": "https://www.facebook.com/groups/2260804924238978",
+          "index": 0,
+          "completed": true
+        },
+        "status": "success",
+        "category": "control",
+        "actionType": "loop",
+        "inputMapping": {
+          "items": {
+            "sourcePath": "uids",
+            "sourceField": "value",
+            "sourceNodeId": "01388df3-e1fe-44c8-bf9e-accb3722028b"
+          }
+        }
+      },
+      "type": "actionNode",
+      "position": {
+        "x": 448,
+        "y": 144
+      }
+    },
+    {
+      "id": "3bedb9c9-a1f7-4740-8fa9-1bee895a516c",
+      "data": {
+        "icon": "Package",
+        "label": "đăng bài trong group",
+        "config": {
+          "blockId": "7f90aa52-f239-4f34-af3b-16ba5484c6fe"
+        },
+        "output": {
+          "success": true
+        },
+        "status": "success",
+        "category": "block",
+        "blockData": {
+          "id": "7f90aa52-f239-4f34-af3b-16ba5484c6fe",
+          "name": "đăng bài trong group",
+          "inputSchema": [
+            {
+              "name": "campaign",
+              "type": "string",
+              "label": "campaign",
+              "required": true
+            }
+          ],
+          "outputSchema": []
+        },
+        "actionType": "block",
+        "inputMapping": {
+          "campaign": {
+            "sourceField": "value",
+            "sourceNodeId": "01388df3-e1fe-44c8-bf9e-accb3722028b"
+          }
+        }
+      },
+      "type": "actionNode",
+      "position": {
+        "x": -80,
+        "y": 592
+      }
+    },
+    {
+      "id": "33309714-d269-405c-be8c-7f1701110af2",
+      "data": {
+        "icon": "Globe",
+        "label": "Navigate",
+        "config": {},
+        "output": {
+          "currentUrl": "https://www.facebook.com/groups/2260804924238978"
+        },
+        "status": "success",
+        "category": "navigation",
+        "actionType": "navigate",
+        "inputMapping": {
+          "url": {
+            "sourceField": "item",
+            "sourceNodeId": "00395427-fba1-403a-8838-48419a2a5232"
+          }
+        }
+      },
+      "type": "actionNode",
+      "position": {
+        "x": -32,
+        "y": 256
+      }
+    },
+    {
+      "id": "cb93260f-a614-438f-a7f9-f9541bf48941",
+      "data": {
+        "icon": "Loader",
+        "label": "Wait for Navigation",
+        "config": {
+          "timeout": 30000
+        },
+        "output": {
+          "url": "https://www.facebook.com/groups/2260804924238978"
+        },
+        "status": "success",
+        "category": "utility",
+        "actionType": "waitForNavigation",
+        "inputMapping": {}
+      },
+      "type": "actionNode",
+      "position": {
+        "x": -48,
+        "y": 416
+      }
+    },
+    {
+      "id": "246f7aca-8357-4110-8df1-5514e0a6ea95",
+      "data": {
+        "icon": "Clock",
+        "label": "Sleep",
+        "config": {
+          "ms": 1000
+        },
+        "output": {},
+        "status": "success",
+        "category": "utility",
+        "actionType": "sleep",
+        "inputMapping": {
+          "ms": {
+            "sourcePath": "sleep",
+            "sourceField": "value",
+            "sourceNodeId": "01388df3-e1fe-44c8-bf9e-accb3722028b"
+          }
+        }
+      },
+      "type": "actionNode",
+      "position": {
+        "x": -64,
+        "y": 832
+      }
+    },
+    {
+      "id": "0f82f6b2-3126-4dff-a163-d8e917d45ca8",
+      "data": {
+        "icon": "LogOut",
+        "label": "Block Output",
+        "config": {
+          "value": "Hoàn thành",
+          "fieldName": "res"
+        },
+        "output": {
+          "res": "Hoàn thành"
+        },
+        "status": "success",
+        "category": "block",
+        "actionType": "blockOutput",
+        "inputMapping": {}
+      },
+      "type": "actionNode",
+      "position": {
+        "x": 544,
+        "y": 432
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "xy-edge__01388df3-e1fe-44c8-bf9e-accb3722028boutput-00395427-fba1-403a-8838-48419a2a5232input",
+      "source": "01388df3-e1fe-44c8-bf9e-accb3722028b",
+      "target": "00395427-fba1-403a-8838-48419a2a5232",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    },
+    {
+      "id": "xy-edge__00395427-fba1-403a-8838-48419a2a5232loop-body-33309714-d269-405c-be8c-7f1701110af2input",
+      "source": "00395427-fba1-403a-8838-48419a2a5232",
+      "target": "33309714-d269-405c-be8c-7f1701110af2",
+      "sourceHandle": "loop-body",
+      "targetHandle": "input"
+    },
+    {
+      "id": "xy-edge__33309714-d269-405c-be8c-7f1701110af2output-cb93260f-a614-438f-a7f9-f9541bf48941input",
+      "source": "33309714-d269-405c-be8c-7f1701110af2",
+      "target": "cb93260f-a614-438f-a7f9-f9541bf48941",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    },
+    {
+      "id": "xy-edge__cb93260f-a614-438f-a7f9-f9541bf48941output-3bedb9c9-a1f7-4740-8fa9-1bee895a516cinput",
+      "source": "cb93260f-a614-438f-a7f9-f9541bf48941",
+      "target": "3bedb9c9-a1f7-4740-8fa9-1bee895a516c",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    },
+    {
+      "id": "xy-edge__3bedb9c9-a1f7-4740-8fa9-1bee895a516coutput-246f7aca-8357-4110-8df1-5514e0a6ea95input",
+      "source": "3bedb9c9-a1f7-4740-8fa9-1bee895a516c",
+      "target": "246f7aca-8357-4110-8df1-5514e0a6ea95",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    },
+    {
+      "id": "xy-edge__00395427-fba1-403a-8838-48419a2a5232loop-done-0f82f6b2-3126-4dff-a163-d8e917d45ca8input",
+      "source": "00395427-fba1-403a-8838-48419a2a5232",
+      "target": "0f82f6b2-3126-4dff-a163-d8e917d45ca8",
+      "sourceHandle": "loop-done",
+      "targetHandle": "input"
+    }
+  ],
+  "variables": {},
+  "input_schema": {},
+  "output_schema": {},
+  "is_block": false,
+  "created_at": "2026-03-16T08:01:47.168422+00:00",
+  "updated_at": "2026-03-16T10:14:42.084+00:00"
+}

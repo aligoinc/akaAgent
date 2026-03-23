@@ -240,6 +240,44 @@ export class PlaywrightController {
           break
         }
 
+        // =========== API CALL ===========
+        case 'apiCall': {
+          const url = input.url as string
+          const method = (input.method as string) || 'GET'
+          let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (input.headers) {
+            const h = typeof input.headers === 'string' ? JSON.parse(input.headers) : input.headers
+            headers = { ...headers, ...h }
+          }
+          const fetchOptions: RequestInit = { method, headers }
+          if (['POST', 'PUT', 'PATCH'].includes(method) && input.body) {
+            fetchOptions.body = typeof input.body === 'string' ? input.body : JSON.stringify(input.body)
+          }
+          const timeout = (input.timeout as number) || 30000
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), timeout)
+          fetchOptions.signal = controller.signal
+
+          try {
+            const response = await fetch(url, fetchOptions)
+            clearTimeout(timer)
+            let data: unknown
+            const contentType = response.headers.get('content-type') || ''
+            if (contentType.includes('application/json')) {
+              data = await response.json()
+            } else {
+              data = await response.text()
+            }
+            const respHeaders: Record<string, string> = {}
+            response.headers.forEach((v, k) => { respHeaders[k] = v })
+            output = { status: response.status, data, headers: respHeaders }
+          } catch (fetchErr: any) {
+            clearTimeout(timer)
+            throw new Error(`API call failed: ${fetchErr.message}`)
+          }
+          break
+        }
+
         default:
           throw new Error(`Unknown action type: ${actionType}`)
       }

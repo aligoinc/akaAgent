@@ -284,6 +284,34 @@ export const builtinActions: ActionDefinition[] = [
     ]
   },
 
+  // =========== API ===========
+  {
+    id: 'apiCall',
+    name: 'API Call',
+    type: 'apiCall',
+    description: 'Make an HTTP request to any REST API',
+    icon: 'Webhook',
+    category: 'utility',
+    inputSchema: [
+      { name: 'url', type: 'string', label: 'URL', required: true, placeholder: 'https://api.example.com/endpoint' },
+      { name: 'method', type: 'string', label: 'Method', required: true, defaultValue: 'GET', options: [
+        { label: 'GET', value: 'GET' },
+        { label: 'POST', value: 'POST' },
+        { label: 'PUT', value: 'PUT' },
+        { label: 'PATCH', value: 'PATCH' },
+        { label: 'DELETE', value: 'DELETE' }
+      ]},
+      { name: 'headers', type: 'json', label: 'Headers', placeholder: '{"Content-Type": "application/json"}' },
+      { name: 'body', type: 'json', label: 'Body', placeholder: '{"key": "value"}' },
+      { name: 'timeout', type: 'number', label: 'Timeout (ms)', defaultValue: 30000 }
+    ],
+    outputSchema: [
+      { name: 'status', type: 'number', label: 'Status Code' },
+      { name: 'data', type: 'json', label: 'Response Data' },
+      { name: 'headers', type: 'json', label: 'Response Headers' }
+    ]
+  },
+
   // =========== CONTROL FLOW ===========
   {
     id: 'ifElse',
@@ -372,6 +400,37 @@ export const builtinActions: ActionDefinition[] = [
       { name: 'fieldName', type: 'string', label: 'Output Name', required: true, placeholder: 'e.g. extractedText' },
       { name: 'fieldLabel', type: 'string', label: 'Display Label', placeholder: 'e.g. Extracted Text' },
       { name: 'value', type: 'any', label: 'Output Value', description: 'Map this to a node output to return it.' }
+    ],
+    outputSchema: []
+  },
+
+  // =========== CAMPAIGN INTERGRATION ===========
+  {
+    id: 'updateCampaignStatus',
+    name: 'Cập nhật Trạng thái CD',
+    type: 'updateCampaignStatus',
+    description: 'Cập nhật trạng thái chiến dịch/cá nhân đang chạy',
+    icon: 'RefreshCw',
+    category: 'utility',
+    inputSchema: [
+      { name: 'status', type: 'string', label: 'Trạng thái', required: true, defaultValue: 'hoàn thành', options: [
+        { label: 'Đang chạy', value: 'đang chạy' },
+        { label: 'Hoàn thành', value: 'hoàn thành' },
+        { label: 'Lỗi', value: 'lỗi' },
+        { label: 'Chờ xử lý', value: 'chờ xử lý' }
+      ]}
+    ],
+    outputSchema: []
+  },
+  {
+    id: 'writeCampaignLog',
+    name: 'Ghi Log CD',
+    type: 'writeCampaignLog',
+    description: 'Ghi log vào hệ thống tiến trình chiến dịch',
+    icon: 'AlignLeft',
+    category: 'utility',
+    inputSchema: [
+      { name: 'message', type: 'string', label: 'Nội dung Log', required: true, placeholder: 'vd: Đã gửi xong tin nhắn...' }
     ],
     outputSchema: []
   }

@@ -156,6 +156,20 @@ export class FlowRunner {
           const fieldName = String(node.data.config.fieldName || 'output')
           blockOutputs[fieldName] = val
           result = { success: true, output: { [fieldName]: val }, durationMs: 0 }
+        } else if (node.data.actionType === 'updateCampaignStatus') {
+          const detailId = flowData.variables?.detailId as number
+          const status = String(resolvedInput.status || 'hoàn thành')
+          if (detailId) {
+            await this.supabase.updateCampaignDetail(detailId, { status })
+          }
+          result = { success: true, output: { status }, durationMs: 0 }
+        } else if (node.data.actionType === 'writeCampaignLog') {
+          const campaignId = flowData.variables?.campaignId as number
+          const message = String(resolvedInput.message || '')
+          if (campaignId && message) {
+            await this.supabase.appendCampaignLog(campaignId, message)
+          }
+          result = { success: true, output: { message }, durationMs: 0 }
         } else {
           result = await this.controller.executeAction(
             node.data.actionType,
@@ -186,9 +200,11 @@ export class FlowRunner {
           console.warn('Failed to insert run step log:', err)
         }
 
-        // Skip on error: log and continue to next action
+        // Stop on error: log and fail workflow execution
         if (!result.success) {
-          console.warn(`Action "${node.data.actionType}" failed on node ${node.id}: ${result.error}. Skipping...`)
+          const errMsg = `Lỗi ở bước "${node.data.label || node.data.actionType}": ${result.error}`
+          console.warn(`Action failed on node ${node.id}.`, result.error)
+          throw new Error(errMsg)
         }
       }
 

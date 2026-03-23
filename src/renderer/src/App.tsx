@@ -3,6 +3,9 @@ import Sidebar from './components/Sidebar/Sidebar'
 import Canvas from './components/Canvas/Canvas'
 import ConfigPanel from './components/ConfigPanel/ConfigPanel'
 import Toolbar from './components/Toolbar/Toolbar'
+import TopBar from './components/TopBar/TopBar'
+import CampaignPage from './pages/CampaignPage'
+import BrowserPage from './pages/BrowserPage'
 import { useFlowStore } from './stores/flowStore'
 import { useExecutionStore } from './stores/executionStore'
 import { FlowData, ExecutionStep } from '../../shared/types'
@@ -10,6 +13,8 @@ import { useElementStore } from './stores/elementStore'
 import { useBlockStore } from './stores/blockStore'
 
 export default function App() {
+  const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
+
   const {
     selectedNodeId,
     getFlowData,
@@ -81,8 +86,6 @@ export default function App() {
       const flowData = getFlowData()
       const result = await window.electronAPI.runFlow(flowData)
       console.log('Flow completed:', result)
-
-      // console.log('Flow completed:', result)
     } catch (err) {
       console.error('Flow run error:', err)
     } finally {
@@ -101,12 +104,11 @@ export default function App() {
   }, [setRunning])
 
   const handleSave = useCallback(async (customName?: string) => {
-    if (!window.electronAPI) return false // Return false if API not available
+    if (!window.electronAPI) return false
     try {
       const flowData = getFlowData()
-      if (customName) flowData.name = customName // Apply custom name if provided
+      if (customName) flowData.name = customName
       
-      // Auto-extract block schemas if it's marked as a block
       if (flowData.isBlock) {
         flowData.inputSchema = flowData.nodes
           .filter(n => n.data.actionType === 'blockInput')
@@ -128,7 +130,7 @@ export default function App() {
 
       await window.electronAPI.saveFlow(flowData)
       alert('Flow saved successfully!')
-      loadBlocks() // Refresh sidebar list
+      loadBlocks()
     } catch (err) {
       console.error('Save error:', err)
     }
@@ -158,7 +160,7 @@ export default function App() {
     if (!window.electronAPI) return
     try {
       await window.electronAPI.deleteFlow(flowId)
-      loadBlocks() // Refresh sidebar list
+      loadBlocks()
     } catch (err) {
       console.error('Delete flow error:', err)
     }
@@ -166,58 +168,72 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      <Toolbar
-        onRun={handleRun}
-        onStop={handleStop}
-        onSave={handleSave}
-        onLoad={handleLoad}
-        onNew={handleNew}
-        onLaunchBrowser={handleLaunchBrowser}
-      />
+      <TopBar activePage={activePage} onPageChange={setActivePage} />
 
-      <div className="app-body">
-        <Sidebar onEditBlock={handleSelectFlow} onDeleteFlow={handleDeleteFlow} />
-        <Canvas />
-        {selectedNodeId && <ConfigPanel />}
+      <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <CampaignPage />
       </div>
 
-      {/* Flow List Modal */}
-      {showFlowList && (
-        <div className="modal-overlay" onClick={() => setShowFlowList(false)}>
-          <div className="modal animate-fadeIn" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">Open Flow</span>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowFlowList(false)}>
-                ✕
-              </button>
-            </div>
-           <div className="modal-body">
-              {flows.filter(f => !f.isBlock).length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-text">No saved workflows found</div>
-                </div>
-              ) : (
-                flows.filter(f => !f.isBlock).map(flow => (
-                  <div
-                    key={flow.id}
-                    className="flow-list-item"
-                    onClick={() => handleSelectFlow(flow)}
-                  >
-                    <div className="flow-list-item-info">
-                      <div className="flow-list-item-name">
-                        {flow.name}
-                      </div>
-                      <div className="flow-list-item-meta">
-                        {flow.nodes.length} nodes · Updated {flow.updatedAt ? new Date(flow.updatedAt).toLocaleDateString() : 'N/A'}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+      <div style={{ display: activePage === 'browsers' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <BrowserPage />
+      </div>
+
+      <div style={{ display: activePage === 'workflow-editor' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <>
+          <Toolbar
+            onRun={handleRun}
+            onStop={handleStop}
+            onSave={handleSave}
+            onLoad={handleLoad}
+            onNew={handleNew}
+            onLaunchBrowser={handleLaunchBrowser}
+          />
+
+          <div className="app-body">
+            <Sidebar onEditBlock={handleSelectFlow} onDeleteFlow={handleDeleteFlow} />
+            <Canvas />
+            {selectedNodeId && <ConfigPanel />}
           </div>
-        </div>
-      )}
+
+          {/* Flow List Modal */}
+          {showFlowList && (
+            <div className="modal-overlay" onClick={() => setShowFlowList(false)}>
+              <div className="modal animate-fadeIn" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <span className="modal-title">Open Flow</span>
+                  <button className="btn btn-ghost btn-icon" onClick={() => setShowFlowList(false)}>
+                    ✕
+                  </button>
+                </div>
+               <div className="modal-body">
+                  {flows.filter(f => !f.isBlock).length === 0 ? (
+                    <div className="empty-state">
+                      <div className="empty-state-text">No saved workflows found</div>
+                    </div>
+                  ) : (
+                    flows.filter(f => !f.isBlock).map(flow => (
+                      <div
+                        key={flow.id}
+                        className="flow-list-item"
+                        onClick={() => handleSelectFlow(flow)}
+                      >
+                        <div className="flow-list-item-info">
+                          <div className="flow-list-item-name">
+                            {flow.name}
+                          </div>
+                          <div className="flow-list-item-meta">
+                            {flow.nodes.length} nodes · Updated {flow.updatedAt ? new Date(flow.updatedAt).toLocaleDateString() : 'N/A'}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      </div>
     </div>
   )
 }
