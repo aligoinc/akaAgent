@@ -160,7 +160,15 @@ export class WebviewController {
               sel.addRange(range);
               `}
               // Use execCommand to properly trigger React/Draft.js/Lexical editor state updates
-              document.execCommand('insertText', false, ${safeJS(text)});
+              var lines = String(${safeJS(text)}).split('\\n');
+              for (var i = 0; i < lines.length; i++) {
+                if (i > 0) {
+                  document.execCommand('insertParagraph', false, null) || document.execCommand('insertLineBreak', false, null);
+                }
+                if (lines[i].length > 0) {
+                  document.execCommand('insertText', false, lines[i]);
+                }
+              }
             } else {
               ${clearFirst ? 'el.value = "";' : ''}
               el.value = ${clearFirst ? '' : '(el.value || "") + '}${safeJS(text)};
@@ -281,7 +289,15 @@ export class WebviewController {
               sel.addRange(range);
               document.execCommand('delete', false);
               // Insert new text using execCommand to trigger React/Draft.js editor state
-              document.execCommand('insertText', false, text);
+              var lines = String(text).split('\\n');
+              for (var i = 0; i < lines.length; i++) {
+                if (i > 0) {
+                  document.execCommand('insertParagraph', false, null) || document.execCommand('insertLineBreak', false, null);
+                }
+                if (lines[i].length > 0) {
+                  document.execCommand('insertText', false, lines[i]);
+                }
+              }
             } else {
               el.value = text;
               el.dispatchEvent(new Event("input", { bubbles: true }));
