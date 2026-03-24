@@ -1,21 +1,20 @@
 import { BrowserWindow } from 'electron'
 import { SupabaseService } from './supabase'
-import { BrowserProfileManager } from '../playwright/browserProfileManager'
-import { PlaywrightController } from '../playwright/controller'
+import { WebviewRegistry, WebviewController } from '../playwright/webviewController'
 import { FlowRunner } from '../playwright/flowRunner'
 import { IPC_CHANNELS, ExecutionStep, Campaign, CampaignDetail } from '../../shared/types'
 
 export class CampaignScheduler {
   private supabase: SupabaseService
-  private profileManager: BrowserProfileManager
+  private webviewRegistry: WebviewRegistry
   private mainWindow: BrowserWindow
   private intervalId: ReturnType<typeof setInterval> | null = null
   private running = false
   private processing = false
 
-  constructor(supabase: SupabaseService, profileManager: BrowserProfileManager, mainWindow: BrowserWindow) {
+  constructor(supabase: SupabaseService, webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow) {
     this.supabase = supabase
-    this.profileManager = profileManager
+    this.webviewRegistry = webviewRegistry
     this.mainWindow = mainWindow
   }
 
@@ -58,9 +57,9 @@ export class CampaignScheduler {
         const campaigns = await this.supabase.getPendingCampaigns(account.id)
         if (campaigns.length === 0) continue
 
-        // Check browser is running for this account
-        if (!this.profileManager.isProfileConnected(account.id)) {
-          this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở trình duyệt. Bỏ qua.`)
+        // Check browser webview is registered for this account
+        if (!this.webviewRegistry.isRegistered(account.id)) {
+          this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở tab trình duyệt. Bỏ qua.`)
           continue
         }
 
@@ -177,17 +176,17 @@ export class CampaignScheduler {
       } : {})
     }
 
-    // Create a temporary PlaywrightController wrapper that delegates to the profile's page
-    const page = this.profileManager.getProfilePage(accountId)
-    if (!page) {
-      throw new Error(`Browser profile not found for account ${accountId}`)
+    // Create a controller that uses the account's embedded webview
+    const controller = this.webviewRegistry.getController(accountId)
+    if (!controller) {
+      throw new Error(`Không tìm thấy tab trình duyệt cho tài khoản ${accountId}`)
     }
-
-    // Create a controller that uses this specific page
-    const controller = new PlaywrightController()
-    // We need to set the page directly - use a workaround
-    ;(controller as any).page = page
-    ;(controller as any).context = this.profileManager.getProfileContext(accountId)
+    
+    // Debug: Log the current URL to ensure it's on the right page
+    try {
+      const currentUrl = controller.getURL()
+      console.log(`Campaign ${campaign.id} detail ${detailName} running on URL: ${currentUrl}`)
+    } catch {}
 
     const runner = new FlowRunner(controller, this.supabase, (step: ExecutionStep) => {
       // Send progress to main window

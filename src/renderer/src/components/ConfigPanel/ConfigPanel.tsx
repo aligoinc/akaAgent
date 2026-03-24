@@ -34,8 +34,8 @@ export default function ConfigPanel() {
         description: 'Reusable block',
         icon: 'Package',
         category: 'block' as ActionCategory,
-        inputSchema: bData.inputSchema,
-        outputSchema: bData.outputSchema
+        inputSchema: bData.inputSchema || [],
+        outputSchema: bData.outputSchema || []
       }
     }
     return builtinActions.find(a => a.type === selectedNode.data.actionType) || null
@@ -246,7 +246,7 @@ export default function ConfigPanel() {
     )
   }
 
-  const IconComponent = (LucideIcons as any)[actionDef.icon] || Package
+  const IconComponent = ((LucideIcons as any)[actionDef.icon || 'Package']) || LucideIcons.Package
 
   return (
     <div 

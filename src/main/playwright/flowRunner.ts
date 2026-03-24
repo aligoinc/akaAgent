@@ -1,4 +1,4 @@
-import { PlaywrightController } from './controller'
+import { IBrowserController } from '../../shared/types'
 import { FlowData, ExecutionStep, ExecutionRun, FlowNodeSerialized, FlowEdgeSerialized } from '../../shared/types'
 import { builtinActions } from '../../shared/actions'
 import { SupabaseService } from '../services/supabase'
@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 type ProgressCallback = (step: ExecutionStep) => void
 
 export class FlowRunner {
-  private controller: PlaywrightController
+  private controller: IBrowserController
   private supabase: SupabaseService
   private onProgress: ProgressCallback
   private cancelled = false
@@ -17,7 +17,7 @@ export class FlowRunner {
   private nodeMap: Map<string, FlowNodeSerialized> = new Map()
   private loopBodyNodeIds: Set<string> = new Set()
 
-  constructor(controller: PlaywrightController, supabase: SupabaseService, onProgress: ProgressCallback) {
+  constructor(controller: IBrowserController, supabase: SupabaseService, onProgress: ProgressCallback) {
     this.controller = controller
     this.supabase = supabase
     this.onProgress = onProgress
@@ -127,7 +127,9 @@ export class FlowRunner {
             result = { success: false, output: {}, error: 'Block not found in database', durationMs: 0 }
           } else {
             // Recursively execute block flow
-            blockFlow.variables = resolvedInput
+            // Merge parent flow variables so campaign-level data (campaignContent, etc.) passes through
+            blockFlow.variables = { ...flowData.variables, ...resolvedInput }
+            console.log(`[FlowRunner] Executing block "${blockFlow.name}" (${blockId}) with variables:`, JSON.stringify(blockFlow.variables).substring(0, 300))
             const subRunner = new FlowRunner(this.controller, this.supabase, () => {}) // Sub-progress not emitted to avoid overlapping step UI
             
             const startT = Date.now()
@@ -461,7 +463,8 @@ export class FlowRunner {
         if (!blockFlow) {
           result = { success: false, output: {}, error: 'Block not found in database', durationMs: 0 }
         } else {
-          blockFlow.variables = resolvedInput
+          // Merge parent flow variables so campaign-level data passes through
+          blockFlow.variables = { ...flowData.variables, ...resolvedInput }
           const subRunner = new FlowRunner(this.controller, this.supabase, () => {})
           const startT = Date.now()
           const subRun = await subRunner.run(blockFlow)
@@ -566,16 +569,22 @@ export class FlowRunner {
           }
 
           if (value && typeof value === 'object') {
-            value = this.getNestedValue(value, source.sourcePath)
+            const nested = this.getNestedValue(value, source.sourcePath)
+            value = nested !== undefined ? nested : ''
           } else {
-            // Path was specified but value is not an object or couldn't be parsed
-            value = ''
+            // Path was specified but value is a primitive string. Just use the original string.
+            // This handles cases where older visual flows added sourcePath="content" to plain strings.
+            // i.e., fallback to the full primitive value.
           }
         }
         
         config[inputField] = value ?? ''
+      } else {
+        console.log(`[FlowRunner] mapping source ${source.sourceNodeId}.${source.sourceField} NOT FOUND for field ${inputField}`)
       }
     }
+
+    console.log(`[FlowRunner] node ${node.data.actionType} (${node.id}) resolved inputs:`, config)
 
     // Resolve Element IDs to XPaths
     const actionDef = builtinActions.find(a => a.type === node.data.actionType)

@@ -18,21 +18,15 @@ const electronAPI = {
   getBrowserStatus: (): Promise<{ connected: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.BROWSER_STATUS),
 
-  // Multi-browser profiles
-  launchProfile: (accountId: number, profileName: string): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.PROFILE_LAUNCH, accountId, profileName),
+  // Webview registration (embedded browser tabs)
+  registerWebview: (accountId: number, webContentsId: number): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_REGISTER, accountId, webContentsId),
 
-  closeProfile: (accountId: number): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.PROFILE_CLOSE, accountId),
+  unregisterWebview: (accountId: number): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_UNREGISTER, accountId),
 
-  getProfileStatus: (accountId: number): Promise<{ connected: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.PROFILE_STATUS, accountId),
-
-  listProfiles: (): Promise<{ accountId: number; profileName: string; connected: boolean }[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.PROFILE_LIST),
-
-  focusProfile: (accountId: number): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.PROFILE_FOCUS, accountId),
+  getWebviewStatus: (accountId: number): Promise<{ connected: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_STATUS, accountId),
 
   // Flow execution
   runFlow: (flowData: FlowData): Promise<unknown> =>

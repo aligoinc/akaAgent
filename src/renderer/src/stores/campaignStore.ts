@@ -69,12 +69,6 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   createAccount: async (data) => {
     if (!window.electronAPI) throw new Error('API not available')
     const account = await window.electronAPI.createAccount(data)
-    // Also launch browser profile
-    try {
-      await window.electronAPI.launchProfile(account.id, account.name)
-    } catch (err) {
-      console.error('Failed to launch profile:', err)
-    }
     await get().loadAccounts()
     return account
   },

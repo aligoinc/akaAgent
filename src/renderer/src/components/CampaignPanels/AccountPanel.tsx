@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Globe, Edit3, Power } from 'lucide-react'
+import { Plus, Trash2, Edit3 } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { FlatformAccount } from '../../../../shared/types'
 
@@ -46,20 +46,6 @@ export default function AccountPanel() {
     await deleteAccount(account.id)
   }
 
-  const handleToggleBrowser = async (account: FlatformAccount) => {
-    if (!window.electronAPI) return
-    try {
-      const { connected } = await window.electronAPI.getProfileStatus(account.id)
-      if (connected) {
-        await window.electronAPI.closeProfile(account.id)
-      } else {
-        await window.electronAPI.launchProfile(account.id, account.name)
-      }
-      loadAccounts()
-    } catch (err) {
-      console.error('Failed to toggle browser:', err)
-    }
-  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -135,9 +121,6 @@ export default function AccountPanel() {
                 </div>
               </div>
               <div className="account-card-actions">
-                <button className="btn-icon" onClick={() => handleToggleBrowser(account)} title="Mở/Đóng trình duyệt">
-                  <Globe size={13} />
-                </button>
                 <button className="btn-icon" onClick={() => handleEdit(account)} title="Sửa">
                   <Edit3 size={13} />
                 </button>

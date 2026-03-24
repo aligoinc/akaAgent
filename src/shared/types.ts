@@ -121,6 +121,15 @@ export interface ActionResult {
   screenshotBase64?: string
 }
 
+/**
+ * Common interface for browser controllers (PlaywrightController, WebviewController).
+ * FlowRunner uses this interface to execute actions on either controller type.
+ */
+export interface IBrowserController {
+  isConnected(): boolean
+  executeAction(actionType: ActionType, input: Record<string, unknown>): Promise<ActionResult>
+}
+
 export interface ExecutionStep {
   nodeId: string
   actionType: ActionType
@@ -273,6 +282,11 @@ export const IPC_CHANNELS = {
   SCHEDULER_START: 'scheduler:start',
   SCHEDULER_STOP: 'scheduler:stop',
   SCHEDULER_STATUS: 'scheduler:status',
+
+  // Webview registration (embedded browser tabs)
+  WEBVIEW_REGISTER: 'webview:register',
+  WEBVIEW_UNREGISTER: 'webview:unregister',
+  WEBVIEW_STATUS: 'webview:status',
 
   // Campaign Log (real-time)
   CAMPAIGN_LOG: 'campaign:log',

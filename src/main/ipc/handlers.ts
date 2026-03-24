@@ -2,20 +2,20 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { IPC_CHANNELS, FlowData, ExecutionStep } from '../../shared/types'
 import { builtinActions } from '../../shared/actions'
 import { PlaywrightController } from '../playwright/controller'
-import { BrowserProfileManager } from '../playwright/browserProfileManager'
+import { WebviewRegistry } from '../playwright/webviewController'
 import { FlowRunner } from '../playwright/flowRunner'
 import { SupabaseService } from '../services/supabase'
 import { CampaignScheduler } from '../services/campaignScheduler'
 
 let playwrightController: PlaywrightController | null = null
 let flowRunner: FlowRunner | null = null
-let profileManager: BrowserProfileManager | null = null
+let webviewRegistry: WebviewRegistry | null = null
 let campaignScheduler: CampaignScheduler | null = null
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const supabase = new SupabaseService()
-  profileManager = new BrowserProfileManager()
-  campaignScheduler = new CampaignScheduler(supabase, profileManager, mainWindow)
+  webviewRegistry = new WebviewRegistry()
+  campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow)
 
   // =========== ACTIONS ===========
   ipcMain.handle(IPC_CHANNELS.ACTIONS_LIST, () => {
@@ -43,30 +43,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return { connected: playwrightController?.isConnected() ?? false }
   })
 
-  // =========== MULTI-BROWSER PROFILE MANAGEMENT ===========
-  ipcMain.handle(IPC_CHANNELS.PROFILE_LAUNCH, async (_, accountId: number, profileName: string) => {
-    if (!profileManager) throw new Error('Profile manager not initialized')
-    await profileManager.launchProfile(accountId, profileName)
+  // =========== WEBVIEW REGISTRATION ===========
+  ipcMain.handle(IPC_CHANNELS.WEBVIEW_REGISTER, (_, accountId: number, webContentsId: number) => {
+    if (!webviewRegistry) throw new Error('Webview registry not initialized')
+    webviewRegistry.register(accountId, webContentsId)
     return { success: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROFILE_CLOSE, async (_, accountId: number) => {
-    if (!profileManager) throw new Error('Profile manager not initialized')
-    await profileManager.closeProfile(accountId)
+  ipcMain.handle(IPC_CHANNELS.WEBVIEW_UNREGISTER, (_, accountId: number) => {
+    if (!webviewRegistry) throw new Error('Webview registry not initialized')
+    webviewRegistry.unregister(accountId)
     return { success: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROFILE_STATUS, (_, accountId: number) => {
-    return { connected: profileManager?.isProfileConnected(accountId) ?? false }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.PROFILE_LIST, () => {
-    return profileManager?.listProfiles() ?? []
-  })
-
-  ipcMain.handle(IPC_CHANNELS.PROFILE_FOCUS, async (_, accountId: number) => {
-    if (profileManager) await profileManager.focusProfile(accountId)
-    return { success: true }
+  ipcMain.handle(IPC_CHANNELS.WEBVIEW_STATUS, (_, accountId: number) => {
+    return { connected: webviewRegistry?.isRegistered(accountId) ?? false }
   })
 
   // =========== FLOW EXECUTION ===========
@@ -148,9 +139,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.DB_DELETE_ACCOUNT, async (_, id: number) => {
-    // Also close browser profile if open
-    if (profileManager?.isProfileConnected(id)) {
-      await profileManager.closeProfile(id)
+    // Unregister webview if registered
+    if (webviewRegistry?.isRegistered(id)) {
+      webviewRegistry.unregister(id)
     }
     return supabase.deleteAccount(id)
   })
