@@ -159,14 +159,28 @@ export class WebviewController {
               sel.removeAllRanges();
               sel.addRange(range);
               `}
-              // Use execCommand to properly trigger React/Draft.js/Lexical editor state updates
-              var lines = String(${safeJS(text)}).split('\\n');
-              for (var i = 0; i < lines.length; i++) {
-                if (i > 0) {
-                  document.execCommand('insertParagraph', false, null) || document.execCommand('insertLineBreak', false, null);
-                }
-                if (lines[i].length > 0) {
-                  document.execCommand('insertText', false, lines[i]);
+              // Attempt to dispatch a paste event so rich text editors (like Lexical on FB)
+              // can cleanly handle newlines and generate proper paragraph blocks.
+              var textToInsert = String(${safeJS(text)});
+              var dt = new DataTransfer();
+              dt.setData('text/plain', textToInsert);
+              var pasteEvent = new ClipboardEvent('paste', {
+                clipboardData: dt,
+                bubbles: true,
+                cancelable: true
+              });
+              var handled = !el.dispatchEvent(pasteEvent);
+              
+              if (!handled) {
+                // Fallback for basic contenteditables that do not intercept paste
+                var lines = textToInsert.split('\\n');
+                for (var i = 0; i < lines.length; i++) {
+                  if (i > 0) {
+                    document.execCommand('insertParagraph', false, null) || document.execCommand('insertLineBreak', false, null);
+                  }
+                  if (lines[i].length > 0) {
+                    document.execCommand('insertText', false, lines[i]);
+                  }
                 }
               }
             } else {
@@ -288,14 +302,28 @@ export class WebviewController {
               sel.removeAllRanges();
               sel.addRange(range);
               document.execCommand('delete', false);
-              // Insert new text using execCommand to trigger React/Draft.js editor state
-              var lines = String(text).split('\\n');
-              for (var i = 0; i < lines.length; i++) {
-                if (i > 0) {
-                  document.execCommand('insertParagraph', false, null) || document.execCommand('insertLineBreak', false, null);
-                }
-                if (lines[i].length > 0) {
-                  document.execCommand('insertText', false, lines[i]);
+              // Attempt to dispatch a paste event so rich text editors (like Lexical on FB)
+              // can cleanly handle newlines and generate proper paragraph blocks.
+              var textToInsert = String(text);
+              var dt = new DataTransfer();
+              dt.setData('text/plain', textToInsert);
+              var pasteEvent = new ClipboardEvent('paste', {
+                clipboardData: dt,
+                bubbles: true,
+                cancelable: true
+              });
+              var handled = !el.dispatchEvent(pasteEvent);
+              
+              if (!handled) {
+                // Fallback for basic contenteditables that do not intercept paste
+                var lines = textToInsert.split('\\n');
+                for (var i = 0; i < lines.length; i++) {
+                  if (i > 0) {
+                    document.execCommand('insertParagraph', false, null) || document.execCommand('insertLineBreak', false, null);
+                  }
+                  if (lines[i].length > 0) {
+                    document.execCommand('insertText', false, lines[i]);
+                  }
                 }
               }
             } else {
