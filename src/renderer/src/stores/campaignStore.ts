@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { FlatformAccount, Campaign, CampaignAction, CampaignDetail } from '../../../shared/types'
+import { FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -37,6 +37,11 @@ interface CampaignStore {
   createCampaignDetail: (data: Partial<CampaignDetail>) => Promise<CampaignDetail>
   updateCampaignDetail: (id: number, updates: Partial<CampaignDetail>) => Promise<void>
   deleteCampaignDetail: (id: number) => Promise<void>
+
+  // Detail Actions (action logs)
+  detailActions: CampaignDetailAction[]
+  loadingDetailActions: boolean
+  loadDetailActionsByCampaign: (campaignId: number) => Promise<void>
 
   // Logs
   logs: { timestamp: string; message: string }[]
@@ -217,6 +222,23 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     await window.electronAPI.deleteCampaignDetail(id)
     const { selectedCampaignId } = get()
     if (selectedCampaignId) await get().loadCampaignDetails(selectedCampaignId)
+  },
+
+  // =========== DETAIL ACTIONS ===========
+  detailActions: [],
+  loadingDetailActions: false,
+
+  loadDetailActionsByCampaign: async (campaignId) => {
+    if (!window.electronAPI) return
+    set({ loadingDetailActions: true })
+    try {
+      const actions = await window.electronAPI.listDetailActionsByCampaign(campaignId)
+      set({ detailActions: actions })
+    } catch (err) {
+      console.error('Failed to load detail actions:', err)
+    } finally {
+      set({ loadingDetailActions: false })
+    }
   },
 
   // =========== LOGS ===========

@@ -205,6 +205,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return supabase.deleteCampaignDetail(id)
   })
 
+  // =========== DATABASE - CAMPAIGN DETAIL ACTIONS ===========
+  ipcMain.handle(IPC_CHANNELS.DB_LIST_DETAIL_ACTIONS, async (_, detailId: number) => {
+    return supabase.listDetailActions(detailId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DB_LIST_DETAIL_ACTIONS_BY_CAMPAIGN, async (_, campaignId: number) => {
+    return supabase.listDetailActionsByCampaign(campaignId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DB_CREATE_DETAIL_ACTION, async (_, actionData) => {
+    return supabase.createDetailAction(actionData)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DB_DELETE_DETAIL_ACTION, async (_, id: number) => {
+    return supabase.deleteDetailAction(id)
+  })
+
   // =========== CAMPAIGN SCHEDULER ===========
   ipcMain.handle(IPC_CHANNELS.SCHEDULER_START, () => {
     campaignScheduler?.start()

@@ -1827,6 +1827,139 @@ body {
   color: var(--text-tertiary);
 }
 
+/* --- Schedule Section Styles --- */
+.schedule-radio-group {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.schedule-radio-label {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 0 !important;
+}
+
+.schedule-radio-label input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+  margin: 0;
+}
+
+.schedule-weekday-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.schedule-checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 0 !important;
+}
+
+.schedule-checkbox-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+  margin: 0;
+}
+
+.schedule-checkbox-label input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.schedule-checkbox-label input[type="checkbox"]:disabled + span {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.schedule-option-label {
+  padding: 10px 0 0 0;
+  border-top: 1px solid var(--border-default);
+  margin-top: 4px;
+}
+
+.schedule-option-label span {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.schedule-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.schedule-hint-inline {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.stepper-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--bg-elevated);
+}
+
+/* --- Extra Settings Section --- */
+.extra-comment-options {
+  padding-left: 24px;
+  border-left: 2px solid var(--border-hover);
+  margin-bottom: 8px;
+}
+
+.extra-image-upload {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.extra-image-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.extra-image-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.extra-image-name {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
 /* --- Stepper Grid (details table) --- */
 .stepper-grid-toolbar {
   margin-bottom: 12px;
@@ -1975,6 +2108,37 @@ body {
   top: 0;
   z-index: 1;
   background: var(--bg-secondary);
+}
+
+/* Detail Dock Tabs */
+.detail-dock-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  padding: 0 8px;
+}
+
+.detail-dock-tab {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.detail-dock-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.detail-dock-tab.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
 }
 
 /* =========== Browser Page =========== */
