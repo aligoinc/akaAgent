@@ -237,6 +237,14 @@ export class CampaignScheduler {
 
         // Run workflow for each detail
         for (let i = 0; i < details.length; i++) {
+          // Kiểm tra xem chiến dịch có bị tạm dừng trong lúc đang chạy không
+          const currentCamp = await this.supabase.getCampaign(campaign.id);
+          if (currentCamp && currentCamp.status === 'tạm dừng') {
+            this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`);
+            await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+            return; // Thoát khỏi chiến dịch hiện tại
+          }
+
           const detail = details[i]
           if (detail.status !== 'chờ xử lý') continue
 

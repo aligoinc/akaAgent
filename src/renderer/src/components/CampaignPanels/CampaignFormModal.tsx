@@ -32,7 +32,7 @@ const STEPS: StepDef[] = [
     title: 'Cài đặt chung',
     fields: [
       { key: 'actionId', label: 'Chiến dịch' },
-      { key: 'flatformAccountId', label: 'Tài khoản' },
+      { key: 'flatformAccountIds', label: 'Tài khoản' },
       { key: 'name', label: 'Tên chiến dịch' }
     ]
   },
@@ -119,7 +119,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
     actionId: campaign?.actionId || '',
-    flatformAccountId: campaign?.flatformAccountId || 0,
+    flatformAccountIds: campaign?.flatformAccountId ? [campaign.flatformAccountId] : [] as number[],
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
     scheduleEndDate: initEndDate(),
@@ -140,7 +140,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? 60,
     imageOption: (campaign?.extraSettings?.imageOption || 'none') as 'none' | 'all' | 'random',
     randomImageCount: campaign?.extraSettings?.randomImageCount || 3,
-    images: campaign?.images || [] as string[]
+    images: campaign?.images || [] as string[],
+    splitDataAcrossAccounts: false
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
 
@@ -149,6 +150,18 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [activeStep, setActiveStep] = useState('general')
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
+  const accountDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (accountDropdownRef.current && !accountDropdownRef.current.contains(event.target as Node)) {
+        setIsAccountDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
@@ -191,7 +204,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isFieldComplete = (key: string): boolean => {
     switch (key) {
       case 'actionId': return !!formData.actionId
-      case 'flatformAccountId': return formData.flatformAccountId > 0
+      case 'flatformAccountIds': return formData.flatformAccountIds.length > 0
       case 'name': return formData.name.trim().length > 0
       case 'schedule': return !!formData.schedule
       case 'scheduleType': return !!formData.scheduleType
@@ -227,73 +240,106 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   }
 
   const handleSave = async () => {
-    if (!formData.name.trim() || !formData.actionId || !formData.flatformAccountId) {
+    if (!formData.name.trim() || !formData.actionId || formData.flatformAccountIds.length === 0) {
       setToastMsg({ type: 'error', text: 'Vui lòng nhập Tên, Hành động và Tài khoản.' })
       setTimeout(() => setToastMsg(null), 3000)
       return
     }
 
     try {
-      let savedCampaign: Campaign
-
-      const campaignPayload = {
-        name: formData.name,
-        actionId: formData.actionId,
-        flatformAccountId: formData.flatformAccountId,
-        schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
-        scheduleType: formData.scheduleType,
-        scheduleEndDate: formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : undefined,
-        scheduleDays: formData.scheduleDays || undefined,
-        scheduleWeekDays: formData.scheduleWeekDays || undefined,
-        continueNextDay: formData.continueNextDay,
-        refreshData: formData.refreshData,
-        timeSleepBetween2: formData.timeSleepBetween2,
-        content: formData.content,
-        extraSettings: {
-          sharePost: formData.sharePost,
-          enableComment: formData.enableComment,
-          commentType: formData.commentType,
-          commentCount: formData.commentCount,
-          commentContent: formData.commentContent,
-          actionLimits: {
-            sleepBetweenActions: formData.timeSleepBetween2,
-            dailyLimit: formData.dailyLimit,
-            rateLimitCount: formData.rateLimitCount,
-            rateLimitMinutes: formData.rateLimitMinutes
-          },
-          imageOption: formData.imageOption,
-          randomImageCount: formData.randomImageCount
-        } as CampaignExtraSettings,
-        images: formData.images
-      }
-
-      if (campaign && campaign.id) {
-        await updateCampaign(campaign.id, campaignPayload)
-        savedCampaign = campaign
-      } else {
-        savedCampaign = await createCampaign(campaignPayload)
-      }
-
-      const { deleteCampaignDetail, updateCampaignDetail } = useCampaignStore.getState()
+      const { deleteCampaignDetail, updateCampaignDetail, createCampaignDetail, createCampaign, updateCampaign } = useCampaignStore.getState()
 
       for (const id of deletedIds) {
         await deleteCampaignDetail(id)
       }
 
-      for (const d of details) {
-        if (d.id) {
-          await updateCampaignDetail(d.id, {
-            name: d.name,
-            phone: d.phone,
-            uid: d.uid,
-            email: d.email,
-            note: d.note,
-          })
+      let accountChunks: Partial<CampaignDetail>[][] = [];
+      const numAccounts = formData.flatformAccountIds.length;
+      
+      if (formData.splitDataAcrossAccounts && numAccounts > 1 && details.length > 0) {
+        // Khởi tạo mảng con cho mỗi tài khoản
+        for (let i = 0; i < numAccounts; i++) {
+          accountChunks.push([]);
+        }
+        // Chia data lần lượt (round-robin)
+        for (let i = 0; i < details.length; i++) {
+          const accountIndex = i % numAccounts;
+          accountChunks[accountIndex].push(details[i]);
+        }
+      } else {
+        for (let i = 0; i < numAccounts; i++) {
+          accountChunks.push(details);
+        }
+      }
+
+      for (let i = 0; i < numAccounts; i++) {
+        const accountId = formData.flatformAccountIds[i]
+        const isFirst = (i === 0)
+        const currentDetails = accountChunks[i] || [];
+
+        const campaignPayload = {
+          name: formData.name,
+          actionId: formData.actionId,
+          flatformAccountId: accountId,
+          schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
+          scheduleType: formData.scheduleType,
+          scheduleEndDate: formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : undefined,
+          scheduleDays: formData.scheduleDays || undefined,
+          scheduleWeekDays: formData.scheduleWeekDays || undefined,
+          continueNextDay: formData.continueNextDay,
+          refreshData: formData.refreshData,
+          timeSleepBetween2: formData.timeSleepBetween2,
+          content: formData.content,
+          extraSettings: {
+            sharePost: formData.sharePost,
+            enableComment: formData.enableComment,
+            commentType: formData.commentType,
+            commentCount: formData.commentCount,
+            commentContent: formData.commentContent,
+            actionLimits: {
+              sleepBetweenActions: formData.timeSleepBetween2,
+              dailyLimit: formData.dailyLimit,
+              rateLimitCount: formData.rateLimitCount,
+              rateLimitMinutes: formData.rateLimitMinutes
+            },
+            imageOption: formData.imageOption,
+            randomImageCount: formData.randomImageCount
+          } as CampaignExtraSettings,
+          images: formData.images
+        }
+
+        let savedCampaign: Campaign
+
+        if (campaign && campaign.id && isFirst) {
+          await updateCampaign(campaign.id, campaignPayload)
+          savedCampaign = campaign
+          
+          for (const d of currentDetails) {
+            if (d.id) {
+              await updateCampaignDetail(d.id, {
+                name: d.name,
+                phone: d.phone,
+                uid: d.uid,
+                email: d.email,
+                note: d.note,
+              })
+            } else {
+              await createCampaignDetail({
+                ...d,
+                campaignId: savedCampaign.id
+              })
+            }
+          }
         } else {
-          await createCampaignDetail({
-            ...d,
-            campaignId: savedCampaign.id
-          })
+          savedCampaign = await createCampaign(campaignPayload)
+          
+          for (const d of currentDetails) {
+            await createCampaignDetail({
+              ...d,
+              id: undefined,
+              campaignId: savedCampaign.id
+            })
+          }
         }
       }
 
@@ -521,16 +567,79 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     </select>
                   </div>
 
-                  <div className="stepper-form-group">
-                    <label>Tài khoản <span className="required">*</span></label>
-                    <select
-                      value={formData.flatformAccountId}
-                      onChange={e => setFormData(p => ({ ...p, flatformAccountId: Number(e.target.value) }))}
-                      className="stepper-input"
-                    >
-                      <option value={0}>-- Chọn tài khoản --</option>
-                      {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.flatformType})</option>)}
-                    </select>
+                  <div className="stepper-form-group" ref={accountDropdownRef}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label style={{ margin: 0 }}>Tài khoản <span className="required">*</span></label>
+                      {accounts.length > 0 && !(campaign && campaign.id) && (
+                        <button 
+                          type="button" 
+                          className="btn btn-ghost" 
+                          style={{ padding: '2px 8px', fontSize: '12px', height: 'auto' }}
+                          onClick={() => {
+                            const allSelected = formData.flatformAccountIds.length === accounts.length;
+                            setFormData(p => ({
+                              ...p,
+                              flatformAccountIds: allSelected ? [] : accounts.map(a => a.id)
+                            }));
+                          }}
+                        >
+                          {formData.flatformAccountIds.length === accounts.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                      <div 
+                        className="stepper-input" 
+                        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isAccountDropdownOpen ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}
+                        onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
+                      >
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 8 }}>
+                          {formData.flatformAccountIds.length === 0 
+                            ? '-- Chọn tài khoản --' 
+                            : formData.flatformAccountIds.length === 1 
+                              ? accounts.find(a => a.id === formData.flatformAccountIds[0])?.name || 'Đã chọn 1 tài khoản'
+                              : `Đã chọn ${formData.flatformAccountIds.length} tài khoản`}
+                        </span>
+                        <ChevronDown size={16} style={{ flexShrink: 0, transform: isAccountDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                      </div>
+                      
+                      {isAccountDropdownOpen && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 10, background: 'var(--bg-primary)', border: '1px solid var(--border-default)', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                          <div className="account-checkbox-list" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '12px', maxHeight: '250px', overflowY: 'auto' }}>
+                            {accounts.map(a => (
+                              <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-primary)' }}>
+                                <input
+                                  type={campaign && campaign.id ? "radio" : "checkbox"}
+                                  name={campaign && campaign.id ? "account-selection" : undefined}
+                                  checked={formData.flatformAccountIds.includes(a.id)}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    if (campaign && campaign.id) {
+                                      setFormData(p => ({
+                                        ...p,
+                                        flatformAccountIds: [a.id]
+                                      }))
+                                      setIsAccountDropdownOpen(false) // auto close if it is a radio select
+                                    } else {
+                                      setFormData(p => ({
+                                        ...p,
+                                        flatformAccountIds: checked 
+                                          ? [...p.flatformAccountIds, a.id]
+                                          : p.flatformAccountIds.filter(id => id !== a.id)
+                                      }))
+                                    }
+                                  }}
+                                />
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${a.name} (${a.flatformType})`}>{a.name} ({a.flatformType})</span>
+                              </label>
+                            ))}
+                            {accounts.length === 0 && (
+                              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>Chưa có tài khoản nào</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="stepper-form-group">
@@ -1001,6 +1110,18 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
               {!collapsedSections['details'] && (
                 <div className="stepper-section-body">
+                  {formData.flatformAccountIds.length > 1 && (
+                    <div className="stepper-form-group" style={{ marginBottom: 12 }}>
+                      <label className="schedule-checkbox-label" style={{ fontWeight: 500 }}>
+                        <input
+                          type="checkbox"
+                          checked={formData.splitDataAcrossAccounts}
+                          onChange={e => setFormData(p => ({ ...p, splitDataAcrossAccounts: e.target.checked }))}
+                        />
+                        <span>Chia đều data cho các tài khoản <span className="schedule-hint-inline" style={{ fontWeight: 'normal' }}>(Mặc định là tất cả tài khoản chung 1 data)</span></span>
+                      </label>
+                    </div>
+                  )}
                   <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
                     <button className="btn btn-secondary" onClick={addDetailRow}>
                       <Plus size={14} /> Thêm data

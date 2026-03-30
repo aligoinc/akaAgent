@@ -355,6 +355,17 @@ export class SupabaseService {
 
   // =========== CAMPAIGNS ===========
 
+  async getCampaign(id: number): Promise<Campaign | null> {
+    const { data, error } = await this.client
+      .from('auto_campaigns')
+      .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
+      .eq('id', id)
+      .single()
+
+    if (error) return null
+    return this.mapCampaignFromDB(data)
+  }
+
   async listCampaigns(): Promise<Campaign[]> {
     const { data, error } = await this.client
       .from('auto_campaigns')

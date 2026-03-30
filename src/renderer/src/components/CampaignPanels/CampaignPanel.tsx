@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { Campaign } from '../../../../shared/types'
 import CampaignFormModal from './CampaignFormModal'
@@ -66,6 +66,14 @@ export default function CampaignPanel() {
   const handleRowClick = (campaign: Campaign) => {
     setSelectedCampaignId(prev => prev === campaign.id ? null : campaign.id)
     if (!detailDockOpen) setDetailDockOpen(true)
+  }
+
+  const handlePause = async (campaign: Campaign) => {
+    await updateCampaign(campaign.id, { status: 'tạm dừng' })
+  }
+
+  const handleResume = async (campaign: Campaign) => {
+    await updateCampaign(campaign.id, { status: 'chờ xử lý' })
   }
 
   const getStatusColor = (status: string) => {
@@ -153,6 +161,16 @@ export default function CampaignPanel() {
                   {campaign.schedule ? new Date(campaign.schedule).toLocaleString('vi-VN') : '-'}
                 </div>
                 <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
+                  {(campaign.status === 'đang chạy' || campaign.status === 'chờ xử lý') && (
+                    <button className="btn-icon" onClick={() => handlePause(campaign)} title="Tạm dừng">
+                      <Pause size={12} />
+                    </button>
+                  )}
+                  {campaign.status === 'tạm dừng' && (
+                    <button className="btn-icon" onClick={() => handleResume(campaign)} title="Tiếp tục">
+                      <Play size={12} />
+                    </button>
+                  )}
                   <button className="btn-icon" onClick={() => handleClone(campaign)} title="Nhân bản">
                     <Copy size={12} />
                   </button>
