@@ -11,6 +11,7 @@ import { useExecutionStore } from './stores/executionStore'
 import { FlowData, ExecutionStep } from '../../shared/types'
 import { useElementStore } from './stores/elementStore'
 import { useBlockStore } from './stores/blockStore'
+import { useThemeStore } from './stores/themeStore'
 
 export default function App() {
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
@@ -31,9 +32,19 @@ export default function App() {
   } = useExecutionStore()
   const { loadElements } = useElementStore()
   const { loadBlocks } = useBlockStore()
+  const { theme } = useThemeStore()
 
   const [showFlowList, setShowFlowList] = useState(false)
   const [flows, setFlows] = useState<FlowData[]>([])
+
+  // Apply theme class to body
+  useEffect(() => {
+    if (theme === 'light') {
+      document.body.classList.add('theme-light')
+    } else {
+      document.body.classList.remove('theme-light')
+    }
+  }, [theme])
 
   // Listen to flow progress events from main process
   useEffect(() => {
