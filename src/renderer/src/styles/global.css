@@ -1503,7 +1503,7 @@ body {
   min-width: 0;
 }
 .col-ops {
-  width: 72px;
+  width: 100px;
   flex-shrink: 0;
   display: flex;
   gap: 2px;
