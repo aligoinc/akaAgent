@@ -13,8 +13,8 @@ function createWindow(): BrowserWindow {
     frame: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#0a0a0f',
-      symbolColor: '#a0a0b0',
+      color: '#7c3aed',
+      symbolColor: '#ffffff',
       height: 36
     },
     webPreferences: {

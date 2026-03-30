@@ -12,6 +12,14 @@
   --bg-node: #1e1e32;
   --bg-hover: #2a2a42;
 
+  /* Topbar */
+  --bg-topbar: var(--bg-secondary);
+  --text-topbar: var(--text-primary);
+  --text-topbar-muted: var(--text-secondary);
+  --border-topbar: var(--border-default);
+  --bg-topbar-hover: var(--bg-tertiary);
+  --bg-topbar-active: rgba(124, 92, 252, 0.15);
+
   /* Accent colors */
   --accent-primary: #7c5cfc;
   --accent-primary-hover: #9178ff;
@@ -69,12 +77,20 @@
 
 body.theme-light {
   /* Colors - Light Palette */
-  --bg-primary: #f8fafc;
+  --bg-primary: #eef2f7;
   --bg-secondary: #ffffff;
   --bg-tertiary: #f1f5f9;
-  --bg-elevated: #ffffff;
+  --bg-elevated: #f8fafc;
   --bg-node: #ffffff;
-  --bg-hover: #e2e8f0;
+  --bg-hover: rgba(99, 102, 241, 0.06);
+
+  /* Topbar - Vibrant Premium Look */
+  --bg-topbar: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
+  --text-topbar: #ffffff;
+  --text-topbar-muted: rgba(255, 255, 255, 0.72);
+  --border-topbar: transparent;
+  --bg-topbar-hover: rgba(255, 255, 255, 0.15);
+  --bg-topbar-active: rgba(255, 255, 255, 0.25);
 
   /* Accent colors */
   --accent-primary: #6366f1;
@@ -95,8 +111,8 @@ body.theme-light {
 
   /* Text */
   --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-tertiary: #64748b;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
   --text-inverse: #ffffff;
 
   /* Borders */
@@ -105,10 +121,14 @@ body.theme-light {
   --border-active: #6366f1;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-glow: 0 0 15px rgba(99, 102, 241, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 15px rgba(99, 102, 241, 0.2);
+
+  /* Card */
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --card-radius: 12px;
 }
 
 /* =========== RESET =========== */
@@ -920,7 +940,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 40px;
+  padding: 48px 24px;
   color: var(--text-tertiary);
   text-align: center;
 }
@@ -933,6 +953,9 @@ body {
 
 .empty-state-text {
   font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  line-height: 1.6;
 }
 
 /* =========== ANIMATIONS =========== */
@@ -1179,15 +1202,16 @@ body {
 
 /* =========== TOP BAR NAVIGATION =========== */
 .topbar {
-  height: var(--toolbar-height);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-default);
+  height: 52px;
+  background: var(--bg-topbar);
+  border-bottom: 1px solid var(--border-topbar);
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 20px;
   gap: 8px;
   -webkit-app-region: no-drag;
   z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .topbar-left {
@@ -1197,24 +1221,27 @@ body {
 }
 
 .topbar-logo {
-  width: 26px;
-  height: 26px;
-  background: linear-gradient(
-    135deg,
-    var(--accent-primary),
-    var(--accent-secondary)
-  );
-  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: background var(--transition-fast);
+}
+
+.topbar-logo:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .topbar-brand {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
+  color: var(--text-topbar);
+  letter-spacing: -0.03em;
 }
 
 .topbar-nav {
@@ -1227,28 +1254,30 @@ body {
 .topbar-nav-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 7px;
+  padding: 7px 16px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-topbar-muted);
   font-family: var(--font-family);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .topbar-nav-item:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: var(--bg-topbar-hover);
+  color: var(--text-topbar);
 }
 
 .topbar-nav-item.active {
-  background: rgba(124, 92, 252, 0.15);
-  color: var(--accent-primary);
+  background: var(--bg-topbar-active);
+  color: var(--text-topbar);
   font-weight: 600;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .topbar-right {
@@ -1258,26 +1287,42 @@ body {
   gap: 8px;
 }
 
+.topbar .btn-ghost {
+  color: var(--text-topbar-muted);
+}
+
+.topbar .btn-ghost:hover {
+  background: var(--bg-topbar-hover);
+  color: var(--text-topbar);
+}
+
 /* =========== CAMPAIGN PAGE LAYOUT =========== */
 .campaign-page {
   display: flex;
   flex: 1;
   overflow: hidden;
   background: var(--bg-primary);
+  padding: 12px;
+  gap: 12px;
 }
 
 .campaign-page-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-radius: var(--card-radius, var(--radius-md));
+  box-shadow: var(--card-shadow, var(--shadow-sm));
+  border: 1px solid var(--border-default);
 }
 
 .resize-handle {
-  width: 4px;
+  width: 3px;
   cursor: col-resize;
-  background: var(--border-default);
+  background: transparent;
   transition: background var(--transition-fast);
   flex-shrink: 0;
+  border-radius: 4px;
+  margin: 24px 0;
 }
 
 .resize-handle:hover,
@@ -1291,7 +1336,8 @@ body {
   flex-direction: column;
   height: 100%;
   background: var(--bg-secondary);
-  border-right: 1px solid var(--border-default);
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 .campaign-panel:last-child {
@@ -1302,22 +1348,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
-  background: var(--bg-elevated);
+  background: var(--bg-secondary);
 }
 
 .campaign-panel-title {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .campaign-panel-content {
   flex: 1;
   overflow-y: auto;
-  padding: 6px;
+  padding: 8px;
 }
 
 /* =========== PANEL FORM =========== */
@@ -1359,17 +1406,18 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  margin-bottom: 4px;
+  border-radius: 8px;
+  margin-bottom: 6px;
   transition: all var(--transition-fast);
-  background: var(--bg-tertiary);
+  background: var(--bg-elevated);
 }
 
 .account-card:hover {
-  border-color: var(--border-hover);
+  border-color: var(--accent-primary);
   background: var(--bg-hover);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.08);
 }
 
 .account-card-info {
@@ -1440,30 +1488,31 @@ body {
 /* =========== CAMPAIGN TABLE (multi-column) =========== */
 .campaign-table {
   width: 100%;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .campaign-table-header {
   display: flex;
-  padding: 6px 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border-default);
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
   font-size: 10px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   position: sticky;
   top: 0;
-  background: var(--bg-secondary);
+  background: var(--bg-elevated);
   z-index: 1;
 }
 
 .campaign-table-row {
   display: flex;
-  padding: 8px 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-default);
-  transition: background var(--transition-fast);
+  transition: all var(--transition-fast);
   align-items: center;
+  border-radius: 0;
 }
 
 .campaign-table-row:hover {
@@ -1471,8 +1520,9 @@ body {
 }
 
 .campaign-table-row.selected {
-  background: rgba(99, 102, 241, 0.12);
-  border-left: 2px solid var(--accent-primary);
+  background: rgba(99, 102, 241, 0.08);
+  border-left: 3px solid var(--accent-primary);
+  padding-left: 9px;
 }
 
 .campaign-col {
@@ -1528,13 +1578,16 @@ body {
 .status-badge {
   font-weight: 600;
   font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
 }
 
 /* =========== LOG PANEL =========== */
 .log-panel-content {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 10px 12px;
   font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
   font-size: 11px;
   line-height: 1.6;
@@ -1542,15 +1595,21 @@ body {
 
 .log-entry {
   display: flex;
-  gap: 8px;
-  padding: 2px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.log-entry:last-child {
+  border-bottom: none;
 }
 
 .log-time {
-  color: var(--text-tertiary);
+  color: var(--accent-primary);
   flex-shrink: 0;
   font-size: 10px;
+  font-weight: 500;
+  opacity: 0.7;
 }
 
 .log-message {

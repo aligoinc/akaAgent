@@ -44,6 +44,10 @@ export default function App() {
     } else {
       document.body.classList.remove('theme-light')
     }
+    
+    if (window.electronAPI?.setTheme) {
+      window.electronAPI.setTheme(theme).catch(err => console.error('Set theme error:', err))
+    }
   }, [theme])
 
   // Listen to flow progress events from main process
