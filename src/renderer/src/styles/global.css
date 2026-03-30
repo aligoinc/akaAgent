@@ -67,6 +67,50 @@
   --font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+body.theme-light {
+  /* Colors - Light Palette */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-elevated: #ffffff;
+  --bg-node: #ffffff;
+  --bg-hover: #e2e8f0;
+
+  /* Accent colors */
+  --accent-primary: #6366f1;
+  --accent-primary-hover: #4f46e5;
+  --accent-secondary: #3b82f6;
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-error: #ef4444;
+  --accent-info: #0ea5e9;
+
+  /* Category colors */
+  --cat-navigation: #0ea5e9;
+  --cat-interaction: #8b5cf6;
+  --cat-data: #10b981;
+  --cat-control: #f59e0b;
+  --cat-utility: #f97316;
+  --cat-block: #6366f1;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-inverse: #ffffff;
+
+  /* Borders */
+  --border-default: #e2e8f0;
+  --border-hover: #cbd5e1;
+  --border-active: #6366f1;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-glow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
 /* =========== RESET =========== */
 *,
 *::before,
