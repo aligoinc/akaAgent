@@ -1,5 +1,6 @@
-import { Zap, Layers, Settings, Play, Pause, Globe } from 'lucide-react'
+import { Zap, Layers, Settings, Play, Pause, Globe, Sun, Moon } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
+import { useThemeStore } from '../../stores/themeStore'
 
 interface TopBarProps {
   activePage: 'campaigns' | 'workflow-editor' | 'browsers'
@@ -8,6 +9,7 @@ interface TopBarProps {
 
 export default function TopBar({ activePage, onPageChange }: TopBarProps) {
   const { schedulerRunning, setSchedulerRunning } = useCampaignStore()
+  const { theme, toggleTheme } = useThemeStore()
 
   const handleToggleScheduler = async () => {
     if (!window.electronAPI) return
@@ -58,6 +60,15 @@ export default function TopBar({ activePage, onPageChange }: TopBarProps) {
       </nav>
 
       <div className="topbar-right">
+        <button
+          className="btn btn-ghost btn-icon"
+          onClick={toggleTheme}
+          title={theme === 'light' ? 'Chế độ tối' : 'Chế độ sáng'}
+          style={{ marginRight: 8 }}
+        >
+          {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+        </button>
+
         <button
           className={`btn ${schedulerRunning ? 'btn-danger' : 'btn-success'}`}
           onClick={handleToggleScheduler}
