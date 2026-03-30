@@ -37,7 +37,7 @@ export default function App() {
   const [showFlowList, setShowFlowList] = useState(false)
   const [flows, setFlows] = useState<FlowData[]>([])
 
-  // Apply theme class to body and notify main process
+  // Apply theme class to body
   useEffect(() => {
     if (theme === 'light') {
       document.body.classList.add('theme-light')
