@@ -59,7 +59,8 @@ const STEPS: StepDef[] = [
     id: 'content',
     title: 'Nội dung',
     fields: [
-      { key: 'content', label: 'Nội dung chiến dịch' }
+      { key: 'content', label: 'Nội dung chiến dịch' },
+      { key: 'images', label: 'Media' }
     ]
   },
   {
@@ -67,8 +68,7 @@ const STEPS: StepDef[] = [
     title: 'Cài đặt thêm',
     fields: [
       { key: 'sharePost', label: 'Đăng bài dạng chia sẻ' },
-      { key: 'enableComment', label: 'Kiêm comment' },
-      { key: 'images', label: 'Chọn ảnh' }
+      { key: 'enableComment', label: 'Kiêm comment' }
     ]
   },
   {
@@ -90,6 +90,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const contentRef = useRef<HTMLDivElement>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const txtFileInputRef = useRef<HTMLInputElement>(null)
 
   const initSchedule = () => {
     if (campaign?.schedule) {
@@ -137,6 +138,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
     rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
     rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? 60,
+    imageOption: (campaign?.extraSettings?.imageOption || 'none') as 'none' | 'all' | 'random',
+    randomImageCount: campaign?.extraSettings?.randomImageCount || 3,
     images: campaign?.images || [] as string[]
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -257,7 +260,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             dailyLimit: formData.dailyLimit,
             rateLimitCount: formData.rateLimitCount,
             rateLimitMinutes: formData.rateLimitMinutes
-          }
+          },
+          imageOption: formData.imageOption,
+          randomImageCount: formData.randomImageCount
         } as CampaignExtraSettings,
         images: formData.images
       }
@@ -379,6 +384,52 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const handleTxtFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target?.result as string
+        if (!text) return
+
+        // Mảng chứa các UID cắt bằng dấu phẩy hoặc xuống dòng
+        const tokens = text.split(/[\r\n,]+/)
+        
+        const newRows: Partial<CampaignDetail>[] = []
+        for (const token of tokens) {
+          const uid = token.trim()
+          if (!uid) continue
+
+          newRows.push({
+            name: '',
+            uid: uid,
+            phone: '',
+            email: '',
+            note: '',
+            status: 'chờ xử lý'
+          })
+        }
+
+        if (newRows.length > 0) {
+          setDetails(prev => [...prev, ...newRows])
+          setToastMsg({ type: 'success', text: `Đã thêm ${newRows.length} UID từ file TXT.` })
+          setTimeout(() => setToastMsg(null), 3000)
+        } else {
+          setToastMsg({ type: 'error', text: 'File TXT trống hoặc không có UID hợp lệ.' })
+          setTimeout(() => setToastMsg(null), 3000)
+        }
+      } catch (err) {
+        console.error('Lỗi khi đọc file TXT:', err)
+        setToastMsg({ type: 'error', text: 'Có lỗi xảy ra khi đọc file TXT.' })
+        setTimeout(() => setToastMsg(null), 3000)
+      }
+    }
+    reader.readAsText(file) // For text files
+    if (txtFileInputRef.current) txtFileInputRef.current.value = ''
+  }
+
   return (
     <div className="modal-overlay">
       <div className="campaign-full-modal stepper-modal">
@@ -493,17 +544,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     />
                   </div>
 
-                  <div className="stepper-form-group">
-                    <label>Thời gian nghỉ giữa 2 lần (giây)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={formData.timeSleepBetween2}
-                      onChange={e => setFormData(p => ({ ...p, timeSleepBetween2: Number(e.target.value) }))}
-                      className="stepper-input"
-                      style={{ maxWidth: 200 }}
-                    />
-                  </div>
+
                 </div>
               )}
             </div>
@@ -612,7 +653,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                           checked={formData.continueNextDay}
                           onChange={e => setFormData(p => ({ ...p, continueNextDay: e.target.checked }))}
                         />
-                        <span>Nếu không chạy hết, hôm sau chiến dịch sẽ chạy theo thời gian hẹn giờ</span>
+                        <span>Nếu chưa chạy hết data do đạt giới hạn, 00h ngày hôm sau sẽ tiếp tục chạy. Nếu chạy hết data sẽ hoàn thành chiến dịch.</span>
                       </label>
                     </div>
                   )}
@@ -723,6 +764,119 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       rows={8}
                     />
                   </div>
+
+                  {/* Media section */}
+                  <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>Media</div>
+                    
+                    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+                      {/* Left side */}
+                      <div style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => imageInputRef.current?.click()}
+                          style={{ width: 'fit-content', opacity: formData.imageOption === 'none' ? 0.6 : 1 }}
+                          disabled={formData.imageOption === 'none'}
+                        >
+                          Tải hoặc chọn ảnh
+                        </button>
+                        <input
+                          type="file"
+                          ref={imageInputRef}
+                          style={{ display: 'none' }}
+                          accept="image/*"
+                          multiple
+                          onChange={e => {
+                            const files = Array.from(e.target.files || [])
+                            const paths = files.map(f => (f as any).path || f.name)
+                            setFormData(p => ({ ...p, images: [...p.images, ...paths] }))
+                            e.target.value = ''
+                          }}
+                        />
+
+                        <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+                          <label className="schedule-radio-label">
+                            <input
+                              type="radio"
+                              name="imageOption"
+                              checked={formData.imageOption === 'none'}
+                              onChange={() => setFormData(p => ({ ...p, imageOption: 'none' }))}
+                            />
+                            <span>Không gửi ảnh</span>
+                          </label>
+                          <label className="schedule-radio-label">
+                            <input
+                              type="radio"
+                              name="imageOption"
+                              checked={formData.imageOption === 'all'}
+                              onChange={() => setFormData(p => ({ ...p, imageOption: 'all' }))}
+                            />
+                            <span>Gửi ảnh đã chọn</span>
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <label className="schedule-radio-label">
+                              <input
+                                type="radio"
+                                name="imageOption"
+                                checked={formData.imageOption === 'random'}
+                                onChange={() => setFormData(p => ({ ...p, imageOption: 'random' }))}
+                              />
+                              <span>Gửi ngẫu nhiên số ảnh trong ảnh đã chọn</span>
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={formData.randomImageCount}
+                              onChange={e => setFormData(p => ({ ...p, randomImageCount: Number(e.target.value) }))}
+                              className="stepper-input"
+                              style={{ width: 60, padding: '4px 8px' }}
+                              disabled={formData.imageOption !== 'random'}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right side - Table */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Ảnh đã chọn</div>
+                        <div className="stepper-grid-container" style={{ margin: 0, maxHeight: 300, overflowY: 'auto' }}>
+                          <table className="campaign-grid">
+                            <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                              <tr>
+                                <th style={{ width: 50, textAlign: 'center' }}>STT</th>
+                                <th>Link</th>
+                                <th style={{ width: 40, textAlign: 'center' }}></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {formData.images.length === 0 ? (
+                                <tr>
+                                  <td colSpan={3} className="text-center text-muted" style={{ padding: '24px 0' }}>Chưa có ảnh nào được chọn</td>
+                                </tr>
+                              ) : (
+                                formData.images.map((img, idx) => (
+                                  <tr key={idx}>
+                                    <td className="text-center">{idx + 1}</td>
+                                    <td className="text-truncate" style={{ maxWidth: 200 }} title={img}>{img.split(/[\\/]/).pop() || img}</td>
+                                    <td className="text-center">
+                                      <button
+                                        className="btn-icon text-error action-btn"
+                                        style={{ display: 'inline-flex' }}
+                                        onClick={() => setFormData(p => ({ ...p, images: p.images.filter((_, i) => i !== idx) }))}
+                                        title="Xóa"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -821,52 +975,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     </div>
                   )}
 
-                  {/* Image upload */}
-                  <div className="stepper-form-group">
-                    <label>Chọn ảnh</label>
-                    <div className="extra-image-upload">
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => imageInputRef.current?.click()}
-                      >
-                        <Image size={14} /> Chọn ảnh
-                      </button>
-                      <input
-                        type="file"
-                        ref={imageInputRef}
-                        style={{ display: 'none' }}
-                        accept="image/*"
-                        multiple
-                        onChange={e => {
-                          const files = Array.from(e.target.files || [])
-                          const paths = files.map(f => (f as any).path || f.name)
-                          setFormData(p => ({ ...p, images: [...p.images, ...paths] }))
-                          e.target.value = ''
-                        }}
-                        title="Chọn ảnh"
-                      />
-                      {formData.images.length > 0 && (
-                        <span className="schedule-hint" style={{ marginTop: 0, marginLeft: 8 }}>
-                          {formData.images.length} ảnh đã chọn
-                        </span>
-                      )}
-                    </div>
-                    {formData.images.length > 0 && (
-                      <div className="extra-image-list">
-                        {formData.images.map((img, idx) => (
-                          <div key={idx} className="extra-image-item">
-                            <span className="extra-image-name">{img.split(/[\\/]/).pop()}</span>
-                            <button
-                              className="btn-icon text-error"
-                              onClick={() => setFormData(p => ({ ...p, images: p.images.filter((_, i) => i !== idx) }))}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+
                 </div>
               )}
             </div>
@@ -894,13 +1003,19 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                 <div className="stepper-section-body">
                   <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
                     <button className="btn btn-secondary" onClick={addDetailRow}>
-                      <Plus size={14} /> Thêm dòng
+                      <Plus size={14} /> Thêm data
                     </button>
                     <button 
                       className="btn btn-secondary" 
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Upload size={14} /> Upload Excel
+                    </button>
+                    <button 
+                      className="btn btn-secondary" 
+                      onClick={() => txtFileInputRef.current?.click()}
+                    >
+                      <Upload size={14} /> Upload TXT
                     </button>
                     <input
                       type="file"
@@ -909,6 +1024,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       accept=".xlsx, .xls, .csv"
                       onChange={handleFileUpload}
                       title="Upload Excel"
+                    />
+                    <input
+                      type="file"
+                      ref={txtFileInputRef}
+                      style={{ display: 'none' }}
+                      accept=".txt"
+                      onChange={handleTxtFileUpload}
+                      title="Upload TXT"
                     />
                   </div>
 
@@ -927,7 +1050,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         {loadingDetails ? (
                           <tr><td colSpan={5} className="text-center">Đang tải data...</td></tr>
                         ) : details.length === 0 ? (
-                          <tr><td colSpan={5} className="text-center text-muted">Chưa có data nào. Nhấn "Thêm dòng" hoặc "Upload Excel" để bắt đầu.</td></tr>
+                          <tr><td colSpan={5} className="text-center text-muted">Chưa có data nào.</td></tr>
                         ) : (
                           details.map((d, i) => (
                             <tr key={d.id || `new-${i}`}>
