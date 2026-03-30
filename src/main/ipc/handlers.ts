@@ -17,6 +17,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   webviewRegistry = new WebviewRegistry()
   campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow)
 
+  // =========== THEME ===========
+  ipcMain.handle(IPC_CHANNELS.THEME_CHANGE, (_, theme: 'light' | 'dark') => {
+    if (theme === 'light') {
+      mainWindow.setTitleBarOverlay({
+        color: '#7c3aed',
+        symbolColor: '#ffffff'
+      })
+    } else {
+      mainWindow.setTitleBarOverlay({
+        color: '#0a0a0f',
+        symbolColor: '#a0a0b0'
+      })
+    }
+  })
+
   // =========== ACTIONS ===========
   ipcMain.handle(IPC_CHANNELS.ACTIONS_LIST, () => {
     return builtinActions

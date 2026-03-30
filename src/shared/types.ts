@@ -256,6 +256,9 @@ export interface CampaignDetailAction {
 // ============================================
 
 export const IPC_CHANNELS = {
+  // Theme
+  THEME_CHANGE: 'theme:change',
+
   // Flow execution
   FLOW_RUN: 'flow:run',
   FLOW_STOP: 'flow:stop',

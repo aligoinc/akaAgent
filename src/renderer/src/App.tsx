@@ -37,12 +37,16 @@ export default function App() {
   const [showFlowList, setShowFlowList] = useState(false)
   const [flows, setFlows] = useState<FlowData[]>([])
 
-  // Apply theme class to body
+  // Apply theme class to body and notify main process
   useEffect(() => {
     if (theme === 'light') {
       document.body.classList.add('theme-light')
     } else {
       document.body.classList.remove('theme-light')
+    }
+    
+    if (window.electronAPI?.setTheme) {
+      window.electronAPI.setTheme(theme).catch(err => console.error('Set theme error:', err))
     }
   }, [theme])
 

@@ -4,6 +4,10 @@ import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccoun
 export type ElectronAPI = typeof electronAPI
 
 const electronAPI = {
+  // Theme
+  setTheme: (theme: 'light' | 'dark'): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.THEME_CHANGE, theme),
+
   // Actions
   listActions: (): Promise<ActionDefinition[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.ACTIONS_LIST),
