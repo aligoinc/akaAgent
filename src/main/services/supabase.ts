@@ -373,8 +373,16 @@ export class SupabaseService {
       flatform_account_id: campaign.flatformAccountId,
       status: campaign.status || 'chờ xử lý',
       schedule: campaign.schedule || null,
+      schedule_type: campaign.scheduleType || 'daily',
+      schedule_end_date: campaign.scheduleEndDate || null,
+      schedule_days: campaign.scheduleDays || null,
+      schedule_week_days: campaign.scheduleWeekDays || null,
+      continue_next_day: campaign.continueNextDay ?? false,
+      refresh_data: campaign.refreshData ?? false,
       time_sleep_between_2: campaign.timeSleepBetween2 || 30,
       content: campaign.content || '',
+      extra_settings: campaign.extraSettings || {},
+      images: campaign.images || [],
       log: ''
     }
 
@@ -395,8 +403,16 @@ export class SupabaseService {
     if (updates.flatformAccountId !== undefined) payload.flatform_account_id = updates.flatformAccountId
     if (updates.status !== undefined) payload.status = updates.status
     if (updates.schedule !== undefined) payload.schedule = updates.schedule
+    if (updates.scheduleType !== undefined) payload.schedule_type = updates.scheduleType
+    if (updates.scheduleEndDate !== undefined) payload.schedule_end_date = updates.scheduleEndDate
+    if (updates.scheduleDays !== undefined) payload.schedule_days = updates.scheduleDays
+    if (updates.scheduleWeekDays !== undefined) payload.schedule_week_days = updates.scheduleWeekDays
+    if (updates.continueNextDay !== undefined) payload.continue_next_day = updates.continueNextDay
+    if (updates.refreshData !== undefined) payload.refresh_data = updates.refreshData
     if (updates.timeSleepBetween2 !== undefined) payload.time_sleep_between_2 = updates.timeSleepBetween2
     if (updates.content !== undefined) payload.content = updates.content
+    if (updates.extraSettings !== undefined) payload.extra_settings = updates.extraSettings
+    if (updates.images !== undefined) payload.images = updates.images
     if (updates.log !== undefined) payload.log = updates.log
 
     const { data, error } = await this.client
@@ -438,8 +454,16 @@ export class SupabaseService {
         flatform_account_id: origCamp.flatform_account_id,
         status: 'chờ xử lý',
         schedule: origCamp.schedule,
+        schedule_type: origCamp.schedule_type,
+        schedule_end_date: origCamp.schedule_end_date,
+        schedule_days: origCamp.schedule_days,
+        schedule_week_days: origCamp.schedule_week_days,
+        continue_next_day: origCamp.continue_next_day,
+        refresh_data: origCamp.refresh_data,
         time_sleep_between_2: origCamp.time_sleep_between_2,
         content: origCamp.content,
+        extra_settings: origCamp.extra_settings,
+        images: origCamp.images,
         log: ''
       })
       .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
@@ -568,7 +592,110 @@ export class SupabaseService {
     if (error) throw new Error(`Failed to delete campaign detail: ${error.message}`)
   }
 
+  // =========== CAMPAIGN DETAIL ACTIONS (Action Logs) ===========
+
+  async listDetailActions(detailId: number): Promise<import('../../shared/types').CampaignDetailAction[]> {
+    const { data, error } = await this.client
+      .from('auto_campaign_detail_actions')
+      .select('*')
+      .eq('campaign_detail_id', detailId)
+      .eq('is_delete', false)
+      .order('created_at', { ascending: true })
+
+    if (error) throw new Error(`Failed to list detail actions: ${error.message}`)
+    return (data || []).map(row => this.mapDetailActionFromDB(row))
+  }
+
+  async listDetailActionsByCampaign(campaignId: number): Promise<import('../../shared/types').CampaignDetailAction[]> {
+    const { data, error } = await this.client
+      .from('auto_campaign_detail_actions')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .eq('is_delete', false)
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    if (error) throw new Error(`Failed to list detail actions by campaign: ${error.message}`)
+    return (data || []).map(row => this.mapDetailActionFromDB(row))
+  }
+
+  async createDetailAction(action: Partial<import('../../shared/types').CampaignDetailAction>): Promise<import('../../shared/types').CampaignDetailAction> {
+    const payload = {
+      campaign_detail_id: action.campaignDetailId,
+      campaign_id: action.campaignId,
+      account_id: action.accountId,
+      action_name: action.actionName,
+      status: action.status || 'success',
+      log: action.log || null,
+      data: action.data || null
+    }
+
+    const { data, error } = await this.client
+      .from('auto_campaign_detail_actions')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to create detail action: ${error.message}`)
+    return this.mapDetailActionFromDB(data)
+  }
+
+  async deleteDetailAction(id: number): Promise<void> {
+    const { error } = await this.client
+      .from('auto_campaign_detail_actions')
+      .update({ is_delete: true })
+      .eq('id', id)
+
+    if (error) throw new Error(`Failed to delete detail action: ${error.message}`)
+  }
+
   // =========== SCHEDULER QUERIES ===========
+
+  async getAccountRateLimitStatus(
+    accountId: number, 
+    actionName: string, 
+    limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }
+  ): Promise<{ ok: boolean, reason?: string }> {
+    const dailyLimit = limitConfig?.dailyLimit && limitConfig.dailyLimit > 0 ? limitConfig.dailyLimit : 30
+    const rateLimitCount = limitConfig?.rateLimitCount && limitConfig.rateLimitCount > 0 ? limitConfig.rateLimitCount : 9
+    const rateLimitMinutes = limitConfig?.rateLimitMinutes && limitConfig.rateLimitMinutes > 0 ? limitConfig.rateLimitMinutes : 60
+
+    // 1. Query today's count for this specific actionName
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    // We count successful actions or basically any valid action performed by the bot matching the actionName
+    const { count: dailyActionCount, error: dailyErr } = await this.client
+      .from('auto_campaign_detail_actions')
+      .select('*', { count: 'exact', head: true })
+      .eq('account_id', accountId)
+      .eq('action_name', actionName)
+      .gte('created_at', today.toISOString())
+      
+    if (dailyErr) throw new Error(`Daily count query error: ${dailyErr.message}`)
+    
+    if ((dailyActionCount ?? 0) >= dailyLimit) {
+        return { ok: false, reason: `Đạt giới hạn ngày cho hành động "${actionName}" (${dailyActionCount}/${dailyLimit})` }
+    }
+
+    // 2. Query short-term count for this specific actionName
+    const timeFrameStart = new Date(new Date().getTime() - rateLimitMinutes * 60 * 1000)
+    
+    const { count: windowActionCount, error: winErr } = await this.client
+      .from('auto_campaign_detail_actions')
+      .select('*', { count: 'exact', head: true })
+      .eq('account_id', accountId)
+      .eq('action_name', actionName)
+      .gte('created_at', timeFrameStart.toISOString())
+      
+    if (winErr) throw new Error(`Window count query error: ${winErr.message}`)
+    
+    if ((windowActionCount ?? 0) >= rateLimitCount) {
+        return { ok: false, reason: `Đạt tốc độ giới hạn hành động "${actionName}" (${windowActionCount}/${rateLimitCount} lần / ${rateLimitMinutes} phút)` }
+    }
+
+    return { ok: true }
+  }
 
   async getEligibleAccounts(): Promise<FlatformAccount[]> {
     const { data, error } = await this.client
@@ -699,8 +826,16 @@ export class SupabaseService {
       flatformAccountId: row.flatform_account_id as number,
       status: row.status as string,
       schedule: row.schedule as string | undefined,
+      scheduleType: (row.schedule_type as Campaign['scheduleType']) || 'daily',
+      scheduleEndDate: row.schedule_end_date as string | undefined,
+      scheduleDays: row.schedule_days as string | undefined,
+      scheduleWeekDays: row.schedule_week_days as string | undefined,
+      continueNextDay: (row.continue_next_day as boolean) ?? false,
+      refreshData: (row.refresh_data as boolean) ?? false,
       timeSleepBetween2: row.time_sleep_between_2 as number,
       content: (row.content as string) || '',
+      extraSettings: (row.extra_settings as Campaign['extraSettings']) || {},
+      images: (row.images as string[]) || [],
       log: (row.log as string) || '',
       isDelete: row.is_delete as boolean,
       createdAt: row.created_at as string,
@@ -722,6 +857,21 @@ export class SupabaseService {
       note: row.note as string | undefined,
       schedule: row.schedule as string | undefined,
       dateAction: row.date_action as string | undefined,
+      isDelete: row.is_delete as boolean,
+      createdAt: row.created_at as string
+    }
+  }
+
+  private mapDetailActionFromDB(row: Record<string, unknown>): import('../../shared/types').CampaignDetailAction {
+    return {
+      id: row.id as number,
+      campaignDetailId: row.campaign_detail_id as number | undefined,
+      campaignId: row.campaign_id as number,
+      accountId: row.account_id as number | undefined,
+      actionName: row.action_name as string,
+      status: row.status as string,
+      log: row.log as string | undefined,
+      data: row.data as Record<string, unknown> | undefined,
       isDelete: row.is_delete as boolean,
       createdAt: row.created_at as string
     }

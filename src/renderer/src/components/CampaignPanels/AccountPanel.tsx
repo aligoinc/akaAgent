@@ -7,7 +7,10 @@ export default function AccountPanel() {
   const { accounts, loadAccounts, createAccount, updateAccount, deleteAccount } = useCampaignStore()
   const [showForm, setShowForm] = useState(false)
   const [editingAccount, setEditingAccount] = useState<FlatformAccount | null>(null)
-  const [formData, setFormData] = useState({ name: '', flatformType: 'facebook' })
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    flatformType: 'facebook'
+  })
 
   useEffect(() => {
     loadAccounts()
@@ -16,16 +19,15 @@ export default function AccountPanel() {
   const handleSubmit = async () => {
     if (!formData.name.trim()) return
     try {
+      const payload = {
+        name: formData.name,
+        flatformType: formData.flatformType
+      }
+
       if (editingAccount) {
-        await updateAccount(editingAccount.id, {
-          name: formData.name,
-          flatformType: formData.flatformType
-        })
+        await updateAccount(editingAccount.id, payload)
       } else {
-        await createAccount({
-          name: formData.name,
-          flatformType: formData.flatformType
-        })
+        await createAccount(payload)
       }
       setShowForm(false)
       setEditingAccount(null)
@@ -37,7 +39,10 @@ export default function AccountPanel() {
 
   const handleEdit = (account: FlatformAccount) => {
     setEditingAccount(account)
-    setFormData({ name: account.name, flatformType: account.flatformType })
+    setFormData({ 
+      name: account.name, 
+      flatformType: account.flatformType
+    })
     setShowForm(true)
   }
 
@@ -94,6 +99,8 @@ export default function AccountPanel() {
             <option value="instagram">Instagram</option>
             <option value="other">Khác</option>
           </select>
+
+
           <div className="panel-form-actions">
             <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingAccount(null) }}>Huỷ</button>
             <button className="btn btn-primary" onClick={handleSubmit}>{editingAccount ? 'Cập nhật' : 'Tạo'}</button>

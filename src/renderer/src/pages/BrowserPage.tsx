@@ -31,9 +31,9 @@ export default function BrowserPage() {
   // Cleanup: unregister all webviews on unmount
   useEffect(() => {
     return () => {
-      for (const accountId of registeredIds.current) {
+      registeredIds.current.forEach((accountId) => {
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
-      }
+      })
       registeredIds.current.clear()
     }
   }, [])

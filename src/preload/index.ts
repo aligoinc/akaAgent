@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccount, Campaign, CampaignAction, CampaignDetail } from '../shared/types'
+import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction } from '../shared/types'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -130,6 +130,19 @@ const electronAPI = {
 
   deleteCampaignDetail: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_CAMPAIGN_DETAIL, id),
+
+  // Campaign Detail Actions (Action Logs)
+  listDetailActions: (detailId: number): Promise<CampaignDetailAction[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_DETAIL_ACTIONS, detailId),
+
+  listDetailActionsByCampaign: (campaignId: number): Promise<CampaignDetailAction[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_DETAIL_ACTIONS_BY_CAMPAIGN, campaignId),
+
+  createDetailAction: (data: Partial<CampaignDetailAction>): Promise<CampaignDetailAction> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_CREATE_DETAIL_ACTION, data),
+
+  deleteDetailAction: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_DETAIL_ACTION, id),
 
   // Campaign Scheduler
   startScheduler: (): Promise<{ success: boolean }> =>

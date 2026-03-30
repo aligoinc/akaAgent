@@ -9,9 +9,10 @@ export default function CampaignPanel() {
   const {
     accounts, campaigns, campaignActions,
     campaignDetails, loadingDetails,
+    detailActions, loadingDetailActions,
     loadCampaigns, loadCampaignActions, loadAccounts,
     createCampaign, updateCampaign, deleteCampaign, cloneCampaign,
-    loadCampaignDetails
+    loadCampaignDetails, loadDetailActionsByCampaign
   } = useCampaignStore()
 
   const [showForm, setShowForm] = useState(false)
@@ -20,6 +21,7 @@ export default function CampaignPanel() {
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
+  const [detailTab, setDetailTab] = useState<'data' | 'actions'>('data')
 
   useEffect(() => {
     loadCampaigns()
@@ -31,8 +33,9 @@ export default function CampaignPanel() {
   useEffect(() => {
     if (selectedCampaignId) {
       loadCampaignDetails(selectedCampaignId)
+      loadDetailActionsByCampaign(selectedCampaignId)
     }
-  }, [selectedCampaignId, loadCampaignDetails])
+  }, [selectedCampaignId, loadCampaignDetails, loadDetailActionsByCampaign])
 
   const handleEdit = (campaign: Campaign) => {
     setEditingCampaign(campaign)
@@ -48,10 +51,9 @@ export default function CampaignPanel() {
   }
 
   const handleClone = (campaign: Campaign) => {
-    // Open form pre-filled with old data but without id (creates new)
     const cloneData: Campaign = {
       ...campaign,
-      id: 0, // signal that this is a new campaign
+      id: 0,
       name: campaign.name + ' (Copy)',
       status: 'chờ xử lý',
       log: ''
@@ -72,6 +74,8 @@ export default function CampaignPanel() {
       case 'hoàn thành': return 'var(--accent-success)'
       case 'lỗi': return 'var(--accent-error)'
       case 'tạm dừng': return 'var(--accent-info)'
+      case 'success': return 'var(--accent-success)'
+      case 'error': return 'var(--accent-error)'
       default: return 'var(--text-tertiary)'
     }
   }
@@ -171,9 +175,6 @@ export default function CampaignPanel() {
           <div className="detail-dock-header" onClick={() => setDetailDockOpen(!detailDockOpen)}>
             <span className="detail-dock-title">
               Chi tiết: <strong>{selectedCampaign?.name || ''}</strong>
-              <span className="text-secondary" style={{ marginLeft: 8, fontSize: 11 }}>
-                ({campaignDetails.length} mục)
-              </span>
             </span>
             <button className="btn-icon">
               {detailDockOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -182,37 +183,103 @@ export default function CampaignPanel() {
 
           {detailDockOpen && (
             <div className="detail-dock-body">
-              {loadingDetails ? (
-                <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
-              ) : campaignDetails.length === 0 ? (
-                <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có chi tiết nào</div>
-              ) : (
-                <table className="campaign-grid" style={{ fontSize: 12 }}>
-                  <thead>
-                    <tr>
-                      <th>Tên</th>
-                      <th>UID</th>
-                      <th>SĐT</th>
-                      <th>Email</th>
-                      <th>Trạng thái</th>
-                      <th>Ghi chú</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {campaignDetails.map(d => (
-                      <tr key={d.id}>
-                        <td>{d.name || '-'}</td>
-                        <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
-                        <td>{d.phone || '-'}</td>
-                        <td>{d.email || '-'}</td>
-                        <td>
-                          <span style={{ color: getStatusColor(d.status) }}>{d.status}</span>
-                        </td>
-                        <td style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Tabs */}
+              <div className="detail-dock-tabs">
+                <button
+                  className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
+                  onClick={() => setDetailTab('data')}
+                >
+                  Dữ liệu ({campaignDetails.length})
+                </button>
+                <button
+                  className={`detail-dock-tab ${detailTab === 'actions' ? 'active' : ''}`}
+                  onClick={() => {
+                    setDetailTab('actions')
+                    if (selectedCampaignId) loadDetailActionsByCampaign(selectedCampaignId)
+                  }}
+                >
+                  Lịch sử hành động ({detailActions.length})
+                </button>
+              </div>
+
+              {/* Tab: Data */}
+              {detailTab === 'data' && (
+                <>
+                  {loadingDetails ? (
+                    <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
+                  ) : campaignDetails.length === 0 ? (
+                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có chi tiết nào</div>
+                  ) : (
+                    <table className="campaign-grid" style={{ fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th>Tên</th>
+                          <th>UID</th>
+                          <th>SĐT</th>
+                          <th>Email</th>
+                          <th>Trạng thái</th>
+                          <th>Ghi chú</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {campaignDetails.map(d => (
+                          <tr key={d.id}>
+                            <td>{d.name || '-'}</td>
+                            <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
+                            <td>{d.phone || '-'}</td>
+                            <td>{d.email || '-'}</td>
+                            <td>
+                              <span style={{ color: getStatusColor(d.status) }}>{d.status}</span>
+                            </td>
+                            <td style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
+              )}
+
+              {/* Tab: Action Logs */}
+              {detailTab === 'actions' && (
+                <>
+                  {loadingDetailActions ? (
+                    <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
+                  ) : detailActions.length === 0 ? (
+                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có hành động nào được ghi nhận</div>
+                  ) : (
+                    <table className="campaign-grid" style={{ fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th>Thời gian</th>
+                          <th>Hành động</th>
+                          <th>Trạng thái</th>
+                          <th>Chi tiết</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detailActions.map(a => (
+                          <tr key={a.id}>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {a.createdAt ? new Date(a.createdAt).toLocaleString('vi-VN') : '-'}
+                            </td>
+                            <td>
+                              <strong>{a.actionName}</strong>
+                            </td>
+                            <td>
+                              <span style={{ color: getStatusColor(a.status) }}>
+                                {a.status === 'success' ? '✅ Thành công' : a.status === 'error' ? '❌ Lỗi' : a.status}
+                              </span>
+                            </td>
+                            <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {a.log || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
               )}
             </div>
           )}

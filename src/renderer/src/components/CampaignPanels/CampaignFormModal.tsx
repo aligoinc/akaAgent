@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
-import { Campaign, CampaignDetail } from '../../../../shared/types'
+import { Campaign, CampaignDetail, CampaignExtraSettings } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
 
 interface CampaignFormModalProps {
@@ -16,6 +16,16 @@ interface StepDef {
   fields: { key: string; label: string }[]
 }
 
+const WEEKDAYS = [
+  { value: '2', label: 'Thứ 2' },
+  { value: '3', label: 'Thứ 3' },
+  { value: '4', label: 'Thứ 4' },
+  { value: '5', label: 'Thứ 5' },
+  { value: '6', label: 'Thứ 6' },
+  { value: '7', label: 'Thứ 7' },
+  { value: '8', label: 'Chủ nhật' }
+]
+
 const STEPS: StepDef[] = [
   {
     id: 'general',
@@ -23,9 +33,26 @@ const STEPS: StepDef[] = [
     fields: [
       { key: 'actionId', label: 'Chiến dịch' },
       { key: 'flatformAccountId', label: 'Tài khoản' },
-      { key: 'name', label: 'Tên chiến dịch' },
-      { key: 'schedule', label: 'Thời gian' },
-      { key: 'timeSleepBetween2', label: 'Thời gian nghỉ' }
+      { key: 'name', label: 'Tên chiến dịch' }
+    ]
+  },
+  {
+    id: 'schedule',
+    title: 'Lịch chạy',
+    fields: [
+      { key: 'scheduleType', label: 'Loại lịch' },
+      { key: 'schedule', label: 'Ngày chạy' },
+      { key: 'scheduleEndDate', label: 'Ngày kết thúc' }
+    ]
+  },
+  {
+    id: 'limits',
+    title: 'Giới hạn hành động',
+    fields: [
+      { key: 'timeSleepBetween2', label: 'Nghỉ giữa 2 lần' },
+      { key: 'dailyLimit', label: 'Giới hạn ngày' },
+      { key: 'rateLimitCount', label: 'Số lần chờ' },
+      { key: 'rateLimitMinutes', label: 'Khung thời gian' }
     ]
   },
   {
@@ -33,6 +60,15 @@ const STEPS: StepDef[] = [
     title: 'Nội dung',
     fields: [
       { key: 'content', label: 'Nội dung chiến dịch' }
+    ]
+  },
+  {
+    id: 'extra',
+    title: 'Cài đặt thêm',
+    fields: [
+      { key: 'sharePost', label: 'Đăng bài dạng chia sẻ' },
+      { key: 'enableComment', label: 'Kiêm comment' },
+      { key: 'images', label: 'Chọn ảnh' }
     ]
   },
   {
@@ -61,10 +97,22 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       const pad = (n: number) => n.toString().padStart(2, '0')
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
     }
-    // Default to current time for new or cloned campaigns
     const now = new Date()
     const pad = (n: number) => n.toString().padStart(2, '0')
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+  }
+
+  const initEndDate = () => {
+    if (campaign?.scheduleEndDate) {
+      const d = new Date(campaign.scheduleEndDate)
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    }
+    // Default to 7 days from now
+    const d = new Date()
+    d.setDate(d.getDate() + 7)
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   }
 
   const [formData, setFormData] = useState({
@@ -72,9 +120,26 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     actionId: campaign?.actionId || '',
     flatformAccountId: campaign?.flatformAccountId || 0,
     schedule: initSchedule(),
+    scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
+    scheduleEndDate: initEndDate(),
+    scheduleDays: campaign?.scheduleDays || '',
+    scheduleWeekDays: campaign?.scheduleWeekDays || '',
+    continueNextDay: campaign?.continueNextDay ?? true,
+    refreshData: campaign?.refreshData ?? true,
     timeSleepBetween2: campaign?.timeSleepBetween2 ?? 30,
-    content: campaign?.content || ''
+    content: campaign?.content || '',
+    // Extra settings
+    sharePost: campaign?.extraSettings?.sharePost ?? false,
+    enableComment: campaign?.extraSettings?.enableComment ?? false,
+    commentType: (campaign?.extraSettings?.commentType || 'own') as 'own' | 'others',
+    commentCount: campaign?.extraSettings?.commentCount ?? 3,
+    commentContent: campaign?.extraSettings?.commentContent || '',
+    dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
+    rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
+    rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? 60,
+    images: campaign?.images || [] as string[]
   })
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   const [details, setDetails] = useState<Partial<CampaignDetail>[]>([])
   const [deletedIds, setDeletedIds] = useState<number[]>([])
@@ -109,14 +174,33 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   }, [campaign, cloneFromId])
 
   // Check field completion
+  const toggleWeekDay = (day: string) => {
+    const days = formData.scheduleWeekDays ? formData.scheduleWeekDays.split(',').filter(Boolean) : []
+    const idx = days.indexOf(day)
+    if (idx >= 0) {
+      days.splice(idx, 1)
+    } else {
+      days.push(day)
+    }
+    setFormData(p => ({ ...p, scheduleWeekDays: days.join(',') }))
+  }
+
   const isFieldComplete = (key: string): boolean => {
     switch (key) {
       case 'actionId': return !!formData.actionId
       case 'flatformAccountId': return formData.flatformAccountId > 0
       case 'name': return formData.name.trim().length > 0
       case 'schedule': return !!formData.schedule
+      case 'scheduleType': return !!formData.scheduleType
+      case 'scheduleEndDate': return !!formData.scheduleEndDate
       case 'timeSleepBetween2': return formData.timeSleepBetween2 >= 0
+      case 'dailyLimit': return formData.dailyLimit >= 0
+      case 'rateLimitCount': return formData.rateLimitCount >= 0
+      case 'rateLimitMinutes': return formData.rateLimitMinutes >= 0
       case 'content': return formData.content.trim().length > 0
+      case 'sharePost': return true  // optional, always "complete"
+      case 'enableComment': return true  // optional
+      case 'images': return true  // optional
       case 'details': return details.length > 0
       default: return false
     }
@@ -149,25 +233,40 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     try {
       let savedCampaign: Campaign
 
+      const campaignPayload = {
+        name: formData.name,
+        actionId: formData.actionId,
+        flatformAccountId: formData.flatformAccountId,
+        schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
+        scheduleType: formData.scheduleType,
+        scheduleEndDate: formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : undefined,
+        scheduleDays: formData.scheduleDays || undefined,
+        scheduleWeekDays: formData.scheduleWeekDays || undefined,
+        continueNextDay: formData.continueNextDay,
+        refreshData: formData.refreshData,
+        timeSleepBetween2: formData.timeSleepBetween2,
+        content: formData.content,
+        extraSettings: {
+          sharePost: formData.sharePost,
+          enableComment: formData.enableComment,
+          commentType: formData.commentType,
+          commentCount: formData.commentCount,
+          commentContent: formData.commentContent,
+          actionLimits: {
+            sleepBetweenActions: formData.timeSleepBetween2,
+            dailyLimit: formData.dailyLimit,
+            rateLimitCount: formData.rateLimitCount,
+            rateLimitMinutes: formData.rateLimitMinutes
+          }
+        } as CampaignExtraSettings,
+        images: formData.images
+      }
+
       if (campaign && campaign.id) {
-        await updateCampaign(campaign.id, {
-          name: formData.name,
-          actionId: formData.actionId,
-          flatformAccountId: formData.flatformAccountId,
-          schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
-          timeSleepBetween2: formData.timeSleepBetween2,
-          content: formData.content
-        })
+        await updateCampaign(campaign.id, campaignPayload)
         savedCampaign = campaign
       } else {
-        savedCampaign = await createCampaign({
-          name: formData.name,
-          actionId: formData.actionId,
-          flatformAccountId: formData.flatformAccountId,
-          schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
-          timeSleepBetween2: formData.timeSleepBetween2,
-          content: formData.content
-        })
+        savedCampaign = await createCampaign(campaignPayload)
       }
 
       const { deleteCampaignDetail, updateCampaignDetail } = useCampaignStore.getState()
@@ -394,9 +493,62 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     />
                   </div>
 
+                  <div className="stepper-form-group">
+                    <label>Thời gian nghỉ giữa 2 lần (giây)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.timeSleepBetween2}
+                      onChange={e => setFormData(p => ({ ...p, timeSleepBetween2: Number(e.target.value) }))}
+                      className="stepper-input"
+                      style={{ maxWidth: 200 }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Lịch chạy */}
+            <div
+              className="stepper-section"
+              ref={el => { sectionRefs.current['schedule'] = el }}
+            >
+              <div
+                className="stepper-section-header"
+                onClick={() => toggleSection('schedule')}
+              >
+                <div className="stepper-section-header-left">
+                  <span className="stepper-section-num">2</span>
+                  <span className="stepper-section-title">Lịch chạy</span>
+                </div>
+                {collapsedSections['schedule'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+              </div>
+
+              {!collapsedSections['schedule'] && (
+                <div className="stepper-section-body">
+                  {/* Schedule Type */}
+                  <div className="stepper-form-group">
+                    <label>Lịch</label>
+                    <div className="schedule-radio-group">
+                      {([['daily', 'Hàng ngày'], ['weekly', 'Theo tuần'], ['monthly', 'Theo tháng']] as const).map(([value, label]) => (
+                        <label key={value} className="schedule-radio-label">
+                          <input
+                            type="radio"
+                            name="scheduleType"
+                            value={value}
+                            checked={formData.scheduleType === value}
+                            onChange={() => setFormData(p => ({ ...p, scheduleType: value }))}
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Start date / End date */}
                   <div className="stepper-form-row">
                     <div className="stepper-form-group half">
-                      <label>Thời gian (Hẹn giờ)</label>
+                      <label>Ngày chạy</label>
                       <input
                         type="datetime-local"
                         value={formData.schedule}
@@ -405,12 +557,136 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       />
                     </div>
                     <div className="stepper-form-group half">
-                      <label>Thời gian nghỉ giữa 2 lần (giây)</label>
+                      <label>Ngày kết thúc</label>
+                      <input
+                        type="date"
+                        value={formData.scheduleEndDate}
+                        onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
+                        className="stepper-input"
+                        disabled={formData.scheduleType === 'daily'}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Monthly days */}
+                  <div className="stepper-form-group">
+                    <label>Lịch tháng</label>
+                    <input
+                      type="text"
+                      value={formData.scheduleDays}
+                      onChange={e => setFormData(p => ({ ...p, scheduleDays: e.target.value }))}
+                      className="stepper-input"
+                      placeholder="Ví dụ: 5,10,19,25"
+                      disabled={formData.scheduleType !== 'monthly'}
+                    />
+                    <span className="schedule-hint">Danh sách ngày chạy, các ngày cách nhau bởi dấu phẩy.</span>
+                  </div>
+
+                  {/* Weekly days */}
+                  <div className="stepper-form-group">
+                    <label>Lịch tuần</label>
+                    <div className="schedule-weekday-group">
+                      {WEEKDAYS.map(day => {
+                        const selectedDays = formData.scheduleWeekDays ? formData.scheduleWeekDays.split(',') : []
+                        return (
+                          <label key={day.value} className="schedule-checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={selectedDays.includes(day.value)}
+                              onChange={() => toggleWeekDay(day.value)}
+                              disabled={formData.scheduleType !== 'weekly'}
+                            />
+                            <span>{day.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Conditional checkbox based on schedule type */}
+                  {formData.scheduleType === 'daily' && (
+                    <div className="stepper-form-group">
+                      <label className="schedule-checkbox-label schedule-option-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.continueNextDay}
+                          onChange={e => setFormData(p => ({ ...p, continueNextDay: e.target.checked }))}
+                        />
+                        <span>Nếu không chạy hết, hôm sau chiến dịch sẽ chạy theo thời gian hẹn giờ</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && (
+                    <div className="stepper-form-group">
+                      <label className="schedule-checkbox-label schedule-option-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.refreshData}
+                          onChange={e => setFormData(p => ({ ...p, refreshData: e.target.checked }))}
+                        />
+                        <span>Dữ liệu sẽ được làm mới lại khi chạy hết data <span className="schedule-hint-inline">(Mặc định là chạy hết sẽ hoàn thành chiến dịch)</span></span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Section 3: Giới hạn hành động */}
+            <div
+              className="stepper-section"
+              ref={el => { sectionRefs.current['limits'] = el }}
+            >
+              <div
+                className="stepper-section-header"
+                onClick={() => toggleSection('limits')}
+              >
+                <div className="stepper-section-header-left">
+                  <span className="stepper-section-num">3</span>
+                  <span className="stepper-section-title">Giới hạn hành động</span>
+                </div>
+                {collapsedSections['limits'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+              </div>
+
+              {!collapsedSections['limits'] && (
+                <div className="stepper-section-body">
+                  <div className="stepper-form-row">
+                    <div className="stepper-form-group half">
+                      <label>Thời gian nghỉ giữa 2 lần gửi (giây)</label>
                       <input
                         type="number"
-                        min={0}
                         value={formData.timeSleepBetween2}
-                        onChange={e => setFormData(p => ({ ...p, timeSleepBetween2: Number(e.target.value) }))}
+                        onChange={e => setFormData(p => ({ ...p, timeSleepBetween2: parseInt(e.target.value) || 0 }))}
+                        className="stepper-input"
+                      />
+                    </div>
+                    <div className="stepper-form-group half">
+                      <label>Giới hạn trong ngày</label>
+                      <input
+                        type="number"
+                        value={formData.dailyLimit}
+                        onChange={e => setFormData(p => ({ ...p, dailyLimit: parseInt(e.target.value) || 0 }))}
+                        className="stepper-input"
+                      />
+                    </div>
+                  </div>
+                  <div className="stepper-form-row" style={{ marginTop: 12 }}>
+                    <div className="stepper-form-group half">
+                      <label>Giới hạn số hành động</label>
+                      <input
+                        type="number"
+                        value={formData.rateLimitCount}
+                        onChange={e => setFormData(p => ({ ...p, rateLimitCount: parseInt(e.target.value) || 0 }))}
+                        className="stepper-input"
+                      />
+                    </div>
+                    <div className="stepper-form-group half">
+                      <label>Trong khoảng (phút)</label>
+                      <input
+                        type="number"
+                        value={formData.rateLimitMinutes}
+                        onChange={e => setFormData(p => ({ ...p, rateLimitMinutes: parseInt(e.target.value) || 0 }))}
                         className="stepper-input"
                       />
                     </div>
@@ -419,7 +695,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               )}
             </div>
 
-            {/* Section 2: Nội dung */}
+            {/* Section 4: Nội dung */}
             <div
               className="stepper-section"
               ref={el => { sectionRefs.current['content'] = el }}
@@ -429,7 +705,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                 onClick={() => toggleSection('content')}
               >
                 <div className="stepper-section-header-left">
-                  <span className="stepper-section-num">2</span>
+                  <span className="stepper-section-num">4</span>
                   <span className="stepper-section-title">Nội dung</span>
                 </div>
                 {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -451,7 +727,151 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               )}
             </div>
 
-            {/* Section 3: Danh sách data */}
+            {/* Section 5: Cài đặt thêm */}
+            <div
+              className="stepper-section"
+              ref={el => { sectionRefs.current['extra'] = el }}
+            >
+              <div
+                className="stepper-section-header"
+                onClick={() => toggleSection('extra')}
+              >
+                <div className="stepper-section-header-left">
+                  <span className="stepper-section-num">5</span>
+                  <span className="stepper-section-title">Cài đặt thêm</span>
+                </div>
+                {collapsedSections['extra'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+              </div>
+
+              {!collapsedSections['extra'] && (
+                <div className="stepper-section-body">
+                  {/* Share post */}
+                  <div className="stepper-form-group">
+                    <label className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.sharePost}
+                        onChange={e => setFormData(p => ({ ...p, sharePost: e.target.checked }))}
+                      />
+                      <span>Đăng bài dạng chia sẻ (mỗi lần đăng thì chia sẻ thêm cho 3 nhóm) - <em>Chỉ dành cho nhóm mà bạn đã tham gia</em></span>
+                    </label>
+                  </div>
+
+                  {/* Enable comment */}
+                  <div className="stepper-form-group">
+                    <label className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.enableComment}
+                        onChange={e => setFormData(p => ({ ...p, enableComment: e.target.checked }))}
+                      />
+                      <span>Kiêm comment</span>
+                    </label>
+                  </div>
+
+                  {/* Comment options - only when enableComment */}
+                  {formData.enableComment && (
+                    <div className="extra-comment-options">
+                      <div className="stepper-form-group">
+                        <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+                          <label className="schedule-radio-label">
+                            <input
+                              type="radio"
+                              name="commentType"
+                              value="own"
+                              checked={formData.commentType === 'own'}
+                              onChange={() => setFormData(p => ({ ...p, commentType: 'own' }))}
+                            />
+                            <span>Chỉ comment vào bài post của mình</span>
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <label className="schedule-radio-label">
+                              <input
+                                type="radio"
+                                name="commentType"
+                                value="others"
+                                checked={formData.commentType === 'others'}
+                                onChange={() => setFormData(p => ({ ...p, commentType: 'others' }))}
+                              />
+                              <span>Comment vào các bài khác trừ bài post của mình với số lượng</span>
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={formData.commentCount}
+                              onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
+                              className="stepper-input"
+                              style={{ width: 60 }}
+                              disabled={formData.commentType !== 'others'}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="stepper-form-group">
+                        <label>Nội dung comment</label>
+                        <textarea
+                          className="stepper-textarea"
+                          placeholder="Nhập nội dung comment..."
+                          value={formData.commentContent}
+                          onChange={e => setFormData(p => ({ ...p, commentContent: e.target.value }))}
+                          rows={4}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Image upload */}
+                  <div className="stepper-form-group">
+                    <label>Chọn ảnh</label>
+                    <div className="extra-image-upload">
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => imageInputRef.current?.click()}
+                      >
+                        <Image size={14} /> Chọn ảnh
+                      </button>
+                      <input
+                        type="file"
+                        ref={imageInputRef}
+                        style={{ display: 'none' }}
+                        accept="image/*"
+                        multiple
+                        onChange={e => {
+                          const files = Array.from(e.target.files || [])
+                          const paths = files.map(f => (f as any).path || f.name)
+                          setFormData(p => ({ ...p, images: [...p.images, ...paths] }))
+                          e.target.value = ''
+                        }}
+                        title="Chọn ảnh"
+                      />
+                      {formData.images.length > 0 && (
+                        <span className="schedule-hint" style={{ marginTop: 0, marginLeft: 8 }}>
+                          {formData.images.length} ảnh đã chọn
+                        </span>
+                      )}
+                    </div>
+                    {formData.images.length > 0 && (
+                      <div className="extra-image-list">
+                        {formData.images.map((img, idx) => (
+                          <div key={idx} className="extra-image-item">
+                            <span className="extra-image-name">{img.split(/[\\/]/).pop()}</span>
+                            <button
+                              className="btn-icon text-error"
+                              onClick={() => setFormData(p => ({ ...p, images: p.images.filter((_, i) => i !== idx) }))}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 6: Danh sách data */}
             <div
               className="stepper-section"
               ref={el => { sectionRefs.current['details'] = el }}
@@ -461,7 +881,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                 onClick={() => toggleSection('details')}
               >
                 <div className="stepper-section-header-left">
-                  <span className="stepper-section-num">3</span>
+                  <span className="stepper-section-num">6</span>
                   <span className="stepper-section-title">Danh sách data</span>
                   {details.length > 0 && (
                     <span className="stepper-section-badge">{details.length}</span>

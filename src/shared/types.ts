@@ -181,6 +181,20 @@ export interface CampaignAction {
   createdAt?: string
 }
 
+export interface CampaignExtraSettings {
+  sharePost?: boolean            // đăng bài dạng chia sẻ
+  enableComment?: boolean        // kiếm comment
+  commentType?: 'own' | 'others' // comment vào bài mình / bài khác
+  commentCount?: number          // số lượng comment (khi commentType = 'others')
+  commentContent?: string        // nội dung comment
+  actionLimits?: {               // giới hạn gửi (được lưu theo campaign nhưng check theo account_id + actionName)
+    sleepBetweenActions?: number
+    dailyLimit?: number
+    rateLimitCount?: number
+    rateLimitMinutes?: number
+  }
+}
+
 export interface Campaign {
   id: number
   name: string
@@ -188,9 +202,17 @@ export interface Campaign {
   flatformAccountId: number
   status: string
   schedule?: string
+  scheduleType?: 'daily' | 'weekly' | 'monthly'
+  scheduleEndDate?: string
+  scheduleDays?: string          // comma-separated days of month e.g. "5,10,19,25"
+  scheduleWeekDays?: string      // comma-separated weekday numbers e.g. "2,3,5" (2=Mon..8=Sun)
+  continueNextDay?: boolean      // daily: continue at scheduled time next day if not finished
+  refreshData?: boolean          // weekly/monthly: reset data to pending when all done
   timeSleepBetween2: number   // seconds
   log: string
   content?: string
+  extraSettings?: CampaignExtraSettings
+  images?: string[]              // file paths or base64 strings
   isDelete: boolean
   createdAt?: string
   updatedAt?: string
@@ -210,6 +232,19 @@ export interface CampaignDetail {
   note?: string
   schedule?: string
   dateAction?: string
+  isDelete: boolean
+  createdAt?: string
+}
+
+export interface CampaignDetailAction {
+  id: number
+  campaignDetailId?: number
+  campaignId: number
+  accountId?: number
+  actionName: string
+  status: string
+  log?: string
+  data?: Record<string, unknown>
   isDelete: boolean
   createdAt?: string
 }
@@ -277,6 +312,12 @@ export const IPC_CHANNELS = {
   DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
   DB_UPDATE_CAMPAIGN_DETAIL: 'db:update-campaign-detail',
   DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
+
+  // Database Campaign Detail Actions (action logs)
+  DB_LIST_DETAIL_ACTIONS: 'db:list-detail-actions',
+  DB_LIST_DETAIL_ACTIONS_BY_CAMPAIGN: 'db:list-detail-actions-by-campaign',
+  DB_CREATE_DETAIL_ACTION: 'db:create-detail-action',
+  DB_DELETE_DETAIL_ACTION: 'db:delete-detail-action',
 
   // Campaign Scheduler
   SCHEDULER_START: 'scheduler:start',

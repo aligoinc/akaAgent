@@ -64,7 +64,7 @@ export class CampaignScheduler {
         }
 
         for (const campaign of campaigns) {
-          await this.executeCampaign(account.id, account.name, campaign)
+          await this.executeCampaign(account, campaign)
         }
       }
     } catch (err) {
@@ -75,15 +75,138 @@ export class CampaignScheduler {
     }
   }
 
-  private async executeCampaign(accountId: number, accountName: string, campaign: Campaign): Promise<void> {
+  /**
+   * Check if a campaign should run today based on its schedule type.
+   */
+  private shouldRunToday(campaign: Campaign): boolean {
+    const now = new Date()
+    
+    // Check if past the end date
+    if (campaign.scheduleEndDate) {
+      const endDate = new Date(campaign.scheduleEndDate)
+      if (now > endDate) return false
+    }
+
+    const scheduleType = campaign.scheduleType || 'daily'
+
+    switch (scheduleType) {
+      case 'daily':
+        // Daily: always eligible (schedule time check is done by getPendingCampaigns)
+        return true
+
+      case 'weekly': {
+        // JS: 0=Sun, 1=Mon ... 6=Sat
+        // Our format: 2=Mon, 3=Tue ... 7=Sat, 8=Sun
+        const jsDay = now.getDay() // 0-6
+        const ourDay = jsDay === 0 ? 8 : jsDay + 1 // convert to 2-8
+        const weekDays = (campaign.scheduleWeekDays || '').split(',').map(d => d.trim()).filter(Boolean)
+        return weekDays.includes(String(ourDay))
+      }
+
+      case 'monthly': {
+        const dayOfMonth = now.getDate()
+        const monthDays = (campaign.scheduleDays || '').split(',').map(d => d.trim()).filter(Boolean)
+        return monthDays.includes(String(dayOfMonth))
+      }
+
+      default:
+        return true
+    }
+  }
+
+  /**
+   * Handle post-campaign completion logic based on schedule type.
+   * - Daily + continueNextDay: reset schedule to tomorrow same time, set status back to pending
+   * - Weekly/Monthly + refreshData: reset all details to pending, set campaign back to pending
+   * - Otherwise: mark campaign as complete
+   */
+  private async handleCampaignCompletion(campaign: Campaign): Promise<void> {
+    const scheduleType = campaign.scheduleType || 'daily'
+
+    // Check end date
+    const now = new Date()
+    if (campaign.scheduleEndDate) {
+      const endDate = new Date(campaign.scheduleEndDate)
+      if (now >= endDate) {
+        // Past end date, mark as complete
+        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch (đã hết ngày kết thúc)`)
+        this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
+        return
+      }
+    }
+
+    if (scheduleType === 'daily' && campaign.continueNextDay) {
+      // Reset schedule to tomorrow, same time
+      if (campaign.schedule) {
+        const schedDate = new Date(campaign.schedule)
+        const tomorrow = new Date(now)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
+
+        await this.supabase.updateCampaign(campaign.id, {
+          status: 'chờ xử lý',
+          schedule: tomorrow.toISOString()
+        })
+        await this.supabase.appendCampaignLog(campaign.id, `Đặt lịch chạy lại lúc ${tomorrow.toLocaleString('vi-VN')}`)
+        this.sendLog(`🔄 Chiến dịch "${campaign.name}" sẽ chạy lại vào ${tomorrow.toLocaleString('vi-VN')}`)
+      } else {
+        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch`)
+        this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
+      }
+      return
+    }
+
+    if ((scheduleType === 'weekly' || scheduleType === 'monthly') && campaign.refreshData) {
+      // Reset all detail statuses to pending
+      const details = await this.supabase.listCampaignDetails(campaign.id)
+      for (const detail of details) {
+        await this.supabase.updateCampaignDetail(detail.id, {
+          status: 'chờ xử lý',
+          note: ''
+        })
+      }
+
+      // Reset schedule to tomorrow same time
+      if (campaign.schedule) {
+        const schedDate = new Date(campaign.schedule)
+        const tomorrow = new Date(now)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
+
+        await this.supabase.updateCampaign(campaign.id, {
+          status: 'chờ xử lý',
+          schedule: tomorrow.toISOString()
+        })
+        await this.supabase.appendCampaignLog(campaign.id, `Dữ liệu đã được làm mới. Chạy lại lúc ${tomorrow.toLocaleString('vi-VN')}`)
+        this.sendLog(`🔄 Chiến dịch "${campaign.name}": dữ liệu đã reset, chạy lại ${tomorrow.toLocaleString('vi-VN')}`)
+      } else {
+        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+      }
+      return
+    }
+
+    // Default: mark as complete
+    await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+    await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch`)
+    this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
+  }
+
+  private async executeCampaign(account: import('../../shared/types').FlatformAccount, campaign: Campaign): Promise<void> {
+    // Check schedule type eligibility
+    if (!this.shouldRunToday(campaign)) {
+      return
+    }
+
     try {
       // Update campaign status to running
       await this.supabase.updateCampaign(campaign.id, { status: 'đang chạy' })
       await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
-      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${accountName}"`)
+      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
       // Update account status to running
-      await this.supabase.updateAccount(accountId, { status: 'đang chạy' })
+      await this.supabase.updateAccount(account.id, { status: 'đang chạy' })
 
       // Get the campaign action and its workflow
       const action = await this.supabase.getCampaignAction(campaign.actionId)
@@ -108,35 +231,85 @@ export class CampaignScheduler {
 
       if (details.length === 0) {
         // No details, run workflow once with campaign info
-        await this.runWorkflowForDetail(accountId, campaign, flow, null)
+        // Check rate limits first
+        const limitConfig = campaign.extraSettings?.actionLimits
+        let overrideEnableComment = campaign.extraSettings?.enableComment ?? false
+
+        try {
+          const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, 'Đăng bài', limitConfig)
+          if (!limitStatus.ok) {
+            await this.supabase.appendCampaignLog(campaign.id, `Từ chối chạy do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
+            this.sendLog(`⚠️ Từ chối "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
+            await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+            await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+            return
+          }
+        } catch (err) {
+          console.error('Rate limit check error:', err)
+        }
+
+        const campaignToRun = {
+          ...campaign,
+          extraSettings: { ...campaign.extraSettings, enableComment: overrideEnableComment }
+        }
+        await this.runWorkflowForDetail(account.id, campaignToRun, flow, null)
+        await this.handleCampaignCompletion(campaign)
       } else {
+        let rateLimitReached = false
+
         // Run workflow for each detail
         for (let i = 0; i < details.length; i++) {
           const detail = details[i]
           if (detail.status !== 'chờ xử lý') continue
 
-          await this.runWorkflowForDetail(accountId, campaign, flow, detail)
+          const limitConfig = campaign.extraSettings?.actionLimits
+          let overrideEnableComment = campaign.extraSettings?.enableComment ?? false
+
+          // Check Rate limit before processing
+          try {
+            const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, 'Đăng bài', limitConfig)
+            if (!limitStatus.ok) {
+              rateLimitReached = true
+              await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng gửi do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
+              this.sendLog(`⚠️ Tạm dừng "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
+              break
+            }
+          } catch (err) {
+            console.error('Rate limit check error:', err)
+          }
+
+          const campaignToRun = {
+            ...campaign,
+            extraSettings: { ...campaign.extraSettings, enableComment: overrideEnableComment }
+          }
+          await this.runWorkflowForDetail(account.id, campaignToRun, flow, detail)
 
           // Sleep between details
-          if (i < details.length - 1 && campaign.timeSleepBetween2 > 0) {
-            this.sendLog(`⏳ Nghỉ ${campaign.timeSleepBetween2}s trước khi xử lý mục tiếp theo...`)
-            await new Promise(resolve => setTimeout(resolve, campaign.timeSleepBetween2 * 1000))
+          if (i < details.length - 1) {
+            const sleepTime = campaign.extraSettings?.actionLimits?.sleepBetweenActions || campaign.timeSleepBetween2 || 0
+              
+            if (sleepTime > 0) {
+              this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
+              await new Promise(resolve => setTimeout(resolve, sleepTime * 1000))
+            }
           }
+        }
+
+        if (rateLimitReached) {
+          await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+        } else {
+          // Handle completion based on schedule type
+          await this.handleCampaignCompletion(campaign)
         }
       }
 
-      // Mark campaign as complete
-      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
-      await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch`)
-      this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
-
       // Reset account status
-      await this.supabase.updateAccount(accountId, { status: 'chờ xử lý' })
+      await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
       await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
-      await this.supabase.updateAccount(accountId, { status: 'chờ xử lý' })
+      await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     }
   }
@@ -166,6 +339,11 @@ export class CampaignScheduler {
       campaignId: campaign.id,
       campaignName: campaign.name,
       campaignContent: campaign.content,
+      commentContent: campaign.extraSettings?.commentContent || '',
+      sharePost: campaign.extraSettings?.sharePost ?? false,
+      enableComment: campaign.extraSettings?.enableComment ?? false,
+      commentType: campaign.extraSettings?.commentType || 'own',
+      commentCount: campaign.extraSettings?.commentCount ?? 3,
       accountId: accountId,
       ...(detail ? {
         detailId: detail.id,
@@ -200,6 +378,37 @@ export class CampaignScheduler {
         await this.supabase.updateCampaignDetail(detail.id, { status: 'hoàn thành' })
         await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detailName}`)
         this.sendLog(`✅ Hoàn thành "${detailName}"`)
+
+        // Log individual actions into auto_campaign_detail_actions
+        try {
+          // Log post action
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: accountId,
+            actionName: 'Đăng bài',
+            status: 'success',
+            log: `Đăng bài thành công vào ${detailName}`
+          })
+
+          // Log comment action if comment was enabled
+          if (campaign.extraSettings?.enableComment && campaign.extraSettings?.commentContent) {
+            await this.supabase.createDetailAction({
+              campaignDetailId: detail.id,
+              campaignId: campaign.id,
+              accountId: accountId,
+              actionName: 'Comment',
+              status: 'success',
+              log: `Comment thành công: "${campaign.extraSettings.commentContent.substring(0, 50)}..."`,
+              data: {
+                commentType: campaign.extraSettings.commentType,
+                commentContent: campaign.extraSettings.commentContent
+              }
+            })
+          }
+        } catch (logErr) {
+          console.error('Failed to log detail actions:', logErr)
+        }
       } else {
         await this.supabase.updateCampaignDetail(detail.id, {
           status: 'lỗi',
@@ -207,6 +416,20 @@ export class CampaignScheduler {
         })
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detailName} - ${result.error}`)
         this.sendLog(`❌ Lỗi "${detailName}": ${result.error}`)
+
+        // Log failed action
+        try {
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: accountId,
+            actionName: 'Lỗi thực thi',
+            status: 'error',
+            log: result.error || 'Unknown error'
+          })
+        } catch (logErr) {
+          console.error('Failed to log error action:', logErr)
+        }
       }
     }
   }
