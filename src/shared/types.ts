@@ -193,6 +193,8 @@ export interface CampaignExtraSettings {
     rateLimitCount?: number
     rateLimitMinutes?: number
   }
+  imageOption?: 'none' | 'all' | 'random'
+  randomImageCount?: number
 }
 
 export interface Campaign {

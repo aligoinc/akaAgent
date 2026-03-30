@@ -136,28 +136,6 @@ export class CampaignScheduler {
       }
     }
 
-    if (scheduleType === 'daily' && campaign.continueNextDay) {
-      // Reset schedule to tomorrow, same time
-      if (campaign.schedule) {
-        const schedDate = new Date(campaign.schedule)
-        const tomorrow = new Date(now)
-        tomorrow.setDate(tomorrow.getDate() + 1)
-        tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
-
-        await this.supabase.updateCampaign(campaign.id, {
-          status: 'chờ xử lý',
-          schedule: tomorrow.toISOString()
-        })
-        await this.supabase.appendCampaignLog(campaign.id, `Đặt lịch chạy lại lúc ${tomorrow.toLocaleString('vi-VN')}`)
-        this.sendLog(`🔄 Chiến dịch "${campaign.name}" sẽ chạy lại vào ${tomorrow.toLocaleString('vi-VN')}`)
-      } else {
-        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
-        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch`)
-        this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
-      }
-      return
-    }
-
     if ((scheduleType === 'weekly' || scheduleType === 'monthly') && campaign.refreshData) {
       // Reset all detail statuses to pending
       const details = await this.supabase.listCampaignDetails(campaign.id)
@@ -296,7 +274,27 @@ export class CampaignScheduler {
         }
 
         if (rateLimitReached) {
-          await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+          if (campaign.scheduleType === 'daily' && campaign.continueNextDay) {
+            // Update schedule to tomorrow, status to chờ xử lý
+            const now = new Date()
+            if (campaign.schedule) {
+              const schedDate = new Date(campaign.schedule)
+              const tomorrow = new Date(now)
+              tomorrow.setDate(tomorrow.getDate() + 1)
+              tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
+              
+              await this.supabase.updateCampaign(campaign.id, {
+                status: 'chờ xử lý',
+                schedule: tomorrow.toISOString()
+              })
+              await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do đạt giới hạn. Cập nhật lịch chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
+              this.sendLog(`🔄 Chiến dịch "${campaign.name}" sẽ chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
+            } else {
+              await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+            }
+          } else {
+            await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+          }
         } else {
           // Handle completion based on schedule type
           await this.handleCampaignCompletion(campaign)
@@ -332,6 +330,23 @@ export class CampaignScheduler {
       this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
     }
 
+    // Resolve which images to process based on ExtraSettings
+    let finalImages: string[] = []
+    const imageOption = campaign.extraSettings?.imageOption || 'all'
+    const availableImages = campaign.images || []
+    
+    if (imageOption === 'all') {
+      finalImages = [...availableImages]
+    } else if (imageOption === 'random') {
+      const count = campaign.extraSettings?.randomImageCount || 3
+      // Shuffle array securely
+      const shuffled = [...availableImages].sort(() => 0.5 - Math.random())
+      finalImages = shuffled.slice(0, count)
+    } else {
+      // none
+      finalImages = []
+    }
+
     // Prepare flow variables with campaign/detail data
     const flowCopy = JSON.parse(JSON.stringify(flow))
     flowCopy.variables = {
@@ -344,6 +359,7 @@ export class CampaignScheduler {
       enableComment: campaign.extraSettings?.enableComment ?? false,
       commentType: campaign.extraSettings?.commentType || 'own',
       commentCount: campaign.extraSettings?.commentCount ?? 3,
+      images: finalImages, // Make sure nodes picking up images use this list
       accountId: accountId,
       ...(detail ? {
         detailId: detail.id,
