@@ -544,6 +544,17 @@ export class WebviewRegistry {
     return new WebviewController(wc)
   }
 
+  getWebContentsId(accountId: number): number | null {
+    const wcId = this.registry.get(accountId)
+    if (wcId === undefined) return null
+    const wc = webContents.fromId(wcId)
+    if (!wc || wc.isDestroyed()) {
+      this.registry.delete(accountId)
+      return null
+    }
+    return wcId
+  }
+
   listRegistered(): { accountId: number; connected: boolean }[] {
     const result: { accountId: number; connected: boolean }[] = []
     for (const [accountId] of this.registry) {

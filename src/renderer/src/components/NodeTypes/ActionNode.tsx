@@ -90,6 +90,27 @@ function ActionNode({ data, selected }: NodeProps<ActionNodeType>) {
             style={{ left: '70%' }}
           />
         </>
+      ) : data.actionType === 'ifElse' ? (
+        <>
+          <div className="loop-handle-labels">
+            <span className="loop-handle-label-text" style={{ color: 'var(--color-success)' }}>TRUE</span>
+            <span className="loop-handle-label-text" style={{ color: 'var(--color-error, #e74c3c)' }}>FALSE</span>
+          </div>
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="if-true"
+            className="loop-handle-body"
+            style={{ left: '30%' }}
+          />
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="if-false"
+            className="loop-handle-done"
+            style={{ left: '70%' }}
+          />
+        </>
       ) : (
         <Handle
           type="source"

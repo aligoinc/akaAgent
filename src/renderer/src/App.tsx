@@ -12,9 +12,11 @@ import { FlowData, ExecutionStep } from '../../shared/types'
 import { useElementStore } from './stores/elementStore'
 import { useBlockStore } from './stores/blockStore'
 import { useThemeStore } from './stores/themeStore'
+import { useCampaignStore } from './stores/campaignStore'
 
 export default function App() {
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
+  const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
 
   const {
     selectedNodeId,
@@ -33,9 +35,19 @@ export default function App() {
   const { loadElements } = useElementStore()
   const { loadBlocks } = useBlockStore()
   const { theme } = useThemeStore()
+  const { loadAccounts } = useCampaignStore()
 
   const [showFlowList, setShowFlowList] = useState(false)
   const [flows, setFlows] = useState<FlowData[]>([])
+
+  // Listen for auto-check login status updates from main process
+  useEffect(() => {
+    if (!window.electronAPI?.onAccountStatusUpdated) return
+    const unsubscribe = window.electronAPI.onAccountStatusUpdated(() => {
+      loadAccounts()
+    })
+    return unsubscribe
+  }, [loadAccounts])
 
   // Apply theme class to body
   useEffect(() => {
@@ -186,11 +198,14 @@ export default function App() {
       <TopBar activePage={activePage} onPageChange={setActivePage} />
 
       <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <CampaignPage />
+        <CampaignPage onNavigateToBrowser={(accountId) => {
+          setFocusAccountId(accountId)
+          setActivePage('browsers')
+        }} />
       </div>
 
       <div style={{ display: activePage === 'browsers' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <BrowserPage />
+        <BrowserPage focusAccountId={focusAccountId} onFocusHandled={() => setFocusAccountId(null)} />
       </div>
 
       <div style={{ display: activePage === 'workflow-editor' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
