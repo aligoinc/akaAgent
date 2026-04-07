@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { RefreshCw, X, Globe, ExternalLink } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { useCampaignStore } from '../stores/campaignStore'
 import { FlatformAccount } from '../../../shared/types'
 
@@ -8,13 +8,22 @@ const PLATFORM_URLS: Record<string, string> = {
   zalo: 'https://chat.zalo.me',
   tiktok: 'https://www.tiktok.com',
   shopee: 'https://banhang.shopee.vn',
+  instagram: 'https://www.instagram.com',
 }
 
-export default function BrowserPage() {
+interface BrowserPageProps {
+  focusAccountId?: number | null
+  onFocusHandled?: () => void
+}
+
+export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserPageProps) {
   const { accounts, loadAccounts } = useCampaignStore()
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
+
+  // Filter out disabled (isActive=false) accounts - they don't get browser tabs
+  const activeAccounts = accounts.filter(a => a.isActive)
 
   // Load accounts on mount
   useEffect(() => {
@@ -23,10 +32,18 @@ export default function BrowserPage() {
 
   // Auto-select first account
   useEffect(() => {
-    if (accounts.length > 0 && activeAccountId === null) {
-      setActiveAccountId(accounts[0].id)
+    if (activeAccounts.length > 0 && activeAccountId === null) {
+      setActiveAccountId(activeAccounts[0].id)
     }
-  }, [accounts, activeAccountId])
+  }, [activeAccounts, activeAccountId])
+
+  // Handle focus from external navigation (context menu)
+  useEffect(() => {
+    if (focusAccountId) {
+      setActiveAccountId(focusAccountId)
+      onFocusHandled?.()
+    }
+  }, [focusAccountId, onFocusHandled])
 
   // Cleanup: unregister all webviews on unmount
   useEffect(() => {
@@ -53,15 +70,6 @@ export default function BrowserPage() {
     }
   }
 
-  const handleOpenExternal = () => {
-    if (activeAccountId) {
-      const wv = webviewRefs.current.get(activeAccountId)
-      if (wv) {
-        window.open(wv.getURL(), '_blank')
-      }
-    }
-  }
-
   // Register webview with main process when it's ready
   const handleWebviewRef = useCallback((account: FlatformAccount, el: any) => {
     if (!el) return
@@ -83,8 +91,6 @@ export default function BrowserPage() {
     // Listen for dom-ready to register
     wv.addEventListener('dom-ready', onDomReady)
   }, [])
-
-  const activeAccounts = accounts.filter(a => a.isActive)
 
   return (
     <div className="browser-page">
@@ -114,7 +120,7 @@ export default function BrowserPage() {
       <div className="browser-webview-container">
         {activeAccounts.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-text">Chưa có tài khoản nào. Hãy thêm tài khoản ở trang Chiến dịch.</div>
+            <div className="empty-state-text">Chưa có tài khoản nào hoạt động. Hãy thêm tài khoản ở trang Chiến dịch.</div>
           </div>
         ) : (
           activeAccounts.map(account => (
@@ -139,4 +145,3 @@ export default function BrowserPage() {
     </div>
   )
 }
-
