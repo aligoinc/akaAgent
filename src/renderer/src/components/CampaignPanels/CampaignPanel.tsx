@@ -1,11 +1,16 @@
-import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { Campaign } from '../../../../shared/types'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
 
-export default function CampaignPanel() {
+interface CampaignPanelProps {
+  filterAccountId?: number | null
+  onClearFilter?: () => void
+}
+
+export default function CampaignPanel({ filterAccountId, onClearFilter }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
     campaignDetails, loadingDetails,
@@ -90,6 +95,16 @@ export default function CampaignPanel() {
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
 
+  // Filter campaigns by account if filter is active
+  const filteredCampaigns = useMemo(() => {
+    if (!filterAccountId) return campaigns
+    return campaigns.filter(c => c.flatformAccountId === filterAccountId)
+  }, [campaigns, filterAccountId])
+
+  const filterAccountName = filterAccountId 
+    ? accounts.find(a => a.id === filterAccountId)?.name || `ID: ${filterAccountId}`
+    : null
+
   return (
     <div className="campaign-panel" style={{ display: 'flex', flexDirection: 'column' }}>
       <div className="campaign-panel-header">
@@ -106,6 +121,16 @@ export default function CampaignPanel() {
           </button>
         </div>
       </div>
+
+      {/* Filter indicator */}
+      {filterAccountId && (
+        <div className="campaign-filter-bar">
+          <span>🔍 Lọc theo: <strong>{filterAccountName}</strong></span>
+          <button className="btn-icon" onClick={onClearFilter} title="Bỏ lọc">
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       {showForm && (
         <CampaignFormModal 
@@ -130,8 +155,8 @@ export default function CampaignPanel() {
 
       {/* Campaign Table */}
       <div className="campaign-panel-content" style={{ flex: 1, minHeight: 0 }}>
-        {campaigns.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-text">Chưa có chiến dịch</div></div>
+        {filteredCampaigns.length === 0 ? (
+          <div className="empty-state"><div className="empty-state-text">{filterAccountId ? 'Không có chiến dịch cho tài khoản này' : 'Chưa có chiến dịch'}</div></div>
         ) : (
           <div className="campaign-table">
             <div className="campaign-table-header">
@@ -142,7 +167,7 @@ export default function CampaignPanel() {
               <div className="campaign-col col-schedule">Lịch chạy</div>
               <div className="campaign-col col-ops"></div>
             </div>
-            {campaigns.map(campaign => (
+            {filteredCampaigns.map(campaign => (
               <div 
                 key={campaign.id} 
                 className={`campaign-table-row ${selectedCampaignId === campaign.id ? 'selected' : ''}`}

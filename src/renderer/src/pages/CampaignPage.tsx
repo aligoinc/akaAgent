@@ -1,10 +1,15 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import AccountPanel from '../components/CampaignPanels/AccountPanel'
 import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
 
-export default function CampaignPage() {
+interface CampaignPageProps {
+  onNavigateToBrowser?: (accountId: number) => void
+}
+
+export default function CampaignPage({ onNavigateToBrowser }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
+  const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef<{ index: number; startX: number; startWidths: number[] } | null>(null)
 
@@ -43,11 +48,18 @@ export default function CampaignPage() {
     document.addEventListener('mouseup', handleMouseUp)
   }, [panelWidths])
 
+  const handleFilterCampaigns = useCallback((accountId: number | null) => {
+    setFilterAccountId(accountId)
+  }, [])
+
   return (
     <div className="campaign-page" ref={containerRef}>
       {/* Account Panel */}
       <div className="campaign-page-panel" style={{ width: panelWidths[0], minWidth: 180 }}>
-        <AccountPanel />
+        <AccountPanel 
+          onNavigateToBrowser={onNavigateToBrowser}
+          onFilterCampaigns={handleFilterCampaigns}
+        />
       </div>
 
       {/* Resize Handle 1 */}
@@ -58,7 +70,10 @@ export default function CampaignPage() {
 
       {/* Campaign Panel (takes remaining space) */}
       <div className="campaign-page-panel" style={{ flex: 1, minWidth: 300 }}>
-        <CampaignPanel />
+        <CampaignPanel 
+          filterAccountId={filterAccountId}
+          onClearFilter={() => setFilterAccountId(null)}
+        />
       </div>
 
       {/* Resize Handle 2 */}

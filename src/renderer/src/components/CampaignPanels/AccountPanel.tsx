@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit3 } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { FlatformAccount } from '../../../../shared/types'
+import AccountContextMenu from './AccountContextMenu'
 
-export default function AccountPanel() {
+interface AccountPanelProps {
+  onNavigateToBrowser?: (accountId: number) => void
+  onFilterCampaigns?: (accountId: number | null) => void
+}
+
+export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
   const { accounts, loadAccounts, createAccount, updateAccount, deleteAccount } = useCampaignStore()
   const [showForm, setShowForm] = useState(false)
   const [editingAccount, setEditingAccount] = useState<FlatformAccount | null>(null)
@@ -11,6 +17,12 @@ export default function AccountPanel() {
     name: '', 
     flatformType: 'facebook'
   })
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    account: FlatformAccount
+    position: { x: number; y: number }
+  } | null>(null)
 
   useEffect(() => {
     loadAccounts()
@@ -37,6 +49,15 @@ export default function AccountPanel() {
     }
   }
 
+  const handleContextMenu = (e: React.MouseEvent, account: FlatformAccount) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({
+      account,
+      position: { x: e.clientX, y: e.clientY }
+    })
+  }
+
   const handleEdit = (account: FlatformAccount) => {
     setEditingAccount(account)
     setFormData({ 
@@ -51,11 +72,65 @@ export default function AccountPanel() {
     await deleteAccount(account.id)
   }
 
+  const handleViewBrowser = (accountId: number) => {
+    onNavigateToBrowser?.(accountId)
+  }
+
+  const handleReloadPage = async (account: FlatformAccount) => {
+    if (!window.electronAPI?.reloadAccountPage) {
+      alert('Tính năng này cần Electron API')
+      return
+    }
+    const result = await window.electronAPI.reloadAccountPage(account.id, account.flatformType)
+    if (!result.success) {
+      alert(`Không thể load lại: ${result.reason}`)
+    }
+  }
+
+  const handleCheckLogin = async (account: FlatformAccount) => {
+    if (!window.electronAPI?.checkFacebookLogin) {
+      alert('Tính năng này cần Electron API')
+      return
+    }
+    try {
+      const result = await window.electronAPI.checkFacebookLogin(account.id)
+      await loadAccounts() // Refresh to get updated loginStatus
+      if (result.loggedIn) {
+        alert(`✅ ${account.name}: Đã đăng nhập Facebook`)
+      } else {
+        alert(`❌ ${account.name}: ${result.reason || 'Chưa đăng nhập'}`)
+      }
+    } catch (err: any) {
+      alert(`Lỗi kiểm tra: ${err.message}`)
+    }
+  }
+
+  const handleResume = async (account: FlatformAccount) => {
+    await updateAccount(account.id, { status: 'hoạt động' })
+  }
+
+  const handlePause = async (account: FlatformAccount) => {
+    await updateAccount(account.id, { status: 'tạm dừng' })
+  }
+
+  const handleEnable = async (account: FlatformAccount) => {
+    await updateAccount(account.id, { isActive: true, status: 'hoạt động' })
+  }
+
+  const handleDisable = async (account: FlatformAccount) => {
+    await updateAccount(account.id, { isActive: false, status: 'vô hiệu hoá' })
+  }
+
+  const handleFilterCampaigns = (accountId: number) => {
+    onFilterCampaigns?.(accountId)
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'hoạt động': return 'var(--accent-success)'
       case 'đang chạy': return 'var(--accent-success)'
       case 'tạm dừng': return 'var(--accent-warning)'
+      case 'vô hiệu hoá': return 'var(--accent-error)'
       case 'lỗi': return 'var(--accent-error)'
       default: return 'var(--text-tertiary)'
     }
@@ -67,6 +142,13 @@ export default function AccountPanel() {
       case 'checkpoint': return 'var(--accent-error)'
       default: return 'var(--text-tertiary)'
     }
+  }
+
+  const getStatusIcon = (account: FlatformAccount) => {
+    if (!account.isActive) return '🚫'
+    if (account.status === 'tạm dừng') return '⏸️'
+    if (account.status === 'hoạt động' || account.status === 'đang chạy') return '🟢'
+    return '⏳'
   }
 
   return (
@@ -100,7 +182,6 @@ export default function AccountPanel() {
             <option value="other">Khác</option>
           </select>
 
-
           <div className="panel-form-actions">
             <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingAccount(null) }}>Huỷ</button>
             <button className="btn btn-primary" onClick={handleSubmit}>{editingAccount ? 'Cập nhật' : 'Tạo'}</button>
@@ -113,32 +194,48 @@ export default function AccountPanel() {
           <div className="empty-state"><div className="empty-state-text">Chưa có tài khoản</div></div>
         ) : (
           accounts.map(account => (
-            <div key={account.id} className="account-card">
+            <div 
+              key={account.id} 
+              className={`account-card ${!account.isActive ? 'disabled' : ''}`}
+              onContextMenu={(e) => handleContextMenu(e, account)}
+              title="Nhấn chuột phải để xem menu"
+            >
               <div className="account-card-info">
-                <div className="account-card-name">{account.name}</div>
+                <div className="account-card-name">
+                  <span className="account-status-icon">{getStatusIcon(account)}</span>
+                  {account.name}
+                </div>
                 <div className="account-card-meta">
                   <span className="account-tag" style={{ color: 'var(--accent-info)' }}>{account.flatformType}</span>
+                  <span style={{ color: getLoginColor(account.loginStatus), fontSize: '10px' }}>{account.loginStatus}</span>
                 </div>
                 <div className="account-card-meta">
-                  <span style={{ color: getLoginColor(account.loginStatus) }}>{account.loginStatus}</span>
+                  <span style={{ color: getStatusColor(account.status), fontSize: '10px', fontWeight: 600 }}>{account.status}</span>
                 </div>
-                <div className="account-card-meta">
-                  <span style={{ color: getStatusColor(account.status) }}>{account.status}</span>
-                  {!account.isActive && <span className="account-tag inactive">Ngưng hoạt động</span>}
-                </div>
-              </div>
-              <div className="account-card-actions">
-                <button className="btn-icon" onClick={() => handleEdit(account)} title="Sửa">
-                  <Edit3 size={13} />
-                </button>
-                <button className="btn-icon" onClick={() => handleDelete(account)} title="Xoá">
-                  <Trash2 size={13} />
-                </button>
               </div>
             </div>
           ))
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <AccountContextMenu
+          account={contextMenu.account}
+          position={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+          onViewBrowser={handleViewBrowser}
+          onReloadPage={handleReloadPage}
+          onCheckLogin={handleCheckLogin}
+          onResume={handleResume}
+          onPause={handlePause}
+          onEnable={handleEnable}
+          onDisable={handleDisable}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onFilterCampaigns={handleFilterCampaigns}
+        />
+      )}
     </div>
   )
 }

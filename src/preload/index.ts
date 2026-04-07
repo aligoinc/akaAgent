@@ -164,6 +164,19 @@ const electronAPI = {
     ipcRenderer.on(IPC_CHANNELS.CAMPAIGN_LOG, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.CAMPAIGN_LOG, handler)
   },
+
+  // Account Actions
+  checkFacebookLogin: (accountId: number): Promise<{ loggedIn: boolean; status: string; reason?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_CHECK_FB_LOGIN, accountId),
+
+  reloadAccountPage: (accountId: number, flatformType: string): Promise<{ success: boolean; reason?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_RELOAD_PAGE, accountId, flatformType),
+
+  onAccountStatusUpdated: (callback: () => void): () => void => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC_CHANNELS.ACCOUNT_STATUS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ACCOUNT_STATUS_UPDATED, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)

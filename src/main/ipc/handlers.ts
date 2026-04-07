@@ -251,4 +251,161 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.SCHEDULER_STATUS, () => {
     return { running: campaignScheduler?.isRunning() ?? false }
   })
+
+  // =========== ACCOUNT ACTIONS ===========
+  ipcMain.handle(IPC_CHANNELS.ACCOUNT_RELOAD_PAGE, async (_, accountId: number, flatformType: string) => {
+    if (!webviewRegistry) throw new Error('Webview registry not initialized')
+    const wcId = webviewRegistry.getWebContentsId(accountId)
+    if (!wcId) {
+      return { success: false, reason: 'Tab trình duyệt chưa được mở' }
+    }
+    try {
+      const { webContents } = require('electron')
+      const wc = webContents.fromId(wcId)
+      if (!wc || wc.isDestroyed()) {
+        return { success: false, reason: 'Tab trình duyệt không khả dụng' }
+      }
+      const platformUrls: Record<string, string> = {
+        facebook: 'https://www.facebook.com',
+        zalo: 'https://chat.zalo.me',
+        tiktok: 'https://www.tiktok.com',
+        shopee: 'https://banhang.shopee.vn',
+        instagram: 'https://www.instagram.com',
+      }
+      const url = platformUrls[flatformType] || 'about:blank'
+      wc.loadURL(url)
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, reason: err.message }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ACCOUNT_CHECK_FB_LOGIN, async (_, accountId: number) => {
+    if (!webviewRegistry) throw new Error('Webview registry not initialized')
+    const webContentsId = webviewRegistry.getWebContentsId(accountId)
+    if (!webContentsId) {
+      // Try to update status directly - webview not available
+      return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt chưa được mở' }
+    }
+    try {
+      const { webContents } = require('electron')
+      const wc = webContents.fromId(webContentsId)
+      if (!wc) {
+        return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt không khả dụng' }
+      }
+      // Execute JS in webview to check login: look for c_user cookie
+      const result = await wc.executeJavaScript(`
+        (function() {
+          try {
+            const cookies = document.cookie;
+            if (cookies.includes('c_user=')) {
+              return { loggedIn: true };
+            }
+            // Check for checkpoint
+            if (document.querySelector('#checkpoint_title') || window.location.href.includes('checkpoint')) {
+              return { loggedIn: false, checkpoint: true };
+            }
+            return { loggedIn: false };
+          } catch(e) {
+            return { loggedIn: false, error: e.message };
+          }
+        })()
+      `)
+      if (result.loggedIn) {
+        await supabase.updateAccount(accountId, { loginStatus: 'đã đăng nhập' })
+        return { loggedIn: true, status: 'đã đăng nhập' }
+      } else if (result.checkpoint) {
+        await supabase.updateAccount(accountId, { loginStatus: 'checkpoint' })
+        return { loggedIn: false, status: 'checkpoint', reason: 'Tài khoản bị checkpoint' }
+      } else {
+        await supabase.updateAccount(accountId, { loginStatus: 'chưa đăng nhập' })
+        return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa đăng nhập Facebook' }
+      }
+    } catch (err: any) {
+      return { loggedIn: false, status: 'chưa đăng nhập', reason: err.message }
+    }
+  })
+
+  // =========== AUTO-CHECK LOGIN STATUS (every 30s) ===========
+  const AUTO_CHECK_INTERVAL = 30_000
+
+  async function checkAccountLogin(accountId: number, wcId: number): Promise<string | null> {
+    try {
+      const { webContents } = require('electron')
+      const wc = webContents.fromId(wcId)
+      if (!wc || wc.isDestroyed()) return null
+
+      const url = wc.getURL()
+
+      // Facebook check
+      if (url.includes('facebook.com')) {
+        const result = await wc.executeJavaScript(`
+          (function() {
+            try {
+              const cookies = document.cookie;
+              if (cookies.includes('c_user=')) return { loggedIn: true };
+              if (document.querySelector('#checkpoint_title') || window.location.href.includes('checkpoint'))
+                return { loggedIn: false, checkpoint: true };
+              return { loggedIn: false };
+            } catch(e) { return { loggedIn: false }; }
+          })()
+        `)
+        if (result.loggedIn) return 'đã đăng nhập'
+        if (result.checkpoint) return 'checkpoint'
+        return 'chưa đăng nhập'
+      }
+
+      // Zalo check - logged in if there is chat content
+      if (url.includes('zalo')) {
+        const result = await wc.executeJavaScript(`
+          (function() {
+            try {
+              return !!document.querySelector('[data-id="conversations"]') || !!document.querySelector('.chat-list');
+            } catch(e) { return false; }
+          })()
+        `)
+        return result ? 'đã đăng nhập' : 'chưa đăng nhập'
+      }
+
+      // Default: check if page has loaded content (basic check)
+      return null // no change for unsupported platforms
+    } catch {
+      return null
+    }
+  }
+
+  setInterval(async () => {
+    if (!webviewRegistry) return
+    const registered = webviewRegistry.listRegistered()
+    if (registered.length === 0) return
+
+    let hasChanges = false
+
+    for (const { accountId, connected } of registered) {
+      if (!connected) continue
+      const wcId = webviewRegistry.getWebContentsId(accountId)
+      if (!wcId) continue
+
+      try {
+        const newStatus = await checkAccountLogin(accountId, wcId)
+        if (newStatus) {
+          // Only update if status actually changed
+          const accounts = await supabase.listAccounts()
+          const account = accounts.find(a => a.id === accountId)
+          if (account && account.loginStatus !== newStatus) {
+            await supabase.updateAccount(accountId, { loginStatus: newStatus })
+            hasChanges = true
+            console.log(`[AutoCheck] Account ${accountId}: ${account.loginStatus} → ${newStatus}`)
+          }
+        }
+      } catch (err) {
+        // Silently ignore per-account errors
+      }
+    }
+
+    // Notify renderer to refresh accounts if any status changed
+    if (hasChanges) {
+      mainWindow.webContents.send(IPC_CHANNELS.ACCOUNT_STATUS_UPDATED)
+    }
+  }, AUTO_CHECK_INTERVAL)
 }
