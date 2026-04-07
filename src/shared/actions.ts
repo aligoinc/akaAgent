@@ -433,5 +433,21 @@ export const builtinActions: ActionDefinition[] = [
       { name: 'message', type: 'string', label: 'Nội dung Log', required: true, placeholder: 'vd: Đã gửi xong tin nhắn...' }
     ],
     outputSchema: []
+  },
+  {
+    id: 'uploadFile',
+    name: 'Upload File',
+    type: 'uploadFile',
+    description: 'Đính kèm file vào input (VD: upload ảnh lên Facebook)',
+    icon: 'Upload',
+    category: 'interaction',
+    inputSchema: [
+      { name: 'selector', type: 'element', label: 'File Input Element', required: true, description: 'Kéo thả element input type=file hoặc nhập CSS/XPath' },
+      { name: 'filePaths', type: 'json', label: 'Danh sách file', required: true, placeholder: '["C:/path/to/image1.png","C:/path/to/image2.jpg"]' }
+    ],
+    outputSchema: [
+      { name: 'success', type: 'boolean', label: 'Success' },
+      { name: 'fileCount', type: 'number', label: 'Số file đã upload' }
+    ]
   }
 ]

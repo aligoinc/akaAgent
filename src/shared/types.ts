@@ -12,7 +12,7 @@ export type ActionType =
   // Data
   | 'getValue' | 'setValue' | 'getText' | 'screenshot' | 'getAttribute'
   // Utility
-  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog'
+  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog' | 'uploadFile'
   // Control Flow
   | 'ifElse' | 'loop' | 'switch'
   // Block System
