@@ -16,6 +16,7 @@ export class FlowRunner {
   private edges: FlowEdgeSerialized[] = []
   private nodeMap: Map<string, FlowNodeSerialized> = new Map()
   private loopBodyNodeIds: Set<string> = new Set()
+  private ifElseBranchNodeIds: Set<string> = new Set()
 
   constructor(controller: IBrowserController, supabase: SupabaseService, onProgress: ProgressCallback) {
     this.controller = controller
@@ -32,6 +33,7 @@ export class FlowRunner {
     this.nodeOutputs.clear()
     this.elementMap.clear()
     this.loopBodyNodeIds.clear()
+    this.ifElseBranchNodeIds.clear()
     this.edges = flowData.edges
     this.nodeMap = new Map(flowData.nodes.map(n => [n.id, n]))
 
@@ -73,6 +75,17 @@ export class FlowRunner {
       }
     }
 
+    // Pre-scan: identify all ifElse branch nodes so we can skip them in the main execution
+    for (const node of flowData.nodes) {
+      if (node.data.actionType === 'ifElse') {
+        const trueBranch = this.collectBranchNodes(node.id, 'if-true')
+        const falseBranch = this.collectBranchNodes(node.id, 'if-false')
+        for (const id of [...trueBranch, ...falseBranch]) {
+          this.ifElseBranchNodeIds.add(id)
+        }
+      }
+    }
+
     try {
       // Topological sort of nodes based on edges
       const sortedNodes = this.topologicalSort(flowData.nodes, flowData.edges)
@@ -83,13 +96,19 @@ export class FlowRunner {
           break
         }
 
-        // Skip nodes that belong to a loop body (they are executed by the loop itself)
-        if (this.loopBodyNodeIds.has(node.id)) {
+        // Skip nodes that belong to a loop body or ifElse branch (they are executed by their parent)
+        if (this.loopBodyNodeIds.has(node.id) || this.ifElseBranchNodeIds.has(node.id)) {
           continue
         }
 
-        // Skip ifElse and switch for now (Phase 4+)
-        if (['ifElse', 'switch'].includes(node.data.actionType)) {
+        // Skip switch for now (Phase 4+)
+        if (node.data.actionType === 'switch') {
+          continue
+        }
+
+        // Handle ifElse execution
+        if (node.data.actionType === 'ifElse') {
+          await this.executeIfElse(node, flowData, run, blockOutputs)
           continue
         }
 
@@ -283,6 +302,108 @@ export class FlowRunner {
   }
 
   /**
+   * Collect all downstream nodes from a specific source handle of a node.
+   * Used for ifElse branches (if-true / if-false) and similar branching patterns.
+   * Collects nodes by BFS, stopping at nodes that are also reachable from sibling handles.
+   */
+  private collectBranchNodes(nodeId: string, handleId: string): string[] {
+    // Find all sibling handle target IDs (nodes connected from OTHER handles of the same node)
+    const siblingTargetIds = new Set<string>()
+    for (const edge of this.edges) {
+      if (edge.source === nodeId && edge.sourceHandle !== handleId) {
+        siblingTargetIds.add(edge.target)
+      }
+    }
+
+    // BFS from the specified handle
+    const branchNodeIds: string[] = []
+    const visited = new Set<string>()
+    const queue: string[] = []
+
+    for (const edge of this.edges) {
+      if (edge.source === nodeId && edge.sourceHandle === handleId) {
+        queue.push(edge.target)
+      }
+    }
+
+    while (queue.length > 0) {
+      const nid = queue.shift()!
+      if (visited.has(nid)) continue
+      visited.add(nid)
+      branchNodeIds.push(nid)
+
+      // Follow downstream edges, but stop at nodes that belong to sibling branches
+      for (const edge of this.edges) {
+        if (edge.source === nid && !visited.has(edge.target) && !siblingTargetIds.has(edge.target)) {
+          queue.push(edge.target)
+        }
+      }
+    }
+
+    return branchNodeIds
+  }
+
+  /**
+   * Execute an ifElse node: evaluate condition, then execute the matching branch.
+   * Handles: 'if-true' for truthy, 'if-false' for falsy.
+   */
+  private async executeIfElse(
+    ifElseNode: FlowNodeSerialized,
+    flowData: FlowData,
+    run: ExecutionRun,
+    blockOutputs: Record<string, unknown>
+  ): Promise<void> {
+    const resolvedInput = this.resolveInputs(ifElseNode)
+    const conditionStr = String(resolvedInput.condition || 'false')
+
+    // Evaluate condition using the same evaluator as while loops
+    const conditionResult = this.evaluateCondition(conditionStr)
+
+    // Log the ifElse step
+    const ifStep: ExecutionStep = {
+      nodeId: ifElseNode.id,
+      actionType: 'ifElse',
+      status: 'success',
+      input: resolvedInput,
+      output: { result: conditionResult },
+      executedAt: new Date().toISOString()
+    }
+    this.onProgress({ ...ifStep })
+    run.steps.push(ifStep)
+    this.nodeOutputs.set(ifElseNode.id, { result: conditionResult })
+
+    try {
+      await this.supabase.createRunStep(run.id, ifStep)
+    } catch (err) {
+      console.warn('Failed to insert ifElse step log:', err)
+    }
+
+    // Determine which branch to execute
+    const handleId = conditionResult ? 'if-true' : 'if-false'
+    const branchNodeIds = this.collectBranchNodes(ifElseNode.id, handleId)
+
+    if (branchNodeIds.length === 0) {
+      console.log(`[FlowRunner] ifElse node ${ifElseNode.id} condition=${conditionResult}, no nodes on ${handleId} branch`)
+      return
+    }
+
+    console.log(`[FlowRunner] ifElse node ${ifElseNode.id} condition=${conditionResult}, executing ${handleId} branch (${branchNodeIds.length} nodes)`)
+
+    // Get branch nodes in topological order
+    const allNodes = Array.from(this.nodeMap.values())
+    const branchNodes = this.topologicalSort(
+      allNodes.filter(n => branchNodeIds.includes(n.id)),
+      this.edges.filter(e => branchNodeIds.includes(e.source) && branchNodeIds.includes(e.target))
+    )
+
+    // Execute branch nodes (reuse the loop body executor since same logic applies)
+    const success = await this.executeLoopBodyNodes(branchNodes, ifElseNode, flowData, run, blockOutputs)
+    if (!success) {
+      throw new Error(`ifElse ${handleId} branch failed`)
+    }
+  }
+
+  /**
    * Execute a loop node: iterate over items, count, or while condition,
    * and execute the loop body nodes for each iteration.
    */
@@ -437,8 +558,14 @@ export class FlowRunner {
         continue
       }
 
-      // Skip ifElse, switch in loop body too
-      if (['ifElse', 'switch'].includes(bodyNode.data.actionType)) {
+      // Handle ifElse in loop body
+      if (bodyNode.data.actionType === 'ifElse') {
+        await this.executeIfElse(bodyNode, flowData, run, blockOutputs)
+        continue
+      }
+
+      // Skip switch in loop body
+      if (bodyNode.data.actionType === 'switch') {
         continue
       }
 
