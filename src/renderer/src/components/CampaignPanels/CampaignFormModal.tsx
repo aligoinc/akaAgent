@@ -141,7 +141,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     imageOption: (campaign?.extraSettings?.imageOption || 'none') as 'none' | 'all' | 'random',
     randomImageCount: campaign?.extraSettings?.randomImageCount || 3,
     images: campaign?.images || [] as string[],
-    splitDataAcrossAccounts: false
+    splitDataAcrossAccounts: false,
+    leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
+    autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
+    shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
 
@@ -303,7 +306,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               rateLimitMinutes: formData.rateLimitMinutes
             },
             imageOption: formData.imageOption,
-            randomImageCount: formData.randomImageCount
+            randomImageCount: formData.randomImageCount,
+            leaveGroupOnPendingApproval: formData.leaveGroupOnPendingApproval,
+            autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
+            shuffleGroupList: formData.shuffleGroupList
           } as CampaignExtraSettings,
           images: formData.images
         }
@@ -1083,6 +1089,48 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       </div>
                     </div>
                   )}
+
+                  {/* Divider */}
+                  <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+                  {/* Leave group on pending approval */}
+                  <div className="stepper-form-group">
+                    <label className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.leaveGroupOnPendingApproval}
+                        onChange={e => setFormData(p => ({ ...p, leaveGroupOnPendingApproval: e.target.checked }))}
+                      />
+                      <span>RỜI GROUP chờ duyệt bài đăng <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu đã tham gia)</em></span>
+                    </label>
+                  </div>
+
+                  {/* Auto join group after post */}
+                  <div className="stepper-form-group">
+                    <label className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.autoJoinGroupAfterPost}
+                        onChange={e => setFormData(p => ({ ...p, autoJoinGroupAfterPost: e.target.checked }))}
+                      />
+                      <span>Tự động THAM GIA GROUP sau khi đăng bài thành công và không bị kiểm duyệt <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu chưa tham gia)</em></span>
+                    </label>
+                  </div>
+
+                  {/* Shuffle group list */}
+                  <div className="stepper-form-group">
+                    <label className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.shuffleGroupList}
+                        onChange={e => setFormData(p => ({ ...p, shuffleGroupList: e.target.checked }))}
+                      />
+                      <span>XÁO TRỘN DANH SÁCH GROUP trước khi chạy chiến dịch <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Thay đổi thứ tự sắp xếp của danh sách group)</em></span>
+                    </label>
+                    <div className="schedule-hint" style={{ marginTop: 4, marginLeft: 24 }}>
+                      Thay vì đăng tuần tự hoặc cố định vào 1 danh sách nhóm, hệ thống sẽ tự động trộn danh sách nhóm và chọn ngẫu nhiên để đăng. Cách này giúp nội dung phân tán tự nhiên hơn, tránh việc bị Facebook đánh giá là spam vì đăng quá dầy đặn vào cùng thời điểm và nhóm giống nhau.
+                    </div>
+                  </div>
 
 
                 </div>

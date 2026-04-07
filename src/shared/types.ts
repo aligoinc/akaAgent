@@ -195,6 +195,9 @@ export interface CampaignExtraSettings {
   }
   imageOption?: 'none' | 'all' | 'random'
   randomImageCount?: number
+  leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
+  autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
+  shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
 }
 
 export interface Campaign {

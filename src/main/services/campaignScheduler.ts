@@ -207,6 +207,15 @@ export class CampaignScheduler {
       // Get campaign details
       const details = await this.supabase.listCampaignDetails(campaign.id)
 
+      // Shuffle details if shuffleGroupList is enabled (Fisher-Yates shuffle)
+      if (campaign.extraSettings?.shuffleGroupList && details.length > 1) {
+        for (let i = details.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [details[i], details[j]] = [details[j], details[i]]
+        }
+        this.sendLog(`🔀 Đã xáo trộn danh sách ${details.length} group`)
+      }
+
       if (details.length === 0) {
         // No details, run workflow once with campaign info
         // Check rate limits first
@@ -375,7 +384,11 @@ export class CampaignScheduler {
         detailPhone: detail.phone,
         detailUid: detail.uid,
         detailEmail: detail.email
-      } : {})
+      } : {}),
+      // Group posting extra settings
+      leaveGroupOnPendingApproval: campaign.extraSettings?.leaveGroupOnPendingApproval ?? false,
+      autoJoinGroupAfterPost: campaign.extraSettings?.autoJoinGroupAfterPost ?? false,
+      shuffleGroupList: campaign.extraSettings?.shuffleGroupList ?? false
     }
 
     // Create a controller that uses the account's embedded webview
