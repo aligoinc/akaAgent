@@ -423,6 +423,115 @@ export class WebviewController {
           break
         }
 
+        // =========== FILE UPLOAD ===========
+        case 'uploadFile': {
+          const selector = input.selector as string
+          let filePaths: string[]
+          const rawPaths = input.filePaths
+          if (typeof rawPaths === 'string') {
+            try { filePaths = JSON.parse(rawPaths) } catch { filePaths = [rawPaths] }
+          } else if (Array.isArray(rawPaths)) {
+            filePaths = rawPaths as string[]
+          } else {
+            filePaths = []
+          }
+          if (!Array.isArray(filePaths) || filePaths.length === 0) {
+            throw new Error('filePaths must be a non-empty array of file paths')
+          }
+
+          // Handle base64 data URIs → write to temp files
+          const { writeFileSync, existsSync: fsExists } = await import('fs')
+          const { join: pathJoin } = await import('path')
+          const { tmpdir } = await import('os')
+          const resolvedPaths: string[] = []
+          for (let i = 0; i < filePaths.length; i++) {
+            const fp = filePaths[i]
+            if (fp.startsWith('data:')) {
+              // data:image/png;base64,iVBOR...
+              const match = fp.match(/^data:([^;]+);base64,(.+)$/)
+              if (!match) throw new Error(`Invalid data URI at index ${i}`)
+              const ext = match[1].split('/')[1] || 'png'
+              const buf = Buffer.from(match[2], 'base64')
+              const tmpPath = pathJoin(tmpdir(), `upload_${Date.now()}_${i}.${ext}`)
+              writeFileSync(tmpPath, buf)
+              resolvedPaths.push(tmpPath)
+            } else {
+              // Normalize path for Windows
+              const normalizedPath = fp.replace(/\//g, '\\')
+              if (!fsExists(normalizedPath) && !fsExists(fp)) {
+                console.warn(`[WebviewController] uploadFile: File not found: ${fp}`)
+              }
+              resolvedPaths.push(fp)
+            }
+          }
+
+          // Use CDP to set files on the input element
+          // First, find the DOM node via JS
+          await this.waitForElement(selector, 15000)
+          const backendNodeId = await this.exec(`
+            var el = resolveSelector(${safeJS(selector)});
+            if (!el) throw new Error("File input element not found: " + ${safeJS(selector)});
+            // Make sure it's a file input or create one if needed
+            if (el.tagName !== 'INPUT' || el.type !== 'file') {
+              // Try to find a file input inside or nearby
+              var fileInput = el.querySelector('input[type="file"]');
+              if (!fileInput) {
+                // Look for a hidden file input in the parent
+                var parent = el.closest('form') || el.parentElement || document.body;
+                fileInput = parent.querySelector('input[type="file"]');
+              }
+              if (fileInput) el = fileInput;
+            }
+            // Return a unique attribute to find this node via CDP
+            var uniqueId = '__upload_target_' + Date.now();
+            el.setAttribute('data-upload-id', uniqueId);
+            return uniqueId;
+          `)
+
+          try {
+            // Attach debugger if not already attached
+            this.wc.debugger.attach('1.3')
+          } catch {
+            // Already attached, ignore
+          }
+
+          try {
+            // Get the document root
+            const { root } = await this.wc.debugger.sendCommand('DOM.getDocument', {})
+            
+            // Find the element by attribute
+            const { nodeId } = await this.wc.debugger.sendCommand('DOM.querySelector', {
+              nodeId: root.nodeId,
+              selector: `[data-upload-id="${backendNodeId}"]`
+            })
+
+            if (!nodeId) {
+              throw new Error('Could not find file input element via CDP')
+            }
+
+            // Set files on the input
+            await this.wc.debugger.sendCommand('DOM.setFileInputFiles', {
+              nodeId,
+              files: resolvedPaths
+            })
+
+            // Dispatch change event
+            await this.exec(`
+              var el = document.querySelector('[data-upload-id="${backendNodeId}"]');
+              if (el) {
+                el.removeAttribute('data-upload-id');
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+            `)
+
+            output = { success: true, fileCount: resolvedPaths.length }
+          } finally {
+            try { this.wc.debugger.detach() } catch {}
+          }
+          break
+        }
+
         default:
           throw new Error(`Unknown action type: ${actionType}`)
       }

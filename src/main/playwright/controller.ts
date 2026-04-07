@@ -278,6 +278,26 @@ export class PlaywrightController {
           break
         }
 
+        // =========== FILE UPLOAD ===========
+        case 'uploadFile': {
+          const selector = input.selector as string
+          let filePaths: string[]
+          const rawPaths = input.filePaths
+          if (typeof rawPaths === 'string') {
+            try { filePaths = JSON.parse(rawPaths) } catch { filePaths = [rawPaths] }
+          } else if (Array.isArray(rawPaths)) {
+            filePaths = rawPaths as string[]
+          } else {
+            filePaths = []
+          }
+          if (!Array.isArray(filePaths) || filePaths.length === 0) {
+            throw new Error('filePaths must be a non-empty array of file paths')
+          }
+          await page.setInputFiles(selector, filePaths)
+          output = { success: true, fileCount: filePaths.length }
+          break
+        }
+
         default:
           throw new Error(`Unknown action type: ${actionType}`)
       }

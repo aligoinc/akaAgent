@@ -1,4 +1,5 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, webContents } from 'electron'
+import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry, WebviewController } from '../playwright/webviewController'
 import { FlowRunner } from '../playwright/flowRunner'
@@ -403,19 +404,154 @@ export class CampaignScheduler {
       console.log(`Campaign ${campaign.id} detail ${detailName} running on URL: ${currentUrl}`)
     } catch {}
 
+    // ====== AUTO IMAGE UPLOAD via CDP ======
+    // Strategy:
+    // 1) Intercept file choosers: if the flow explicitly clicks Photo/Video, intercept and provide files.
+    // 2) Intercept workflow clicks: wrap the controller's executeAction. If it's about to click "Post" (Đăng), 
+    //    we directly inject the images via CDP before the click happens.
+    let cdpDebuggerAttached = false
+    let imageInjected = false
+    const wcId = this.webviewRegistry.getWebContentsId(accountId)
+    const targetWc = wcId ? webContents.fromId(wcId) : null
+
+    // Validate file paths exist
+    const validImages = finalImages.filter(fp => {
+      if (fp.startsWith('data:')) return true
+      return existsSync(fp)
+    })
+
+    if (targetWc && validImages.length > 0) {
+      try {
+        targetWc.debugger.attach('1.3')
+        cdpDebuggerAttached = true
+        await targetWc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true })
+
+        targetWc.debugger.on('message', (_event: any, method: string) => {
+          if (method === 'Page.fileChooserOpened') {
+            imageInjected = true
+            console.log(`[CampaignScheduler] File chooser intercepted, providing ${validImages.length} images`)
+            this.sendLog(`📎 Đang đính kèm ${validImages.length} ảnh qua hộp thoại...`)
+            targetWc.debugger.sendCommand('Page.handleFileChooser', {
+              action: 'accept',
+              files: validImages
+            }).catch(err => {
+              console.error('[CampaignScheduler] Failed to handle file chooser:', err)
+            })
+          }
+        })
+
+        console.log(`[CampaignScheduler] CDP file chooser interception enabled for ${validImages.length} images`)
+      } catch (cdpErr) {
+        console.warn('[CampaignScheduler] Failed to set up CDP file chooser interception:', cdpErr)
+        cdpDebuggerAttached = false
+      }
+    }
+
+    // Wrap the controller to intercept the final post click
+    const originalExecuteAction = controller.executeAction.bind(controller)
+    controller.executeAction = async (actionType: import('../../shared/types').ActionType, input: any) => {
+      // Check if we are about to click a "Post" or "Comment" button and haven't injected images yet
+      if (
+        cdpDebuggerAttached && 
+        targetWc && 
+        validImages.length > 0 && 
+        !imageInjected && 
+        actionType === 'click' && 
+        input.selector
+      ) {
+        const sel = input.selector.toLowerCase()
+        const isSubmitClick = sel.includes('đăng') || sel.includes('post') || 
+                              sel.includes('bình luận') || sel.includes('comment') || 
+                              sel.includes('gửi') || sel.includes('send')
+                              
+        if (isSubmitClick) {
+          try {
+            console.log(`[CampaignScheduler] Intercepted submit click (${input.selector}), injecting images first...`)
+            this.sendLog(`📎 Đang tự động đính kèm ${validImages.length} ảnh trước khi đăng...`)
+            imageInjected = true
+
+            // Disable file chooser interception before direct DOM manipulation just in case
+            try {
+              await targetWc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: false })
+            } catch {}
+
+            // Try to find file input and set files
+            const { root } = await targetWc.debugger.sendCommand('DOM.getDocument', {})
+            let fileInputNodeId = 0
+            const fileInputSelectors = [
+              'input[type="file"][accept*="image"]',
+              'input[type="file"][accept*="video"]',
+              'input[type="file"]'
+            ]
+
+            for (const selector of fileInputSelectors) {
+              try {
+                const res = await targetWc.debugger.sendCommand('DOM.querySelector', {
+                  nodeId: root.nodeId,
+                  selector
+                })
+                if (res.nodeId) {
+                  fileInputNodeId = res.nodeId
+                  break
+                }
+              } catch {}
+            }
+
+            if (fileInputNodeId) {
+              // Direct upload
+              await targetWc.debugger.sendCommand('DOM.setFileInputFiles', {
+                nodeId: fileInputNodeId,
+                files: validImages
+              })
+
+              await targetWc.executeJavaScript(`
+                (function() {
+                  var inputs = document.querySelectorAll('input[type="file"]');
+                  for (var i = 0; i < inputs.length; i++) {
+                    inputs[i].dispatchEvent(new Event('change', { bubbles: true }));
+                    inputs[i].dispatchEvent(new Event('input', { bubbles: true }));
+                  }
+                })()
+              `)
+
+              this.sendLog(`✅ Đã đính kèm ảnh thành công`)
+              await new Promise(r => setTimeout(r, 2000)) // Give React time to process the file change
+            } else {
+              // Fallback: try clicking the photo button to trigger the interceptor we had
+              console.log('[CampaignScheduler] No file input found directly, trying to click Photo button')
+              // Note: if file input not found, we can't easily upload.
+              this.sendLog(`⚠️ Không tìm thấy vị trí để đính kèm ảnh`)
+            }
+          } catch (injectErr) {
+            console.error('[CampaignScheduler] Failed to inject images before submit:', injectErr)
+            this.sendLog(`⚠️ Lỗi khi đính kèm ảnh: ${injectErr}`)
+          }
+        }
+      }
+
+      // Proceed with the actual click (or whatever action it was)
+      return originalExecuteAction(actionType, input)
+    }
+
     const runner = new FlowRunner(controller, this.supabase, (step: ExecutionStep) => {
-      // Send progress to main window
       this.mainWindow.webContents.send(IPC_CHANNELS.FLOW_PROGRESS, step)
     })
 
-    const result = await runner.run(flowCopy)
+    let result: import('../../shared/types').ExecutionRun
+    try {
+      result = await runner.run(flowCopy)
+    } finally {
+      // Clean up CDP debugger
+      if (cdpDebuggerAttached && targetWc && !targetWc.isDestroyed()) {
+        try {
+          await targetWc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: false })
+          targetWc.debugger.detach()
+        } catch {}
+      }
+    }
 
     if (detail) {
       if (result.status === 'completed') {
-        await this.supabase.updateCampaignDetail(detail.id, { status: 'hoàn thành' })
-        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detailName}`)
-        this.sendLog(`✅ Hoàn thành "${detailName}"`)
-
         // Log individual actions into auto_campaign_detail_actions
         try {
           // Log post action
@@ -427,6 +563,8 @@ export class CampaignScheduler {
             status: 'success',
             log: `Đăng bài thành công vào ${detailName}`
           })
+          // Send real-time log to UI for post action
+          this.sendLog(`📝 Đăng bài thành công vào "${detailName}"`)
 
           // Log comment action if comment was enabled
           if (campaign.extraSettings?.enableComment && campaign.extraSettings?.commentContent) {
@@ -442,10 +580,19 @@ export class CampaignScheduler {
                 commentContent: campaign.extraSettings.commentContent
               }
             })
+            // Send real-time log to UI for comment action
+            const commentPreview = campaign.extraSettings.commentContent.length > 50
+              ? campaign.extraSettings.commentContent.substring(0, 50) + '...'
+              : campaign.extraSettings.commentContent
+            this.sendLog(`💬 Comment thành công vào "${detailName}": "${commentPreview}"`)
           }
         } catch (logErr) {
           console.error('Failed to log detail actions:', logErr)
         }
+
+        await this.supabase.updateCampaignDetail(detail.id, { status: 'hoàn thành' })
+        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detailName}`)
+        this.sendLog(`✅ Hoàn thành "${detailName}"`)
       } else {
         await this.supabase.updateCampaignDetail(detail.id, {
           status: 'lỗi',
