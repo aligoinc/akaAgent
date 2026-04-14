@@ -26,7 +26,17 @@ const WEEKDAYS = [
   { value: '8', label: 'Chủ nhật' }
 ]
 
-const STEPS: StepDef[] = [
+// Campaign action IDs that don't need detail data (no Section 6) and extra group settings (no Section 5)
+const SIMPLE_CAMPAIGN_ACTIONS = new Set([
+  'facebook_timeline_post'
+])
+
+// Campaign action IDs for "Nhắn tin & Kết bạn" type — hide extra (group), show details, show message/friend toggles
+const MESSAGE_FRIEND_ACTIONS = new Set([
+  'facebook_message_friend'
+])
+
+const ALL_STEPS: StepDef[] = [
   {
     id: 'general',
     title: 'Cài đặt chung',
@@ -144,9 +154,19 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     splitDataAcrossAccounts: false,
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
-    shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false
+    shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
+    // Nhắn tin & Kết bạn
+    enableMessage: campaign?.extraSettings?.enableMessage ?? true,
+    enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
+
+  // Determine if this is a "simple" campaign (no details/extra sections)
+  const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
+  const isMessageFriendCampaign = MESSAGE_FRIEND_ACTIONS.has(formData.actionId)
+  const STEPS = isSimpleCampaign
+    ? ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
+    : ALL_STEPS
 
   const [details, setDetails] = useState<Partial<CampaignDetail>[]>([])
   const [deletedIds, setDeletedIds] = useState<number[]>([])
@@ -996,8 +1016,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               )}
             </div>
 
-            {/* Section 5: Cài đặt thêm */}
-            <div
+            {/* Section 5: Cài đặt thêm (hidden for simple campaigns) */}
+            {!isSimpleCampaign && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['extra'] = el }}
             >
@@ -1135,10 +1155,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
                 </div>
               )}
-            </div>
+            </div>}
 
-            {/* Section 6: Danh sách data */}
-            <div
+            {/* Section 6: Danh sách data (hidden for simple campaigns) */}
+            {!isSimpleCampaign && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['details'] = el }}
             >
@@ -1246,7 +1266,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
 

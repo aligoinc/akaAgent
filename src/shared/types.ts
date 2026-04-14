@@ -198,6 +198,9 @@ export interface CampaignExtraSettings {
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
   autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
+  // Nhắn tin & kết bạn
+  enableMessage?: boolean                  // Gửi tin nhắn
+  enableAddFriend?: boolean                // Kết bạn
 }
 
 export interface Campaign {
