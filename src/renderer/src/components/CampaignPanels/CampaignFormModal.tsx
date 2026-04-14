@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { Campaign, CampaignDetail, CampaignExtraSettings } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
+import FriendPickerModal from './FriendPickerModal'
+import { useUiStore } from '../../stores/uiStore'
 
 interface CampaignFormModalProps {
   campaign: Campaign | null
@@ -26,7 +28,17 @@ const WEEKDAYS = [
   { value: '8', label: 'Chủ nhật' }
 ]
 
-const STEPS: StepDef[] = [
+// Campaign action IDs that don't need detail data (no Section 6) and extra group settings (no Section 5)
+const SIMPLE_CAMPAIGN_ACTIONS = new Set([
+  'facebook_timeline_post'
+])
+
+// Campaign action IDs for "Nhắn tin & Kết bạn" type — hide extra (group), show details, show message/friend toggles
+const MESSAGE_FRIEND_ACTIONS = new Set([
+  'facebook_message_friend'
+])
+
+const ALL_STEPS: StepDef[] = [
   {
     id: 'general',
     title: 'Cài đặt chung',
@@ -144,9 +156,19 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     splitDataAcrossAccounts: false,
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
-    shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false
+    shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
+    // Nhắn tin & Kết bạn
+    enableMessage: campaign?.extraSettings?.enableMessage ?? true,
+    enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
+
+  // Determine if this is a "simple" campaign (no details/extra sections)
+  const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
+  const isMessageFriendCampaign = MESSAGE_FRIEND_ACTIONS.has(formData.actionId)
+  const STEPS = isSimpleCampaign
+    ? ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
+    : ALL_STEPS
 
   const [details, setDetails] = useState<Partial<CampaignDetail>[]>([])
   const [deletedIds, setDeletedIds] = useState<number[]>([])
@@ -166,7 +188,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const { showAlert } = useUiStore()
 
   useEffect(() => {
     async function fetchDetails() {
@@ -244,8 +266,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.actionId || formData.flatformAccountIds.length === 0) {
-      setToastMsg({ type: 'error', text: 'Vui lòng nhập Tên, Hành động và Tài khoản.' })
-      setTimeout(() => setToastMsg(null), 3000)
+      showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
     }
 
@@ -309,7 +330,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             randomImageCount: formData.randomImageCount,
             leaveGroupOnPendingApproval: formData.leaveGroupOnPendingApproval,
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
-            shuffleGroupList: formData.shuffleGroupList
+            shuffleGroupList: formData.shuffleGroupList,
+            enableMessage: formData.enableMessage,
+            enableAddFriend: formData.enableAddFriend
           } as CampaignExtraSettings,
           images: formData.images
         }
@@ -349,13 +372,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         }
       }
 
-      setToastMsg({ type: 'success', text: 'Lưu chiến dịch thành công!' })
-      // Delay closing to let user see the toast, and prevent Electron modal focus loss bug
+      showAlert('Lưu chiến dịch thành công!', 'success')
+      // Delay closing to let user see the toast
       setTimeout(() => onClose(), 1200)
     } catch (err) {
       console.error('Failed to save campaign:', err)
-      setToastMsg({ type: 'error', text: 'Có lỗi xảy ra khi lưu chiến dịch.' })
-      setTimeout(() => setToastMsg(null), 3000)
+      showAlert('Có lỗi xảy ra khi lưu chiến dịch.', 'error')
     }
   }
 
@@ -428,7 +450,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         setDetails(prev => [...prev, ...newRows])
       } catch (err) {
         console.error('Lỗi khi đọc file Excel:', err)
-        alert('Có lỗi xảy ra khi đọc file Excel. Vui lòng kiểm tra lại định dạng file.')
+        showAlert('Có lỗi xảy ra khi đọc file Excel. Vui lòng kiểm tra lại định dạng file.', 'error')
       }
     }
     reader.readAsBinaryString(file)
@@ -466,20 +488,32 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
         if (newRows.length > 0) {
           setDetails(prev => [...prev, ...newRows])
-          setToastMsg({ type: 'success', text: `Đã thêm ${newRows.length} UID từ file TXT.` })
-          setTimeout(() => setToastMsg(null), 3000)
+          showAlert(`Đã thêm ${newRows.length} UID từ file TXT.`, 'success')
         } else {
-          setToastMsg({ type: 'error', text: 'File TXT trống hoặc không có UID hợp lệ.' })
-          setTimeout(() => setToastMsg(null), 3000)
+          showAlert('File TXT trống hoặc không có UID hợp lệ.', 'error')
         }
       } catch (err) {
         console.error('Lỗi khi đọc file TXT:', err)
-        setToastMsg({ type: 'error', text: 'Có lỗi xảy ra khi đọc file TXT.' })
-        setTimeout(() => setToastMsg(null), 3000)
+        showAlert('Có lỗi xảy ra khi đọc file TXT.', 'error')
       }
     }
     reader.readAsText(file) // For text files
     if (txtFileInputRef.current) txtFileInputRef.current.value = ''
+  }
+
+  const [showFriendPicker, setShowFriendPicker] = useState(false)
+
+  const onFriendsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
+    const newRows: Partial<CampaignDetail>[] = contacts.map(c => ({
+      name: c.name,
+      uid: c.uid || '',
+      phone: '',
+      email: '',
+      note: '',
+      status: 'chờ xử lý'
+    }))
+    setDetails(prev => [...prev, ...newRows])
+    showAlert(`Đã thêm ${newRows.length} bạn bè.`, 'success')
   }
 
   return (
@@ -492,19 +526,6 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           </span>
           <button className="btn-icon" onClick={onClose}><X size={18} /></button>
         </div>
-
-        {toastMsg && (
-          <div style={{
-            padding: '10px 16px',
-            backgroundColor: toastMsg.type === 'success' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-            color: toastMsg.type === 'success' ? '#34d399' : '#f43f5e',
-            borderBottom: '1px solid var(--border-default)',
-            fontSize: 13,
-            fontWeight: 500
-          }}>
-            {toastMsg.text}
-          </div>
-        )}
 
         {/* Stepper Layout */}
         <div className="stepper-layout">
@@ -880,8 +901,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     />
                   </div>
 
-                  {/* Media section */}
-                  <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16 }}>
+                  {/* Media section - ẩn cho chiến dịch nhắn tin & kết bạn */}
+                  <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16, display: isMessageFriendCampaign ? 'none' : undefined }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>Media</div>
                     
                     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
@@ -996,8 +1017,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               )}
             </div>
 
-            {/* Section 5: Cài đặt thêm */}
-            <div
+            {!isSimpleCampaign && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['extra'] = el }}
             >
@@ -1014,131 +1034,167 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
               {!collapsedSections['extra'] && (
                 <div className="stepper-section-body">
-                  {/* Share post */}
-                  <div className="stepper-form-group">
-                    <label className="schedule-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.sharePost}
-                        onChange={e => setFormData(p => ({ ...p, sharePost: e.target.checked }))}
-                      />
-                      <span>Đăng bài dạng chia sẻ (mỗi lần đăng thì chia sẻ thêm cho 3 nhóm) - <em>Chỉ dành cho nhóm mà bạn đã tham gia</em></span>
-                    </label>
-                  </div>
 
-                  {/* Enable comment */}
-                  <div className="stepper-form-group">
-                    <label className="schedule-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.enableComment}
-                        onChange={e => setFormData(p => ({ ...p, enableComment: e.target.checked }))}
-                      />
-                      <span>Kiêm comment</span>
-                    </label>
-                  </div>
-
-                  {/* Comment options - only when enableComment */}
-                  {formData.enableComment && (
-                    <div className="extra-comment-options">
+                  {/* === Nhắn tin & Kết bạn toggles (chỉ hiện cho message_friend campaigns) === */}
+                  {isMessageFriendCampaign && (
+                    <>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Chọn hành động</div>
                       <div className="stepper-form-group">
-                        <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
-                          <label className="schedule-radio-label">
-                            <input
-                              type="radio"
-                              name="commentType"
-                              value="own"
-                              checked={formData.commentType === 'own'}
-                              onChange={() => setFormData(p => ({ ...p, commentType: 'own' }))}
-                            />
-                            <span>Chỉ comment vào bài post của mình</span>
-                          </label>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <label className="schedule-radio-label">
-                              <input
-                                type="radio"
-                                name="commentType"
-                                value="others"
-                                checked={formData.commentType === 'others'}
-                                onChange={() => setFormData(p => ({ ...p, commentType: 'others' }))}
-                              />
-                              <span>Comment vào các bài khác trừ bài post của mình với số lượng</span>
-                            </label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={formData.commentCount}
-                              onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
-                              className="stepper-input"
-                              style={{ width: 60 }}
-                              disabled={formData.commentType !== 'others'}
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.enableMessage}
+                            onChange={e => setFormData(p => ({ ...p, enableMessage: e.target.checked }))}
+                          />
+                          <span>💬 Nhắn tin cho bạn bè / UID</span>
+                        </label>
+                      </div>
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.enableAddFriend}
+                            onChange={e => setFormData(p => ({ ...p, enableAddFriend: e.target.checked }))}
+                          />
+                          <span>🤝 Kết bạn với UID</span>
+                        </label>
+                      </div>
+                      {!formData.enableMessage && !formData.enableAddFriend && (
+                        <div style={{ color: 'var(--text-error)', fontSize: 12, marginTop: 4 }}>⚠️ Vui lòng chọn ít nhất một hành động.</div>
+                      )}
+                    </>
+                  )}
+
+                  {/* === Group campaign options (ẩn cho message_friend campaigns) === */}
+                  {!isMessageFriendCampaign && (
+                    <>
+                      {/* Share post */}
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.sharePost}
+                            onChange={e => setFormData(p => ({ ...p, sharePost: e.target.checked }))}
+                          />
+                          <span>Đăng bài dạng chia sẻ (mỗi lần đăng thì chia sẻ thêm cho 3 nhóm) - <em>Chỉ dành cho nhóm mà bạn đã tham gia</em></span>
+                        </label>
+                      </div>
+
+                      {/* Enable comment */}
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.enableComment}
+                            onChange={e => setFormData(p => ({ ...p, enableComment: e.target.checked }))}
+                          />
+                          <span>Kiêm comment</span>
+                        </label>
+                      </div>
+
+                      {/* Comment options - only when enableComment */}
+                      {formData.enableComment && (
+                        <div className="extra-comment-options">
+                          <div className="stepper-form-group">
+                            <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+                              <label className="schedule-radio-label">
+                                <input
+                                  type="radio"
+                                  name="commentType"
+                                  value="own"
+                                  checked={formData.commentType === 'own'}
+                                  onChange={() => setFormData(p => ({ ...p, commentType: 'own' }))}
+                                />
+                                <span>Chỉ comment vào bài post của mình</span>
+                              </label>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <label className="schedule-radio-label">
+                                  <input
+                                    type="radio"
+                                    name="commentType"
+                                    value="others"
+                                    checked={formData.commentType === 'others'}
+                                    onChange={() => setFormData(p => ({ ...p, commentType: 'others' }))}
+                                  />
+                                  <span>Comment vào các bài khác trừ bài post của mình với số lượng</span>
+                                </label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={formData.commentCount}
+                                  onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
+                                  className="stepper-input"
+                                  style={{ width: 60 }}
+                                  disabled={formData.commentType !== 'others'}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="stepper-form-group">
+                            <label>Nội dung comment</label>
+                            <textarea
+                              className="stepper-textarea"
+                              placeholder="Nhập nội dung comment..."
+                              value={formData.commentContent}
+                              onChange={e => setFormData(p => ({ ...p, commentContent: e.target.value }))}
+                              rows={4}
                             />
                           </div>
                         </div>
-                      </div>
+                      )}
 
+                      {/* Divider */}
+                      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+                      {/* Leave group on pending approval */}
                       <div className="stepper-form-group">
-                        <label>Nội dung comment</label>
-                        <textarea
-                          className="stepper-textarea"
-                          placeholder="Nhập nội dung comment..."
-                          value={formData.commentContent}
-                          onChange={e => setFormData(p => ({ ...p, commentContent: e.target.value }))}
-                          rows={4}
-                        />
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.leaveGroupOnPendingApproval}
+                            onChange={e => setFormData(p => ({ ...p, leaveGroupOnPendingApproval: e.target.checked }))}
+                          />
+                          <span>RỜI GROUP chờ duyệt bài đăng <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu đã tham gia)</em></span>
+                        </label>
                       </div>
-                    </div>
+
+                      {/* Auto join group after post */}
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.autoJoinGroupAfterPost}
+                            onChange={e => setFormData(p => ({ ...p, autoJoinGroupAfterPost: e.target.checked }))}
+                          />
+                          <span>Tự động THAM GIA GROUP sau khi đăng bài thành công và không bị kiểm duyệt <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu chưa tham gia)</em></span>
+                        </label>
+                      </div>
+
+                      {/* Shuffle group list */}
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.shuffleGroupList}
+                            onChange={e => setFormData(p => ({ ...p, shuffleGroupList: e.target.checked }))}
+                          />
+                          <span>XÁO TRỘN DANH SÁCH GROUP trước khi chạy chiến dịch <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Thay đổi thứ tự sắp xếp của danh sách group)</em></span>
+                        </label>
+                        <div className="schedule-hint" style={{ marginTop: 4, marginLeft: 24 }}>
+                          Thay vì đăng tuần tự hoặc cố định vào 1 danh sách nhóm, hệ thống sẽ tự động trộn danh sách nhóm và chọn ngẫu nhiên để đăng. Cách này giúp nội dung phân tán tự nhiên hơn, tránh việc bị Facebook đánh giá là spam vì đăng quá dầy đặc vào cùng thời điểm và nhóm giống nhau.
+                        </div>
+                      </div>
+                    </>
                   )}
-
-                  {/* Divider */}
-                  <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
-
-                  {/* Leave group on pending approval */}
-                  <div className="stepper-form-group">
-                    <label className="schedule-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.leaveGroupOnPendingApproval}
-                        onChange={e => setFormData(p => ({ ...p, leaveGroupOnPendingApproval: e.target.checked }))}
-                      />
-                      <span>RỜI GROUP chờ duyệt bài đăng <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu đã tham gia)</em></span>
-                    </label>
-                  </div>
-
-                  {/* Auto join group after post */}
-                  <div className="stepper-form-group">
-                    <label className="schedule-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.autoJoinGroupAfterPost}
-                        onChange={e => setFormData(p => ({ ...p, autoJoinGroupAfterPost: e.target.checked }))}
-                      />
-                      <span>Tự động THAM GIA GROUP sau khi đăng bài thành công và không bị kiểm duyệt <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu chưa tham gia)</em></span>
-                    </label>
-                  </div>
-
-                  {/* Shuffle group list */}
-                  <div className="stepper-form-group">
-                    <label className="schedule-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.shuffleGroupList}
-                        onChange={e => setFormData(p => ({ ...p, shuffleGroupList: e.target.checked }))}
-                      />
-                      <span>XÁO TRỘN DANH SÁCH GROUP trước khi chạy chiến dịch <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Thay đổi thứ tự sắp xếp của danh sách group)</em></span>
-                    </label>
-                    <div className="schedule-hint" style={{ marginTop: 4, marginLeft: 24 }}>
-                      Thay vì đăng tuần tự hoặc cố định vào 1 danh sách nhóm, hệ thống sẽ tự động trộn danh sách nhóm và chọn ngẫu nhiên để đăng. Cách này giúp nội dung phân tán tự nhiên hơn, tránh việc bị Facebook đánh giá là spam vì đăng quá dầy đặn vào cùng thời điểm và nhóm giống nhau.
-                    </div>
-                  </div>
-
 
                 </div>
               )}
-            </div>
+            </div>}
 
-            {/* Section 6: Danh sách data */}
-            <div
+
+            {/* Section 6: Danh sách data (hidden for simple campaigns) */}
+            {!isSimpleCampaign && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['details'] = el }}
             >
@@ -1186,6 +1242,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     >
                       <Upload size={14} /> Upload TXT
                     </button>
+                    {isMessageFriendCampaign && (
+                      <button 
+                        className="btn btn-secondary" 
+                        onClick={() => {
+                          if (formData.flatformAccountIds.length === 0) {
+                            showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                            return
+                          }
+                          setShowFriendPicker(true)
+                        }}
+                        title="Chọn bạn bè từ danh sách liên hệ"
+                      >
+                        <Users size={14} /> Chọn bạn bè
+                      </button>
+                    )}
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -1246,7 +1317,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
 
@@ -1256,6 +1327,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           <button className="btn btn-primary" onClick={handleSave}>Lưu chiến dịch</button>
         </div>
       </div>
+      {/* Friend Picker Modal */}
+      {showFriendPicker && formData.flatformAccountIds.length > 0 && (
+        <FriendPickerModal
+          accountId={formData.flatformAccountIds[0]}
+          onClose={() => setShowFriendPicker(false)}
+          onSelect={onFriendsSelected}
+        />
+      )}
     </div>
   )
 }

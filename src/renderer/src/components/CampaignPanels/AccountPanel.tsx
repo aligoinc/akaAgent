@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { FlatformAccount } from '../../../../shared/types'
 import AccountContextMenu from './AccountContextMenu'
+import { useUiStore } from '../../stores/uiStore'
 
 interface AccountPanelProps {
   onNavigateToBrowser?: (accountId: number) => void
@@ -78,30 +79,30 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   const handleReloadPage = async (account: FlatformAccount) => {
     if (!window.electronAPI?.reloadAccountPage) {
-      alert('Tính năng này cần Electron API')
+      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
     const result = await window.electronAPI.reloadAccountPage(account.id, account.flatformType)
     if (!result.success) {
-      alert(`Không thể load lại: ${result.reason}`)
+      useUiStore.getState().showAlert(`Không thể load lại: ${result.reason}`, 'error')
     }
   }
 
   const handleCheckLogin = async (account: FlatformAccount) => {
     if (!window.electronAPI?.checkFacebookLogin) {
-      alert('Tính năng này cần Electron API')
+      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
     try {
       const result = await window.electronAPI.checkFacebookLogin(account.id)
       await loadAccounts() // Refresh to get updated loginStatus
       if (result.loggedIn) {
-        alert(`✅ ${account.name}: Đã đăng nhập Facebook`)
+        useUiStore.getState().showAlert(`✅ ${account.name}: Đã đăng nhập Facebook`, 'success')
       } else {
-        alert(`❌ ${account.name}: ${result.reason || 'Chưa đăng nhập'}`)
+        useUiStore.getState().showAlert(`❌ ${account.name}: ${result.reason || 'Chưa đăng nhập'}`, 'error')
       }
     } catch (err: any) {
-      alert(`Lỗi kiểm tra: ${err.message}`)
+      useUiStore.getState().showAlert(`Lỗi kiểm tra: ${err.message}`, 'error')
     }
   }
 
@@ -127,35 +128,35 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   const handleLoadFriends = async (account: FlatformAccount) => {
     if (!window.electronAPI?.loadFriends) {
-      alert('Tính năng này cần Electron API')
+      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
     try {
       const result = await window.electronAPI.loadFriends(account.id)
       if (result.success) {
-        alert(`✅ Đã load ${result.count} bạn bè cho "${account.name}"`)
+        useUiStore.getState().showAlert(`✅ Đã load ${result.count} bạn bè cho "${account.name}"`, 'success')
       } else {
-        alert(`❌ Lỗi: ${result.error}`)
+        useUiStore.getState().showAlert(`❌ Lỗi: ${result.error}`, 'error')
       }
     } catch (err: any) {
-      alert(`Lỗi load bạn bè: ${err.message}`)
+      useUiStore.getState().showAlert(`Lỗi load bạn bè: ${err.message}`, 'error')
     }
   }
 
   const handleLoadGroups = async (account: FlatformAccount) => {
     if (!window.electronAPI?.loadGroups) {
-      alert('Tính năng này cần Electron API')
+      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
     try {
       const result = await window.electronAPI.loadGroups(account.id)
       if (result.success) {
-        alert(`✅ Đã load ${result.count} group cho "${account.name}"`)
+        useUiStore.getState().showAlert(`✅ Đã load ${result.count} group cho "${account.name}"`, 'success')
       } else {
-        alert(`❌ Lỗi: ${result.error}`)
+        useUiStore.getState().showAlert(`❌ Lỗi: ${result.error}`, 'error')
       }
     } catch (err: any) {
-      alert(`Lỗi load group: ${err.message}`)
+      useUiStore.getState().showAlert(`Lỗi load group: ${err.message}`, 'error')
     }
   }
 

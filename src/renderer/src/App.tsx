@@ -13,6 +13,8 @@ import { useElementStore } from './stores/elementStore'
 import { useBlockStore } from './stores/blockStore'
 import { useThemeStore } from './stores/themeStore'
 import { useCampaignStore } from './stores/campaignStore'
+import { useUiStore } from './stores/uiStore'
+import AlertModal from './components/CampaignPanels/AlertModal'
 
 export default function App() {
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
@@ -156,7 +158,7 @@ export default function App() {
       }
 
       await window.electronAPI.saveFlow(flowData)
-      alert('Flow saved successfully!')
+      useUiStore.getState().showAlert('Flow saved successfully!', 'success')
       loadBlocks()
     } catch (err) {
       console.error('Save error:', err)
@@ -267,6 +269,8 @@ export default function App() {
           )}
         </>
       </div>
+
+      <AlertModal />
     </div>
   )
 }
