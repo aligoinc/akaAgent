@@ -13,6 +13,8 @@ import { useElementStore } from './stores/elementStore'
 import { useBlockStore } from './stores/blockStore'
 import { useThemeStore } from './stores/themeStore'
 import { useCampaignStore } from './stores/campaignStore'
+import { useUiStore } from './stores/uiStore'
+import AlertModal from './components/CampaignPanels/AlertModal'
 
 export default function App() {
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
@@ -156,7 +158,7 @@ export default function App() {
       }
 
       await window.electronAPI.saveFlow(flowData)
-      alert('Flow saved successfully!')
+      useUiStore.getState().showAlert('Flow saved successfully!', 'success')
       loadBlocks()
     } catch (err) {
       console.error('Save error:', err)
@@ -204,7 +206,10 @@ export default function App() {
         }} />
       </div>
 
-      <div style={{ display: activePage === 'browsers' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div style={activePage === 'browsers'
+        ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
+        : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
+      }>
         <BrowserPage focusAccountId={focusAccountId} onFocusHandled={() => setFocusAccountId(null)} />
       </div>
 
@@ -264,6 +269,8 @@ export default function App() {
           )}
         </>
       </div>
+
+      <AlertModal />
     </div>
   )
 }

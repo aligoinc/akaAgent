@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { FlowData, ExecutionRun, ExecutionStep, FlatformAccount, Campaign, CampaignAction, CampaignDetail } from '../../shared/types'
+import { FlowData, ExecutionRun, ExecutionStep, FlatformAccount, Campaign, CampaignAction, CampaignDetail, FlatformContact, ContactType } from '../../shared/types'
 import * as dotenv from 'dotenv'
 import { join } from 'path'
 
@@ -20,6 +20,28 @@ export class SupabaseService {
       // Fallback dummy client so app doesn't crash
       this.client = createClient('https://dummy.supabase.co', 'dummy')
     }
+  }
+
+  // =========== STARTUP RESET ===========
+
+  async resetRunningStatuses(): Promise<void> {
+    console.log('[Supabase] Resetting "đang chạy" statuses to "chờ xử lý"...')
+    
+    // Reset accounts
+    const { error: accError } = await this.client
+      .from('auto_flatform_accounts')
+      .update({ status: 'chờ xử lý' })
+      .eq('status', 'đang chạy')
+
+    if (accError) console.error('Failed to reset account statuses:', accError.message)
+
+    // Reset campaigns
+    const { error: campError } = await this.client
+      .from('auto_campaigns')
+      .update({ status: 'chờ xử lý' })
+      .eq('status', 'đang chạy')
+
+    if (campError) console.error('Failed to reset campaign statuses:', campError.message)
   }
 
   // =========== FLOWS ===========
@@ -660,6 +682,72 @@ export class SupabaseService {
     if (error) throw new Error(`Failed to delete detail action: ${error.message}`)
   }
 
+  // =========== FLATFORM CONTACTS ===========
+
+  async listContacts(flatformAccountId: number, contactType?: ContactType): Promise<FlatformContact[]> {
+    let query = this.client
+      .from('auto_flatform_contacts')
+      .select('*')
+      .eq('flatform_account_id', flatformAccountId)
+      .eq('is_delete', false)
+      .order('name', { ascending: true })
+
+    if (contactType) {
+      query = query.eq('contact_type', contactType)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(`Failed to list contacts: ${error.message}`)
+    return (data || []).map(row => this.mapContactFromDB(row))
+  }
+
+  async upsertContacts(contacts: Partial<FlatformContact>[]): Promise<number> {
+    if (contacts.length === 0) return 0
+
+    // Filter out contacts without uid (required for unique constraint)
+    const validContacts = contacts.filter(c => c.uid)
+
+    if (validContacts.length === 0) return 0
+
+    // Batch in chunks of 100 to avoid payload limits
+    let totalSaved = 0
+    const chunkSize = 100
+
+    for (let i = 0; i < validContacts.length; i += chunkSize) {
+      const chunk = validContacts.slice(i, i + chunkSize)
+      const payloads = chunk.map(c => ({
+        flatform_account_id: c.flatformAccountId,
+        contact_type: c.contactType,
+        name: c.name,
+        uid: c.uid,
+        url: c.url || null,
+        extra_data: c.extraData || {},
+        is_delete: false,
+        updated_at: new Date().toISOString()
+      }))
+
+      const { data, error } = await this.client
+        .from('auto_flatform_contacts')
+        .upsert(payloads, { onConflict: 'flatform_account_id,contact_type,uid' })
+        .select()
+
+      if (error) throw new Error(`Failed to upsert contacts: ${error.message}`)
+      totalSaved += data?.length || 0
+    }
+
+    return totalSaved
+  }
+
+  async deleteContacts(flatformAccountId: number, contactType: ContactType): Promise<void> {
+    const { error } = await this.client
+      .from('auto_flatform_contacts')
+      .update({ is_delete: true, updated_at: new Date().toISOString() })
+      .eq('flatform_account_id', flatformAccountId)
+      .eq('contact_type', contactType)
+
+    if (error) throw new Error(`Failed to delete contacts: ${error.message}`)
+  }
+
   // =========== SCHEDULER QUERIES ===========
 
   async getAccountRateLimitStatus(
@@ -743,6 +831,207 @@ export class SupabaseService {
 
     if (error) return null
     return this.mapCampaignActionFromDB(data)
+  }
+
+  // =========== SEED: Auto-create built-in campaign actions & workflows ===========
+
+  async seedBuiltinCampaignActions(): Promise<void> {
+    const FACEBOOK_POST_ACTION_ID = 'facebook_timeline_post'
+    const FACEBOOK_POST_WORKFLOW_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+    const FACEBOOK_MSG_FRIEND_ACTION_ID = 'facebook_message_friend'
+
+    // Seed facebook_message_friend (no workflow - handled directly by scheduler)
+    const existingMsgFriend = await this.getCampaignAction(FACEBOOK_MSG_FRIEND_ACTION_ID)
+    if (!existingMsgFriend) {
+      try {
+        await this.createCampaignAction({
+          id: FACEBOOK_MSG_FRIEND_ACTION_ID,
+          name: 'Facebook - Nhắn tin & Kết bạn đến bạn bè/UID',
+          flatformType: 'facebook',
+          isActive: true,
+          workflowId: undefined
+        })
+        console.log('[Seed] Created built-in campaign action: facebook_message_friend')
+      } catch (err) {
+        console.error('[Seed] Failed to create facebook_message_friend action:', err)
+      }
+    }
+
+    // Check if the action already exists
+    const existing = await this.getCampaignAction(FACEBOOK_POST_ACTION_ID)
+    if (existing) return // Already seeded
+
+    // 1. Create the workflow for "Đăng bài lên Facebook"
+    const workflowNodes = [
+      {
+        id: 'node_get_content',
+        type: 'actionNode',
+        position: { x: 250, y: 50 },
+        data: {
+          actionType: 'blockInput',
+          label: 'Lấy nội dung chiến dịch',
+          icon: 'Download',
+          category: 'block',
+          config: { fieldName: 'campaignContent', defaultValue: '' },
+          inputMapping: {}
+        }
+      },
+      {
+        id: 'node_nav_fb',
+        type: 'actionNode',
+        position: { x: 250, y: 170 },
+        data: {
+          actionType: 'navigate',
+          label: 'Mở Facebook',
+          icon: 'Globe',
+          category: 'navigation',
+          config: { url: 'https://www.facebook.com' },
+          inputMapping: {}
+        }
+      },
+      {
+        id: 'node_wait_composer',
+        type: 'actionNode',
+        position: { x: 250, y: 290 },
+        data: {
+          actionType: 'waitForSelector',
+          label: 'Chờ trang tải',
+          icon: 'Clock',
+          category: 'utility',
+          config: { selector: '[role="main"]', timeout: 10000 },
+          inputMapping: {}
+        }
+      },
+      {
+        id: 'node_click_composer',
+        type: 'actionNode',
+        position: { x: 250, y: 410 },
+        data: {
+          actionType: 'click',
+          label: 'Click ô đăng bài',
+          icon: 'MousePointer',
+          category: 'interaction',
+          config: { selector: '[role="main"] [role="button"][tabindex="0"]' },
+          inputMapping: {}
+        }
+      },
+      {
+        id: 'node_wait_dialog',
+        type: 'actionNode',
+        position: { x: 250, y: 530 },
+        data: {
+          actionType: 'waitForSelector',
+          label: 'Chờ hộp thoại đăng bài',
+          icon: 'Clock',
+          category: 'utility',
+          config: { selector: '[role="dialog"] [contenteditable="true"]', timeout: 10000 },
+          inputMapping: {}
+        }
+      },
+      {
+        id: 'node_sleep_1',
+        type: 'actionNode',
+        position: { x: 250, y: 650 },
+        data: {
+          actionType: 'sleep',
+          label: 'Đợi 2 giây',
+          icon: 'Clock',
+          category: 'utility',
+          config: { duration: 2000 },
+          inputMapping: {}
+        }
+      },
+      {
+        id: 'node_type_content',
+        type: 'actionNode',
+        position: { x: 250, y: 770 },
+        data: {
+          actionType: 'type',
+          label: 'Nhập nội dung bài đăng',
+          icon: 'Type',
+          category: 'interaction',
+          config: { selector: '[role="dialog"] [contenteditable="true"]', text: '' },
+          inputMapping: { text: { sourceNodeId: 'node_get_content', sourceField: 'value' } }
+        }
+      },
+      {
+        id: 'node_sleep_2',
+        type: 'actionNode',
+        position: { x: 250, y: 890 },
+        data: {
+          actionType: 'sleep',
+          label: 'Đợi 2 giây',
+          icon: 'Clock',
+          category: 'utility',
+          config: { duration: 2000 },
+          inputMapping: {}
+        }
+      },
+      {
+        id: 'node_click_post',
+        type: 'actionNode',
+        position: { x: 250, y: 1010 },
+        data: {
+          actionType: 'click',
+          label: 'Click nút Đăng',
+          icon: 'MousePointer',
+          category: 'interaction',
+          config: { selector: '[role="dialog"] [aria-label="Đăng"], [role="dialog"] [aria-label="Post"]' },
+          inputMapping: {}
+        }
+      },
+      {
+        id: 'node_wait_done',
+        type: 'actionNode',
+        position: { x: 250, y: 1130 },
+        data: {
+          actionType: 'sleep',
+          label: 'Chờ hoàn thành',
+          icon: 'Clock',
+          category: 'utility',
+          config: { duration: 3000 },
+          inputMapping: {}
+        }
+      }
+    ]
+
+    const workflowEdges = [
+      { id: 'e0', source: 'node_get_content', target: 'node_nav_fb' },
+      { id: 'e1', source: 'node_nav_fb', target: 'node_wait_composer' },
+      { id: 'e2', source: 'node_wait_composer', target: 'node_click_composer' },
+      { id: 'e3', source: 'node_click_composer', target: 'node_wait_dialog' },
+      { id: 'e4', source: 'node_wait_dialog', target: 'node_sleep_1' },
+      { id: 'e5', source: 'node_sleep_1', target: 'node_type_content' },
+      { id: 'e6', source: 'node_type_content', target: 'node_sleep_2' },
+      { id: 'e7', source: 'node_sleep_2', target: 'node_click_post' },
+      { id: 'e8', source: 'node_click_post', target: 'node_wait_done' },
+    ]
+
+    try {
+      // Save workflow
+      await this.saveFlow({
+        id: FACEBOOK_POST_WORKFLOW_ID,
+        name: '[Built-in] Đăng bài lên dòng thời gian Facebook',
+        description: 'Workflow tự động đăng bài lên Facebook Timeline. Sử dụng nội dung từ campaign.',
+        nodes: workflowNodes as any,
+        edges: workflowEdges,
+        variables: {},
+        isBlock: false
+      })
+
+      // Create campaign action linked to the workflow
+      await this.createCampaignAction({
+        id: FACEBOOK_POST_ACTION_ID,
+        name: 'Facebook - Đăng bài lên trang cá nhân',
+        flatformType: 'facebook',
+        isActive: true,
+        workflowId: FACEBOOK_POST_WORKFLOW_ID
+      })
+
+      console.log('[Seed] Created built-in campaign action: facebook_timeline_post')
+    } catch (err) {
+      console.error('[Seed] Failed to create built-in campaign action:', err)
+    }
   }
 
   // =========== MAPPERS ===========
@@ -870,6 +1159,21 @@ export class SupabaseService {
       dateAction: row.date_action as string | undefined,
       isDelete: row.is_delete as boolean,
       createdAt: row.created_at as string
+    }
+  }
+
+  private mapContactFromDB(row: Record<string, unknown>): FlatformContact {
+    return {
+      id: row.id as number,
+      flatformAccountId: row.flatform_account_id as number,
+      contactType: row.contact_type as ContactType,
+      name: row.name as string,
+      uid: row.uid as string | undefined,
+      url: row.url as string | undefined,
+      extraData: row.extra_data as Record<string, unknown> | undefined,
+      isDelete: row.is_delete as boolean,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string
     }
   }
 

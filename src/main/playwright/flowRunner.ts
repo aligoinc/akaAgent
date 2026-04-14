@@ -116,7 +116,7 @@ export class FlowRunner {
         if (node.data.actionType === 'loop') {
           const loopResult = await this.executeLoop(node, flowData, run, blockOutputs)
           if (!loopResult) {
-            console.warn(`Loop node ${node.id} failed. Skipping...`)
+            throw new Error(run.error || `Loop execution failed on node ${node.id}`)
           }
           continue
         }
@@ -307,11 +307,25 @@ export class FlowRunner {
    * Collects nodes by BFS, stopping at nodes that are also reachable from sibling handles.
    */
   private collectBranchNodes(nodeId: string, handleId: string): string[] {
-    // Find all sibling handle target IDs (nodes connected from OTHER handles of the same node)
+    // Find all sibling handle target IDs (nodes reachable from OTHER handles of the same node)
     const siblingTargetIds = new Set<string>()
+    const siblingQueue: string[] = []
+
     for (const edge of this.edges) {
       if (edge.source === nodeId && edge.sourceHandle !== handleId) {
-        siblingTargetIds.add(edge.target)
+        siblingQueue.push(edge.target)
+      }
+    }
+
+    while (siblingQueue.length > 0) {
+      const nid = siblingQueue.shift()!
+      if (siblingTargetIds.has(nid)) continue
+      siblingTargetIds.add(nid)
+
+      for (const edge of this.edges) {
+        if (edge.source === nid && !siblingTargetIds.has(edge.target)) {
+          siblingQueue.push(edge.target)
+        }
       }
     }
 
@@ -399,7 +413,7 @@ export class FlowRunner {
     // Execute branch nodes (reuse the loop body executor since same logic applies)
     const success = await this.executeLoopBodyNodes(branchNodes, ifElseNode, flowData, run, blockOutputs)
     if (!success) {
-      throw new Error(`ifElse ${handleId} branch failed`)
+      throw new Error(run.error || `ifElse ${handleId} branch failed`)
     }
   }
 
@@ -486,7 +500,7 @@ export class FlowRunner {
         if (!condResult) break
 
         // Set loop output for this iteration
-        this.nodeOutputs.set(loopNode.id, { index, item: index, completed: false })
+        this.nodeOutputs.set(loopNode.id, { index, iteration: index + 1, item: index, completed: false })
 
         const success = await this.executeLoopBodyNodes(bodyNodes, loopNode, flowData, run, blockOutputs)
         if (!success) return false
@@ -494,7 +508,7 @@ export class FlowRunner {
         index++
       }
 
-      this.nodeOutputs.set(loopNode.id, { index: index - 1, item: index - 1, completed: true })
+      this.nodeOutputs.set(loopNode.id, { index: index - 1, iteration: index, item: index - 1, completed: true })
     } else {
       // forEach and count loops
       for (let i = 0; i < items.length; i++) {
@@ -506,7 +520,7 @@ export class FlowRunner {
         const item = items[i]
 
         // Set loop output for this iteration (child nodes can map from loop node's output)
-        this.nodeOutputs.set(loopNode.id, { index: i, item, completed: false })
+        this.nodeOutputs.set(loopNode.id, { index: i, iteration: i + 1, item, completed: false })
 
         const success = await this.executeLoopBodyNodes(bodyNodes, loopNode, flowData, run, blockOutputs)
         if (!success) return false
@@ -515,6 +529,7 @@ export class FlowRunner {
       const lastIndex = items.length > 0 ? items.length - 1 : 0
       this.nodeOutputs.set(loopNode.id, {
         index: lastIndex,
+        iteration: items.length,
         item: items.length > 0 ? items[lastIndex] : null,
         completed: true
       })
@@ -545,14 +560,23 @@ export class FlowRunner {
     run: ExecutionRun,
     blockOutputs: Record<string, unknown>
   ): Promise<boolean> {
+    const skippedNodes = new Set<string>()
+
     for (const bodyNode of bodyNodes) {
       if (this.cancelled) {
         run.status = 'cancelled'
         return false
       }
 
+      if (skippedNodes.has(bodyNode.id)) {
+        continue
+      }
+
       // Nested loops
       if (bodyNode.data.actionType === 'loop') {
+        const innerLoopBodyIds = this.collectLoopBody(bodyNode.id)
+        innerLoopBodyIds.forEach(id => skippedNodes.add(id))
+
         const success = await this.executeLoop(bodyNode, flowData, run, blockOutputs)
         if (!success) return false
         continue
@@ -560,6 +584,11 @@ export class FlowRunner {
 
       // Handle ifElse in loop body
       if (bodyNode.data.actionType === 'ifElse') {
+        const innerBranchIdsTrue = this.collectBranchNodes(bodyNode.id, 'if-true')
+        const innerBranchIdsFalse = this.collectBranchNodes(bodyNode.id, 'if-false')
+        innerBranchIdsTrue.forEach(id => skippedNodes.add(id))
+        innerBranchIdsFalse.forEach(id => skippedNodes.add(id))
+
         await this.executeIfElse(bodyNode, flowData, run, blockOutputs)
         continue
       }
@@ -615,6 +644,20 @@ export class FlowRunner {
         const fieldName = String(bodyNode.data.config.fieldName || 'output')
         blockOutputs[fieldName] = val
         result = { success: true, output: { [fieldName]: val }, durationMs: 0 }
+      } else if (bodyNode.data.actionType === 'updateCampaignStatus') {
+        const detailId = flowData.variables?.detailId as number
+        const status = String(resolvedInput.status || 'hoàn thành')
+        if (detailId) {
+          await this.supabase.updateCampaignDetail(detailId, { status })
+        }
+        result = { success: true, output: { status }, durationMs: 0 }
+      } else if (bodyNode.data.actionType === 'writeCampaignLog') {
+        const campaignId = flowData.variables?.campaignId as number
+        const message = String(resolvedInput.message || '')
+        if (campaignId && message) {
+          await this.supabase.appendCampaignLog(campaignId, message)
+        }
+        result = { success: true, output: { message }, durationMs: 0 }
       } else {
         result = await this.controller.executeAction(
           bodyNode.data.actionType,
@@ -656,13 +699,14 @@ export class FlowRunner {
   }
 
   /**
-   * Simple condition evaluator for while loops.
+   * Simple condition evaluator for while loops and ifElse.
    * Replaces {{nodeId.field}} with actual values from nodeOutputs.
+   * Node IDs can contain hyphens (e.g. node-input-images).
    */
   private evaluateCondition(condition: string): boolean {
     try {
-      // Replace {{nodeId.field}} patterns
-      const resolved = condition.replace(/\{\{(\w+)\.(\w+)\}\}/g, (_, nodeId, field) => {
+      // Replace {{nodeId.field}} patterns — nodeId can contain hyphens
+      const resolved = condition.replace(/\{\{([\w-]+)\.([\w-]+)\}\}/g, (_, nodeId, field) => {
         const output = this.nodeOutputs.get(nodeId)
         if (output && field in output) {
           const val = output[field]
@@ -713,18 +757,29 @@ export class FlowRunner {
 
     console.log(`[FlowRunner] node ${node.data.actionType} (${node.id}) resolved inputs:`, config)
 
-    // Resolve Element IDs to XPaths
+    // Resolve Element IDs to XPaths and perform {{var}} string interpolation
     const actionDef = builtinActions.find(a => a.type === node.data.actionType)
     if (actionDef) {
       for (const field of actionDef.inputSchema) {
-        if (field.type === 'element' && config[field.name]) {
-          const elementId = String(config[field.name])
-          const xpath = this.elementMap.get(elementId)
-          if (xpath) {
-            config[field.name] = xpath
-          } else {
-            // Keep the original value (it could be a raw string instead of ID)
+        if (typeof config[field.name] === 'string') {
+          let strVal = config[field.name] as string
+
+          // 1. Resolve Element IDs to XPaths
+          if (field.type === 'element') {
+            const xpath = this.elementMap.get(strVal)
+            if (xpath) strVal = xpath
           }
+
+          // 2. String interpolation for {{nodeId.field}}
+          strVal = strVal.replace(/\{\{([\w-]+)\.([\w-]+)\}\}/g, (match, srcNodeId, srcField) => {
+            const output = this.nodeOutputs.get(srcNodeId)
+            if (output && srcField in output) {
+               return String(output[srcField])
+            }
+            return match // leave unresolved
+          })
+
+          config[field.name] = strVal
         }
       }
     }

@@ -12,7 +12,7 @@ export type ActionType =
   // Data
   | 'getValue' | 'setValue' | 'getText' | 'screenshot' | 'getAttribute'
   // Utility
-  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog' | 'uploadFile'
+  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog' | 'uploadFile' | 'dropFile'
   // Control Flow
   | 'ifElse' | 'loop' | 'switch'
   // Block System
@@ -198,6 +198,9 @@ export interface CampaignExtraSettings {
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
   autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
+  // Nhắn tin & kết bạn
+  enableMessage?: boolean                  // Gửi tin nhắn
+  enableAddFriend?: boolean                // Kết bạn
 }
 
 export interface Campaign {
@@ -252,6 +255,25 @@ export interface CampaignDetailAction {
   data?: Record<string, unknown>
   isDelete: boolean
   createdAt?: string
+}
+
+// ============================================
+// Flatform Contact Types
+// ============================================
+
+export type ContactType = 'friend' | 'group'
+
+export interface FlatformContact {
+  id: number
+  flatformAccountId: number
+  contactType: ContactType
+  name: string
+  uid?: string
+  url?: string
+  extraData?: Record<string, unknown>
+  isDelete: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 // ============================================
@@ -348,6 +370,13 @@ export const IPC_CHANNELS = {
   // Actions
   ACTIONS_LIST: 'actions:list',
   ACTION_EXECUTE: 'action:execute',
+
+  // Contacts (Load data)
+  CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',
+  CONTACTS_LOAD_GROUPS: 'contacts:load-groups',
+  CONTACTS_LIST: 'contacts:list',
+  CONTACTS_DELETE: 'contacts:delete',
+  CONTACTS_PROGRESS: 'contacts:progress',
 } as const
 
 // ============================================

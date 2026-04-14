@@ -15,11 +15,51 @@ function safeJS(selector: string): string {
 const SELECTOR_RESOLVER_JS = `
 function resolveSelector(selector) {
   if (!selector) return null;
+  
+  function isVisible(el) {
+    if (!el) return false;
+    var style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    return el.offsetWidth > 0 && el.offsetHeight > 0;
+  }
+
+  // Handle Playwright/XPath indices implicitly by returning the matching visible element if none provided?
+  // Wait, if selector explicitly has [n], document.evaluate already processes [n] natively.
+  // BUT native [n] doesn't know about visibility.
+  // Instead of breaking standard XPath [n], we'll just evaluate standard XPath.
+  // However, we can first check if we could resolve it and if it's visible.
+  
   if (selector.startsWith('/') || selector.startsWith('(')) {
+    // If standard XPath is used, let's try to get all nodes and find the first visible one if it doesn't have an index?
+    // Actually, if it has [n], evaluate might just return that exact node, and we can't do much if it's invisible.
+    // Let's implement a custom selector mechanism for visible nodes:
+    // We will evaluate as ORDERED_NODE_SNAPSHOT_TYPE, filter by visibility, and if it's a single target query, take the first visible.
+    
+    // Check if the query ends with an index pattern like [1] or [2]
+    var match = selector.match(/^(.*)\\[(\\d+)\\]$/);
+    if (match) {
+        var baseSelector = match[1];
+        var index = parseInt(match[2], 10) - 1; // 0-based for JS
+        
+        var result = document.evaluate(baseSelector, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+        var visibleEls = [];
+        for (var i = 0; i < result.snapshotLength; i++) {
+           var n = result.snapshotItem(i);
+           if (isVisible(n)) visibleEls.push(n);
+        }
+        return visibleEls[index] || null;
+    }
+
     var result = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return result.singleNodeValue;
   }
-  return document.querySelector(selector);
+
+  // CSS Selectors
+  var els = document.querySelectorAll(selector);
+  for (var i = 0; i < els.length; i++) {
+    if (isVisible(els[i])) return els[i];
+  }
+  return null;
 }
 `
 
@@ -114,16 +154,24 @@ export class WebviewController {
         case 'click': {
           const selector = input.selector as string
           const clickCount = (input.clickCount as number) || 1
-          await this.waitForElement(selector, 15000) // Auto-wait like Playwright
+          await this.waitForElement(selector, 15000)
           await this.exec(`
             var el = resolveSelector(${safeJS(selector)});
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
             el.scrollIntoView({ block: "center", inline: "center" });
             
-            // Execute the click asynchronously so if it triggers immediate navigation, 
-            // the executeJavaScript IPC call can still return 'true' before the context is destroyed.
+            // Dispatch full pointer + mouse event chain to trigger React/FB event handlers
             setTimeout(function() {
+              var rect = el.getBoundingClientRect();
+              var cx = rect.left + rect.width / 2;
+              var cy = rect.top + rect.height / 2;
+              var evtInit = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
+
               for (var i = 0; i < ${Number(clickCount)}; i++) {
+                el.dispatchEvent(new PointerEvent("pointerdown", Object.assign({}, evtInit, { pointerId: 1, pointerType: "mouse" })));
+                el.dispatchEvent(new MouseEvent("mousedown", evtInit));
+                el.dispatchEvent(new PointerEvent("pointerup", Object.assign({}, evtInit, { pointerId: 1, pointerType: "mouse" })));
+                el.dispatchEvent(new MouseEvent("mouseup", evtInit));
                 el.click();
               }
             }, 50);
@@ -137,60 +185,91 @@ export class WebviewController {
           const text = String(input.text ?? '')
           const clearFirst = !!input.clearFirst
           await this.waitForElement(selector, 15000)
+          
+          // Step 1: Click and focus the element to trigger Lexical mount
           await this.exec(`
             var el = resolveSelector(${safeJS(selector)});
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
+            el.scrollIntoView({ block: "center", inline: "center" });
             el.focus();
-            if (el.isContentEditable) {
-              ${clearFirst ? `
-              // Select all content and delete it first
-              var range = document.createRange();
-              range.selectNodeContents(el);
-              var sel = window.getSelection();
-              sel.removeAllRanges();
-              sel.addRange(range);
-              document.execCommand('delete', false);
-              ` : `
-              // Move cursor to end
-              var range = document.createRange();
-              range.selectNodeContents(el);
-              range.collapse(false);
-              var sel = window.getSelection();
-              sel.removeAllRanges();
-              sel.addRange(range);
-              `}
-              // Attempt to dispatch a paste event so rich text editors (like Lexical on FB)
-              // can cleanly handle newlines and generate proper paragraph blocks.
-              var textToInsert = String(${safeJS(text)});
-              var dt = new DataTransfer();
-              dt.setData('text/plain', textToInsert);
-              var pasteEvent = new ClipboardEvent('paste', {
-                clipboardData: dt,
-                bubbles: true,
-                cancelable: true
-              });
-              var handled = !el.dispatchEvent(pasteEvent);
+            if (!el.isContentEditable && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
+              el.click();
+            }
+          `)
+
+          // Step 2: Wait for Lexical to mount contenteditable
+          await new Promise(r => setTimeout(r, 500))
+
+          // Step 3: Find the actual editable, focus it, and use execCommand
+          // execCommand('insertText') triggers beforeinput events that Lexical uses
+          // to update its state — works without OS focus or webview visibility
+          await this.exec(`
+            var el = resolveSelector(${safeJS(selector)});
+            // Find the actual editable target
+            var target = null;
+            if (el && el.isContentEditable) {
+              target = el;
+            } else if (el) {
+              target = el.querySelector('[contenteditable="true"]');
+              if (!target && el.closest) {
+                var parent = el.closest('[role="complementary"], [data-testid], form, [class*="comment"]');
+                if (parent) target = parent.querySelector('[contenteditable="true"]');
+              }
+              if (!target && el.parentElement) target = el.parentElement.querySelector('[contenteditable="true"]');
+              if (!target && el.parentElement && el.parentElement.parentElement) {
+                target = el.parentElement.parentElement.querySelector('[contenteditable="true"]');
+              }
+            }
+            if (!target && document.activeElement && document.activeElement.isContentEditable) {
+              target = document.activeElement;
+            }
+            if (!target) {
+              var all = document.querySelectorAll('[contenteditable="true"]');
+              if (all.length > 0) target = all[all.length - 1];
+            }
+            
+            if (target && target.isContentEditable) {
+              target.focus();
               
-              if (!handled) {
-                // Fallback for basic contenteditables that do not intercept paste
-                var lines = textToInsert.split('\\n');
-                for (var i = 0; i < lines.length; i++) {
-                  if (i > 0) {
-                    document.execCommand('insertParagraph', false, null) || document.execCommand('insertLineBreak', false, null);
-                  }
-                  if (lines[i].length > 0) {
-                    document.execCommand('insertText', false, lines[i]);
-                  }
+              if (${clearFirst}) {
+                var range = document.createRange();
+                range.selectNodeContents(target);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                document.execCommand('delete', false);
+              } else {
+                var range = document.createRange();
+                range.selectNodeContents(target);
+                range.collapse(false);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+              }
+              
+              // Use execCommand which triggers beforeinput -> Lexical updates state
+              var lines = String(${safeJS(text)}).split('\\n');
+              for (var i = 0; i < lines.length; i++) {
+                if (i > 0) {
+                  document.execCommand('insertParagraph', false, null);
+                }
+                if (lines[i].length > 0) {
+                  document.execCommand('insertText', false, lines[i]);
                 }
               }
+              return true;
+            } else if (target) {
+              // Regular input/textarea
+              ${clearFirst ? 'target.value = "";' : ''}
+              target.value = ${clearFirst ? '' : '(target.value || "") + '}${safeJS(text)};
+              target.dispatchEvent(new Event("input", { bubbles: true }));
+              target.dispatchEvent(new Event("change", { bubbles: true }));
+              return true;
             } else {
-              ${clearFirst ? 'el.value = "";' : ''}
-              el.value = ${clearFirst ? '' : '(el.value || "") + '}${safeJS(text)};
-              el.dispatchEvent(new Event("input", { bubbles: true }));
-              el.dispatchEvent(new Event("change", { bubbles: true }));
+              throw new Error("Cannot find editable element for typing");
             }
-            return true;
           `)
+          
           output = { success: true }
           break
         }
@@ -249,7 +328,7 @@ export class WebviewController {
         case 'pressKey': {
           // pressKey typically doesn't need to wait for a specific element (defaults to body/activeElement),
           // but if we were pressing on a selector, we would wait. The current implementation uses activeElement.
-          const key = input.key as string
+          const key = input.key as string || 'Enter'
           await this.exec(`
             var keyMap = {
               "Enter": { key: "Enter", code: "Enter", keyCode: 13 },
@@ -532,6 +611,162 @@ export class WebviewController {
           break
         }
 
+        // =========== DRAG-AND-DROP FILE UPLOAD (JS_DROP_FILE) ===========
+        case 'dropFile': {
+          const selector = input.selector as string
+          let filePaths: string[]
+          const rawPaths = input.filePaths
+          if (typeof rawPaths === 'string') {
+            try { filePaths = JSON.parse(rawPaths) } catch { filePaths = [rawPaths] }
+          } else if (Array.isArray(rawPaths)) {
+            filePaths = rawPaths as string[]
+          } else {
+            filePaths = []
+          }
+          if (!Array.isArray(filePaths) || filePaths.length === 0) {
+            throw new Error('filePaths must be a non-empty array of file paths')
+          }
+
+          // Resolve base64 data URIs → write to temp files
+          const { writeFileSync: writeSync, existsSync: fsCheck } = await import('fs')
+          const { join: joinPath } = await import('path')
+          const { tmpdir: getTmp } = await import('os')
+          const resolvedFiles: string[] = []
+          for (let i = 0; i < filePaths.length; i++) {
+            const fp = filePaths[i]
+            if (fp.startsWith('data:')) {
+              const match = fp.match(/^data:([^;]+);base64,(.+)$/)
+              if (!match) throw new Error(`Invalid data URI at index ${i}`)
+              const ext = match[1].split('/')[1] || 'png'
+              const buf = Buffer.from(match[2], 'base64')
+              const tmpPath = joinPath(getTmp(), `drop_${Date.now()}_${i}.${ext}`)
+              writeSync(tmpPath, buf)
+              resolvedFiles.push(tmpPath)
+            } else {
+              const normalizedPath = fp.replace(/\//g, '\\')
+              if (!fsCheck(normalizedPath) && !fsCheck(fp)) {
+                console.warn(`[WebviewController] dropFile: File not found: ${fp}`)
+              }
+              resolvedFiles.push(fp)
+            }
+          }
+
+          await this.waitForElement(selector, 15000)
+
+          // For each file, use JS_DROP_FILE technique:
+          // 1. Inject a temporary <input type="file"> via JS
+          // 2. Use CDP to set files on it
+          // 3. The JS onchange handler fires synthetic drag-and-drop events onto the target element
+          let uploadedCount = 0
+          for (const filePath of resolvedFiles) {
+            try {
+              // Step 1: Inject the drop file script, which creates a temporary <input type="file">
+              // and sets up the onchange handler to fire DragEvents onto the target element.
+              // The script returns the temporary input element reference.
+              const uniqueId = `__drop_input_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+              await this.exec(`
+                var b = resolveSelector(${safeJS(selector)});
+                if (!b) throw new Error("Drop target element not found: " + ${safeJS(selector)});
+                var c = b.ownerDocument;
+                // Scroll target into view
+                var m = 0;
+                while (true) {
+                  var e = b.getBoundingClientRect();
+                  var g = e.left + (e.width / 2);
+                  var h = e.top + (e.height / 2);
+                  var f = c.elementFromPoint(g, h);
+                  if (f && b.contains(f)) break;
+                  if (1 < ++m) { b.scrollIntoView({behavior:'instant',block:'center',inline:'center'}); break; }
+                  b.scrollIntoView({behavior:'instant',block:'center',inline:'center'});
+                }
+                var a = c.createElement('INPUT');
+                a.setAttribute('type', 'file');
+                a.setAttribute('multiple', 'true');
+                a.setAttribute('data-drop-id', ${safeJS(uniqueId)});
+                a.setAttribute('style', 'position:fixed;z-index:2147483647;left:0;top:0;opacity:0;');
+                a.onchange = function() {
+                  var e2 = b.getBoundingClientRect();
+                  var g2 = e2.left + (e2.width / 2);
+                  var h2 = e2.top + (e2.height / 2);
+                  var f2 = c.elementFromPoint(g2, h2) || b;
+                  var dt = {
+                    effectAllowed: 'all',
+                    dropEffect: 'none',
+                    types: ['Files'],
+                    files: this.files,
+                    setData: function(){},
+                    getData: function(){},
+                    clearData: function(){},
+                    setDragImage: function(){}
+                  };
+                  if (window.DataTransferItemList) {
+                    var items = [];
+                    for (var i = 0; i < this.files.length; i++) {
+                      items.push(Object.setPrototypeOf({
+                        kind: 'file',
+                        type: this.files[i].type,
+                        file: this.files[i],
+                        getAsFile: function(){ return this.file; },
+                        getAsString: function(cb) {
+                          var reader = new FileReader();
+                          reader.onload = function(ev){ cb(ev.target.result); };
+                          reader.readAsText(this.file);
+                        }
+                      }, DataTransferItem.prototype));
+                    }
+                    dt.items = Object.setPrototypeOf(items, DataTransferItemList.prototype);
+                  }
+                  Object.setPrototypeOf(dt, DataTransfer.prototype);
+                  ['dragenter', 'dragover', 'drop'].forEach(function(evtName) {
+                    var d = c.createEvent('DragEvent');
+                    d.initMouseEvent(evtName, true, true, c.defaultView, 0, 0, 0, g2, h2, false, false, false, false, 0, null);
+                    Object.setPrototypeOf(d, null);
+                    d.dataTransfer = dt;
+                    Object.setPrototypeOf(d, DragEvent.prototype);
+                    f2.dispatchEvent(d);
+                  });
+                  a.parentElement.removeChild(a);
+                };
+                c.documentElement.appendChild(a);
+                a.getBoundingClientRect();
+                return ${safeJS(uniqueId)};
+              `)
+
+              // Step 2: Use CDP to set the file on the temporary input
+              try { this.wc.debugger.attach('1.3') } catch { /* already attached */ }
+
+              try {
+                const { root } = await this.wc.debugger.sendCommand('DOM.getDocument', {})
+                const { nodeId } = await this.wc.debugger.sendCommand('DOM.querySelector', {
+                  nodeId: root.nodeId,
+                  selector: `[data-drop-id="${uniqueId}"]`
+                })
+
+                if (!nodeId) {
+                  throw new Error('Could not find temporary drop input via CDP')
+                }
+
+                // Set the file — this triggers onchange which fires the DragEvents
+                await this.wc.debugger.sendCommand('DOM.setFileInputFiles', {
+                  nodeId,
+                  files: [filePath]
+                })
+
+                uploadedCount++
+                // Wait for React/framework to process the drop
+                await new Promise(r => setTimeout(r, 2000))
+              } finally {
+                try { this.wc.debugger.detach() } catch {}
+              }
+            } catch (dropErr) {
+              console.error(`[WebviewController] dropFile failed for ${filePath}:`, dropErr)
+            }
+          }
+
+          output = { success: uploadedCount > 0, fileCount: uploadedCount }
+          break
+        }
+
         default:
           throw new Error(`Unknown action type: ${actionType}`)
       }
@@ -558,6 +793,7 @@ export class WebviewController {
     const startTime = Date.now()
     console.log(`[WebviewController] waitForElement: "${selector.substring(0, 80)}..." timeout=${timeout}ms, URL=${this.getURL()}`)
     let attempts = 0
+    let lastScrollTime = 0
     while (Date.now() - startTime < timeout) {
       try {
         const found = await this.exec(`
@@ -572,6 +808,16 @@ export class WebviewController {
       } catch (err: any) {
         console.log(`[WebviewController] waitForElement poll error: ${err.message}`)
       }
+
+      // Auto-scroll down every 3 seconds to trigger lazy loading (e.g., Facebook feed)
+      const now = Date.now()
+      if (now - lastScrollTime > 3000) {
+        try {
+          await this.exec(`window.scrollBy(0, 600);`)
+          lastScrollTime = now
+        } catch {}
+      }
+
       await new Promise(resolve => setTimeout(resolve, 500))
     }
     console.log(`[WebviewController] Element NOT FOUND after ${attempts} attempts (${timeout}ms). URL was: ${this.getURL()}`)

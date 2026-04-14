@@ -2,6 +2,8 @@ node_modules/
 out/
 dist/
 .env
+.mcp.json
+*.local.json
 *.log
 .DS_Store
 Thumbs.db

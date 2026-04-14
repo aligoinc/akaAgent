@@ -449,5 +449,22 @@ export const builtinActions: ActionDefinition[] = [
       { name: 'success', type: 'boolean', label: 'Success' },
       { name: 'fileCount', type: 'number', label: 'Số file đã upload' }
     ]
+  },
+  {
+    id: 'dropFile',
+    name: 'Drop File (Kéo thả)',
+    type: 'dropFile',
+    description: 'Upload file bằng cách mô phỏng kéo thả (drag-and-drop) vào element. Phù hợp với Facebook, các editor không có input[type=file].',
+    icon: 'ImagePlus',
+    category: 'interaction',
+    inputSchema: [
+      { name: 'selector', type: 'element', label: 'Vùng thả file', required: true, description: 'Element nhận file (VD: vùng soạn bài, khung post)' },
+      { name: 'filePaths', type: 'json', label: 'Danh sách file', required: true, placeholder: '["C:/path/to/image1.png"]' }
+    ],
+    outputSchema: [
+      { name: 'success', type: 'boolean', label: 'Success' },
+      { name: 'fileCount', type: 'number', label: 'Số file đã upload' }
+    ]
   }
 ]
+

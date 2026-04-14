@@ -1,7 +1,7 @@
-import { BrowserWindow, webContents } from 'electron'
+import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
-import { WebviewRegistry, WebviewController } from '../playwright/webviewController'
+import { WebviewRegistry } from '../playwright/webviewController'
 import { FlowRunner } from '../playwright/flowRunner'
 import { IPC_CHANNELS, ExecutionStep, Campaign, CampaignDetail } from '../../shared/types'
 
@@ -189,8 +189,21 @@ export class CampaignScheduler {
 
       // Get the campaign action and its workflow
       const action = await this.supabase.getCampaignAction(campaign.actionId)
-      if (!action || !action.workflowId) {
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action hoặc workflow`)
+      if (!action) {
+        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action`)
+        await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+        this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy action "${campaign.actionId}"`)
+        return
+      }
+
+      // === Message & Friend Request campaign: no workflow, direct browser automation ===
+      if (campaign.actionId === 'facebook_message_friend') {
+        await this.executeMessageFriendCampaign(account, campaign)
+        return
+      }
+
+      if (!action.workflowId) {
+        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy workflow`)
         await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy workflow cho action "${campaign.actionId}"`)
         return
@@ -357,7 +370,6 @@ export class CampaignScheduler {
       finalImages = [...availableImages]
     } else if (imageOption === 'random') {
       const count = campaign.extraSettings?.randomImageCount || 3
-      // Shuffle array securely
       const shuffled = [...availableImages].sort(() => 0.5 - Math.random())
       finalImages = shuffled.slice(0, count)
     } else {
@@ -365,7 +377,14 @@ export class CampaignScheduler {
       finalImages = []
     }
 
+    // Validate file paths exist
+    const validImages = finalImages.filter(fp => {
+      if (fp.startsWith('data:')) return true
+      return existsSync(fp)
+    })
+
     // Prepare flow variables with campaign/detail data
+    // The workflow nodes will consume these variables via blockInput/inputMapping
     const flowCopy = JSON.parse(JSON.stringify(flow))
     flowCopy.variables = {
       ...flowCopy.variables,
@@ -377,7 +396,7 @@ export class CampaignScheduler {
       enableComment: campaign.extraSettings?.enableComment ?? false,
       commentType: campaign.extraSettings?.commentType || 'own',
       commentCount: campaign.extraSettings?.commentCount ?? 3,
-      images: finalImages, // Make sure nodes picking up images use this list
+      images: validImages,
       accountId: accountId,
       ...(detail ? {
         detailId: detail.id,
@@ -398,163 +417,24 @@ export class CampaignScheduler {
       throw new Error(`Không tìm thấy tab trình duyệt cho tài khoản ${accountId}`)
     }
     
-    // Debug: Log the current URL to ensure it's on the right page
+    // Debug: Log the current URL
     try {
       const currentUrl = controller.getURL()
       console.log(`Campaign ${campaign.id} detail ${detailName} running on URL: ${currentUrl}`)
     } catch {}
 
-    // ====== AUTO IMAGE UPLOAD via CDP ======
-    // Strategy:
-    // 1) Intercept file choosers: if the flow explicitly clicks Photo/Video, intercept and provide files.
-    // 2) Intercept workflow clicks: wrap the controller's executeAction. If it's about to click "Post" (Đăng), 
-    //    we directly inject the images via CDP before the click happens.
-    let cdpDebuggerAttached = false
-    let imageInjected = false
-    const wcId = this.webviewRegistry.getWebContentsId(accountId)
-    const targetWc = wcId ? webContents.fromId(wcId) : null
-
-    // Validate file paths exist
-    const validImages = finalImages.filter(fp => {
-      if (fp.startsWith('data:')) return true
-      return existsSync(fp)
-    })
-
-    if (targetWc && validImages.length > 0) {
-      try {
-        targetWc.debugger.attach('1.3')
-        cdpDebuggerAttached = true
-        await targetWc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true })
-
-        targetWc.debugger.on('message', (_event: any, method: string) => {
-          if (method === 'Page.fileChooserOpened') {
-            imageInjected = true
-            console.log(`[CampaignScheduler] File chooser intercepted, providing ${validImages.length} images`)
-            this.sendLog(`📎 Đang đính kèm ${validImages.length} ảnh qua hộp thoại...`)
-            targetWc.debugger.sendCommand('Page.handleFileChooser', {
-              action: 'accept',
-              files: validImages
-            }).catch(err => {
-              console.error('[CampaignScheduler] Failed to handle file chooser:', err)
-            })
-          }
-        })
-
-        console.log(`[CampaignScheduler] CDP file chooser interception enabled for ${validImages.length} images`)
-      } catch (cdpErr) {
-        console.warn('[CampaignScheduler] Failed to set up CDP file chooser interception:', cdpErr)
-        cdpDebuggerAttached = false
-      }
-    }
-
-    // Wrap the controller to intercept the final post click
-    const originalExecuteAction = controller.executeAction.bind(controller)
-    controller.executeAction = async (actionType: import('../../shared/types').ActionType, input: any) => {
-      // Check if we are about to click a "Post" or "Comment" button and haven't injected images yet
-      if (
-        cdpDebuggerAttached && 
-        targetWc && 
-        validImages.length > 0 && 
-        !imageInjected && 
-        actionType === 'click' && 
-        input.selector
-      ) {
-        const sel = input.selector.toLowerCase()
-        const isSubmitClick = sel.includes('đăng') || sel.includes('post') || 
-                              sel.includes('bình luận') || sel.includes('comment') || 
-                              sel.includes('gửi') || sel.includes('send')
-                              
-        if (isSubmitClick) {
-          try {
-            console.log(`[CampaignScheduler] Intercepted submit click (${input.selector}), injecting images first...`)
-            this.sendLog(`📎 Đang tự động đính kèm ${validImages.length} ảnh trước khi đăng...`)
-            imageInjected = true
-
-            // Disable file chooser interception before direct DOM manipulation just in case
-            try {
-              await targetWc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: false })
-            } catch {}
-
-            // Try to find file input and set files
-            const { root } = await targetWc.debugger.sendCommand('DOM.getDocument', {})
-            let fileInputNodeId = 0
-            const fileInputSelectors = [
-              'input[type="file"][accept*="image"]',
-              'input[type="file"][accept*="video"]',
-              'input[type="file"]'
-            ]
-
-            for (const selector of fileInputSelectors) {
-              try {
-                const res = await targetWc.debugger.sendCommand('DOM.querySelector', {
-                  nodeId: root.nodeId,
-                  selector
-                })
-                if (res.nodeId) {
-                  fileInputNodeId = res.nodeId
-                  break
-                }
-              } catch {}
-            }
-
-            if (fileInputNodeId) {
-              // Direct upload
-              await targetWc.debugger.sendCommand('DOM.setFileInputFiles', {
-                nodeId: fileInputNodeId,
-                files: validImages
-              })
-
-              await targetWc.executeJavaScript(`
-                (function() {
-                  var inputs = document.querySelectorAll('input[type="file"]');
-                  for (var i = 0; i < inputs.length; i++) {
-                    inputs[i].dispatchEvent(new Event('change', { bubbles: true }));
-                    inputs[i].dispatchEvent(new Event('input', { bubbles: true }));
-                  }
-                })()
-              `)
-
-              this.sendLog(`✅ Đã đính kèm ảnh thành công`)
-              await new Promise(r => setTimeout(r, 2000)) // Give React time to process the file change
-            } else {
-              // Fallback: try clicking the photo button to trigger the interceptor we had
-              console.log('[CampaignScheduler] No file input found directly, trying to click Photo button')
-              // Note: if file input not found, we can't easily upload.
-              this.sendLog(`⚠️ Không tìm thấy vị trí để đính kèm ảnh`)
-            }
-          } catch (injectErr) {
-            console.error('[CampaignScheduler] Failed to inject images before submit:', injectErr)
-            this.sendLog(`⚠️ Lỗi khi đính kèm ảnh: ${injectErr}`)
-          }
-        }
-      }
-
-      // Proceed with the actual click (or whatever action it was)
-      return originalExecuteAction(actionType, input)
-    }
-
+    // Run the workflow — all browser actions (click, setValue, dropFile, etc.)
+    // are defined as nodes in the workflow and executed by FlowRunner
     const runner = new FlowRunner(controller, this.supabase, (step: ExecutionStep) => {
       this.mainWindow.webContents.send(IPC_CHANNELS.FLOW_PROGRESS, step)
     })
 
-    let result: import('../../shared/types').ExecutionRun
-    try {
-      result = await runner.run(flowCopy)
-    } finally {
-      // Clean up CDP debugger
-      if (cdpDebuggerAttached && targetWc && !targetWc.isDestroyed()) {
-        try {
-          await targetWc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: false })
-          targetWc.debugger.detach()
-        } catch {}
-      }
-    }
+    const result = await runner.run(flowCopy)
 
     if (detail) {
       if (result.status === 'completed') {
         // Log individual actions into auto_campaign_detail_actions
         try {
-          // Log post action
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
@@ -563,29 +443,7 @@ export class CampaignScheduler {
             status: 'success',
             log: `Đăng bài thành công vào ${detailName}`
           })
-          // Send real-time log to UI for post action
           this.sendLog(`📝 Đăng bài thành công vào "${detailName}"`)
-
-          // Log comment action if comment was enabled
-          if (campaign.extraSettings?.enableComment && campaign.extraSettings?.commentContent) {
-            await this.supabase.createDetailAction({
-              campaignDetailId: detail.id,
-              campaignId: campaign.id,
-              accountId: accountId,
-              actionName: 'Comment',
-              status: 'success',
-              log: `Comment thành công: "${campaign.extraSettings.commentContent.substring(0, 50)}..."`,
-              data: {
-                commentType: campaign.extraSettings.commentType,
-                commentContent: campaign.extraSettings.commentContent
-              }
-            })
-            // Send real-time log to UI for comment action
-            const commentPreview = campaign.extraSettings.commentContent.length > 50
-              ? campaign.extraSettings.commentContent.substring(0, 50) + '...'
-              : campaign.extraSettings.commentContent
-            this.sendLog(`💬 Comment thành công vào "${detailName}": "${commentPreview}"`)
-          }
         } catch (logErr) {
           console.error('Failed to log detail actions:', logErr)
         }
@@ -627,5 +485,326 @@ export class CampaignScheduler {
     } catch {
       // Window may be closed
     }
+  }
+
+  // =========== Facebook Message & Friend Request Campaign ===========
+
+  /**
+   * Extract a clean UID/username from user input that may be a full Facebook URL.
+   * Examples:
+   *   "https://www.facebook.com/quangnhut27" → "quangnhut27"
+   *   "https://www.facebook.com/profile.php?id=100012345" → "100012345"
+   *   "https://facebook.com/quangnhut27/" → "quangnhut27"
+   *   "quangnhut27" → "quangnhut27"
+   *   "100012345" → "100012345"
+   */
+  private extractUidFromInput(raw: string): string {
+    const trimmed = raw.trim()
+    try {
+      const url = new URL(trimmed)
+      // Handle profile.php?id=xxx
+      const idParam = url.searchParams.get('id')
+      if (idParam) return idParam
+      // Handle /username or /username/
+      const parts = url.pathname.split('/').filter(Boolean)
+      if (parts.length > 0) return parts[parts.length - 1]
+    } catch {
+      // Not a URL, return as-is
+    }
+    return trimmed
+  }
+
+  private async executeMessageFriendCampaign(
+    account: import('../../shared/types').FlatformAccount,
+    campaign: Campaign
+  ): Promise<void> {
+    const enableMessage = campaign.extraSettings?.enableMessage ?? true
+    const enableAddFriend = campaign.extraSettings?.enableAddFriend ?? false
+    const messageContent = campaign.content || ''
+
+    if (!enableMessage && !enableAddFriend) {
+      await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Chưa chọn hành động nào (nhắn tin hoặc kết bạn)')
+      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+      return
+    }
+
+    const details = await this.supabase.listCampaignDetails(campaign.id)
+    if (details.length === 0) {
+      await this.supabase.appendCampaignLog(campaign.id, 'Không có data để xử lý')
+      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      return
+    }
+
+    const controller = this.webviewRegistry.getController(account.id)
+    if (!controller) {
+      await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy tab trình duyệt')
+      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+      return
+    }
+
+    let rateLimitReached = false
+    const limitConfig = campaign.extraSettings?.actionLimits
+
+    for (let i = 0; i < details.length; i++) {
+      // Check if campaign was paused
+      const currentCamp = await this.supabase.getCampaign(campaign.id)
+      if (currentCamp && currentCamp.status === 'tạm dừng') {
+        this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+        return
+      }
+
+      const detail = details[i]
+      if (detail.status !== 'chờ xử lý') continue
+
+      const detailName = detail.name || detail.uid || 'N/A'
+      const uid = detail.uid ? this.extractUidFromInput(detail.uid) : ''
+
+      if (!uid) {
+        await this.supabase.updateCampaignDetail(detail.id, { status: 'lỗi', note: 'Thiếu UID' })
+        await this.supabase.createDetailAction({
+          campaignDetailId: detail.id,
+          campaignId: campaign.id,
+          accountId: account.id,
+          actionName: 'Bỏ qua',
+          status: 'error',
+          log: `Bỏ qua ${detailName}: thiếu UID`
+        })
+        continue
+      }
+
+      // Check rate limit
+      const actionName = enableMessage ? 'Nhắn tin' : 'Kết bạn'
+      try {
+        const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionName, limitConfig)
+        if (!limitStatus.ok) {
+          rateLimitReached = true
+          await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do vượt giới hạn: ${limitStatus.reason}`)
+          this.sendLog(`⚠️ Tạm dừng "${campaign.name}" do giới hạn: ${limitStatus.reason}`)
+          break
+        }
+      } catch (err) {
+        console.error('Rate limit check error:', err)
+      }
+
+      await this.supabase.updateCampaignDetail(detail.id, {
+        status: 'đang chạy',
+        dateAction: new Date().toISOString()
+      })
+      this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
+
+      let detailSuccess = true
+
+      // --- Send Message ---
+      if (enableMessage && messageContent) {
+        try {
+          await this.sendFacebookMessage(controller, uid, messageContent)
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Nhắn tin',
+            status: 'success',
+            log: `Nhắn tin thành công đến ${detailName}`
+          })
+          this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
+        } catch (err: any) {
+          detailSuccess = false
+          const errMsg = err.message || String(err)
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Nhắn tin',
+            status: 'error',
+            log: `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
+          })
+          this.sendLog(`❌ Lỗi nhắn tin "${detailName}": ${errMsg}`)
+        }
+      }
+
+      // --- Add Friend ---
+      if (enableAddFriend) {
+        try {
+          await this.sendFriendRequest(controller, uid)
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Kết bạn',
+            status: 'success',
+            log: `Kết bạn thành công với ${detailName}`
+          })
+          this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
+        } catch (err: any) {
+          detailSuccess = false
+          const errMsg = err.message || String(err)
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Kết bạn',
+            status: 'error',
+            log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
+          })
+          this.sendLog(`❌ Lỗi kết bạn "${detailName}": ${errMsg}`)
+        }
+      }
+
+      // Update detail status
+      await this.supabase.updateCampaignDetail(detail.id, {
+        status: detailSuccess ? 'hoàn thành' : 'lỗi',
+        note: detailSuccess ? '' : 'Có lỗi xảy ra'
+      })
+      await this.supabase.appendCampaignLog(campaign.id,
+        detailSuccess ? `Hoàn thành: ${detailName}` : `Lỗi: ${detailName}`
+      )
+
+      // Sleep between details
+      if (i < details.length - 1) {
+        const sleepTime = campaign.extraSettings?.actionLimits?.sleepBetweenActions || campaign.timeSleepBetween2 || 0
+        if (sleepTime > 0) {
+          this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
+          await new Promise(resolve => setTimeout(resolve, sleepTime * 1000))
+        }
+      }
+    }
+
+    if (rateLimitReached) {
+      if (campaign.scheduleType === 'daily' && campaign.continueNextDay && campaign.schedule) {
+        const now = new Date()
+        const schedDate = new Date(campaign.schedule)
+        const tomorrow = new Date(now)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
+        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý', schedule: tomorrow.toISOString() })
+        await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do đạt giới hạn. Chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
+      } else {
+        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+      }
+    } else {
+      await this.handleCampaignCompletion(campaign)
+    }
+
+    await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+  }
+
+  /**
+   * Send a Facebook message to a user via Facebook Messenger.
+   * Navigate to facebook.com/messages/t/{uid}, type message, send.
+   * Handles two common blocking scenarios:
+   *   1) PIN recovery dialog ("Nhập mã PIN để khôi phục đoạn chat") → close it
+   *   2) "Tiếp tục" (Continue) button at the bottom → click it
+   */
+  private async sendFacebookMessage(
+    controller: import('../../shared/types').IBrowserController,
+    uid: string,
+    message: string
+  ): Promise<void> {
+    // Navigate to Facebook messenger conversation
+    await controller.executeAction('navigate', { url: `https://www.facebook.com/messages/t/${uid}` })
+    await new Promise(r => setTimeout(r, 4000))
+
+    // --- Handle blocking scenario 1: PIN recovery dialog ---
+    // Try to close the dialog by clicking the X (close) button
+    // Use short timeout to avoid wasting time if no dialog exists
+    const pinDialogCheck = await controller.executeAction('waitForSelector', {
+      selector: '[aria-label="Đóng"], [aria-label="Close"]',
+      timeout: 3000
+    })
+    if (pinDialogCheck.success && pinDialogCheck.output?.found !== false) {
+      await controller.executeAction('click', {
+        selector: '[aria-label="Đóng"], [aria-label="Close"]'
+      })
+      this.sendLog('📌 Đã đóng dialog khôi phục đoạn chat')
+      await new Promise(r => setTimeout(r, 2000))
+
+      // --- Handle confirmation dialog: "Tiếp tục mà không khôi phục?" ---
+      // The blue button
+      const confirmCheck = await controller.executeAction('waitForSelector', {
+        selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]',
+        timeout: 3000
+      })
+      if (confirmCheck.success && confirmCheck.output?.found !== false) {
+        await controller.executeAction('click', {
+          selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]'
+        })
+        this.sendLog('📌 Đã nhấn "Không khôi phục tin nhắn"')
+        await new Promise(r => setTimeout(r, 2000))
+      }
+    }
+
+    // --- Handle blocking scenario 2: "Tiếp tục" button ---
+    // Facebook sometimes shows an end-to-end encryption notice with a "Tiếp tục" button
+    const continueCheck = await controller.executeAction('waitForSelector', {
+      selector: '//*[@role="button" and .="Tiếp tục"]',
+      timeout: 2000
+    })
+    if (continueCheck.success && continueCheck.output?.found !== false) {
+      await controller.executeAction('click', {
+        selector: '//*[@role="button" and .="Tiếp tục"]'
+      })
+      this.sendLog('📌 Đã nhấn nút Tiếp tục')
+      await new Promise(r => setTimeout(r, 2000))
+    }
+
+    // Wait for the message input to appear
+    await controller.executeAction('waitForSelector', {
+      selector: '[role="textbox"][contenteditable="true"]',
+      timeout: 15000
+    })
+    await new Promise(r => setTimeout(r, 1000))
+
+    // Click into the message input
+    await controller.executeAction('click', {
+      selector: '[role="textbox"][contenteditable="true"]'
+    })
+    await new Promise(r => setTimeout(r, 500))
+
+    // Set the message content (uses paste-based approach for multiline support)
+    await controller.executeAction('setValue', {
+      selector: '[role="textbox"][contenteditable="true"]',
+      value: message
+    })
+    await new Promise(r => setTimeout(r, 1000))
+
+    // Press Enter to send
+    await controller.executeAction('pressKey', { key: 'Enter' })
+    await new Promise(r => setTimeout(r, 2000))
+  }
+
+  /**
+   * Send a friend request to a Facebook user.
+   * Navigate to their profile and click "Add Friend" button.
+   */
+  private async sendFriendRequest(
+    controller: import('../../shared/types').IBrowserController,
+    uid: string
+  ): Promise<void> {
+    // Navigate to the user's profile
+    const profileUrl = uid.match(/^\d+$/)
+      ? `https://www.facebook.com/profile.php?id=${uid}`
+      : `https://www.facebook.com/${uid}`
+
+    await controller.executeAction('navigate', { url: profileUrl })
+    await new Promise(r => setTimeout(r, 3000))
+
+    // Wait for profile page
+    await controller.executeAction('waitForSelector', {
+      selector: '[role="main"]',
+      timeout: 10000
+    })
+    await new Promise(r => setTimeout(r, 1500))
+
+    // Click the "Thêm bạn bè" button using exact XPath
+    const addFriendResult = await controller.executeAction('click', {
+      selector: '//*[@role="button" and .="Thêm bạn bè"]'
+    })
+
+    if (!addFriendResult.success) {
+      throw new Error('Không tìm thấy nút Kết bạn. Có thể đã là bạn bè hoặc đã gửi lời mời.')
+    }
+
+    await new Promise(r => setTimeout(r, 2000))
   }
 }
