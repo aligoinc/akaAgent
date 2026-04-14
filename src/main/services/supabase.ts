@@ -22,6 +22,28 @@ export class SupabaseService {
     }
   }
 
+  // =========== STARTUP RESET ===========
+
+  async resetRunningStatuses(): Promise<void> {
+    console.log('[Supabase] Resetting "đang chạy" statuses to "chờ xử lý"...')
+    
+    // Reset accounts
+    const { error: accError } = await this.client
+      .from('auto_flatform_accounts')
+      .update({ status: 'chờ xử lý' })
+      .eq('status', 'đang chạy')
+
+    if (accError) console.error('Failed to reset account statuses:', accError.message)
+
+    // Reset campaigns
+    const { error: campError } = await this.client
+      .from('auto_campaigns')
+      .update({ status: 'chờ xử lý' })
+      .eq('status', 'đang chạy')
+
+    if (campError) console.error('Failed to reset campaign statuses:', campError.message)
+  }
+
   // =========== FLOWS ===========
 
   async saveFlow(flowData: FlowData): Promise<FlowData> {

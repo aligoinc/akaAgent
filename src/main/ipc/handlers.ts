@@ -20,6 +20,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow)
   contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow)
 
+  // =========== STARTUP RESET ===========
+  supabase.resetRunningStatuses().catch(err => {
+    console.error('Failed to reset running statuses:', err)
+  })
+
   // =========== SEED BUILT-IN DATA ===========
   supabase.seedBuiltinCampaignActions().catch(err => {
     console.error('Failed to seed built-in campaign actions:', err)

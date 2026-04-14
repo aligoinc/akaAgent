@@ -4,6 +4,7 @@ import { useCampaignStore } from '../../stores/campaignStore'
 import { Campaign, CampaignDetail, CampaignExtraSettings } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
 import FriendPickerModal from './FriendPickerModal'
+import { useUiStore } from '../../stores/uiStore'
 
 interface CampaignFormModalProps {
   campaign: Campaign | null
@@ -187,7 +188,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const { showAlert } = useUiStore()
 
   useEffect(() => {
     async function fetchDetails() {
@@ -265,8 +266,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.actionId || formData.flatformAccountIds.length === 0) {
-      setToastMsg({ type: 'error', text: 'Vui lòng nhập Tên, Hành động và Tài khoản.' })
-      setTimeout(() => setToastMsg(null), 3000)
+      showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
     }
 
@@ -372,13 +372,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         }
       }
 
-      setToastMsg({ type: 'success', text: 'Lưu chiến dịch thành công!' })
-      // Delay closing to let user see the toast, and prevent Electron modal focus loss bug
+      showAlert('Lưu chiến dịch thành công!', 'success')
+      // Delay closing to let user see the toast
       setTimeout(() => onClose(), 1200)
     } catch (err) {
       console.error('Failed to save campaign:', err)
-      setToastMsg({ type: 'error', text: 'Có lỗi xảy ra khi lưu chiến dịch.' })
-      setTimeout(() => setToastMsg(null), 3000)
+      showAlert('Có lỗi xảy ra khi lưu chiến dịch.', 'error')
     }
   }
 
@@ -451,7 +450,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         setDetails(prev => [...prev, ...newRows])
       } catch (err) {
         console.error('Lỗi khi đọc file Excel:', err)
-        alert('Có lỗi xảy ra khi đọc file Excel. Vui lòng kiểm tra lại định dạng file.')
+        showAlert('Có lỗi xảy ra khi đọc file Excel. Vui lòng kiểm tra lại định dạng file.', 'error')
       }
     }
     reader.readAsBinaryString(file)
@@ -489,16 +488,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
         if (newRows.length > 0) {
           setDetails(prev => [...prev, ...newRows])
-          setToastMsg({ type: 'success', text: `Đã thêm ${newRows.length} UID từ file TXT.` })
-          setTimeout(() => setToastMsg(null), 3000)
+          showAlert(`Đã thêm ${newRows.length} UID từ file TXT.`, 'success')
         } else {
-          setToastMsg({ type: 'error', text: 'File TXT trống hoặc không có UID hợp lệ.' })
-          setTimeout(() => setToastMsg(null), 3000)
+          showAlert('File TXT trống hoặc không có UID hợp lệ.', 'error')
         }
       } catch (err) {
         console.error('Lỗi khi đọc file TXT:', err)
-        setToastMsg({ type: 'error', text: 'Có lỗi xảy ra khi đọc file TXT.' })
-        setTimeout(() => setToastMsg(null), 3000)
+        showAlert('Có lỗi xảy ra khi đọc file TXT.', 'error')
       }
     }
     reader.readAsText(file) // For text files
@@ -517,8 +513,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       status: 'chờ xử lý'
     }))
     setDetails(prev => [...prev, ...newRows])
-    setToastMsg({ type: 'success', text: `Đã thêm ${newRows.length} bạn bè.` })
-    setTimeout(() => setToastMsg(null), 3000)
+    showAlert(`Đã thêm ${newRows.length} bạn bè.`, 'success')
   }
 
   return (
@@ -531,19 +526,6 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           </span>
           <button className="btn-icon" onClick={onClose}><X size={18} /></button>
         </div>
-
-        {toastMsg && (
-          <div style={{
-            padding: '10px 16px',
-            backgroundColor: toastMsg.type === 'success' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-            color: toastMsg.type === 'success' ? '#34d399' : '#f43f5e',
-            borderBottom: '1px solid var(--border-default)',
-            fontSize: 13,
-            fontWeight: 500
-          }}>
-            {toastMsg.text}
-          </div>
-        )}
 
         {/* Stepper Layout */}
         <div className="stepper-layout">
@@ -1265,8 +1247,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         className="btn btn-secondary" 
                         onClick={() => {
                           if (formData.flatformAccountIds.length === 0) {
-                            setToastMsg({ type: 'error', text: 'Vui lòng chọn tài khoản trước.' })
-                            setTimeout(() => setToastMsg(null), 3000)
+                            showAlert('Vui lòng chọn tài khoản trước.', 'error')
                             return
                           }
                           setShowFriendPicker(true)

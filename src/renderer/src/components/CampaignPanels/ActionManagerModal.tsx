@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit3, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
+import { useUiStore } from '../../stores/uiStore'
 import { CampaignAction, FlowData } from '../../../../shared/types'
 
 interface ActionManagerModalProps {
@@ -60,13 +61,13 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       await deleteCampaignAction(action.id)
     } catch (err) {
       console.error('Failed to delete action:', err)
-      alert('Không thể xoá hành động này. Có thể nó đang được sử dụng trong các chiến dịch.')
+      useUiStore.getState().showAlert('', 'error')
     }
   }
 
   const handleSubmit = async () => {
     if (!formData.id.trim() || !formData.name.trim()) {
-      alert('Vui lòng nhập ID và Tên hành động')
+      useUiStore.getState().showAlert('', 'error')
       return
     }
 
@@ -79,7 +80,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       setShowForm(false)
     } catch (err) {
       console.error('Failed to save action:', err)
-      alert('Lỗi: ID có thể đã tồn tại hoặc dữ liệu không hợp lệ.')
+      useUiStore.getState().showAlert('', 'error')
     }
   }
 
