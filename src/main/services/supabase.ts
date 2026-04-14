@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { FlowData, ExecutionRun, ExecutionStep, FlatformAccount, Campaign, CampaignAction, CampaignDetail } from '../../shared/types'
+import { FlowData, ExecutionRun, ExecutionStep, FlatformAccount, Campaign, CampaignAction, CampaignDetail, FlatformContact, ContactType } from '../../shared/types'
 import * as dotenv from 'dotenv'
 import { join } from 'path'
 
@@ -660,6 +660,72 @@ export class SupabaseService {
     if (error) throw new Error(`Failed to delete detail action: ${error.message}`)
   }
 
+  // =========== FLATFORM CONTACTS ===========
+
+  async listContacts(flatformAccountId: number, contactType?: ContactType): Promise<FlatformContact[]> {
+    let query = this.client
+      .from('auto_flatform_contacts')
+      .select('*')
+      .eq('flatform_account_id', flatformAccountId)
+      .eq('is_delete', false)
+      .order('name', { ascending: true })
+
+    if (contactType) {
+      query = query.eq('contact_type', contactType)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(`Failed to list contacts: ${error.message}`)
+    return (data || []).map(row => this.mapContactFromDB(row))
+  }
+
+  async upsertContacts(contacts: Partial<FlatformContact>[]): Promise<number> {
+    if (contacts.length === 0) return 0
+
+    // Filter out contacts without uid (required for unique constraint)
+    const validContacts = contacts.filter(c => c.uid)
+
+    if (validContacts.length === 0) return 0
+
+    // Batch in chunks of 100 to avoid payload limits
+    let totalSaved = 0
+    const chunkSize = 100
+
+    for (let i = 0; i < validContacts.length; i += chunkSize) {
+      const chunk = validContacts.slice(i, i + chunkSize)
+      const payloads = chunk.map(c => ({
+        flatform_account_id: c.flatformAccountId,
+        contact_type: c.contactType,
+        name: c.name,
+        uid: c.uid,
+        url: c.url || null,
+        extra_data: c.extraData || {},
+        is_delete: false,
+        updated_at: new Date().toISOString()
+      }))
+
+      const { data, error } = await this.client
+        .from('auto_flatform_contacts')
+        .upsert(payloads, { onConflict: 'flatform_account_id,contact_type,uid' })
+        .select()
+
+      if (error) throw new Error(`Failed to upsert contacts: ${error.message}`)
+      totalSaved += data?.length || 0
+    }
+
+    return totalSaved
+  }
+
+  async deleteContacts(flatformAccountId: number, contactType: ContactType): Promise<void> {
+    const { error } = await this.client
+      .from('auto_flatform_contacts')
+      .update({ is_delete: true, updated_at: new Date().toISOString() })
+      .eq('flatform_account_id', flatformAccountId)
+      .eq('contact_type', contactType)
+
+    if (error) throw new Error(`Failed to delete contacts: ${error.message}`)
+  }
+
   // =========== SCHEDULER QUERIES ===========
 
   async getAccountRateLimitStatus(
@@ -870,6 +936,21 @@ export class SupabaseService {
       dateAction: row.date_action as string | undefined,
       isDelete: row.is_delete as boolean,
       createdAt: row.created_at as string
+    }
+  }
+
+  private mapContactFromDB(row: Record<string, unknown>): FlatformContact {
+    return {
+      id: row.id as number,
+      flatformAccountId: row.flatform_account_id as number,
+      contactType: row.contact_type as ContactType,
+      name: row.name as string,
+      uid: row.uid as string | undefined,
+      url: row.url as string | undefined,
+      extraData: row.extra_data as Record<string, unknown> | undefined,
+      isDelete: row.is_delete as boolean,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string
     }
   }
 
