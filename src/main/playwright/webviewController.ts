@@ -160,9 +160,18 @@ export class WebviewController {
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
             el.scrollIntoView({ block: "center", inline: "center" });
             
-            // Use JS click — works even when webview is hidden (display:none)
+            // Dispatch full pointer + mouse event chain to trigger React/FB event handlers
             setTimeout(function() {
+              var rect = el.getBoundingClientRect();
+              var cx = rect.left + rect.width / 2;
+              var cy = rect.top + rect.height / 2;
+              var evtInit = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
+
               for (var i = 0; i < ${Number(clickCount)}; i++) {
+                el.dispatchEvent(new PointerEvent("pointerdown", Object.assign({}, evtInit, { pointerId: 1, pointerType: "mouse" })));
+                el.dispatchEvent(new MouseEvent("mousedown", evtInit));
+                el.dispatchEvent(new PointerEvent("pointerup", Object.assign({}, evtInit, { pointerId: 1, pointerType: "mouse" })));
+                el.dispatchEvent(new MouseEvent("mouseup", evtInit));
                 el.click();
               }
             }, 50);

@@ -816,6 +816,24 @@ export class SupabaseService {
   async seedBuiltinCampaignActions(): Promise<void> {
     const FACEBOOK_POST_ACTION_ID = 'facebook_timeline_post'
     const FACEBOOK_POST_WORKFLOW_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+    const FACEBOOK_MSG_FRIEND_ACTION_ID = 'facebook_message_friend'
+
+    // Seed facebook_message_friend (no workflow - handled directly by scheduler)
+    const existingMsgFriend = await this.getCampaignAction(FACEBOOK_MSG_FRIEND_ACTION_ID)
+    if (!existingMsgFriend) {
+      try {
+        await this.createCampaignAction({
+          id: FACEBOOK_MSG_FRIEND_ACTION_ID,
+          name: 'Facebook - Nhắn tin & Kết bạn đến bạn bè/UID',
+          flatformType: 'facebook',
+          isActive: true,
+          workflowId: undefined
+        })
+        console.log('[Seed] Created built-in campaign action: facebook_message_friend')
+      } catch (err) {
+        console.error('[Seed] Failed to create facebook_message_friend action:', err)
+      }
+    }
 
     // Check if the action already exists
     const existing = await this.getCampaignAction(FACEBOOK_POST_ACTION_ID)

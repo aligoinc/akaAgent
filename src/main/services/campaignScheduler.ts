@@ -189,8 +189,21 @@ export class CampaignScheduler {
 
       // Get the campaign action and its workflow
       const action = await this.supabase.getCampaignAction(campaign.actionId)
-      if (!action || !action.workflowId) {
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action hoặc workflow`)
+      if (!action) {
+        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action`)
+        await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+        this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy action "${campaign.actionId}"`)
+        return
+      }
+
+      // === Message & Friend Request campaign: no workflow, direct browser automation ===
+      if (campaign.actionId === 'facebook_message_friend') {
+        await this.executeMessageFriendCampaign(account, campaign)
+        return
+      }
+
+      if (!action.workflowId) {
+        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy workflow`)
         await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy workflow cho action "${campaign.actionId}"`)
         return
@@ -472,5 +485,326 @@ export class CampaignScheduler {
     } catch {
       // Window may be closed
     }
+  }
+
+  // =========== Facebook Message & Friend Request Campaign ===========
+
+  /**
+   * Extract a clean UID/username from user input that may be a full Facebook URL.
+   * Examples:
+   *   "https://www.facebook.com/quangnhut27" → "quangnhut27"
+   *   "https://www.facebook.com/profile.php?id=100012345" → "100012345"
+   *   "https://facebook.com/quangnhut27/" → "quangnhut27"
+   *   "quangnhut27" → "quangnhut27"
+   *   "100012345" → "100012345"
+   */
+  private extractUidFromInput(raw: string): string {
+    const trimmed = raw.trim()
+    try {
+      const url = new URL(trimmed)
+      // Handle profile.php?id=xxx
+      const idParam = url.searchParams.get('id')
+      if (idParam) return idParam
+      // Handle /username or /username/
+      const parts = url.pathname.split('/').filter(Boolean)
+      if (parts.length > 0) return parts[parts.length - 1]
+    } catch {
+      // Not a URL, return as-is
+    }
+    return trimmed
+  }
+
+  private async executeMessageFriendCampaign(
+    account: import('../../shared/types').FlatformAccount,
+    campaign: Campaign
+  ): Promise<void> {
+    const enableMessage = campaign.extraSettings?.enableMessage ?? true
+    const enableAddFriend = campaign.extraSettings?.enableAddFriend ?? false
+    const messageContent = campaign.content || ''
+
+    if (!enableMessage && !enableAddFriend) {
+      await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Chưa chọn hành động nào (nhắn tin hoặc kết bạn)')
+      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+      return
+    }
+
+    const details = await this.supabase.listCampaignDetails(campaign.id)
+    if (details.length === 0) {
+      await this.supabase.appendCampaignLog(campaign.id, 'Không có data để xử lý')
+      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      return
+    }
+
+    const controller = this.webviewRegistry.getController(account.id)
+    if (!controller) {
+      await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy tab trình duyệt')
+      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+      return
+    }
+
+    let rateLimitReached = false
+    const limitConfig = campaign.extraSettings?.actionLimits
+
+    for (let i = 0; i < details.length; i++) {
+      // Check if campaign was paused
+      const currentCamp = await this.supabase.getCampaign(campaign.id)
+      if (currentCamp && currentCamp.status === 'tạm dừng') {
+        this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+        return
+      }
+
+      const detail = details[i]
+      if (detail.status !== 'chờ xử lý') continue
+
+      const detailName = detail.name || detail.uid || 'N/A'
+      const uid = detail.uid ? this.extractUidFromInput(detail.uid) : ''
+
+      if (!uid) {
+        await this.supabase.updateCampaignDetail(detail.id, { status: 'lỗi', note: 'Thiếu UID' })
+        await this.supabase.createDetailAction({
+          campaignDetailId: detail.id,
+          campaignId: campaign.id,
+          accountId: account.id,
+          actionName: 'Bỏ qua',
+          status: 'error',
+          log: `Bỏ qua ${detailName}: thiếu UID`
+        })
+        continue
+      }
+
+      // Check rate limit
+      const actionName = enableMessage ? 'Nhắn tin' : 'Kết bạn'
+      try {
+        const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionName, limitConfig)
+        if (!limitStatus.ok) {
+          rateLimitReached = true
+          await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do vượt giới hạn: ${limitStatus.reason}`)
+          this.sendLog(`⚠️ Tạm dừng "${campaign.name}" do giới hạn: ${limitStatus.reason}`)
+          break
+        }
+      } catch (err) {
+        console.error('Rate limit check error:', err)
+      }
+
+      await this.supabase.updateCampaignDetail(detail.id, {
+        status: 'đang chạy',
+        dateAction: new Date().toISOString()
+      })
+      this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
+
+      let detailSuccess = true
+
+      // --- Send Message ---
+      if (enableMessage && messageContent) {
+        try {
+          await this.sendFacebookMessage(controller, uid, messageContent)
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Nhắn tin',
+            status: 'success',
+            log: `Nhắn tin thành công đến ${detailName}`
+          })
+          this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
+        } catch (err: any) {
+          detailSuccess = false
+          const errMsg = err.message || String(err)
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Nhắn tin',
+            status: 'error',
+            log: `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
+          })
+          this.sendLog(`❌ Lỗi nhắn tin "${detailName}": ${errMsg}`)
+        }
+      }
+
+      // --- Add Friend ---
+      if (enableAddFriend) {
+        try {
+          await this.sendFriendRequest(controller, uid)
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Kết bạn',
+            status: 'success',
+            log: `Kết bạn thành công với ${detailName}`
+          })
+          this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
+        } catch (err: any) {
+          detailSuccess = false
+          const errMsg = err.message || String(err)
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail.id,
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Kết bạn',
+            status: 'error',
+            log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
+          })
+          this.sendLog(`❌ Lỗi kết bạn "${detailName}": ${errMsg}`)
+        }
+      }
+
+      // Update detail status
+      await this.supabase.updateCampaignDetail(detail.id, {
+        status: detailSuccess ? 'hoàn thành' : 'lỗi',
+        note: detailSuccess ? '' : 'Có lỗi xảy ra'
+      })
+      await this.supabase.appendCampaignLog(campaign.id,
+        detailSuccess ? `Hoàn thành: ${detailName}` : `Lỗi: ${detailName}`
+      )
+
+      // Sleep between details
+      if (i < details.length - 1) {
+        const sleepTime = campaign.extraSettings?.actionLimits?.sleepBetweenActions || campaign.timeSleepBetween2 || 0
+        if (sleepTime > 0) {
+          this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
+          await new Promise(resolve => setTimeout(resolve, sleepTime * 1000))
+        }
+      }
+    }
+
+    if (rateLimitReached) {
+      if (campaign.scheduleType === 'daily' && campaign.continueNextDay && campaign.schedule) {
+        const now = new Date()
+        const schedDate = new Date(campaign.schedule)
+        const tomorrow = new Date(now)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
+        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý', schedule: tomorrow.toISOString() })
+        await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do đạt giới hạn. Chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
+      } else {
+        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+      }
+    } else {
+      await this.handleCampaignCompletion(campaign)
+    }
+
+    await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+  }
+
+  /**
+   * Send a Facebook message to a user via Facebook Messenger.
+   * Navigate to facebook.com/messages/t/{uid}, type message, send.
+   * Handles two common blocking scenarios:
+   *   1) PIN recovery dialog ("Nhập mã PIN để khôi phục đoạn chat") → close it
+   *   2) "Tiếp tục" (Continue) button at the bottom → click it
+   */
+  private async sendFacebookMessage(
+    controller: import('../../shared/types').IBrowserController,
+    uid: string,
+    message: string
+  ): Promise<void> {
+    // Navigate to Facebook messenger conversation
+    await controller.executeAction('navigate', { url: `https://www.facebook.com/messages/t/${uid}` })
+    await new Promise(r => setTimeout(r, 4000))
+
+    // --- Handle blocking scenario 1: PIN recovery dialog ---
+    // Try to close the dialog by clicking the X (close) button
+    // Use short timeout to avoid wasting time if no dialog exists
+    const pinDialogCheck = await controller.executeAction('waitForSelector', {
+      selector: '[aria-label="Đóng"], [aria-label="Close"]',
+      timeout: 3000
+    })
+    if (pinDialogCheck.success && pinDialogCheck.output?.found !== false) {
+      await controller.executeAction('click', {
+        selector: '[aria-label="Đóng"], [aria-label="Close"]'
+      })
+      this.sendLog('📌 Đã đóng dialog khôi phục đoạn chat')
+      await new Promise(r => setTimeout(r, 2000))
+
+      // --- Handle confirmation dialog: "Tiếp tục mà không khôi phục?" ---
+      // The blue button
+      const confirmCheck = await controller.executeAction('waitForSelector', {
+        selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]',
+        timeout: 3000
+      })
+      if (confirmCheck.success && confirmCheck.output?.found !== false) {
+        await controller.executeAction('click', {
+          selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]'
+        })
+        this.sendLog('📌 Đã nhấn "Không khôi phục tin nhắn"')
+        await new Promise(r => setTimeout(r, 2000))
+      }
+    }
+
+    // --- Handle blocking scenario 2: "Tiếp tục" button ---
+    // Facebook sometimes shows an end-to-end encryption notice with a "Tiếp tục" button
+    const continueCheck = await controller.executeAction('waitForSelector', {
+      selector: '//*[@role="button" and .="Tiếp tục"]',
+      timeout: 2000
+    })
+    if (continueCheck.success && continueCheck.output?.found !== false) {
+      await controller.executeAction('click', {
+        selector: '//*[@role="button" and .="Tiếp tục"]'
+      })
+      this.sendLog('📌 Đã nhấn nút Tiếp tục')
+      await new Promise(r => setTimeout(r, 2000))
+    }
+
+    // Wait for the message input to appear
+    await controller.executeAction('waitForSelector', {
+      selector: '[role="textbox"][contenteditable="true"]',
+      timeout: 15000
+    })
+    await new Promise(r => setTimeout(r, 1000))
+
+    // Click into the message input
+    await controller.executeAction('click', {
+      selector: '[role="textbox"][contenteditable="true"]'
+    })
+    await new Promise(r => setTimeout(r, 500))
+
+    // Set the message content (uses paste-based approach for multiline support)
+    await controller.executeAction('setValue', {
+      selector: '[role="textbox"][contenteditable="true"]',
+      value: message
+    })
+    await new Promise(r => setTimeout(r, 1000))
+
+    // Press Enter to send
+    await controller.executeAction('pressKey', { key: 'Enter' })
+    await new Promise(r => setTimeout(r, 2000))
+  }
+
+  /**
+   * Send a friend request to a Facebook user.
+   * Navigate to their profile and click "Add Friend" button.
+   */
+  private async sendFriendRequest(
+    controller: import('../../shared/types').IBrowserController,
+    uid: string
+  ): Promise<void> {
+    // Navigate to the user's profile
+    const profileUrl = uid.match(/^\d+$/)
+      ? `https://www.facebook.com/profile.php?id=${uid}`
+      : `https://www.facebook.com/${uid}`
+
+    await controller.executeAction('navigate', { url: profileUrl })
+    await new Promise(r => setTimeout(r, 3000))
+
+    // Wait for profile page
+    await controller.executeAction('waitForSelector', {
+      selector: '[role="main"]',
+      timeout: 10000
+    })
+    await new Promise(r => setTimeout(r, 1500))
+
+    // Click the "Thêm bạn bè" button using exact XPath
+    const addFriendResult = await controller.executeAction('click', {
+      selector: '//*[@role="button" and .="Thêm bạn bè"]'
+    })
+
+    if (!addFriendResult.success) {
+      throw new Error('Không tìm thấy nút Kết bạn. Có thể đã là bạn bè hoặc đã gửi lời mời.')
+    }
+
+    await new Promise(r => setTimeout(r, 2000))
   }
 }
