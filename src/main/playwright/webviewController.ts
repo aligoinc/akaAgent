@@ -155,20 +155,58 @@ export class WebviewController {
           const selector = input.selector as string
           const clickCount = (input.clickCount as number) || 1
           await this.waitForElement(selector, 15000) // Auto-wait like Playwright
-          await this.exec(`
+          
+          // Get element coordinates for CDP click
+          const clickRect = await this.exec(`
             var el = resolveSelector(${safeJS(selector)});
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
             el.scrollIntoView({ block: "center", inline: "center" });
-            
-            // Execute the click asynchronously so if it triggers immediate navigation, 
-            // the executeJavaScript IPC call can still return 'true' before the context is destroyed.
-            setTimeout(function() {
-              for (var i = 0; i < ${Number(clickCount)}; i++) {
-                el.click();
-              }
-            }, 50);
-            return true;
+            var r = el.getBoundingClientRect();
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
           `)
+
+          // Use CDP for a real (trusted) mouse click
+          let clickAttached = false
+          try {
+            try {
+              this.wc.debugger.attach('1.3')
+              clickAttached = true
+            } catch {}
+
+            for (let i = 0; i < clickCount; i++) {
+              await this.wc.debugger.sendCommand('Input.dispatchMouseEvent', {
+                type: 'mousePressed',
+                x: clickRect.x,
+                y: clickRect.y,
+                button: 'left',
+                clickCount: 1
+              })
+              await this.wc.debugger.sendCommand('Input.dispatchMouseEvent', {
+                type: 'mouseReleased',
+                x: clickRect.x,
+                y: clickRect.y,
+                button: 'left',
+                clickCount: 1
+              })
+            }
+          } catch (err) {
+            // Fallback to JS click if CDP fails
+            console.warn('[WebviewController] CDP click failed, falling back to JS:', err)
+            await this.exec(`
+              var el = resolveSelector(${safeJS(selector)});
+              if (el) {
+                setTimeout(function() {
+                  for (var i = 0; i < ${Number(clickCount)}; i++) { el.click(); }
+                }, 50);
+              }
+              return true;
+            `)
+          } finally {
+            if (clickAttached) {
+              try { this.wc.debugger.detach() } catch {}
+            }
+          }
+
           output = { success: true }
           break
         }
@@ -177,20 +215,15 @@ export class WebviewController {
           const text = String(input.text ?? '')
           const clearFirst = !!input.clearFirst
           await this.waitForElement(selector, 15000)
+          
+          // Scroll element into view and ensure JS-level focus
           await this.exec(`
             var el = resolveSelector(${safeJS(selector)});
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
-            
-            // Re-resolve or retry if it's a FB Placeholder that hasn't swapped yet?
-            // Actually, if we waited 2 seconds, it should be swapped.
-            if (!el.isContentEditable && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
-              throw new Error("Cannot type: Element is not an editable input field (React Lexical may have failed to mount)");
-            }
-            
+            el.scrollIntoView({ block: "center", inline: "center" });
             el.focus();
             if (el.isContentEditable) {
               ${clearFirst ? `
-              // Select all content and delete it first
               var range = document.createRange();
               range.selectNodeContents(el);
               var sel = window.getSelection();
@@ -198,7 +231,6 @@ export class WebviewController {
               sel.addRange(range);
               document.execCommand('delete', false);
               ` : `
-              // Move cursor to end
               var range = document.createRange();
               range.selectNodeContents(el);
               range.collapse(false);
@@ -206,38 +238,18 @@ export class WebviewController {
               sel.removeAllRanges();
               sel.addRange(range);
               `}
-              // Attempt to dispatch a paste event so rich text editors (like Lexical on FB)
-              // can cleanly handle newlines and generate proper paragraph blocks.
-              var textToInsert = String(${safeJS(text)});
-              var dt = new DataTransfer();
-              dt.setData('text/plain', textToInsert);
-              var pasteEvent = new ClipboardEvent('paste', {
-                clipboardData: dt,
-                bubbles: true,
-                cancelable: true
-              });
-              var handled = !el.dispatchEvent(pasteEvent);
-              
-              if (!handled) {
-                // Fallback for basic contenteditables that do not intercept paste
-                var lines = textToInsert.split('\\n');
-                for (var i = 0; i < lines.length; i++) {
-                  if (i > 0) {
-                    document.execCommand('insertParagraph', false, null) || document.execCommand('insertLineBreak', false, null);
-                  }
-                  if (lines[i].length > 0) {
-                    document.execCommand('insertText', false, lines[i]);
-                  }
-                }
-              }
-            } else {
-              ${clearFirst ? 'el.value = "";' : ''}
-              el.value = ${clearFirst ? '' : '(el.value || "") + '}${safeJS(text)};
-              el.dispatchEvent(new Event("input", { bubbles: true }));
-              el.dispatchEvent(new Event("change", { bubbles: true }));
+            } else if ('value' in el && ${clearFirst}) {
+              el.value = "";
             }
-            return true;
           `)
+
+          // Wait for Lexical to be ready (element should already have real focus from CDP click)
+          await new Promise(r => setTimeout(r, 500))
+
+          // Use native Electron API to type — works because the element has real focus
+          // from the preceding CDP click action on "Bình luận"
+          this.wc.insertText(text)
+          
           output = { success: true }
           break
         }
