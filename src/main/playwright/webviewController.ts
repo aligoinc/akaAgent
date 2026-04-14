@@ -154,59 +154,20 @@ export class WebviewController {
         case 'click': {
           const selector = input.selector as string
           const clickCount = (input.clickCount as number) || 1
-          await this.waitForElement(selector, 15000) // Auto-wait like Playwright
-          
-          // Get element coordinates for CDP click
-          const clickRect = await this.exec(`
+          await this.waitForElement(selector, 15000)
+          await this.exec(`
             var el = resolveSelector(${safeJS(selector)});
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
             el.scrollIntoView({ block: "center", inline: "center" });
-            var r = el.getBoundingClientRect();
-            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-          `)
-
-          // Use CDP for a real (trusted) mouse click
-          let clickAttached = false
-          try {
-            try {
-              this.wc.debugger.attach('1.3')
-              clickAttached = true
-            } catch {}
-
-            for (let i = 0; i < clickCount; i++) {
-              await this.wc.debugger.sendCommand('Input.dispatchMouseEvent', {
-                type: 'mousePressed',
-                x: clickRect.x,
-                y: clickRect.y,
-                button: 'left',
-                clickCount: 1
-              })
-              await this.wc.debugger.sendCommand('Input.dispatchMouseEvent', {
-                type: 'mouseReleased',
-                x: clickRect.x,
-                y: clickRect.y,
-                button: 'left',
-                clickCount: 1
-              })
-            }
-          } catch (err) {
-            // Fallback to JS click if CDP fails
-            console.warn('[WebviewController] CDP click failed, falling back to JS:', err)
-            await this.exec(`
-              var el = resolveSelector(${safeJS(selector)});
-              if (el) {
-                setTimeout(function() {
-                  for (var i = 0; i < ${Number(clickCount)}; i++) { el.click(); }
-                }, 50);
+            
+            // Use JS click — works even when webview is hidden (display:none)
+            setTimeout(function() {
+              for (var i = 0; i < ${Number(clickCount)}; i++) {
+                el.click();
               }
-              return true;
-            `)
-          } finally {
-            if (clickAttached) {
-              try { this.wc.debugger.detach() } catch {}
-            }
-          }
-
+            }, 50);
+            return true;
+          `)
           output = { success: true }
           break
         }
@@ -216,39 +177,89 @@ export class WebviewController {
           const clearFirst = !!input.clearFirst
           await this.waitForElement(selector, 15000)
           
-          // Scroll element into view and ensure JS-level focus
+          // Step 1: Click and focus the element to trigger Lexical mount
           await this.exec(`
             var el = resolveSelector(${safeJS(selector)});
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
             el.scrollIntoView({ block: "center", inline: "center" });
             el.focus();
-            if (el.isContentEditable) {
-              ${clearFirst ? `
-              var range = document.createRange();
-              range.selectNodeContents(el);
-              var sel = window.getSelection();
-              sel.removeAllRanges();
-              sel.addRange(range);
-              document.execCommand('delete', false);
-              ` : `
-              var range = document.createRange();
-              range.selectNodeContents(el);
-              range.collapse(false);
-              var sel = window.getSelection();
-              sel.removeAllRanges();
-              sel.addRange(range);
-              `}
-            } else if ('value' in el && ${clearFirst}) {
-              el.value = "";
+            if (!el.isContentEditable && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
+              el.click();
             }
           `)
 
-          // Wait for Lexical to be ready (element should already have real focus from CDP click)
+          // Step 2: Wait for Lexical to mount contenteditable
           await new Promise(r => setTimeout(r, 500))
 
-          // Use native Electron API to type — works because the element has real focus
-          // from the preceding CDP click action on "Bình luận"
-          this.wc.insertText(text)
+          // Step 3: Find the actual editable, focus it, and use execCommand
+          // execCommand('insertText') triggers beforeinput events that Lexical uses
+          // to update its state — works without OS focus or webview visibility
+          await this.exec(`
+            var el = resolveSelector(${safeJS(selector)});
+            // Find the actual editable target
+            var target = null;
+            if (el && el.isContentEditable) {
+              target = el;
+            } else if (el) {
+              target = el.querySelector('[contenteditable="true"]');
+              if (!target && el.closest) {
+                var parent = el.closest('[role="complementary"], [data-testid], form, [class*="comment"]');
+                if (parent) target = parent.querySelector('[contenteditable="true"]');
+              }
+              if (!target && el.parentElement) target = el.parentElement.querySelector('[contenteditable="true"]');
+              if (!target && el.parentElement && el.parentElement.parentElement) {
+                target = el.parentElement.parentElement.querySelector('[contenteditable="true"]');
+              }
+            }
+            if (!target && document.activeElement && document.activeElement.isContentEditable) {
+              target = document.activeElement;
+            }
+            if (!target) {
+              var all = document.querySelectorAll('[contenteditable="true"]');
+              if (all.length > 0) target = all[all.length - 1];
+            }
+            
+            if (target && target.isContentEditable) {
+              target.focus();
+              
+              if (${clearFirst}) {
+                var range = document.createRange();
+                range.selectNodeContents(target);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                document.execCommand('delete', false);
+              } else {
+                var range = document.createRange();
+                range.selectNodeContents(target);
+                range.collapse(false);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+              }
+              
+              // Use execCommand which triggers beforeinput -> Lexical updates state
+              var lines = String(${safeJS(text)}).split('\\n');
+              for (var i = 0; i < lines.length; i++) {
+                if (i > 0) {
+                  document.execCommand('insertParagraph', false, null);
+                }
+                if (lines[i].length > 0) {
+                  document.execCommand('insertText', false, lines[i]);
+                }
+              }
+              return true;
+            } else if (target) {
+              // Regular input/textarea
+              ${clearFirst ? 'target.value = "";' : ''}
+              target.value = ${clearFirst ? '' : '(target.value || "") + '}${safeJS(text)};
+              target.dispatchEvent(new Event("input", { bubbles: true }));
+              target.dispatchEvent(new Event("change", { bubbles: true }));
+              return true;
+            } else {
+              throw new Error("Cannot find editable element for typing");
+            }
+          `)
           
           output = { success: true }
           break
@@ -773,6 +784,7 @@ export class WebviewController {
     const startTime = Date.now()
     console.log(`[WebviewController] waitForElement: "${selector.substring(0, 80)}..." timeout=${timeout}ms, URL=${this.getURL()}`)
     let attempts = 0
+    let lastScrollTime = 0
     while (Date.now() - startTime < timeout) {
       try {
         const found = await this.exec(`
@@ -787,6 +799,16 @@ export class WebviewController {
       } catch (err: any) {
         console.log(`[WebviewController] waitForElement poll error: ${err.message}`)
       }
+
+      // Auto-scroll down every 3 seconds to trigger lazy loading (e.g., Facebook feed)
+      const now = Date.now()
+      if (now - lastScrollTime > 3000) {
+        try {
+          await this.exec(`window.scrollBy(0, 600);`)
+          lastScrollTime = now
+        } catch {}
+      }
+
       await new Promise(resolve => setTimeout(resolve, 500))
     }
     console.log(`[WebviewController] Element NOT FOUND after ${attempts} attempts (${timeout}ms). URL was: ${this.getURL()}`)

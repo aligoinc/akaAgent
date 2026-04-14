@@ -65,6 +65,17 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.WEBVIEW_REGISTER, (_, accountId: number, webContentsId: number) => {
     if (!webviewRegistry) throw new Error('Webview registry not initialized')
     webviewRegistry.register(accountId, webContentsId)
+    
+    // Prevent Chromium from throttling this webview when it's in the background.
+    // This ensures DOM is always fully rendered and accessible for automation.
+    try {
+      const { webContents } = require('electron')
+      const wc = webContents.fromId(webContentsId)
+      if (wc && !wc.isDestroyed()) {
+        wc.setBackgroundThrottling(false)
+      }
+    } catch {}
+    
     return { success: true }
   })
 
