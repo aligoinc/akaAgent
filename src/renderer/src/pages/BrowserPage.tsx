@@ -116,8 +116,8 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
         </div>
       </div>
 
-      {/* Webview container */}
-      <div className="browser-webview-container">
+      {/* Webview container - all webviews are always rendered, stacked via z-index */}
+      <div className="browser-webview-container" style={{ position: 'relative' }}>
         {activeAccounts.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-text">Chưa có tài khoản nào hoạt động. Hãy thêm tài khoản ở trang Chiến dịch.</div>
@@ -130,9 +130,12 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
               src={getInitialUrl(account)}
               partition={getProfilePartition(account.id)}
               style={{
+                position: 'absolute' as const,
+                top: 0,
+                left: 0,
                 width: '100%',
                 height: '100%',
-                display: activeAccountId === account.id ? 'flex' : 'none'
+                zIndex: activeAccountId === account.id ? 2 : 1
               }}
               /* @ts-ignore */
               allowpopups="true"
