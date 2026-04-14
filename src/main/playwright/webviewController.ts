@@ -15,11 +15,51 @@ function safeJS(selector: string): string {
 const SELECTOR_RESOLVER_JS = `
 function resolveSelector(selector) {
   if (!selector) return null;
+  
+  function isVisible(el) {
+    if (!el) return false;
+    var style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    return el.offsetWidth > 0 && el.offsetHeight > 0;
+  }
+
+  // Handle Playwright/XPath indices implicitly by returning the matching visible element if none provided?
+  // Wait, if selector explicitly has [n], document.evaluate already processes [n] natively.
+  // BUT native [n] doesn't know about visibility.
+  // Instead of breaking standard XPath [n], we'll just evaluate standard XPath.
+  // However, we can first check if we could resolve it and if it's visible.
+  
   if (selector.startsWith('/') || selector.startsWith('(')) {
+    // If standard XPath is used, let's try to get all nodes and find the first visible one if it doesn't have an index?
+    // Actually, if it has [n], evaluate might just return that exact node, and we can't do much if it's invisible.
+    // Let's implement a custom selector mechanism for visible nodes:
+    // We will evaluate as ORDERED_NODE_SNAPSHOT_TYPE, filter by visibility, and if it's a single target query, take the first visible.
+    
+    // Check if the query ends with an index pattern like [1] or [2]
+    var match = selector.match(/^(.*)\\[(\\d+)\\]$/);
+    if (match) {
+        var baseSelector = match[1];
+        var index = parseInt(match[2], 10) - 1; // 0-based for JS
+        
+        var result = document.evaluate(baseSelector, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+        var visibleEls = [];
+        for (var i = 0; i < result.snapshotLength; i++) {
+           var n = result.snapshotItem(i);
+           if (isVisible(n)) visibleEls.push(n);
+        }
+        return visibleEls[index] || null;
+    }
+
     var result = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return result.singleNodeValue;
   }
-  return document.querySelector(selector);
+
+  // CSS Selectors
+  var els = document.querySelectorAll(selector);
+  for (var i = 0; i < els.length; i++) {
+    if (isVisible(els[i])) return els[i];
+  }
+  return null;
 }
 `
 
@@ -140,6 +180,13 @@ export class WebviewController {
           await this.exec(`
             var el = resolveSelector(${safeJS(selector)});
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
+            
+            // Re-resolve or retry if it's a FB Placeholder that hasn't swapped yet?
+            // Actually, if we waited 2 seconds, it should be swapped.
+            if (!el.isContentEditable && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
+              throw new Error("Cannot type: Element is not an editable input field (React Lexical may have failed to mount)");
+            }
+            
             el.focus();
             if (el.isContentEditable) {
               ${clearFirst ? `
@@ -249,7 +296,7 @@ export class WebviewController {
         case 'pressKey': {
           // pressKey typically doesn't need to wait for a specific element (defaults to body/activeElement),
           // but if we were pressing on a selector, we would wait. The current implementation uses activeElement.
-          const key = input.key as string
+          const key = input.key as string || 'Enter'
           await this.exec(`
             var keyMap = {
               "Enter": { key: "Enter", code: "Enter", keyCode: 13 },
@@ -529,6 +576,162 @@ export class WebviewController {
           } finally {
             try { this.wc.debugger.detach() } catch {}
           }
+          break
+        }
+
+        // =========== DRAG-AND-DROP FILE UPLOAD (JS_DROP_FILE) ===========
+        case 'dropFile': {
+          const selector = input.selector as string
+          let filePaths: string[]
+          const rawPaths = input.filePaths
+          if (typeof rawPaths === 'string') {
+            try { filePaths = JSON.parse(rawPaths) } catch { filePaths = [rawPaths] }
+          } else if (Array.isArray(rawPaths)) {
+            filePaths = rawPaths as string[]
+          } else {
+            filePaths = []
+          }
+          if (!Array.isArray(filePaths) || filePaths.length === 0) {
+            throw new Error('filePaths must be a non-empty array of file paths')
+          }
+
+          // Resolve base64 data URIs → write to temp files
+          const { writeFileSync: writeSync, existsSync: fsCheck } = await import('fs')
+          const { join: joinPath } = await import('path')
+          const { tmpdir: getTmp } = await import('os')
+          const resolvedFiles: string[] = []
+          for (let i = 0; i < filePaths.length; i++) {
+            const fp = filePaths[i]
+            if (fp.startsWith('data:')) {
+              const match = fp.match(/^data:([^;]+);base64,(.+)$/)
+              if (!match) throw new Error(`Invalid data URI at index ${i}`)
+              const ext = match[1].split('/')[1] || 'png'
+              const buf = Buffer.from(match[2], 'base64')
+              const tmpPath = joinPath(getTmp(), `drop_${Date.now()}_${i}.${ext}`)
+              writeSync(tmpPath, buf)
+              resolvedFiles.push(tmpPath)
+            } else {
+              const normalizedPath = fp.replace(/\//g, '\\')
+              if (!fsCheck(normalizedPath) && !fsCheck(fp)) {
+                console.warn(`[WebviewController] dropFile: File not found: ${fp}`)
+              }
+              resolvedFiles.push(fp)
+            }
+          }
+
+          await this.waitForElement(selector, 15000)
+
+          // For each file, use JS_DROP_FILE technique:
+          // 1. Inject a temporary <input type="file"> via JS
+          // 2. Use CDP to set files on it
+          // 3. The JS onchange handler fires synthetic drag-and-drop events onto the target element
+          let uploadedCount = 0
+          for (const filePath of resolvedFiles) {
+            try {
+              // Step 1: Inject the drop file script, which creates a temporary <input type="file">
+              // and sets up the onchange handler to fire DragEvents onto the target element.
+              // The script returns the temporary input element reference.
+              const uniqueId = `__drop_input_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+              await this.exec(`
+                var b = resolveSelector(${safeJS(selector)});
+                if (!b) throw new Error("Drop target element not found: " + ${safeJS(selector)});
+                var c = b.ownerDocument;
+                // Scroll target into view
+                var m = 0;
+                while (true) {
+                  var e = b.getBoundingClientRect();
+                  var g = e.left + (e.width / 2);
+                  var h = e.top + (e.height / 2);
+                  var f = c.elementFromPoint(g, h);
+                  if (f && b.contains(f)) break;
+                  if (1 < ++m) { b.scrollIntoView({behavior:'instant',block:'center',inline:'center'}); break; }
+                  b.scrollIntoView({behavior:'instant',block:'center',inline:'center'});
+                }
+                var a = c.createElement('INPUT');
+                a.setAttribute('type', 'file');
+                a.setAttribute('multiple', 'true');
+                a.setAttribute('data-drop-id', ${safeJS(uniqueId)});
+                a.setAttribute('style', 'position:fixed;z-index:2147483647;left:0;top:0;opacity:0;');
+                a.onchange = function() {
+                  var e2 = b.getBoundingClientRect();
+                  var g2 = e2.left + (e2.width / 2);
+                  var h2 = e2.top + (e2.height / 2);
+                  var f2 = c.elementFromPoint(g2, h2) || b;
+                  var dt = {
+                    effectAllowed: 'all',
+                    dropEffect: 'none',
+                    types: ['Files'],
+                    files: this.files,
+                    setData: function(){},
+                    getData: function(){},
+                    clearData: function(){},
+                    setDragImage: function(){}
+                  };
+                  if (window.DataTransferItemList) {
+                    var items = [];
+                    for (var i = 0; i < this.files.length; i++) {
+                      items.push(Object.setPrototypeOf({
+                        kind: 'file',
+                        type: this.files[i].type,
+                        file: this.files[i],
+                        getAsFile: function(){ return this.file; },
+                        getAsString: function(cb) {
+                          var reader = new FileReader();
+                          reader.onload = function(ev){ cb(ev.target.result); };
+                          reader.readAsText(this.file);
+                        }
+                      }, DataTransferItem.prototype));
+                    }
+                    dt.items = Object.setPrototypeOf(items, DataTransferItemList.prototype);
+                  }
+                  Object.setPrototypeOf(dt, DataTransfer.prototype);
+                  ['dragenter', 'dragover', 'drop'].forEach(function(evtName) {
+                    var d = c.createEvent('DragEvent');
+                    d.initMouseEvent(evtName, true, true, c.defaultView, 0, 0, 0, g2, h2, false, false, false, false, 0, null);
+                    Object.setPrototypeOf(d, null);
+                    d.dataTransfer = dt;
+                    Object.setPrototypeOf(d, DragEvent.prototype);
+                    f2.dispatchEvent(d);
+                  });
+                  a.parentElement.removeChild(a);
+                };
+                c.documentElement.appendChild(a);
+                a.getBoundingClientRect();
+                return ${safeJS(uniqueId)};
+              `)
+
+              // Step 2: Use CDP to set the file on the temporary input
+              try { this.wc.debugger.attach('1.3') } catch { /* already attached */ }
+
+              try {
+                const { root } = await this.wc.debugger.sendCommand('DOM.getDocument', {})
+                const { nodeId } = await this.wc.debugger.sendCommand('DOM.querySelector', {
+                  nodeId: root.nodeId,
+                  selector: `[data-drop-id="${uniqueId}"]`
+                })
+
+                if (!nodeId) {
+                  throw new Error('Could not find temporary drop input via CDP')
+                }
+
+                // Set the file — this triggers onchange which fires the DragEvents
+                await this.wc.debugger.sendCommand('DOM.setFileInputFiles', {
+                  nodeId,
+                  files: [filePath]
+                })
+
+                uploadedCount++
+                // Wait for React/framework to process the drop
+                await new Promise(r => setTimeout(r, 2000))
+              } finally {
+                try { this.wc.debugger.detach() } catch {}
+              }
+            } catch (dropErr) {
+              console.error(`[WebviewController] dropFile failed for ${filePath}:`, dropErr)
+            }
+          }
+
+          output = { success: uploadedCount > 0, fileCount: uploadedCount }
           break
         }
 

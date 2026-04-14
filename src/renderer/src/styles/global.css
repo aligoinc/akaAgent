@@ -2440,6 +2440,19 @@ body {
   color: var(--accent-error);
 }
 
+/* Context submenu (expandable) */
+.context-menu-submenu {
+  position: relative;
+}
+
+.context-submenu-items {
+  padding-left: 8px;
+  border-left: 2px solid var(--accent-primary);
+  margin-left: 12px;
+  margin-top: 2px;
+  animation: contextMenuIn 0.12s ease-out;
+}
+
 /* =========== CAMPAIGN FILTER BAR =========== */
 .campaign-filter-bar {
   display: flex;

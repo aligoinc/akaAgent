@@ -12,7 +12,7 @@ export type ActionType =
   // Data
   | 'getValue' | 'setValue' | 'getText' | 'screenshot' | 'getAttribute'
   // Utility
-  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog' | 'uploadFile'
+  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog' | 'uploadFile' | 'dropFile'
   // Control Flow
   | 'ifElse' | 'loop' | 'switch'
   // Block System
@@ -255,6 +255,25 @@ export interface CampaignDetailAction {
 }
 
 // ============================================
+// Flatform Contact Types
+// ============================================
+
+export type ContactType = 'friend' | 'group'
+
+export interface FlatformContact {
+  id: number
+  flatformAccountId: number
+  contactType: ContactType
+  name: string
+  uid?: string
+  url?: string
+  extraData?: Record<string, unknown>
+  isDelete: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+// ============================================
 // IPC Channel Types
 // ============================================
 
@@ -348,6 +367,13 @@ export const IPC_CHANNELS = {
   // Actions
   ACTIONS_LIST: 'actions:list',
   ACTION_EXECUTE: 'action:execute',
+
+  // Contacts (Load data)
+  CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',
+  CONTACTS_LOAD_GROUPS: 'contacts:load-groups',
+  CONTACTS_LIST: 'contacts:list',
+  CONTACTS_DELETE: 'contacts:delete',
+  CONTACTS_PROGRESS: 'contacts:progress',
 } as const
 
 // ============================================

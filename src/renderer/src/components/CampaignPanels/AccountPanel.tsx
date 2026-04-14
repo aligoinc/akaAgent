@@ -125,6 +125,40 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     onFilterCampaigns?.(accountId)
   }
 
+  const handleLoadFriends = async (account: FlatformAccount) => {
+    if (!window.electronAPI?.loadFriends) {
+      alert('Tính năng này cần Electron API')
+      return
+    }
+    try {
+      const result = await window.electronAPI.loadFriends(account.id)
+      if (result.success) {
+        alert(`✅ Đã load ${result.count} bạn bè cho "${account.name}"`)
+      } else {
+        alert(`❌ Lỗi: ${result.error}`)
+      }
+    } catch (err: any) {
+      alert(`Lỗi load bạn bè: ${err.message}`)
+    }
+  }
+
+  const handleLoadGroups = async (account: FlatformAccount) => {
+    if (!window.electronAPI?.loadGroups) {
+      alert('Tính năng này cần Electron API')
+      return
+    }
+    try {
+      const result = await window.electronAPI.loadGroups(account.id)
+      if (result.success) {
+        alert(`✅ Đã load ${result.count} group cho "${account.name}"`)
+      } else {
+        alert(`❌ Lỗi: ${result.error}`)
+      }
+    } catch (err: any) {
+      alert(`Lỗi load group: ${err.message}`)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'hoạt động': return 'var(--accent-success)'
@@ -234,6 +268,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           onEdit={handleEdit}
           onDelete={handleDelete}
           onFilterCampaigns={handleFilterCampaigns}
+          onLoadFriends={handleLoadFriends}
+          onLoadGroups={handleLoadGroups}
         />
       )}
     </div>

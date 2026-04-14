@@ -1,7 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react'
-import { 
-  Globe, RefreshCw, Shield, Play, Pause, 
-  Unlock, Ban, Edit3, Trash2, ListFilter 
+import { useEffect, useRef, useCallback, useState } from 'react'
+import {
+  Globe, RefreshCw, Shield, Play, Pause,
+  Unlock, Ban, Edit3, Trash2, ListFilter,
+  Database, Users, FolderOpen, ChevronRight
 } from 'lucide-react'
 import { FlatformAccount } from '../../../../shared/types'
 
@@ -27,6 +28,8 @@ interface AccountContextMenuProps {
   onEdit: (account: FlatformAccount) => void
   onDelete: (account: FlatformAccount) => void
   onFilterCampaigns: (accountId: number) => void
+  onLoadFriends: (account: FlatformAccount) => void
+  onLoadGroups: (account: FlatformAccount) => void
 }
 
 export default function AccountContextMenu({
@@ -42,9 +45,12 @@ export default function AccountContextMenu({
   onDisable,
   onEdit,
   onDelete,
-  onFilterCampaigns
+  onFilterCampaigns,
+  onLoadFriends,
+  onLoadGroups
 }: AccountContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const [showLoadData, setShowLoadData] = useState(false)
 
   // Close on click outside
   useEffect(() => {
@@ -184,6 +190,40 @@ export default function AccountContextMenu({
           <span>Xoá tài khoản</span>
         </button>
       </div>
+
+      {/* Load Data Group */}
+      {!isDisabled && account.flatformType === 'facebook' && account.loginStatus === 'đã đăng nhập' && (
+        <div className="context-menu-group">
+          <div className="context-menu-submenu">
+            <button
+              className="context-menu-item"
+              onClick={() => setShowLoadData(!showLoadData)}
+            >
+              <Database size={14} />
+              <span>Load data</span>
+              <ChevronRight size={12} style={{ marginLeft: 'auto', transform: showLoadData ? 'rotate(90deg)' : undefined, transition: 'transform 0.15s' }} />
+            </button>
+            {showLoadData && (
+              <div className="context-submenu-items">
+                <button
+                  className="context-menu-item"
+                  onClick={() => handleAction(() => onLoadFriends(account))}
+                >
+                  <Users size={14} />
+                  <span>Load danh sách bạn bè</span>
+                </button>
+                <button
+                  className="context-menu-item"
+                  onClick={() => handleAction(() => onLoadGroups(account))}
+                >
+                  <FolderOpen size={14} />
+                  <span>Load danh sách group</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Campaign Group */}
       <div className="context-menu-group">

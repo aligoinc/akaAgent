@@ -6,16 +6,19 @@ import { WebviewRegistry } from '../playwright/webviewController'
 import { FlowRunner } from '../playwright/flowRunner'
 import { SupabaseService } from '../services/supabase'
 import { CampaignScheduler } from '../services/campaignScheduler'
+import { ContactLoader } from '../services/contactLoader'
 
 let playwrightController: PlaywrightController | null = null
 let flowRunner: FlowRunner | null = null
 let webviewRegistry: WebviewRegistry | null = null
 let campaignScheduler: CampaignScheduler | null = null
+let contactLoader: ContactLoader | null = null
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const supabase = new SupabaseService()
   webviewRegistry = new WebviewRegistry()
   campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow)
+  contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow)
 
   // =========== THEME ===========
   ipcMain.handle(IPC_CHANNELS.THEME_CHANGE, (_, theme: 'light' | 'dark') => {
@@ -324,6 +327,25 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     } catch (err: any) {
       return { loggedIn: false, status: 'chưa đăng nhập', reason: err.message }
     }
+  })
+
+  // =========== CONTACTS (Load data) ===========
+  ipcMain.handle(IPC_CHANNELS.CONTACTS_LOAD_FRIENDS, async (_, flatformAccountId: number) => {
+    if (!contactLoader) throw new Error('ContactLoader not initialized')
+    return contactLoader.loadFriends(flatformAccountId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CONTACTS_LOAD_GROUPS, async (_, flatformAccountId: number) => {
+    if (!contactLoader) throw new Error('ContactLoader not initialized')
+    return contactLoader.loadGroups(flatformAccountId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CONTACTS_LIST, async (_, flatformAccountId: number, contactType?: string) => {
+    return supabase.listContacts(flatformAccountId, contactType as any)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CONTACTS_DELETE, async (_, flatformAccountId: number, contactType: string) => {
+    return supabase.deleteContacts(flatformAccountId, contactType as any)
   })
 
   // =========== AUTO-CHECK LOGIN STATUS (every 30s) ===========

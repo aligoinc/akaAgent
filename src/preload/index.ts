@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction } from '../shared/types'
+import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, FlatformContact, ContactType } from '../shared/types'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -176,6 +176,25 @@ const electronAPI = {
     const handler = () => callback()
     ipcRenderer.on(IPC_CHANNELS.ACCOUNT_STATUS_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.ACCOUNT_STATUS_UPDATED, handler)
+  },
+
+  // Contacts (Load data)
+  loadFriends: (flatformAccountId: number): Promise<{ success: boolean; count: number; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LOAD_FRIENDS, flatformAccountId),
+
+  loadGroups: (flatformAccountId: number): Promise<{ success: boolean; count: number; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LOAD_GROUPS, flatformAccountId),
+
+  listContacts: (flatformAccountId: number, contactType?: ContactType): Promise<FlatformContact[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LIST, flatformAccountId, contactType),
+
+  deleteContacts: (flatformAccountId: number, contactType: ContactType): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_DELETE, flatformAccountId, contactType),
+
+  onContactsProgress: (callback: (data: { message: string }) => void): () => void => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { message: string }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CONTACTS_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTACTS_PROGRESS, handler)
   },
 }
 
