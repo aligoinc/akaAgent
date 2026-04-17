@@ -901,8 +901,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     />
                   </div>
 
-                  {/* Media section - ẩn cho chiến dịch nhắn tin & kết bạn */}
-                  <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16, display: isMessageFriendCampaign ? 'none' : undefined }}>
+                  {/* Media section */}
+                  <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>Media</div>
                     
                     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>

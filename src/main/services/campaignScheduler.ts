@@ -601,10 +601,28 @@ export class CampaignScheduler {
 
       let detailSuccess = true
 
+      // Resolve images for this detail (per-detail so 'random' picks vary)
+      const imageOption = campaign.extraSettings?.imageOption || 'none'
+      const availableImages = campaign.images || []
+      let finalImages: string[] = []
+      if (imageOption === 'all') {
+        finalImages = [...availableImages]
+      } else if (imageOption === 'random') {
+        const count = campaign.extraSettings?.randomImageCount || 3
+        finalImages = [...availableImages].sort(() => 0.5 - Math.random()).slice(0, count)
+      }
+      const validImages = finalImages.filter(fp => fp.startsWith('data:') || existsSync(fp))
+      if (finalImages.length > 0 && validImages.length < finalImages.length) {
+        const missing = finalImages.filter(fp => !fp.startsWith('data:') && !existsSync(fp))
+        const msg = `⚠️ Bỏ qua ${missing.length}/${finalImages.length} ảnh không tìm thấy: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''}`
+        this.sendLog(msg)
+        await this.supabase.appendCampaignLog(campaign.id, msg)
+      }
+
       // --- Send Message ---
-      if (enableMessage && messageContent) {
+      if (enableMessage && (messageContent || validImages.length > 0)) {
         try {
-          await this.sendFacebookMessage(controller, uid, messageContent)
+          await this.sendFacebookMessage(controller, uid, messageContent, validImages)
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
@@ -705,7 +723,8 @@ export class CampaignScheduler {
   private async sendFacebookMessage(
     controller: import('../../shared/types').IBrowserController,
     uid: string,
-    message: string
+    message: string,
+    images: string[] = []
   ): Promise<void> {
     // Navigate to Facebook messenger conversation
     await controller.executeAction('navigate', { url: `https://www.facebook.com/messages/t/${uid}` })
@@ -768,11 +787,27 @@ export class CampaignScheduler {
     await new Promise(r => setTimeout(r, 500))
 
     // Set the message content (uses paste-based approach for multiline support)
-    await controller.executeAction('setValue', {
-      selector: '[role="textbox"][contenteditable="true"]',
-      value: message
-    })
-    await new Promise(r => setTimeout(r, 1000))
+    if (message) {
+      await controller.executeAction('setValue', {
+        selector: '[role="textbox"][contenteditable="true"]',
+        value: message
+      })
+      await new Promise(r => setTimeout(r, 1000))
+    }
+
+    // Attach images via drag-and-drop onto the message textbox
+    if (images.length > 0) {
+      const dropResult = await controller.executeAction('dropFile', {
+        selector: '[role="textbox"][contenteditable="true"]',
+        filePaths: images
+      })
+      if (!dropResult.success) {
+        throw new Error('Không thể đính kèm ảnh vào tin nhắn')
+      }
+      this.sendLog(`🖼 Đã đính kèm ${images.length} ảnh vào tin nhắn`)
+      // Wait for previews/uploads to finalize before sending
+      await new Promise(r => setTimeout(r, Math.max(3000, images.length * 1500)))
+    }
 
     // Press Enter to send
     await controller.executeAction('pressKey', { key: 'Enter' })
