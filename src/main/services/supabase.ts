@@ -18,6 +18,7 @@ export class SupabaseService {
     console.log('[Supabase] Resetting "đang chạy" statuses to "chờ xử lý"...')
     await accountRepo.resetRunningAccountStatuses()
     await campaignRepo.resetRunningCampaignStatuses()
+    await campaignRepo.resetRunningDetailStatuses()
   }
 
   // =========== FLOWS ===========

@@ -204,6 +204,15 @@ export async function resetRunningCampaignStatuses(): Promise<void> {
   if (error) console.error('Failed to reset campaign statuses:', error.message)
 }
 
+export async function resetRunningDetailStatuses(): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_details')
+    .update({ status: 'chờ xử lý' })
+    .eq('status', 'đang chạy')
+
+  if (error) console.error('Failed to reset detail statuses:', error.message)
+}
+
 // =========== CAMPAIGN DETAILS ===========
 
 export async function listCampaignDetails(campaignId: number): Promise<CampaignDetail[]> {
@@ -306,7 +315,8 @@ export async function createDetailAction(action: Partial<CampaignDetailAction>):
     action_name: action.actionName,
     status: action.status || 'success',
     log: action.log || null,
-    data: action.data || null
+    data: action.data || null,
+    post_url: action.postUrl || null
   }
 
   const { data, error } = await client()
