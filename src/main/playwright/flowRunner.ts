@@ -334,8 +334,10 @@ export class FlowRunner {
     const visited = new Set<string>()
     const queue: string[] = []
 
+    // Exclude convergence nodes (reachable from sibling handles) even at initial push.
+    // Those post-ifElse nodes must run in the main loop, not as part of this branch.
     for (const edge of this.edges) {
-      if (edge.source === nodeId && edge.sourceHandle === handleId) {
+      if (edge.source === nodeId && edge.sourceHandle === handleId && !siblingTargetIds.has(edge.target)) {
         queue.push(edge.target)
       }
     }
@@ -771,10 +773,17 @@ export class FlowRunner {
           }
 
           // 2. String interpolation for {{nodeId.field}}
+          // Arrays/objects → JSON.stringify so they stay valid as JS literals (for ifElse / loop conditions)
+          // and as serialized text for display. Primitives use String() so plain interpolation
+          // like "Đã đăng: {{node.value}}" doesn't add extra quotes.
           strVal = strVal.replace(/\{\{([\w-]+)\.([\w-]+)\}\}/g, (match, srcNodeId, srcField) => {
             const output = this.nodeOutputs.get(srcNodeId)
             if (output && srcField in output) {
-               return String(output[srcField])
+              const val = output[srcField]
+              if (val !== null && typeof val === 'object') {
+                return JSON.stringify(val)
+              }
+              return String(val)
             }
             return match // leave unresolved
           })
