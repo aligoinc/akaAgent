@@ -211,7 +211,7 @@ export interface Campaign {
   status: string
   schedule?: string
   scheduleType?: 'daily' | 'weekly' | 'monthly'
-  scheduleEndDate?: string
+  scheduleEndDate?: string | null
   scheduleDays?: string          // comma-separated days of month e.g. "5,10,19,25"
   scheduleWeekDays?: string      // comma-separated weekday numbers e.g. "2,3,5" (2=Mon..8=Sun)
   continueNextDay?: boolean      // daily: continue at scheduled time next day if not finished
@@ -253,6 +253,7 @@ export interface CampaignDetailAction {
   status: string
   log?: string
   data?: Record<string, unknown>
+  postUrl?: string               // URL of the post this action is related to (e.g. just-published post, commented post)
   isDelete: boolean
   createdAt?: string
 }

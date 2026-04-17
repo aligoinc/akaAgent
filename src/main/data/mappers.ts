@@ -151,6 +151,7 @@ export function mapDetailActionFromDB(row: Record<string, unknown>): CampaignDet
     status: row.status as string,
     log: row.log as string | undefined,
     data: row.data as Record<string, unknown> | undefined,
+    postUrl: row.post_url as string | undefined,
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string
   }

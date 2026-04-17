@@ -79,7 +79,6 @@ const ALL_STEPS: StepDef[] = [
     id: 'extra',
     title: 'Cài đặt thêm',
     fields: [
-      { key: 'sharePost', label: 'Đăng bài dạng chia sẻ' },
       { key: 'enableComment', label: 'Kiêm comment' }
     ]
   },
@@ -307,7 +306,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           flatformAccountId: accountId,
           schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
           scheduleType: formData.scheduleType,
-          scheduleEndDate: formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : undefined,
+          scheduleEndDate: formData.scheduleType === 'daily'
+            ? null
+            : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null),
           scheduleDays: formData.scheduleDays || undefined,
           scheduleWeekDays: formData.scheduleWeekDays || undefined,
           continueNextDay: formData.continueNextDay,
@@ -1081,17 +1082,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                   {/* === Group campaign options (ẩn cho message_friend campaigns) === */}
                   {!isMessageFriendCampaign && (
                     <>
-                      {/* Share post */}
-                      <div className="stepper-form-group">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={formData.sharePost}
-                            onChange={e => setFormData(p => ({ ...p, sharePost: e.target.checked }))}
-                          />
-                          <span>Đăng bài dạng chia sẻ (mỗi lần đăng thì chia sẻ thêm cho 3 nhóm) - <em>Chỉ dành cho nhóm mà bạn đã tham gia</em></span>
-                        </label>
-                      </div>
+                      {/* Share post - tạm ẩn, sẽ mở lại khi implement đầy đủ */}
 
                       {/* Enable comment */}
                       <div className="stepper-form-group">

@@ -221,6 +221,12 @@ export class CampaignScheduler {
       // Get campaign details
       const details = await this.supabase.listCampaignDetails(campaign.id)
 
+      if (campaign.extraSettings?.sharePost) {
+        const msg = '⚠️ Tính năng "Đăng bài dạng chia sẻ" chưa được hỗ trợ trong phiên bản hiện tại - sẽ bỏ qua'
+        this.sendLog(msg)
+        await this.supabase.appendCampaignLog(campaign.id, msg)
+      }
+
       // Shuffle details if shuffleGroupList is enabled (Fisher-Yates shuffle)
       if (campaign.extraSettings?.shuffleGroupList && details.length > 1) {
         for (let i = details.length - 1; i > 0; i--) {
@@ -336,10 +342,27 @@ export class CampaignScheduler {
       await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
+      await this.recoverStuckDetails(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
       await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
       await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
+    }
+  }
+
+  private async recoverStuckDetails(campaignId: number, errMsg: string): Promise<void> {
+    try {
+      const details = await this.supabase.listCampaignDetails(campaignId)
+      for (const d of details) {
+        if (d.status === 'đang chạy') {
+          await this.supabase.updateCampaignDetail(d.id, {
+            status: 'lỗi',
+            note: `Dừng đột ngột: ${errMsg}`
+          })
+        }
+      }
+    } catch (recoverErr) {
+      console.error('Failed to recover stuck details:', recoverErr)
     }
   }
 
@@ -389,6 +412,20 @@ export class CampaignScheduler {
       await this.supabase.appendCampaignLog(campaign.id, msg)
     }
 
+    // Compute which comment-box positions (1-indexed XPath) to target.
+    // After posting, user's own post sits at position [1]; other posts start at [2].
+    const enableComment = campaign.extraSettings?.enableComment ?? false
+    const commentType = campaign.extraSettings?.commentType || 'own'
+    const commentCount = campaign.extraSettings?.commentCount ?? 3
+    let commentIndices: number[] = []
+    if (enableComment) {
+      if (commentType === 'own') {
+        commentIndices = [1]
+      } else {
+        for (let i = 0; i < commentCount; i++) commentIndices.push(i + 2)
+      }
+    }
+
     // Prepare flow variables with campaign/detail data
     // The workflow nodes will consume these variables via blockInput/inputMapping
     const flowCopy = JSON.parse(JSON.stringify(flow))
@@ -399,9 +436,10 @@ export class CampaignScheduler {
       campaignContent: campaign.content,
       commentContent: campaign.extraSettings?.commentContent || '',
       sharePost: campaign.extraSettings?.sharePost ?? false,
-      enableComment: campaign.extraSettings?.enableComment ?? false,
-      commentType: campaign.extraSettings?.commentType || 'own',
-      commentCount: campaign.extraSettings?.commentCount ?? 3,
+      enableComment,
+      commentType,
+      commentCount,
+      commentIndices,
       images: validImages,
       accountId: accountId,
       ...(detail ? {
@@ -437,9 +475,43 @@ export class CampaignScheduler {
 
     const result = await runner.run(flowCopy)
 
+    // Inspect per-step outcomes so we log each milestone that actually
+    // succeeded — even if the flow as a whole ended up failing later
+    // (e.g. post succeeded but a comment failed).
+    const postStep = result.steps.find(s => s.nodeId === 'node-block-post')
+    const postSucceeded = postStep?.status === 'success'
+    const commentSteps = result.steps.filter(s => s.nodeId === 'node-block-comment')
+    const commentSuccessCount = commentSteps.filter(s => s.status === 'success').length
+
+    // Detect pending approval via FB's banner text (so leaveGroupOnPendingApproval works)
+    let isPendingPost = false
+    if (detail && postSucceeded) {
+      const leaveOnPending = campaign.extraSettings?.leaveGroupOnPendingApproval ?? false
+      const joinAfterPost = campaign.extraSettings?.autoJoinGroupAfterPost ?? false
+      if (leaveOnPending || joinAfterPost) {
+        isPendingPost = await this.detectPostPending(controller)
+      }
+    }
+
+    // Post-flow group actions (leaveGroupOnPendingApproval / autoJoinGroupAfterPost)
+    let postPendingNote = ''
+    if (detail && postSucceeded) {
+      const leaveOnPending = campaign.extraSettings?.leaveGroupOnPendingApproval ?? false
+      const joinAfterPost = campaign.extraSettings?.autoJoinGroupAfterPost ?? false
+      if (isPendingPost && leaveOnPending) {
+        const left = await this.leaveCurrentGroup(controller, campaign.id)
+        postPendingNote = left ? 'Bài chờ duyệt - đã rời nhóm' : 'Bài chờ duyệt - không rời được nhóm'
+      } else if (!isPendingPost && joinAfterPost) {
+        await this.joinCurrentGroupIfNotMember(controller, campaign.id)
+      }
+    }
+
     if (detail) {
-      if (result.status === 'completed') {
-        // Log individual actions into auto_campaign_detail_actions
+      // ----- Milestone 1: Post success -----
+      if (postSucceeded) {
+        this.sendLog(`📝 Đăng bài thành công vào "${detailName}"`)
+        if (isPendingPost) this.sendLog(`⏳ Bài đang chờ duyệt`)
+
         try {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
@@ -447,33 +519,79 @@ export class CampaignScheduler {
             accountId: accountId,
             actionName: 'Đăng bài',
             status: 'success',
-            log: `Đăng bài thành công vào ${detailName}`
+            log: `Đăng bài thành công vào ${detailName}${postPendingNote ? ` (${postPendingNote})` : ''}`
           })
-          this.sendLog(`📝 Đăng bài thành công vào "${detailName}"`)
         } catch (logErr) {
-          console.error('Failed to log detail actions:', logErr)
+          console.error('Failed to log post detail action:', logErr)
         }
+      }
 
-        await this.supabase.updateCampaignDetail(detail.id, { status: 'hoàn thành' })
-        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detailName}`)
+      // ----- Milestone 2: Each successful comment -----
+      if (enableComment && commentSuccessCount > 0) {
+        const commentBody = campaign.extraSettings?.commentContent || ''
+        const preview = commentBody.length > 50 ? commentBody.substring(0, 50) + '...' : commentBody
+        for (let i = 0; i < commentSuccessCount; i++) {
+          const position = commentIndices[i]
+          const target = commentType === 'own' ? 'bài của mình' : `bài thứ ${position}`
+          try {
+            await this.supabase.createDetailAction({
+              campaignDetailId: detail.id,
+              campaignId: campaign.id,
+              accountId: accountId,
+              actionName: 'Comment',
+              status: 'success',
+              log: `Đã comment vào ${target}: "${preview}"`,
+              data: {
+                commentType,
+                commentContent: commentBody,
+                commentPosition: position,
+                iteration: i + 1
+              }
+            })
+            this.sendLog(`💬 Đã comment vào ${target} tại "${detailName}"`)
+          } catch (logErr) {
+            console.error('Failed to log comment detail action:', logErr)
+          }
+        }
+      }
+
+      // ----- Overall detail status -----
+      if (result.status === 'completed') {
+        await this.supabase.updateCampaignDetail(detail.id, {
+          status: 'hoàn thành',
+          note: postPendingNote || undefined
+        })
+        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detailName}${postPendingNote ? ` - ${postPendingNote}` : ''}`)
         this.sendLog(`✅ Hoàn thành "${detailName}"`)
       } else {
+        // Figure out which milestone failed so the error message is specific
+        let failureLabel = ''
+        let errorMsg = result.error || 'Lỗi không xác định'
+        if (!postSucceeded) {
+          failureLabel = 'Đăng bài lỗi'
+          errorMsg = `Đăng bài thất bại: ${errorMsg}`
+        } else if (enableComment && commentSuccessCount < commentIndices.length) {
+          failureLabel = 'Comment lỗi'
+          errorMsg = `Comment thất bại ở lần thứ ${commentSuccessCount + 1}/${commentIndices.length}: ${result.error || 'Lỗi không xác định'}`
+        } else {
+          failureLabel = 'Lỗi thực thi'
+        }
+
         await this.supabase.updateCampaignDetail(detail.id, {
           status: 'lỗi',
-          note: result.error || 'Unknown error'
+          note: errorMsg
         })
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detailName} - ${result.error}`)
-        this.sendLog(`❌ Lỗi "${detailName}": ${result.error}`)
+        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detailName} - ${errorMsg}`)
+        this.sendLog(`❌ Lỗi "${detailName}": ${errorMsg}`)
 
-        // Log failed action
         try {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
             accountId: accountId,
-            actionName: 'Lỗi thực thi',
+            actionName: failureLabel,
             status: 'error',
-            log: result.error || 'Unknown error'
+            log: errorMsg
           })
         } catch (logErr) {
           console.error('Failed to log error action:', logErr)
@@ -490,6 +608,90 @@ export class CampaignScheduler {
       })
     } catch {
       // Window may be closed
+    }
+  }
+
+  /**
+   * Detect whether the just-submitted post is awaiting admin approval by
+   * scanning for FB's pending banner text.
+   */
+  private async detectPostPending(
+    controller: import('../../shared/types').IBrowserController
+  ): Promise<boolean> {
+    await new Promise(r => setTimeout(r, 3500))
+    const selector = `//*[contains(text(),"đang chờ được duyệt") or contains(text(),"chờ phê duyệt") or contains(text(),"Bài viết đang chờ duyệt") or contains(text(),"pending approval") or contains(text(),"Post pending approval")]`
+    try {
+      const check = await controller.executeAction('waitForSelector', { selector, timeout: 2500 })
+      return check.success && check.output?.found !== false
+    } catch {
+      return false
+    }
+  }
+
+  // =========== Group Post Post-flow Actions ===========
+
+  /**
+   * Open the group's "Joined" menu and leave the group, then confirm.
+   * Caller should already be on the group page.
+   */
+  private async leaveCurrentGroup(
+    controller: import('../../shared/types').IBrowserController,
+    campaignId: number
+  ): Promise<boolean> {
+    try {
+      const joinedMenuSelector = `//*[@role="button" and (contains(@aria-label,"Đã tham gia") or contains(@aria-label,"Joined") or .="Đã tham gia" or .="Joined")]`
+      const menuCheck = await controller.executeAction('waitForSelector', { selector: joinedMenuSelector, timeout: 4000 })
+      if (!menuCheck.success || menuCheck.output?.found === false) {
+        this.sendLog('⚠️ Không tìm thấy menu "Đã tham gia"')
+        return false
+      }
+      await controller.executeAction('click', { selector: joinedMenuSelector })
+      await new Promise(r => setTimeout(r, 1500))
+
+      const leaveItemSelector = `//*[@role="menuitem" and (contains(.,"Rời nhóm") or contains(.,"Rời khỏi nhóm") or contains(.,"Leave group") or contains(.,"Leave Group"))]`
+      const leaveClick = await controller.executeAction('click', { selector: leaveItemSelector })
+      if (!leaveClick.success) {
+        this.sendLog('⚠️ Không tìm thấy mục "Rời nhóm" trong menu')
+        return false
+      }
+      await new Promise(r => setTimeout(r, 1500))
+
+      const confirmSelector = `//*[@role="button" and (.="Rời nhóm" or .="Rời khỏi nhóm" or .="Leave Group" or .="Leave group")]`
+      await controller.executeAction('click', { selector: confirmSelector })
+      await new Promise(r => setTimeout(r, 2000))
+
+      this.sendLog('👋 Đã rời nhóm (do bài đăng chờ duyệt)')
+      await this.supabase.appendCampaignLog(campaignId, 'Đã rời nhóm do bài đăng chờ duyệt')
+      return true
+    } catch (err) {
+      console.error('leaveCurrentGroup error:', err)
+      this.sendLog(`⚠️ Lỗi khi rời nhóm: ${err instanceof Error ? err.message : String(err)}`)
+      return false
+    }
+  }
+
+  /**
+   * If a Join button is visible on the current group page, click it.
+   * No-op if the user is already a member (button absent).
+   */
+  private async joinCurrentGroupIfNotMember(
+    controller: import('../../shared/types').IBrowserController,
+    campaignId: number
+  ): Promise<boolean> {
+    try {
+      const joinSelector = `//*[@role="button" and (contains(@aria-label,"Tham gia nhóm") or contains(@aria-label,"Join group") or .="Tham gia nhóm" or .="Join group" or .="Tham gia" or .="Join")]`
+      const check = await controller.executeAction('waitForSelector', { selector: joinSelector, timeout: 2500 })
+      if (!check.success || check.output?.found === false) {
+        return false
+      }
+      await controller.executeAction('click', { selector: joinSelector })
+      await new Promise(r => setTimeout(r, 2500))
+      this.sendLog('🤝 Đã nhấn "Tham gia nhóm"')
+      await this.supabase.appendCampaignLog(campaignId, 'Tự động tham gia nhóm sau khi đăng bài thành công')
+      return true
+    } catch (err) {
+      console.error('joinCurrentGroupIfNotMember error:', err)
+      return false
     }
   }
 

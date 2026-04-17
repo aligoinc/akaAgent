@@ -301,11 +301,30 @@ export class WebviewController {
         case 'hover': {
           const selector = input.selector as string
           await this.waitForElement(selector, 10000)
+          // Primary mechanism: FocusEvent('focusin'). This is what Facebook's
+          // href-resolver listens for (confirmed by user's Selenium setup).
+          // We also call focus() and dispatch pointer/mouse events so the
+          // action still serves generic hover use-cases (tooltips, etc).
           await this.exec(`
             var el = resolveSelector(${safeJS(selector)});
             if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
-            el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-            el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+            el.scrollIntoView({ block: "center", inline: "center" });
+
+            var init = { bubbles: true, cancelable: true, view: window };
+
+            // Primary: focusin — triggers FB's lazy href loader.
+            el.dispatchEvent(new FocusEvent("focusin", init));
+            try { if (typeof el.focus === "function") el.focus(); } catch (e) {}
+
+            // Secondary: pointer + mouse events for generic hover handlers.
+            var pInit = Object.assign({}, init, { pointerId: 1, pointerType: "mouse", isPrimary: true });
+            try { el.dispatchEvent(new PointerEvent("pointerover", pInit)); } catch (e) {}
+            try { el.dispatchEvent(new PointerEvent("pointerenter", pInit)); } catch (e) {}
+            try { el.dispatchEvent(new PointerEvent("pointermove", pInit)); } catch (e) {}
+
+            el.dispatchEvent(new MouseEvent("mouseover", init));
+            el.dispatchEvent(new MouseEvent("mouseenter", init));
+            el.dispatchEvent(new MouseEvent("mousemove", init));
             return true;
           `)
           output = { success: true }
