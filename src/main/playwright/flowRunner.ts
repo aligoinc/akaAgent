@@ -334,8 +334,10 @@ export class FlowRunner {
     const visited = new Set<string>()
     const queue: string[] = []
 
+    // Exclude convergence nodes (reachable from sibling handles) even at initial push.
+    // Those post-ifElse nodes must run in the main loop, not as part of this branch.
     for (const edge of this.edges) {
-      if (edge.source === nodeId && edge.sourceHandle === handleId) {
+      if (edge.source === nodeId && edge.sourceHandle === handleId && !siblingTargetIds.has(edge.target)) {
         queue.push(edge.target)
       }
     }
