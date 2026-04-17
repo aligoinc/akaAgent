@@ -771,10 +771,17 @@ export class FlowRunner {
           }
 
           // 2. String interpolation for {{nodeId.field}}
+          // Arrays/objects → JSON.stringify so they stay valid as JS literals (for ifElse / loop conditions)
+          // and as serialized text for display. Primitives use String() so plain interpolation
+          // like "Đã đăng: {{node.value}}" doesn't add extra quotes.
           strVal = strVal.replace(/\{\{([\w-]+)\.([\w-]+)\}\}/g, (match, srcNodeId, srcField) => {
             const output = this.nodeOutputs.get(srcNodeId)
             if (output && srcField in output) {
-               return String(output[srcField])
+              const val = output[srcField]
+              if (val !== null && typeof val === 'object') {
+                return JSON.stringify(val)
+              }
+              return String(val)
             }
             return match // leave unresolved
           })
