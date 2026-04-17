@@ -382,6 +382,12 @@ export class CampaignScheduler {
       if (fp.startsWith('data:')) return true
       return existsSync(fp)
     })
+    if (finalImages.length > 0 && validImages.length < finalImages.length) {
+      const missing = finalImages.filter(fp => !fp.startsWith('data:') && !existsSync(fp))
+      const msg = `⚠️ Bỏ qua ${missing.length}/${finalImages.length} ảnh không tìm thấy: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''}`
+      this.sendLog(msg)
+      await this.supabase.appendCampaignLog(campaign.id, msg)
+    }
 
     // Prepare flow variables with campaign/detail data
     // The workflow nodes will consume these variables via blockInput/inputMapping

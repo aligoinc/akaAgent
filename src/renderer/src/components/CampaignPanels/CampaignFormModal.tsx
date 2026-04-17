@@ -924,8 +924,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                           multiple
                           onChange={e => {
                             const files = Array.from(e.target.files || [])
-                            const paths = files.map(f => (f as any).path || f.name)
-                            setFormData(p => ({ ...p, images: [...p.images, ...paths] }))
+                            const paths = files
+                              .map(f => {
+                                try {
+                                  return window.electronAPI.getPathForFile(f)
+                                } catch {
+                                  return ''
+                                }
+                              })
+                              .filter(Boolean)
+                            if (paths.length < files.length) {
+                              showAlert('Một số ảnh không xác định được đường dẫn và đã bị bỏ qua.', 'error')
+                            }
+                            if (paths.length > 0) {
+                              setFormData(p => ({ ...p, images: [...p.images, ...paths] }))
+                            }
                             e.target.value = ''
                           }}
                         />

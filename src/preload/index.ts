@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, FlatformContact, ContactType } from '../shared/types'
 
 export type ElectronAPI = typeof electronAPI
@@ -196,6 +196,10 @@ const electronAPI = {
     ipcRenderer.on(IPC_CHANNELS.CONTACTS_PROGRESS, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTACTS_PROGRESS, handler)
   },
+
+  // Resolve absolute disk path for a File object selected via <input type="file">.
+  // Electron 32+ removed File.path; webUtils.getPathForFile is the replacement.
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)
