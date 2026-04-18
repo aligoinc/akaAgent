@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
+import { useAuthStore } from '../../stores/authStore'
 import { Campaign } from '../../../../shared/types'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -19,6 +20,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     createCampaign, updateCampaign, deleteCampaign, cloneCampaign,
     loadCampaignDetails, loadDetailActionsByCampaign
   } = useCampaignStore()
+  const isAdminAkabiz = !!useAuthStore(s => s.user?.isAdminAkabiz)
 
   const [showForm, setShowForm] = useState(false)
   const [showActionManager, setShowActionManager] = useState(false)
@@ -110,9 +112,11 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       <div className="campaign-panel-header">
         <span className="campaign-panel-title">Chiến dịch</span>
         <div style={{ display: 'flex', gap: 4 }}>
-          <button className="btn btn-ghost btn-icon" onClick={() => setShowActionManager(true)} title="Quản lý Hành động">
-            <Settings2 size={14} />
-          </button>
+          {isAdminAkabiz && (
+            <button className="btn btn-ghost btn-icon" onClick={() => setShowActionManager(true)} title="Quản lý Hành động">
+              <Settings2 size={14} />
+            </button>
+          )}
           <button className="btn btn-ghost btn-icon" onClick={() => loadCampaigns()} title="Làm mới">
             <RefreshCw size={14} />
           </button>
@@ -146,7 +150,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
         />
       )}
 
-      {showActionManager && (
+      {showActionManager && isAdminAkabiz && (
         <ActionManagerModal onClose={() => {
           setShowActionManager(false)
           loadCampaignActions()

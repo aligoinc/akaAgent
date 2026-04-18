@@ -1,10 +1,12 @@
 import { FlowData, ExecutionRun, ExecutionStep } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapFlowFromDB, mapRunFromDB, mapRunStepFromDB } from '../mappers'
+import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
 
 export async function saveFlow(flowData: FlowData): Promise<FlowData> {
+  const u = requireCurrentUser()
   const payload = {
     id: flowData.id,
     name: flowData.name,
@@ -15,6 +17,8 @@ export async function saveFlow(flowData: FlowData): Promise<FlowData> {
     input_schema: flowData.inputSchema || {},
     output_schema: flowData.outputSchema || {},
     is_block: flowData.isBlock || false,
+    staff_id: u.staffId,
+    organization_id: u.organizationId,
     updated_at: new Date().toISOString()
   }
 
@@ -29,10 +33,14 @@ export async function saveFlow(flowData: FlowData): Promise<FlowData> {
 }
 
 export async function loadFlow(flowId: string): Promise<FlowData | null> {
+  const u = requireCurrentUser()
+  // Allow staff's own flow OR a system-shared flow (staff_id IS NULL).
+  // System-shared flows are seeded built-ins (FB_SHARE_POST, FB_REELS, ...) used by the scheduler.
   const { data, error } = await client()
     .from('auto_flows')
     .select('*')
     .eq('id', flowId)
+    .or(`staff_id.eq.${u.staffId},staff_id.is.null`)
     .single()
 
   if (error) return null
@@ -40,16 +48,46 @@ export async function loadFlow(flowId: string): Promise<FlowData | null> {
 }
 
 export async function listFlows(): Promise<FlowData[]> {
+  const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_flows')
     .select('*')
+    .eq('staff_id', u.staffId)
     .order('updated_at', { ascending: false })
 
   if (error) throw new Error(`Failed to list flows: ${error.message}`)
   return (data || []).map(mapFlowFromDB)
 }
 
+// System-level upsert for seeding built-in workflows (no auth required, owner-less).
+export async function saveFlowSystem(flowData: FlowData): Promise<FlowData> {
+  const payload = {
+    id: flowData.id,
+    name: flowData.name,
+    description: flowData.description || '',
+    nodes: flowData.nodes,
+    edges: flowData.edges,
+    variables: flowData.variables || {},
+    input_schema: flowData.inputSchema || {},
+    output_schema: flowData.outputSchema || {},
+    is_block: flowData.isBlock || false,
+    staff_id: null,
+    organization_id: null,
+    updated_at: new Date().toISOString()
+  }
+
+  const { data, error } = await client()
+    .from('auto_flows')
+    .upsert(payload)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to save system flow: ${error.message}`)
+  return mapFlowFromDB(data)
+}
+
 export async function deleteFlow(flowId: string): Promise<void> {
+  const u = requireCurrentUser()
   const { data: runs } = await client()
     .from('auto_runs')
     .select('id')
@@ -74,6 +112,7 @@ export async function deleteFlow(flowId: string): Promise<void> {
     .from('auto_flows')
     .delete()
     .eq('id', flowId)
+    .eq('staff_id', u.staffId)
 
   if (error) throw new Error(`Failed to delete flow: ${error.message}`)
 }

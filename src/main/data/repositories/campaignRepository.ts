@@ -1,16 +1,19 @@
 import { Campaign, CampaignDetail, CampaignDetailAction } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignDetailFromDB, mapDetailActionFromDB } from '../mappers'
+import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
 
 // =========== CAMPAIGNS ===========
 
 export async function getCampaign(id: number): Promise<Campaign | null> {
+  const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
     .eq('id', id)
+    .eq('staff_id', u.staffId)
     .single()
 
   if (error) return null
@@ -18,9 +21,11 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
 }
 
 export async function listCampaigns(): Promise<Campaign[]> {
+  const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
+    .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
@@ -29,6 +34,7 @@ export async function listCampaigns(): Promise<Campaign[]> {
 }
 
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
+  const u = requireCurrentUser()
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
@@ -45,7 +51,9 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     content: campaign.content || '',
     extra_settings: campaign.extraSettings || {},
     images: campaign.images || [],
-    log: ''
+    log: '',
+    staff_id: u.staffId,
+    organization_id: u.organizationId
   }
 
   const { data, error } = await client()
@@ -59,6 +67,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
 }
 
 export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
+  const u = requireCurrentUser()
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.actionId !== undefined) payload.action_id = updates.actionId
@@ -81,6 +90,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
     .from('auto_campaigns')
     .update(payload)
     .eq('id', id)
+    .eq('staff_id', u.staffId)
     .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
     .single()
 
@@ -89,19 +99,23 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
 }
 
 export async function deleteCampaign(id: number): Promise<void> {
+  const u = requireCurrentUser()
   const { error } = await client()
     .from('auto_campaigns')
     .update({ is_delete: true, updated_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('staff_id', u.staffId)
 
   if (error) throw new Error(`Failed to delete campaign: ${error.message}`)
 }
 
 export async function cloneCampaign(id: number): Promise<Campaign> {
+  const u = requireCurrentUser()
   const { data: origCamp, error: errC } = await client()
     .from('auto_campaigns')
     .select('*')
     .eq('id', id)
+    .eq('staff_id', u.staffId)
     .single()
 
   if (errC || !origCamp) throw new Error(`Campaign not found: ${errC?.message}`)
@@ -124,7 +138,9 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       content: origCamp.content,
       extra_settings: origCamp.extra_settings,
       images: origCamp.images,
-      log: ''
+      log: '',
+      staff_id: u.staffId,
+      organization_id: u.organizationId
     })
     .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
     .single()
@@ -183,10 +199,12 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
 }
 
 export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {
+  const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
     .eq('flatform_account_id', accountId)
+    .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
     .eq('is_delete', false)
     .lte('schedule', new Date().toISOString())
