@@ -436,9 +436,13 @@ export class WebviewController {
         }
         case 'getText': {
           await this.waitForElement(input.selector as string, 10000)
+          // Ưu tiên innerText (giữ ngắt dòng đúng theo layout, bỏ qua text ẩn).
+          // Fallback về textContent nếu element không phải HTMLElement.
           const text = await this.exec(`
             var el = resolveSelector(${safeJS(input.selector as string)});
-            return el ? (el.textContent || "") : "";
+            if (!el) return "";
+            var t = (typeof el.innerText === 'string' && el.innerText.length > 0) ? el.innerText : (el.textContent || "");
+            return t;
           `)
           output = { text: text || '' }
           break
@@ -521,6 +525,87 @@ export class WebviewController {
           break
         }
 
+        // =========== FILE DOWNLOAD ===========
+        // Tải 1 URL về file trên đĩa. Dùng Node `fetch` (undici, chạy main
+        // process) — bypass hoàn toàn Chromium network stack nên không dính
+        // ERR_BLOCKED_BY_CLIENT / tracking protection / webRequest filter.
+        // Lấy cookie từ session của webview và gắn thủ công vào header.
+        case 'downloadUrl': {
+          const url = input.url as string
+          if (!url || typeof url !== 'string') {
+            throw new Error('downloadUrl: thiếu tham số "url"')
+          }
+          const timeout = (input.timeout as number) || 30000
+          const requestedPath = input.outputPath as string | undefined
+
+          // Lấy cookie áp dụng cho URL này từ session của tab webview
+          let cookieHeader = ''
+          try {
+            const cookies = await this.wc.session.cookies.get({ url })
+            cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+          } catch (cookieErr) {
+            console.warn('[WebviewController] get cookies failed:', cookieErr)
+          }
+
+          const currentPageUrl = (() => {
+            try { return this.wc.getURL() || 'https://www.facebook.com/' }
+            catch { return 'https://www.facebook.com/' }
+          })()
+
+          const headers: Record<string, string> = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+            'Referer': currentPageUrl,
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8'
+          }
+          if (cookieHeader) headers['Cookie'] = cookieHeader
+
+          let response: Response
+          try {
+            response = await fetch(url, {
+              method: 'GET',
+              headers,
+              redirect: 'follow',
+              signal: AbortSignal.timeout(timeout)
+            })
+          } catch (fetchErr: any) {
+            throw new Error(`downloadUrl failed: ${fetchErr.message || fetchErr}`)
+          }
+
+          if (!response.ok) {
+            throw new Error(`downloadUrl: HTTP ${response.status} ${response.statusText}`)
+          }
+
+          const contentType = response.headers.get('content-type') || 'application/octet-stream'
+          const arrayBuf = await response.arrayBuffer()
+          const buf = Buffer.from(arrayBuf)
+
+          const { writeFileSync, mkdirSync, existsSync: fsExists } = await import('fs')
+          const { join: pathJoin, dirname: pathDirname, extname: pathExtname } = await import('path')
+          const { tmpdir } = await import('os')
+
+          const extFromUrl = pathExtname(new URL(url).pathname).replace('.', '').toLowerCase()
+          const extFromType = contentType.split(';')[0].split('/').pop() || ''
+          const ext = extFromUrl || extFromType || 'bin'
+
+          let filePath: string
+          if (requestedPath) {
+            filePath = requestedPath
+            const dir = pathDirname(filePath)
+            if (!fsExists(dir)) mkdirSync(dir, { recursive: true })
+          } else {
+            filePath = pathJoin(tmpdir(), `fb-dl-${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`)
+          }
+          writeFileSync(filePath, buf)
+
+          output = {
+            filePath,
+            byteLength: buf.length,
+            contentType
+          }
+          break
+        }
+
         // =========== FILE UPLOAD ===========
         case 'uploadFile': {
           const selector = input.selector as string
@@ -534,7 +619,9 @@ export class WebviewController {
             filePaths = []
           }
           if (!Array.isArray(filePaths) || filePaths.length === 0) {
-            throw new Error('filePaths must be a non-empty array of file paths')
+            // No-op khi rỗng (cho phép node tồn tại trong workflow mà không fail).
+            output = { success: true, fileCount: 0, skipped: true }
+            break
           }
 
           // Handle base64 data URIs → write to temp files
@@ -642,8 +729,11 @@ export class WebviewController {
           } else {
             filePaths = []
           }
+          // No-op khi filePaths rỗng — cho phép node dropFile tồn tại trong workflow
+          // mà không fail khi campaign không có ảnh.
           if (!Array.isArray(filePaths) || filePaths.length === 0) {
-            throw new Error('filePaths must be a non-empty array of file paths')
+            output = { success: true, fileCount: 0, skipped: true }
+            break
           }
 
           // Resolve base64 data URIs → write to temp files
@@ -783,6 +873,500 @@ export class WebviewController {
           }
 
           output = { success: uploadedCount > 0, fileCount: uploadedCount }
+          break
+        }
+
+        // =========== FACEBOOK COMPOUND ACTIONS ===========
+        // Cao hơn primitive (navigate/click/getText...): mỗi action gói 1 thao
+        // tác FB hoàn chỉnh. Workflow chỉ cần 1 node để dùng → tránh phải design
+        // flow nhiều chục node với conditional/loop phức tạp.
+
+        case 'fbScrapePost': {
+          const sourceLink = input.sourceLink as string
+          const includeImages = input.includeImages === true
+          const appendContent = (input.appendContent as string) || ''
+          // Parse appendImages: có thể là array hoặc JSON string của array
+          let appendImages: string[] = []
+          const rawAppendImgs = input.appendImages
+          if (typeof rawAppendImgs === 'string' && rawAppendImgs) {
+            try { appendImages = JSON.parse(rawAppendImgs) } catch { appendImages = [] }
+          } else if (Array.isArray(rawAppendImgs)) {
+            appendImages = rawAppendImgs as string[]
+          }
+
+          if (!sourceLink) {
+            // Khi sourceLink rỗng → no-op. Trả appendContent + appendImages để
+            // các node sau (type, dropFile) vẫn có data dùng.
+            output = { scrapedText: appendContent, scrapedImages: appendImages }
+            break
+          }
+
+          const url = /^https?:\/\//i.test(sourceLink.trim())
+            ? sourceLink.trim()
+            : (/^\d+$/.test(sourceLink.trim())
+              ? `https://www.facebook.com/profile.php?id=${sourceLink.trim()}`
+              : `https://www.facebook.com/${sourceLink.trim()}`)
+
+          await this.executeAction('navigate', { url })
+          await new Promise(r => setTimeout(r, 4000))
+          await this.executeAction('waitForSelector', { selector: '[role="main"]', timeout: 10000 }).catch(() => null)
+          await new Promise(r => setTimeout(r, 1500))
+          await this.executeAction('scroll', { direction: 'down', amount: 2000 }).catch(() => null)
+          await new Promise(r => setTimeout(r, 3000))
+
+          // Container detection: PAGE union (3 nhánh) hoặc GROUP — thử theo URL
+          const PAGE_CONTAINER = "(" +
+            "//*[@role='feed']/following-sibling::*[not(@class)][1]/div[not(@class)]" +
+            " | //*[@class='x1yztbdb']/following-sibling::*[not(@class)][1]/div[not(@class)]" +
+            " | //*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')]" +
+          ")[1]"
+          const GROUP_CONTAINER = "(//*[@role='feed'][last()]/*/*/div[not(@class)][1])[1]"
+          const isGroupUrl = /facebook\.com\/groups\//i.test(url)
+          const probeOrder = isGroupUrl
+            ? [GROUP_CONTAINER, PAGE_CONTAINER]
+            : [PAGE_CONTAINER, GROUP_CONTAINER]
+          let FIRST_CONTAINER: string | null = null
+          for (const sel of probeOrder) {
+            const probe = await this.executeAction('waitForSelector', { selector: sel, timeout: 1500 }).catch(() => null)
+            if (probe && probe.success && probe.output?.found !== false) { FIRST_CONTAINER = sel; break }
+          }
+          if (!FIRST_CONTAINER) {
+            output = { scrapedText: '', scrapedImages: [] }
+            break
+          }
+
+          const SEE_MORE_BTN_XPATH =
+            `${FIRST_CONTAINER}//*[@role='button' and (normalize-space(.)='Xem thêm' or normalize-space(.)='See more')]`
+          const CONTENT_XPATH =
+            `${FIRST_CONTAINER}//div[@dir='auto']//*[@data-ad-rendering-role='story_message' or @class='xh8yej3' or @id]`
+          const IMG_XPATH = (i: number) =>
+            `(${FIRST_CONTAINER}//*[@dir='auto' and ` +
+            `.//*[@data-ad-comet-preview='message' or @data-ad-rendering-role='story_message' or @data-ad-preview='message' or @class='xh8yej3' or @id]]` +
+            `/following-sibling::*[1]/div[1]//img)[${i}]`
+
+          // Click "Xem thêm" tối đa 2 vòng (DOM có thể dựng lại sau expand)
+          for (let iter = 0; iter < 2; iter++) {
+            const probe = await this.executeAction('waitForSelector', { selector: SEE_MORE_BTN_XPATH, timeout: 1500 }).catch(() => null)
+            if (!probe || !probe.success || probe.output?.found === false) break
+            const clickRes = await this.executeAction('click', { selector: SEE_MORE_BTN_XPATH }).catch(() => null)
+            if (!clickRes || !clickRes.success) break
+            await new Promise(r => setTimeout(r, 1000))
+          }
+
+          // Lấy nội dung — comprehensive 3-method approach:
+          //   1. Walk lên dir='auto' wrapper từ kết quả XPath C#
+          //   2. Thử 3 cách extract text:
+          //      a. innerText (CSS-based)
+          //      b. innerHTML parse (replace <br>/</div>/</p>/... → \n + strip tags)
+          //      c. walk DOM tree (block tag + computed style detect)
+          //   3. Chọn method có nhiều \n nhất, hoặc dài nhất nếu không có \n
+          // Trả về cả debug info (tag wrapper, length của từng method) để diagnose.
+          let rawText = ''
+          let debugInfo = ''
+          try {
+            const result = await this.exec(`
+              var marker = resolveSelector(${safeJS(CONTENT_XPATH)});
+              if (!marker) return { text: '', debug: 'marker not found' };
+
+              // Walk up tìm dir='auto' wrapper
+              var wrapper = marker;
+              var depth = 0;
+              while (wrapper && wrapper.parentElement && depth < 20) {
+                if (wrapper.tagName === 'DIV' && wrapper.getAttribute && wrapper.getAttribute('dir') === 'auto') break;
+                wrapper = wrapper.parentElement;
+                depth++;
+              }
+              if (!wrapper || wrapper === document.body) wrapper = marker;
+
+              var BLOCK = {DIV:1,P:1,H1:1,H2:1,H3:1,H4:1,H5:1,H6:1,LI:1,UL:1,OL:1,BLOCKQUOTE:1,ARTICLE:1,SECTION:1};
+              var candidates = [];
+
+              // Method A: innerText
+              var aText = (typeof wrapper.innerText === 'string' ? wrapper.innerText : (wrapper.textContent || '')).trim();
+              candidates.push({ name: 'innerText', text: aText });
+
+              // Method B: innerHTML parse
+              var html = wrapper.innerHTML || '';
+              html = html.replace(/<br\\s*\\/?\\s*>/gi, '\\n');
+              html = html.replace(/<\\/(div|p|h[1-6]|li|blockquote)\\s*>/gi, '\\n');
+              var tmp = document.createElement('div');
+              tmp.innerHTML = html;
+              var bText = (tmp.textContent || '').replace(/\\n{3,}/g, '\\n\\n').trim();
+              candidates.push({ name: 'innerHTML', text: bText });
+
+              // Method C: walk DOM tree
+              var out = [];
+              function walk(node) {
+                if (node.nodeType === 3) { out.push(node.nodeValue || ''); return; }
+                if (node.nodeType !== 1) return;
+                if (node.tagName === 'BR') { out.push('\\n'); return; }
+                if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return;
+                var isBlock = BLOCK[node.tagName] === 1;
+                if (!isBlock) {
+                  try {
+                    var disp = window.getComputedStyle(node).display;
+                    isBlock = (disp === 'block' || disp === 'flex' || disp === 'grid' || disp === 'list-item');
+                  } catch(e) {}
+                }
+                if (isBlock && out.length && out[out.length-1].slice(-1) !== '\\n') out.push('\\n');
+                for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i]);
+                if (isBlock && out.length && out[out.length-1].slice(-1) !== '\\n') out.push('\\n');
+              }
+              walk(wrapper);
+              var cText = out.join('').replace(/\\n{3,}/g, '\\n\\n').trim();
+              candidates.push({ name: 'walkDOM', text: cText });
+
+              // Pick best: ưu tiên có \\n, rồi dài nhất
+              var withBreaks = candidates.filter(function(c){ return c.text.indexOf('\\n') !== -1; });
+              var pool = withBreaks.length > 0 ? withBreaks : candidates;
+              var best = pool[0];
+              for (var i = 1; i < pool.length; i++) {
+                if (pool[i].text.length > best.text.length) best = pool[i];
+              }
+
+              var debug = 'wrapper=' + wrapper.tagName +
+                          (wrapper.getAttribute ? ('[dir=' + (wrapper.getAttribute('dir')||'-') + ']') : '') +
+                          ' | best=' + best.name +
+                          ' | ' + candidates.map(function(c){
+                            return c.name + ':' + c.text.length + (c.text.indexOf('\\n')!==-1?'(\\\\n)':'');
+                          }).join(', ');
+              return { text: best.text, debug: debug };
+            `)
+            if (result && typeof result === 'object') {
+              rawText = ((result as any).text as string) || ''
+              debugInfo = ((result as any).debug as string) || ''
+              if (debugInfo) console.log('[fbScrapePost] ' + debugInfo + ' | preview:', rawText.substring(0, 200))
+            }
+          } catch (e) {
+            console.warn('[fbScrapePost] getText failed:', e)
+          }
+
+          // Normalize newlines: \r\n / \r / U+2028 / U+2029 → \n
+          // Tránh trường hợp FB nguồn dùng line separator khác làm
+          // type/setValue handler không split đúng.
+          if (rawText) {
+            rawText = rawText
+              .replace(/\r\n/g, '\n')
+              .replace(/\r/g, '\n')
+              .replace(/[\u2028\u2029]/g, '\n')
+          }
+
+          let scrapedText = rawText
+          if (appendContent) {
+            scrapedText = rawText ? `${rawText}\n${appendContent}` : appendContent
+          }
+
+          // Lấy ảnh
+          const scrapedImages: string[] = []
+          if (includeImages) {
+            const collected: string[] = []
+            for (let i = 1; i <= 8; i++) {
+              const sel = IMG_XPATH(i)
+              const probe = await this.executeAction('waitForSelector', { selector: sel, timeout: 1500 }).catch(() => null)
+              if (!probe || !probe.success || probe.output?.found === false) break
+              const attr = await this.executeAction('getAttribute', { selector: sel, attribute: 'src' }).catch(() => null)
+              if (!attr || !attr.success) break
+              const src = (attr.output?.value as string | undefined) || ''
+              if (!src || !/^https?:\/\//i.test(src)) break
+              if (!collected.includes(src)) collected.push(src)
+            }
+            for (const u of collected) {
+              try {
+                const dl = await this.executeAction('downloadUrl', { url: u, timeout: 20000 })
+                if (dl.success && typeof dl.output?.filePath === 'string') {
+                  scrapedImages.push(dl.output.filePath as string)
+                }
+              } catch {}
+            }
+          }
+
+          // Merge: ảnh user upload (appendImages) đứng trước, ảnh scrape sau.
+          // Để dropFile node sau này gọi 1 lần, có cả ảnh user lẫn ảnh nguồn.
+          const finalImages = [...appendImages, ...scrapedImages]
+          output = { scrapedText, scrapedImages: finalImages }
+          break
+        }
+
+        case 'fbSharePost': {
+          const sourceUrl = input.sourceUrl as string
+          const content = (input.content as string) || ''
+          if (!sourceUrl) throw new Error('fbSharePost: thiếu sourceUrl')
+
+          const url = /^https?:\/\//i.test(sourceUrl.trim())
+            ? sourceUrl.trim()
+            : (/^\d+$/.test(sourceUrl.trim())
+              ? `https://www.facebook.com/profile.php?id=${sourceUrl.trim()}`
+              : `https://www.facebook.com/${sourceUrl.trim()}`)
+
+          await this.executeAction('navigate', { url })
+          await new Promise(r => setTimeout(r, 4000))
+          await this.executeAction('waitForSelector', { selector: '[role="main"]', timeout: 10000 }).catch(() => null)
+          await new Promise(r => setTimeout(r, 1500))
+
+          const shareBtnSel = '//*[@role="button" and (@aria-label="Chia sẻ" or @aria-label="Share" or .="Chia sẻ" or .="Share")]'
+          const shareClick = await this.executeAction('click', { selector: shareBtnSel })
+          if (!shareClick.success) throw new Error('Không tìm thấy nút Chia sẻ trên bài đăng nguồn')
+          await new Promise(r => setTimeout(r, 2500))
+
+          const shareNowSel = '//*[@role="menuitem" and (contains(.,"Chia sẻ ngay") or contains(.,"Chia sẻ lên trang cá nhân") or contains(.,"Share now") or contains(.,"Share to your feed") or contains(.,"Share to Feed"))]'
+          await this.executeAction('click', { selector: shareNowSel }).catch(() => null)
+          await new Promise(r => setTimeout(r, 3500))
+
+          const composerSel = '[role="dialog"] [contenteditable="true"]'
+          const composerCheck = await this.executeAction('waitForSelector', { selector: composerSel, timeout: 5000 })
+          if (composerCheck.success && composerCheck.output?.found !== false) {
+            if (content) {
+              await this.executeAction('click', { selector: composerSel }).catch(() => null)
+              await new Promise(r => setTimeout(r, 500))
+              await this.executeAction('setValue', { selector: composerSel, value: content }).catch(() => null)
+              await new Promise(r => setTimeout(r, 1500))
+            }
+            await this.executeAction('click', { selector: '[role="dialog"] [aria-label="Đăng"], [role="dialog"] [aria-label="Post"]' })
+            await new Promise(r => setTimeout(r, 5000))
+          } else {
+            await new Promise(r => setTimeout(r, 2000))
+          }
+          output = { success: true }
+          break
+        }
+
+        case 'fbSendMessage': {
+          // No-op nếu enabled = false (cho phép node luôn có trong workflow)
+          if (input.enabled === false) {
+            output = { ok: true, skipped: true }
+            break
+          }
+          const uid = input.uid as string
+          const message = (input.content as string) || ''
+          let images: string[] = []
+          const rawImgs = input.images
+          if (typeof rawImgs === 'string' && rawImgs) {
+            try { images = JSON.parse(rawImgs) } catch { images = [] }
+          } else if (Array.isArray(rawImgs)) {
+            images = rawImgs as string[]
+          }
+          if (!uid) {
+            output = { ok: false, error: 'fbSendMessage: thiếu uid' }
+            break
+          }
+
+          try {
+          // Navigate Messenger conversation
+          await this.executeAction('navigate', { url: `https://www.facebook.com/messages/t/${uid}` })
+          await new Promise(r => setTimeout(r, 4000))
+
+          // Handle blocking dialog 1: "Khôi phục đoạn chat" — đóng dialog, rồi confirm "Không khôi phục"
+          const pinDialogCheck = await this.executeAction('waitForSelector', {
+            selector: '[aria-label="Đóng"], [aria-label="Close"]',
+            timeout: 3000
+          }).catch(() => null)
+          if (pinDialogCheck && pinDialogCheck.success && pinDialogCheck.output?.found !== false) {
+            await this.executeAction('click', {
+              selector: '[aria-label="Đóng"], [aria-label="Close"]'
+            }).catch(() => null)
+            await new Promise(r => setTimeout(r, 2000))
+            const confirmCheck = await this.executeAction('waitForSelector', {
+              selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]',
+              timeout: 3000
+            }).catch(() => null)
+            if (confirmCheck && confirmCheck.success && confirmCheck.output?.found !== false) {
+              await this.executeAction('click', {
+                selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]'
+              }).catch(() => null)
+              await new Promise(r => setTimeout(r, 2000))
+            }
+          }
+
+          // Handle blocking dialog 2: "Tiếp tục" (E2EE notice)
+          const continueCheck = await this.executeAction('waitForSelector', {
+            selector: '//*[@role="button" and .="Tiếp tục"]',
+            timeout: 2000
+          }).catch(() => null)
+          if (continueCheck && continueCheck.success && continueCheck.output?.found !== false) {
+            await this.executeAction('click', {
+              selector: '//*[@role="button" and .="Tiếp tục"]'
+            }).catch(() => null)
+            await new Promise(r => setTimeout(r, 2000))
+          }
+
+          // Wait for message input
+          await this.executeAction('waitForSelector', {
+            selector: '[role="textbox"][contenteditable="true"]',
+            timeout: 15000
+          })
+          await new Promise(r => setTimeout(r, 1000))
+          await this.executeAction('click', { selector: '[role="textbox"][contenteditable="true"]' })
+          await new Promise(r => setTimeout(r, 500))
+
+          // Type message
+          if (message) {
+            await this.executeAction('setValue', {
+              selector: '[role="textbox"][contenteditable="true"]',
+              value: message
+            })
+            await new Promise(r => setTimeout(r, 1000))
+          }
+
+          // Drop images (no-op nếu rỗng vì dropFile đã tự skip)
+          if (images.length > 0) {
+            const drop = await this.executeAction('dropFile', {
+              selector: '[role="textbox"][contenteditable="true"]',
+              filePaths: images
+            })
+            if (!drop.success) throw new Error('Không thể đính kèm ảnh vào tin nhắn')
+            await new Promise(r => setTimeout(r, Math.max(3000, images.length * 1500)))
+          }
+
+          await this.executeAction('pressKey', { key: 'Enter' })
+          await new Promise(r => setTimeout(r, 2000))
+          output = { ok: true }
+          } catch (sendErr: any) {
+            // Catch để workflow chạy tiếp (sang fbAddFriend) — outcome trong output.ok
+            output = { ok: false, error: sendErr?.message || String(sendErr) }
+          }
+          break
+        }
+
+        case 'fbDetectPostPending': {
+          // Sau khi đăng bài group, FB hiện banner "đang chờ duyệt" nếu group bật moderation.
+          // Action này chờ ngắn rồi probe text banner. Trả về { isPending: bool }.
+          await new Promise(r => setTimeout(r, 3500))
+          const selector = `//*[contains(text(),"đang chờ được duyệt") or contains(text(),"chờ phê duyệt") or contains(text(),"Bài viết đang chờ duyệt") or contains(text(),"pending approval") or contains(text(),"Post pending approval")]`
+          try {
+            const check = await this.executeAction('waitForSelector', { selector, timeout: 2500 })
+            const found = check.success && check.output?.found !== false
+            output = { isPending: found }
+          } catch {
+            output = { isPending: false }
+          }
+          break
+        }
+
+        case 'fbLeaveGroupIfPending': {
+          // No-op nếu enabled=false hoặc isPending=false (chỉ rời khi bài chờ duyệt).
+          if (input.enabled === false || input.isPending !== true) {
+            output = { skipped: true, left: false }
+            break
+          }
+          try {
+            const joinedMenuSelector = `//*[@role="button" and (contains(@aria-label,"Đã tham gia") or contains(@aria-label,"Joined") or .="Đã tham gia" or .="Joined")]`
+            const menuCheck = await this.executeAction('waitForSelector', { selector: joinedMenuSelector, timeout: 4000 })
+            if (!menuCheck.success || menuCheck.output?.found === false) {
+              output = { skipped: false, left: false, error: 'Không tìm thấy menu "Đã tham gia"' }
+              break
+            }
+            await this.executeAction('click', { selector: joinedMenuSelector })
+            await new Promise(r => setTimeout(r, 1500))
+
+            const leaveItemSelector = `//*[@role="menuitem" and (contains(.,"Rời nhóm") or contains(.,"Rời khỏi nhóm") or contains(.,"Leave group") or contains(.,"Leave Group"))]`
+            const leaveClick = await this.executeAction('click', { selector: leaveItemSelector })
+            if (!leaveClick.success) {
+              output = { skipped: false, left: false, error: 'Không tìm thấy mục "Rời nhóm" trong menu' }
+              break
+            }
+            await new Promise(r => setTimeout(r, 1500))
+
+            const confirmSelector = `//*[@role="button" and (.="Rời nhóm" or .="Rời khỏi nhóm" or .="Leave Group" or .="Leave group")]`
+            await this.executeAction('click', { selector: confirmSelector })
+            await new Promise(r => setTimeout(r, 2000))
+            output = { skipped: false, left: true }
+          } catch (err: any) {
+            output = { skipped: false, left: false, error: err?.message || String(err) }
+          }
+          break
+        }
+
+        case 'fbJoinGroupIfNotMember': {
+          // No-op nếu enabled=false hoặc isPending=true (chỉ join khi bài KHÔNG chờ duyệt = mình chưa member).
+          if (input.enabled === false || input.isPending === true) {
+            output = { skipped: true, joined: false }
+            break
+          }
+          try {
+            const joinSelector = `//*[@role="button" and (contains(@aria-label,"Tham gia nhóm") or contains(@aria-label,"Join group") or .="Tham gia nhóm" or .="Join group" or .="Tham gia" or .="Join")]`
+            const check = await this.executeAction('waitForSelector', { selector: joinSelector, timeout: 2500 })
+            if (!check.success || check.output?.found === false) {
+              output = { skipped: true, joined: false }  // không có nút Join = đã là member
+              break
+            }
+            await this.executeAction('click', { selector: joinSelector })
+            await new Promise(r => setTimeout(r, 2500))
+            output = { skipped: false, joined: true }
+          } catch (err: any) {
+            output = { skipped: false, joined: false, error: err?.message || String(err) }
+          }
+          break
+        }
+
+        case 'fbAddFriend': {
+          if (input.enabled === false) {
+            output = { ok: true, skipped: true }
+            break
+          }
+          const uid = input.uid as string
+          if (!uid) {
+            output = { ok: false, error: 'fbAddFriend: thiếu uid' }
+            break
+          }
+
+          try {
+            const profileUrl = /^\d+$/.test(uid)
+              ? `https://www.facebook.com/profile.php?id=${uid}`
+              : `https://www.facebook.com/${uid}`
+            await this.executeAction('navigate', { url: profileUrl })
+            await new Promise(r => setTimeout(r, 3000))
+            await this.executeAction('waitForSelector', { selector: '[role="main"]', timeout: 10000 })
+            await new Promise(r => setTimeout(r, 1500))
+
+            const addFriendResult = await this.executeAction('click', {
+              selector: '//*[@role="button" and .="Thêm bạn bè"]'
+            })
+            if (!addFriendResult.success) {
+              output = { ok: false, error: 'Không tìm thấy nút Kết bạn (đã là bạn hoặc đã gửi lời mời)' }
+              break
+            }
+            await new Promise(r => setTimeout(r, 2000))
+            output = { ok: true }
+          } catch (frdErr: any) {
+            output = { ok: false, error: frdErr?.message || String(frdErr) }
+          }
+          break
+        }
+
+        case 'fbPostReels': {
+          const content = (input.content as string) || ''
+          const videoPath = input.videoPath as string
+          if (!videoPath) throw new Error('fbPostReels: thiếu videoPath (cần ít nhất 1 video trong Media)')
+
+          await this.executeAction('navigate', { url: 'https://www.facebook.com/reels/create' })
+          await new Promise(r => setTimeout(r, 5000))
+
+          const upload = await this.executeAction('uploadFile', {
+            selector: 'input[type="file"]',
+            filePaths: [videoPath]
+          })
+          if (!upload.success) throw new Error('Không upload được video cho Reels')
+          await new Promise(r => setTimeout(r, 6000))
+
+          const nextSel = '//*[@role="button" and (.="Tiếp" or .="Next")]'
+          await this.executeAction('click', { selector: nextSel }).catch(() => null)
+          await new Promise(r => setTimeout(r, 3000))
+          await this.executeAction('click', { selector: nextSel }).catch(() => null)
+          await new Promise(r => setTimeout(r, 3000))
+
+          if (content) {
+            const descSel = '[contenteditable="true"][role="textbox"], [contenteditable="true"]'
+            await this.executeAction('click', { selector: descSel }).catch(() => null)
+            await new Promise(r => setTimeout(r, 500))
+            await this.executeAction('setValue', { selector: descSel, value: content }).catch(() => null)
+            await new Promise(r => setTimeout(r, 1500))
+          }
+
+          const publishSel = '//*[@role="button" and (.="Đăng" or .="Publish" or .="Post" or .="Chia sẻ")]'
+          const pub = await this.executeAction('click', { selector: publishSel })
+          if (!pub.success) throw new Error('Không tìm thấy nút Đăng Reels')
+          await new Promise(r => setTimeout(r, 6000))
+          output = { success: true }
           break
         }
 

@@ -38,6 +38,11 @@ const MESSAGE_FRIEND_ACTIONS = new Set([
   'facebook_message_friend'
 ])
 
+// Campaign action IDs that show the "Nguồn đăng bài" section (source links, copy content, share, reels)
+const TIMELINE_POST_ACTIONS = new Set([
+  'facebook_timeline_post'
+])
+
 const ALL_STEPS: StepDef[] = [
   {
     id: 'general',
@@ -158,13 +163,19 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
     // Nhắn tin & Kết bạn
     enableMessage: campaign?.extraSettings?.enableMessage ?? true,
-    enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false
+    enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false,
+    // Nguồn đăng bài (timeline post)
+    copyContentFromSource: campaign?.extraSettings?.copyContentFromSource ?? false,
+    includeSourceImages: campaign?.extraSettings?.includeSourceImages ?? false,
+    postAsReels: campaign?.extraSettings?.postAsReels ?? false,
+    sourceLinks: campaign?.extraSettings?.sourceLinks || ''
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isMessageFriendCampaign = MESSAGE_FRIEND_ACTIONS.has(formData.actionId)
+  const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const STEPS = isSimpleCampaign
     ? ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
     : ALL_STEPS
@@ -333,7 +344,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
             enableMessage: formData.enableMessage,
-            enableAddFriend: formData.enableAddFriend
+            enableAddFriend: formData.enableAddFriend,
+            // Nguồn đăng bài (timeline post only)
+            copyContentFromSource: formData.copyContentFromSource,
+            includeSourceImages: formData.includeSourceImages,
+            postAsReels: formData.postAsReels,
+            sourceLinks: formData.sourceLinks,
+            // Giữ nguyên con trỏ rotation hiện tại (scheduler cập nhật mỗi lần chạy)
+            sourceLinkIndex: campaign?.extraSettings?.sourceLinkIndex ?? 0
           } as CampaignExtraSettings,
           images: formData.images
         }
@@ -891,11 +909,77 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
               {!collapsedSections['content'] && (
                 <div className="stepper-section-body">
+                  {/* === Nguồn đăng bài (chỉ hiện cho đăng trang cá nhân) === */}
+                  {isTimelinePostCampaign && (
+                    <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid var(--border-default)' }}>
+                      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 12 }}>
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.copyContentFromSource}
+                            onChange={e => setFormData(p => ({ ...p, copyContentFromSource: e.target.checked }))}
+                          />
+                          <span>Copy nội dung từ nguồn</span>
+                        </label>
+                        <label className="schedule-checkbox-label" style={{ opacity: formData.copyContentFromSource ? 1 : 0.5 }}>
+                          <input
+                            type="checkbox"
+                            checked={formData.includeSourceImages}
+                            onChange={e => setFormData(p => ({ ...p, includeSourceImages: e.target.checked }))}
+                            disabled={!formData.copyContentFromSource}
+                          />
+                          <span>Lấy kèm hình ảnh</span>
+                        </label>
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.sharePost}
+                            onChange={e => setFormData(p => ({ ...p, sharePost: e.target.checked }))}
+                          />
+                          <span>Đăng bài bằng cách chia sẻ</span>
+                        </label>
+                      </div>
+
+                      <div className="stepper-form-group">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                          <label style={{ margin: 0 }}>Danh sách uid/link (page, profile, group, post)</label>
+                          <span style={{ color: 'var(--text-error)', fontSize: 12 }}>(Mỗi link/uid cách nhau bằng dấu phẩy)</span>
+                        </div>
+                        <textarea
+                          className="stepper-textarea"
+                          placeholder="Ví dụ: https://facebook.com/abc, https://facebook.com/xyz/posts/12345, 100012345"
+                          value={formData.sourceLinks}
+                          onChange={e => setFormData(p => ({ ...p, sourceLinks: e.target.value }))}
+                          rows={6}
+                        />
+                        <div className="schedule-hint" style={{ marginTop: 4 }}>
+                          Hệ thống sẽ tự động copy nội dung gần nhất trong link để đăng bài.<br />
+                          Nếu có nhiều link, hệ thống sẽ lấy nội dung từ 1 link lần lượt trong danh sách, đảm bảo nội dung không bị trùng lặp.
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 12 }}>
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.postAsReels}
+                            onChange={e => setFormData(p => ({ ...p, postAsReels: e.target.checked }))}
+                          />
+                          <span>Đăng Reels <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Đăng video trên Reels)</em></span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="stepper-form-group">
                     <label>Nội dung chiến dịch</label>
                     <textarea
                       className="stepper-textarea"
-                      placeholder="Nhập nội dung chiến dịch ở đây..."
+                      placeholder={isTimelinePostCampaign && formData.copyContentFromSource
+                        ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
+                        : "Nhập nội dung chiến dịch ở đây..."}
                       value={formData.content}
                       onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
                       rows={8}

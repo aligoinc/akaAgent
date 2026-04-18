@@ -298,6 +298,60 @@ export class PlaywrightController {
           break
         }
 
+        // =========== FILE DOWNLOAD ===========
+        case 'downloadUrl': {
+          const url = input.url as string
+          if (!url || typeof url !== 'string') {
+            throw new Error('downloadUrl: thiếu tham số "url"')
+          }
+          const timeout = (input.timeout as number) || 30000
+          const requestedPath = input.outputPath as string | undefined
+
+          const ac = new AbortController()
+          const timer = setTimeout(() => ac.abort(), timeout)
+
+          try {
+            const response = await fetch(url, {
+              signal: ac.signal,
+              headers: {
+                'Referer': 'https://www.facebook.com/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+              }
+            })
+            clearTimeout(timer)
+            if (!response.ok) {
+              throw new Error(`downloadUrl: HTTP ${response.status} ${response.statusText}`)
+            }
+
+            const contentType = response.headers.get('content-type') || 'application/octet-stream'
+            const buf = Buffer.from(await response.arrayBuffer())
+
+            const { writeFileSync, mkdirSync, existsSync: fsExists } = await import('fs')
+            const { join: pathJoin, dirname: pathDirname, extname: pathExtname } = await import('path')
+            const { tmpdir } = await import('os')
+
+            const extFromUrl = pathExtname(new URL(url).pathname).replace('.', '').toLowerCase()
+            const extFromType = contentType.split(';')[0].split('/').pop() || ''
+            const ext = extFromUrl || extFromType || 'bin'
+
+            let filePath: string
+            if (requestedPath) {
+              filePath = requestedPath
+              const dir = pathDirname(filePath)
+              if (!fsExists(dir)) mkdirSync(dir, { recursive: true })
+            } else {
+              filePath = pathJoin(tmpdir(), `fb-dl-${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`)
+            }
+            writeFileSync(filePath, buf)
+
+            output = { filePath, byteLength: buf.length, contentType }
+          } catch (dlErr: any) {
+            clearTimeout(timer)
+            throw new Error(`downloadUrl failed: ${dlErr.message || dlErr}`)
+          }
+          break
+        }
+
         default:
           throw new Error(`Unknown action type: ${actionType}`)
       }

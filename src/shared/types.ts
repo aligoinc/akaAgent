@@ -12,7 +12,10 @@ export type ActionType =
   // Data
   | 'getValue' | 'setValue' | 'getText' | 'screenshot' | 'getAttribute'
   // Utility
-  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog' | 'uploadFile' | 'dropFile'
+  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog' | 'uploadFile' | 'dropFile' | 'downloadUrl'
+  // Facebook compound actions (high-level, FB-specific automation)
+  | 'fbScrapePost' | 'fbSharePost' | 'fbPostReels' | 'fbSendMessage' | 'fbAddFriend'
+  | 'fbDetectPostPending' | 'fbLeaveGroupIfPending' | 'fbJoinGroupIfNotMember'
   // Control Flow
   | 'ifElse' | 'loop' | 'switch'
   // Block System
@@ -182,7 +185,7 @@ export interface CampaignAction {
 }
 
 export interface CampaignExtraSettings {
-  sharePost?: boolean            // đăng bài dạng chia sẻ
+  sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
   enableComment?: boolean        // kiếm comment
   commentType?: 'own' | 'others' // comment vào bài mình / bài khác
   commentCount?: number          // số lượng comment (khi commentType = 'others')
@@ -201,6 +204,12 @@ export interface CampaignExtraSettings {
   // Nhắn tin & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
   enableAddFriend?: boolean                // Kết bạn
+  // Đăng bài lên trang cá nhân — tuỳ chọn nguồn
+  copyContentFromSource?: boolean          // Copy nội dung gần nhất từ link nguồn và nối thêm vào nội dung nhập
+  includeSourceImages?: boolean            // Lấy kèm hình ảnh từ link nguồn (đi kèm copyContentFromSource)
+  postAsReels?: boolean                    // Đăng video dưới dạng Reels thay vì post thường
+  sourceLinks?: string                     // Danh sách uid/link nguồn, phẩy ngăn cách (page, profile, group, post)
+  sourceLinkIndex?: number                 // Con trỏ rotation qua danh sách sourceLinks (tăng mỗi lần chạy)
 }
 
 export interface Campaign {
