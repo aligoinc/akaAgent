@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useUiStore } from '../../stores/uiStore'
 import { Campaign } from '../../../../shared/types'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -49,12 +50,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     setShowForm(true)
   }
 
-  const handleDelete = async (campaign: Campaign) => {
-    if (!confirm(`Xoá chiến dịch "${campaign.name}"?`)) return
-    await deleteCampaign(campaign.id)
-    if (selectedCampaignId === campaign.id) {
-      setSelectedCampaignId(null)
-    }
+  const handleDelete = (campaign: Campaign) => {
+    useUiStore.getState().showConfirm(
+      `Xoá chiến dịch "${campaign.name}"?`,
+      async () => {
+        await deleteCampaign(campaign.id)
+        if (selectedCampaignId === campaign.id) {
+          setSelectedCampaignId(null)
+        }
+      },
+      { title: 'Xoá chiến dịch', confirmText: 'Xoá', variant: 'danger' }
+    )
   }
 
   const handleClone = (campaign: Campaign) => {

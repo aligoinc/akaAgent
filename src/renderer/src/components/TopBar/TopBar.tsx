@@ -2,6 +2,7 @@ import { Zap, Layers, Settings, Play, Pause, Globe, Sun, Moon, LogOut, User } fr
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useUiStore } from '../../stores/uiStore'
 
 interface TopBarProps {
   activePage: 'campaigns' | 'workflow-editor' | 'browsers'
@@ -29,13 +30,18 @@ export default function TopBar({ activePage, onPageChange }: TopBarProps) {
     }
   }
 
-  const handleLogout = async () => {
-    if (!confirm('Đăng xuất khỏi tài khoản?')) return
-    if (schedulerRunning) {
-      try { await window.electronAPI?.stopScheduler() } catch { /* ignore */ }
-      setSchedulerRunning(false)
-    }
-    await logout()
+  const handleLogout = () => {
+    useUiStore.getState().showConfirm(
+      'Đăng xuất khỏi tài khoản?',
+      async () => {
+        if (schedulerRunning) {
+          try { await window.electronAPI?.stopScheduler() } catch { /* ignore */ }
+          setSchedulerRunning(false)
+        }
+        await logout()
+      },
+      { title: 'Đăng xuất', confirmText: 'Đăng xuất', variant: 'primary' }
+    )
   }
 
   return (

@@ -17,6 +17,7 @@ import { useCampaignStore } from './stores/campaignStore'
 import { useAuthStore } from './stores/authStore'
 import { useUiStore } from './stores/uiStore'
 import AlertModal from './components/CampaignPanels/AlertModal'
+import ConfirmModal from './components/CampaignPanels/ConfirmModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
@@ -217,6 +218,7 @@ export default function App() {
       <div className="app-layout" style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ color: 'var(--text-secondary, #aaa)', fontSize: 13 }}>Đang khởi tạo…</div>
         <AlertModal />
+        <ConfirmModal />
       </div>
     )
   }
@@ -226,6 +228,7 @@ export default function App() {
       <div className="app-layout">
         <LoginPage />
         <AlertModal />
+        <ConfirmModal />
       </div>
     )
   }
@@ -306,6 +309,7 @@ export default function App() {
       </div>
 
       <AlertModal />
+      <ConfirmModal />
     </div>
   )
 }

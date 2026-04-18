@@ -68,9 +68,12 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setShowForm(true)
   }
 
-  const handleDelete = async (account: FlatformAccount) => {
-    if (!confirm(`Xoá tài khoản "${account.name}"?`)) return
-    await deleteAccount(account.id)
+  const handleDelete = (account: FlatformAccount) => {
+    useUiStore.getState().showConfirm(
+      `Xoá tài khoản "${account.name}"?`,
+      async () => { await deleteAccount(account.id) },
+      { title: 'Xoá tài khoản', confirmText: 'Xoá', variant: 'danger' }
+    )
   }
 
   const handleViewBrowser = (accountId: number) => {
