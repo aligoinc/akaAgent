@@ -111,7 +111,7 @@ export async function seedBuiltinCampaignActions(): Promise<void> {
   ]
 
   try {
-    await flowRepo.saveFlow({
+    await flowRepo.saveFlowSystem({
       id: FACEBOOK_POST_WORKFLOW_ID,
       name: '[Built-in] Đăng bài lên dòng thời gian Facebook',
       description: 'Workflow tự động đăng bài lên Facebook Timeline. Sử dụng nội dung từ campaign.',
@@ -145,7 +145,7 @@ async function seedScrapePostBlock(): Promise<void> {
   // Luôn upsert (saveFlow là upsert) để updates về definition mới có hiệu lực
   // sau khi user restart app. Built-in flows không nên bị user edit thủ công.
   try {
-    await flowRepo.saveFlow({
+    await flowRepo.saveFlowSystem({
       id: FB_SCRAPE_POST_BLOCK_ID,
       name: '[Built-in] Block: Lấy nội dung bài viết Facebook',
       description: 'Mở link nguồn → bấm "Xem thêm" → lấy text (nối với appendContent qua \\n) + tải ảnh về file tạm',
@@ -241,7 +241,7 @@ async function seedScrapePostBlock(): Promise<void> {
  */
 async function seedSharePostWorkflow(): Promise<void> {
   try {
-    await flowRepo.saveFlow({
+    await flowRepo.saveFlowSystem({
       id: FB_SHARE_POST_WORKFLOW_ID,
       name: '[Built-in] Đăng bài Facebook bằng cách chia sẻ',
       description: 'Mở link nguồn → click Chia sẻ → Chia sẻ ngay → điền nội dung → Đăng',
@@ -300,7 +300,7 @@ async function seedSharePostWorkflow(): Promise<void> {
  */
 async function seedPostCopySourceWorkflow(): Promise<void> {
   try {
-    await flowRepo.saveFlow({
+    await flowRepo.saveFlowSystem({
       id: FB_POST_COPY_SOURCE_WORKFLOW_ID,
       name: '[Built-in] Đăng bài Facebook (copy nội dung từ nguồn)',
       description: 'Dùng block scrape-post-content lấy nội dung + ảnh từ link nguồn → đăng lên trang cá nhân',
@@ -457,7 +457,7 @@ async function seedPostCopySourceWorkflow(): Promise<void> {
  */
 async function seedReelsWorkflow(): Promise<void> {
   try {
-    await flowRepo.saveFlow({
+    await flowRepo.saveFlowSystem({
       id: FB_REELS_WORKFLOW_ID,
       name: '[Built-in] Đăng Reels Facebook',
       description: 'Mở /reels/create → upload video → Tiếp x2 → nhập nội dung → Đăng',
@@ -510,7 +510,7 @@ async function seedReelsWorkflow(): Promise<void> {
  */
 async function seedMessageFriendWorkflow(): Promise<void> {
   try {
-    await flowRepo.saveFlow({
+    await flowRepo.saveFlowSystem({
       id: FB_MESSAGE_FRIEND_WORKFLOW_ID,
       name: '[Built-in] Nhắn tin & Kết bạn (per-detail)',
       description: 'Workflow chạy cho 1 UID: gửi tin nhắn (nếu enabled) + gửi lời mời kết bạn (nếu enabled)',
@@ -608,7 +608,7 @@ async function seedMessageFriendWorkflow(): Promise<void> {
  */
 async function seedGroupPostCompletionBlock(): Promise<void> {
   try {
-    await flowRepo.saveFlow({
+    await flowRepo.saveFlowSystem({
       id: FB_GROUP_POST_COMPLETION_BLOCK_ID,
       name: '[Built-in] Block: Hậu kỳ đăng bài Group Facebook',
       description: 'Detect chờ duyệt → rời nhóm (nếu cần) → tham gia nhóm (nếu cần)',

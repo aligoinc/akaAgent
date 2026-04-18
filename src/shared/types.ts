@@ -93,6 +93,8 @@ export interface FlowData {
   inputSchema?: ActionIOField[]
   outputSchema?: ActionIOField[]
   isBlock?: boolean
+  staffId?: number
+  organizationId?: number
   createdAt?: string
   updatedAt?: string
 }
@@ -170,6 +172,8 @@ export interface FlatformAccount {
   status: string
   isActive: boolean
   isDelete: boolean
+  staffId?: number
+  organizationId?: number
   createdAt?: string
   updatedAt?: string
 }
@@ -231,6 +235,8 @@ export interface Campaign {
   extraSettings?: CampaignExtraSettings
   images?: string[]              // file paths or base64 strings
   isDelete: boolean
+  staffId?: number
+  organizationId?: number
   createdAt?: string
   updatedAt?: string
   // Joined fields
@@ -282,8 +288,23 @@ export interface FlatformContact {
   url?: string
   extraData?: Record<string, unknown>
   isDelete: boolean
+  staffId?: number
+  organizationId?: number
   createdAt?: string
   updatedAt?: string
+}
+
+// ============================================
+// Auth Types
+// ============================================
+
+export interface AuthUser {
+  staffId: number
+  organizationId: number
+  name: string
+  username: string
+  organizationName: string
+  isAdminAkabiz: boolean
 }
 
 // ============================================
@@ -293,6 +314,11 @@ export interface FlatformContact {
 export const IPC_CHANNELS = {
   // Theme
   THEME_CHANGE: 'theme:change',
+
+  // Auth
+  AUTH_LOGIN: 'auth:login',
+  AUTH_LOGOUT: 'auth:logout',
+  AUTH_ME: 'auth:me',
 
   // Flow execution
   FLOW_RUN: 'flow:run',

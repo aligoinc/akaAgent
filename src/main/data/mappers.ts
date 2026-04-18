@@ -11,6 +11,8 @@ export function mapFlowFromDB(row: Record<string, unknown>): FlowData {
     inputSchema: row.input_schema as FlowData['inputSchema'],
     outputSchema: row.output_schema as FlowData['outputSchema'],
     isBlock: row.is_block as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: row.organization_id as number | undefined,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }
@@ -65,6 +67,8 @@ export function mapAccountFromDB(row: Record<string, unknown>): FlatformAccount 
     status: row.status as string,
     isActive: row.is_active as boolean,
     isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: row.organization_id as number | undefined,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }
@@ -102,6 +106,8 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     images: (row.images as string[]) || [],
     log: (row.log as string) || '',
     isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: row.organization_id as number | undefined,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     actionName: (row as any).auto_campaign_actions?.name as string | undefined,
@@ -136,6 +142,8 @@ export function mapContactFromDB(row: Record<string, unknown>): FlatformContact 
     url: row.url as string | undefined,
     extraData: row.extra_data as Record<string, unknown> | undefined,
     isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: row.organization_id as number | undefined,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }

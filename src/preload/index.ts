@@ -1,9 +1,19 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, FlatformContact, ContactType } from '../shared/types'
+import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, FlatformContact, ContactType, AuthUser } from '../shared/types'
 
 export type ElectronAPI = typeof electronAPI
 
 const electronAPI = {
+  // Auth
+  login: (username: string, password: string): Promise<AuthUser> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGIN, username, password),
+
+  logout: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGOUT),
+
+  getCurrentUser: (): Promise<AuthUser | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTH_ME),
+
   // Theme
   setTheme: (theme: 'light' | 'dark'): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.THEME_CHANGE, theme),

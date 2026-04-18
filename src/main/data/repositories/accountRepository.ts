@@ -1,13 +1,16 @@
 import { FlatformAccount } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountFromDB } from '../mappers'
+import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
 
 export async function listAccounts(): Promise<FlatformAccount[]> {
+  const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_flatform_accounts')
     .select('*')
+    .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
@@ -16,12 +19,15 @@ export async function listAccounts(): Promise<FlatformAccount[]> {
 }
 
 export async function createAccount(account: Partial<FlatformAccount>): Promise<FlatformAccount> {
+  const u = requireCurrentUser()
   const payload = {
     name: account.name,
     flatform_type: account.flatformType || 'facebook',
     login_status: account.loginStatus || 'ch\u01b0a \u0111\u0103ng nh\u1eadp',
     status: account.status || 'ch\u1edd x\u1eed l\u00fd',
-    is_active: account.isActive ?? true
+    is_active: account.isActive ?? true,
+    staff_id: u.staffId,
+    organization_id: u.organizationId
   }
 
   const { data, error } = await client()
@@ -35,6 +41,7 @@ export async function createAccount(account: Partial<FlatformAccount>): Promise<
 }
 
 export async function updateAccount(id: number, updates: Partial<FlatformAccount>): Promise<FlatformAccount> {
+  const u = requireCurrentUser()
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.flatformType !== undefined) payload.flatform_type = updates.flatformType
@@ -46,6 +53,7 @@ export async function updateAccount(id: number, updates: Partial<FlatformAccount
     .from('auto_flatform_accounts')
     .update(payload)
     .eq('id', id)
+    .eq('staff_id', u.staffId)
     .select()
     .single()
 
@@ -54,18 +62,22 @@ export async function updateAccount(id: number, updates: Partial<FlatformAccount
 }
 
 export async function deleteAccount(id: number): Promise<void> {
+  const u = requireCurrentUser()
   const { error } = await client()
     .from('auto_flatform_accounts')
     .update({ is_delete: true, updated_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('staff_id', u.staffId)
 
   if (error) throw new Error(`Failed to delete account: ${error.message}`)
 }
 
 export async function getEligibleAccounts(): Promise<FlatformAccount[]> {
+  const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_flatform_accounts')
     .select('*')
+    .eq('staff_id', u.staffId)
     .eq('is_active', true)
     .eq('is_delete', false)
 

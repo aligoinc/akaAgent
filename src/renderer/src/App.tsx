@@ -6,6 +6,7 @@ import Toolbar from './components/Toolbar/Toolbar'
 import TopBar from './components/TopBar/TopBar'
 import CampaignPage from './pages/CampaignPage'
 import BrowserPage from './pages/BrowserPage'
+import LoginPage from './pages/LoginPage'
 import { useFlowStore } from './stores/flowStore'
 import { useExecutionStore } from './stores/executionStore'
 import { FlowData, ExecutionStep } from '../../shared/types'
@@ -13,12 +14,28 @@ import { useElementStore } from './stores/elementStore'
 import { useBlockStore } from './stores/blockStore'
 import { useThemeStore } from './stores/themeStore'
 import { useCampaignStore } from './stores/campaignStore'
+import { useAuthStore } from './stores/authStore'
 import { useUiStore } from './stores/uiStore'
 import AlertModal from './components/CampaignPanels/AlertModal'
 
 export default function App() {
+  const { user, initializing, rehydrateFromStorage } = useAuthStore()
+  const isAdminAkabiz = !!user?.isAdminAkabiz
+  // Default to campaigns; if user is not akaBiz admin, workflow-editor is hidden anyway.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
   const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
+
+  // Bootstrap auth: re-login from stored creds (or land on LoginPage).
+  useEffect(() => {
+    rehydrateFromStorage()
+  }, [rehydrateFromStorage])
+
+  // Snap workflow-editor → campaigns if user loses admin access (e.g. after switching account).
+  useEffect(() => {
+    if (!isAdminAkabiz && activePage === 'workflow-editor') {
+      setActivePage('campaigns')
+    }
+  }, [isAdminAkabiz, activePage])
 
   const {
     selectedNodeId,
@@ -195,6 +212,24 @@ export default function App() {
     }
   }, [loadBlocks])
 
+  if (initializing) {
+    return (
+      <div className="app-layout" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'var(--text-secondary, #aaa)', fontSize: 13 }}>Đang khởi tạo…</div>
+        <AlertModal />
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="app-layout">
+        <LoginPage />
+        <AlertModal />
+      </div>
+    )
+  }
+
   return (
     <div className="app-layout">
       <TopBar activePage={activePage} onPageChange={setActivePage} />
@@ -213,7 +248,7 @@ export default function App() {
         <BrowserPage focusAccountId={focusAccountId} onFocusHandled={() => setFocusAccountId(null)} />
       </div>
 
-      <div style={{ display: activePage === 'workflow-editor' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ display: activePage === 'workflow-editor' && isAdminAkabiz ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <>
           <Toolbar
             onRun={handleRun}

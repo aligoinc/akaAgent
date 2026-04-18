@@ -14,6 +14,7 @@ import { registerAccountHandlers } from './handlers/accountHandlers'
 import { registerContactHandlers } from './handlers/contactHandlers'
 import { registerElementHandlers } from './handlers/elementHandlers'
 import { registerRunHandlers } from './handlers/runHandlers'
+import { registerAuthHandlers } from './handlers/authHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const supabase = new SupabaseService()
@@ -50,6 +51,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.DB_DELETE_FLOW, async (_, flowId: string) => supabase.deleteFlow(flowId))
 
   // Register domain handlers
+  registerAuthHandlers()
   registerFlowHandlers(mainWindow, supabase)
   registerBrowserHandlers(webviewRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)
