@@ -4,6 +4,13 @@ import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { FlowRunner } from '../playwright/flowRunner'
 import { IPC_CHANNELS, ExecutionStep, Campaign, CampaignDetail } from '../../shared/types'
+import {
+  FB_SHARE_POST_WORKFLOW_ID,
+  FB_REELS_WORKFLOW_ID,
+  FB_POST_COPY_SOURCE_WORKFLOW_ID,
+  FB_MESSAGE_FRIEND_WORKFLOW_ID,
+  FB_GROUP_POST_COMPLETION_BLOCK_ID
+} from '../data/seed/builtinCampaignActions'
 
 export class CampaignScheduler {
   private supabase: SupabaseService
@@ -191,7 +198,7 @@ export class CampaignScheduler {
       const action = await this.supabase.getCampaignAction(campaign.actionId)
       if (!action) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy action "${campaign.actionId}"`)
         return
       }
@@ -204,7 +211,7 @@ export class CampaignScheduler {
 
       if (!action.workflowId) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy workflow`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy workflow cho action "${campaign.actionId}"`)
         return
       }
@@ -213,19 +220,27 @@ export class CampaignScheduler {
       const flow = await this.supabase.loadFlow(action.workflowId)
       if (!flow) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy flow ${action.workflowId}`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy flow`)
+        return
+      }
+
+      // === Timeline post with source options: custom handling ===
+      // (copy content / share / reels — run once then completion, similar to simple campaign)
+      const extraForTimeline = campaign.extraSettings || {}
+      const needTimelineCustom = campaign.actionId === 'facebook_timeline_post' && (
+        extraForTimeline.copyContentFromSource === true ||
+        extraForTimeline.sharePost === true ||
+        extraForTimeline.postAsReels === true
+      )
+      if (needTimelineCustom) {
+        await this.executeTimelinePostCampaign(account, campaign, flow)
+        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
         return
       }
 
       // Get campaign details
       const details = await this.supabase.listCampaignDetails(campaign.id)
-
-      if (campaign.extraSettings?.sharePost) {
-        const msg = '⚠️ Tính năng "Đăng bài dạng chia sẻ" chưa được hỗ trợ trong phiên bản hiện tại - sẽ bỏ qua'
-        this.sendLog(msg)
-        await this.supabase.appendCampaignLog(campaign.id, msg)
-      }
 
       // Shuffle details if shuffleGroupList is enabled (Fisher-Yates shuffle)
       if (campaign.extraSettings?.shuffleGroupList && details.length > 1) {
@@ -344,9 +359,22 @@ export class CampaignScheduler {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.recoverStuckDetails(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
-      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
       await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
+      // Đối với simple campaign (không có detail row), ghi 1 entry vào detail_actions
+      // để khách hàng có lịch sử lỗi để xem.
+      if (campaign.actionId === 'facebook_timeline_post') {
+        try {
+          await this.supabase.createDetailAction({
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: 'Đăng bài',
+            status: 'error',
+            log: errMsg
+          })
+        } catch {}
+      }
     }
   }
 
@@ -483,27 +511,74 @@ export class CampaignScheduler {
     const commentSteps = result.steps.filter(s => s.nodeId === 'node-block-comment')
     const commentSuccessCount = commentSteps.filter(s => s.status === 'success').length
 
-    // Detect pending approval via FB's banner text (so leaveGroupOnPendingApproval works)
+    // Detect pending + post-flow group actions (leave/join) — invoke sub-block.
+    // Block tự xử lý điều kiện (enabled + isPending) trong từng action node.
     let isPendingPost = false
-    if (detail && postSucceeded) {
-      const leaveOnPending = campaign.extraSettings?.leaveGroupOnPendingApproval ?? false
-      const joinAfterPost = campaign.extraSettings?.autoJoinGroupAfterPost ?? false
-      if (leaveOnPending || joinAfterPost) {
-        isPendingPost = await this.detectPostPending(controller)
-      }
-    }
-
-    // Post-flow group actions (leaveGroupOnPendingApproval / autoJoinGroupAfterPost)
     let postPendingNote = ''
     if (detail && postSucceeded) {
       const leaveOnPending = campaign.extraSettings?.leaveGroupOnPendingApproval ?? false
       const joinAfterPost = campaign.extraSettings?.autoJoinGroupAfterPost ?? false
-      if (isPendingPost && leaveOnPending) {
-        const left = await this.leaveCurrentGroup(controller, campaign.id)
-        postPendingNote = left ? 'Bài chờ duyệt - đã rời nhóm' : 'Bài chờ duyệt - không rời được nhóm'
-      } else if (!isPendingPost && joinAfterPost) {
-        await this.joinCurrentGroupIfNotMember(controller, campaign.id)
+      if (leaveOnPending || joinAfterPost) {
+        try {
+          const completionBlock = await this.supabase.loadFlow(FB_GROUP_POST_COMPLETION_BLOCK_ID)
+          if (completionBlock) {
+            const blockCopy = JSON.parse(JSON.stringify(completionBlock))
+            blockCopy.variables = {
+              ...(blockCopy.variables || {}),
+              leaveOnPending,
+              joinAfterPost
+            }
+            const completionRunner = new FlowRunner(controller, this.supabase, () => {})
+            const completionRun = await completionRunner.run(blockCopy)
+            isPendingPost = (completionRun.output?.isPending as boolean) === true
+            const left = (completionRun.output?.left as boolean) === true
+            const joined = (completionRun.output?.joined as boolean) === true
+
+            if (isPendingPost && leaveOnPending) {
+              postPendingNote = left ? 'Bài chờ duyệt - đã rời nhóm' : 'Bài chờ duyệt - không rời được nhóm'
+              if (left) {
+                this.sendLog('👋 Đã rời nhóm (do bài đăng chờ duyệt)')
+                await this.supabase.appendCampaignLog(campaign.id, 'Đã rời nhóm do bài đăng chờ duyệt')
+              }
+            } else if (!isPendingPost && joinAfterPost && joined) {
+              this.sendLog('🤝 Đã nhấn "Tham gia nhóm"')
+              await this.supabase.appendCampaignLog(campaign.id, 'Tự động tham gia nhóm sau khi đăng bài thành công')
+            }
+          } else {
+            console.warn('[Scheduler] Group post completion block not found, skipping leave/join')
+          }
+        } catch (err) {
+          console.error('[Scheduler] Group post completion block failed:', err)
+        }
       }
+    }
+
+    // ===== Simple campaign (no detail row): vẫn ghi 1 entry vào detail_actions =====
+    // để khách hàng thấy lịch sử chạy giống như các chiến dịch có data.
+    // Lưu ý: KHÔNG dùng `postSucceeded` (chỉ match `node-block-post` của workflow
+    // group post) — workflow timeline post có node ID khác (`node_click_post`).
+    // Với simple campaign, success = cả workflow chạy xong = result.status='completed'.
+    if (!detail) {
+      if (result.status === 'completed') {
+        this.sendLog(`📝 Đăng bài thành công`)
+        try {
+          await this.supabase.createDetailAction({
+            campaignId: campaign.id,
+            accountId: accountId,
+            actionName: 'Đăng bài',
+            status: 'success',
+            log: 'Đăng bài thành công'
+          })
+        } catch (logErr) {
+          console.error('Failed to log post detail action (no detail):', logErr)
+        }
+      } else {
+        // Throw để outer try/catch ghi 1 entry detail_action lỗi (campaign status
+        // vẫn là 'hoàn thành' — campaign chỉ có 4 status: chờ xử lý / tạm dừng /
+        // đang chạy / hoàn thành; lỗi được lưu trong campaign.log + detail_actions).
+        throw new Error(result.error || 'Workflow không chạy xong')
+      }
+      return
     }
 
     if (detail) {
@@ -611,91 +686,12 @@ export class CampaignScheduler {
     }
   }
 
-  /**
-   * Detect whether the just-submitted post is awaiting admin approval by
-   * scanning for FB's pending banner text.
-   */
-  private async detectPostPending(
-    controller: import('../../shared/types').IBrowserController
-  ): Promise<boolean> {
-    await new Promise(r => setTimeout(r, 3500))
-    const selector = `//*[contains(text(),"đang chờ được duyệt") or contains(text(),"chờ phê duyệt") or contains(text(),"Bài viết đang chờ duyệt") or contains(text(),"pending approval") or contains(text(),"Post pending approval")]`
-    try {
-      const check = await controller.executeAction('waitForSelector', { selector, timeout: 2500 })
-      return check.success && check.output?.found !== false
-    } catch {
-      return false
-    }
-  }
-
-  // =========== Group Post Post-flow Actions ===========
-
-  /**
-   * Open the group's "Joined" menu and leave the group, then confirm.
-   * Caller should already be on the group page.
-   */
-  private async leaveCurrentGroup(
-    controller: import('../../shared/types').IBrowserController,
-    campaignId: number
-  ): Promise<boolean> {
-    try {
-      const joinedMenuSelector = `//*[@role="button" and (contains(@aria-label,"Đã tham gia") or contains(@aria-label,"Joined") or .="Đã tham gia" or .="Joined")]`
-      const menuCheck = await controller.executeAction('waitForSelector', { selector: joinedMenuSelector, timeout: 4000 })
-      if (!menuCheck.success || menuCheck.output?.found === false) {
-        this.sendLog('⚠️ Không tìm thấy menu "Đã tham gia"')
-        return false
-      }
-      await controller.executeAction('click', { selector: joinedMenuSelector })
-      await new Promise(r => setTimeout(r, 1500))
-
-      const leaveItemSelector = `//*[@role="menuitem" and (contains(.,"Rời nhóm") or contains(.,"Rời khỏi nhóm") or contains(.,"Leave group") or contains(.,"Leave Group"))]`
-      const leaveClick = await controller.executeAction('click', { selector: leaveItemSelector })
-      if (!leaveClick.success) {
-        this.sendLog('⚠️ Không tìm thấy mục "Rời nhóm" trong menu')
-        return false
-      }
-      await new Promise(r => setTimeout(r, 1500))
-
-      const confirmSelector = `//*[@role="button" and (.="Rời nhóm" or .="Rời khỏi nhóm" or .="Leave Group" or .="Leave group")]`
-      await controller.executeAction('click', { selector: confirmSelector })
-      await new Promise(r => setTimeout(r, 2000))
-
-      this.sendLog('👋 Đã rời nhóm (do bài đăng chờ duyệt)')
-      await this.supabase.appendCampaignLog(campaignId, 'Đã rời nhóm do bài đăng chờ duyệt')
-      return true
-    } catch (err) {
-      console.error('leaveCurrentGroup error:', err)
-      this.sendLog(`⚠️ Lỗi khi rời nhóm: ${err instanceof Error ? err.message : String(err)}`)
-      return false
-    }
-  }
-
-  /**
-   * If a Join button is visible on the current group page, click it.
-   * No-op if the user is already a member (button absent).
-   */
-  private async joinCurrentGroupIfNotMember(
-    controller: import('../../shared/types').IBrowserController,
-    campaignId: number
-  ): Promise<boolean> {
-    try {
-      const joinSelector = `//*[@role="button" and (contains(@aria-label,"Tham gia nhóm") or contains(@aria-label,"Join group") or .="Tham gia nhóm" or .="Join group" or .="Tham gia" or .="Join")]`
-      const check = await controller.executeAction('waitForSelector', { selector: joinSelector, timeout: 2500 })
-      if (!check.success || check.output?.found === false) {
-        return false
-      }
-      await controller.executeAction('click', { selector: joinSelector })
-      await new Promise(r => setTimeout(r, 2500))
-      this.sendLog('🤝 Đã nhấn "Tham gia nhóm"')
-      await this.supabase.appendCampaignLog(campaignId, 'Tự động tham gia nhóm sau khi đăng bài thành công')
-      return true
-    } catch (err) {
-      console.error('joinCurrentGroupIfNotMember error:', err)
-      return false
-    }
-  }
-
   // =========== Facebook Message & Friend Request Campaign ===========
+  // Group post post-flow actions (detect pending / leave group / join group) đã
+  // được refactor sang FB_GROUP_POST_COMPLETION_BLOCK_ID — sub-block invoke từ
+  // runWorkflowForDetail. 3 helper cũ (detectPostPending, leaveCurrentGroup,
+  // joinCurrentGroupIfNotMember) đã chuyển thành action types fbDetectPostPending,
+  // fbLeaveGroupIfPending, fbJoinGroupIfNotMember trong webviewController.
 
   /**
    * Extract a clean UID/username from user input that may be a full Facebook URL.
@@ -722,6 +718,12 @@ export class CampaignScheduler {
     return trimmed
   }
 
+  /**
+   * Loop qua details, mỗi detail invoke FB_MESSAGE_FRIEND_WORKFLOW_ID 1 lần
+   * (workflow chứa 2 action node fbSendMessage + fbAddFriend, mỗi action self-catch
+   * lỗi và trả qua output.ok/error nên cả 2 đều chạy độc lập). Scheduler đọc
+   * step.output để log per-action vào detail_actions.
+   */
   private async executeMessageFriendCampaign(
     account: import('../../shared/types').FlatformAccount,
     campaign: Campaign
@@ -732,7 +734,7 @@ export class CampaignScheduler {
 
     if (!enableMessage && !enableAddFriend) {
       await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Chưa chọn hành động nào (nhắn tin hoặc kết bạn)')
-      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
       return
     }
 
@@ -743,10 +745,10 @@ export class CampaignScheduler {
       return
     }
 
-    const controller = this.webviewRegistry.getController(account.id)
-    if (!controller) {
-      await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy tab trình duyệt')
-      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+    const flow = await this.supabase.loadFlow(FB_MESSAGE_FRIEND_WORKFLOW_ID)
+    if (!flow) {
+      await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy workflow Nhắn tin & Kết bạn')
+      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
       return
     }
 
@@ -781,7 +783,7 @@ export class CampaignScheduler {
         continue
       }
 
-      // Check rate limit
+      // Rate limit check
       const actionName = enableMessage ? 'Nhắn tin' : 'Kết bạn'
       try {
         const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionName, limitConfig)
@@ -801,9 +803,7 @@ export class CampaignScheduler {
       })
       this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
 
-      let detailSuccess = true
-
-      // Resolve images for this detail (per-detail so 'random' picks vary)
+      // Resolve ảnh per-detail (random pick khác nhau giữa các detail)
       const imageOption = campaign.extraSettings?.imageOption || 'none'
       const availableImages = campaign.images || []
       let finalImages: string[] = []
@@ -821,10 +821,49 @@ export class CampaignScheduler {
         await this.supabase.appendCampaignLog(campaign.id, msg)
       }
 
-      // --- Send Message ---
-      if (enableMessage && (messageContent || validImages.length > 0)) {
-        try {
-          await this.sendFacebookMessage(controller, uid, messageContent, validImages)
+      // Skip nếu enableMessage nhưng không có nội dung và không có ảnh (matches old behavior)
+      const effectiveEnableMessage = enableMessage && (messageContent.trim().length > 0 || validImages.length > 0)
+
+      // Run workflow
+      const flowCopy = JSON.parse(JSON.stringify(flow))
+      flowCopy.variables = {
+        ...(flowCopy.variables || {}),
+        detailUid: uid,
+        campaignContent: messageContent,
+        images: validImages,
+        enableMessage: effectiveEnableMessage,
+        enableAddFriend
+      }
+
+      const controller = this.webviewRegistry.getController(account.id)
+      if (!controller) {
+        await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy tab trình duyệt')
+        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        return
+      }
+
+      const runner = new FlowRunner(controller, this.supabase, (step: ExecutionStep) => {
+        this.mainWindow.webContents.send(IPC_CHANNELS.FLOW_PROGRESS, step)
+      })
+
+      let detailSuccess = true
+      let runError: string | null = null
+      let runResult: import('../../shared/types').ExecutionRun | null = null
+      try {
+        runResult = await runner.run(flowCopy)
+      } catch (err: any) {
+        runError = err?.message || String(err)
+        detailSuccess = false
+      }
+
+      // Inspect step outcomes per action node ID
+      const msgStep = runResult?.steps.find(s => s.nodeId === 'node_send_msg')
+      const friendStep = runResult?.steps.find(s => s.nodeId === 'node_add_friend')
+
+      // --- Per-action logging: Nhắn tin ---
+      if (effectiveEnableMessage && msgStep) {
+        const msgOk = msgStep.status === 'success' && (msgStep.output as any)?.ok === true
+        if (msgOk) {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
@@ -834,9 +873,9 @@ export class CampaignScheduler {
             log: `Nhắn tin thành công đến ${detailName}`
           })
           this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
-        } catch (err: any) {
+        } else {
           detailSuccess = false
-          const errMsg = err.message || String(err)
+          const errMsg = (msgStep.output as any)?.error || msgStep.error || runError || 'Lỗi không xác định'
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
@@ -849,10 +888,10 @@ export class CampaignScheduler {
         }
       }
 
-      // --- Add Friend ---
-      if (enableAddFriend) {
-        try {
-          await this.sendFriendRequest(controller, uid)
+      // --- Per-action logging: Kết bạn ---
+      if (enableAddFriend && friendStep) {
+        const frdOk = friendStep.status === 'success' && (friendStep.output as any)?.ok === true
+        if (frdOk) {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
@@ -862,9 +901,9 @@ export class CampaignScheduler {
             log: `Kết bạn thành công với ${detailName}`
           })
           this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
-        } catch (err: any) {
+        } else {
           detailSuccess = false
-          const errMsg = err.message || String(err)
+          const errMsg = (friendStep.output as any)?.error || friendStep.error || runError || 'Lỗi không xác định'
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
@@ -915,139 +954,139 @@ export class CampaignScheduler {
     await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
   }
 
+  // =========== Facebook Timeline Post — Source Options ===========
+
   /**
-   * Send a Facebook message to a user via Facebook Messenger.
-   * Navigate to facebook.com/messages/t/{uid}, type message, send.
-   * Handles two common blocking scenarios:
-   *   1) PIN recovery dialog ("Nhập mã PIN để khôi phục đoạn chat") → close it
-   *   2) "Tiếp tục" (Continue) button at the bottom → click it
+   * Handle facebook_timeline_post campaigns that use source-link features
+   * (copyContentFromSource / sharePost / postAsReels).
+   *
+   * Architecture: scheduler chỉ làm orchestration (rotate link, rate-limit,
+   * data merge). Tất cả browser automation (scrape, share, reels) chạy qua
+   * action handlers trong WebviewController, được wrap thành block/workflow
+   * trong builtinCampaignActions:
+   *   - FB_SCRAPE_POST_BLOCK_ID   (block isBlock=true) → scrape source + download ảnh
+   *   - FB_SHARE_POST_WORKFLOW_ID (workflow)            → đăng bằng cách chia sẻ
+   *   - FB_REELS_WORKFLOW_ID      (workflow)            → đăng Reels
+   * Default: dùng workflow timeline post hiện có.
    */
-  private async sendFacebookMessage(
-    controller: import('../../shared/types').IBrowserController,
-    uid: string,
-    message: string,
-    images: string[] = []
+  private async executeTimelinePostCampaign(
+    account: import('../../shared/types').FlatformAccount,
+    campaign: Campaign,
+    flow: import('../../shared/types').FlowData
   ): Promise<void> {
-    // Navigate to Facebook messenger conversation
-    await controller.executeAction('navigate', { url: `https://www.facebook.com/messages/t/${uid}` })
-    await new Promise(r => setTimeout(r, 4000))
+    const extra = campaign.extraSettings || {}
 
-    // --- Handle blocking scenario 1: PIN recovery dialog ---
-    // Try to close the dialog by clicking the X (close) button
-    // Use short timeout to avoid wasting time if no dialog exists
-    const pinDialogCheck = await controller.executeAction('waitForSelector', {
-      selector: '[aria-label="Đóng"], [aria-label="Close"]',
-      timeout: 3000
-    })
-    if (pinDialogCheck.success && pinDialogCheck.output?.found !== false) {
-      await controller.executeAction('click', {
-        selector: '[aria-label="Đóng"], [aria-label="Close"]'
-      })
-      this.sendLog('📌 Đã đóng dialog khôi phục đoạn chat')
-      await new Promise(r => setTimeout(r, 2000))
+    // --- Rotate source link (mỗi lần chạy 1 link) ---
+    const sourceLinks = (extra.sourceLinks || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
 
-      // --- Handle confirmation dialog: "Tiếp tục mà không khôi phục?" ---
-      // The blue button
-      const confirmCheck = await controller.executeAction('waitForSelector', {
-        selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]',
-        timeout: 3000
-      })
-      if (confirmCheck.success && confirmCheck.output?.found !== false) {
-        await controller.executeAction('click', {
-          selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]'
+    let currentLink: string | null = null
+    if (sourceLinks.length > 0) {
+      const idx = (extra.sourceLinkIndex || 0) % sourceLinks.length
+      currentLink = sourceLinks[idx]
+      const nextIdx = (idx + 1) % sourceLinks.length
+      try {
+        await this.supabase.updateCampaign(campaign.id, {
+          extraSettings: { ...extra, sourceLinkIndex: nextIdx }
         })
-        this.sendLog('📌 Đã nhấn "Không khôi phục tin nhắn"')
-        await new Promise(r => setTimeout(r, 2000))
+      } catch (err) {
+        console.error('Failed to persist sourceLinkIndex:', err)
       }
+      this.sendLog(`🔗 Link nguồn #${idx + 1}/${sourceLinks.length}: ${currentLink}`)
     }
 
-    // --- Handle blocking scenario 2: "Tiếp tục" button ---
-    // Facebook sometimes shows an end-to-end encryption notice with a "Tiếp tục" button
-    const continueCheck = await controller.executeAction('waitForSelector', {
-      selector: '//*[@role="button" and .="Tiếp tục"]',
-      timeout: 2000
-    })
-    if (continueCheck.success && continueCheck.output?.found !== false) {
-      await controller.executeAction('click', {
-        selector: '//*[@role="button" and .="Tiếp tục"]'
-      })
-      this.sendLog('📌 Đã nhấn nút Tiếp tục')
-      await new Promise(r => setTimeout(r, 2000))
+    // Validate prerequisites
+    if ((extra.copyContentFromSource || extra.sharePost) && !currentLink) {
+      const msg = '⚠️ Bật "Copy nội dung từ nguồn" hoặc "Đăng bài bằng cách chia sẻ" nhưng không có link nguồn — bỏ qua.'
+      this.sendLog(msg)
+      await this.supabase.appendCampaignLog(campaign.id, msg)
+      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      return
     }
 
-    // Wait for the message input to appear
-    await controller.executeAction('waitForSelector', {
-      selector: '[role="textbox"][contenteditable="true"]',
-      timeout: 15000
-    })
-    await new Promise(r => setTimeout(r, 1000))
-
-    // Click into the message input
-    await controller.executeAction('click', {
-      selector: '[role="textbox"][contenteditable="true"]'
-    })
-    await new Promise(r => setTimeout(r, 500))
-
-    // Set the message content (uses paste-based approach for multiline support)
-    if (message) {
-      await controller.executeAction('setValue', {
-        selector: '[role="textbox"][contenteditable="true"]',
-        value: message
-      })
-      await new Promise(r => setTimeout(r, 1000))
-    }
-
-    // Attach images via drag-and-drop onto the message textbox
-    if (images.length > 0) {
-      const dropResult = await controller.executeAction('dropFile', {
-        selector: '[role="textbox"][contenteditable="true"]',
-        filePaths: images
-      })
-      if (!dropResult.success) {
-        throw new Error('Không thể đính kèm ảnh vào tin nhắn')
+    // --- Rate limit ---
+    const limitConfig = extra.actionLimits
+    try {
+      const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, 'Đăng bài', limitConfig)
+      if (!limitStatus.ok) {
+        await this.supabase.appendCampaignLog(campaign.id, `Từ chối chạy do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
+        this.sendLog(`⚠️ Từ chối "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
+        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+        return
       }
-      this.sendLog(`🖼 Đã đính kèm ${images.length} ảnh vào tin nhắn`)
-      // Wait for previews/uploads to finalize before sending
-      await new Promise(r => setTimeout(r, Math.max(3000, images.length * 1500)))
+    } catch (err) {
+      console.error('Rate limit check error:', err)
     }
 
-    // Press Enter to send
-    await controller.executeAction('pressKey', { key: 'Enter' })
-    await new Promise(r => setTimeout(r, 2000))
-  }
+    // --- Chọn workflow + label dựa trên flags ---
+    // Mỗi mode 1 workflow riêng (block scrape được dùng làm node trong copy-source workflow).
+    // Scheduler chỉ load + chạy — không còn invoke block riêng hay làm browser action.
+    let chosenFlow: import('../../shared/types').FlowData = flow
+    let actionLabel = 'Đăng bài'
 
-  /**
-   * Send a friend request to a Facebook user.
-   * Navigate to their profile and click "Add Friend" button.
-   */
-  private async sendFriendRequest(
-    controller: import('../../shared/types').IBrowserController,
-    uid: string
-  ): Promise<void> {
-    // Navigate to the user's profile
-    const profileUrl = uid.match(/^\d+$/)
-      ? `https://www.facebook.com/profile.php?id=${uid}`
-      : `https://www.facebook.com/${uid}`
-
-    await controller.executeAction('navigate', { url: profileUrl })
-    await new Promise(r => setTimeout(r, 3000))
-
-    // Wait for profile page
-    await controller.executeAction('waitForSelector', {
-      selector: '[role="main"]',
-      timeout: 10000
-    })
-    await new Promise(r => setTimeout(r, 1500))
-
-    // Click the "Thêm bạn bè" button using exact XPath
-    const addFriendResult = await controller.executeAction('click', {
-      selector: '//*[@role="button" and .="Thêm bạn bè"]'
-    })
-
-    if (!addFriendResult.success) {
-      throw new Error('Không tìm thấy nút Kết bạn. Có thể đã là bạn bè hoặc đã gửi lời mời.')
+    if (extra.postAsReels) {
+      const reelsFlow = await this.supabase.loadFlow(FB_REELS_WORKFLOW_ID)
+      if (!reelsFlow) throw new Error('Không tìm thấy workflow "Đăng Reels"')
+      if ((campaign.images || []).length === 0) {
+        throw new Error('Đăng Reels yêu cầu ít nhất 1 video trong phần Media')
+      }
+      chosenFlow = reelsFlow
+      actionLabel = 'Đăng Reels'
+    } else if (extra.sharePost && currentLink) {
+      const shareFlow = await this.supabase.loadFlow(FB_SHARE_POST_WORKFLOW_ID)
+      if (!shareFlow) throw new Error('Không tìm thấy workflow "Đăng bài bằng cách chia sẻ"')
+      chosenFlow = shareFlow
+      actionLabel = 'Đăng bài (chia sẻ)'
+    } else if (extra.copyContentFromSource && currentLink) {
+      const copyFlow = await this.supabase.loadFlow(FB_POST_COPY_SOURCE_WORKFLOW_ID)
+      if (!copyFlow) throw new Error('Không tìm thấy workflow "Đăng bài (copy nội dung từ nguồn)"')
+      chosenFlow = copyFlow
+      // actionLabel giữ "Đăng bài"
     }
 
-    await new Promise(r => setTimeout(r, 2000))
+    // Inject variables cho workflow đã chọn. blockInput nodes của workflow
+    // sẽ đọc từ flowCopy.variables qua field name tương ứng.
+    const flowCopy = JSON.parse(JSON.stringify(chosenFlow))
+    flowCopy.variables = {
+      ...(flowCopy.variables || {}),
+      sourceLink: currentLink || '',
+      includeImages: extra.includeSourceImages === true,
+      videoPath: (campaign.images || [])[0] || ''
+      // campaignContent đã được runWorkflowForDetail set từ campaign.content
+    }
+
+    try {
+      await this.runWorkflowForDetail(account.id, campaign, flowCopy, null)
+      // Bổ sung log specific cho share/reels (runWorkflowForDetail log "Đăng bài" chung)
+      if (actionLabel !== 'Đăng bài') {
+        try {
+          await this.supabase.createDetailAction({
+            campaignId: campaign.id,
+            accountId: account.id,
+            actionName: actionLabel,
+            status: 'success',
+            log: currentLink ? `${actionLabel} thành công (nguồn: ${currentLink})` : `${actionLabel} thành công`,
+            postUrl: currentLink || undefined
+          })
+        } catch {}
+      }
+      await this.handleCampaignCompletion(campaign)
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
+      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
+      try {
+        await this.supabase.createDetailAction({
+          campaignId: campaign.id,
+          accountId: account.id,
+          actionName: actionLabel,
+          status: 'error',
+          log: errMsg
+        })
+      } catch {}
+    }
   }
 }
