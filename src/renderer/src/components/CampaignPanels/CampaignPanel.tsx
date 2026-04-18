@@ -88,7 +88,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       case 'đang chạy': return 'var(--accent-warning)'
       case 'hoàn thành': return 'var(--accent-success)'
       case 'lỗi': return 'var(--accent-error)'
-      case 'tạm dừng': return 'var(--accent-info)'
+      case 'tạm dừng': return 'var(--accent-error)'
       case 'success': return 'var(--accent-success)'
       case 'error': return 'var(--accent-error)'
       default: return 'var(--text-tertiary)'

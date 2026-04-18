@@ -175,6 +175,13 @@ const electronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.CAMPAIGN_LOG, handler)
   },
 
+  // Campaign Status (real-time)
+  onCampaignStatusUpdated: (callback: (campaign: Campaign) => void): () => void => {
+    const handler = (_event: Electron.IpcRendererEvent, campaign: Campaign) => callback(campaign)
+    ipcRenderer.on(IPC_CHANNELS.CAMPAIGN_STATUS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CAMPAIGN_STATUS_UPDATED, handler)
+  },
+
   // Account Actions
   checkFacebookLogin: (accountId: number): Promise<{ loggedIn: boolean; status: string; reason?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_CHECK_FB_LOGIN, accountId),

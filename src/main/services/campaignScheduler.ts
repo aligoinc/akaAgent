@@ -137,7 +137,7 @@ export class CampaignScheduler {
       const endDate = new Date(campaign.scheduleEndDate)
       if (now >= endDate) {
         // Past end date, mark as complete
-        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
         await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch (đã hết ngày kết thúc)`)
         this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
         return
@@ -161,20 +161,20 @@ export class CampaignScheduler {
         tomorrow.setDate(tomorrow.getDate() + 1)
         tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
 
-        await this.supabase.updateCampaign(campaign.id, {
+        await this.updateCampaignAndBroadcast(campaign.id, {
           status: 'chờ xử lý',
           schedule: tomorrow.toISOString()
         })
         await this.supabase.appendCampaignLog(campaign.id, `Dữ liệu đã được làm mới. Chạy lại lúc ${tomorrow.toLocaleString('vi-VN')}`)
         this.sendLog(`🔄 Chiến dịch "${campaign.name}": dữ liệu đã reset, chạy lại ${tomorrow.toLocaleString('vi-VN')}`)
       } else {
-        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
       }
       return
     }
 
     // Default: mark as complete
-    await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+    await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
     await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch`)
     this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
@@ -187,7 +187,7 @@ export class CampaignScheduler {
 
     try {
       // Update campaign status to running
-      await this.supabase.updateCampaign(campaign.id, { status: 'đang chạy' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy' })
       await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
       this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
@@ -198,7 +198,7 @@ export class CampaignScheduler {
       const action = await this.supabase.getCampaignAction(campaign.actionId)
       if (!action) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy action "${campaign.actionId}"`)
         return
       }
@@ -211,7 +211,7 @@ export class CampaignScheduler {
 
       if (!action.workflowId) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy workflow`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy workflow cho action "${campaign.actionId}"`)
         return
       }
@@ -220,7 +220,7 @@ export class CampaignScheduler {
       const flow = await this.supabase.loadFlow(action.workflowId)
       if (!flow) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy flow ${action.workflowId}`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy flow`)
         return
       }
@@ -262,7 +262,7 @@ export class CampaignScheduler {
           if (!limitStatus.ok) {
             await this.supabase.appendCampaignLog(campaign.id, `Từ chối chạy do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
             this.sendLog(`⚠️ Từ chối "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
-            await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+            await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
             await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
             return
           }
@@ -335,17 +335,17 @@ export class CampaignScheduler {
               tomorrow.setDate(tomorrow.getDate() + 1)
               tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
               
-              await this.supabase.updateCampaign(campaign.id, {
+              await this.updateCampaignAndBroadcast(campaign.id, {
                 status: 'chờ xử lý',
                 schedule: tomorrow.toISOString()
               })
               await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do đạt giới hạn. Cập nhật lịch chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
               this.sendLog(`🔄 Chiến dịch "${campaign.name}" sẽ chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
             } else {
-              await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+              await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
             }
           } else {
-            await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+            await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
           }
         } else {
           // Handle completion based on schedule type
@@ -359,7 +359,7 @@ export class CampaignScheduler {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.recoverStuckDetails(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
-      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
       // Đối với simple campaign (không có detail row), ghi 1 entry vào detail_actions
@@ -705,6 +705,19 @@ export class CampaignScheduler {
     }
   }
 
+  /**
+   * Cập nhật campaign xong push luôn ra renderer để UI hiện status realtime.
+   */
+  private async updateCampaignAndBroadcast(id: number, updates: Partial<Campaign>): Promise<Campaign> {
+    const updated = await this.supabase.updateCampaign(id, updates)
+    try {
+      this.mainWindow.webContents.send(IPC_CHANNELS.CAMPAIGN_STATUS_UPDATED, updated)
+    } catch {
+      // Window may be closed
+    }
+    return updated
+  }
+
   // =========== Facebook Message & Friend Request Campaign ===========
   // Group post post-flow actions (detect pending / leave group / join group) đã
   // được refactor sang FB_GROUP_POST_COMPLETION_BLOCK_ID — sub-block invoke từ
@@ -776,21 +789,21 @@ export class CampaignScheduler {
 
     if (!enableMessage && !enableAddFriend) {
       await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Chưa chọn hành động nào (nhắn tin hoặc kết bạn)')
-      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       return
     }
 
     const details = await this.supabase.listCampaignDetails(campaign.id)
     if (details.length === 0) {
       await this.supabase.appendCampaignLog(campaign.id, 'Không có data để xử lý')
-      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       return
     }
 
     const flow = await this.supabase.loadFlow(FB_MESSAGE_FRIEND_WORKFLOW_ID)
     if (!flow) {
       await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy workflow Nhắn tin & Kết bạn')
-      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       return
     }
 
@@ -885,7 +898,7 @@ export class CampaignScheduler {
       const controller = this.webviewRegistry.getController(account.id)
       if (!controller) {
         await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy tab trình duyệt')
-        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
         return
       }
 
@@ -989,10 +1002,10 @@ export class CampaignScheduler {
         const tomorrow = new Date(now)
         tomorrow.setDate(tomorrow.getDate() + 1)
         tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
-        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý', schedule: tomorrow.toISOString() })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', schedule: tomorrow.toISOString() })
         await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do đạt giới hạn. Chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
       } else {
-        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
       }
     } else {
       await this.handleCampaignCompletion(campaign)
@@ -1035,7 +1048,7 @@ export class CampaignScheduler {
       currentLink = sourceLinks[idx]
       const nextIdx = (idx + 1) % sourceLinks.length
       try {
-        await this.supabase.updateCampaign(campaign.id, {
+        await this.updateCampaignAndBroadcast(campaign.id, {
           extraSettings: { ...extra, sourceLinkIndex: nextIdx }
         })
       } catch (err) {
@@ -1049,7 +1062,7 @@ export class CampaignScheduler {
       const msg = '⚠️ Bật "Copy nội dung từ nguồn" hoặc "Đăng bài bằng cách chia sẻ" nhưng không có link nguồn — bỏ qua.'
       this.sendLog(msg)
       await this.supabase.appendCampaignLog(campaign.id, msg)
-      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       return
     }
 
@@ -1060,7 +1073,7 @@ export class CampaignScheduler {
       if (!limitStatus.ok) {
         await this.supabase.appendCampaignLog(campaign.id, `Từ chối chạy do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
         this.sendLog(`⚠️ Từ chối "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
         return
       }
     } catch (err) {
@@ -1123,7 +1136,7 @@ export class CampaignScheduler {
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
-      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
       try {
         await this.supabase.createDetailAction({
