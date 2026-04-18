@@ -5,6 +5,7 @@ import { builtinActions } from '../../../../shared/actions'
 import { ActionDefinition, ActionCategory, ElementDefinition, FlowData } from '../../../../shared/types'
 import { useElementStore } from '../../stores/elementStore'
 import { useBlockStore } from '../../stores/blockStore'
+import { useUiStore } from '../../stores/uiStore'
 
 const categoryOrder: ActionCategory[] = ['navigation', 'interaction', 'data', 'utility', 'control', 'block']
 
@@ -220,7 +221,11 @@ export default function Sidebar({ onEditBlock, onDeleteFlow }: SidebarProps) {
                   style={{ opacity: 0.5, padding: 4 }}
                   onClick={(e) => {
                     e.stopPropagation()
-                    if (confirm(`Delete element "${element.name}"?`)) deleteElement(element.id)
+                    useUiStore.getState().showConfirm(
+                      `Xoá element "${element.name}"?`,
+                      () => deleteElement(element.id),
+                      { title: 'Xoá element', confirmText: 'Xoá', variant: 'danger' }
+                    )
                   }}
                   title="Delete element"
                 >
@@ -266,7 +271,11 @@ export default function Sidebar({ onEditBlock, onDeleteFlow }: SidebarProps) {
                     style={{ opacity: 0.5, padding: 4 }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (confirm(`Delete workflow "${flow.name}"?`)) onDeleteFlow?.(flow.id)
+                      useUiStore.getState().showConfirm(
+                        `Xoá workflow "${flow.name}"?`,
+                        () => onDeleteFlow?.(flow.id),
+                        { title: 'Xoá workflow', confirmText: 'Xoá', variant: 'danger' }
+                      )
                     }}
                     title="Delete workflow"
                   >
@@ -308,7 +317,11 @@ export default function Sidebar({ onEditBlock, onDeleteFlow }: SidebarProps) {
                     style={{ opacity: 0.5, padding: 4 }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (confirm(`Delete block "${block.name}"?`)) onDeleteFlow?.(block.id)
+                      useUiStore.getState().showConfirm(
+                        `Xoá block "${block.name}"?`,
+                        () => onDeleteFlow?.(block.id),
+                        { title: 'Xoá block', confirmText: 'Xoá', variant: 'danger' }
+                      )
                     }}
                     title="Delete block"
                   >

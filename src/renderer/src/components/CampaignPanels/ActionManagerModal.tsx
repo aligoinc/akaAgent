@@ -55,14 +55,19 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
     setShowForm(true)
   }
 
-  const handleDelete = async (action: CampaignAction) => {
-    if (!confirm(`Xoá hành động "${action.name}"?`)) return
-    try {
-      await deleteCampaignAction(action.id)
-    } catch (err) {
-      console.error('Failed to delete action:', err)
-      useUiStore.getState().showAlert('', 'error')
-    }
+  const handleDelete = (action: CampaignAction) => {
+    useUiStore.getState().showConfirm(
+      `Xoá hành động "${action.name}"?`,
+      async () => {
+        try {
+          await deleteCampaignAction(action.id)
+        } catch (err) {
+          console.error('Failed to delete action:', err)
+          useUiStore.getState().showAlert('', 'error')
+        }
+      },
+      { title: 'Xoá hành động', confirmText: 'Xoá', variant: 'danger' }
+    )
   }
 
   const handleSubmit = async () => {
