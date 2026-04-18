@@ -27,6 +27,7 @@ interface CampaignStore {
   updateCampaign: (id: number, updates: Partial<Campaign>) => Promise<void>
   deleteCampaign: (id: number) => Promise<void>
   cloneCampaign: (id: number) => Promise<Campaign>
+  upsertCampaign: (campaign: Campaign) => void
 
   // Campaign Details
   campaignDetails: CampaignDetail[]
@@ -177,6 +178,16 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const cloned = await window.electronAPI.cloneCampaign(id)
     await get().loadCampaigns()
     return cloned
+  },
+
+  upsertCampaign: (campaign) => {
+    set(state => {
+      const idx = state.campaigns.findIndex(c => c.id === campaign.id)
+      if (idx === -1) return { campaigns: [campaign, ...state.campaigns] }
+      const next = state.campaigns.slice()
+      next[idx] = { ...next[idx], ...campaign }
+      return { campaigns: next }
+    })
   },
 
   // =========== CAMPAIGN DETAILS ===========

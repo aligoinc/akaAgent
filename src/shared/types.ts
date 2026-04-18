@@ -398,6 +398,9 @@ export const IPC_CHANNELS = {
   // Campaign Log (real-time)
   CAMPAIGN_LOG: 'campaign:log',
 
+  // Campaign Status (real-time: main → renderer whenever a campaign row changes)
+  CAMPAIGN_STATUS_UPDATED: 'campaign:status-updated',
+
   // Account Actions
   ACCOUNT_CHECK_FB_LOGIN: 'account:check-fb-login',
   ACCOUNT_RELOAD_PAGE: 'account:reload-page',

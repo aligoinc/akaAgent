@@ -54,7 +54,7 @@ export default function App() {
   const { loadElements } = useElementStore()
   const { loadBlocks } = useBlockStore()
   const { theme } = useThemeStore()
-  const { loadAccounts } = useCampaignStore()
+  const { loadAccounts, upsertCampaign } = useCampaignStore()
 
   const [showFlowList, setShowFlowList] = useState(false)
   const [flows, setFlows] = useState<FlowData[]>([])
@@ -67,6 +67,15 @@ export default function App() {
     })
     return unsubscribe
   }, [loadAccounts])
+
+  // Listen for realtime campaign status updates (scheduler → renderer)
+  useEffect(() => {
+    if (!window.electronAPI?.onCampaignStatusUpdated) return
+    const unsubscribe = window.electronAPI.onCampaignStatusUpdated((campaign) => {
+      upsertCampaign(campaign)
+    })
+    return unsubscribe
+  }, [upsertCampaign])
 
   // Apply theme class to body
   useEffect(() => {
