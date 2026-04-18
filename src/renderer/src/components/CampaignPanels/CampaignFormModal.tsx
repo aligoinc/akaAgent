@@ -979,11 +979,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       className="stepper-textarea"
                       placeholder={isTimelinePostCampaign && formData.copyContentFromSource
                         ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
-                        : "Nhập nội dung chiến dịch ở đây..."}
+                        : "Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."}
                       value={formData.content}
                       onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
                       rows={8}
                     />
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                      Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
+                    </div>
                   </div>
 
                   {/* Media section */}
@@ -1223,11 +1226,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                             <label>Nội dung comment</label>
                             <textarea
                               className="stepper-textarea"
-                              placeholder="Nhập nội dung comment..."
+                              placeholder="Nhập nội dung comment. Dùng dấu | để tách nhiều nội dung — comment 1 dùng nội dung 1, comment 2 dùng nội dung 2..."
                               value={formData.commentContent}
                               onChange={e => setFormData(p => ({ ...p, commentContent: e.target.value }))}
                               rows={4}
                             />
+                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                              Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — comment thứ K trong group dùng nội dung thứ K (lặp lại từ đầu khi hết biến thể).
+                            </div>
                           </div>
                         </div>
                       )}

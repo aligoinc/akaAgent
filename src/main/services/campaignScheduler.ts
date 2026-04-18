@@ -312,7 +312,7 @@ export class CampaignScheduler {
             ...campaign,
             extraSettings: { ...campaign.extraSettings, enableComment: overrideEnableComment }
           }
-          await this.runWorkflowForDetail(account.id, campaignToRun, flow, detail)
+          await this.runWorkflowForDetail(account.id, campaignToRun, flow, detail, i)
 
           // Sleep between details
           if (i < details.length - 1) {
@@ -398,7 +398,8 @@ export class CampaignScheduler {
     accountId: number,
     campaign: Campaign,
     flow: import('../../shared/types').FlowData,
-    detail: CampaignDetail | null
+    detail: CampaignDetail | null,
+    detailIndex: number = 0
   ): Promise<void> {
     const detailName = detail?.name || detail?.uid || 'N/A'
 
@@ -454,6 +455,22 @@ export class CampaignScheduler {
       }
     }
 
+    // Phân tách nội dung theo dấu `|` → deterministic cycle theo chỉ số:
+    //   - Bài đăng: detail thứ N dùng variant[N % numVariants].
+    //   - Comment trong cùng 1 group: comment thứ K dùng variant[K % numVariants],
+    //     reset lại đầu variant list ở mỗi group.
+    const postVariants = this.splitContentVariants(campaign.content)
+    const commentVariants = this.splitContentVariants(campaign.extraSettings?.commentContent)
+    const selectedPostContent = this.cycleVariant(postVariants, detailIndex)
+    // `commentIterations[k] = { position, text }` — flow loop iterates mảng này
+    // thay vì commentIndices, block dùng sourcePath để lấy position + text.
+    const commentIterations = commentIndices.map((position, k) => ({
+      position,
+      text: this.cycleVariant(commentVariants, k)
+    }))
+    // `selectedCommentContent` dùng cho preview log per-comment bên dưới.
+    const selectedCommentContent = commentVariants[0] || ''
+
     // Prepare flow variables with campaign/detail data
     // The workflow nodes will consume these variables via blockInput/inputMapping
     const flowCopy = JSON.parse(JSON.stringify(flow))
@@ -461,13 +478,14 @@ export class CampaignScheduler {
       ...flowCopy.variables,
       campaignId: campaign.id,
       campaignName: campaign.name,
-      campaignContent: campaign.content,
-      commentContent: campaign.extraSettings?.commentContent || '',
+      campaignContent: selectedPostContent,
+      commentContent: selectedCommentContent,
       sharePost: campaign.extraSettings?.sharePost ?? false,
       enableComment,
       commentType,
       commentCount,
       commentIndices,
+      commentIterations,
       images: validImages,
       accountId: accountId,
       ...(detail ? {
@@ -603,10 +621,11 @@ export class CampaignScheduler {
 
       // ----- Milestone 2: Each successful comment -----
       if (enableComment && commentSuccessCount > 0) {
-        const commentBody = campaign.extraSettings?.commentContent || ''
-        const preview = commentBody.length > 50 ? commentBody.substring(0, 50) + '...' : commentBody
         for (let i = 0; i < commentSuccessCount; i++) {
-          const position = commentIndices[i]
+          const iter = commentIterations[i]
+          const position = iter?.position ?? commentIndices[i]
+          const commentBody = iter?.text || ''
+          const preview = commentBody.length > 50 ? commentBody.substring(0, 50) + '...' : commentBody
           const target = commentType === 'own' ? 'bài của mình' : `bài thứ ${position}`
           try {
             await this.supabase.createDetailAction({
@@ -719,6 +738,29 @@ export class CampaignScheduler {
   }
 
   /**
+   * Tách nội dung theo dấu `|` thành mảng biến thể (đã trim, bỏ rỗng).
+   * Nếu input rỗng/null → `[]`; nếu không có dấu `|` → `[raw]`.
+   * Dùng cho cả `content` và `commentContent`.
+   */
+  private splitContentVariants(raw: string | undefined | null): string[] {
+    if (!raw) return []
+    if (!raw.includes('|')) return [raw]
+    return raw.split('|').map(s => s.trim()).filter(s => s.length > 0)
+  }
+
+  /**
+   * Chọn biến thể theo chỉ số (cycle). `index` vượt quá length sẽ modulo về
+   * đầu. Mảng rỗng → `''`.
+   *   cycleVariant(['a','b','c'], 0) → 'a'
+   *   cycleVariant(['a','b','c'], 3) → 'a' (cycle)
+   */
+  private cycleVariant(variants: string[], index: number): string {
+    if (variants.length === 0) return ''
+    const safeIdx = ((index % variants.length) + variants.length) % variants.length
+    return variants[safeIdx]
+  }
+
+  /**
    * Loop qua details, mỗi detail invoke FB_MESSAGE_FRIEND_WORKFLOW_ID 1 lần
    * (workflow chứa 2 action node fbSendMessage + fbAddFriend, mỗi action self-catch
    * lỗi và trả qua output.ok/error nên cả 2 đều chạy độc lập). Scheduler đọc
@@ -821,15 +863,20 @@ export class CampaignScheduler {
         await this.supabase.appendCampaignLog(campaign.id, msg)
       }
 
+      // Cycle biến thể nội dung nhắn tin theo thứ tự detail (tách bằng `|`).
+      // Detail thứ N → variant[N % numVariants].
+      const messageVariants = this.splitContentVariants(messageContent)
+      const selectedMessageContent = this.cycleVariant(messageVariants, i)
+
       // Skip nếu enableMessage nhưng không có nội dung và không có ảnh (matches old behavior)
-      const effectiveEnableMessage = enableMessage && (messageContent.trim().length > 0 || validImages.length > 0)
+      const effectiveEnableMessage = enableMessage && (selectedMessageContent.trim().length > 0 || validImages.length > 0)
 
       // Run workflow
       const flowCopy = JSON.parse(JSON.stringify(flow))
       flowCopy.variables = {
         ...(flowCopy.variables || {}),
         detailUid: uid,
-        campaignContent: messageContent,
+        campaignContent: selectedMessageContent,
         images: validImages,
         enableMessage: effectiveEnableMessage,
         enableAddFriend

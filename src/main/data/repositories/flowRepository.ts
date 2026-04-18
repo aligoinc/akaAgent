@@ -5,6 +5,25 @@ import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
 
+// Admin tenant (org có is_admin_akabiz=true) sở hữu các flow built-in để
+// quản lý/edit từ "Cài đặt Workflow". Cache trong-process — admin ko đổi runtime.
+let _adminTenantCache: { staffId: number; organizationId: number } | null = null
+async function resolveAdminTenant(): Promise<{ staffId: number; organizationId: number } | null> {
+  if (_adminTenantCache) return _adminTenantCache
+  const { data } = await client()
+    .from('org_organization')
+    .select('id, staff_admin_id')
+    .eq('is_admin_akabiz', true)
+    .limit(1)
+    .maybeSingle()
+  const staffAdminId = data?.staff_admin_id as number | null | undefined
+  const orgId = data?.id as number | undefined
+  if (staffAdminId && orgId) {
+    _adminTenantCache = { staffId: staffAdminId, organizationId: orgId }
+  }
+  return _adminTenantCache
+}
+
 export async function saveFlow(flowData: FlowData): Promise<FlowData> {
   const u = requireCurrentUser()
   const payload = {
@@ -34,13 +53,19 @@ export async function saveFlow(flowData: FlowData): Promise<FlowData> {
 
 export async function loadFlow(flowId: string): Promise<FlowData | null> {
   const u = requireCurrentUser()
-  // Allow staff's own flow OR a system-shared flow (staff_id IS NULL).
-  // System-shared flows are seeded built-ins (FB_SHARE_POST, FB_REELS, ...) used by the scheduler.
+  // Allow: flow của chính staff, flow built-in đã gán admin tenant (để mọi
+  // staff load-to-run được), hoặc legacy NULL (seeded trước commit này —
+  // sẽ tự upsert thành admin ở lần khởi động tiếp).
+  const admin = await resolveAdminTenant()
+  const orClauses = [`staff_id.eq.${u.staffId}`, 'staff_id.is.null']
+  if (admin && admin.staffId !== u.staffId) {
+    orClauses.push(`staff_id.eq.${admin.staffId}`)
+  }
   const { data, error } = await client()
     .from('auto_flows')
     .select('*')
     .eq('id', flowId)
-    .or(`staff_id.eq.${u.staffId},staff_id.is.null`)
+    .or(orClauses.join(','))
     .single()
 
   if (error) return null
@@ -59,8 +84,12 @@ export async function listFlows(): Promise<FlowData[]> {
   return (data || []).map(mapFlowFromDB)
 }
 
-// System-level upsert for seeding built-in workflows (no auth required, owner-less).
+// System-level upsert for seeding built-in workflows (no auth required).
+// Gán về admin tenant (is_admin_akabiz=true) để admin edit được từ "Cài đặt
+// Workflow". Các staff khác vẫn load-to-run qua fallback trong loadFlow.
+// Nếu chưa có admin (DB mới), fallback NULL để ko block seed.
 export async function saveFlowSystem(flowData: FlowData): Promise<FlowData> {
+  const admin = await resolveAdminTenant()
   const payload = {
     id: flowData.id,
     name: flowData.name,
@@ -71,8 +100,8 @@ export async function saveFlowSystem(flowData: FlowData): Promise<FlowData> {
     input_schema: flowData.inputSchema || {},
     output_schema: flowData.outputSchema || {},
     is_block: flowData.isBlock || false,
-    staff_id: null,
-    organization_id: null,
+    staff_id: admin?.staffId ?? null,
+    organization_id: admin?.organizationId ?? null,
     updated_at: new Date().toISOString()
   }
 
