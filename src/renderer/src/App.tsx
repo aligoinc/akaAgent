@@ -18,6 +18,7 @@ import { useAuthStore } from './stores/authStore'
 import { useUiStore } from './stores/uiStore'
 import AlertModal from './components/CampaignPanels/AlertModal'
 import ConfirmModal from './components/CampaignPanels/ConfirmModal'
+import UpdateModal from './components/UpdateModal/UpdateModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
@@ -59,6 +60,25 @@ export default function App() {
 
   const [showFlowList, setShowFlowList] = useState(false)
   const [flows, setFlows] = useState<FlowData[]>([])
+  const [updateInfo, setUpdateInfo] = useState<{ localVersion: string; remoteVersion: string } | null>(null)
+
+  // Auto-check for updates once on app start (non-blocking).
+  useEffect(() => {
+    if (!window.electronAPI?.checkForUpdate) return
+    const timer = setTimeout(async () => {
+      try {
+        const res = await window.electronAPI.checkForUpdate()
+        if (res.hasUpdate) {
+          setUpdateInfo({ localVersion: res.localVersion, remoteVersion: res.remoteVersion })
+        } else if (res.error) {
+          console.warn('Update check error:', res.error)
+        }
+      } catch (err) {
+        console.warn('Update check failed:', err)
+      }
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [])
 
   // Listen for auto-check login status updates from main process
   useEffect(() => {
@@ -228,6 +248,13 @@ export default function App() {
         <div style={{ color: 'var(--text-secondary, #aaa)', fontSize: 13 }}>Đang khởi tạo…</div>
         <AlertModal />
         <ConfirmModal />
+        {updateInfo && (
+          <UpdateModal
+            localVersion={updateInfo.localVersion}
+            remoteVersion={updateInfo.remoteVersion}
+            onClose={() => setUpdateInfo(null)}
+          />
+        )}
       </div>
     )
   }
@@ -238,6 +265,13 @@ export default function App() {
         <LoginPage />
         <AlertModal />
         <ConfirmModal />
+        {updateInfo && (
+          <UpdateModal
+            localVersion={updateInfo.localVersion}
+            remoteVersion={updateInfo.remoteVersion}
+            onClose={() => setUpdateInfo(null)}
+          />
+        )}
       </div>
     )
   }
@@ -319,6 +353,13 @@ export default function App() {
 
       <AlertModal />
       <ConfirmModal />
+      {updateInfo && (
+        <UpdateModal
+          localVersion={updateInfo.localVersion}
+          remoteVersion={updateInfo.remoteVersion}
+          onClose={() => setUpdateInfo(null)}
+        />
+      )}
     </div>
   )
 }

@@ -46,6 +46,12 @@
     "files": [
       "out/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "version.txt",
+        "to": "version.txt"
+      }
+    ],
     "asarUnpack": [
       "node_modules/playwright-core/**/*"
     ],

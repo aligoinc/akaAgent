@@ -416,6 +416,11 @@ export const IPC_CHANNELS = {
   CONTACTS_LIST: 'contacts:list',
   CONTACTS_DELETE: 'contacts:delete',
   CONTACTS_PROGRESS: 'contacts:progress',
+
+  // Auto-update
+  UPDATE_CHECK: 'update:check',
+  UPDATE_DOWNLOAD_INSTALL: 'update:download-install',
+  UPDATE_PROGRESS: 'update:progress',
 } as const
 
 // ============================================

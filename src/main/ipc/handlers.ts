@@ -15,6 +15,7 @@ import { registerChannelContactHandlers } from './handlers/channelContactHandler
 import { registerElementHandlers } from './handlers/elementHandlers'
 import { registerRunHandlers } from './handlers/runHandlers'
 import { registerAuthHandlers } from './handlers/authHandlers'
+import { registerUpdateHandlers } from './handlers/updateHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const supabase = new SupabaseService()
@@ -52,6 +53,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   // Register domain handlers
   registerAuthHandlers()
+  registerUpdateHandlers(mainWindow)
   registerFlowHandlers(mainWindow, supabase)
   registerBrowserHandlers(webviewRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)
