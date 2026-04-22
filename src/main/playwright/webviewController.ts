@@ -1100,16 +1100,39 @@ export class WebviewController {
 
           await this.executeAction('navigate', { url })
           await new Promise(r => setTimeout(r, 4000))
-          await this.executeAction('waitForSelector', { selector: '[role="main"]', timeout: 10000 }).catch(() => null)
+
+          // Cuộn xuống ~2000px để kích hoạt lazy-render của FB — nếu không, bài post có thể
+          // chưa được mount vào DOM, khiến waitForSelector container fail oan.
+          await this.executeAction('scroll', { direction: 'down', amount: 2000 }).catch(() => null)
           await new Promise(r => setTimeout(r, 1500))
 
-          const shareBtnSel = '//*[@role="button" and (@aria-label="Chia sẻ" or @aria-label="Share" or .="Chia sẻ" or .="Share")]'
+          // Tìm container bài đăng trước (page/profile vs group khác selector — union cả hai)
+          // để tránh khớp nhầm nút "Chia sẻ" của component khác (sidebar, reel, story...)
+          const postContainerSel = [
+            '//*[@role="feed"]/following-sibling::*[not(@class)][1]/div[not(@class)]',
+            '//*[@class="x1yztbdb"]/following-sibling::*[not(@class)][1]/div[not(@class)]',
+            '//*[@role="dialog" and not(@aria-label="Thông báo") and not(@aria-label="Messenger")]',
+            '//*[@role="feed"][last()]/*/*/div[not(@class)][1]'
+          ].join('|')
+          const containerCheck = await this.executeAction('waitForSelector', { selector: postContainerSel, timeout: 10000 })
+          if (!containerCheck.success || containerCheck.output?.found === false) {
+            throw new Error('Không tìm thấy container bài đăng nguồn')
+          }
+          await new Promise(r => setTimeout(r, 1500))
+
+          // Nút Chia sẻ scope trong container (append descendant axis `//...` sau mỗi nhánh container)
+          // FB render nút Chia sẻ theo 2 dạng:
+          //   (a) role=button có aria-label/text là "Chia sẻ" / "Share"
+          //   (b) role=button chứa descendant có data-ad-rendering-role="share_button" (biến thể mới)
+          const shareBtnInner = '//*[@role="button" and (@aria-label="Chia sẻ" or @aria-label="Share" or .="Chia sẻ" or .="Share" or .//*[@data-ad-rendering-role="share_button"])]'
+          const shareBtnSel = postContainerSel.split('|').map(c => c + shareBtnInner).join('|')
           const shareClick = await this.executeAction('click', { selector: shareBtnSel })
           if (!shareClick.success) throw new Error('Không tìm thấy nút Chia sẻ trên bài đăng nguồn')
           await new Promise(r => setTimeout(r, 2500))
 
-          const shareNowSel = '//*[@role="menuitem" and (contains(.,"Chia sẻ ngay") or contains(.,"Chia sẻ lên trang cá nhân") or contains(.,"Share now") or contains(.,"Share to your feed") or contains(.,"Share to Feed"))]'
-          await this.executeAction('click', { selector: shareNowSel }).catch(() => null)
+          const shareNowSel = '//*[@role="button" and contains(.,"Chia sẻ ngay")]'
+          const shareNowClick = await this.executeAction('click', { selector: shareNowSel })
+          if (!shareNowClick.success) throw new Error('Không tìm thấy nút "Chia sẻ ngay" trong menu chia sẻ')
           await new Promise(r => setTimeout(r, 3500))
 
           const composerSel = '[role="dialog"] [contenteditable="true"]'
