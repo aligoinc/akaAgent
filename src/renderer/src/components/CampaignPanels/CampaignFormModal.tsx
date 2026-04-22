@@ -4,6 +4,7 @@ import { useCampaignStore } from '../../stores/campaignStore'
 import { Campaign, CampaignDetail, CampaignExtraSettings } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
 import FriendPickerModal from './FriendPickerModal'
+import GroupPickerModal from './GroupPickerModal'
 import { useUiStore } from '../../stores/uiStore'
 
 interface CampaignFormModalProps {
@@ -36,6 +37,11 @@ const SIMPLE_CAMPAIGN_ACTIONS = new Set([
 // Campaign action IDs for "Nhắn tin & Kết bạn" type — hide extra (group), show details, show message/friend toggles
 const MESSAGE_FRIEND_ACTIONS = new Set([
   'facebook_message_friend'
+])
+
+// Campaign action IDs for "Đăng bài vào group" type — show "Chọn nhóm" picker in data list
+const GROUP_POST_ACTIONS = new Set([
+  'facebook_group_post'
 ])
 
 // Campaign action IDs that show the "Nguồn đăng bài" section (source links, copy content, share, reels)
@@ -175,6 +181,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isMessageFriendCampaign = MESSAGE_FRIEND_ACTIONS.has(formData.actionId)
+  const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const STEPS = isSimpleCampaign
     ? ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
@@ -521,6 +528,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   }
 
   const [showFriendPicker, setShowFriendPicker] = useState(false)
+  const [showGroupPicker, setShowGroupPicker] = useState(false)
 
   const onFriendsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
     const newRows: Partial<CampaignDetail>[] = contacts.map(c => ({
@@ -533,6 +541,19 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     }))
     setDetails(prev => [...prev, ...newRows])
     showAlert(`Đã thêm ${newRows.length} bạn bè.`, 'success')
+  }
+
+  const onGroupsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
+    const newRows: Partial<CampaignDetail>[] = contacts.map(c => ({
+      name: c.name,
+      uid: c.uid || '',
+      phone: '',
+      email: '',
+      note: '',
+      status: 'chờ xử lý'
+    }))
+    setDetails(prev => [...prev, ...newRows])
+    showAlert(`Đã thêm ${newRows.length} nhóm.`, 'success')
   }
 
   return (
@@ -1337,8 +1358,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       <Upload size={14} /> Upload TXT
                     </button>
                     {isMessageFriendCampaign && (
-                      <button 
-                        className="btn btn-secondary" 
+                      <button
+                        className="btn btn-secondary"
                         onClick={() => {
                           if (formData.channelIds.length === 0) {
                             showAlert('Vui lòng chọn tài khoản trước.', 'error')
@@ -1349,6 +1370,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         title="Chọn bạn bè từ danh sách liên hệ"
                       >
                         <Users size={14} /> Chọn bạn bè
+                      </button>
+                    )}
+                    {isGroupPostCampaign && (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          if (formData.channelIds.length === 0) {
+                            showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                            return
+                          }
+                          setShowGroupPicker(true)
+                        }}
+                        title="Chọn nhóm từ danh sách đã tham gia"
+                      >
+                        <Users size={14} /> Chọn nhóm
                       </button>
                     )}
                     <input
@@ -1427,6 +1463,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           channelId={formData.channelIds[0]}
           onClose={() => setShowFriendPicker(false)}
           onSelect={onFriendsSelected}
+        />
+      )}
+      {/* Group Picker Modal */}
+      {showGroupPicker && formData.channelIds.length > 0 && (
+        <GroupPickerModal
+          channelId={formData.channelIds[0]}
+          onClose={() => setShowGroupPicker(false)}
+          onSelect={onGroupsSelected}
         />
       )}
     </div>
