@@ -492,7 +492,9 @@ export class CampaignScheduler {
         detailId: detail.id,
         detailName: detail.name,
         detailPhone: detail.phone,
-        detailUid: detail.uid,
+        detailUid: campaign.actionId === 'facebook_group_post' && detail.uid
+          ? this.normalizeGroupUrl(detail.uid)
+          : detail.uid,
         detailEmail: detail.email
       } : {}),
       // Group posting extra settings
@@ -748,6 +750,22 @@ export class CampaignScheduler {
       // Not a URL, return as-is
     }
     return trimmed
+  }
+
+  /**
+   * Chuẩn hoá uid/link group thành URL đầy đủ để truyền vào `node-navigate`.
+   *   - Bare UID (`164469482423151`) hoặc slug (`myvang.baclieu`) → wrap với
+   *     `https://www.facebook.com/groups/{uid}/`
+   *   - Link đầy đủ (có http/https) → giữ nguyên
+   *   - `facebook.com/groups/...` thiếu protocol → thêm `https://`
+   */
+  private normalizeGroupUrl(raw: string): string {
+    const trimmed = raw.trim()
+    if (!trimmed) return trimmed
+    if (/^https?:\/\//i.test(trimmed)) return trimmed
+    if (/^(www\.)?facebook\.com\//i.test(trimmed)) return `https://${trimmed}`
+    const cleaned = trimmed.replace(/^\/+|\/+$/g, '').replace(/^groups\//i, '')
+    return `https://www.facebook.com/groups/${cleaned}/`
   }
 
   /**
