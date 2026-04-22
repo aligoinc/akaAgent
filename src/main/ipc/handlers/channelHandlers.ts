@@ -81,7 +81,7 @@ export function registerChannelHandlers(supabase: SupabaseService, webviewRegist
         return { loggedIn: true, status: 'đã đăng nhập' }
       } else if (result.checkpoint) {
         await supabase.updateChannel(channelId, { loginStatus: 'checkpoint' })
-        return { loggedIn: false, status: 'checkpoint', reason: 'Kênh bị checkpoint' }
+        return { loggedIn: false, status: 'checkpoint', reason: 'Tài khoản bị checkpoint' }
       } else {
         await supabase.updateChannel(channelId, { loginStatus: 'chưa đăng nhập' })
         return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa đăng nhập Facebook' }

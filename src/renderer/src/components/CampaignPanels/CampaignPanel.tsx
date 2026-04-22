@@ -166,13 +166,13 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
       {/* Campaign Table */}
       <div className="campaign-panel-content" style={{ flex: 1, minHeight: 0 }}>
         {filteredCampaigns.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-text">{filterChannelId ? 'Không có chiến dịch cho kênh này' : 'Chưa có chiến dịch'}</div></div>
+          <div className="empty-state"><div className="empty-state-text">{filterChannelId ? 'Không có chiến dịch cho tài khoản này' : 'Chưa có chiến dịch'}</div></div>
         ) : (
           <div className="campaign-table">
             <div className="campaign-table-header">
               <div className="campaign-col col-name">Tên</div>
               <div className="campaign-col col-action">Hành động</div>
-              <div className="campaign-col col-channel">Kênh</div>
+              <div className="campaign-col col-channel">Tài khoản</div>
               <div className="campaign-col col-status">Trạng thái</div>
               <div className="campaign-col col-schedule">Lịch chạy</div>
               <div className="campaign-col col-ops"></div>

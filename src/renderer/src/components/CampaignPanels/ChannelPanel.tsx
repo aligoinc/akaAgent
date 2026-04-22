@@ -70,9 +70,9 @@ export default function ChannelPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   const handleDelete = (channel: OrgChannel) => {
     useUiStore.getState().showConfirm(
-      `Xoá kênh "${channel.name}"?`,
+      `Xoá tài khoản "${channel.name}"?`,
       async () => { await deleteChannel(channel.id) },
-      { title: 'Xoá kênh', confirmText: 'Xoá', variant: 'danger' }
+      { title: 'Xoá tài khoản', confirmText: 'Xoá', variant: 'danger' }
     )
   }
 
@@ -192,8 +192,8 @@ export default function ChannelPanel({ onNavigateToBrowser, onFilterCampaigns }:
   return (
     <div className="campaign-panel">
       <div className="campaign-panel-header">
-        <span className="campaign-panel-title">Kênh</span>
-        <button className="btn btn-primary btn-icon" onClick={() => { setShowForm(true); setEditingChannel(null); setFormData({ name: '', flatformType: 'facebook' }) }} title="Thêm kênh">
+        <span className="campaign-panel-title">Tài khoản</span>
+        <button className="btn btn-primary btn-icon" onClick={() => { setShowForm(true); setEditingChannel(null); setFormData({ name: '', flatformType: 'facebook' }) }} title="Thêm tài khoản">
           <Plus size={14} />
         </button>
       </div>
@@ -202,7 +202,7 @@ export default function ChannelPanel({ onNavigateToBrowser, onFilterCampaigns }:
         <div className="panel-form">
           <input
             type="text"
-            placeholder="Tên kênh"
+            placeholder="Tên tài khoản"
             value={formData.name}
             onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
             className="panel-input"
@@ -229,7 +229,7 @@ export default function ChannelPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
       <div className="campaign-panel-content">
         {channels.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-text">Chưa có kênh</div></div>
+          <div className="empty-state"><div className="empty-state-text">Chưa có tài khoản</div></div>
         ) : (
           channels.map(channel => (
             <div 

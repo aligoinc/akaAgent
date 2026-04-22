@@ -67,7 +67,7 @@ export class CampaignScheduler {
 
         // Check browser webview is registered for this channel
         if (!this.webviewRegistry.isRegistered(channel.id)) {
-          this.sendLog(`⚠️ Kênh "${channel.name}" chưa mở tab trình duyệt. Bỏ qua.`)
+          this.sendLog(`⚠️ Tài khoản "${channel.name}" chưa mở tab trình duyệt. Bỏ qua.`)
           continue
         }
 
@@ -189,7 +189,7 @@ export class CampaignScheduler {
       // Update campaign status to running
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy' })
       await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
-      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên kênh "${channel.name}"`)
+      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${channel.name}"`)
 
       // Update channel status to running
       await this.supabase.updateChannel(channel.id, { status: 'đang chạy' })
@@ -504,7 +504,7 @@ export class CampaignScheduler {
     // Create a controller that uses the channel's embedded webview
     const controller = this.webviewRegistry.getController(channelId)
     if (!controller) {
-      throw new Error(`Không tìm thấy tab trình duyệt cho kênh ${channelId}`)
+      throw new Error(`Không tìm thấy tab trình duyệt cho tài khoản ${channelId}`)
     }
     
     // Debug: Log the current URL

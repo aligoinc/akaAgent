@@ -120,7 +120,7 @@ export default function BrowserPage({ focusChannelId, onFocusHandled }: BrowserP
       <div className="browser-webview-container" style={{ position: 'relative' }}>
         {activeChannels.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-text">Chưa có kênh nào hoạt động. Hãy thêm kênh ở trang Chiến dịch.</div>
+            <div className="empty-state-text">Chưa có tài khoản nào hoạt động. Hãy thêm tài khoản ở trang Chiến dịch.</div>
           </div>
         ) : (
           activeChannels.map(channel => (
