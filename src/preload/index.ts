@@ -216,7 +216,38 @@ const electronAPI = {
 
   // Resolve absolute disk path for a File object selected via <input type="file">.
   // Electron 32+ removed File.path; webUtils.getPathForFile is the replacement.
-  getPathForFile: (file: File): string => webUtils.getPathForFile(file)
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+
+  // Auto-update
+  checkForUpdate: (): Promise<{
+    hasUpdate: boolean
+    localVersion: string
+    remoteVersion: string
+    error?: string
+  }> => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CHECK),
+
+  downloadAndInstallUpdate: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_DOWNLOAD_INSTALL),
+
+  onUpdateProgress: (
+    callback: (p: {
+      phase: 'downloading' | 'installing' | 'done' | 'error'
+      percent?: number
+      transferred?: number
+      total?: number
+      message?: string
+    }) => void
+  ): () => void => {
+    const handler = (_event: Electron.IpcRendererEvent, p: {
+      phase: 'downloading' | 'installing' | 'done' | 'error'
+      percent?: number
+      transferred?: number
+      total?: number
+      message?: string
+    }): void => callback(p)
+    ipcRenderer.on(IPC_CHANNELS.UPDATE_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_PROGRESS, handler)
+  }
 }
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)
