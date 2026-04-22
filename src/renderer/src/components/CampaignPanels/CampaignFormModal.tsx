@@ -49,7 +49,7 @@ const ALL_STEPS: StepDef[] = [
     title: 'Cài đặt chung',
     fields: [
       { key: 'actionId', label: 'Chiến dịch' },
-      { key: 'flatformAccountIds', label: 'Tài khoản' },
+      { key: 'channelIds', label: 'Kênh' },
       { key: 'name', label: 'Tên chiến dịch' }
     ]
   },
@@ -98,7 +98,7 @@ const ALL_STEPS: StepDef[] = [
 
 export default function CampaignFormModal({ campaign, cloneFromId, onClose }: CampaignFormModalProps) {
   const {
-    accounts, campaignActions,
+    channels, campaignActions,
     createCampaign, updateCampaign,
     createCampaignDetail, loadCampaignDetails
   } = useCampaignStore()
@@ -135,7 +135,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
     actionId: campaign?.actionId || '',
-    flatformAccountIds: campaign?.flatformAccountId ? [campaign.flatformAccountId] : [] as number[],
+    channelIds: campaign?.channelId ? [campaign.channelId] : [] as number[],
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
     scheduleEndDate: initEndDate(),
@@ -157,7 +157,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     imageOption: (campaign?.extraSettings?.imageOption || 'none') as 'none' | 'all' | 'random',
     randomImageCount: campaign?.extraSettings?.randomImageCount || 3,
     images: campaign?.images || [] as string[],
-    splitDataAcrossAccounts: false,
+    splitDataAcrossChannels: false,
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
@@ -185,13 +185,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [activeStep, setActiveStep] = useState('general')
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
-  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
-  const accountDropdownRef = useRef<HTMLDivElement>(null)
+  const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false)
+  const channelDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (accountDropdownRef.current && !accountDropdownRef.current.contains(event.target as Node)) {
-        setIsAccountDropdownOpen(false)
+      if (channelDropdownRef.current && !channelDropdownRef.current.contains(event.target as Node)) {
+        setIsChannelDropdownOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -239,7 +239,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isFieldComplete = (key: string): boolean => {
     switch (key) {
       case 'actionId': return !!formData.actionId
-      case 'flatformAccountIds': return formData.flatformAccountIds.length > 0
+      case 'channelIds': return formData.channelIds.length > 0
       case 'name': return formData.name.trim().length > 0
       case 'schedule': return !!formData.schedule
       case 'scheduleType': return !!formData.scheduleType
@@ -275,8 +275,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   }
 
   const handleSave = async () => {
-    if (!formData.name.trim() || !formData.actionId || formData.flatformAccountIds.length === 0) {
-      showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
+    if (!formData.name.trim() || !formData.actionId || formData.channelIds.length === 0) {
+      showAlert('Vui lòng nhập Tên, Hành động và Kênh.', 'error')
       return
     }
 
@@ -287,34 +287,34 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         await deleteCampaignDetail(id)
       }
 
-      let accountChunks: Partial<CampaignDetail>[][] = [];
-      const numAccounts = formData.flatformAccountIds.length;
+      let channelChunks: Partial<CampaignDetail>[][] = [];
+      const numChannels = formData.channelIds.length;
       
-      if (formData.splitDataAcrossAccounts && numAccounts > 1 && details.length > 0) {
-        // Khởi tạo mảng con cho mỗi tài khoản
-        for (let i = 0; i < numAccounts; i++) {
-          accountChunks.push([]);
+      if (formData.splitDataAcrossChannels && numChannels > 1 && details.length > 0) {
+        // Khởi tạo mảng con cho mỗi kênh
+        for (let i = 0; i < numChannels; i++) {
+          channelChunks.push([]);
         }
         // Chia data lần lượt (round-robin)
         for (let i = 0; i < details.length; i++) {
-          const accountIndex = i % numAccounts;
-          accountChunks[accountIndex].push(details[i]);
+          const channelIndex = i % numChannels;
+          channelChunks[channelIndex].push(details[i]);
         }
       } else {
-        for (let i = 0; i < numAccounts; i++) {
-          accountChunks.push(details);
+        for (let i = 0; i < numChannels; i++) {
+          channelChunks.push(details);
         }
       }
 
-      for (let i = 0; i < numAccounts; i++) {
-        const accountId = formData.flatformAccountIds[i]
+      for (let i = 0; i < numChannels; i++) {
+        const channelId = formData.channelIds[i]
         const isFirst = (i === 0)
-        const currentDetails = accountChunks[i] || [];
+        const currentDetails = channelChunks[i] || [];
 
         const campaignPayload = {
           name: formData.name,
           actionId: formData.actionId,
-          flatformAccountId: accountId,
+          channelId: channelId,
           schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
           scheduleType: formData.scheduleType,
           scheduleEndDate: formData.scheduleType === 'daily'
@@ -613,65 +613,65 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     </select>
                   </div>
 
-                  <div className="stepper-form-group" ref={accountDropdownRef}>
+                  <div className="stepper-form-group" ref={channelDropdownRef}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label style={{ margin: 0 }}>Tài khoản <span className="required">*</span></label>
-                      {accounts.length > 0 && !(campaign && campaign.id) && (
+                      <label style={{ margin: 0 }}>Kênh <span className="required">*</span></label>
+                      {channels.length > 0 && !(campaign && campaign.id) && (
                         <button 
                           type="button" 
                           className="btn btn-ghost" 
                           style={{ padding: '2px 8px', fontSize: '12px', height: 'auto' }}
                           onClick={() => {
-                            const allSelected = formData.flatformAccountIds.length === accounts.length;
+                            const allSelected = formData.channelIds.length === channels.length;
                             setFormData(p => ({
                               ...p,
-                              flatformAccountIds: allSelected ? [] : accounts.map(a => a.id)
+                              channelIds: allSelected ? [] : channels.map(a => a.id)
                             }));
                           }}
                         >
-                          {formData.flatformAccountIds.length === accounts.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                          {formData.channelIds.length === channels.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                         </button>
                       )}
                     </div>
                     <div style={{ position: 'relative' }}>
                       <div 
                         className="stepper-input" 
-                        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isAccountDropdownOpen ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}
-                        onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
+                        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isChannelDropdownOpen ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}
+                        onClick={() => setIsChannelDropdownOpen(!isChannelDropdownOpen)}
                       >
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 8 }}>
-                          {formData.flatformAccountIds.length === 0 
-                            ? '-- Chọn tài khoản --' 
-                            : formData.flatformAccountIds.length === 1 
-                              ? accounts.find(a => a.id === formData.flatformAccountIds[0])?.name || 'Đã chọn 1 tài khoản'
-                              : `Đã chọn ${formData.flatformAccountIds.length} tài khoản`}
+                          {formData.channelIds.length === 0 
+                            ? '-- Chọn kênh --' 
+                            : formData.channelIds.length === 1 
+                              ? channels.find(a => a.id === formData.channelIds[0])?.name || 'Đã chọn 1 kênh'
+                              : `Đã chọn ${formData.channelIds.length} kênh`}
                         </span>
-                        <ChevronDown size={16} style={{ flexShrink: 0, transform: isAccountDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                        <ChevronDown size={16} style={{ flexShrink: 0, transform: isChannelDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                       </div>
                       
-                      {isAccountDropdownOpen && (
+                      {isChannelDropdownOpen && (
                         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 10, background: 'var(--bg-primary)', border: '1px solid var(--border-default)', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-                          <div className="account-checkbox-list" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '12px', maxHeight: '250px', overflowY: 'auto' }}>
-                            {accounts.map(a => (
+                          <div className="channel-checkbox-list" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '12px', maxHeight: '250px', overflowY: 'auto' }}>
+                            {channels.map(a => (
                               <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-primary)' }}>
                                 <input
                                   type={campaign && campaign.id ? "radio" : "checkbox"}
-                                  name={campaign && campaign.id ? "account-selection" : undefined}
-                                  checked={formData.flatformAccountIds.includes(a.id)}
+                                  name={campaign && campaign.id ? "channel-selection" : undefined}
+                                  checked={formData.channelIds.includes(a.id)}
                                   onChange={(e) => {
                                     const checked = e.target.checked;
                                     if (campaign && campaign.id) {
                                       setFormData(p => ({
                                         ...p,
-                                        flatformAccountIds: [a.id]
+                                        channelIds: [a.id]
                                       }))
-                                      setIsAccountDropdownOpen(false) // auto close if it is a radio select
+                                      setIsChannelDropdownOpen(false) // auto close if it is a radio select
                                     } else {
                                       setFormData(p => ({
                                         ...p,
-                                        flatformAccountIds: checked 
-                                          ? [...p.flatformAccountIds, a.id]
-                                          : p.flatformAccountIds.filter(id => id !== a.id)
+                                        channelIds: checked 
+                                          ? [...p.channelIds, a.id]
+                                          : p.channelIds.filter(id => id !== a.id)
                                       }))
                                     }
                                   }}
@@ -679,8 +679,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${a.name} (${a.flatformType})`}>{a.name} ({a.flatformType})</span>
                               </label>
                             ))}
-                            {accounts.length === 0 && (
-                              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>Chưa có tài khoản nào</div>
+                            {channels.length === 0 && (
+                              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>Chưa có kênh nào</div>
                             )}
                           </div>
                         </div>
@@ -1308,15 +1308,15 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
               {!collapsedSections['details'] && (
                 <div className="stepper-section-body">
-                  {formData.flatformAccountIds.length > 1 && (
+                  {formData.channelIds.length > 1 && (
                     <div className="stepper-form-group" style={{ marginBottom: 12 }}>
                       <label className="schedule-checkbox-label" style={{ fontWeight: 500 }}>
                         <input
                           type="checkbox"
-                          checked={formData.splitDataAcrossAccounts}
-                          onChange={e => setFormData(p => ({ ...p, splitDataAcrossAccounts: e.target.checked }))}
+                          checked={formData.splitDataAcrossChannels}
+                          onChange={e => setFormData(p => ({ ...p, splitDataAcrossChannels: e.target.checked }))}
                         />
-                        <span>Chia đều data cho các tài khoản <span className="schedule-hint-inline" style={{ fontWeight: 'normal' }}>(Mặc định là tất cả tài khoản chung 1 data)</span></span>
+                        <span>Chia đều data cho các kênh <span className="schedule-hint-inline" style={{ fontWeight: 'normal' }}>(Mặc định là tất cả kênh chung 1 data)</span></span>
                       </label>
                     </div>
                   )}
@@ -1340,8 +1340,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       <button 
                         className="btn btn-secondary" 
                         onClick={() => {
-                          if (formData.flatformAccountIds.length === 0) {
-                            showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                          if (formData.channelIds.length === 0) {
+                            showAlert('Vui lòng chọn kênh trước.', 'error')
                             return
                           }
                           setShowFriendPicker(true)
@@ -1422,9 +1422,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         </div>
       </div>
       {/* Friend Picker Modal */}
-      {showFriendPicker && formData.flatformAccountIds.length > 0 && (
+      {showFriendPicker && formData.channelIds.length > 0 && (
         <FriendPickerModal
-          accountId={formData.flatformAccountIds[0]}
+          channelId={formData.channelIds[0]}
           onClose={() => setShowFriendPicker(false)}
           onSelect={onFriendsSelected}
         />

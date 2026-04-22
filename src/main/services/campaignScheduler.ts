@@ -53,26 +53,26 @@ export class CampaignScheduler {
     this.processing = true
 
     try {
-      // 1. Get eligible accounts
-      const accounts = await this.supabase.getEligibleAccounts()
-      if (accounts.length === 0) {
+      // 1. Get eligible channels
+      const channels = await this.supabase.getEligibleChannels()
+      if (channels.length === 0) {
         this.processing = false
         return
       }
 
-      for (const account of accounts) {
-        // 2. Get pending campaigns for this account
-        const campaigns = await this.supabase.getPendingCampaigns(account.id)
+      for (const channel of channels) {
+        // 2. Get pending campaigns for this channel
+        const campaigns = await this.supabase.getPendingCampaigns(channel.id)
         if (campaigns.length === 0) continue
 
-        // Check browser webview is registered for this account
-        if (!this.webviewRegistry.isRegistered(account.id)) {
-          this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở tab trình duyệt. Bỏ qua.`)
+        // Check browser webview is registered for this channel
+        if (!this.webviewRegistry.isRegistered(channel.id)) {
+          this.sendLog(`⚠️ Kênh "${channel.name}" chưa mở tab trình duyệt. Bỏ qua.`)
           continue
         }
 
         for (const campaign of campaigns) {
-          await this.executeCampaign(account, campaign)
+          await this.executeCampaign(channel, campaign)
         }
       }
     } catch (err) {
@@ -179,7 +179,7 @@ export class CampaignScheduler {
     this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
 
-  private async executeCampaign(account: import('../../shared/types').FlatformAccount, campaign: Campaign): Promise<void> {
+  private async executeCampaign(channel: import('../../shared/types').OrgChannel, campaign: Campaign): Promise<void> {
     // Check schedule type eligibility
     if (!this.shouldRunToday(campaign)) {
       return
@@ -189,10 +189,10 @@ export class CampaignScheduler {
       // Update campaign status to running
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy' })
       await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
-      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
+      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên kênh "${channel.name}"`)
 
-      // Update account status to running
-      await this.supabase.updateAccount(account.id, { status: 'đang chạy' })
+      // Update channel status to running
+      await this.supabase.updateChannel(channel.id, { status: 'đang chạy' })
 
       // Get the campaign action and its workflow
       const action = await this.supabase.getCampaignAction(campaign.actionId)
@@ -205,7 +205,7 @@ export class CampaignScheduler {
 
       // === Message & Friend Request campaign: no workflow, direct browser automation ===
       if (campaign.actionId === 'facebook_message_friend') {
-        await this.executeMessageFriendCampaign(account, campaign)
+        await this.executeMessageFriendCampaign(channel, campaign)
         return
       }
 
@@ -234,8 +234,8 @@ export class CampaignScheduler {
         extraForTimeline.postAsReels === true
       )
       if (needTimelineCustom) {
-        await this.executeTimelinePostCampaign(account, campaign, flow)
-        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+        await this.executeTimelinePostCampaign(channel, campaign, flow)
+        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
         return
       }
 
@@ -258,12 +258,12 @@ export class CampaignScheduler {
         let overrideEnableComment = campaign.extraSettings?.enableComment ?? false
 
         try {
-          const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, 'Đăng bài', limitConfig)
+          const limitStatus = await this.supabase.getChannelRateLimitStatus(channel.id, 'Đăng bài', limitConfig)
           if (!limitStatus.ok) {
             await this.supabase.appendCampaignLog(campaign.id, `Từ chối chạy do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
             this.sendLog(`⚠️ Từ chối "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
             await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
-            await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+            await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
             return
           }
         } catch (err) {
@@ -274,7 +274,7 @@ export class CampaignScheduler {
           ...campaign,
           extraSettings: { ...campaign.extraSettings, enableComment: overrideEnableComment }
         }
-        await this.runWorkflowForDetail(account.id, campaignToRun, flow, null)
+        await this.runWorkflowForDetail(channel.id, campaignToRun, flow, null)
         await this.handleCampaignCompletion(campaign)
       } else {
         let rateLimitReached = false
@@ -285,7 +285,7 @@ export class CampaignScheduler {
           const currentCamp = await this.supabase.getCampaign(campaign.id);
           if (currentCamp && currentCamp.status === 'tạm dừng') {
             this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`);
-            await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+            await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
             return; // Thoát khỏi chiến dịch hiện tại
           }
 
@@ -297,7 +297,7 @@ export class CampaignScheduler {
 
           // Check Rate limit before processing
           try {
-            const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, 'Đăng bài', limitConfig)
+            const limitStatus = await this.supabase.getChannelRateLimitStatus(channel.id, 'Đăng bài', limitConfig)
             if (!limitStatus.ok) {
               rateLimitReached = true
               await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng gửi do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
@@ -312,7 +312,7 @@ export class CampaignScheduler {
             ...campaign,
             extraSettings: { ...campaign.extraSettings, enableComment: overrideEnableComment }
           }
-          await this.runWorkflowForDetail(account.id, campaignToRun, flow, detail, i)
+          await this.runWorkflowForDetail(channel.id, campaignToRun, flow, detail, i)
 
           // Sleep between details
           if (i < details.length - 1) {
@@ -353,14 +353,14 @@ export class CampaignScheduler {
         }
       }
 
-      // Reset account status
-      await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+      // Reset channel status
+      await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.recoverStuckDetails(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+      await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
       // Đối với simple campaign (không có detail row), ghi 1 entry vào detail_actions
       // để khách hàng có lịch sử lỗi để xem.
@@ -368,7 +368,7 @@ export class CampaignScheduler {
         try {
           await this.supabase.createDetailAction({
             campaignId: campaign.id,
-            accountId: account.id,
+            channelId: channel.id,
             actionName: 'Đăng bài',
             status: 'error',
             log: errMsg
@@ -395,7 +395,7 @@ export class CampaignScheduler {
   }
 
   private async runWorkflowForDetail(
-    accountId: number,
+    channelId: number,
     campaign: Campaign,
     flow: import('../../shared/types').FlowData,
     detail: CampaignDetail | null,
@@ -487,7 +487,7 @@ export class CampaignScheduler {
       commentIndices,
       commentIterations,
       images: validImages,
-      accountId: accountId,
+      channelId: channelId,
       ...(detail ? {
         detailId: detail.id,
         detailName: detail.name,
@@ -501,10 +501,10 @@ export class CampaignScheduler {
       shuffleGroupList: campaign.extraSettings?.shuffleGroupList ?? false
     }
 
-    // Create a controller that uses the account's embedded webview
-    const controller = this.webviewRegistry.getController(accountId)
+    // Create a controller that uses the channel's embedded webview
+    const controller = this.webviewRegistry.getController(channelId)
     if (!controller) {
-      throw new Error(`Không tìm thấy tab trình duyệt cho tài khoản ${accountId}`)
+      throw new Error(`Không tìm thấy tab trình duyệt cho kênh ${channelId}`)
     }
     
     // Debug: Log the current URL
@@ -582,7 +582,7 @@ export class CampaignScheduler {
         try {
           await this.supabase.createDetailAction({
             campaignId: campaign.id,
-            accountId: accountId,
+            channelId: channelId,
             actionName: 'Đăng bài',
             status: 'success',
             log: 'Đăng bài thành công'
@@ -609,7 +609,7 @@ export class CampaignScheduler {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
-            accountId: accountId,
+            channelId: channelId,
             actionName: 'Đăng bài',
             status: 'success',
             log: `Đăng bài thành công vào ${detailName}${postPendingNote ? ` (${postPendingNote})` : ''}`
@@ -631,7 +631,7 @@ export class CampaignScheduler {
             await this.supabase.createDetailAction({
               campaignDetailId: detail.id,
               campaignId: campaign.id,
-              accountId: accountId,
+              channelId: channelId,
               actionName: 'Comment',
               status: 'success',
               log: `Đã comment vào ${target}: "${preview}"`,
@@ -682,7 +682,7 @@ export class CampaignScheduler {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
-            accountId: accountId,
+            channelId: channelId,
             actionName: failureLabel,
             status: 'error',
             log: errorMsg
@@ -780,7 +780,7 @@ export class CampaignScheduler {
    * step.output để log per-action vào detail_actions.
    */
   private async executeMessageFriendCampaign(
-    account: import('../../shared/types').FlatformAccount,
+    channel: import('../../shared/types').OrgChannel,
     campaign: Campaign
   ): Promise<void> {
     const enableMessage = campaign.extraSettings?.enableMessage ?? true
@@ -815,7 +815,7 @@ export class CampaignScheduler {
       const currentCamp = await this.supabase.getCampaign(campaign.id)
       if (currentCamp && currentCamp.status === 'tạm dừng') {
         this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
-        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
         return
       }
 
@@ -830,7 +830,7 @@ export class CampaignScheduler {
         await this.supabase.createDetailAction({
           campaignDetailId: detail.id,
           campaignId: campaign.id,
-          accountId: account.id,
+          channelId: channel.id,
           actionName: 'Bỏ qua',
           status: 'error',
           log: `Bỏ qua ${detailName}: thiếu UID`
@@ -841,7 +841,7 @@ export class CampaignScheduler {
       // Rate limit check
       const actionName = enableMessage ? 'Nhắn tin' : 'Kết bạn'
       try {
-        const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionName, limitConfig)
+        const limitStatus = await this.supabase.getChannelRateLimitStatus(channel.id, actionName, limitConfig)
         if (!limitStatus.ok) {
           rateLimitReached = true
           await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do vượt giới hạn: ${limitStatus.reason}`)
@@ -895,7 +895,7 @@ export class CampaignScheduler {
         enableAddFriend
       }
 
-      const controller = this.webviewRegistry.getController(account.id)
+      const controller = this.webviewRegistry.getController(channel.id)
       if (!controller) {
         await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy tab trình duyệt')
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
@@ -927,7 +927,7 @@ export class CampaignScheduler {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
-            accountId: account.id,
+            channelId: channel.id,
             actionName: 'Nhắn tin',
             status: 'success',
             log: `Nhắn tin thành công đến ${detailName}`
@@ -939,7 +939,7 @@ export class CampaignScheduler {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
-            accountId: account.id,
+            channelId: channel.id,
             actionName: 'Nhắn tin',
             status: 'error',
             log: `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
@@ -955,7 +955,7 @@ export class CampaignScheduler {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
-            accountId: account.id,
+            channelId: channel.id,
             actionName: 'Kết bạn',
             status: 'success',
             log: `Kết bạn thành công với ${detailName}`
@@ -967,7 +967,7 @@ export class CampaignScheduler {
           await this.supabase.createDetailAction({
             campaignDetailId: detail.id,
             campaignId: campaign.id,
-            accountId: account.id,
+            channelId: channel.id,
             actionName: 'Kết bạn',
             status: 'error',
             log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
@@ -1011,7 +1011,7 @@ export class CampaignScheduler {
       await this.handleCampaignCompletion(campaign)
     }
 
-    await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+    await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
   }
 
   // =========== Facebook Timeline Post — Source Options ===========
@@ -1030,7 +1030,7 @@ export class CampaignScheduler {
    * Default: dùng workflow timeline post hiện có.
    */
   private async executeTimelinePostCampaign(
-    account: import('../../shared/types').FlatformAccount,
+    channel: import('../../shared/types').OrgChannel,
     campaign: Campaign,
     flow: import('../../shared/types').FlowData
   ): Promise<void> {
@@ -1069,7 +1069,7 @@ export class CampaignScheduler {
     // --- Rate limit ---
     const limitConfig = extra.actionLimits
     try {
-      const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, 'Đăng bài', limitConfig)
+      const limitStatus = await this.supabase.getChannelRateLimitStatus(channel.id, 'Đăng bài', limitConfig)
       if (!limitStatus.ok) {
         await this.supabase.appendCampaignLog(campaign.id, `Từ chối chạy do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
         this.sendLog(`⚠️ Từ chối "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
@@ -1118,13 +1118,13 @@ export class CampaignScheduler {
     }
 
     try {
-      await this.runWorkflowForDetail(account.id, campaign, flowCopy, null)
+      await this.runWorkflowForDetail(channel.id, campaign, flowCopy, null)
       // Bổ sung log specific cho share/reels (runWorkflowForDetail log "Đăng bài" chung)
       if (actionLabel !== 'Đăng bài') {
         try {
           await this.supabase.createDetailAction({
             campaignId: campaign.id,
-            accountId: account.id,
+            channelId: channel.id,
             actionName: actionLabel,
             status: 'success',
             log: currentLink ? `${actionLabel} thành công (nguồn: ${currentLink})` : `${actionLabel} thành công`,
@@ -1141,7 +1141,7 @@ export class CampaignScheduler {
       try {
         await this.supabase.createDetailAction({
           campaignId: campaign.id,
-          accountId: account.id,
+          channelId: channel.id,
           actionName: actionLabel,
           status: 'error',
           log: errMsg

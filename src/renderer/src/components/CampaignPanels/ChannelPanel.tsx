@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
-import { FlatformAccount } from '../../../../shared/types'
-import AccountContextMenu from './AccountContextMenu'
+import { OrgChannel } from '../../../../shared/types'
+import ChannelContextMenu from './ChannelContextMenu'
 import { useUiStore } from '../../stores/uiStore'
 
-interface AccountPanelProps {
-  onNavigateToBrowser?: (accountId: number) => void
-  onFilterCampaigns?: (accountId: number | null) => void
+interface ChannelPanelProps {
+  onNavigateToBrowser?: (channelId: number) => void
+  onFilterCampaigns?: (channelId: number | null) => void
 }
 
-export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
-  const { accounts, loadAccounts, createAccount, updateAccount, deleteAccount } = useCampaignStore()
+export default function ChannelPanel({ onNavigateToBrowser, onFilterCampaigns }: ChannelPanelProps) {
+  const { channels, loadChannels, createChannel, updateChannel, deleteChannel } = useCampaignStore()
   const [showForm, setShowForm] = useState(false)
-  const [editingAccount, setEditingAccount] = useState<FlatformAccount | null>(null)
+  const [editingChannel, setEditingChannel] = useState<OrgChannel | null>(null)
   const [formData, setFormData] = useState({ 
     name: '', 
     flatformType: 'facebook'
@@ -21,13 +21,13 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
-    account: FlatformAccount
+    channel: OrgChannel
     position: { x: number; y: number }
   } | null>(null)
 
   useEffect(() => {
-    loadAccounts()
-  }, [loadAccounts])
+    loadChannels()
+  }, [loadChannels])
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) return
@@ -37,107 +37,107 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         flatformType: formData.flatformType
       }
 
-      if (editingAccount) {
-        await updateAccount(editingAccount.id, payload)
+      if (editingChannel) {
+        await updateChannel(editingChannel.id, payload)
       } else {
-        await createAccount(payload)
+        await createChannel(payload)
       }
       setShowForm(false)
-      setEditingAccount(null)
+      setEditingChannel(null)
       setFormData({ name: '', flatformType: 'facebook' })
     } catch (err) {
-      console.error('Failed to save account:', err)
+      console.error('Failed to save channel:', err)
     }
   }
 
-  const handleContextMenu = (e: React.MouseEvent, account: FlatformAccount) => {
+  const handleContextMenu = (e: React.MouseEvent, channel: OrgChannel) => {
     e.preventDefault()
     e.stopPropagation()
     setContextMenu({
-      account,
+      channel,
       position: { x: e.clientX, y: e.clientY }
     })
   }
 
-  const handleEdit = (account: FlatformAccount) => {
-    setEditingAccount(account)
+  const handleEdit = (channel: OrgChannel) => {
+    setEditingChannel(channel)
     setFormData({ 
-      name: account.name, 
-      flatformType: account.flatformType
+      name: channel.name, 
+      flatformType: channel.flatformType
     })
     setShowForm(true)
   }
 
-  const handleDelete = (account: FlatformAccount) => {
+  const handleDelete = (channel: OrgChannel) => {
     useUiStore.getState().showConfirm(
-      `Xoá tài khoản "${account.name}"?`,
-      async () => { await deleteAccount(account.id) },
-      { title: 'Xoá tài khoản', confirmText: 'Xoá', variant: 'danger' }
+      `Xoá kênh "${channel.name}"?`,
+      async () => { await deleteChannel(channel.id) },
+      { title: 'Xoá kênh', confirmText: 'Xoá', variant: 'danger' }
     )
   }
 
-  const handleViewBrowser = (accountId: number) => {
-    onNavigateToBrowser?.(accountId)
+  const handleViewBrowser = (channelId: number) => {
+    onNavigateToBrowser?.(channelId)
   }
 
-  const handleReloadPage = async (account: FlatformAccount) => {
-    if (!window.electronAPI?.reloadAccountPage) {
+  const handleReloadPage = async (channel: OrgChannel) => {
+    if (!window.electronAPI?.reloadChannelPage) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
-    const result = await window.electronAPI.reloadAccountPage(account.id, account.flatformType)
+    const result = await window.electronAPI.reloadChannelPage(channel.id, channel.flatformType)
     if (!result.success) {
       useUiStore.getState().showAlert(`Không thể load lại: ${result.reason}`, 'error')
     }
   }
 
-  const handleCheckLogin = async (account: FlatformAccount) => {
+  const handleCheckLogin = async (channel: OrgChannel) => {
     if (!window.electronAPI?.checkFacebookLogin) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
     try {
-      const result = await window.electronAPI.checkFacebookLogin(account.id)
-      await loadAccounts() // Refresh to get updated loginStatus
+      const result = await window.electronAPI.checkFacebookLogin(channel.id)
+      await loadChannels() // Refresh to get updated loginStatus
       if (result.loggedIn) {
-        useUiStore.getState().showAlert(`✅ ${account.name}: Đã đăng nhập Facebook`, 'success')
+        useUiStore.getState().showAlert(`✅ ${channel.name}: Đã đăng nhập Facebook`, 'success')
       } else {
-        useUiStore.getState().showAlert(`❌ ${account.name}: ${result.reason || 'Chưa đăng nhập'}`, 'error')
+        useUiStore.getState().showAlert(`❌ ${channel.name}: ${result.reason || 'Chưa đăng nhập'}`, 'error')
       }
     } catch (err: any) {
       useUiStore.getState().showAlert(`Lỗi kiểm tra: ${err.message}`, 'error')
     }
   }
 
-  const handleResume = async (account: FlatformAccount) => {
-    await updateAccount(account.id, { status: 'hoạt động' })
+  const handleResume = async (channel: OrgChannel) => {
+    await updateChannel(channel.id, { status: 'hoạt động' })
   }
 
-  const handlePause = async (account: FlatformAccount) => {
-    await updateAccount(account.id, { status: 'tạm dừng' })
+  const handlePause = async (channel: OrgChannel) => {
+    await updateChannel(channel.id, { status: 'tạm dừng' })
   }
 
-  const handleEnable = async (account: FlatformAccount) => {
-    await updateAccount(account.id, { isActive: true, status: 'hoạt động' })
+  const handleEnable = async (channel: OrgChannel) => {
+    await updateChannel(channel.id, { isActive: true, status: 'hoạt động' })
   }
 
-  const handleDisable = async (account: FlatformAccount) => {
-    await updateAccount(account.id, { isActive: false, status: 'vô hiệu hoá' })
+  const handleDisable = async (channel: OrgChannel) => {
+    await updateChannel(channel.id, { isActive: false, status: 'vô hiệu hoá' })
   }
 
-  const handleFilterCampaigns = (accountId: number) => {
-    onFilterCampaigns?.(accountId)
+  const handleFilterCampaigns = (channelId: number) => {
+    onFilterCampaigns?.(channelId)
   }
 
-  const handleLoadFriends = async (account: FlatformAccount) => {
+  const handleLoadFriends = async (channel: OrgChannel) => {
     if (!window.electronAPI?.loadFriends) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
     try {
-      const result = await window.electronAPI.loadFriends(account.id)
+      const result = await window.electronAPI.loadFriends(channel.id)
       if (result.success) {
-        useUiStore.getState().showAlert(`✅ Đã load ${result.count} bạn bè cho "${account.name}"`, 'success')
+        useUiStore.getState().showAlert(`✅ Đã load ${result.count} bạn bè cho "${channel.name}"`, 'success')
       } else {
         useUiStore.getState().showAlert(`❌ Lỗi: ${result.error}`, 'error')
       }
@@ -146,15 +146,15 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     }
   }
 
-  const handleLoadGroups = async (account: FlatformAccount) => {
+  const handleLoadGroups = async (channel: OrgChannel) => {
     if (!window.electronAPI?.loadGroups) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
     try {
-      const result = await window.electronAPI.loadGroups(account.id)
+      const result = await window.electronAPI.loadGroups(channel.id)
       if (result.success) {
-        useUiStore.getState().showAlert(`✅ Đã load ${result.count} group cho "${account.name}"`, 'success')
+        useUiStore.getState().showAlert(`✅ Đã load ${result.count} group cho "${channel.name}"`, 'success')
       } else {
         useUiStore.getState().showAlert(`❌ Lỗi: ${result.error}`, 'error')
       }
@@ -182,18 +182,18 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     }
   }
 
-  const getStatusIcon = (account: FlatformAccount) => {
-    if (!account.isActive) return '🚫'
-    if (account.status === 'tạm dừng') return '⏸️'
-    if (account.status === 'hoạt động' || account.status === 'đang chạy') return '🟢'
+  const getStatusIcon = (channel: OrgChannel) => {
+    if (!channel.isActive) return '🚫'
+    if (channel.status === 'tạm dừng') return '⏸️'
+    if (channel.status === 'hoạt động' || channel.status === 'đang chạy') return '🟢'
     return '⏳'
   }
 
   return (
     <div className="campaign-panel">
       <div className="campaign-panel-header">
-        <span className="campaign-panel-title">Tài khoản</span>
-        <button className="btn btn-primary btn-icon" onClick={() => { setShowForm(true); setEditingAccount(null); setFormData({ name: '', flatformType: 'facebook' }) }} title="Thêm tài khoản">
+        <span className="campaign-panel-title">Kênh</span>
+        <button className="btn btn-primary btn-icon" onClick={() => { setShowForm(true); setEditingChannel(null); setFormData({ name: '', flatformType: 'facebook' }) }} title="Thêm kênh">
           <Plus size={14} />
         </button>
       </div>
@@ -202,7 +202,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         <div className="panel-form">
           <input
             type="text"
-            placeholder="Tên tài khoản"
+            placeholder="Tên kênh"
             value={formData.name}
             onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
             className="panel-input"
@@ -221,34 +221,34 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           </select>
 
           <div className="panel-form-actions">
-            <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingAccount(null) }}>Huỷ</button>
-            <button className="btn btn-primary" onClick={handleSubmit}>{editingAccount ? 'Cập nhật' : 'Tạo'}</button>
+            <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingChannel(null) }}>Huỷ</button>
+            <button className="btn btn-primary" onClick={handleSubmit}>{editingChannel ? 'Cập nhật' : 'Tạo'}</button>
           </div>
         </div>
       )}
 
       <div className="campaign-panel-content">
-        {accounts.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-text">Chưa có tài khoản</div></div>
+        {channels.length === 0 ? (
+          <div className="empty-state"><div className="empty-state-text">Chưa có kênh</div></div>
         ) : (
-          accounts.map(account => (
+          channels.map(channel => (
             <div 
-              key={account.id} 
-              className={`account-card ${!account.isActive ? 'disabled' : ''}`}
-              onContextMenu={(e) => handleContextMenu(e, account)}
+              key={channel.id} 
+              className={`channel-card ${!channel.isActive ? 'disabled' : ''}`}
+              onContextMenu={(e) => handleContextMenu(e, channel)}
               title="Nhấn chuột phải để xem menu"
             >
-              <div className="account-card-info">
-                <div className="account-card-name">
-                  <span className="account-status-icon">{getStatusIcon(account)}</span>
-                  {account.name}
+              <div className="channel-card-info">
+                <div className="channel-card-name">
+                  <span className="channel-status-icon">{getStatusIcon(channel)}</span>
+                  {channel.name}
                 </div>
-                <div className="account-card-meta">
-                  <span className="account-tag" style={{ color: 'var(--accent-info)' }}>{account.flatformType}</span>
-                  <span style={{ color: getLoginColor(account.loginStatus), fontSize: '10px' }}>{account.loginStatus}</span>
+                <div className="channel-card-meta">
+                  <span className="channel-tag" style={{ color: 'var(--accent-info)' }}>{channel.flatformType}</span>
+                  <span style={{ color: getLoginColor(channel.loginStatus), fontSize: '10px' }}>{channel.loginStatus}</span>
                 </div>
-                <div className="account-card-meta">
-                  <span style={{ color: getStatusColor(account.status), fontSize: '10px', fontWeight: 600 }}>{account.status}</span>
+                <div className="channel-card-meta">
+                  <span style={{ color: getStatusColor(channel.status), fontSize: '10px', fontWeight: 600 }}>{channel.status}</span>
                 </div>
               </div>
             </div>
@@ -258,8 +258,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
       {/* Context Menu */}
       {contextMenu && (
-        <AccountContextMenu
-          account={contextMenu.account}
+        <ChannelContextMenu
+          channel={contextMenu.channel}
           position={contextMenu.position}
           onClose={() => setContextMenu(null)}
           onViewBrowser={handleViewBrowser}

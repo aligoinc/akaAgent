@@ -164,7 +164,7 @@ export interface ExecutionRun {
 // Campaign Automation Types
 // ============================================
 
-export interface FlatformAccount {
+export interface OrgChannel {
   id: number
   name: string
   flatformType: string
@@ -194,7 +194,7 @@ export interface CampaignExtraSettings {
   commentType?: 'own' | 'others' // comment vào bài mình / bài khác
   commentCount?: number          // số lượng comment (khi commentType = 'others')
   commentContent?: string        // nội dung comment
-  actionLimits?: {               // giới hạn gửi (được lưu theo campaign nhưng check theo account_id + actionName)
+  actionLimits?: {               // giới hạn gửi (được lưu theo campaign nhưng check theo channel_id + actionName)
     sleepBetweenActions?: number
     dailyLimit?: number
     rateLimitCount?: number
@@ -220,7 +220,7 @@ export interface Campaign {
   id: number
   name: string
   actionId: string
-  flatformAccountId: number
+  channelId: number
   status: string
   schedule?: string
   scheduleType?: 'daily' | 'weekly' | 'monthly'
@@ -241,7 +241,7 @@ export interface Campaign {
   updatedAt?: string
   // Joined fields
   actionName?: string
-  accountName?: string
+  channelName?: string
 }
 
 export interface CampaignDetail {
@@ -263,7 +263,7 @@ export interface CampaignDetailAction {
   id: number
   campaignDetailId?: number
   campaignId: number
-  accountId?: number
+  channelId?: number
   actionName: string
   status: string
   log?: string
@@ -274,14 +274,14 @@ export interface CampaignDetailAction {
 }
 
 // ============================================
-// Flatform Contact Types
+// Channel Contact Types
 // ============================================
 
 export type ContactType = 'friend' | 'group'
 
-export interface FlatformContact {
+export interface OrgChannelContact {
   id: number
-  flatformAccountId: number
+  channelId: number
   contactType: ContactType
   name: string
   uid?: string
@@ -353,11 +353,11 @@ export const IPC_CHANNELS = {
   DB_LIST_ELEMENTS: 'db:list-elements',
   DB_DELETE_ELEMENT: 'db:delete-element',
 
-  // Database Flatform Accounts
-  DB_LIST_ACCOUNTS: 'db:list-accounts',
-  DB_CREATE_ACCOUNT: 'db:create-account',
-  DB_UPDATE_ACCOUNT: 'db:update-account',
-  DB_DELETE_ACCOUNT: 'db:delete-account',
+  // Database Org Channels
+  DB_LIST_CHANNELS: 'db:list-channels',
+  DB_CREATE_CHANNEL: 'db:create-channel',
+  DB_UPDATE_CHANNEL: 'db:update-channel',
+  DB_DELETE_CHANNEL: 'db:delete-channel',
 
   // Database Campaign Actions
   DB_LIST_CAMPAIGN_ACTIONS: 'db:list-campaign-actions',
@@ -401,10 +401,10 @@ export const IPC_CHANNELS = {
   // Campaign Status (real-time: main → renderer whenever a campaign row changes)
   CAMPAIGN_STATUS_UPDATED: 'campaign:status-updated',
 
-  // Account Actions
-  ACCOUNT_CHECK_FB_LOGIN: 'account:check-fb-login',
-  ACCOUNT_RELOAD_PAGE: 'account:reload-page',
-  ACCOUNT_STATUS_UPDATED: 'account:status-updated',
+  // Channel Actions
+  CHANNEL_CHECK_FB_LOGIN: 'channel:check-fb-login',
+  CHANNEL_RELOAD_PAGE: 'channel:reload-page',
+  CHANNEL_STATUS_UPDATED: 'channel:status-updated',
 
   // Actions
   ACTIONS_LIST: 'actions:list',

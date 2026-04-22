@@ -1,10 +1,10 @@
-import { FlowData, ExecutionRun, ExecutionStep, FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, FlatformContact, ContactType, ElementDefinition } from '../../shared/types'
+import { FlowData, ExecutionRun, ExecutionStep, OrgChannel, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, OrgChannelContact, ContactType, ElementDefinition } from '../../shared/types'
 import * as flowRepo from '../data/repositories/flowRepository'
 import * as elementRepo from '../data/repositories/elementRepository'
-import * as accountRepo from '../data/repositories/accountRepository'
+import * as channelRepo from '../data/repositories/channelRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
-import * as contactRepo from '../data/repositories/contactRepository'
+import * as channelContactRepo from '../data/repositories/channelContactRepository'
 import { seedBuiltinCampaignActions as _seedBuiltin } from '../data/seed/builtinCampaignActions'
 
 /**
@@ -16,7 +16,7 @@ export class SupabaseService {
   // =========== STARTUP ===========
   async resetRunningStatuses(): Promise<void> {
     console.log('[Supabase] Resetting "đang chạy" statuses to "chờ xử lý"...')
-    await accountRepo.resetRunningAccountStatuses()
+    await channelRepo.resetRunningChannelStatuses()
     await campaignRepo.resetRunningCampaignStatuses()
     await campaignRepo.resetRunningDetailStatuses()
   }
@@ -39,12 +39,12 @@ export class SupabaseService {
   listElements() { return elementRepo.listElements() }
   deleteElement(elementId: string) { return elementRepo.deleteElement(elementId) }
 
-  // =========== ACCOUNTS ===========
-  listAccounts() { return accountRepo.listAccounts() }
-  createAccount(account: Partial<FlatformAccount>) { return accountRepo.createAccount(account) }
-  updateAccount(id: number, updates: Partial<FlatformAccount>) { return accountRepo.updateAccount(id, updates) }
-  deleteAccount(id: number) { return accountRepo.deleteAccount(id) }
-  getEligibleAccounts() { return accountRepo.getEligibleAccounts() }
+  // =========== CHANNELS ===========
+  listChannels() { return channelRepo.listChannels() }
+  createChannel(channel: Partial<OrgChannel>) { return channelRepo.createChannel(channel) }
+  updateChannel(id: number, updates: Partial<OrgChannel>) { return channelRepo.updateChannel(id, updates) }
+  deleteChannel(id: number) { return channelRepo.deleteChannel(id) }
+  getEligibleChannels() { return channelRepo.getEligibleChannels() }
 
   // =========== CAMPAIGN ACTIONS ===========
   listCampaignActions() { return campaignActionRepo.listCampaignActions() }
@@ -62,7 +62,7 @@ export class SupabaseService {
   deleteCampaign(id: number) { return campaignRepo.deleteCampaign(id) }
   cloneCampaign(id: number) { return campaignRepo.cloneCampaign(id) }
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }
-  getPendingCampaigns(accountId: number) { return campaignRepo.getPendingCampaigns(accountId) }
+  getPendingCampaigns(channelId: number) { return campaignRepo.getPendingCampaigns(channelId) }
 
   // =========== CAMPAIGN DETAILS ===========
   listCampaignDetails(campaignId: number) { return campaignRepo.listCampaignDetails(campaignId) }
@@ -75,12 +75,12 @@ export class SupabaseService {
   listDetailActionsByCampaign(campaignId: number) { return campaignRepo.listDetailActionsByCampaign(campaignId) }
   createDetailAction(action: Partial<CampaignDetailAction>) { return campaignRepo.createDetailAction(action) }
   deleteDetailAction(id: number) { return campaignRepo.deleteDetailAction(id) }
-  getAccountRateLimitStatus(accountId: number, actionName: string, limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }) { return campaignRepo.getAccountRateLimitStatus(accountId, actionName, limitConfig) }
+  getChannelRateLimitStatus(channelId: number, actionName: string, limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }) { return campaignRepo.getChannelRateLimitStatus(channelId, actionName, limitConfig) }
 
   // =========== CONTACTS ===========
-  listContacts(flatformAccountId: number, contactType?: ContactType) { return contactRepo.listContacts(flatformAccountId, contactType) }
-  upsertContacts(contacts: Partial<FlatformContact>[]) { return contactRepo.upsertContacts(contacts) }
-  deleteContacts(flatformAccountId: number, contactType: ContactType) { return contactRepo.deleteContacts(flatformAccountId, contactType) }
+  listContacts(channelId: number, contactType?: ContactType) { return channelContactRepo.listContacts(channelId, contactType) }
+  upsertContacts(contacts: Partial<OrgChannelContact>[]) { return channelContactRepo.upsertContacts(contacts) }
+  deleteContacts(channelId: number, contactType: ContactType) { return channelContactRepo.deleteContacts(channelId, contactType) }
 
   // =========== SEED ===========
   seedBuiltinCampaignActions() { return _seedBuiltin() }

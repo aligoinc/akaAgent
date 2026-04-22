@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, FlatformContact, ContactType, AuthUser } from '../shared/types'
+import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, OrgChannel, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, OrgChannelContact, ContactType, AuthUser } from '../shared/types'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -33,14 +33,14 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.BROWSER_STATUS),
 
   // Webview registration (embedded browser tabs)
-  registerWebview: (accountId: number, webContentsId: number): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_REGISTER, accountId, webContentsId),
+  registerWebview: (channelId: number, webContentsId: number): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_REGISTER, channelId, webContentsId),
 
-  unregisterWebview: (accountId: number): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_UNREGISTER, accountId),
+  unregisterWebview: (channelId: number): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_UNREGISTER, channelId),
 
-  getWebviewStatus: (accountId: number): Promise<{ connected: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_STATUS, accountId),
+  getWebviewStatus: (channelId: number): Promise<{ connected: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_STATUS, channelId),
 
   // Flow execution
   runFlow: (flowData: FlowData): Promise<unknown> =>
@@ -87,18 +87,18 @@ const electronAPI = {
   deleteElement: (elementId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_ELEMENT, elementId),
 
-  // Flatform Accounts
-  listAccounts: (): Promise<FlatformAccount[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_ACCOUNTS),
+  // Flatform Channels
+  listChannels: (): Promise<OrgChannel[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_CHANNELS),
 
-  createAccount: (data: Partial<FlatformAccount>): Promise<FlatformAccount> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_CREATE_ACCOUNT, data),
+  createChannel: (data: Partial<OrgChannel>): Promise<OrgChannel> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_CREATE_CHANNEL, data),
 
-  updateAccount: (id: number, updates: Partial<FlatformAccount>): Promise<FlatformAccount> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_UPDATE_ACCOUNT, id, updates),
+  updateChannel: (id: number, updates: Partial<OrgChannel>): Promise<OrgChannel> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_UPDATE_CHANNEL, id, updates),
 
-  deleteAccount: (id: number): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_ACCOUNT, id),
+  deleteChannel: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_CHANNEL, id),
 
   // Campaign Actions
   listCampaignActions: (): Promise<CampaignAction[]> =>
@@ -182,31 +182,31 @@ const electronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.CAMPAIGN_STATUS_UPDATED, handler)
   },
 
-  // Account Actions
-  checkFacebookLogin: (accountId: number): Promise<{ loggedIn: boolean; status: string; reason?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_CHECK_FB_LOGIN, accountId),
+  // Channel Actions
+  checkFacebookLogin: (channelId: number): Promise<{ loggedIn: boolean; status: string; reason?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHANNEL_CHECK_FB_LOGIN, channelId),
 
-  reloadAccountPage: (accountId: number, flatformType: string): Promise<{ success: boolean; reason?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_RELOAD_PAGE, accountId, flatformType),
+  reloadChannelPage: (channelId: number, flatformType: string): Promise<{ success: boolean; reason?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CHANNEL_RELOAD_PAGE, channelId, flatformType),
 
-  onAccountStatusUpdated: (callback: () => void): () => void => {
+  onChannelStatusUpdated: (callback: () => void): () => void => {
     const handler = () => callback()
-    ipcRenderer.on(IPC_CHANNELS.ACCOUNT_STATUS_UPDATED, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.ACCOUNT_STATUS_UPDATED, handler)
+    ipcRenderer.on(IPC_CHANNELS.CHANNEL_STATUS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHANNEL_STATUS_UPDATED, handler)
   },
 
   // Contacts (Load data)
-  loadFriends: (flatformAccountId: number): Promise<{ success: boolean; count: number; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LOAD_FRIENDS, flatformAccountId),
+  loadFriends: (channelId: number): Promise<{ success: boolean; count: number; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LOAD_FRIENDS, channelId),
 
-  loadGroups: (flatformAccountId: number): Promise<{ success: boolean; count: number; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LOAD_GROUPS, flatformAccountId),
+  loadGroups: (channelId: number): Promise<{ success: boolean; count: number; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LOAD_GROUPS, channelId),
 
-  listContacts: (flatformAccountId: number, contactType?: ContactType): Promise<FlatformContact[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LIST, flatformAccountId, contactType),
+  listContacts: (channelId: number, contactType?: ContactType): Promise<OrgChannelContact[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_LIST, channelId, contactType),
 
-  deleteContacts: (flatformAccountId: number, contactType: ContactType): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_DELETE, flatformAccountId, contactType),
+  deleteContacts: (channelId: number, contactType: ContactType): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONTACTS_DELETE, channelId, contactType),
 
   onContactsProgress: (callback: (data: { message: string }) => void): () => void => {
     const handler = (_event: Electron.IpcRendererEvent, data: { message: string }) => callback(data)
