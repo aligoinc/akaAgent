@@ -49,7 +49,7 @@ const ALL_STEPS: StepDef[] = [
     title: 'Cài đặt chung',
     fields: [
       { key: 'actionId', label: 'Chiến dịch' },
-      { key: 'channelIds', label: 'Kênh' },
+      { key: 'channelIds', label: 'Tài khoản' },
       { key: 'name', label: 'Tên chiến dịch' }
     ]
   },
@@ -276,7 +276,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.actionId || formData.channelIds.length === 0) {
-      showAlert('Vui lòng nhập Tên, Hành động và Kênh.', 'error')
+      showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
     }
 
@@ -291,7 +291,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       const numChannels = formData.channelIds.length;
       
       if (formData.splitDataAcrossChannels && numChannels > 1 && details.length > 0) {
-        // Khởi tạo mảng con cho mỗi kênh
+        // Khởi tạo mảng con cho mỗi tài khoản
         for (let i = 0; i < numChannels; i++) {
           channelChunks.push([]);
         }
@@ -615,7 +615,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
                   <div className="stepper-form-group" ref={channelDropdownRef}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label style={{ margin: 0 }}>Kênh <span className="required">*</span></label>
+                      <label style={{ margin: 0 }}>Tài khoản <span className="required">*</span></label>
                       {channels.length > 0 && !(campaign && campaign.id) && (
                         <button 
                           type="button" 
@@ -641,10 +641,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       >
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 8 }}>
                           {formData.channelIds.length === 0 
-                            ? '-- Chọn kênh --' 
+                            ? '-- Chọn tài khoản --' 
                             : formData.channelIds.length === 1 
-                              ? channels.find(a => a.id === formData.channelIds[0])?.name || 'Đã chọn 1 kênh'
-                              : `Đã chọn ${formData.channelIds.length} kênh`}
+                              ? channels.find(a => a.id === formData.channelIds[0])?.name || 'Đã chọn 1 tài khoản'
+                              : `Đã chọn ${formData.channelIds.length} tài khoản`}
                         </span>
                         <ChevronDown size={16} style={{ flexShrink: 0, transform: isChannelDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                       </div>
@@ -680,7 +680,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                               </label>
                             ))}
                             {channels.length === 0 && (
-                              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>Chưa có kênh nào</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>Chưa có tài khoản nào</div>
                             )}
                           </div>
                         </div>
@@ -1316,7 +1316,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                           checked={formData.splitDataAcrossChannels}
                           onChange={e => setFormData(p => ({ ...p, splitDataAcrossChannels: e.target.checked }))}
                         />
-                        <span>Chia đều data cho các kênh <span className="schedule-hint-inline" style={{ fontWeight: 'normal' }}>(Mặc định là tất cả kênh chung 1 data)</span></span>
+                        <span>Chia đều data cho các tài khoản <span className="schedule-hint-inline" style={{ fontWeight: 'normal' }}>(Mặc định là tất cả tài khoản chung 1 data)</span></span>
                       </label>
                     </div>
                   )}
@@ -1341,7 +1341,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         className="btn btn-secondary" 
                         onClick={() => {
                           if (formData.channelIds.length === 0) {
-                            showAlert('Vui lòng chọn kênh trước.', 'error')
+                            showAlert('Vui lòng chọn tài khoản trước.', 'error')
                             return
                           }
                           setShowFriendPicker(true)

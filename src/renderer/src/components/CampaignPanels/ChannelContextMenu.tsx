@@ -160,7 +160,7 @@ export default function ChannelContextMenu({
             onClick={() => handleAction(() => onEnable(channel))}
           >
             <Unlock size={14} />
-            <span>MỞ lại kênh</span>
+            <span>MỞ lại tài khoản</span>
           </button>
         ) : (
           <button
@@ -168,7 +168,7 @@ export default function ChannelContextMenu({
             onClick={() => handleAction(() => onDisable(channel))}
           >
             <Ban size={14} />
-            <span>VÔ HIỆU HOÁ kênh</span>
+            <span>VÔ HIỆU HOÁ tài khoản</span>
           </button>
         )}
       </div>
@@ -180,14 +180,14 @@ export default function ChannelContextMenu({
           onClick={() => handleAction(() => onEdit(channel))}
         >
           <Edit3 size={14} />
-          <span>Sửa kênh</span>
+          <span>Sửa tài khoản</span>
         </button>
         <button
           className="context-menu-item accent-error"
           onClick={() => handleAction(() => onDelete(channel))}
         >
           <Trash2 size={14} />
-          <span>Xoá kênh</span>
+          <span>Xoá tài khoản</span>
         </button>
       </div>
 

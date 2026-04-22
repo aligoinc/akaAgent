@@ -54,7 +54,7 @@ export class ContactLoader {
 
     const wcId = this.webviewRegistry.getWebContentsId(channelId)
     if (!wcId) {
-      return { success: false, count: 0, error: 'Không tìm thấy webContents cho kênh này' }
+      return { success: false, count: 0, error: 'Không tìm thấy webContents cho tài khoản này' }
     }
 
     const { webContents } = require('electron')
@@ -76,7 +76,7 @@ export class ContactLoader {
       const contacts = await scrapeFn(wc)
 
       if (contacts.length === 0) {
-        this.sendProgress(`⚠️ Không tìm thấy ${typeName} nào. Kiểm tra kênh đã đăng nhập chưa.`)
+        this.sendProgress(`⚠️ Không tìm thấy ${typeName} nào. Kiểm tra tài khoản đã đăng nhập chưa.`)
         return { success: false, count: 0, error: `Không tìm thấy ${typeName} nào` }
       }
 
