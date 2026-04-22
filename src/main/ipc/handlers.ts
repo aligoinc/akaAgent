@@ -5,13 +5,13 @@ import { WebviewRegistry } from '../playwright/webviewController'
 import { SupabaseService } from '../services/supabase'
 import { CampaignScheduler } from '../services/campaignScheduler'
 import { ContactLoader } from '../services/contactLoader'
-import { startAccountPoller } from '../domain/accounts/accountPoller'
+import { startChannelPoller } from '../domain/channels/channelPoller'
 
 import { registerFlowHandlers } from './handlers/flowHandlers'
 import { registerBrowserHandlers } from './handlers/browserHandlers'
 import { registerCampaignHandlers } from './handlers/campaignHandlers'
-import { registerAccountHandlers } from './handlers/accountHandlers'
-import { registerContactHandlers } from './handlers/contactHandlers'
+import { registerChannelHandlers } from './handlers/channelHandlers'
+import { registerChannelContactHandlers } from './handlers/channelContactHandlers'
 import { registerElementHandlers } from './handlers/elementHandlers'
 import { registerRunHandlers } from './handlers/runHandlers'
 import { registerAuthHandlers } from './handlers/authHandlers'
@@ -55,11 +55,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerFlowHandlers(mainWindow, supabase)
   registerBrowserHandlers(webviewRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)
-  registerAccountHandlers(supabase, webviewRegistry)
-  registerContactHandlers(supabase, contactLoader)
+  registerChannelHandlers(supabase, webviewRegistry)
+  registerChannelContactHandlers(supabase, contactLoader)
   registerElementHandlers(supabase)
   registerRunHandlers(supabase)
 
-  // Start account login poller
-  startAccountPoller(webviewRegistry, mainWindow)
+  // Start channel login poller
+  startChannelPoller(webviewRegistry, mainWindow)
 }

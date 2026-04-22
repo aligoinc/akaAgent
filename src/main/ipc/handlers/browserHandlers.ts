@@ -28,8 +28,8 @@ export function registerBrowserHandlers(webviewRegistry: WebviewRegistry): void 
     return { connected: getPlaywrightController()?.isConnected() ?? false }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WEBVIEW_REGISTER, (_, accountId: number, webContentsId: number) => {
-    webviewRegistry.register(accountId, webContentsId)
+  ipcMain.handle(IPC_CHANNELS.WEBVIEW_REGISTER, (_, channelId: number, webContentsId: number) => {
+    webviewRegistry.register(channelId, webContentsId)
 
     try {
       const { webContents } = require('electron')
@@ -42,12 +42,12 @@ export function registerBrowserHandlers(webviewRegistry: WebviewRegistry): void 
     return { success: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WEBVIEW_UNREGISTER, (_, accountId: number) => {
-    webviewRegistry.unregister(accountId)
+  ipcMain.handle(IPC_CHANNELS.WEBVIEW_UNREGISTER, (_, channelId: number) => {
+    webviewRegistry.unregister(channelId)
     return { success: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WEBVIEW_STATUS, (_, accountId: number) => {
-    return { connected: webviewRegistry.isRegistered(accountId) }
+  ipcMain.handle(IPC_CHANNELS.WEBVIEW_STATUS, (_, channelId: number) => {
+    return { connected: webviewRegistry.isRegistered(channelId) }
   })
 }

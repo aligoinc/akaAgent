@@ -1,14 +1,14 @@
 import { create } from 'zustand'
-import { FlatformAccount, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction } from '../../../shared/types'
+import { OrgChannel, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction } from '../../../shared/types'
 
 interface CampaignStore {
-  // Accounts
-  accounts: FlatformAccount[]
-  loadingAccounts: boolean
-  loadAccounts: () => Promise<void>
-  createAccount: (data: Partial<FlatformAccount>) => Promise<FlatformAccount>
-  updateAccount: (id: number, updates: Partial<FlatformAccount>) => Promise<void>
-  deleteAccount: (id: number) => Promise<void>
+  // Channels
+  channels: OrgChannel[]
+  loadingChannels: boolean
+  loadChannels: () => Promise<void>
+  createChannel: (data: Partial<OrgChannel>) => Promise<OrgChannel>
+  updateChannel: (id: number, updates: Partial<OrgChannel>) => Promise<void>
+  deleteChannel: (id: number) => Promise<void>
 
   // Campaign Actions
   campaignActions: CampaignAction[] // active only
@@ -56,39 +56,39 @@ interface CampaignStore {
 
 export const useCampaignStore = create<CampaignStore>((set, get) => ({
   // =========== ACCOUNTS ===========
-  accounts: [],
-  loadingAccounts: false,
+  channels: [],
+  loadingChannels: false,
 
-  loadAccounts: async () => {
+  loadChannels: async () => {
     if (!window.electronAPI) return
-    set({ loadingAccounts: true })
+    set({ loadingChannels: true })
     try {
-      const accounts = await window.electronAPI.listAccounts()
-      set({ accounts })
+      const channels = await window.electronAPI.listChannels()
+      set({ channels })
     } catch (err) {
-      console.error('Failed to load accounts:', err)
+      console.error('Failed to load channels:', err)
     } finally {
-      set({ loadingAccounts: false })
+      set({ loadingChannels: false })
     }
   },
 
-  createAccount: async (data) => {
+  createChannel: async (data) => {
     if (!window.electronAPI) throw new Error('API not available')
-    const account = await window.electronAPI.createAccount(data)
-    await get().loadAccounts()
-    return account
+    const channel = await window.electronAPI.createChannel(data)
+    await get().loadChannels()
+    return channel
   },
 
-  updateAccount: async (id, updates) => {
+  updateChannel: async (id, updates) => {
     if (!window.electronAPI) return
-    await window.electronAPI.updateAccount(id, updates)
-    await get().loadAccounts()
+    await window.electronAPI.updateChannel(id, updates)
+    await get().loadChannels()
   },
 
-  deleteAccount: async (id) => {
+  deleteChannel: async (id) => {
     if (!window.electronAPI) return
-    await window.electronAPI.deleteAccount(id)
-    await get().loadAccounts()
+    await window.electronAPI.deleteChannel(id)
+    await get().loadChannels()
   },
 
   // =========== CAMPAIGN ACTIONS ===========

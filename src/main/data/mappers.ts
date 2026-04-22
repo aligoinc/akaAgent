@@ -1,4 +1,4 @@
-import { FlowData, ExecutionRun, ExecutionStep, FlatformAccount, Campaign, CampaignAction, CampaignDetail, FlatformContact, ContactType, CampaignDetailAction, ElementDefinition, ActionType } from '../../shared/types'
+import { FlowData, ExecutionRun, ExecutionStep, OrgChannel, Campaign, CampaignAction, CampaignDetail, OrgChannelContact, ContactType, CampaignDetailAction, ElementDefinition, ActionType } from '../../shared/types'
 
 export function mapFlowFromDB(row: Record<string, unknown>): FlowData {
   return {
@@ -58,7 +58,7 @@ export function mapElementFromDB(row: Record<string, unknown>): ElementDefinitio
   }
 }
 
-export function mapAccountFromDB(row: Record<string, unknown>): FlatformAccount {
+export function mapChannelFromDB(row: Record<string, unknown>): OrgChannel {
   return {
     id: row.id as number,
     name: row.name as string,
@@ -91,7 +91,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     id: row.id as number,
     name: row.name as string,
     actionId: row.action_id as string,
-    flatformAccountId: row.flatform_account_id as number,
+    channelId: row.channel_id as number,
     status: row.status as string,
     schedule: row.schedule as string | undefined,
     scheduleType: (row.schedule_type as Campaign['scheduleType']) || 'daily',
@@ -111,7 +111,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     actionName: (row as any).auto_campaign_actions?.name as string | undefined,
-    accountName: (row as any).auto_flatform_accounts?.name as string | undefined
+    channelName: (row as any).org_channels?.name as string | undefined
   }
 }
 
@@ -132,10 +132,10 @@ export function mapCampaignDetailFromDB(row: Record<string, unknown>): CampaignD
   }
 }
 
-export function mapContactFromDB(row: Record<string, unknown>): FlatformContact {
+export function mapChannelContactFromDB(row: Record<string, unknown>): OrgChannelContact {
   return {
     id: row.id as number,
-    flatformAccountId: row.flatform_account_id as number,
+    channelId: row.channel_id as number,
     contactType: row.contact_type as ContactType,
     name: row.name as string,
     uid: row.uid as string | undefined,
@@ -154,7 +154,7 @@ export function mapDetailActionFromDB(row: Record<string, unknown>): CampaignDet
     id: row.id as number,
     campaignDetailId: row.campaign_detail_id as number | undefined,
     campaignId: row.campaign_id as number,
-    accountId: row.account_id as number | undefined,
+    channelId: row.channel_id as number | undefined,
     actionName: row.action_name as string,
     status: row.status as string,
     log: row.log as string | undefined,

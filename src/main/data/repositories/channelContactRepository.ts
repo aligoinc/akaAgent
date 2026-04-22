@@ -1,16 +1,16 @@
-import { FlatformContact, ContactType } from '../../../shared/types'
+import { OrgChannelContact, ContactType } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
-import { mapContactFromDB } from '../mappers'
+import { mapChannelContactFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
 
-export async function listContacts(flatformAccountId: number, contactType?: ContactType): Promise<FlatformContact[]> {
+export async function listContacts(channelId: number, contactType?: ContactType): Promise<OrgChannelContact[]> {
   const u = requireCurrentUser()
   let query = client()
-    .from('auto_flatform_contacts')
+    .from('org_channel_contacts')
     .select('*')
-    .eq('flatform_account_id', flatformAccountId)
+    .eq('channel_id', channelId)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('name', { ascending: true })
@@ -21,10 +21,10 @@ export async function listContacts(flatformAccountId: number, contactType?: Cont
 
   const { data, error } = await query
   if (error) throw new Error(`Failed to list contacts: ${error.message}`)
-  return (data || []).map(row => mapContactFromDB(row))
+  return (data || []).map(row => mapChannelContactFromDB(row))
 }
 
-export async function upsertContacts(contacts: Partial<FlatformContact>[]): Promise<number> {
+export async function upsertContacts(contacts: Partial<OrgChannelContact>[]): Promise<number> {
   if (contacts.length === 0) return 0
 
   const u = requireCurrentUser()
@@ -37,7 +37,7 @@ export async function upsertContacts(contacts: Partial<FlatformContact>[]): Prom
   for (let i = 0; i < validContacts.length; i += chunkSize) {
     const chunk = validContacts.slice(i, i + chunkSize)
     const payloads = chunk.map(c => ({
-      flatform_account_id: c.flatformAccountId,
+      channel_id: c.channelId,
       contact_type: c.contactType,
       name: c.name,
       uid: c.uid,
@@ -50,8 +50,8 @@ export async function upsertContacts(contacts: Partial<FlatformContact>[]): Prom
     }))
 
     const { data, error } = await client()
-      .from('auto_flatform_contacts')
-      .upsert(payloads, { onConflict: 'flatform_account_id,contact_type,uid' })
+      .from('org_channel_contacts')
+      .upsert(payloads, { onConflict: 'channel_id,contact_type,uid' })
       .select()
 
     if (error) throw new Error(`Failed to upsert contacts: ${error.message}`)
@@ -61,12 +61,12 @@ export async function upsertContacts(contacts: Partial<FlatformContact>[]): Prom
   return totalSaved
 }
 
-export async function deleteContacts(flatformAccountId: number, contactType: ContactType): Promise<void> {
+export async function deleteContacts(channelId: number, contactType: ContactType): Promise<void> {
   const u = requireCurrentUser()
   const { error } = await client()
-    .from('auto_flatform_contacts')
+    .from('org_channel_contacts')
     .update({ is_delete: true, updated_at: new Date().toISOString() })
-    .eq('flatform_account_id', flatformAccountId)
+    .eq('channel_id', channelId)
     .eq('staff_id', u.staffId)
     .eq('contact_type', contactType)
 

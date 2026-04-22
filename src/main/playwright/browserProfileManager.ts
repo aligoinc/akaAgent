@@ -4,7 +4,7 @@ import { join } from 'path'
 import { mkdirSync, existsSync, unlinkSync } from 'fs'
 
 export interface ProfileInfo {
-  accountId: number
+  channelId: number
   profileName: string
   connected: boolean
 }
@@ -27,16 +27,16 @@ export class BrowserProfileManager {
     }
   }
 
-  async launchProfile(accountId: number, profileName: string): Promise<void> {
-    if (this.launching.has(accountId)) return
-    this.launching.add(accountId)
+  async launchProfile(channelId: number, profileName: string): Promise<void> {
+    if (this.launching.has(channelId)) return
+    this.launching.add(channelId)
 
     try {
       // Close existing context if any
-      await this.closeProfile(accountId)
+      await this.closeProfile(channelId)
 
       // Create persistent profile directory
-      const profileDir = join(app.getPath('userData'), 'browser-profiles', `account_${accountId}`)
+      const profileDir = join(app.getPath('userData'), 'browser-profiles', `channel_${channelId}`)
       mkdirSync(profileDir, { recursive: true })
       this.cleanProfileLocks(profileDir)
 
@@ -49,40 +49,40 @@ export class BrowserProfileManager {
 
       // Listen for context close
       context.on('close', () => {
-        this.contexts.delete(accountId)
-        this.pages.delete(accountId)
-        this.profileNames.delete(accountId)
+        this.contexts.delete(channelId)
+        this.pages.delete(channelId)
+        this.profileNames.delete(channelId)
       })
 
       const page = context.pages()[0] || await context.newPage()
 
-      this.contexts.set(accountId, context)
-      this.pages.set(accountId, page)
-      this.profileNames.set(accountId, profileName)
+      this.contexts.set(channelId, context)
+      this.pages.set(channelId, page)
+      this.profileNames.set(channelId, profileName)
     } finally {
-      this.launching.delete(accountId)
+      this.launching.delete(channelId)
     }
   }
 
-  async closeProfile(accountId: number): Promise<void> {
-    const context = this.contexts.get(accountId)
+  async closeProfile(channelId: number): Promise<void> {
+    const context = this.contexts.get(channelId)
     if (context) {
       try { await context.close() } catch {}
-      this.contexts.delete(accountId)
-      this.pages.delete(accountId)
-      this.profileNames.delete(accountId)
+      this.contexts.delete(channelId)
+      this.pages.delete(channelId)
+      this.profileNames.delete(channelId)
     }
   }
 
   async closeAll(): Promise<void> {
-    const accountIds = Array.from(this.contexts.keys())
-    for (const id of accountIds) {
+    const channelIds = Array.from(this.contexts.keys())
+    for (const id of channelIds) {
       await this.closeProfile(id)
     }
   }
 
-  isProfileConnected(accountId: number): boolean {
-    const page = this.pages.get(accountId)
+  isProfileConnected(channelId: number): boolean {
+    const page = this.pages.get(channelId)
     if (!page) return false
     try {
       return !page.isClosed()
@@ -91,30 +91,30 @@ export class BrowserProfileManager {
     }
   }
 
-  getProfilePage(accountId: number): Page | null {
-    const page = this.pages.get(accountId)
+  getProfilePage(channelId: number): Page | null {
+    const page = this.pages.get(channelId)
     if (!page || page.isClosed()) return null
     return page
   }
 
-  getProfileContext(accountId: number): BrowserContext | null {
-    return this.contexts.get(accountId) || null
+  getProfileContext(channelId: number): BrowserContext | null {
+    return this.contexts.get(channelId) || null
   }
 
   listProfiles(): ProfileInfo[] {
     const profiles: ProfileInfo[] = []
-    for (const [accountId, _context] of this.contexts) {
+    for (const [channelId, _context] of this.contexts) {
       profiles.push({
-        accountId,
-        profileName: this.profileNames.get(accountId) || `account_${accountId}`,
-        connected: this.isProfileConnected(accountId)
+        channelId,
+        profileName: this.profileNames.get(channelId) || `channel_${channelId}`,
+        connected: this.isProfileConnected(channelId)
       })
     }
     return profiles
   }
 
-  async focusProfile(accountId: number): Promise<void> {
-    const page = this.pages.get(accountId)
+  async focusProfile(channelId: number): Promise<void> {
+    const page = this.pages.get(channelId)
     if (page && !page.isClosed()) {
       try {
         await page.bringToFront()

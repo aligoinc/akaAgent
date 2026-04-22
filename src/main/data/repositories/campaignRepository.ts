@@ -11,7 +11,7 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
+    .select('*, auto_campaign_actions(name), org_channels(name)')
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .single()
@@ -24,7 +24,7 @@ export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
+    .select('*, auto_campaign_actions(name), org_channels(name)')
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
@@ -38,7 +38,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
-    flatform_account_id: campaign.flatformAccountId,
+    channel_id: campaign.channelId,
     status: campaign.status || 'chờ xử lý',
     schedule: campaign.schedule || null,
     schedule_type: campaign.scheduleType || 'daily',
@@ -59,7 +59,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const { data, error } = await client()
     .from('auto_campaigns')
     .insert(payload)
-    .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
+    .select('*, auto_campaign_actions(name), org_channels(name)')
     .single()
 
   if (error) throw new Error(`Failed to create campaign: ${error.message}`)
@@ -71,7 +71,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.actionId !== undefined) payload.action_id = updates.actionId
-  if (updates.flatformAccountId !== undefined) payload.flatform_account_id = updates.flatformAccountId
+  if (updates.channelId !== undefined) payload.channel_id = updates.channelId
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.schedule !== undefined) payload.schedule = updates.schedule
   if (updates.scheduleType !== undefined) payload.schedule_type = updates.scheduleType
@@ -91,7 +91,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
-    .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
+    .select('*, auto_campaign_actions(name), org_channels(name)')
     .single()
 
   if (error) throw new Error(`Failed to update campaign: ${error.message}`)
@@ -125,7 +125,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
     .insert({
       name: origCamp.name + ' (Copy)',
       action_id: origCamp.action_id,
-      flatform_account_id: origCamp.flatform_account_id,
+      channel_id: origCamp.channel_id,
       status: 'chờ xử lý',
       schedule: origCamp.schedule,
       schedule_type: origCamp.schedule_type,
@@ -142,7 +142,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       staff_id: u.staffId,
       organization_id: u.organizationId
     })
-    .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
+    .select('*, auto_campaign_actions(name), org_channels(name)')
     .single()
 
   if (errInsert || !newCamp) throw new Error(`Failed to insert cloned campaign: ${errInsert?.message}`)
@@ -198,12 +198,12 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
   if (error) throw new Error(`Failed to append campaign log: ${error.message}`)
 }
 
-export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {
+export async function getPendingCampaigns(channelId: number): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_flatform_accounts(name)')
-    .eq('flatform_account_id', accountId)
+    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .eq('channel_id', channelId)
     .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
     .eq('is_delete', false)
@@ -329,7 +329,7 @@ export async function createDetailAction(action: Partial<CampaignDetailAction>):
   const payload = {
     campaign_detail_id: action.campaignDetailId,
     campaign_id: action.campaignId,
-    account_id: action.accountId,
+    channel_id: action.channelId,
     action_name: action.actionName,
     status: action.status || 'success',
     log: action.log || null,
@@ -356,8 +356,8 @@ export async function deleteDetailAction(id: number): Promise<void> {
   if (error) throw new Error(`Failed to delete detail action: ${error.message}`)
 }
 
-export async function getAccountRateLimitStatus(
-  accountId: number,
+export async function getChannelRateLimitStatus(
+  channelId: number,
   actionName: string,
   limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }
 ): Promise<{ ok: boolean, reason?: string }> {
@@ -371,7 +371,7 @@ export async function getAccountRateLimitStatus(
   const { count: dailyActionCount, error: dailyErr } = await client()
     .from('auto_campaign_detail_actions')
     .select('*', { count: 'exact', head: true })
-    .eq('account_id', accountId)
+    .eq('channel_id', channelId)
     .eq('action_name', actionName)
     .gte('created_at', today.toISOString())
 
@@ -386,7 +386,7 @@ export async function getAccountRateLimitStatus(
   const { count: windowActionCount, error: winErr } = await client()
     .from('auto_campaign_detail_actions')
     .select('*', { count: 'exact', head: true })
-    .eq('account_id', accountId)
+    .eq('channel_id', channelId)
     .eq('action_name', actionName)
     .gte('created_at', timeFrameStart.toISOString())
 

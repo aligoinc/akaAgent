@@ -8,16 +8,16 @@ import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
 
 interface CampaignPanelProps {
-  filterAccountId?: number | null
+  filterChannelId?: number | null
   onClearFilter?: () => void
 }
 
-export default function CampaignPanel({ filterAccountId, onClearFilter }: CampaignPanelProps) {
+export default function CampaignPanel({ filterChannelId, onClearFilter }: CampaignPanelProps) {
   const {
-    accounts, campaigns, campaignActions,
+    channels, campaigns, campaignActions,
     campaignDetails, loadingDetails,
     detailActions, loadingDetailActions,
-    loadCampaigns, loadCampaignActions, loadAccounts,
+    loadCampaigns, loadCampaignActions, loadChannels,
     createCampaign, updateCampaign, deleteCampaign, cloneCampaign,
     loadCampaignDetails, loadDetailActionsByCampaign
   } = useCampaignStore()
@@ -34,8 +34,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
   useEffect(() => {
     loadCampaigns()
     loadCampaignActions()
-    loadAccounts()
-  }, [loadCampaigns, loadCampaignActions, loadAccounts])
+    loadChannels()
+  }, [loadCampaigns, loadCampaignActions, loadChannels])
 
   // Load details when a campaign is selected
   useEffect(() => {
@@ -103,14 +103,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
 
-  // Filter campaigns by account if filter is active
+  // Filter campaigns by channel if filter is active
   const filteredCampaigns = useMemo(() => {
-    if (!filterAccountId) return campaigns
-    return campaigns.filter(c => c.flatformAccountId === filterAccountId)
-  }, [campaigns, filterAccountId])
+    if (!filterChannelId) return campaigns
+    return campaigns.filter(c => c.channelId === filterChannelId)
+  }, [campaigns, filterChannelId])
 
-  const filterAccountName = filterAccountId 
-    ? accounts.find(a => a.id === filterAccountId)?.name || `ID: ${filterAccountId}`
+  const filterChannelName = filterChannelId 
+    ? channels.find(a => a.id === filterChannelId)?.name || `ID: ${filterChannelId}`
     : null
 
   return (
@@ -133,9 +133,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       </div>
 
       {/* Filter indicator */}
-      {filterAccountId && (
+      {filterChannelId && (
         <div className="campaign-filter-bar">
-          <span>🔍 Lọc theo: <strong>{filterAccountName}</strong></span>
+          <span>🔍 Lọc theo: <strong>{filterChannelName}</strong></span>
           <button className="btn-icon" onClick={onClearFilter} title="Bỏ lọc">
             <X size={12} />
           </button>
@@ -166,13 +166,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       {/* Campaign Table */}
       <div className="campaign-panel-content" style={{ flex: 1, minHeight: 0 }}>
         {filteredCampaigns.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-text">{filterAccountId ? 'Không có chiến dịch cho tài khoản này' : 'Chưa có chiến dịch'}</div></div>
+          <div className="empty-state"><div className="empty-state-text">{filterChannelId ? 'Không có chiến dịch cho kênh này' : 'Chưa có chiến dịch'}</div></div>
         ) : (
           <div className="campaign-table">
             <div className="campaign-table-header">
               <div className="campaign-col col-name">Tên</div>
               <div className="campaign-col col-action">Hành động</div>
-              <div className="campaign-col col-account">Tài khoản</div>
+              <div className="campaign-col col-channel">Kênh</div>
               <div className="campaign-col col-status">Trạng thái</div>
               <div className="campaign-col col-schedule">Lịch chạy</div>
               <div className="campaign-col col-ops"></div>
@@ -186,7 +186,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
               >
                 <div className="campaign-col col-name">{campaign.name}</div>
                 <div className="campaign-col col-action">{campaign.actionName || campaign.actionId}</div>
-                <div className="campaign-col col-account">{campaign.accountName || '-'}</div>
+                <div className="campaign-col col-channel">{campaign.channelName || '-'}</div>
                 <div className="campaign-col col-status">
                   <span className="status-badge" style={{ color: getStatusColor(campaign.status) }}>
                     {campaign.status}

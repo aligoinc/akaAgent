@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useCampaignStore } from '../stores/campaignStore'
-import { FlatformAccount } from '../../../shared/types'
+import { OrgChannel } from '../../../shared/types'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -12,76 +12,76 @@ const PLATFORM_URLS: Record<string, string> = {
 }
 
 interface BrowserPageProps {
-  focusAccountId?: number | null
+  focusChannelId?: number | null
   onFocusHandled?: () => void
 }
 
-export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserPageProps) {
-  const { accounts, loadAccounts } = useCampaignStore()
-  const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
+export default function BrowserPage({ focusChannelId, onFocusHandled }: BrowserPageProps) {
+  const { channels, loadChannels } = useCampaignStore()
+  const [activeChannelId, setActiveChannelId] = useState<number | null>(null)
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
 
-  // Filter out disabled (isActive=false) accounts - they don't get browser tabs
-  const activeAccounts = accounts.filter(a => a.isActive)
+  // Filter out disabled (isActive=false) channels - they don't get browser tabs
+  const activeChannels = channels.filter(a => a.isActive)
 
-  // Load accounts on mount
+  // Load channels on mount
   useEffect(() => {
-    loadAccounts()
-  }, [loadAccounts])
+    loadChannels()
+  }, [loadChannels])
 
-  // Auto-select first account
+  // Auto-select first channel
   useEffect(() => {
-    if (activeAccounts.length > 0 && activeAccountId === null) {
-      setActiveAccountId(activeAccounts[0].id)
+    if (activeChannels.length > 0 && activeChannelId === null) {
+      setActiveChannelId(activeChannels[0].id)
     }
-  }, [activeAccounts, activeAccountId])
+  }, [activeChannels, activeChannelId])
 
   // Handle focus from external navigation (context menu)
   useEffect(() => {
-    if (focusAccountId) {
-      setActiveAccountId(focusAccountId)
+    if (focusChannelId) {
+      setActiveChannelId(focusChannelId)
       onFocusHandled?.()
     }
-  }, [focusAccountId, onFocusHandled])
+  }, [focusChannelId, onFocusHandled])
 
   // Cleanup: unregister all webviews on unmount
   useEffect(() => {
     return () => {
-      registeredIds.current.forEach((accountId) => {
-        window.electronAPI?.unregisterWebview(accountId).catch(() => {})
+      registeredIds.current.forEach((channelId) => {
+        window.electronAPI?.unregisterWebview(channelId).catch(() => {})
       })
       registeredIds.current.clear()
     }
   }, [])
 
-  const getInitialUrl = (account: FlatformAccount) => {
-    return PLATFORM_URLS[account.flatformType] || 'about:blank'
+  const getInitialUrl = (channel: OrgChannel) => {
+    return PLATFORM_URLS[channel.flatformType] || 'about:blank'
   }
 
-  const getProfilePartition = (accountId: number) => {
-    return `persist:account_${accountId}`
+  const getProfilePartition = (channelId: number) => {
+    return `persist:channel_${channelId}`
   }
 
   const handleReload = () => {
-    if (activeAccountId) {
-      const wv = webviewRefs.current.get(activeAccountId)
+    if (activeChannelId) {
+      const wv = webviewRefs.current.get(activeChannelId)
       if (wv) wv.reload()
     }
   }
 
   // Register webview with main process when it's ready
-  const handleWebviewRef = useCallback((account: FlatformAccount, el: any) => {
+  const handleWebviewRef = useCallback((channel: OrgChannel, el: any) => {
     if (!el) return
     const wv = el as Electron.WebviewTag
-    webviewRefs.current.set(account.id, wv)
+    webviewRefs.current.set(channel.id, wv)
 
     const onDomReady = () => {
       try {
         const wcId = (wv as any).getWebContentsId()
         if (wcId && window.electronAPI) {
-          window.electronAPI.registerWebview(account.id, wcId)
-          registeredIds.current.add(account.id)
+          window.electronAPI.registerWebview(channel.id, wcId)
+          registeredIds.current.add(channel.id)
         }
       } catch (err) {
         console.error('Failed to register webview:', err)
@@ -97,14 +97,14 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
       {/* Browser tabs */}
       <div className="browser-tabs-bar">
         <div className="browser-tabs">
-          {activeAccounts.map(account => (
+          {activeChannels.map(channel => (
             <div
-              key={account.id}
-              className={`browser-tab ${activeAccountId === account.id ? 'active' : ''}`}
-              onClick={() => setActiveAccountId(account.id)}
+              key={channel.id}
+              className={`browser-tab ${activeChannelId === channel.id ? 'active' : ''}`}
+              onClick={() => setActiveChannelId(channel.id)}
             >
-              <span className="browser-tab-label">{account.name}</span>
-              <span className="browser-tab-platform">{account.flatformType}</span>
+              <span className="browser-tab-label">{channel.name}</span>
+              <span className="browser-tab-platform">{channel.flatformType}</span>
             </div>
           ))}
         </div>
@@ -118,24 +118,24 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
 
       {/* Webview container - all webviews are always rendered, stacked via z-index */}
       <div className="browser-webview-container" style={{ position: 'relative' }}>
-        {activeAccounts.length === 0 ? (
+        {activeChannels.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-text">Chưa có tài khoản nào hoạt động. Hãy thêm tài khoản ở trang Chiến dịch.</div>
+            <div className="empty-state-text">Chưa có kênh nào hoạt động. Hãy thêm kênh ở trang Chiến dịch.</div>
           </div>
         ) : (
-          activeAccounts.map(account => (
+          activeChannels.map(channel => (
             <webview
-              key={account.id}
-              ref={(el: any) => handleWebviewRef(account, el)}
-              src={getInitialUrl(account)}
-              partition={getProfilePartition(account.id)}
+              key={channel.id}
+              ref={(el: any) => handleWebviewRef(channel, el)}
+              src={getInitialUrl(channel)}
+              partition={getProfilePartition(channel.id)}
               style={{
                 position: 'absolute' as const,
                 top: 0,
                 left: 0,
                 width: '100%',
                 height: '100%',
-                zIndex: activeAccountId === account.id ? 2 : 1
+                zIndex: activeChannelId === channel.id ? 2 : 1
               }}
               /* @ts-ignore */
               allowpopups="true"

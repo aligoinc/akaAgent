@@ -1,11 +1,11 @@
 import { BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../../shared/types'
 import { WebviewRegistry } from '../../playwright/webviewController'
-import * as accountRepo from '../../data/repositories/accountRepository'
+import * as channelRepo from '../../data/repositories/channelRepository'
 
 const AUTO_CHECK_INTERVAL = 30_000
 
-async function checkAccountLogin(accountId: number, wcId: number): Promise<string | null> {
+async function checkChannelLogin(channelId: number, wcId: number): Promise<string | null> {
   try {
     const { webContents } = require('electron')
     const wc = webContents.fromId(wcId)
@@ -47,7 +47,7 @@ async function checkAccountLogin(accountId: number, wcId: number): Promise<strin
   }
 }
 
-export function startAccountPoller(webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow): void {
+export function startChannelPoller(webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow): void {
   setInterval(async () => {
     if (!webviewRegistry) return
     const registered = webviewRegistry.listRegistered()
@@ -55,29 +55,29 @@ export function startAccountPoller(webviewRegistry: WebviewRegistry, mainWindow:
 
     let hasChanges = false
 
-    for (const { accountId, connected } of registered) {
+    for (const { channelId, connected } of registered) {
       if (!connected) continue
-      const wcId = webviewRegistry.getWebContentsId(accountId)
+      const wcId = webviewRegistry.getWebContentsId(channelId)
       if (!wcId) continue
 
       try {
-        const newStatus = await checkAccountLogin(accountId, wcId)
+        const newStatus = await checkChannelLogin(channelId, wcId)
         if (newStatus) {
-          const accounts = await accountRepo.listAccounts()
-          const account = accounts.find(a => a.id === accountId)
-          if (account && account.loginStatus !== newStatus) {
-            await accountRepo.updateAccount(accountId, { loginStatus: newStatus })
+          const channels = await channelRepo.listChannels()
+          const channel = channels.find(a => a.id === channelId)
+          if (channel && channel.loginStatus !== newStatus) {
+            await channelRepo.updateChannel(channelId, { loginStatus: newStatus })
             hasChanges = true
-            console.log(`[AutoCheck] Account ${accountId}: ${account.loginStatus} → ${newStatus}`)
+            console.log(`[AutoCheck] Channel ${channelId}: ${channel.loginStatus} → ${newStatus}`)
           }
         }
       } catch {
-        // Silently ignore per-account errors
+        // Silently ignore per-channel errors
       }
     }
 
     if (hasChanges) {
-      mainWindow.webContents.send(IPC_CHANNELS.ACCOUNT_STATUS_UPDATED)
+      mainWindow.webContents.send(IPC_CHANNELS.CHANNEL_STATUS_UPDATED)
     }
   }, AUTO_CHECK_INTERVAL)
 }

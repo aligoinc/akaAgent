@@ -1488,60 +1488,60 @@ export class WebviewController {
 }
 
 /**
- * Registry to map accountId → webContentsId.
- * Used by CampaignScheduler to find the correct webview for each account.
+ * Registry to map channelId → webContentsId.
+ * Used by CampaignScheduler to find the correct webview for each channel.
  */
 export class WebviewRegistry {
-  private registry: Map<number, number> = new Map() // accountId → webContentsId
+  private registry: Map<number, number> = new Map() // channelId → webContentsId
 
-  register(accountId: number, webContentsId: number): void {
-    this.registry.set(accountId, webContentsId)
+  register(channelId: number, webContentsId: number): void {
+    this.registry.set(channelId, webContentsId)
   }
 
-  unregister(accountId: number): void {
-    this.registry.delete(accountId)
+  unregister(channelId: number): void {
+    this.registry.delete(channelId)
   }
 
-  isRegistered(accountId: number): boolean {
-    const wcId = this.registry.get(accountId)
+  isRegistered(channelId: number): boolean {
+    const wcId = this.registry.get(channelId)
     if (wcId === undefined) return false
     // Verify the webContents still exists
     const wc = webContents.fromId(wcId)
     if (!wc || wc.isDestroyed()) {
-      this.registry.delete(accountId)
+      this.registry.delete(channelId)
       return false
     }
     return true
   }
 
-  getController(accountId: number): WebviewController | null {
-    const wcId = this.registry.get(accountId)
+  getController(channelId: number): WebviewController | null {
+    const wcId = this.registry.get(channelId)
     if (wcId === undefined) return null
     const wc = webContents.fromId(wcId)
     if (!wc || wc.isDestroyed()) {
-      this.registry.delete(accountId)
+      this.registry.delete(channelId)
       return null
     }
     return new WebviewController(wc)
   }
 
-  getWebContentsId(accountId: number): number | null {
-    const wcId = this.registry.get(accountId)
+  getWebContentsId(channelId: number): number | null {
+    const wcId = this.registry.get(channelId)
     if (wcId === undefined) return null
     const wc = webContents.fromId(wcId)
     if (!wc || wc.isDestroyed()) {
-      this.registry.delete(accountId)
+      this.registry.delete(channelId)
       return null
     }
     return wcId
   }
 
-  listRegistered(): { accountId: number; connected: boolean }[] {
-    const result: { accountId: number; connected: boolean }[] = []
-    for (const [accountId] of this.registry) {
+  listRegistered(): { channelId: number; connected: boolean }[] {
+    const result: { channelId: number; connected: boolean }[] = []
+    for (const [channelId] of this.registry) {
       result.push({
-        accountId,
-        connected: this.isRegistered(accountId)
+        channelId,
+        connected: this.isRegistered(channelId)
       })
     }
     return result
