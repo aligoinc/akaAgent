@@ -987,6 +987,9 @@ export class WebviewController {
 
               // Method B: innerHTML parse
               var html = wrapper.innerHTML || '';
+              // FB render emoji bằng <img alt="😀" src="..."> → unwrap alt trước khi strip tag
+              html = html.replace(/<img[^>]*\\balt="([^"]*)"[^>]*>/gi, '$1');
+              html = html.replace(/<img[^>]*\\balt='([^']*)'[^>]*>/gi, '$1');
               html = html.replace(/<br\\s*\\/?\\s*>/gi, '\\n');
               html = html.replace(/<\\/(div|p|h[1-6]|li|blockquote)\\s*>/gi, '\\n');
               var tmp = document.createElement('div');
@@ -1001,6 +1004,12 @@ export class WebviewController {
                 if (node.nodeType !== 1) return;
                 if (node.tagName === 'BR') { out.push('\\n'); return; }
                 if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return;
+                // FB render emoji bằng <img alt="😀" ...> → lấy alt làm text
+                if (node.tagName === 'IMG') {
+                  var alt = (node.getAttribute && node.getAttribute('alt')) || '';
+                  if (alt) out.push(alt);
+                  return;
+                }
                 var isBlock = BLOCK[node.tagName] === 1;
                 if (!isBlock) {
                   try {
