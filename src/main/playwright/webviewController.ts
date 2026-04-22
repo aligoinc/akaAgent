@@ -1189,12 +1189,12 @@ export class WebviewController {
             }).catch(() => null)
             await new Promise(r => setTimeout(r, 2000))
             const confirmCheck = await this.executeAction('waitForSelector', {
-              selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]',
+              selector: '(//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"])[position()=2]',
               timeout: 3000
             }).catch(() => null)
             if (confirmCheck && confirmCheck.success && confirmCheck.output?.found !== false) {
               await this.executeAction('click', {
-                selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]'
+                selector: '(//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"])[position()=2]'
               }).catch(() => null)
               await new Promise(r => setTimeout(r, 2000))
             }
