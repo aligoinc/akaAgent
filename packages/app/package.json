@@ -1,26 +1,41 @@
 {
   "name": "@akabiz/app",
   "version": "0.0.0",
-  "description": "akaBiz Auto v2 — Electron + React app services + CLI runner.",
+  "description": "akaBiz Auto v2 — Electron + React app + CLI runner.",
   "private": true,
   "type": "module",
-  "main": "./dist/cli/run-workflow.js",
+  "main": "./out/main/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.cli.json",
+    "build:electron": "electron-vite build",
+    "dev": "electron-vite dev",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.cli.json --noEmit",
     "test": "echo \"(no tests yet)\" && exit 0",
     "run-workflow": "npm run build && node dist/cli/run-workflow.js",
     "seed-workflow": "npm run build && node dist/cli/seed-workflow.js",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist out"
   },
   "dependencies": {
     "@akabiz/engine": "*",
     "@supabase/supabase-js": "^2.49.1",
+    "@xyflow/react": "^12.4.4",
     "croner": "^9.1.0",
-    "playwright": "^1.58.2"
+    "dotenv": "^17.3.1",
+    "lucide-react": "^0.469.0",
+    "playwright": "^1.58.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@electron-toolkit/utils": "^3.0.0",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.3"
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.1",
+    "electron-vite": "^3.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
   }
 }

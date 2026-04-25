@@ -1,10 +1,25 @@
 # @akabiz/app
 
-akaBiz Auto v2 — Electron + React app services + CLI runner.
+akaBiz Auto v2 — Electron + React app + CLI runner.
 
-**Status**: Phase 6 done — minimum viable. Test E2E từ CLI.
+**Status**: Phase 7a done — Electron + React UI shell với 3 pages (Workflows / Runs / Channels) + WorkflowDetail canvas (ReactFlow read-only) + Run từ UI + real-time progress.
 
-## Quick start (E2E test)
+## Quick start — Electron app (Phase 7a)
+
+```bash
+# Install deps + build packages
+npm install
+npm run engine:build
+
+# Setup .env at repo root (see "Setup environment" below)
+
+# Run Electron app in dev mode
+npm run dev -w @akabiz/app
+```
+
+→ App opens, see Workflows / Runs / Channels tabs. Click into a workflow to see canvas + Run button.
+
+## Quick start — CLI E2E test
 
 ### 1. Setup environment
 
