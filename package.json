@@ -20,7 +20,11 @@
     "build:mac": "npm run build && electron-builder --mac --config",
     "engine:build": "npm run build -w @akabiz/engine",
     "engine:typecheck": "npm run typecheck -w @akabiz/engine",
-    "engine:test": "npm run test -w @akabiz/engine"
+    "engine:test": "npm run test -w @akabiz/engine",
+    "v2:dev": "npm run dev -w @akabiz/app",
+    "v2:build": "npm run engine:build && npm run build:electron -w @akabiz/app",
+    "migrate:legacy": "tsx scripts/migrate-legacy.ts",
+    "migrate:legacy:dry": "tsx scripts/migrate-legacy.ts --dry-run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
@@ -43,6 +47,7 @@
     "electron-vite": "^3.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.3",
     "vite": "^6.0.0"
   },
