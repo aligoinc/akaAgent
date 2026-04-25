@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { config as loadEnv } from 'dotenv'
 import { bootstrap, type AppContext } from '../../src/bootstrap.js'
 import { IPC_CHANNELS } from '../../shared/ipcChannels.js'
@@ -62,6 +63,72 @@ async function setupIpc(): Promise<void> {
       .select('*').eq('workflow_id', id).eq('version', targetVersion).single()
     if (revErr) throw new Error(revErr.message)
     return { workflow: wf, revision: rev }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WORKFLOW_SAVE, async (_e, args: {
+    id: string
+    name: string
+    description?: string | null
+    isBlock?: boolean
+    graph: { nodes: unknown[]; edges: unknown[]; variables?: unknown[]; inputSchema?: unknown[]; outputSchema?: unknown[] }
+    bumpVersion?: boolean
+  }) => {
+    // Get current_version
+    const { data: existing } = await ctx.supabase.from('workflows').select('current_version').eq('id', args.id).single()
+    const currentVer = existing?.current_version ? Number(existing.current_version) : 0
+    const newVer = args.bumpVersion || !existing ? currentVer + 1 : currentVer
+
+    // Upsert workflow
+    const wfPayload: Record<string, unknown> = {
+      id: args.id,
+      name: args.name,
+      description: args.description ?? null,
+      is_active: true,
+      is_block: args.isBlock ?? false,
+      current_version: newVer,
+      updated_at: new Date().toISOString()
+    }
+    const { error: wfErr } = await ctx.supabase.from('workflows').upsert(wfPayload)
+    if (wfErr) throw new Error(`save workflow failed: ${wfErr.message}`)
+
+    // Upsert revision
+    const { error: revErr } = await ctx.supabase.from('workflow_revisions').upsert({
+      workflow_id: args.id,
+      version: newVer,
+      graph: args.graph,
+      is_published: true
+    })
+    if (revErr) throw new Error(`save revision failed: ${revErr.message}`)
+
+    return { id: args.id, version: newVer }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WORKFLOW_CREATE, async (_e, args: { name: string; description?: string }) => {
+    const id = randomUUID()
+    const { error } = await ctx.supabase.from('workflows').insert({
+      id,
+      name: args.name,
+      description: args.description ?? null,
+      is_active: true,
+      is_block: false,
+      current_version: 1
+    })
+    if (error) throw new Error(error.message)
+    // Create empty revision v1
+    const { error: revErr } = await ctx.supabase.from('workflow_revisions').insert({
+      workflow_id: id,
+      version: 1,
+      graph: { nodes: [], edges: [], variables: [], inputSchema: [], outputSchema: [] },
+      is_published: true
+    })
+    if (revErr) throw new Error(revErr.message)
+    return { id }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WORKFLOW_DELETE, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('workflows').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
   })
 
   // ===== RUN =====

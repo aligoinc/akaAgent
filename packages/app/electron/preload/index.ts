@@ -5,7 +5,11 @@ import type { ProgressEvent, RunResult } from '@akabiz/engine'
 const api = {
   workflows: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.WORKFLOW_LIST),
-    get: (id: string, version?: number) => ipcRenderer.invoke(IPC_CHANNELS.WORKFLOW_GET, id, version)
+    get: (id: string, version?: number) => ipcRenderer.invoke(IPC_CHANNELS.WORKFLOW_GET, id, version),
+    save: (args: { id: string; name: string; description?: string | null; isBlock?: boolean; graph: { nodes: unknown[]; edges: unknown[]; variables?: unknown[]; inputSchema?: unknown[]; outputSchema?: unknown[] }; bumpVersion?: boolean }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKFLOW_SAVE, args),
+    create: (args: { name: string; description?: string }) => ipcRenderer.invoke(IPC_CHANNELS.WORKFLOW_CREATE, args),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.WORKFLOW_DELETE, id)
   },
   runs: {
     enqueue: (args: { workflowId: string; channelId?: string; input: Record<string, unknown>; workflowVersion?: number }): Promise<RunResult> =>

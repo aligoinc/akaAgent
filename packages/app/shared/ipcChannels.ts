@@ -8,7 +8,9 @@ export const IPC_CHANNELS = {
   // Workflows
   WORKFLOW_LIST: 'workflow:list',
   WORKFLOW_GET: 'workflow:get',
-  WORKFLOW_SEED: 'workflow:seed',           // upsert from JSON
+  WORKFLOW_SAVE: 'workflow:save',           // upsert workflow + new revision
+  WORKFLOW_CREATE: 'workflow:create',       // blank workflow
+  WORKFLOW_DELETE: 'workflow:delete',
   // Runs
   RUN_ENQUEUE: 'run:enqueue',
   RUN_LIST: 'run:list',
