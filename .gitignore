@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+.tsbuildinfo
 .env
 .mcp.json
 *.local.json
@@ -8,3 +9,9 @@ dist/
 .DS_Store
 Thumbs.db
 release/
+
+# Compiled artifacts in shared/ (TS sources only)
+packages/app/shared/*.js
+packages/app/shared/*.js.map
+packages/app/shared/*.d.ts
+packages/app/shared/*.d.ts.map
