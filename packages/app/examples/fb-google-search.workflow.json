@@ -1,0 +1,87 @@
+{
+  "name": "Google search smoke test (browser)",
+  "description": "Verify browser primitives: navigate + click + type + screenshot. CẦN channel browser.",
+  "graph": {
+    "nodes": [
+      {
+        "id": "n_in",
+        "manifestId": "core.input",
+        "position": { "x": 0, "y": 0 },
+        "config": {},
+        "inputMapping": {}
+      },
+      {
+        "id": "n_nav",
+        "manifestId": "core.navigate",
+        "position": { "x": 0, "y": 100 },
+        "config": { "url": "https://www.google.com", "waitUntil": "domcontentloaded" },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_wait",
+        "manifestId": "core.waitForSelector",
+        "position": { "x": 0, "y": 200 },
+        "config": {
+          "selector": { "kind": "inline", "type": "css", "expression": "textarea[name='q']" },
+          "state": "visible",
+          "timeout": 10000
+        },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_type",
+        "manifestId": "core.type",
+        "position": { "x": 0, "y": 300 },
+        "config": {
+          "selector": { "kind": "inline", "type": "css", "expression": "textarea[name='q']" },
+          "text": "{{n_in.query}}",
+          "delay": 80
+        },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_press",
+        "manifestId": "core.pressKey",
+        "position": { "x": 0, "y": 400 },
+        "config": { "key": "Enter" },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_wait2",
+        "manifestId": "core.waitForSelector",
+        "position": { "x": 0, "y": 500 },
+        "config": {
+          "selector": { "kind": "inline", "type": "css", "expression": "#search" },
+          "state": "visible",
+          "timeout": 10000
+        },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_shot",
+        "manifestId": "core.screenshot",
+        "position": { "x": 0, "y": 600 },
+        "config": { "fullPage": false },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_out",
+        "manifestId": "core.output",
+        "position": { "x": 0, "y": 700 },
+        "config": {},
+        "inputMapping": {
+          "screenshotBase64": { "sourceNodeId": "n_shot", "sourceField": "screenshotBase64" }
+        }
+      }
+    ],
+    "edges": [
+      { "id": "e1", "source": "n_in", "target": "n_nav" },
+      { "id": "e2", "source": "n_nav", "target": "n_wait" },
+      { "id": "e3", "source": "n_wait", "target": "n_type" },
+      { "id": "e4", "source": "n_type", "target": "n_press" },
+      { "id": "e5", "source": "n_press", "target": "n_wait2" },
+      { "id": "e6", "source": "n_wait2", "target": "n_shot" },
+      { "id": "e7", "source": "n_shot", "target": "n_out" }
+    ]
+  }
+}

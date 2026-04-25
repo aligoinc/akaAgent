@@ -1,0 +1,70 @@
+{
+  "name": "Hello World — engine smoke test",
+  "description": "Pure logic workflow: setVariable + log + httpRequest + transformJson + output. KHÔNG cần channel.",
+  "graph": {
+    "nodes": [
+      {
+        "id": "n_in",
+        "manifestId": "core.input",
+        "position": { "x": 0, "y": 0 },
+        "config": {},
+        "inputMapping": {}
+      },
+      {
+        "id": "n_log_start",
+        "manifestId": "core.log",
+        "position": { "x": 0, "y": 100 },
+        "config": { "message": "Đang fetch GitHub user {{n_in.username}}", "level": "info" },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_http",
+        "manifestId": "core.httpRequest",
+        "position": { "x": 0, "y": 200 },
+        "config": {
+          "url": "https://api.github.com/users/{{n_in.username}}",
+          "method": "GET",
+          "timeout": 10000
+        },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_transform",
+        "manifestId": "core.transformJson",
+        "position": { "x": 0, "y": 300 },
+        "config": {
+          "template": {
+            "name": "{{n_http.data.name}}",
+            "publicRepos": "{{n_http.data.public_repos}}",
+            "followers": "{{n_http.data.followers}}",
+            "summary": "User {{n_http.data.login}} có {{n_http.data.public_repos}} repos và {{n_http.data.followers}} followers"
+          }
+        },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_log_end",
+        "manifestId": "core.log",
+        "position": { "x": 0, "y": 400 },
+        "config": { "message": "{{n_transform.result.summary}}", "level": "info" },
+        "inputMapping": {}
+      },
+      {
+        "id": "n_out",
+        "manifestId": "core.output",
+        "position": { "x": 0, "y": 500 },
+        "config": {},
+        "inputMapping": {
+          "result": { "sourceNodeId": "n_transform", "sourceField": "result" }
+        }
+      }
+    ],
+    "edges": [
+      { "id": "e1", "source": "n_in", "target": "n_log_start" },
+      { "id": "e2", "source": "n_log_start", "target": "n_http" },
+      { "id": "e3", "source": "n_http", "target": "n_transform" },
+      { "id": "e4", "source": "n_transform", "target": "n_log_end" },
+      { "id": "e5", "source": "n_log_end", "target": "n_out" }
+    ]
+  }
+}
