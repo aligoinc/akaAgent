@@ -6,6 +6,8 @@ import { setVariableManifest, setVariableHandler } from './data/setVariable.js'
 import { logManifest, logHandler } from './data/log.js'
 import { transformJsonManifest, transformJsonHandler } from './data/transformJson.js'
 import { ifManifest } from './controlFlow/if.js'
+import { switchManifest } from './controlFlow/switch.js'
+import { filterManifest } from './controlFlow/filter.js'
 import { delayManifest, delayHandler } from './controlFlow/delay.js'
 import { loopManifest } from './controlFlow/loop.js'
 import { breakManifest } from './controlFlow/break.js'
@@ -31,8 +33,10 @@ export function registerCorePrimitives(registry: BlockRegistry): void {
   registry.register(logManifest, logHandler)
   registry.register(transformJsonManifest, transformJsonHandler)
 
-  // control flow — runner special-case (no handler) for if/loop/break/continue
+  // control flow — runner special-case (no handler) for if/switch/filter/loop/break/continue
   registry.register(ifManifest)
+  registry.register(switchManifest)
+  registry.register(filterManifest)
   registry.register(loopManifest)
   registry.register(breakManifest)
   registry.register(continueManifest)
@@ -50,6 +54,8 @@ export {
   logManifest, logHandler,
   transformJsonManifest, transformJsonHandler,
   ifManifest,
+  switchManifest,
+  filterManifest,
   loopManifest, breakManifest, continueManifest,
   delayManifest, delayHandler,
   httpRequestManifest, httpRequestHandler,

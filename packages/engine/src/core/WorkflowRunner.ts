@@ -204,6 +204,18 @@ export class WorkflowRunner {
         continue
       }
 
+      // Special: switch — multi-case branching
+      if (node.manifestId === 'core.switch') {
+        await this.executeSwitchNode(node, context, runId, graph, skipped)
+        continue
+      }
+
+      // Special: filter — skip downstream nếu condition false
+      if (node.manifestId === 'core.filter') {
+        await this.executeFilterNode(node, context, runId, graph, skipped)
+        continue
+      }
+
       // Special: loop
       if (node.manifestId === 'core.loop') {
         await this.executeLoopNode(node, graph, context, runId, request)
@@ -608,6 +620,129 @@ export class WorkflowRunner {
       durationMs: step.durationMs ?? 0
     })
     return result
+  }
+
+  // ========== switch ==========
+
+  private async executeSwitchNode(
+    node: WorkflowNode,
+    context: ExecutionContext,
+    runId: string,
+    graph: RunGraph,
+    skipped: Set<string>
+  ): Promise<void> {
+    const startedAt = new Date()
+    // Resolve expression — use raw config (KHÔNG pre-interpolated bởi resolveNodeInput
+    // vì cần raw template) hoặc resolved config.
+    // Use resolved config: simple cho user (config["expression"] đã interpolate).
+    const resolved = this.resolveNodeInput(node, context)
+    const value = resolved.expression
+    const valueStr = value === null || value === undefined ? 'null' : String(value)
+
+    // Cases: array of strings
+    const casesRaw = resolved.cases
+    const cases: string[] = Array.isArray(casesRaw)
+      ? casesRaw.map(c => String(c))
+      : []
+
+    let matchedHandle: string
+    let matched: boolean
+    if (cases.includes(valueStr)) {
+      matchedHandle = `switch-${valueStr}`
+      matched = true
+    } else {
+      matchedHandle = 'switch-default'
+      matched = false
+    }
+
+    // Mark losing handles' downstream as skipped
+    for (const c of cases) {
+      const h = `switch-${c}`
+      if (h !== matchedHandle) {
+        this.collectDownstream(node.id, h, graph.outgoing, graph.incoming, skipped)
+      }
+    }
+    if (matchedHandle !== 'switch-default') {
+      this.collectDownstream(node.id, 'switch-default', graph.outgoing, graph.incoming, skipped)
+    }
+
+    const finishedAt = new Date()
+    const durationMs = finishedAt.getTime() - startedAt.getTime()
+    const output = { value, branch: matchedHandle, matched }
+
+    const step: RunStep = {
+      id: randomUUID(),
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      input: { expression: value, cases },
+      output,
+      attempt: 1,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      durationMs
+    }
+    await this.opts.persistence.saveStep(step)
+    context.setNodeOutput(node.id, output)
+    this.emit({
+      kind: 'step.end',
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      output,
+      durationMs
+    })
+  }
+
+  // ========== filter ==========
+
+  private async executeFilterNode(
+    node: WorkflowNode,
+    context: ExecutionContext,
+    runId: string,
+    graph: RunGraph,
+    skipped: Set<string>
+  ): Promise<void> {
+    const startedAt = new Date()
+    // Use raw condition để evaluate fresh với current scope (giống while loop)
+    const condition = String(node.config.condition ?? '')
+    const passed = condition !== '' && evaluateCondition(condition, context.getScope())
+
+    if (!passed) {
+      // Skip all downstream qua handle 'main' (default outgoing)
+      this.collectDownstream(node.id, 'main', graph.outgoing, graph.incoming, skipped)
+    }
+
+    const finishedAt = new Date()
+    const durationMs = finishedAt.getTime() - startedAt.getTime()
+    const output = { passed }
+
+    const step: RunStep = {
+      id: randomUUID(),
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      input: { condition },
+      output,
+      attempt: 1,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      durationMs
+    }
+    await this.opts.persistence.saveStep(step)
+    context.setNodeOutput(node.id, output)
+    this.emit({
+      kind: 'step.end',
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      output,
+      durationMs
+    })
   }
 
   // ========== helpers ==========
