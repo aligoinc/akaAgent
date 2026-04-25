@@ -54,7 +54,9 @@ export const IPC_CHANNELS = {
   CAMPAIGNVIEW_DELETE: 'campaignView:delete',
   // Channels CRUD (extension)
   CHANNEL_SAVE: 'channel:save',
-  CHANNEL_DELETE: 'channel:delete'
+  CHANNEL_DELETE: 'channel:delete',
+  // Campaign logs (Phase 9.5)
+  CAMPAIGNLOG_LIST: 'campaignLog:list'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
@@ -179,4 +181,17 @@ export interface CampaignViewRow {
   datatable_id: string | null
   organization_id: number | null
   created_at: string
+}
+
+export interface CampaignLogItem {
+  id: number
+  campaign_view_id: string | null
+  workflow_id: string
+  run_id: string
+  datatable_row_id: string | null
+  ts: string
+  level: 'info' | 'success' | 'warn' | 'error'
+  icon: string | null
+  message: string
+  meta: Record<string, unknown> | null
 }

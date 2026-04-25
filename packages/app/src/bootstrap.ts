@@ -9,6 +9,11 @@ import { ConnectionVault } from './services/ConnectionVault.js'
 import { RunOrchestrator } from './services/RunOrchestrator.js'
 import { TriggerService } from './services/TriggerService.js'
 import { ElementPickerService } from './services/ElementPickerService.js'
+import { CampaignLogger } from './services/CampaignLogger.js'
+import { ScreenshotWriter } from './services/ScreenshotWriter.js'
+import { ForensicCollector } from './services/ForensicCollector.js'
+import { ProgressDispatcher } from './services/ProgressDispatcher.js'
+import { CleanupJob } from './services/CleanupJob.js'
 import { SupabaseRunPersistence } from './repositories/SupabaseRunPersistence.js'
 import { SupabaseDataTableProvider } from './repositories/SupabaseDataTableProvider.js'
 
@@ -39,6 +44,11 @@ export interface AppContext {
   orchestrator: RunOrchestrator
   triggerService: TriggerService
   elementPicker: ElementPickerService
+  campaignLogger: CampaignLogger
+  screenshotWriter: ScreenshotWriter
+  forensicCollector: ForensicCollector
+  progressDispatcher: ProgressDispatcher
+  cleanupJob: CleanupJob
   shutdown: () => Promise<void>
 }
 
@@ -119,6 +129,19 @@ export async function bootstrap(opts: BootstrapOptions): Promise<AppContext> {
   const triggerService = new TriggerService(supabase, orchestrator)
   const elementPicker = new ElementPickerService(channelManager)
 
+  // 9. Logging 3-tier
+  const campaignLogger = new CampaignLogger(supabase)
+  const screenshotWriter = new ScreenshotWriter(supabase, channelManager)
+  const forensicCollector = new ForensicCollector(supabase, channelManager)
+  // ProgressDispatcher wired by main process (because it needs mainWindow.webContents)
+  const progressDispatcher = new ProgressDispatcher(
+    campaignLogger,
+    screenshotWriter,
+    forensicCollector,
+    () => { /* placeholder; main wires actual broadcast */ }
+  )
+  const cleanupJob = new CleanupJob(supabase)
+
   return {
     supabase,
     registry,
@@ -130,7 +153,13 @@ export async function bootstrap(opts: BootstrapOptions): Promise<AppContext> {
     orchestrator,
     triggerService,
     elementPicker,
+    campaignLogger,
+    screenshotWriter,
+    forensicCollector,
+    progressDispatcher,
+    cleanupJob,
     async shutdown() {
+      cleanupJob.stop()
       triggerService.stop()
       await channelManager.closeAll()
     }

@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
-import type { CampaignViewRow, WorkflowListItem, TriggerRow, DataTableRow } from '../../../shared/ipcChannels'
+import type { CampaignViewRow, WorkflowListItem, TriggerRow, DataTableRow, CampaignLogItem } from '../../../shared/ipcChannels'
 
 export function CampaignViewsPage(): JSX.Element {
   const [views, setViews] = useState<CampaignViewRow[]>([])
+  const [selectedView, setSelectedView] = useState<CampaignViewRow | null>(null)
   const [workflows, setWorkflows] = useState<WorkflowListItem[]>([])
   const [triggers, setTriggers] = useState<TriggerRow[]>([])
   const [datatables, setDatatables] = useState<DataTableRow[]>([])
@@ -74,6 +75,7 @@ export function CampaignViewsPage(): JSX.Element {
                 <td>{datatables.find(d => d.id === v.datatable_id)?.name ?? '—'}</td>
                 <td style={{ fontSize: 11 }}>{new Date(v.created_at).toLocaleDateString()}</td>
                 <td>
+                  <button onClick={() => setSelectedView(v)} style={{ padding: '4px 8px', fontSize: 11, marginRight: 4 }}>📋 Logs</button>
                   <button onClick={() => setEditing(v)} style={{ padding: '4px 8px', fontSize: 11, marginRight: 4 }}>Edit</button>
                   <button onClick={() => void handleDelete(v.id)} style={{ background: '#7f1d1d', color: '#fca5a5', borderColor: '#991b1b', padding: '4px 8px', fontSize: 11 }}>🗑</button>
                 </td>
@@ -81,6 +83,61 @@ export function CampaignViewsPage(): JSX.Element {
             ))}
           </tbody>
         </table>
+      )}
+
+      {selectedView && (
+        <CampaignLogsPanel campaign={selectedView} onClose={() => setSelectedView(null)} />
+      )}
+    </div>
+  )
+}
+
+function CampaignLogsPanel({ campaign, onClose }: { campaign: CampaignViewRow; onClose: () => void }): JSX.Element {
+  const [logs, setLogs] = useState<CampaignLogItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    window.akabiz.campaignLogs.list({ campaignViewId: campaign.id, limit: 500 })
+      .then(setLogs)
+      .finally(() => setLoading(false))
+  }, [campaign.id])
+
+  return (
+    <div style={{ position: 'fixed', top: 60, left: '5%', right: '5%', bottom: 20, background: '#1a1f2c', border: '1px solid #4f46e5', borderRadius: 8, padding: 16, overflow: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100 }}>
+      <div className="row" style={{ marginBottom: 12 }}>
+        <h3 style={{ margin: 0 }}>📋 Lịch sử hành động: {campaign.name}</h3>
+        <button onClick={onClose} style={{ marginLeft: 'auto' }}>✕ Close</button>
+      </div>
+      {loading && <div className="empty">Loading…</div>}
+      {!loading && logs.length === 0 && (
+        <div className="empty">
+          Chưa có log. Chiến dịch chưa chạy hoặc workflow chưa có node với <code>reportingLabel</code>.
+        </div>
+      )}
+      {!loading && logs.length > 0 && (
+        <div style={{ fontFamily: 'monospace', fontSize: 13 }}>
+          {logs.map(l => (
+            <div key={l.id} style={{
+              padding: '4px 8px',
+              borderLeft: `3px solid ${l.level === 'error' ? '#ef4444' : l.level === 'warn' ? '#f59e0b' : l.level === 'success' ? '#10b981' : '#3b82f6'}`,
+              marginBottom: 4,
+              background: '#0f1115',
+              borderRadius: 4,
+              color: l.level === 'error' ? '#fca5a5' : l.level === 'warn' ? '#fcd34d' : l.level === 'success' ? '#6ee7b7' : '#cbd5e1'
+            }}>
+              <span style={{ color: '#666', marginRight: 8 }}>{new Date(l.ts).toLocaleString()}</span>
+              {l.icon && <span style={{ marginRight: 6 }}>{l.icon}</span>}
+              <span>{l.message}</span>
+              {l.meta && (
+                <details style={{ marginTop: 2 }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 11, color: '#888' }}>meta</summary>
+                  <pre style={{ fontSize: 11, marginTop: 2 }}>{JSON.stringify(l.meta, null, 2)}</pre>
+                </details>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

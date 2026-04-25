@@ -144,8 +144,23 @@ async function setupIpc(): Promise<void> {
     }
     if (args.channelId) enqueueArgs.channelId = args.channelId
     if (args.workflowVersion) enqueueArgs.workflowVersion = args.workflowVersion
-    const result = await ctx.engine.enqueue(enqueueArgs)
-    return result
+
+    // Hook run.start to register channel for dispatcher (cho screenshot/forensic)
+    let captured = false
+    const captureHandler = (event: import('@akabiz/engine').ProgressEvent): void => {
+      if (!captured && event.kind === 'run.start') {
+        captured = true
+        ctx.progressDispatcher.registerRunChannel(event.runId, args.channelId ?? null)
+      }
+    }
+    ctx.engine.on('progress', captureHandler)
+
+    try {
+      const result = await ctx.engine.enqueue(enqueueArgs)
+      return result
+    } finally {
+      ctx.engine.off('progress', captureHandler)
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.RUN_LIST, async (_e, opts: { workflowId?: string; limit?: number } = {}) => {
@@ -543,9 +558,33 @@ async function setupIpc(): Promise<void> {
     return { ok: true }
   })
 
-  // ===== Forward ProgressEvent → renderer =====
-  ctx.engine.on('progress', (event) => {
+  // ===== CAMPAIGN LOGS =====
+  ipcMain.handle(IPC_CHANNELS.CAMPAIGNLOG_LIST, async (_e, opts: {
+    campaignViewId?: string
+    workflowId?: string
+    runId?: string
+    datatableRowId?: string
+    limit?: number
+  } = {}) => {
+    let q = ctx.supabase.from('campaign_logs')
+      .select('*')
+      .order('ts', { ascending: false })
+      .limit(opts.limit ?? 200)
+    if (opts.campaignViewId) q = q.eq('campaign_view_id', opts.campaignViewId)
+    if (opts.workflowId) q = q.eq('workflow_id', opts.workflowId)
+    if (opts.runId) q = q.eq('run_id', opts.runId)
+    if (opts.datatableRowId) q = q.eq('datatable_row_id', opts.datatableRowId)
+    const { data, error } = await q
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+
+  // ===== ProgressDispatcher: fan-out tới sinks + realtime broadcast =====
+  ctx.progressDispatcher.setRealtimeBroadcast((event) => {
     mainWindow?.webContents.send(IPC_CHANNELS.RUN_PROGRESS, event)
+  })
+  ctx.engine.on('progress', (event) => {
+    ctx.progressDispatcher.handle(event)
   })
 }
 

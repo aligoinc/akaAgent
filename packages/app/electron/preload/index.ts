@@ -78,6 +78,10 @@ const api = {
       ipcRenderer.invoke(IPC_CHANNELS.CHANNEL_SAVE, args),
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.CHANNEL_DELETE, id)
   },
+  campaignLogs: {
+    list: (opts?: { campaignViewId?: string; workflowId?: string; runId?: string; datatableRowId?: string; limit?: number }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CAMPAIGNLOG_LIST, opts ?? {})
+  },
   onProgress: (cb: (event: ProgressEvent) => void) => {
     const handler = (_e: unknown, event: ProgressEvent): void => cb(event)
     ipcRenderer.on(IPC_CHANNELS.RUN_PROGRESS, handler)

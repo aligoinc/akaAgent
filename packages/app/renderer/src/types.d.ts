@@ -1,7 +1,8 @@
 import type { ProgressEvent, RunResult, BlockManifest } from '@akabiz/engine'
 import type {
   WorkflowListItem, RunListItem, ChannelListItem, NamedSelectorRow, PickResult,
-  DataTableRow, DataTableRowItem, TriggerRow, ConnectionRow, CampaignViewRow
+  DataTableRow, DataTableRowItem, TriggerRow, ConnectionRow, CampaignViewRow,
+  CampaignLogItem
 } from '../../shared/ipcChannels'
 
 export interface WorkflowGraph {
@@ -94,6 +95,9 @@ declare global {
       channelsAdmin: {
         save: (args: { id?: string; name: string; channel_type: string; profile_path?: string | null; user_agent?: string | null; locale?: string | null; timezone?: string | null; proxy_url?: string | null }) => Promise<ChannelListItem>
         delete: (id: string) => Promise<{ ok: boolean }>
+      }
+      campaignLogs: {
+        list: (opts?: { campaignViewId?: string; workflowId?: string; runId?: string; datatableRowId?: string; limit?: number }) => Promise<CampaignLogItem[]>
       }
       onProgress: (cb: (event: ProgressEvent) => void) => () => void
     }
