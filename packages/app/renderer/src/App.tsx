@@ -7,8 +7,9 @@ import { DataTablesPage } from './pages/DataTablesPage'
 import { TriggersPage } from './pages/TriggersPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { CampaignViewsPage } from './pages/CampaignViewsPage'
+import { BlocksPage } from './pages/BlocksPage'
 
-type Page = 'campaigns' | 'workflows' | 'datatables' | 'triggers' | 'channels' | 'selectors' | 'connections' | 'runs'
+type Page = 'campaigns' | 'workflows' | 'blocks' | 'datatables' | 'triggers' | 'channels' | 'selectors' | 'connections' | 'runs'
 
 export default function App(): JSX.Element {
   const [page, setPage] = useState<Page>('campaigns')
@@ -27,6 +28,7 @@ export default function App(): JSX.Element {
         <nav>
           {tab('campaigns', 'Chiến dịch')}
           {tab('workflows', 'Workflows')}
+          {tab('blocks', 'Blocks')}
           {tab('datatables', 'DataTables')}
           {tab('triggers', 'Triggers')}
           {tab('channels', 'Channels')}
@@ -34,7 +36,7 @@ export default function App(): JSX.Element {
           {tab('connections', 'Connections')}
           {tab('runs', 'Runs')}
         </nav>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>Phase 9</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>Phase 10</span>
       </header>
       <main className="page">
         {page === 'campaigns' && <CampaignViewsPage />}
@@ -45,6 +47,7 @@ export default function App(): JSX.Element {
             onBack={() => setSelectedWorkflowId(null)}
           />
         )}
+        {page === 'blocks' && <BlocksPage />}
         {page === 'datatables' && <DataTablesPage />}
         {page === 'triggers' && <TriggersPage />}
         {page === 'runs' && <RunsPage />}

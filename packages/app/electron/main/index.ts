@@ -579,6 +579,67 @@ async function setupIpc(): Promise<void> {
     return data ?? []
   })
 
+  // ===== CUSTOM BLOCKS (Phase 10) =====
+  ipcMain.handle(IPC_CHANNELS.CUSTOMBLOCK_LIST, async () => {
+    const { data, error } = await ctx.supabase.from('blocks').select('*').order('manifest_id')
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CUSTOMBLOCK_SAVE, async (_e, args: {
+    manifest_id: string
+    name: string
+    version: string
+    kind: 'core' | 'adapter' | 'code' | 'composite'
+    runtime: 'control' | 'page' | 'node' | 'composite'
+    requires: 'browser' | 'none'
+    manifest: Record<string, unknown>
+    code?: string | null
+    workflow_ref?: string | null
+    source?: string
+  }) => {
+    const payload: Record<string, unknown> = {
+      manifest_id: args.manifest_id,
+      name: args.name,
+      version: args.version,
+      kind: args.kind,
+      runtime: args.runtime,
+      requires: args.requires,
+      manifest: args.manifest,
+      code: args.code ?? null,
+      workflow_ref: args.workflow_ref ?? null,
+      source: args.source ?? 'user',
+      updated_at: new Date().toISOString()
+    }
+    const { data, error } = await ctx.supabase.from('blocks').upsert(payload).select().single()
+    if (error) throw new Error(error.message)
+
+    // Re-register into engine registry so usable immediately
+    try {
+      const enriched = {
+        ...args.manifest,
+        manifestId: args.manifest_id,
+        name: args.name,
+        version: args.version,
+        kind: args.kind,
+        runtime: args.runtime,
+        requires: args.requires,
+        ...(args.code ? { code: args.code } : {}),
+        ...(args.workflow_ref ? { workflowRef: args.workflow_ref } : {})
+      }
+      ctx.registry.upsert(enriched as Parameters<typeof ctx.registry.upsert>[0])
+    } catch (err) {
+      console.warn('[main] re-register block error:', err)
+    }
+    return data
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CUSTOMBLOCK_DELETE, async (_e, manifestId: string) => {
+    const { error } = await ctx.supabase.from('blocks').delete().eq('manifest_id', manifestId)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
   // ===== ProgressDispatcher: fan-out tới sinks + realtime broadcast =====
   ctx.progressDispatcher.setRealtimeBroadcast((event) => {
     mainWindow?.webContents.send(IPC_CHANNELS.RUN_PROGRESS, event)

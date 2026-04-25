@@ -83,6 +83,36 @@ export async function bootstrap(opts: BootstrapOptions): Promise<AppContext> {
   registerDataTablePrimitives(registry, dataTableProvider)
   registerBrowserPrimitives(registry)
 
+  // 5b. Load custom blocks from DB (composite + code blocks user/AI tạo)
+  try {
+    const { data: customBlocks } = await supabase.from('blocks').select('*')
+    for (const row of customBlocks ?? []) {
+      try {
+        const manifest = (row.manifest as Record<string, unknown> | null) ?? {}
+        const enriched = {
+          ...manifest,
+          manifestId: String(row.manifest_id),
+          name: String(row.name ?? manifest.name ?? row.manifest_id),
+          version: String(row.version ?? manifest.version ?? '1.0.0'),
+          kind: String(row.kind ?? manifest.kind),
+          runtime: String(row.runtime ?? manifest.runtime),
+          requires: String(row.requires ?? manifest.requires ?? 'none'),
+          ui: manifest.ui ?? { icon: 'Box', category: 'custom', description: '' },
+          inputSchema: manifest.inputSchema ?? [],
+          outputSchema: manifest.outputSchema ?? [],
+          ...(row.code ? { code: String(row.code) } : {}),
+          ...(row.workflow_ref ? { workflowRef: String(row.workflow_ref) } : {})
+        }
+        registry.upsert(enriched as unknown as Parameters<typeof registry.upsert>[0])
+      } catch (err) {
+        console.warn(`[bootstrap] failed to load block ${row.manifest_id}:`, err)
+      }
+    }
+    console.log(`[bootstrap] loaded ${customBlocks?.length ?? 0} custom blocks from DB`)
+  } catch (err) {
+    console.warn('[bootstrap] custom blocks load error:', err)
+  }
+
   // 6. Workflow loader (from DB)
   const workflowLoader = async (id: string, version?: number): Promise<Workflow> => {
     const { data: wf, error } = await supabase.from('workflows').select('*').eq('id', id).single()

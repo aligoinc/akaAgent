@@ -99,6 +99,22 @@ declare global {
       campaignLogs: {
         list: (opts?: { campaignViewId?: string; workflowId?: string; runId?: string; datatableRowId?: string; limit?: number }) => Promise<CampaignLogItem[]>
       }
+      customBlocks: {
+        list: () => Promise<Array<Record<string, unknown>>>
+        save: (args: {
+          manifest_id: string
+          name: string
+          version: string
+          kind: 'code' | 'composite'
+          runtime: 'control' | 'page' | 'node' | 'composite'
+          requires: 'browser' | 'none'
+          manifest: Record<string, unknown>
+          code?: string | null
+          workflow_ref?: string | null
+          source?: string
+        }) => Promise<Record<string, unknown>>
+        delete: (manifestId: string) => Promise<{ ok: boolean }>
+      }
       onProgress: (cb: (event: ProgressEvent) => void) => () => void
     }
   }

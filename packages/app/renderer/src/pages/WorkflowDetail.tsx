@@ -321,6 +321,35 @@ export function WorkflowDetail({ workflowId, onBack }: Props): JSX.Element {
           <button className="primary" onClick={handleSave} disabled={saving || !dirty}>
             {saving ? 'Saving…' : '💾 Save'}
           </button>
+          <button onClick={async () => {
+            const manifestId = prompt('Manifest ID for new composite block (vd: user.fb_post_comment):', 'user.')
+            if (!manifestId) return
+            const blockName = prompt('Block name:', workflowMeta.name)
+            if (!blockName) return
+            try {
+              await window.akabiz.customBlocks.save({
+                manifest_id: manifestId,
+                name: blockName,
+                version: '1.0.0',
+                kind: 'composite',
+                runtime: 'composite',
+                requires: rfNodes.some(n => {
+                  const data = nodeData.get(n.id)
+                  return data && blocks.find(b => b.manifestId === data.manifestId)?.requires === 'browser'
+                }) ? 'browser' : 'none',
+                manifest: {
+                  ui: { icon: 'Box', category: 'custom', description: blockName },
+                  inputSchema: [],
+                  outputSchema: []
+                },
+                workflow_ref: workflowId,
+                source: 'user'
+              })
+              alert(`Composite block "${manifestId}" saved! Available in Block Library.`)
+            } catch (err) {
+              alert(`Save failed: ${(err as Error).message}`)
+            }
+          }}>📦 Save as block</button>
           {error && <span style={{ color: '#fca5a5', fontSize: 11 }}>{error}</span>}
         </div>
 

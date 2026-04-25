@@ -508,6 +508,30 @@ export class WorkflowRunner {
     // Phase 5: code blocks (kind='code') — runtime sandbox dispatch
     if (manifest && manifest.kind === 'code') {
       result = await this.executeCodeBlock(manifest as CodeBlockManifest, resolvedInput, runId, node.id, logMessages)
+    } else if (manifest && manifest.kind === 'composite') {
+      // Phase 10: composite block — workflowRef sub-execution
+      const compositeManifest = manifest as { workflowRef?: string }
+      if (!compositeManifest.workflowRef) {
+        result = { success: false, error: `Composite block '${manifest.manifestId}' missing workflowRef` }
+      } else if (!this.opts.loadWorkflow) {
+        result = { success: false, error: 'Composite block requires loadWorkflow in engine options' }
+      } else {
+        try {
+          const subWf = await this.opts.loadWorkflow(compositeManifest.workflowRef)
+          const subRunner = new WorkflowRunner(this.opts)
+          const subResult = await subRunner.run(subWf, {
+            workflowId: compositeManifest.workflowRef,
+            input: resolvedInput
+          })
+          if (subResult.status === 'completed') {
+            result = { success: true, output: subResult.output ?? {} }
+          } else {
+            result = { success: false, error: subResult.error ?? `Composite '${manifest.manifestId}' failed` }
+          }
+        } catch (err) {
+          result = { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      }
     } else if (!handler) {
       result = { success: false, error: `No handler registered for manifestId: ${node.manifestId}` }
     } else {

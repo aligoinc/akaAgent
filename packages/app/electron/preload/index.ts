@@ -82,6 +82,22 @@ const api = {
     list: (opts?: { campaignViewId?: string; workflowId?: string; runId?: string; datatableRowId?: string; limit?: number }) =>
       ipcRenderer.invoke(IPC_CHANNELS.CAMPAIGNLOG_LIST, opts ?? {})
   },
+  customBlocks: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.CUSTOMBLOCK_LIST),
+    save: (args: {
+      manifest_id: string
+      name: string
+      version: string
+      kind: 'code' | 'composite'
+      runtime: 'control' | 'page' | 'node' | 'composite'
+      requires: 'browser' | 'none'
+      manifest: Record<string, unknown>
+      code?: string | null
+      workflow_ref?: string | null
+      source?: string
+    }) => ipcRenderer.invoke(IPC_CHANNELS.CUSTOMBLOCK_SAVE, args),
+    delete: (manifestId: string) => ipcRenderer.invoke(IPC_CHANNELS.CUSTOMBLOCK_DELETE, manifestId)
+  },
   onProgress: (cb: (event: ProgressEvent) => void) => {
     const handler = (_e: unknown, event: ProgressEvent): void => cb(event)
     ipcRenderer.on(IPC_CHANNELS.RUN_PROGRESS, handler)

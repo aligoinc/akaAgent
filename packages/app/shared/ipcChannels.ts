@@ -56,7 +56,11 @@ export const IPC_CHANNELS = {
   CHANNEL_SAVE: 'channel:save',
   CHANNEL_DELETE: 'channel:delete',
   // Campaign logs (Phase 9.5)
-  CAMPAIGNLOG_LIST: 'campaignLog:list'
+  CAMPAIGNLOG_LIST: 'campaignLog:list',
+  // Custom blocks (Phase 10)
+  CUSTOMBLOCK_LIST: 'customBlock:list',
+  CUSTOMBLOCK_SAVE: 'customBlock:save',
+  CUSTOMBLOCK_DELETE: 'customBlock:delete'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
