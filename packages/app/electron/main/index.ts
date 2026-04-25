@@ -258,6 +258,291 @@ async function setupIpc(): Promise<void> {
     return { ok: true }
   })
 
+  // ===== DATATABLES =====
+  ipcMain.handle(IPC_CHANNELS.DATATABLE_LIST, async () => {
+    const { data, error } = await ctx.supabase.from('datatables').select('*').order('name')
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DATATABLE_GET, async (_e, id: string) => {
+    const { data, error } = await ctx.supabase.from('datatables').select('*').eq('id', id).single()
+    if (error) throw new Error(error.message)
+    return data
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DATATABLE_SAVE, async (_e, args: { id?: string; name: string; description?: string | null; schema: unknown[] }) => {
+    const payload: Record<string, unknown> = {
+      name: args.name,
+      description: args.description ?? null,
+      schema: args.schema
+    }
+    if (args.id) {
+      payload.id = args.id
+      const { data, error } = await ctx.supabase.from('datatables').upsert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    } else {
+      const { data, error } = await ctx.supabase.from('datatables').insert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DATATABLE_DELETE, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('datatables').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DATATABLE_ROWS_LIST, async (_e, args: { datatableId: string; status?: string; limit?: number }) => {
+    let q = ctx.supabase.from('datatable_rows').select('*').eq('datatable_id', args.datatableId)
+      .order('created_at', { ascending: true })
+      .limit(args.limit ?? 200)
+    if (args.status) q = q.eq('status', args.status)
+    const { data, error } = await q
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DATATABLE_ROW_SAVE, async (_e, args: { id?: string; datatableId: string; data: Record<string, unknown>; status?: string; tags?: string[] }) => {
+    const payload: Record<string, unknown> = {
+      datatable_id: args.datatableId,
+      data: args.data,
+      status: args.status ?? 'pending',
+      tags: args.tags ?? null,
+      updated_at: new Date().toISOString()
+    }
+    if (args.id) {
+      payload.id = args.id
+      const { data, error } = await ctx.supabase.from('datatable_rows').upsert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    } else {
+      const { data, error } = await ctx.supabase.from('datatable_rows').insert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DATATABLE_ROW_DELETE, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('datatable_rows').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DATATABLE_ROW_RESET, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('datatable_rows')
+      .update({ status: 'pending', retry_count: 0 }).eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
+  // ===== TRIGGERS =====
+  ipcMain.handle(IPC_CHANNELS.TRIGGER_LIST, async () => {
+    const { data, error } = await ctx.supabase.from('triggers').select('*').order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TRIGGER_SAVE, async (_e, args: {
+    id?: string
+    workflow_id: string
+    workflow_version?: number | null
+    channel_id?: string | null
+    datatable_id?: string | null
+    datatable_filter?: Record<string, unknown> | null
+    kind: 'manual' | 'schedule' | 'webhook' | 'event'
+    config: Record<string, unknown>
+    settings?: Record<string, unknown> | null
+    is_active?: boolean
+  }) => {
+    // Compute next_run_at if schedule
+    let nextRunAt: string | null = null
+    if (args.kind === 'schedule' && args.config?.cron) {
+      try {
+        const { Cron } = await import('croner')
+        const cron = new Cron(String(args.config.cron), { timezone: String(args.config.timezone ?? 'UTC') })
+        const next = cron.nextRun()
+        nextRunAt = next ? next.toISOString() : null
+      } catch (err) {
+        console.warn('[trigger:save] invalid cron:', err)
+      }
+    }
+    const payload: Record<string, unknown> = {
+      workflow_id: args.workflow_id,
+      workflow_version: args.workflow_version ?? null,
+      channel_id: args.channel_id ?? null,
+      datatable_id: args.datatable_id ?? null,
+      datatable_filter: args.datatable_filter ?? null,
+      kind: args.kind,
+      config: args.config,
+      settings: args.settings ?? null,
+      is_active: args.is_active ?? true,
+      next_run_at: nextRunAt
+    }
+    if (args.id) {
+      payload.id = args.id
+      const { data, error } = await ctx.supabase.from('triggers').upsert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    } else {
+      const { data, error } = await ctx.supabase.from('triggers').insert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TRIGGER_DELETE, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('triggers').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TRIGGER_RUN_NOW, async (_e, id: string) => {
+    const { data: trigger, error } = await ctx.supabase.from('triggers').select('*').eq('id', id).single()
+    if (error || !trigger) throw new Error(error?.message ?? 'Trigger not found')
+    // Make sure channel registered
+    if (trigger.channel_id) {
+      try {
+        const { data: ch } = await ctx.supabase.from('channels').select('*').eq('id', trigger.channel_id).single()
+        if (ch) {
+          ctx.channelManager.registerChannel({
+            id: String(ch.id),
+            name: String(ch.name),
+            channelType: ch.channel_type as 'browser_persistent' | 'browser_ephemeral' | 'headless_node',
+            ...(ch.profile_path ? { profileBaseDir: String(ch.profile_path) } : {}),
+            ...(ch.user_agent ? { userAgent: String(ch.user_agent) } : {}),
+            headless: false
+          })
+        }
+      } catch {}
+    }
+    // Fire trigger now
+    await ctx.orchestrator.enqueueFromTrigger(trigger as Parameters<typeof ctx.orchestrator.enqueueFromTrigger>[0])
+    return { ok: true }
+  })
+
+  // ===== CONNECTIONS =====
+  ipcMain.handle(IPC_CHANNELS.CONNECTION_LIST, async () => {
+    const { data, error } = await ctx.supabase.from('connections')
+      .select('id, name, conn_type, scope, organization_id, created_at')
+      .order('name')
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CONNECTION_SAVE, async (_e, args: {
+    id?: string
+    name: string
+    conn_type: 'oauth2' | 'apikey' | 'basicauth' | 'cookie' | 'custom'
+    secrets: Record<string, string>
+    scope?: Record<string, unknown> | null
+  }) => {
+    const encrypted = ctx.connectionVault.encryptToBuffer(args.secrets)
+    const payload: Record<string, unknown> = {
+      name: args.name,
+      conn_type: args.conn_type,
+      data_encrypted: encrypted,
+      scope: args.scope ?? null
+    }
+    if (args.id) {
+      payload.id = args.id
+      const { data, error } = await ctx.supabase.from('connections').upsert(payload).select('id, name, conn_type, scope, organization_id, created_at').single()
+      if (error) throw new Error(error.message)
+      return data
+    } else {
+      const { data, error } = await ctx.supabase.from('connections').insert(payload).select('id, name, conn_type, scope, organization_id, created_at').single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CONNECTION_DELETE, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('connections').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
+  // ===== CAMPAIGN VIEWS =====
+  ipcMain.handle(IPC_CHANNELS.CAMPAIGNVIEW_LIST, async () => {
+    const { data, error } = await ctx.supabase.from('campaign_views').select('*').order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CAMPAIGNVIEW_SAVE, async (_e, args: {
+    id?: string
+    name: string
+    description?: string | null
+    workflow_id?: string | null
+    trigger_id?: string | null
+    datatable_id?: string | null
+  }) => {
+    const payload: Record<string, unknown> = {
+      name: args.name,
+      description: args.description ?? null,
+      workflow_id: args.workflow_id ?? null,
+      trigger_id: args.trigger_id ?? null,
+      datatable_id: args.datatable_id ?? null
+    }
+    if (args.id) {
+      payload.id = args.id
+      const { data, error } = await ctx.supabase.from('campaign_views').upsert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    } else {
+      const { data, error } = await ctx.supabase.from('campaign_views').insert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CAMPAIGNVIEW_DELETE, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('campaign_views').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
+  // ===== CHANNELS CRUD =====
+  ipcMain.handle(IPC_CHANNELS.CHANNEL_SAVE, async (_e, args: {
+    id?: string
+    name: string
+    channel_type: 'browser_persistent' | 'browser_ephemeral' | 'headless_node'
+    profile_path?: string | null
+    user_agent?: string | null
+    locale?: string | null
+    timezone?: string | null
+    proxy_url?: string | null
+  }) => {
+    const payload: Record<string, unknown> = {
+      name: args.name,
+      channel_type: args.channel_type,
+      profile_path: args.profile_path ?? null,
+      user_agent: args.user_agent ?? null,
+      locale: args.locale ?? null,
+      timezone: args.timezone ?? null,
+      proxy_url: args.proxy_url ?? null,
+      updated_at: new Date().toISOString()
+    }
+    if (args.id) {
+      payload.id = args.id
+      const { data, error } = await ctx.supabase.from('channels').upsert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    } else {
+      const { data, error } = await ctx.supabase.from('channels').insert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CHANNEL_DELETE, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('channels').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
   // ===== Forward ProgressEvent → renderer =====
   ctx.engine.on('progress', (event) => {
     mainWindow?.webContents.send(IPC_CHANNELS.RUN_PROGRESS, event)
@@ -280,6 +565,8 @@ app.whenReady().then(async () => {
     appContext = await bootstrap({ supabaseUrl, supabaseKey, vaultKey })
     console.log('[main] Recovering inflight runs...')
     await appContext.orchestrator.recoverInflight()
+    console.log('[main] Starting trigger service...')
+    appContext.triggerService.start()
     console.log('[main] Ready')
 
     await setupIpc()

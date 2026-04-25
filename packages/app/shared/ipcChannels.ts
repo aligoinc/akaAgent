@@ -29,7 +29,32 @@ export const IPC_CHANNELS = {
   SELECTOR_DELETE: 'selector:delete',
   // Element picker
   PICKER_START: 'picker:start',
-  PICKER_CANCEL: 'picker:cancel'
+  PICKER_CANCEL: 'picker:cancel',
+  // DataTables
+  DATATABLE_LIST: 'datatable:list',
+  DATATABLE_GET: 'datatable:get',
+  DATATABLE_SAVE: 'datatable:save',
+  DATATABLE_DELETE: 'datatable:delete',
+  DATATABLE_ROWS_LIST: 'datatable:rowsList',
+  DATATABLE_ROW_SAVE: 'datatable:rowSave',
+  DATATABLE_ROW_DELETE: 'datatable:rowDelete',
+  DATATABLE_ROW_RESET: 'datatable:rowReset',
+  // Triggers
+  TRIGGER_LIST: 'trigger:list',
+  TRIGGER_SAVE: 'trigger:save',
+  TRIGGER_DELETE: 'trigger:delete',
+  TRIGGER_RUN_NOW: 'trigger:runNow',
+  // Connections
+  CONNECTION_LIST: 'connection:list',
+  CONNECTION_SAVE: 'connection:save',
+  CONNECTION_DELETE: 'connection:delete',
+  // Campaign views
+  CAMPAIGNVIEW_LIST: 'campaignView:list',
+  CAMPAIGNVIEW_SAVE: 'campaignView:save',
+  CAMPAIGNVIEW_DELETE: 'campaignView:delete',
+  // Channels CRUD (extension)
+  CHANNEL_SAVE: 'channel:save',
+  CHANNEL_DELETE: 'channel:delete'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
@@ -90,4 +115,68 @@ export interface PickResult {
 export interface PickerStartArgs {
   channelId: string
   url?: string
+}
+
+export interface DataTableRow {
+  id: string
+  name: string
+  schema: Array<{ name: string; type: string; label?: string; required?: boolean }>
+  description: string | null
+  organization_id: number | null
+  created_at: string
+}
+
+export interface DataTableRowItem {
+  id: string
+  datatable_id: string
+  data: Record<string, unknown>
+  status: 'pending' | 'in_progress' | 'done' | 'failed' | 'skipped'
+  last_run_id: string | null
+  last_run_at: string | null
+  retry_count: number
+  tags: string[] | null
+  organization_id: number | null
+  created_at: string
+  updated_at: string | null
+}
+
+export interface TriggerRow {
+  id: string
+  workflow_id: string
+  workflow_version: number | null
+  channel_id: string | null
+  channel_pool: string[] | null
+  channel_assignment: string | null
+  datatable_id: string | null
+  datatable_filter: Record<string, unknown> | null
+  kind: 'manual' | 'schedule' | 'webhook' | 'event'
+  config: Record<string, unknown>
+  settings: Record<string, unknown> | null
+  is_active: boolean
+  next_run_at: string | null
+  last_run_at: string | null
+  last_run_status: string | null
+  consecutive_failures: number
+  organization_id: number | null
+  created_at: string
+}
+
+export interface ConnectionRow {
+  id: string
+  name: string
+  conn_type: 'oauth2' | 'apikey' | 'basicauth' | 'cookie' | 'custom'
+  scope: Record<string, unknown> | null
+  organization_id: number | null
+  created_at: string
+}
+
+export interface CampaignViewRow {
+  id: string
+  name: string
+  description: string | null
+  workflow_id: string | null
+  trigger_id: string | null
+  datatable_id: string | null
+  organization_id: number | null
+  created_at: string
 }

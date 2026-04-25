@@ -42,6 +42,42 @@ const api = {
     start: (args: { channelId: string; url?: string }) => ipcRenderer.invoke(IPC_CHANNELS.PICKER_START, args),
     cancel: () => ipcRenderer.invoke(IPC_CHANNELS.PICKER_CANCEL)
   },
+  datatables: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.DATATABLE_LIST),
+    get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DATATABLE_GET, id),
+    save: (args: { id?: string; name: string; description?: string | null; schema: unknown[] }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.DATATABLE_SAVE, args),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DATATABLE_DELETE, id),
+    rowsList: (args: { datatableId: string; status?: string; limit?: number }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.DATATABLE_ROWS_LIST, args),
+    rowSave: (args: { id?: string; datatableId: string; data: Record<string, unknown>; status?: string; tags?: string[] }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.DATATABLE_ROW_SAVE, args),
+    rowDelete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DATATABLE_ROW_DELETE, id),
+    rowReset: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DATATABLE_ROW_RESET, id)
+  },
+  triggers: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.TRIGGER_LIST),
+    save: (args: Record<string, unknown>) => ipcRenderer.invoke(IPC_CHANNELS.TRIGGER_SAVE, args),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.TRIGGER_DELETE, id),
+    runNow: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.TRIGGER_RUN_NOW, id)
+  },
+  connections: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_LIST),
+    save: (args: { id?: string; name: string; conn_type: string; secrets: Record<string, string>; scope?: Record<string, unknown> | null }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_SAVE, args),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_DELETE, id)
+  },
+  campaignViews: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.CAMPAIGNVIEW_LIST),
+    save: (args: { id?: string; name: string; description?: string | null; workflow_id?: string | null; trigger_id?: string | null; datatable_id?: string | null }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CAMPAIGNVIEW_SAVE, args),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.CAMPAIGNVIEW_DELETE, id)
+  },
+  channelsAdmin: {
+    save: (args: { id?: string; name: string; channel_type: string; profile_path?: string | null; user_agent?: string | null; locale?: string | null; timezone?: string | null; proxy_url?: string | null }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CHANNEL_SAVE, args),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.CHANNEL_DELETE, id)
+  },
   onProgress: (cb: (event: ProgressEvent) => void) => {
     const handler = (_e: unknown, event: ProgressEvent): void => cb(event)
     ipcRenderer.on(IPC_CHANNELS.RUN_PROGRESS, handler)

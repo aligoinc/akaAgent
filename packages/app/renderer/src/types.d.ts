@@ -1,5 +1,8 @@
 import type { ProgressEvent, RunResult, BlockManifest } from '@akabiz/engine'
-import type { WorkflowListItem, RunListItem, ChannelListItem, NamedSelectorRow, PickResult } from '../../shared/ipcChannels'
+import type {
+  WorkflowListItem, RunListItem, ChannelListItem, NamedSelectorRow, PickResult,
+  DataTableRow, DataTableRowItem, TriggerRow, ConnectionRow, CampaignViewRow
+} from '../../shared/ipcChannels'
 
 export interface WorkflowGraph {
   nodes: Array<{
@@ -61,6 +64,36 @@ declare global {
       picker: {
         start: (args: { channelId: string; url?: string }) => Promise<PickResult | null>
         cancel: () => Promise<{ ok: boolean }>
+      }
+      datatables: {
+        list: () => Promise<DataTableRow[]>
+        get: (id: string) => Promise<DataTableRow | null>
+        save: (args: { id?: string; name: string; description?: string | null; schema: unknown[] }) => Promise<DataTableRow>
+        delete: (id: string) => Promise<{ ok: boolean }>
+        rowsList: (args: { datatableId: string; status?: string; limit?: number }) => Promise<DataTableRowItem[]>
+        rowSave: (args: { id?: string; datatableId: string; data: Record<string, unknown>; status?: string; tags?: string[] }) => Promise<DataTableRowItem>
+        rowDelete: (id: string) => Promise<{ ok: boolean }>
+        rowReset: (id: string) => Promise<{ ok: boolean }>
+      }
+      triggers: {
+        list: () => Promise<TriggerRow[]>
+        save: (args: Record<string, unknown>) => Promise<TriggerRow>
+        delete: (id: string) => Promise<{ ok: boolean }>
+        runNow: (id: string) => Promise<{ ok: boolean }>
+      }
+      connections: {
+        list: () => Promise<ConnectionRow[]>
+        save: (args: { id?: string; name: string; conn_type: string; secrets: Record<string, string>; scope?: Record<string, unknown> | null }) => Promise<ConnectionRow>
+        delete: (id: string) => Promise<{ ok: boolean }>
+      }
+      campaignViews: {
+        list: () => Promise<CampaignViewRow[]>
+        save: (args: { id?: string; name: string; description?: string | null; workflow_id?: string | null; trigger_id?: string | null; datatable_id?: string | null }) => Promise<CampaignViewRow>
+        delete: (id: string) => Promise<{ ok: boolean }>
+      }
+      channelsAdmin: {
+        save: (args: { id?: string; name: string; channel_type: string; profile_path?: string | null; user_agent?: string | null; locale?: string | null; timezone?: string | null; proxy_url?: string | null }) => Promise<ChannelListItem>
+        delete: (id: string) => Promise<{ ok: boolean }>
       }
       onProgress: (cb: (event: ProgressEvent) => void) => () => void
     }
