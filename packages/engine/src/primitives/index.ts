@@ -1,4 +1,5 @@
 import type { BlockRegistry } from '../core/BlockRegistry.js'
+import type { IDataTableProvider } from '../core/IDataTableProvider.js'
 
 import { inputManifest, inputHandler } from './workflow/input.js'
 import { outputManifest, outputHandler } from './workflow/output.js'
@@ -17,6 +18,8 @@ import { waitManifest, waitHandler } from './controlFlow/wait.js'
 import { aggregateManifest } from './data/aggregate.js'
 import { httpRequestManifest, httpRequestHandler } from './io/httpRequest.js'
 import { subflowManifest, subflowHandler } from './io/subflow.js'
+import { readDataRowManifest, makeReadDataRowHandler } from './datatable/readDataRow.js'
+import { updateDataRowManifest, makeUpdateDataRowHandler } from './datatable/updateDataRow.js'
 
 /**
  * Đăng ký tất cả core primitives vào BlockRegistry.
@@ -53,6 +56,15 @@ export function registerCorePrimitives(registry: BlockRegistry): void {
   registry.register(subflowManifest, subflowHandler)
 }
 
+/**
+ * Optional: register datatable primitives (cần IDataTableProvider).
+ * App layer gọi nếu workflow có thể dùng datatable.
+ */
+export function registerDataTablePrimitives(registry: BlockRegistry, provider: IDataTableProvider): void {
+  registry.register(readDataRowManifest, makeReadDataRowHandler(provider))
+  registry.register(updateDataRowManifest, makeUpdateDataRowHandler(provider))
+}
+
 export {
   inputManifest, inputHandler,
   outputManifest, outputHandler,
@@ -68,5 +80,7 @@ export {
   delayManifest, delayHandler,
   waitManifest, waitHandler,
   httpRequestManifest, httpRequestHandler,
-  subflowManifest, subflowHandler
+  subflowManifest, subflowHandler,
+  readDataRowManifest, makeReadDataRowHandler,
+  updateDataRowManifest, makeUpdateDataRowHandler
 }

@@ -21,6 +21,7 @@ export type { IChannelProvider, ChannelHandle, ChannelHealth } from './controlle
 export type { ExecutionMiddleware, NodeContext, NodeResult } from './core/ExecutionMiddleware.js'
 export type { IRunPersistence } from './core/IRunPersistence.js'
 export type { IConnectionVault } from './core/IConnectionVault.js'
+export type { IDataTableProvider, PickRowOptions, UpdateRowPatch } from './core/IDataTableProvider.js'
 
 export { BlockRegistry, type CoreBlockHandler, type ExecuteContext } from './core/BlockRegistry.js'
 export { ExecutionContext, type RunMetadata } from './core/ExecutionContext.js'
@@ -31,7 +32,7 @@ export { interpolate, resolveValue, getByPath, formatValue } from './core/interp
 export { evaluateCondition } from './core/conditionEvaluator.js'
 export { topologicalSort, findEntryNodes, buildNodeMap } from './core/topologicalSort.js'
 
-export { registerCorePrimitives } from './primitives/index.js'
+export { registerCorePrimitives, registerDataTablePrimitives } from './primitives/index.js'
 
 export const ENGINE_VERSION = '0.0.0'
 export const MANIFEST_SCHEMA_VERSION = 1
