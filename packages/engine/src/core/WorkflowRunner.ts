@@ -24,6 +24,9 @@ import type { ExecutionMiddleware, NodeContext, NodeResult } from './ExecutionMi
 import type { IRunPersistence } from './IRunPersistence.js'
 import type { IConnectionVault } from './IConnectionVault.js'
 import { LoopBreakSignal, LoopContinueSignal, isLoopSignal } from './LoopSignals.js'
+import { NodeRuntime } from '../runtime/NodeRuntime.js'
+import { PageRuntime } from '../runtime/PageRuntime.js'
+import type { CodeBlockManifest } from '../types/BlockManifest.js'
 
 /**
  * WorkflowRunner — execute 1 workflow lần.
@@ -496,12 +499,16 @@ export class WorkflowRunner {
     }
 
     // Execute via registry handler
+    const manifest = this.opts.registry.get(node.manifestId)
     const handler = this.opts.registry.getHandler(node.manifestId)
     const logMessages: RunStepLogMessage[] = []
 
     let result: { success: boolean; output?: Record<string, unknown>; error?: string }
 
-    if (!handler) {
+    // Phase 5: code blocks (kind='code') — runtime sandbox dispatch
+    if (manifest && manifest.kind === 'code') {
+      result = await this.executeCodeBlock(manifest as CodeBlockManifest, resolvedInput, runId, node.id, logMessages)
+    } else if (!handler) {
       result = { success: false, error: `No handler registered for manifestId: ${node.manifestId}` }
     } else {
       const execCtx: ExecuteContext = {
@@ -787,6 +794,64 @@ export class WorkflowRunner {
       output,
       durationMs
     })
+  }
+
+  // ========== code blocks (Phase 5) ==========
+
+  private async executeCodeBlock(
+    manifest: CodeBlockManifest,
+    resolvedInput: Record<string, unknown>,
+    runId: string,
+    nodeId: string,
+    _logMessages: RunStepLogMessage[]
+  ): Promise<{ success: boolean; output?: Record<string, unknown>; error?: string }> {
+    const code = manifest.code ?? ''
+    if (!code.trim()) {
+      return { success: false, error: `Code block '${manifest.manifestId}' has empty code` }
+    }
+
+    const runtime = manifest.runtime
+    void runId; void nodeId
+
+    if (runtime === 'node') {
+      const nodeRt = new NodeRuntime()
+      const optsArg: { permissions?: { modules?: readonly string[]; timeoutMs?: number; memoryMb?: number }; abortSignal?: AbortSignal } = {
+        abortSignal: this.abortController.signal
+      }
+      if (manifest.permissions) {
+        const perms: { modules?: readonly string[]; timeoutMs?: number; memoryMb?: number } = {}
+        if (manifest.permissions.modules) perms.modules = manifest.permissions.modules
+        if (manifest.permissions.timeoutMs !== undefined) perms.timeoutMs = manifest.permissions.timeoutMs
+        if (manifest.permissions.memoryMb !== undefined) perms.memoryMb = manifest.permissions.memoryMb
+        optsArg.permissions = perms
+      }
+      const r = await nodeRt.execute(code, resolvedInput, {}, optsArg)
+      if (!r.success) return { success: false, error: r.error ?? 'NodeRuntime: unknown error' }
+      const out = r.output && typeof r.output === 'object' ? r.output as Record<string, unknown> : { value: r.output }
+      return { success: true, output: out }
+    }
+
+    if (runtime === 'page') {
+      if (!this.opts.controller) {
+        return { success: false, error: `Code block runtime='page' requires a channel controller` }
+      }
+      const pageRt = new PageRuntime(this.opts.controller)
+      const optsArg: { permissions?: { domains?: string[]; timeoutMs?: number }; abortSignal?: AbortSignal } = {
+        abortSignal: this.abortController.signal
+      }
+      if (manifest.permissions) {
+        const perms: { domains?: string[]; timeoutMs?: number } = {}
+        if (manifest.permissions.domains) perms.domains = [...manifest.permissions.domains]
+        if (manifest.permissions.timeoutMs !== undefined) perms.timeoutMs = manifest.permissions.timeoutMs
+        optsArg.permissions = perms
+      }
+      const r = await pageRt.execute(code, resolvedInput, optsArg)
+      if (!r.success) return { success: false, error: r.error ?? 'PageRuntime: unknown error' }
+      const out = r.output && typeof r.output === 'object' ? r.output as Record<string, unknown> : { value: r.output }
+      return { success: true, output: out }
+    }
+
+    return { success: false, error: `Code block runtime '${runtime}' not supported` }
   }
 
   // ========== aggregate ==========

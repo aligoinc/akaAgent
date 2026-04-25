@@ -33,6 +33,8 @@ export { evaluateCondition } from './core/conditionEvaluator.js'
 export { topologicalSort, findEntryNodes, buildNodeMap } from './core/topologicalSort.js'
 
 export { registerCorePrimitives, registerDataTablePrimitives, registerBrowserPrimitives } from './primitives/index.js'
+export { NodeRuntime, ALLOWED_MODULES } from './runtime/NodeRuntime.js'
+export { PageRuntime } from './runtime/PageRuntime.js'
 
 export const ENGINE_VERSION = '0.0.0'
 export const MANIFEST_SCHEMA_VERSION = 1
