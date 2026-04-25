@@ -24,6 +24,24 @@ const api = {
   blocks: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.BLOCK_LIST)
   },
+  selectors: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.SELECTOR_LIST),
+    getByName: (name: string) => ipcRenderer.invoke(IPC_CHANNELS.SELECTOR_GET_BY_NAME, name),
+    save: (args: {
+      id?: string
+      name: string
+      domain?: string | null
+      description?: string | null
+      selectorType: 'css' | 'xpath' | 'text-match'
+      expression: string
+      fallbacks?: Array<{ type: string; expression: string }>
+    }) => ipcRenderer.invoke(IPC_CHANNELS.SELECTOR_SAVE, args),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.SELECTOR_DELETE, id)
+  },
+  picker: {
+    start: (args: { channelId: string; url?: string }) => ipcRenderer.invoke(IPC_CHANNELS.PICKER_START, args),
+    cancel: () => ipcRenderer.invoke(IPC_CHANNELS.PICKER_CANCEL)
+  },
   onProgress: (cb: (event: ProgressEvent) => void) => {
     const handler = (_e: unknown, event: ProgressEvent): void => cb(event)
     ipcRenderer.on(IPC_CHANNELS.RUN_PROGRESS, handler)

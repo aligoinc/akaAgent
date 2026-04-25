@@ -32,6 +32,9 @@ export class ChannelManager implements IChannelProvider {
   private acquireQueues = new Map<string, Array<() => void>>()
   private busyChannels = new Set<string>()
 
+  /** Inject named selector resolver — called by app boot. */
+  public namedSelectorResolver: ((name: string) => Promise<{ type: 'css' | 'xpath' | 'text-match'; expression: string } | null>) | null = null
+
   registerChannel(config: ChannelConfig): void {
     this.configs.set(config.id, config)
   }
@@ -64,6 +67,10 @@ export class ChannelManager implements IChannelProvider {
       if (config.proxyUrl) ctrlOpts.proxyUrl = config.proxyUrl
 
       controller = new PlaywrightController(ctrlOpts)
+      // Inject named selector resolver
+      if (this.namedSelectorResolver) {
+        controller.namedSelectorResolver = this.namedSelectorResolver
+      }
       this.controllers.set(channelId, controller)
     }
     await controller.connect()

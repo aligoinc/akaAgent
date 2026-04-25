@@ -197,6 +197,67 @@ async function setupIpc(): Promise<void> {
     return ctx.registry.list()
   })
 
+  // ===== NAMED SELECTORS =====
+  ipcMain.handle(IPC_CHANNELS.SELECTOR_LIST, async () => {
+    const { data, error } = await ctx.supabase.from('named_selectors').select('*').order('name')
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SELECTOR_GET_BY_NAME, async (_e, name: string) => {
+    const { data, error } = await ctx.supabase.from('named_selectors').select('*').eq('name', name).maybeSingle()
+    if (error) throw new Error(error.message)
+    return data
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SELECTOR_SAVE, async (_e, args: {
+    id?: string
+    name: string
+    domain?: string | null
+    description?: string | null
+    selectorType: 'css' | 'xpath' | 'text-match'
+    expression: string
+    fallbacks?: Array<{ type: string; expression: string }>
+  }) => {
+    const payload: Record<string, unknown> = {
+      name: args.name,
+      domain: args.domain ?? null,
+      description: args.description ?? null,
+      selector_type: args.selectorType,
+      expression: args.expression,
+      fallbacks: args.fallbacks ?? null,
+      updated_at: new Date().toISOString()
+    }
+    if (args.id) {
+      payload.id = args.id
+      const { data, error } = await ctx.supabase.from('named_selectors').upsert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    } else {
+      const { data, error } = await ctx.supabase.from('named_selectors').insert(payload).select().single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SELECTOR_DELETE, async (_e, id: string) => {
+    const { error } = await ctx.supabase.from('named_selectors').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return { ok: true }
+  })
+
+  // ===== ELEMENT PICKER =====
+  ipcMain.handle(IPC_CHANNELS.PICKER_START, async (_e, args: { channelId: string; url?: string }) => {
+    // Caller phải register channel trước (channel:register)
+    const result = await ctx.elementPicker.pick(args)
+    return result
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PICKER_CANCEL, async () => {
+    ctx.elementPicker.cancel()
+    return { ok: true }
+  })
+
   // ===== Forward ProgressEvent → renderer =====
   ctx.engine.on('progress', (event) => {
     mainWindow?.webContents.send(IPC_CHANNELS.RUN_PROGRESS, event)

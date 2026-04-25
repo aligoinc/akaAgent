@@ -32,6 +32,11 @@ export class PlaywrightController implements IBrowserController {
     return this.context !== null && this.page !== null
   }
 
+  /** Expose internal Page for advanced use cases (element picker, raw evaluate). */
+  getPage(): Page | null {
+    return this.page
+  }
+
   async connect(): Promise<void> {
     if (this.isConnected()) return
 
@@ -75,6 +80,8 @@ export class PlaywrightController implements IBrowserController {
     const startedAt = Date.now()
 
     try {
+      // Pre-resolve named selector (async DB lookup) → cache, sync dispatch reads.
+      if (input.selector) await this.preResolveSelector(input.selector)
       const output = await this.dispatch(actionType, input, page)
       return { success: true, output, durationMs: Date.now() - startedAt }
     } catch (err) {
@@ -251,6 +258,24 @@ export class PlaywrightController implements IBrowserController {
     }
   }
 
+  /** Hook for named selector resolution (set by app boot). */
+  public namedSelectorResolver: ((name: string) => Promise<{ type: 'css' | 'xpath' | 'text-match'; expression: string; fallbacks?: Array<{ type: string; expression: string }> } | null>) | null = null
+
+  private namedSelectorCache = new Map<string, string>()
+
+  private async resolveNamedSelector(name: string): Promise<string> {
+    const cached = this.namedSelectorCache.get(name)
+    if (cached) return cached
+    if (!this.namedSelectorResolver) {
+      throw new Error(`Named selector '${name}' — resolver not configured`)
+    }
+    const sel = await this.namedSelectorResolver(name)
+    if (!sel) throw new Error(`Named selector '${name}' not found in DB`)
+    const playwrightSel = sel.type === 'xpath' ? `xpath=${sel.expression}` : sel.expression
+    this.namedSelectorCache.set(name, playwrightSel)
+    return playwrightSel
+  }
+
   private resolveSelector(raw: unknown): string {
     if (raw == null) throw new Error('selector is required')
     if (typeof raw === 'string') return raw
@@ -260,11 +285,25 @@ export class PlaywrightController implements IBrowserController {
         if (sel.type === 'xpath') return `xpath=${sel.expression}`
         return sel.expression
       }
-      if (sel.kind === 'named') {
-        // Phase 8 sẽ resolve named selector qua provider
-        throw new Error(`Named selector '${sel.name}' resolution not implemented yet (Phase 8)`)
+      if (sel.kind === 'named' && sel.name) {
+        // Sync wrapper — namedSelectorCache must be pre-populated, OR
+        // dispatch is async. For now, throw if not cached. Caller should
+        // pre-warm via resolveNamedSelectorAsync below.
+        const cached = this.namedSelectorCache.get(sel.name)
+        if (cached) return cached
+        throw new Error(`Named selector '${sel.name}' not pre-resolved. Call resolveNamedSelectorAsync first or use inline.`)
       }
     }
     throw new Error(`Invalid selector: ${JSON.stringify(raw)}`)
+  }
+
+  /** Async pre-resolve named selector before sync dispatch. Used by handler. */
+  async preResolveSelector(raw: unknown): Promise<void> {
+    if (raw && typeof raw === 'object') {
+      const sel = raw as { kind?: string; name?: string }
+      if (sel.kind === 'named' && sel.name && !this.namedSelectorCache.has(sel.name)) {
+        await this.resolveNamedSelector(sel.name)
+      }
+    }
   }
 }

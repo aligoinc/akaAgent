@@ -21,7 +21,15 @@ export const IPC_CHANNELS = {
   // Realtime broadcast (main → renderer)
   RUN_PROGRESS: 'run:progress',
   // Block registry
-  BLOCK_LIST: 'block:list'
+  BLOCK_LIST: 'block:list',
+  // Named selectors
+  SELECTOR_LIST: 'selector:list',
+  SELECTOR_GET_BY_NAME: 'selector:getByName',
+  SELECTOR_SAVE: 'selector:save',
+  SELECTOR_DELETE: 'selector:delete',
+  // Element picker
+  PICKER_START: 'picker:start',
+  PICKER_CANCEL: 'picker:cancel'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
@@ -53,4 +61,33 @@ export interface ChannelListItem {
   name: string
   channel_type: string
   status: string
+}
+
+export interface NamedSelectorRow {
+  id: string
+  name: string
+  domain: string | null
+  description: string | null
+  selector_type: 'css' | 'xpath' | 'text-match'
+  expression: string
+  fallbacks: Array<{ type: string; expression: string }> | null
+  last_verified_at: string | null
+  organization_id: number | null
+  created_by: number | null
+  created_at: string
+  updated_at: string | null
+}
+
+export interface PickResult {
+  selectorType: 'css' | 'xpath'
+  expression: string
+  fallbacks: Array<{ type: 'css' | 'xpath' | 'text-match'; expression: string }>
+  text: string
+  tagName: string
+  url: string
+}
+
+export interface PickerStartArgs {
+  channelId: string
+  url?: string
 }

@@ -8,6 +8,7 @@ import { ChannelManager } from './services/ChannelManager.js'
 import { ConnectionVault } from './services/ConnectionVault.js'
 import { RunOrchestrator } from './services/RunOrchestrator.js'
 import { TriggerService } from './services/TriggerService.js'
+import { ElementPickerService } from './services/ElementPickerService.js'
 import { SupabaseRunPersistence } from './repositories/SupabaseRunPersistence.js'
 import { SupabaseDataTableProvider } from './repositories/SupabaseDataTableProvider.js'
 
@@ -37,6 +38,7 @@ export interface AppContext {
   persistence: SupabaseRunPersistence
   orchestrator: RunOrchestrator
   triggerService: TriggerService
+  elementPicker: ElementPickerService
   shutdown: () => Promise<void>
 }
 
@@ -53,8 +55,17 @@ export async function bootstrap(opts: BootstrapOptions): Promise<AppContext> {
   const persistence = new SupabaseRunPersistence(supabase)
   const dataTableProvider = new SupabaseDataTableProvider(supabase)
 
-  // 4. ChannelManager
+  // 4. ChannelManager + named selector resolver hook
   const channelManager = new ChannelManager()
+  channelManager.namedSelectorResolver = async (name: string) => {
+    const { data, error } = await supabase.from('named_selectors')
+      .select('selector_type, expression, fallbacks').eq('name', name).maybeSingle()
+    if (error || !data) return null
+    return {
+      type: data.selector_type as 'css' | 'xpath' | 'text-match',
+      expression: String(data.expression)
+    }
+  }
 
   // 5. BlockRegistry + register primitives
   const registry = new BlockRegistry()
@@ -103,9 +114,10 @@ export async function bootstrap(opts: BootstrapOptions): Promise<AppContext> {
     persistence
   })
 
-  // 8. Orchestrator + TriggerService
+  // 8. Orchestrator + TriggerService + ElementPicker
   const orchestrator = new RunOrchestrator(engine, supabase, dataTableProvider)
   const triggerService = new TriggerService(supabase, orchestrator)
+  const elementPicker = new ElementPickerService(channelManager)
 
   return {
     supabase,
@@ -117,6 +129,7 @@ export async function bootstrap(opts: BootstrapOptions): Promise<AppContext> {
     persistence,
     orchestrator,
     triggerService,
+    elementPicker,
     async shutdown() {
       triggerService.stop()
       await channelManager.closeAll()

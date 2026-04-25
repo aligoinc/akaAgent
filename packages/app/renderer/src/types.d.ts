@@ -1,5 +1,5 @@
 import type { ProgressEvent, RunResult, BlockManifest } from '@akabiz/engine'
-import type { WorkflowListItem, RunListItem, ChannelListItem } from '../../shared/ipcChannels'
+import type { WorkflowListItem, RunListItem, ChannelListItem, NamedSelectorRow, PickResult } from '../../shared/ipcChannels'
 
 export interface WorkflowGraph {
   nodes: Array<{
@@ -43,6 +43,24 @@ declare global {
       }
       blocks: {
         list: () => Promise<BlockManifest[]>
+      }
+      selectors: {
+        list: () => Promise<NamedSelectorRow[]>
+        getByName: (name: string) => Promise<NamedSelectorRow | null>
+        save: (args: {
+          id?: string
+          name: string
+          domain?: string | null
+          description?: string | null
+          selectorType: 'css' | 'xpath' | 'text-match'
+          expression: string
+          fallbacks?: Array<{ type: string; expression: string }>
+        }) => Promise<NamedSelectorRow>
+        delete: (id: string) => Promise<{ ok: boolean }>
+      }
+      picker: {
+        start: (args: { channelId: string; url?: string }) => Promise<PickResult | null>
+        cancel: () => Promise<{ ok: boolean }>
       }
       onProgress: (cb: (event: ProgressEvent) => void) => () => void
     }
