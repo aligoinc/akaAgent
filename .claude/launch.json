@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "akabiz-renderer-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "-c", "packages/app/renderer/vite.config.ts"],
+      "port": 5174
+    }
+  ]
+}
