@@ -20,6 +20,7 @@ import { httpRequestManifest, httpRequestHandler } from './io/httpRequest.js'
 import { subflowManifest, subflowHandler } from './io/subflow.js'
 import { readDataRowManifest, makeReadDataRowHandler } from './datatable/readDataRow.js'
 import { updateDataRowManifest, makeUpdateDataRowHandler } from './datatable/updateDataRow.js'
+import { registerBrowserPrimitives } from './browser/index.js'
 
 /**
  * Đăng ký tất cả core primitives vào BlockRegistry.
@@ -64,6 +65,12 @@ export function registerDataTablePrimitives(registry: BlockRegistry, provider: I
   registry.register(readDataRowManifest, makeReadDataRowHandler(provider))
   registry.register(updateDataRowManifest, makeUpdateDataRowHandler(provider))
 }
+
+/**
+ * Phase 4: register all 20 browser primitives. Cần IBrowserController inject
+ * trong run-time (qua channel acquire).
+ */
+export { registerBrowserPrimitives }
 
 export {
   inputManifest, inputHandler,
