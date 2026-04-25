@@ -1,0 +1,7 @@
+# Phase 3-4: core primitives
+# - controlFlow/  (if, loop, switch, try, parallel, race, delay, filter, aggregate, break, continue, wait)
+# - data/         (setVariable, transformJson, log)
+# - io/           (httpRequest, subflow)
+# - datatable/    (readRow, updateRow)
+# - workflow/     (input, output)
+# - browser/      (navigate, click, type, scroll, hover, getValue, ...)

@@ -1,0 +1,6 @@
+# Phase 5: sandbox runtimes
+# - PageRuntime.ts   (executeJavaScript wrapper, inject __input + __ctx.fetch whitelist)
+# - NodeRuntime.ts   (isolated-vm, memory cap, timeout, module allowlist)
+# - sandbox/
+#   - pageBridge.ts
+#   - nodeAllowlist.ts

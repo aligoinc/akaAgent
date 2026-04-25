@@ -1,0 +1,11 @@
+{
+  "name": "@akabiz/app",
+  "version": "0.0.0",
+  "description": "akaBiz Auto — Electron + React app v2 (placeholder).",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Phase 6+ will wire electron-vite for v2 app\" && exit 0",
+    "build": "echo \"Phase 6+ will wire electron-vite build\" && exit 0",
+    "typecheck": "echo \"(no source yet)\" && exit 0"
+  }
+}

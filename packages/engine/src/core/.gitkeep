@@ -1,0 +1,10 @@
+# Phase 2: engine core
+# - WorkflowRunner.ts       (entry, run(workflow, input))
+# - BlockRegistry.ts        (register/lookup BlockManifest)
+# - ExecutionContext.ts     (variables scope, secrets, IO)
+# - ChannelBinding.ts       (workflow ↔ channel binding)
+# - ActivationQueue.ts      (state machine pending → ready → running → success/error/skipped)
+# - interpolate.ts          ({{nodeId.field}} resolver)
+# - conditionEvaluator.ts   (eval condition expression safely)
+# - topologicalSort.ts      (graph traversal)
+# - ExecutionMiddleware.ts  ✅ done — hook for rate-limit, circuit-breaker, idempotency, tracing

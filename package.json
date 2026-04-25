@@ -5,13 +5,22 @@
   "main": "./out/main/index.js",
   "author": "akaBiz",
   "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "packages/engine",
+    "packages/app",
+    "packages/adapters/*"
+  ],
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
     "build:win": "npm run build && electron-builder --win --config",
-    "build:mac": "npm run build && electron-builder --mac --config"
+    "build:mac": "npm run build && electron-builder --mac --config",
+    "engine:build": "npm run build -w @akabiz/engine",
+    "engine:typecheck": "npm run typecheck -w @akabiz/engine",
+    "engine:test": "npm run test -w @akabiz/engine"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

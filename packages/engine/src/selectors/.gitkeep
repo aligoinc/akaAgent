@@ -1,0 +1,3 @@
+# Phase 4-8: selector resolution
+# - SelectorResolver.ts        (runtime resolve named/inline với fallbacks)
+# - SelectorPickerProtocol.ts  (protocol UI ↔ engine for picking)
