@@ -53,7 +53,7 @@ interface RunGraph {
   nodeMap: Map<string, WorkflowNode>
   outgoing: Map<string, WorkflowEdge[]>
   incoming: Map<string, WorkflowEdge[]>
-  loopBodyNodes: Set<string>          // nodes inside any loop body — skip trong top-level pass
+  bodyNodes: Set<string>              // nodes inside any control body (loop, try) — skip trong top-level pass
 }
 
 export class WorkflowRunner {
@@ -137,11 +137,14 @@ export class WorkflowRunner {
     const outgoing = buildOutgoingEdgeMap(workflow.graph.edges)
     const incoming = buildIncomingEdgeMap(workflow.graph.edges)
 
-    // Pre-scan loop bodies: nodes downstream của loop trên handle 'loop-body'
-    const loopBodyNodes = new Set<string>()
+    // Pre-scan body nodes của control structures (loop, try) — skip trong top-level pass
+    const bodyNodes = new Set<string>()
     for (const node of workflow.graph.nodes) {
       if (node.manifestId === 'core.loop') {
-        this.collectDownstreamReachableOnly(node.id, 'loop-body', outgoing, loopBodyNodes)
+        this.collectDownstreamReachableOnly(node.id, 'loop-body', outgoing, bodyNodes)
+      }
+      if (node.manifestId === 'core.try') {
+        this.collectDownstreamReachableOnly(node.id, 'try-body', outgoing, bodyNodes)
       }
     }
 
@@ -151,7 +154,7 @@ export class WorkflowRunner {
       nodeMap,
       outgoing,
       incoming,
-      loopBodyNodes
+      bodyNodes
     }
   }
 
@@ -169,15 +172,15 @@ export class WorkflowRunner {
     runId: string,
     request: RunRequest,
     skipped: Set<string>,
-    isInsideLoop: boolean
+    isInsideBody: boolean
   ): Promise<void> {
     for (const id of sortedIds) {
       if (this.cancelled) return
       const node = graph.nodeMap.get(id)
       if (!node) continue
       if (skipped.has(id)) continue
-      // Top-level pass skips loop body — chỉ executor của loop tự run body.
-      if (!isInsideLoop && graph.loopBodyNodes.has(id)) continue
+      // Top-level pass skips body nodes (loop/try) — control executor tự run body.
+      if (!isInsideBody && graph.bodyNodes.has(id)) continue
       // Skip if all incoming come from skipped nodes (cascading skip)
       if (this.allParentsSkipped(id, graph.incoming, skipped)) {
         skipped.add(id)
@@ -186,12 +189,12 @@ export class WorkflowRunner {
 
       // Loop control: chỉ valid khi bên trong loop body. Throw signal cho loop executor catch.
       if (node.manifestId === 'core.break') {
-        if (!isInsideLoop) throw new Error('core.break outside of any loop')
+        if (!isInsideBody) throw new Error('core.break outside of any loop')
         await this.recordControlStep(node, context, runId, 'break')
         throw new LoopBreakSignal()
       }
       if (node.manifestId === 'core.continue') {
-        if (!isInsideLoop) throw new Error('core.continue outside of any loop')
+        if (!isInsideBody) throw new Error('core.continue outside of any loop')
         await this.recordControlStep(node, context, runId, 'continue')
         throw new LoopContinueSignal()
       }
@@ -219,6 +222,18 @@ export class WorkflowRunner {
       // Special: loop
       if (node.manifestId === 'core.loop') {
         await this.executeLoopNode(node, graph, context, runId, request)
+        continue
+      }
+
+      // Special: try/catch
+      if (node.manifestId === 'core.try') {
+        await this.executeTryNode(node, graph, context, runId, request, skipped)
+        continue
+      }
+
+      // Special: aggregate — collect outputs from all incoming
+      if (node.manifestId === 'core.aggregate') {
+        await this.executeAggregateNode(node, context, runId, graph)
         continue
       }
 
@@ -677,6 +692,126 @@ export class WorkflowRunner {
       manifestId: node.manifestId,
       status: 'success',
       input: { expression: value, cases },
+      output,
+      attempt: 1,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      durationMs
+    }
+    await this.opts.persistence.saveStep(step)
+    context.setNodeOutput(node.id, output)
+    this.emit({
+      kind: 'step.end',
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      output,
+      durationMs
+    })
+  }
+
+  // ========== try / catch ==========
+
+  /**
+   * core.try wraps subgraph downstream của handle 'try-body'.
+   * - Body success → emit handle 'try', mark 'catch' downstream as skipped.
+   * - Body error → emit handle 'catch' với error info, mark 'try' downstream as skipped.
+   * - LoopBreakSignal/ContinueSignal trong body bypass try (re-throw cho enclosing loop).
+   */
+  private async executeTryNode(
+    node: WorkflowNode,
+    graph: RunGraph,
+    context: ExecutionContext,
+    runId: string,
+    request: RunRequest,
+    parentSkipped: Set<string>
+  ): Promise<void> {
+    const startedAt = new Date()
+
+    // Pre-scan body nodes
+    const bodyIds = new Set<string>()
+    this.collectDownstreamReachableOnly(node.id, 'try-body', graph.outgoing, bodyIds)
+    const sortedBody = graph.sortedIds.filter(id => bodyIds.has(id))
+
+    let success = true
+    let errorInfo: { message: string; name: string; nodeId?: string } | null = null
+
+    const bodySkipped = new Set<string>()
+    try {
+      await this.runNodeSubset(sortedBody, graph, context, runId, request, bodySkipped, true)
+    } catch (err) {
+      // Re-throw loop signals — try doesn't catch break/continue
+      if (isLoopSignal(err)) throw err
+      success = false
+      const e = err instanceof Error ? err : new Error(String(err))
+      errorInfo = { message: e.message, name: e.name }
+      // Try to extract nodeId from message format 'Node "<id>" failed: ...'
+      const m = e.message.match(/Node "([^"]+)" failed/)
+      if (m && m[1]) errorInfo.nodeId = m[1]
+    }
+
+    // Mark losing branch as skipped (use parentSkipped — sẽ propagate downstream try node)
+    const losingHandle = success ? 'catch' : 'try'
+    this.collectDownstream(node.id, losingHandle, graph.outgoing, graph.incoming, parentSkipped)
+
+    const finishedAt = new Date()
+    const durationMs = finishedAt.getTime() - startedAt.getTime()
+    const output = {
+      success,
+      branch: success ? 'try' : 'catch',
+      ...(errorInfo !== null ? { error: errorInfo } : {})
+    }
+
+    const step: RunStep = {
+      id: randomUUID(),
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      input: { bodySize: sortedBody.length },
+      output,
+      attempt: 1,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      durationMs
+    }
+    await this.opts.persistence.saveStep(step)
+    context.setNodeOutput(node.id, output)
+    this.emit({
+      kind: 'step.end',
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      output,
+      durationMs
+    })
+  }
+
+  // ========== aggregate ==========
+
+  private async executeAggregateNode(
+    node: WorkflowNode,
+    context: ExecutionContext,
+    runId: string,
+    graph: RunGraph
+  ): Promise<void> {
+    const startedAt = new Date()
+    const incoming = graph.incoming.get(node.id) ?? []
+    const items: unknown[] = incoming.map(e => context.getNodeOutput(e.source) ?? null)
+
+    const finishedAt = new Date()
+    const durationMs = finishedAt.getTime() - startedAt.getTime()
+    const output = { items, count: items.length }
+
+    const step: RunStep = {
+      id: randomUUID(),
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      input: { incomingCount: incoming.length },
       output,
       attempt: 1,
       startedAt: startedAt.toISOString(),
