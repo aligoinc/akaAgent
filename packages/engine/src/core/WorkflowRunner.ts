@@ -23,25 +23,37 @@ import {
 import type { ExecutionMiddleware, NodeContext, NodeResult } from './ExecutionMiddleware.js'
 import type { IRunPersistence } from './IRunPersistence.js'
 import type { IConnectionVault } from './IConnectionVault.js'
+import { LoopBreakSignal, LoopContinueSignal, isLoopSignal } from './LoopSignals.js'
 
 /**
  * WorkflowRunner — execute 1 workflow lần.
  *
- * Phase 2 implementation: sequential topological execution + ifElse branching.
- * Future (Phase X): full ActivationQueue với parallel + race + n-of-m + side track.
+ * Phase 2: sequential topological execution + ifElse branching.
+ * Phase 3a: + delay, transformJson, httpRequest, subflow primitives.
+ * Phase 3b-1: + loop (count/forEach/while) + break + continue (refactor extract runNodeSubset).
+ * Phase 3b-2 (next): switch, filter.
+ * Phase 3b-3 (next): try/catch, parallel, race, aggregate, wait.
  *
- * Reserved fields trên WorkflowNode (track/joinPolicy/joinCount/compensate) — Phase 2 IGNORE
- * (parse + lưu nhưng không xử lý). Future enable không cần migrate data.
+ * Reserved fields (track/joinPolicy/joinCount/compensate) — IGNORE Phase 2-3,
+ * parse + lưu nguyên trạng. Future enable không cần migrate.
  */
 
 export interface WorkflowRunnerOptions {
   registry: BlockRegistry
-  controller?: IBrowserController                                // optional: chỉ workflow có browser block mới cần
+  controller?: IBrowserController
   persistence: IRunPersistence
   vault: IConnectionVault
   middlewares?: ExecutionMiddleware[]
   onProgress?: (event: ProgressEvent) => void
-  loadWorkflow?: (id: string, version?: number) => Promise<Workflow>   // cho subflow recursive
+  loadWorkflow?: (id: string, version?: number) => Promise<Workflow>
+}
+
+interface RunGraph {
+  sortedIds: string[]
+  nodeMap: Map<string, WorkflowNode>
+  outgoing: Map<string, WorkflowEdge[]>
+  incoming: Map<string, WorkflowEdge[]>
+  loopBodyNodes: Set<string>          // nodes inside any loop body — skip trong top-level pass
 }
 
 export class WorkflowRunner {
@@ -65,9 +77,7 @@ export class WorkflowRunner {
       startedAt: startedAt.toISOString()
     }
 
-    // Resolve secrets — Phase 2 collect connection IDs từ workflow node config (TODO: scan deeper)
     const secrets: Record<string, string> = {}
-
     const context = new ExecutionContext(workflow, request.input, secrets, runMeta)
 
     const run: Run = {
@@ -90,55 +100,16 @@ export class WorkflowRunner {
     let finalOutput: Record<string, unknown> = {}
 
     try {
-      // Validate graph (no cycle) — Phase 2 chấp nhận chỉ DAG
-      const sorted = topologicalSort(workflow.graph.nodes, workflow.graph.edges)
-      const nodeMap = buildNodeMap(workflow.graph.nodes)
-      const outgoing = buildOutgoingEdgeMap(workflow.graph.edges)
-      const incoming = buildIncomingEdgeMap(workflow.graph.edges)
-
-      // Track which nodes are skipped (do filter, ifElse skip nhánh, ...)
+      const graph = this.buildGraph(workflow)
       const skipped = new Set<string>()
-      // Track loop body node ids (skip trong main pass — loop primitive tự execute)
-      const loopBodyNodes = new Set<string>()
-
-      // Phase 2: pre-scan loop bodies (sub-graph downstream của loop trên handle 'loop-body')
-      for (const node of workflow.graph.nodes) {
-        if (node.manifestId === 'core.loop') {
-          this.collectDownstream(node.id, 'loop-body', outgoing, incoming, loopBodyNodes)
-        }
-      }
-
-      for (const node of sorted) {
-        if (this.cancelled) {
-          finalStatus = 'cancelled'
-          break
-        }
-        if (skipped.has(node.id) || loopBodyNodes.has(node.id)) continue
-
-        // Check parent skipped (no incoming edge active) — Phase 2 simple: nếu mọi incoming đều từ skipped node → skip
-        if (this.allParentsSkipped(node.id, incoming, skipped)) {
-          skipped.add(node.id)
-          continue
-        }
-
-        // Special: ifElse — execute condition, mark losing branch downstream as skipped
-        if (node.manifestId === 'core.if') {
-          const branchTaken = await this.executeIfNode(node, context, runId, outgoing, incoming, skipped)
-          // Mark losing handle subgraph as skipped
-          const losingHandle = branchTaken ? 'if-false' : 'if-true'
-          this.collectDownstream(node.id, losingHandle, outgoing, incoming, skipped)
-          continue
-        }
-
-        // Normal node execute
-        await this.executeNode(node, context, runId, request)
-      }
+      await this.runNodeSubset(graph.sortedIds, graph, context, runId, request, skipped, false)
     } catch (err) {
       finalStatus = 'failed'
       finalError = err instanceof Error ? err.message : String(err)
     }
 
-    // Resolve final workflow output từ core.output node (nếu có)
+    if (this.cancelled && finalStatus === 'completed') finalStatus = 'cancelled'
+
     const outputNode = workflow.graph.nodes.find(n => n.manifestId === 'core.output')
     if (outputNode && finalStatus === 'completed') {
       const out = context.getNodeOutput(outputNode.id)
@@ -157,6 +128,281 @@ export class WorkflowRunner {
       ...(finalError !== undefined ? { error: finalError } : {}),
       durationMs
     }
+  }
+
+  // ========== graph build ==========
+
+  private buildGraph(workflow: Workflow): RunGraph {
+    const nodeMap = buildNodeMap(workflow.graph.nodes)
+    const outgoing = buildOutgoingEdgeMap(workflow.graph.edges)
+    const incoming = buildIncomingEdgeMap(workflow.graph.edges)
+
+    // Pre-scan loop bodies: nodes downstream của loop trên handle 'loop-body'
+    const loopBodyNodes = new Set<string>()
+    for (const node of workflow.graph.nodes) {
+      if (node.manifestId === 'core.loop') {
+        this.collectDownstreamReachableOnly(node.id, 'loop-body', outgoing, loopBodyNodes)
+      }
+    }
+
+    const sorted = topologicalSort(workflow.graph.nodes, workflow.graph.edges)
+    return {
+      sortedIds: sorted.map(n => n.id),
+      nodeMap,
+      outgoing,
+      incoming,
+      loopBodyNodes
+    }
+  }
+
+  // ========== node subset execution ==========
+
+  /**
+   * Execute 1 list of node IDs in topological order, sharing context.
+   * - Top-level: sortedIds = all sorted, skipBodyNodes=true (skip loop body trong main pass)
+   * - Loop body iteration: sortedIds = sorted body subset, skipBodyNodes=false
+   */
+  private async runNodeSubset(
+    sortedIds: string[],
+    graph: RunGraph,
+    context: ExecutionContext,
+    runId: string,
+    request: RunRequest,
+    skipped: Set<string>,
+    isInsideLoop: boolean
+  ): Promise<void> {
+    for (const id of sortedIds) {
+      if (this.cancelled) return
+      const node = graph.nodeMap.get(id)
+      if (!node) continue
+      if (skipped.has(id)) continue
+      // Top-level pass skips loop body — chỉ executor của loop tự run body.
+      if (!isInsideLoop && graph.loopBodyNodes.has(id)) continue
+      // Skip if all incoming come from skipped nodes (cascading skip)
+      if (this.allParentsSkipped(id, graph.incoming, skipped)) {
+        skipped.add(id)
+        continue
+      }
+
+      // Loop control: chỉ valid khi bên trong loop body. Throw signal cho loop executor catch.
+      if (node.manifestId === 'core.break') {
+        if (!isInsideLoop) throw new Error('core.break outside of any loop')
+        await this.recordControlStep(node, context, runId, 'break')
+        throw new LoopBreakSignal()
+      }
+      if (node.manifestId === 'core.continue') {
+        if (!isInsideLoop) throw new Error('core.continue outside of any loop')
+        await this.recordControlStep(node, context, runId, 'continue')
+        throw new LoopContinueSignal()
+      }
+
+      // Special: ifElse — execute condition, mark losing branch downstream as skipped
+      if (node.manifestId === 'core.if') {
+        const branchTaken = await this.executeIfNode(node, context, runId)
+        const losingHandle = branchTaken ? 'if-false' : 'if-true'
+        this.collectDownstream(node.id, losingHandle, graph.outgoing, graph.incoming, skipped)
+        continue
+      }
+
+      // Special: loop
+      if (node.manifestId === 'core.loop') {
+        await this.executeLoopNode(node, graph, context, runId, request)
+        continue
+      }
+
+      await this.executeNode(node, context, runId, request)
+    }
+  }
+
+  // ========== loop ==========
+
+  private async executeLoopNode(
+    node: WorkflowNode,
+    graph: RunGraph,
+    context: ExecutionContext,
+    runId: string,
+    request: RunRequest
+  ): Promise<void> {
+    const startedAt = new Date()
+    const resolved = this.resolveNodeInput(node, context)
+    const loopType = String(resolved.loopType ?? 'forEach')
+    const onIterationError = String(resolved.onIterationError ?? 'continue') as 'break' | 'continue' | 'fail'
+    const maxIterations = Number(resolved.maxIterations ?? 10000)
+
+    // Determine items to iterate
+    let items: unknown[]
+    if (loopType === 'count') {
+      const n = Math.max(0, Number(resolved.count ?? 0))
+      items = Array.from({ length: n }, (_, i) => i)
+    } else if (loopType === 'forEach') {
+      const raw = resolved.items
+      if (Array.isArray(raw)) items = raw
+      else if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw)
+          items = Array.isArray(parsed) ? parsed : []
+        } catch { items = [] }
+      } else items = []
+    } else if (loopType === 'while') {
+      items = []   // dynamic — see while-mode below
+    } else {
+      throw new Error(`core.loop: unsupported loopType '${loopType}'`)
+    }
+
+    // Pre-build sorted body node list (subset of graph.sortedIds containing only this loop's body)
+    const bodyIds = new Set<string>()
+    this.collectDownstreamReachableOnly(node.id, 'loop-body', graph.outgoing, bodyIds)
+    const sortedBody = graph.sortedIds.filter(id => bodyIds.has(id))
+
+    let successCount = 0
+    let errorCount = 0
+    const iterationOutputs: Array<Record<string, unknown>> = []
+    let lastError: string | undefined
+
+    const runIteration = async (item: unknown, iteration: number, index: number): Promise<'success' | 'error' | 'break'> => {
+      // Push local scope: { item, index, iteration, loop: { item, index, iteration } }
+      const local: Record<string, unknown> = {
+        item,
+        index,
+        iteration,
+        loop: { item, index, iteration }
+      }
+      context.pushLocal(local)
+
+      // Each iteration uses a fresh skip set (so previous iteration's skips don't carry over)
+      const iterSkipped = new Set<string>()
+
+      try {
+        await this.runNodeSubset(sortedBody, graph, context, runId, request, iterSkipped, true)
+      } catch (err) {
+        if (err instanceof LoopBreakSignal) {
+          context.popLocal()
+          return 'break'
+        }
+        if (err instanceof LoopContinueSignal) {
+          context.popLocal()
+          return 'success'   // continue treats iteration as completed (skip rest)
+        }
+        // Real error
+        const msg = err instanceof Error ? err.message : String(err)
+        lastError = msg
+        context.popLocal()
+        return 'error'
+      } finally {
+        // already popped above on early return
+      }
+
+      // Snapshot outputs of body nodes for this iteration (debug)
+      iterationOutputs.push({})
+      context.popLocal()
+      return 'success'
+    }
+
+    let breakRequested = false
+    if (loopType === 'while') {
+      // Raw condition (chưa interpolate) — evaluate fresh mỗi iteration với scope hiện tại
+      const condition = String(node.config.condition ?? '')
+      if (!condition) throw new Error('core.loop while: condition is required')
+      let iter = 0
+      while (iter < maxIterations) {
+        // Expose `iteration` (= completed count) cho condition check.
+        context.pushLocal({ iteration: iter })
+        const cond = evaluateCondition(condition, context.getScope())
+        context.popLocal()
+        if (!cond) break
+        iter++
+        const outcome = await runIteration(undefined, iter, iter - 1)
+        if (outcome === 'break') { breakRequested = true; break }
+        if (outcome === 'error') {
+          errorCount++
+          if (onIterationError === 'fail') throw new Error(`core.loop iteration ${iter} failed: ${lastError}`)
+          if (onIterationError === 'break') { breakRequested = true; break }
+        } else successCount++
+      }
+    } else {
+      for (let i = 0; i < items.length; i++) {
+        if (this.cancelled) break
+        const outcome = await runIteration(items[i], i + 1, i)
+        if (outcome === 'break') { breakRequested = true; break }
+        if (outcome === 'error') {
+          errorCount++
+          if (onIterationError === 'fail') throw new Error(`core.loop iteration ${i + 1} failed: ${lastError}`)
+          if (onIterationError === 'break') { breakRequested = true; break }
+        } else successCount++
+      }
+    }
+
+    const finishedAt = new Date()
+    const durationMs = finishedAt.getTime() - startedAt.getTime()
+
+    const output = {
+      successCount,
+      errorCount,
+      iterations: successCount + errorCount,
+      completed: !breakRequested,
+      results: iterationOutputs
+    }
+
+    // Record loop step
+    const step: RunStep = {
+      id: randomUUID(),
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      input: { loopType, onIterationError, itemsCount: items.length },
+      output,
+      attempt: 1,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      durationMs,
+      ...(node.reportingLabel !== undefined ? { reportingLabel: node.reportingLabel } : {}),
+      ...(node.reportingTags !== undefined ? { reportingTags: node.reportingTags } : {})
+    }
+    await this.opts.persistence.saveStep(step)
+
+    this.emit({
+      kind: 'step.end',
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      output,
+      durationMs,
+      ...(node.reportingLabel !== undefined ? { reportingLabel: node.reportingLabel } : {}),
+      ...(node.reportingTags !== undefined ? { reportingTags: node.reportingTags } : {})
+    })
+
+    context.setNodeOutput(node.id, output)
+  }
+
+  /** Persist a step record cho break/continue (no real execution, just trace). */
+  private async recordControlStep(node: WorkflowNode, context: ExecutionContext, runId: string, kind: 'break' | 'continue'): Promise<void> {
+    void context
+    const ts = new Date()
+    const step: RunStep = {
+      id: randomUUID(),
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      input: {},
+      output: { signal: kind },
+      attempt: 1,
+      startedAt: ts.toISOString(),
+      finishedAt: ts.toISOString(),
+      durationMs: 0
+    }
+    await this.opts.persistence.saveStep(step)
+    this.emit({
+      kind: 'step.end',
+      runId,
+      nodeId: node.id,
+      manifestId: node.manifestId,
+      status: 'success',
+      output: { signal: kind },
+      durationMs: 0
+    })
   }
 
   // ========== node execution ==========
@@ -260,6 +506,7 @@ export class WorkflowRunner {
       try {
         result = await handler.execute(resolvedInput, execCtx)
       } catch (err) {
+        if (isLoopSignal(err)) throw err   // re-throw cho loop executor
         result = { success: false, error: err instanceof Error ? err.message : String(err) }
       }
     }
@@ -313,30 +560,23 @@ export class WorkflowRunner {
     if (result.success) {
       context.setNodeOutput(node.id, result.output ?? {})
     } else {
-      // Apply onError policy
       const policy = node.onError ?? 'fail'
       if (policy === 'continue') {
-        // Treat as success with empty output
         context.setNodeOutput(node.id, { error: result.error })
         return
       }
       if (policy === 'goto') {
-        // Phase 2 simple: just throw (downstream skipped via try/catch). Future: jump to onErrorTarget.
         throw new Error(`Node "${node.id}" failed: ${result.error}`)
       }
-      // 'fail' (default)
       throw new Error(`Node "${node.id}" failed: ${result.error}`)
     }
-    void request // reserved for future
+    void request
   }
 
   private async executeIfNode(
     node: WorkflowNode,
     context: ExecutionContext,
-    runId: string,
-    _outgoing: Map<string, WorkflowEdge[]>,
-    _incoming: Map<string, WorkflowEdge[]>,
-    _skipped: Set<string>
+    runId: string
   ): Promise<boolean> {
     const startedAt = new Date()
     const condition = String(node.config.condition ?? '')
@@ -379,12 +619,10 @@ export class WorkflowRunner {
     const scope = context.getScope()
     const out: Record<string, unknown> = {}
 
-    // 1. Apply config (with interpolation)
     for (const [k, v] of Object.entries(node.config)) {
       out[k] = resolveValue(v, scope)
     }
 
-    // 2. inputMapping overrides config
     for (const [field, ref] of Object.entries(node.inputMapping)) {
       const sourceOutput = context.getNodeOutput(ref.sourceNodeId)
       if (!sourceOutput) {
@@ -393,7 +631,6 @@ export class WorkflowRunner {
       }
       let value: unknown = sourceOutput[ref.sourceField]
       if (ref.sourcePath && value && typeof value === 'object') {
-        // Walk path
         for (const part of ref.sourcePath.split('.')) {
           if (value == null || typeof value !== 'object') {
             value = undefined
@@ -414,10 +651,48 @@ export class WorkflowRunner {
     skipped: Set<string>
   ): boolean {
     const inc = incoming.get(nodeId)
-    if (!inc || inc.length === 0) return false      // entry node, never "skipped by parents"
+    if (!inc || inc.length === 0) return false
     return inc.every(e => skipped.has(e.source))
   }
 
+  /**
+   * Walk subgraph (DFS) reachable từ `fromNodeId` qua handle (loop-body, switch-x...).
+   * KHÔNG check incoming logic — chỉ collect tất cả node downstream qua handle này
+   * và recursive xuôi theo bất kỳ handle nào của node con.
+   *
+   * Dùng cho:
+   *   - Pre-scan loop body (loopBodyNodes set)
+   *   - Pre-scan switch branches (Phase 3b-2)
+   */
+  private collectDownstreamReachableOnly(
+    fromNodeId: string,
+    handle: string,
+    outgoing: Map<string, WorkflowEdge[]>,
+    target: Set<string>
+  ): void {
+    const queue: string[] = []
+    const start = outgoing.get(`${fromNodeId}::${handle}`) ?? []
+    for (const e of start) queue.push(e.target)
+
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      if (target.has(id)) continue
+      target.add(id)
+      // Recurse downstream theo all handles của id
+      for (const [key, edges] of outgoing.entries()) {
+        if (!key.startsWith(`${id}::`)) continue
+        for (const e of edges) {
+          if (!target.has(e.target)) queue.push(e.target)
+        }
+      }
+    }
+  }
+
+  /**
+   * Conservative skip cascade: dùng cho ifElse losing branch — chỉ mark skipped
+   * nếu mọi incoming của node đều thuộc subgraph đang bị skip.
+   * Tránh skip nhầm node có path khác (vd join từ branch khác).
+   */
   private collectDownstream(
     fromNodeId: string,
     handle: string,
@@ -432,12 +707,10 @@ export class WorkflowRunner {
     while (queue.length > 0) {
       const id = queue.shift()!
       if (target.has(id)) continue
-      // Chỉ mark skipped nếu mọi incoming đều đến từ subgraph (tránh skip nhầm node có path khác)
       const inc = incoming.get(id) ?? []
       const allFromSkipped = inc.every(e => target.has(e.source) || e.source === fromNodeId)
       if (!allFromSkipped) continue
       target.add(id)
-      // Recurse downstream theo all handles
       for (const [key, edges] of outgoing.entries()) {
         if (!key.startsWith(`${id}::`)) continue
         for (const e of edges) queue.push(e.target)

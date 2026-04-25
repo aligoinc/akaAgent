@@ -7,6 +7,9 @@ import { logManifest, logHandler } from './data/log.js'
 import { transformJsonManifest, transformJsonHandler } from './data/transformJson.js'
 import { ifManifest } from './controlFlow/if.js'
 import { delayManifest, delayHandler } from './controlFlow/delay.js'
+import { loopManifest } from './controlFlow/loop.js'
+import { breakManifest } from './controlFlow/break.js'
+import { continueManifest } from './controlFlow/continue.js'
 import { httpRequestManifest, httpRequestHandler } from './io/httpRequest.js'
 import { subflowManifest, subflowHandler } from './io/subflow.js'
 
@@ -28,8 +31,11 @@ export function registerCorePrimitives(registry: BlockRegistry): void {
   registry.register(logManifest, logHandler)
   registry.register(transformJsonManifest, transformJsonHandler)
 
-  // control flow — runner special-case (no handler) for if
+  // control flow — runner special-case (no handler) for if/loop/break/continue
   registry.register(ifManifest)
+  registry.register(loopManifest)
+  registry.register(breakManifest)
+  registry.register(continueManifest)
   registry.register(delayManifest, delayHandler)
 
   // io
@@ -44,6 +50,7 @@ export {
   logManifest, logHandler,
   transformJsonManifest, transformJsonHandler,
   ifManifest,
+  loopManifest, breakManifest, continueManifest,
   delayManifest, delayHandler,
   httpRequestManifest, httpRequestHandler,
   subflowManifest, subflowHandler
