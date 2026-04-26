@@ -2,10 +2,12 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../shared/types'
 import { builtinActions } from '../../shared/actions'
 import { WebviewRegistry } from '../playwright/webviewController'
+import { PageControllerRegistry } from '../v2/runtime/pageController'
 import { SupabaseService } from '../services/supabase'
 import { CampaignScheduler } from '../services/campaignScheduler'
 import { ContactLoader } from '../services/contactLoader'
 import { startChannelPoller } from '../domain/channels/channelPoller'
+import { seedV2 } from '../data/seed/seedV2'
 
 import { registerFlowHandlers } from './handlers/flowHandlers'
 import { registerBrowserHandlers } from './handlers/browserHandlers'
@@ -16,11 +18,14 @@ import { registerElementHandlers } from './handlers/elementHandlers'
 import { registerRunHandlers } from './handlers/runHandlers'
 import { registerAuthHandlers } from './handlers/authHandlers'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
+import { registerV2Handlers } from './handlers/v2Handlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
+  const pageRegistry = new PageControllerRegistry()
   const campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow)
+  campaignScheduler.setPageRegistry(pageRegistry)
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow)
 
   // Startup reset
@@ -31,6 +36,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // Seed built-in data
   supabase.seedBuiltinCampaignActions().catch(err => {
     console.error('Failed to seed built-in campaign actions:', err)
+  })
+
+  // Seed v2 (idempotent — chỉ insert nếu name chưa tồn tại)
+  seedV2().catch(err => {
+    console.error('Failed to seed v2 blocks/workflows:', err)
   })
 
   // Theme
@@ -55,12 +65,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAuthHandlers()
   registerUpdateHandlers(mainWindow)
   registerFlowHandlers(mainWindow, supabase)
-  registerBrowserHandlers(webviewRegistry)
+  registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)
   registerChannelHandlers(supabase, webviewRegistry)
   registerChannelContactHandlers(supabase, contactLoader)
   registerElementHandlers(supabase)
   registerRunHandlers(supabase)
+  registerV2Handlers(mainWindow, pageRegistry)
 
   // Start channel login poller
   startChannelPoller(webviewRegistry, mainWindow)
