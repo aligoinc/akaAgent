@@ -27,6 +27,8 @@ interface CampaignStore {
   updateCampaign: (id: number, updates: Partial<Campaign>) => Promise<void>
   deleteCampaign: (id: number) => Promise<void>
   cloneCampaign: (id: number) => Promise<Campaign>
+  bulkUpdateCampaignStatus: (ids: number[], status: string) => Promise<void>
+  bulkDeleteCampaigns: (ids: number[]) => Promise<void>
   upsertCampaign: (campaign: Campaign) => void
 
   // Campaign Details
@@ -178,6 +180,20 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const cloned = await window.electronAPI.cloneCampaign(id)
     await get().loadCampaigns()
     return cloned
+  },
+
+  bulkUpdateCampaignStatus: async (ids, status) => {
+    if (!window.electronAPI || ids.length === 0) return
+    const api = window.electronAPI
+    await Promise.all(ids.map(id => api.updateCampaign(id, { status })))
+    await get().loadCampaigns()
+  },
+
+  bulkDeleteCampaigns: async (ids) => {
+    if (!window.electronAPI || ids.length === 0) return
+    const api = window.electronAPI
+    await Promise.all(ids.map(id => api.deleteCampaign(id)))
+    await get().loadCampaigns()
   },
 
   upsertCampaign: (campaign) => {

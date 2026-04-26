@@ -19,6 +19,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
     detailActions, loadingDetailActions,
     loadCampaigns, loadCampaignActions, loadChannels,
     createCampaign, updateCampaign, deleteCampaign, cloneCampaign,
+    bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     loadCampaignDetails, loadDetailActionsByCampaign
   } = useCampaignStore()
   const isAdminAkabiz = !!useAuthStore(s => s.user?.isAdminAkabiz)
@@ -30,6 +31,8 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
   const [detailTab, setDetailTab] = useState<'data' | 'actions'>('data')
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
 
   useEffect(() => {
     loadCampaigns()
@@ -44,6 +47,11 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
       loadDetailActionsByCampaign(selectedCampaignId)
     }
   }, [selectedCampaignId, loadCampaignDetails, loadDetailActionsByCampaign])
+
+  // Clear bulk selection when channel filter changes
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [filterChannelId])
 
   const handleEdit = (campaign: Campaign) => {
     setEditingCampaign(campaign)
@@ -87,6 +95,78 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
 
   const handleResume = async (campaign: Campaign) => {
     await updateCampaign(campaign.id, { status: 'chờ xử lý' })
+  }
+
+  const toggleSelectOne = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredCampaigns.length && filteredCampaigns.length > 0) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredCampaigns.map(c => c.id)))
+    }
+  }
+
+  const handleBulkPause = async () => {
+    const eligible = filteredCampaigns
+      .filter(c => selectedIds.has(c.id))
+      .filter(c => c.status === 'đang chạy' || c.status === 'chờ xử lý')
+      .map(c => c.id)
+    if (eligible.length === 0) {
+      setSelectedIds(new Set())
+      return
+    }
+    setBulkActionLoading(true)
+    try {
+      await bulkUpdateCampaignStatus(eligible, 'tạm dừng')
+    } finally {
+      setBulkActionLoading(false)
+      setSelectedIds(new Set())
+    }
+  }
+
+  const handleBulkResume = async () => {
+    const eligible = filteredCampaigns
+      .filter(c => selectedIds.has(c.id) && c.status === 'tạm dừng')
+      .map(c => c.id)
+    if (eligible.length === 0) {
+      setSelectedIds(new Set())
+      return
+    }
+    setBulkActionLoading(true)
+    try {
+      await bulkUpdateCampaignStatus(eligible, 'chờ xử lý')
+    } finally {
+      setBulkActionLoading(false)
+      setSelectedIds(new Set())
+    }
+  }
+
+  const handleBulkDelete = () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    useUiStore.getState().showConfirm(
+      `Xoá ${ids.length} chiến dịch đã chọn?`,
+      async () => {
+        setBulkActionLoading(true)
+        try {
+          await bulkDeleteCampaigns(ids)
+          if (selectedCampaignId && ids.includes(selectedCampaignId)) {
+            setSelectedCampaignId(null)
+          }
+        } finally {
+          setBulkActionLoading(false)
+          setSelectedIds(new Set())
+        }
+      },
+      { title: 'Xoá chiến dịch', confirmText: 'Xoá', variant: 'danger' }
+    )
   }
 
   const getStatusColor = (status: string) => {
@@ -142,6 +222,27 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
         </div>
       )}
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="campaign-bulk-action-bar">
+          <span>Đã chọn <strong>{selectedIds.size}</strong> chiến dịch</span>
+          <div className="bulk-action-buttons">
+            <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading} onClick={handleBulkResume} title="Tiếp tục các chiến dịch đang tạm dừng">
+              <Play size={12} /> Tiếp tục
+            </button>
+            <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading} onClick={handleBulkPause} title="Tạm dừng các chiến dịch đang chạy/chờ">
+              <Pause size={12} /> Tạm dừng
+            </button>
+            <button className="btn btn-danger btn-sm" disabled={bulkActionLoading} onClick={handleBulkDelete} title="Xoá các chiến dịch đã chọn">
+              <Trash2 size={12} /> Xoá
+            </button>
+            <button className="btn-icon" onClick={() => setSelectedIds(new Set())} title="Bỏ chọn tất cả">
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {showForm && (
         <CampaignFormModal 
           campaign={editingCampaign}
@@ -170,6 +271,14 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
         ) : (
           <div className="campaign-table">
             <div className="campaign-table-header">
+              <div className="campaign-col col-checkbox">
+                <input
+                  type="checkbox"
+                  checked={filteredCampaigns.length > 0 && selectedIds.size === filteredCampaigns.length}
+                  ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filteredCampaigns.length }}
+                  onChange={toggleSelectAll}
+                />
+              </div>
               <div className="campaign-col col-name">Tên</div>
               <div className="campaign-col col-action">Hành động</div>
               <div className="campaign-col col-channel">Tài khoản</div>
@@ -178,12 +287,19 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
               <div className="campaign-col col-ops"></div>
             </div>
             {filteredCampaigns.map(campaign => (
-              <div 
-                key={campaign.id} 
-                className={`campaign-table-row ${selectedCampaignId === campaign.id ? 'selected' : ''}`}
+              <div
+                key={campaign.id}
+                className={`campaign-table-row ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
                 onClick={() => handleRowClick(campaign)}
                 style={{ cursor: 'pointer' }}
               >
+                <div className="campaign-col col-checkbox" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(campaign.id)}
+                    onChange={() => toggleSelectOne(campaign.id)}
+                  />
+                </div>
                 <div className="campaign-col col-name">{campaign.name}</div>
                 <div className="campaign-col col-action">{campaign.actionName || campaign.actionId}</div>
                 <div className="campaign-col col-channel">{campaign.channelName || '-'}</div>
