@@ -14,10 +14,12 @@
     "build:mac": "npm run build && electron-builder --mac --config"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@supabase/supabase-js": "^2.49.1",
     "@xyflow/react": "^12.4.4",
     "dotenv": "^17.3.1",
     "lucide-react": "^0.469.0",
+    "monaco-editor": "^0.55.1",
     "playwright": "^1.58.2",
     "uuid": "^11.1.0",
     "xlsx": "^0.18.5",

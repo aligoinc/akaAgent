@@ -4,6 +4,7 @@ import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { FlowRunner } from '../playwright/flowRunner'
 import { IPC_CHANNELS, ExecutionStep, Campaign, CampaignDetail } from '../../shared/types'
+import { IPC_CHANNELS_V2, RunStepV2 } from '../../shared/v2Types'
 import {
   FB_SHARE_POST_WORKFLOW_ID,
   FB_REELS_WORKFLOW_ID,
@@ -11,19 +12,28 @@ import {
   FB_MESSAGE_FRIEND_WORKFLOW_ID,
   FB_GROUP_POST_COMPLETION_BLOCK_ID
 } from '../data/seed/builtinCampaignActions'
+import { PageControllerRegistry } from '../v2/runtime/pageController'
+import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
 
 export class CampaignScheduler {
   private supabase: SupabaseService
   private webviewRegistry: WebviewRegistry
+  private pageRegistry: PageControllerRegistry | null = null
+  private engineV2 = new WorkflowEngineV2()
   private mainWindow: BrowserWindow
   private intervalId: ReturnType<typeof setInterval> | null = null
   private running = false
   private processing = false
+  private activeV2Aborts = new Map<number, AbortController>()
 
   constructor(supabase: SupabaseService, webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow) {
     this.supabase = supabase
     this.webviewRegistry = webviewRegistry
     this.mainWindow = mainWindow
+  }
+
+  setPageRegistry(reg: PageControllerRegistry): void {
+    this.pageRegistry = reg
   }
 
   start(): void {
@@ -203,6 +213,14 @@ export class CampaignScheduler {
         return
       }
 
+      // ==========================================================
+      // ENGINE V2: nếu action có workflow_v2_id thì dùng engine mới
+      // ==========================================================
+      if (action.workflowV2Id && this.pageRegistry) {
+        await this.executeCampaignV2(channel, campaign, action.workflowV2Id)
+        return
+      }
+
       // === Message & Friend Request campaign: no workflow, direct browser automation ===
       if (campaign.actionId === 'facebook_message_friend') {
         await this.executeMessageFriendCampaign(channel, campaign)
@@ -375,6 +393,407 @@ export class CampaignScheduler {
           })
         } catch {}
       }
+    }
+  }
+
+  // ============================================================
+  // V2 EXECUTOR — chạy workflow v2 cho campaign
+  // ============================================================
+  /**
+   * Engine v2 unified executor — thay cho 3 path cũ (executeMessageFriendCampaign,
+   * executeTimelinePostCampaign, runWorkflowForDetail). Workflow v2 đã chứa
+   * logic ifElse cho các biến thể (sharePost / postAsReels / copyContentFromSource /
+   * enableComment / leaveGroup / joinGroup / enableMessage / enableAddFriend).
+   * Scheduler chỉ build variables, loop details, gọi engineV2.run.
+   */
+  private async executeCampaignV2(
+    channel: import('../../shared/types').OrgChannel,
+    campaign: Campaign,
+    workflowV2Id: number
+  ): Promise<void> {
+    if (!this.pageRegistry) throw new Error('pageRegistry chưa được set cho scheduler')
+    const page = this.pageRegistry.get(channel.id)
+    if (!page) {
+      this.sendLog(`⚠️ Tài khoản "${channel.name}" chưa mở tab. Bỏ qua.`)
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
+      return
+    }
+
+    // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
+    let details = await this.supabase.listCampaignDetails(campaign.id)
+
+    // Shuffle group list nếu enabled
+    if (campaign.extraSettings?.shuffleGroupList && details.length > 1 && campaign.actionId === 'facebook_group_post') {
+      for (let i = details.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[details[i], details[j]] = [details[j], details[i]]
+      }
+      this.sendLog(`🔀 Đã xáo trộn danh sách ${details.length} group`)
+    }
+
+    // Resolve sourceLink rotation cho timeline_post
+    const extra = campaign.extraSettings || {}
+    let currentSourceLink = ''
+    if (campaign.actionId === 'facebook_timeline_post') {
+      const links = (extra.sourceLinks || '').split(',').map(s => s.trim()).filter(Boolean)
+      if (links.length > 0) {
+        const idx = (extra.sourceLinkIndex || 0) % links.length
+        currentSourceLink = links[idx]
+        const nextIdx = (idx + 1) % links.length
+        try {
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            extraSettings: { ...extra, sourceLinkIndex: nextIdx }
+          })
+        } catch {}
+        this.sendLog(`🔗 Link nguồn #${idx + 1}/${links.length}: ${currentSourceLink}`)
+      }
+    }
+
+    const runOnce = details.length === 0
+    const targets = runOnce ? [null] : details
+
+    let rateLimitReached = false
+    let rateLimitRetryAt: Date | null = null  // thời điểm có thể retry sau (cho hourly limit)
+    let rateLimitIsDaily = false
+    const limitConfig = extra.actionLimits
+
+    for (let i = 0; i < targets.length; i++) {
+      // Check pause
+      const cur = await this.supabase.getCampaign(campaign.id)
+      if (cur && cur.status === 'tạm dừng') {
+        this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+        return
+      }
+
+      const detail = targets[i]
+      if (detail && detail.status !== 'chờ xử lý') continue
+
+      // Rate limit
+      const actionLabel = campaign.actionId === 'facebook_message_friend' ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn') : 'Đăng bài'
+      try {
+        const limitStatus = await this.supabase.getChannelRateLimitStatus(channel.id, actionLabel, limitConfig)
+        if (!limitStatus.ok) {
+          rateLimitReached = true
+          rateLimitIsDaily = limitStatus.isDailyLimit === true
+          if (limitStatus.retryAfterMs && limitStatus.retryAfterMs > 0) {
+            rateLimitRetryAt = new Date(Date.now() + limitStatus.retryAfterMs)
+          }
+          await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do vượt giới hạn ${actionLabel}: ${limitStatus.reason}`)
+          this.sendLog(`⚠️ Tạm dừng "${campaign.name}" do giới hạn ${actionLabel}: ${limitStatus.reason}`)
+          break
+        }
+      } catch (err) {
+        console.error('Rate limit check error:', err)
+      }
+
+      // Build variables
+      const variables = this.buildVariablesV2(campaign, detail, channel.id, currentSourceLink, i)
+
+      // Update detail status running
+      if (detail) {
+        await this.supabase.updateCampaignDetail(detail.id, {
+          status: 'đang chạy',
+          dateAction: new Date().toISOString()
+        })
+        const detailName = detail.name || detail.uid || 'N/A'
+        this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
+      }
+
+      // Run engine v2
+      const abort = new AbortController()
+      this.activeV2Aborts.set(campaign.id, abort)
+      try {
+        const result = await this.engineV2.run(workflowV2Id, variables, page, {
+          channelId: channel.id,
+          campaignId: campaign.id,
+          campaignDetailId: detail?.id,
+          signal: abort.signal,
+          persist: true,
+          onStepProgress: (step: RunStepV2) => {
+            try { this.mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+          },
+          onLog: (entry) => {
+            try { this.mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+          }
+        })
+
+        // Per-milestone logging — scan steps theo block_name
+        await this.logMilestonesV2(campaign, detail, channel.id, result.steps, result.status === 'completed')
+
+        if (detail) {
+          if (result.status === 'completed') {
+            await this.supabase.updateCampaignDetail(detail.id, { status: 'hoàn thành' })
+            await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detail.name || detail.uid || 'N/A'}`)
+            this.sendLog(`✅ Hoàn thành "${detail.name || detail.uid || 'N/A'}"`)
+          } else {
+            const errMsg = result.error || 'Lỗi không xác định'
+            await this.supabase.updateCampaignDetail(detail.id, { status: 'lỗi', note: errMsg })
+            await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detail.name || detail.uid || 'N/A'} - ${errMsg}`)
+            this.sendLog(`❌ Lỗi "${detail.name || detail.uid || 'N/A'}": ${errMsg}`)
+          }
+        }
+      } catch (err: any) {
+        const errMsg = err?.message || String(err)
+        if (detail) {
+          await this.supabase.updateCampaignDetail(detail.id, { status: 'lỗi', note: errMsg })
+        }
+        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
+        this.sendLog(`❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
+      } finally {
+        this.activeV2Aborts.delete(campaign.id)
+      }
+
+      // Sleep between details
+      if (i < targets.length - 1) {
+        const sleepTime = extra.actionLimits?.sleepBetweenActions || campaign.timeSleepBetween2 || 0
+        if (sleepTime > 0) {
+          this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
+          await new Promise(r => setTimeout(r, sleepTime * 1000))
+        }
+      }
+    }
+
+    if (rateLimitReached) {
+      // Phân biệt 2 loại limit:
+      //   1. Hourly (rateLimitCount/rateLimitMinutes): chỉ cần đợi vài chục phút → reschedule = retryAt
+      //   2. Daily (dailyLimit): cần đợi sang ngày mai
+      //      - continueNextDay=true → schedule = tomorrow cùng giờ user set
+      //      - continueNextDay=false → giữ nguyên schedule, chỉ set status='chờ xử lý'
+      if (rateLimitIsDaily) {
+        if (campaign.scheduleType === 'daily' && campaign.continueNextDay && campaign.schedule) {
+          const now = new Date()
+          const schedDate = new Date(campaign.schedule)
+          const tomorrow = new Date(now)
+          tomorrow.setDate(tomorrow.getDate() + 1)
+          tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            status: 'chờ xử lý',
+            schedule: tomorrow.toISOString()
+          })
+          await this.supabase.appendCampaignLog(campaign.id, `Đạt giới hạn ngày. Lên lịch chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
+          this.sendLog(`🔄 Chiến dịch "${campaign.name}" sẽ chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
+        } else {
+          await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
+        }
+      } else if (rateLimitRetryAt) {
+        // Hourly limit: reschedule = thời điểm có chỗ trong window
+        await this.updateCampaignAndBroadcast(campaign.id, {
+          status: 'chờ xử lý',
+          schedule: rateLimitRetryAt.toISOString()
+        })
+        const minutesLeft = Math.ceil((rateLimitRetryAt.getTime() - Date.now()) / 60000)
+        await this.supabase.appendCampaignLog(campaign.id, `Đạt tốc độ giới hạn. Tiếp tục sau ${minutesLeft} phút (lúc ${rateLimitRetryAt.toLocaleTimeString('vi-VN')})`)
+        this.sendLog(`⏳ Chiến dịch "${campaign.name}" sẽ thử lại sau ${minutesLeft} phút`)
+      } else {
+        // Fallback: không có info retry → giữ nguyên schedule, status chờ xử lý
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
+      }
+    } else {
+      await this.handleCampaignCompletion(campaign)
+    }
+    await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+  }
+
+  /** Build variables object inject vào engine v2. Giữ key tương thích với scheduler cũ. */
+  private buildVariablesV2(
+    campaign: Campaign,
+    detail: CampaignDetail | null,
+    channelId: number,
+    currentSourceLink: string,
+    detailIndex: number
+  ): Record<string, unknown> {
+    const extra = campaign.extraSettings || {}
+    // Resolve images theo imageOption
+    let finalImages: string[] = []
+    const imageOption = extra.imageOption || 'all'
+    const availableImages = campaign.images || []
+    if (imageOption === 'all') finalImages = [...availableImages]
+    else if (imageOption === 'random') {
+      const count = extra.randomImageCount || 3
+      finalImages = [...availableImages].sort(() => 0.5 - Math.random()).slice(0, count)
+    }
+    const validImages = finalImages.filter(fp => fp.startsWith('data:') || existsSync(fp))
+
+    // Comment iterations
+    const enableComment = extra.enableComment ?? false
+    const commentType = extra.commentType || 'own'
+    const commentCount = extra.commentCount ?? 3
+    let commentIndices: number[] = []
+    if (enableComment) {
+      if (commentType === 'own') commentIndices = [1]
+      else for (let i = 0; i < commentCount; i++) commentIndices.push(i + 2)
+    }
+    const postVariants = this.splitContentVariants(campaign.content)
+    const commentVariants = this.splitContentVariants(extra.commentContent)
+    const selectedPostContent = this.cycleVariant(postVariants, detailIndex)
+    const commentIterations = commentIndices.map((position, k) => ({
+      position,
+      text: this.cycleVariant(commentVariants, k)
+    }))
+
+    return {
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      campaignContent: selectedPostContent,
+      images: validImages,
+      channelId,
+      // Comment
+      enableComment,
+      commentType,
+      commentCount,
+      commentIterations,
+      // Group post extras
+      leaveGroupOnPendingApproval: extra.leaveGroupOnPendingApproval ?? false,
+      autoJoinGroupAfterPost: extra.autoJoinGroupAfterPost ?? false,
+      shuffleGroupList: extra.shuffleGroupList ?? false,
+      // Timeline post extras
+      sharePost: extra.sharePost ?? false,
+      copyContentFromSource: extra.copyContentFromSource ?? false,
+      includeSourceImages: extra.includeSourceImages ?? false,
+      postAsReels: extra.postAsReels ?? false,
+      sourceLink: currentSourceLink,
+      videoPath: validImages[0] || '',
+      // Message friend extras
+      enableMessage: extra.enableMessage ?? false,
+      enableAddFriend: extra.enableAddFriend ?? false,
+      // Detail-specific.
+      // detailUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
+      // `fb_resolve_url` sẽ verify/normalize tuỳ theo urlType (group/profile/messenger).
+      ...(detail ? {
+        detailId: detail.id,
+        detailName: detail.name,
+        detailUid: detail.uid,
+        detailPhone: detail.phone,
+        detailEmail: detail.email
+      } : {})
+    }
+  }
+
+  /**
+   * Per-milestone logging cho engine v2.
+   * Scan steps theo block_name (cố định) để biết bước nào succeeded:
+   *   - fb_click_post_button → "Đăng bài"
+   *   - fb_comment_at_position → "Comment"
+   *   - fb_send_message → "Nhắn tin"
+   *   - fb_add_friend → "Kết bạn"
+   * Mỗi success milestone ghi 1 row vào auto_campaign_detail_actions.
+   */
+  private async logMilestonesV2(
+    campaign: Campaign,
+    detail: CampaignDetail | null,
+    channelId: number,
+    steps: RunStepV2[],
+    overallSuccess: boolean
+  ): Promise<void> {
+    void overallSuccess
+    const detailName = detail?.name || detail?.uid || ''
+
+    // Đăng bài
+    const postSteps = steps.filter(s => s.blockName === 'fb_click_post_button' && s.status === 'success')
+    for (const s of postSteps) {
+      try {
+        const isPending = steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true
+        await this.supabase.createDetailAction({
+          campaignDetailId: detail?.id,
+          campaignId: campaign.id,
+          channelId,
+          actionName: 'Đăng bài',
+          status: 'success',
+          log: detail ? `Đăng bài thành công vào ${detailName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công'
+        })
+        this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${detailName}"` : ''}`)
+        if (isPending) this.sendLog(`⏳ Bài đang chờ duyệt`)
+      } catch (err) { console.error('Failed log post:', err) }
+      void s
+    }
+
+    // Comment — đọc position/text từ s.output (block return) thay vì s.input
+    const commentSteps = steps.filter(s => s.blockName === 'fb_comment_at_position' && s.status === 'success')
+    for (let i = 0; i < commentSteps.length; i++) {
+      const s = commentSteps[i]
+      const out = (s.output as any) || {}
+      const position = Number(out.position ?? (i + 1))
+      const text = String(out.text ?? '')
+      const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
+      const target = position === 1 ? 'bài của mình' : `bài thứ ${position}`
+      try {
+        await this.supabase.createDetailAction({
+          campaignDetailId: detail?.id,
+          campaignId: campaign.id,
+          channelId,
+          actionName: 'Comment',
+          status: 'success',
+          log: `Đã comment vào ${target}: "${preview}"`,
+          data: { commentPosition: position, iteration: i + 1, commentContent: text }
+        })
+        this.sendLog(`💬 Đã comment vào ${target}${detail ? ` tại "${detailName}"` : ''}`)
+      } catch (err) { console.error('Failed log comment:', err) }
+    }
+
+    // Nhắn tin
+    const msgSteps = steps.filter(s => s.blockName === 'fb_send_message')
+    for (const s of msgSteps) {
+      const ok = s.status === 'success' && (s.output as any)?.ok === true
+      const errMsg = (s.output as any)?.error || s.error || 'Lỗi không xác định'
+      try {
+        await this.supabase.createDetailAction({
+          campaignDetailId: detail?.id,
+          campaignId: campaign.id,
+          channelId,
+          actionName: 'Nhắn tin',
+          status: ok ? 'success' : 'error',
+          log: ok ? `Nhắn tin thành công đến ${detailName}` : `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
+        })
+        if (ok) this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
+        else this.sendLog(`❌ Lỗi nhắn tin "${detailName}": ${errMsg}`)
+      } catch (err) { console.error('Failed log message:', err) }
+    }
+
+    // Kết bạn — phân biệt 3 case: clicked (kết bạn thật), alreadyFriend (đã là bạn / nút ẩn), error.
+    const friendSteps = steps.filter(s => s.blockName === 'fb_add_friend')
+    for (const s of friendSteps) {
+      const out = (s.output as any) || {}
+      const ok = s.status === 'success' && out.ok === true
+      const alreadyFriend = ok && out.alreadyFriend === true
+      const clicked = ok && out.clicked === true
+      const errMsg = out.error || s.error || 'Lỗi không xác định'
+
+      try {
+        if (alreadyFriend) {
+          // Skip case — không phải lỗi, không phải success thật. Ghi info để khách hàng biết.
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail?.id,
+            campaignId: campaign.id,
+            channelId,
+            actionName: 'Kết bạn',
+            status: 'success',
+            log: `Bỏ qua kết bạn với ${detailName} (đã là bạn bè hoặc nút bị ẩn)`,
+            data: { alreadyFriend: true }
+          })
+          this.sendLog(`ℹ️ Bỏ qua kết bạn với "${detailName}" (đã là bạn hoặc nút bị ẩn)`)
+        } else if (clicked) {
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail?.id,
+            campaignId: campaign.id,
+            channelId,
+            actionName: 'Kết bạn',
+            status: 'success',
+            log: `Kết bạn thành công với ${detailName}`
+          })
+          this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
+        } else {
+          await this.supabase.createDetailAction({
+            campaignDetailId: detail?.id,
+            campaignId: campaign.id,
+            channelId,
+            actionName: 'Kết bạn',
+            status: 'error',
+            log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
+          })
+          this.sendLog(`❌ Lỗi kết bạn "${detailName}": ${errMsg}`)
+        }
+      } catch (err) { console.error('Failed log friend:', err) }
     }
   }
 

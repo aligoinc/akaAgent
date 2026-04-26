@@ -2,9 +2,13 @@ import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../shared/types'
 import { PlaywrightController } from '../../playwright/controller'
 import { WebviewRegistry } from '../../playwright/webviewController'
+import { PageControllerRegistry } from '../../v2/runtime/pageController'
 import { getPlaywrightController, setPlaywrightController } from './flowHandlers'
 
-export function registerBrowserHandlers(webviewRegistry: WebviewRegistry): void {
+export function registerBrowserHandlers(
+  webviewRegistry: WebviewRegistry,
+  pageRegistry: PageControllerRegistry
+): void {
   ipcMain.handle(IPC_CHANNELS.BROWSER_LAUNCH, async (_, options?: { headless?: boolean; profileName?: string }) => {
     let ctrl = getPlaywrightController()
     if (!ctrl) {
@@ -36,6 +40,8 @@ export function registerBrowserHandlers(webviewRegistry: WebviewRegistry): void 
       const wc = webContents.fromId(webContentsId)
       if (wc && !wc.isDestroyed()) {
         wc.setBackgroundThrottling(false)
+        // v2 engine: register PageController cùng lúc để workflow v2 dùng được
+        pageRegistry.register(channelId, wc)
       }
     } catch {}
 
@@ -44,6 +50,7 @@ export function registerBrowserHandlers(webviewRegistry: WebviewRegistry): void 
 
   ipcMain.handle(IPC_CHANNELS.WEBVIEW_UNREGISTER, (_, channelId: number) => {
     webviewRegistry.unregister(channelId)
+    pageRegistry.unregister(channelId)
     return { success: true }
   })
 

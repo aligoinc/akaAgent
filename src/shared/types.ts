@@ -183,7 +183,8 @@ export interface CampaignAction {
   name: string
   flatformType: string
   isActive: boolean
-  workflowId?: string
+  workflowId?: string         // engine cũ (UUID, FK auto_flows.id)
+  workflowV2Id?: number       // engine v2 (BIGINT, FK auto_v2_workflows.id) — ưu tiên nếu set
   isDelete: boolean
   createdAt?: string
 }

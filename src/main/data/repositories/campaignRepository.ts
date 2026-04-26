@@ -360,7 +360,7 @@ export async function getChannelRateLimitStatus(
   channelId: number,
   actionName: string,
   limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }
-): Promise<{ ok: boolean, reason?: string }> {
+): Promise<{ ok: boolean; reason?: string; isDailyLimit?: boolean; retryAfterMs?: number }> {
   const dailyLimit = limitConfig?.dailyLimit && limitConfig.dailyLimit > 0 ? limitConfig.dailyLimit : 30
   const rateLimitCount = limitConfig?.rateLimitCount && limitConfig.rateLimitCount > 0 ? limitConfig.rateLimitCount : 9
   const rateLimitMinutes = limitConfig?.rateLimitMinutes && limitConfig.rateLimitMinutes > 0 ? limitConfig.rateLimitMinutes : 60
@@ -378,7 +378,16 @@ export async function getChannelRateLimitStatus(
   if (dailyErr) throw new Error(`Daily count query error: ${dailyErr.message}`)
 
   if ((dailyActionCount ?? 0) >= dailyLimit) {
-    return { ok: false, reason: `Đạt giới hạn ngày cho hành động "${actionName}" (${dailyActionCount}/${dailyLimit})` }
+    // Daily limit → đợi tới 00:00 ngày mai mới reset
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(0, 0, 0, 0)
+    return {
+      ok: false,
+      isDailyLimit: true,
+      retryAfterMs: tomorrow.getTime() - Date.now(),
+      reason: `Đạt giới hạn ngày cho hành động "${actionName}" (${dailyActionCount}/${dailyLimit})`
+    }
   }
 
   const timeFrameStart = new Date(new Date().getTime() - rateLimitMinutes * 60 * 1000)
@@ -393,7 +402,27 @@ export async function getChannelRateLimitStatus(
   if (winErr) throw new Error(`Window count query error: ${winErr.message}`)
 
   if ((windowActionCount ?? 0) >= rateLimitCount) {
-    return { ok: false, reason: `Đạt tốc độ giới hạn hành động "${actionName}" (${windowActionCount}/${rateLimitCount} lần / ${rateLimitMinutes} phút)` }
+    // Hourly limit → đợi tới khi row cũ nhất trong window > rateLimitMinutes phút
+    const { data: oldestRow } = await client()
+      .from('auto_campaign_detail_actions')
+      .select('created_at')
+      .eq('channel_id', channelId)
+      .eq('action_name', actionName)
+      .gte('created_at', timeFrameStart.toISOString())
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    let retryAfterMs = rateLimitMinutes * 60 * 1000
+    if (oldestRow?.created_at) {
+      const oldestTime = new Date(oldestRow.created_at as string).getTime()
+      retryAfterMs = Math.max(60 * 1000, (oldestTime + rateLimitMinutes * 60 * 1000) - Date.now())
+    }
+    return {
+      ok: false,
+      isDailyLimit: false,
+      retryAfterMs,
+      reason: `Đạt tốc độ giới hạn hành động "${actionName}" (${windowActionCount}/${rateLimitCount} lần / ${rateLimitMinutes} phút)`
+    }
   }
 
   return { ok: true }

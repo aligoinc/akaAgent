@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, OrgChannel, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, OrgChannelContact, ContactType, AuthUser } from '../shared/types'
+import { IPC_CHANNELS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -247,6 +248,75 @@ const electronAPI = {
     }): void => callback(p)
     ipcRenderer.on(IPC_CHANNELS.UPDATE_PROGRESS, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_PROGRESS, handler)
+  },
+
+  // ============================================================
+  // v2: Workflow / Block / Element library
+  // ============================================================
+  v2: {
+    // Block CRUD
+    listBlocks: (): Promise<BlockDef[]> => ipcRenderer.invoke(IPC_CHANNELS_V2.BLOCK_LIST),
+    getBlock: (id: number): Promise<BlockDef | null> => ipcRenderer.invoke(IPC_CHANNELS_V2.BLOCK_GET, id),
+    saveBlock: (payload: Partial<BlockDef> & { name: string; category: BlockDef['category']; kind: BlockDef['kind'] }): Promise<BlockDef> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.BLOCK_SAVE, payload),
+    deleteBlock: (id: number): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.BLOCK_DELETE, id),
+
+    // Workflow CRUD
+    listWorkflows: (): Promise<WorkflowDef[]> => ipcRenderer.invoke(IPC_CHANNELS_V2.WORKFLOW_LIST),
+    getWorkflow: (id: number): Promise<WorkflowDef | null> => ipcRenderer.invoke(IPC_CHANNELS_V2.WORKFLOW_GET, id),
+    saveWorkflow: (payload: Partial<WorkflowDef> & { name: string }): Promise<WorkflowDef> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.WORKFLOW_SAVE, payload),
+    deleteWorkflow: (id: number): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.WORKFLOW_DELETE, id),
+
+    // Element CRUD
+    listElements: (): Promise<ElementDef[]> => ipcRenderer.invoke(IPC_CHANNELS_V2.ELEMENT_LIST),
+    getElement: (id: number): Promise<ElementDef | null> => ipcRenderer.invoke(IPC_CHANNELS_V2.ELEMENT_GET, id),
+    saveElement: (payload: Partial<ElementDef> & { name: string; xpath: string }): Promise<ElementDef> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.ELEMENT_SAVE, payload),
+    deleteElement: (id: number): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.ELEMENT_DELETE, id),
+
+    // Test runs
+    testRunWorkflow: (args: {
+      runKey: string
+      workflowId?: number
+      workflow?: WorkflowDef
+      channelId: number
+      variables: Record<string, unknown>
+    }): Promise<{ runId?: number; status: string; output: Record<string, unknown>; error?: string; steps: RunStepV2[] }> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.WORKFLOW_TEST_RUN, args),
+
+    testRunBlock: (args: {
+      runKey: string
+      blockId?: number
+      code?: string
+      blockName?: string
+      config: Record<string, unknown>
+      channelId: number
+      variables: Record<string, unknown>
+    }): Promise<BlockResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.BLOCK_TEST_RUN, args),
+
+    stopRun: (runKey: string): Promise<{ success: boolean; reason?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS_V2.RUN_STOP, runKey),
+
+    // Run history
+    listRunsByWorkflow: (workflowId: number) => ipcRenderer.invoke('v2:run:list-by-workflow', workflowId),
+    listRunSteps: (runId: number): Promise<RunStepV2[]> => ipcRenderer.invoke('v2:run:list-steps', runId),
+
+    // Realtime listeners
+    onRunProgress: (callback: (payload: { runKey: string; step: RunStepV2 }) => void): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, payload: { runKey: string; step: RunStepV2 }): void => callback(payload)
+      ipcRenderer.on(IPC_CHANNELS_V2.RUN_PROGRESS, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS_V2.RUN_PROGRESS, handler)
+    },
+    onRunLog: (callback: (payload: { runKey: string; nodeId: string; line: string }) => void): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, payload: { runKey: string; nodeId: string; line: string }): void => callback(payload)
+      ipcRenderer.on(IPC_CHANNELS_V2.RUN_LOG, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS_V2.RUN_LOG, handler)
+    }
   }
 }
 
