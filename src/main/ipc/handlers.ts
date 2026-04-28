@@ -38,7 +38,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     console.error('Failed to seed built-in campaign actions:', err)
   })
 
-  // Seed v2 (idempotent — chỉ insert nếu name chưa tồn tại)
+  // Seed v2 (idempotent — UPSERT theo name UNIQUE)
   seedV2().catch(err => {
     console.error('Failed to seed v2 blocks/workflows:', err)
   })
