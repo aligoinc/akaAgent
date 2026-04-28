@@ -8,3 +8,7 @@ dist/
 .DS_Store
 Thumbs.db
 release/
+
+# Claude Code — worktrees auto-tạo bởi Agent isolation, plans là session-specific
+.claude/worktrees/
+.claude/plans/
