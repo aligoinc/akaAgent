@@ -9,6 +9,9 @@ dist/
 Thumbs.db
 release/
 
+# Vite electron config cache (timestamped backups, regenerated tự động)
+electron.vite.config.*.mjs
+
 # Claude Code — worktrees auto-tạo bởi Agent isolation, plans là session-specific
 .claude/worktrees/
 .claude/plans/

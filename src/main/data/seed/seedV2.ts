@@ -2,7 +2,6 @@
 import * as blockRepo from '../repositories/blockRepository'
 import * as workflowV2Repo from '../repositories/workflowV2Repository'
 import * as elementV2Repo from '../repositories/elementV2Repository'
-import * as campaignActionRepo from '../repositories/campaignActionRepository'
 import { getSupabaseClient } from '../supabaseClient'
 import { BlockDef, WorkflowNode, WorkflowEdge } from '../../../shared/v2Types'
 
@@ -1203,33 +1202,33 @@ function e(source: string, target: string, sourceHandle?: string): WorkflowEdge 
 }
 
 // ============================================================
-// 4. BIND TO CAMPAIGN ACTIONS
+// 4. UPSERT CAMPAIGN ACTIONS (3 builtin templates) + bind workflow_v2_id
 // ============================================================
 async function bindToActions(workflowIds: { groupPostId?: number; timelinePostId?: number; messageFriendId?: number }): Promise<void> {
   const client = getSupabaseClient()
-  const updates: { actionId: string; workflowId?: number }[] = [
-    { actionId: 'facebook_group_post', workflowId: workflowIds.groupPostId },
-    { actionId: 'facebook_timeline_post', workflowId: workflowIds.timelinePostId },
-    { actionId: 'facebook_message_friend', workflowId: workflowIds.messageFriendId }
+  const records: Array<{ id: string; name: string; flatform_type: string; workflow_v2_id?: number }> = [
+    { id: 'facebook_group_post', name: 'Facebook - Đăng bài vào group', flatform_type: 'facebook', workflow_v2_id: workflowIds.groupPostId },
+    { id: 'facebook_timeline_post', name: 'Facebook - Đăng bài lên trang cá nhân', flatform_type: 'facebook', workflow_v2_id: workflowIds.timelinePostId },
+    { id: 'facebook_message_friend', name: 'Facebook - Nhắn tin & Kết bạn', flatform_type: 'facebook', workflow_v2_id: workflowIds.messageFriendId }
   ]
 
-  for (const u of updates) {
-    if (!u.workflowId) continue
+  for (const r of records) {
+    if (!r.workflow_v2_id) continue
     try {
-      // Đảm bảo action tồn tại trước (chỉ update nếu có)
-      const existing = await campaignActionRepo.getCampaignAction(u.actionId)
-      if (!existing) {
-        console.log(`[seedV2] Skip bind: action ${u.actionId} chưa được seed bởi engine cũ`)
-        continue
-      }
+      // UPSERT — insert if new (cho fresh DB), update workflow_v2_id nếu đã có (cho prod DB).
+      // is_active/is_delete để DB DEFAULT (true / false).
       const { error } = await client
         .from('auto_campaign_actions')
-        .update({ workflow_v2_id: u.workflowId })
-        .eq('id', u.actionId)
-      if (error) console.error(`[seedV2] Bind ${u.actionId} failed:`, error.message)
-      else console.log(`[seedV2] Bound ${u.actionId} → workflow_v2_id=${u.workflowId}`)
+        .upsert({
+          id: r.id,
+          name: r.name,
+          flatform_type: r.flatform_type,
+          workflow_v2_id: r.workflow_v2_id
+        }, { onConflict: 'id' })
+      if (error) console.error(`[seedV2] Bind ${r.id} failed:`, error.message)
+      else console.log(`[seedV2] Bound ${r.id} → workflow_v2_id=${r.workflow_v2_id}`)
     } catch (err) {
-      console.error(`[seedV2] Bind ${u.actionId} threw:`, err)
+      console.error(`[seedV2] Bind ${r.id} threw:`, err)
     }
   }
 }

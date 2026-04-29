@@ -1,16 +1,13 @@
-import { FlowData, ExecutionRun, ExecutionStep, OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, OrgChannelContact, ContactType, ElementDefinition } from '../../shared/types'
-import * as flowRepo from '../data/repositories/flowRepository'
-import * as elementRepo from '../data/repositories/elementRepository'
+import { OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, OrgChannelContact, ContactType } from '../../shared/types'
 import * as channelRepo from '../data/repositories/channelRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
 import * as channelContactRepo from '../data/repositories/channelContactRepository'
-import { seedBuiltinCampaignActions as _seedBuiltin } from '../data/seed/builtinCampaignActions'
 
 /**
  * Facade that delegates to individual repositories.
  * Keeps backward-compatible API so existing callers (campaignScheduler,
- * contactLoader, flowRunner, handlers) continue to work unchanged.
+ * contactLoader, handlers) continue to work unchanged.
  */
 export class SupabaseService {
   // =========== STARTUP ===========
@@ -21,24 +18,6 @@ export class SupabaseService {
     await campaignRepo.resetRunningDataInputStatuses()
     await campaignRepo.resetRunningDataActionStatuses()
   }
-
-  // =========== FLOWS ===========
-  saveFlow(flowData: FlowData) { return flowRepo.saveFlow(flowData) }
-  loadFlow(flowId: string) { return flowRepo.loadFlow(flowId) }
-  listFlows() { return flowRepo.listFlows() }
-  deleteFlow(flowId: string) { return flowRepo.deleteFlow(flowId) }
-
-  // =========== RUNS ===========
-  createRun(run: ExecutionRun) { return flowRepo.createRun(run) }
-  updateRun(runId: string, status: string, output: Record<string, unknown>, errorStr?: string, completedAt?: string) { return flowRepo.updateRun(runId, status, output, errorStr, completedAt) }
-  createRunStep(runId: string, step: ExecutionStep) { return flowRepo.createRunStep(runId, step) }
-  listRuns(flowId?: string) { return flowRepo.listRuns(flowId) }
-  listRunSteps(runId: string) { return flowRepo.listRunSteps(runId) }
-
-  // =========== ELEMENTS ===========
-  saveElement(element: Omit<ElementDefinition, 'createdAt' | 'updatedAt'>) { return elementRepo.saveElement(element) }
-  listElements() { return elementRepo.listElements() }
-  deleteElement(elementId: string) { return elementRepo.deleteElement(elementId) }
 
   // =========== CHANNELS ===========
   listChannels() { return channelRepo.listChannels() }
@@ -88,7 +67,4 @@ export class SupabaseService {
   listContacts(channelId: number, contactType?: ContactType) { return channelContactRepo.listContacts(channelId, contactType) }
   upsertContacts(contacts: Partial<OrgChannelContact>[]) { return channelContactRepo.upsertContacts(contacts) }
   deleteContacts(channelId: number, contactType: ContactType) { return channelContactRepo.deleteContacts(channelId, contactType) }
-
-  // =========== SEED ===========
-  seedBuiltinCampaignActions() { return _seedBuiltin() }
 }

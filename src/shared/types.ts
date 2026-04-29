@@ -1,166 +1,4 @@
 // ============================================
-// Action System Types
-// ============================================
-
-export type ActionCategory = 'navigation' | 'interaction' | 'data' | 'control' | 'utility' | 'block'
-
-export type ActionType =
-  // Navigation
-  | 'navigate' | 'goBack' | 'goForward' | 'reload'
-  // Interaction
-  | 'click' | 'type' | 'scroll' | 'hover' | 'select' | 'pressKey'
-  // Data
-  | 'getValue' | 'setValue' | 'getText' | 'screenshot' | 'getAttribute'
-  // Utility
-  | 'sleep' | 'waitForSelector' | 'waitForNavigation' | 'apiCall' | 'updateCampaignStatus' | 'writeCampaignLog' | 'uploadFile' | 'dropFile' | 'downloadUrl'
-  // Facebook compound actions (high-level, FB-specific automation)
-  | 'fbScrapePost' | 'fbSharePost' | 'fbPostReels' | 'fbSendMessage' | 'fbAddFriend'
-  | 'fbDetectPostPending' | 'fbLeaveGroupIfPending' | 'fbJoinGroupIfNotMember'
-  // Control Flow
-  | 'ifElse' | 'loop' | 'switch'
-  // Block System
-  | 'blockInput' | 'blockOutput' | 'block'
-
-export interface ActionIOField {
-  name: string
-  type: 'string' | 'number' | 'boolean' | 'json' | 'any' | 'element'
-  label: string
-  description?: string
-  required?: boolean
-  defaultValue?: unknown
-  placeholder?: string
-  options?: { label: string; value: string }[] // for select fields
-}
-
-export interface ActionDefinition {
-  id: string
-  name: string
-  type: ActionType
-  description: string
-  icon: string // lucide icon name
-  category: ActionCategory
-  inputSchema: ActionIOField[]
-  outputSchema: ActionIOField[]
-  defaultConfig?: Record<string, unknown>
-}
-
-// ============================================
-// Element Management Types
-// ============================================
-
-export interface ElementDefinition {
-  id: string
-  name: string
-  xpath: string
-  description?: string
-  createdAt?: string
-  updatedAt?: string
-}
-
-// ============================================
-// Flow Types (React Flow compatible)
-// ============================================
-
-export interface FlowNodeData extends Record<string, unknown> {
-  actionType: ActionType
-  label: string
-  icon: string
-  category: ActionCategory
-  config: Record<string, unknown>    // user-configured input values
-  blockData?: {
-    id: string
-    name: string
-    inputSchema: ActionIOField[]
-    outputSchema: ActionIOField[]
-  }
-  inputMapping: Record<string, {     // maps input fields to outputs of other nodes
-    sourceNodeId: string
-    sourceField: string
-    sourcePath?: string              // optional path for JSON objects e.g. "user.name"
-  }>
-  status?: 'idle' | 'running' | 'success' | 'error'
-  output?: Record<string, unknown>
-  error?: string
-}
-
-export interface FlowData {
-  id: string
-  name: string
-  description?: string
-  nodes: FlowNodeSerialized[]
-  edges: FlowEdgeSerialized[]
-  variables?: Record<string, unknown>
-  inputSchema?: ActionIOField[]
-  outputSchema?: ActionIOField[]
-  isBlock?: boolean
-  staffId?: number
-  organizationId?: number
-  createdAt?: string
-  updatedAt?: string
-}
-
-export interface FlowNodeSerialized {
-  id: string
-  type: string
-  position: { x: number; y: number }
-  data: FlowNodeData
-}
-
-export interface FlowEdgeSerialized {
-  id: string
-  source: string
-  target: string
-  sourceHandle?: string
-  targetHandle?: string
-}
-
-// ============================================
-// Execution Types
-// ============================================
-
-export interface ActionResult {
-  success: boolean
-  output: Record<string, unknown>
-  error?: string
-  durationMs: number
-  screenshotBase64?: string
-}
-
-/**
- * Common interface for browser controllers (PlaywrightController, WebviewController).
- * FlowRunner uses this interface to execute actions on either controller type.
- */
-export interface IBrowserController {
-  isConnected(): boolean
-  executeAction(actionType: ActionType, input: Record<string, unknown>): Promise<ActionResult>
-}
-
-export interface ExecutionStep {
-  nodeId: string
-  actionType: ActionType
-  status: 'pending' | 'running' | 'success' | 'error' | 'skipped'
-  input: Record<string, unknown>
-  output: Record<string, unknown>
-  error?: string
-  durationMs?: number
-  screenshotUrl?: string
-  executedAt?: string
-}
-
-export interface ExecutionRun {
-  id: string
-  flowId: string
-  workflowId?: string
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
-  input: Record<string, unknown>
-  output: Record<string, unknown>
-  steps: ExecutionStep[]
-  startedAt?: string
-  completedAt?: string
-  error?: string
-}
-
-// ============================================
 // Campaign Automation Types
 // ============================================
 
@@ -183,8 +21,7 @@ export interface CampaignAction {
   name: string
   flatformType: string
   isActive: boolean
-  workflowId?: string         // engine cũ (UUID, FK auto_flows.id)
-  workflowV2Id?: number       // engine v2 (BIGINT, FK auto_v2_workflows.id) — ưu tiên nếu set
+  workflowV2Id?: number       // engine v2 (BIGINT, FK auto_v2_workflows.id)
   isDelete: boolean
   createdAt?: string
 }
@@ -268,7 +105,7 @@ export interface CampaignDataInput {
   createdAt?: string
 }
 
-// Việc-cần-làm thực thi trong campaign loop (thay auto_campaign_details cũ)
+// Việc-cần-làm thực thi trong campaign loop
 export interface CampaignDataAction {
   id: number
   campaignId: number
@@ -352,39 +189,6 @@ export const IPC_CHANNELS = {
   AUTH_LOGOUT: 'auth:logout',
   AUTH_ME: 'auth:me',
 
-  // Flow execution
-  FLOW_RUN: 'flow:run',
-  FLOW_STOP: 'flow:stop',
-  FLOW_PROGRESS: 'flow:progress',
-
-  // Browser control (legacy single browser for workflow editor)
-  BROWSER_LAUNCH: 'browser:launch',
-  BROWSER_CLOSE: 'browser:close',
-  BROWSER_STATUS: 'browser:status',
-
-  // Multi-browser profile management
-  PROFILE_LAUNCH: 'profile:launch',
-  PROFILE_CLOSE: 'profile:close',
-  PROFILE_STATUS: 'profile:status',
-  PROFILE_LIST: 'profile:list',
-  PROFILE_FOCUS: 'profile:focus',
-
-  // Database Flow
-  DB_SAVE_FLOW: 'db:save-flow',
-  DB_LOAD_FLOW: 'db:load-flow',
-  DB_LIST_FLOWS: 'db:list-flows',
-  DB_DELETE_FLOW: 'db:delete-flow',
-
-  // Database Run
-  DB_SAVE_RUN: 'db:save-run',
-  DB_LIST_RUNS: 'db:list-runs',
-  DB_LIST_RUN_STEPS: 'db:list-run-steps',
-
-  // Database Element
-  DB_SAVE_ELEMENT: 'db:save-element',
-  DB_LIST_ELEMENTS: 'db:list-elements',
-  DB_DELETE_ELEMENT: 'db:delete-element',
-
   // Database Org Channels
   DB_LIST_CHANNELS: 'db:list-channels',
   DB_CREATE_CHANNEL: 'db:create-channel',
@@ -443,10 +247,6 @@ export const IPC_CHANNELS = {
   CHANNEL_CHECK_FB_LOGIN: 'channel:check-fb-login',
   CHANNEL_RELOAD_PAGE: 'channel:reload-page',
   CHANNEL_STATUS_UPDATED: 'channel:status-updated',
-
-  // Actions
-  ACTIONS_LIST: 'actions:list',
-  ACTION_EXECUTE: 'action:execute',
 
   // Contacts (Load data)
   CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',

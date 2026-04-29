@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, OrgChannelContact, ContactType, AuthUser } from '../shared/types'
+import { IPC_CHANNELS, OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, OrgChannelContact, ContactType, AuthUser } from '../shared/types'
 import { IPC_CHANNELS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -19,20 +19,6 @@ const electronAPI = {
   setTheme: (theme: 'light' | 'dark'): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.THEME_CHANGE, theme),
 
-  // Actions
-  listActions: (): Promise<ActionDefinition[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.ACTIONS_LIST),
-
-  // Browser (legacy single browser for workflow editor)
-  launchBrowser: (options?: { headless?: boolean; profileName?: string }): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.BROWSER_LAUNCH, options),
-
-  closeBrowser: (): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CLOSE),
-
-  getBrowserStatus: (): Promise<{ connected: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.BROWSER_STATUS),
-
   // Webview registration (embedded browser tabs)
   registerWebview: (channelId: number, webContentsId: number): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_REGISTER, channelId, webContentsId),
@@ -42,51 +28,6 @@ const electronAPI = {
 
   getWebviewStatus: (channelId: number): Promise<{ connected: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.WEBVIEW_STATUS, channelId),
-
-  // Flow execution
-  runFlow: (flowData: FlowData): Promise<unknown> =>
-    ipcRenderer.invoke(IPC_CHANNELS.FLOW_RUN, flowData),
-
-  stopFlow: (): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.FLOW_STOP),
-
-  onFlowProgress: (callback: (step: ExecutionStep) => void): () => void => {
-    const handler = (_event: Electron.IpcRendererEvent, step: ExecutionStep) => callback(step)
-    ipcRenderer.on(IPC_CHANNELS.FLOW_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.FLOW_PROGRESS, handler)
-  },
-
-  // Database - Flows
-  saveFlow: (flowData: FlowData): Promise<FlowData> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_SAVE_FLOW, flowData),
-
-  loadFlow: (flowId: string): Promise<FlowData | null> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LOAD_FLOW, flowId),
-
-  listFlows: (): Promise<FlowData[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_FLOWS),
-
-  deleteFlow: (flowId: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_FLOW, flowId),
-
-  saveRun: (runData: unknown): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_SAVE_RUN, runData),
-
-  listRuns: (flowId?: string): Promise<import('../shared/types').ExecutionRun[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_RUNS, flowId),
-
-  listRunSteps: (runId: string): Promise<ExecutionStep[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_RUN_STEPS, runId),
-
-  // Elements
-  saveElement: (elementData: Omit<import('../shared/types').ElementDefinition, 'createdAt' | 'updatedAt'>): Promise<import('../shared/types').ElementDefinition> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_SAVE_ELEMENT, elementData),
-
-  listElements: (): Promise<import('../shared/types').ElementDefinition[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_ELEMENTS),
-
-  deleteElement: (elementId: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_ELEMENT, elementId),
 
   // Flatform Channels
   listChannels: (): Promise<OrgChannel[]> =>
