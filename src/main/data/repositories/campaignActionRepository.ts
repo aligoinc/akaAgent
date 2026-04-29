@@ -44,7 +44,7 @@ export async function createCampaignAction(action: Partial<CampaignAction>): Pro
     name: action.name,
     flatform_type: action.flatformType,
     is_active: action.isActive ?? true,
-    workflow_id: action.workflowId || null
+    workflow_v2_id: action.workflowV2Id ?? null
   }
 
   const { data, error } = await client()
@@ -62,7 +62,7 @@ export async function updateCampaignAction(id: string, updates: Partial<Campaign
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.flatformType !== undefined) payload.flatform_type = updates.flatformType
   if (updates.isActive !== undefined) payload.is_active = updates.isActive
-  if (updates.workflowId !== undefined) payload.workflow_id = updates.workflowId
+  if (updates.workflowV2Id !== undefined) payload.workflow_v2_id = updates.workflowV2Id
 
   const { data, error } = await client()
     .from('auto_campaign_actions')

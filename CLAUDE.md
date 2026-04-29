@@ -17,9 +17,7 @@ npx tsc --noEmit -p tsconfig.node.json   # Main + preload + shared
 npx tsc --noEmit -p tsconfig.web.json    # Renderer
 ```
 
-**Pre-existing TS errors** trong `src/main/playwright/controller.ts:158-159` (`Cannot find name 'window'`) — bỏ qua, KHÔNG phải lỗi do thay đổi mới. Bất kỳ error mới nào là do code vừa thêm.
-
-Project KHÔNG có test framework / lint config. Verify bằng tsc + manual smoke test.
+Project KHÔNG có test framework / lint config. Verify bằng tsc + manual smoke test. Sau migration_v4 (drop engine v1) typecheck phải sạch 0 errors — bất kỳ error nào là regression.
 
 ## Architecture
 
@@ -29,56 +27,49 @@ Project KHÔNG có test framework / lint config. Verify bằng tsc + manual smok
 
 | Layer | Path | Trách nhiệm |
 |---|---|---|
-| Main process (Node) | [src/main](src/main) | IPC, DB (Supabase), browser controllers, scheduler, updater |
-| Preload bridge | [src/preload/index.ts](src/preload/index.ts) | Expose `electronAPI.*` qua `contextBridge` (~50+ methods) |
+| Main process (Node) | [src/main](src/main) | IPC, DB (Supabase), webview controller, scheduler, updater |
+| Preload bridge | [src/preload/index.ts](src/preload/index.ts) | Expose `electronAPI.*` qua `contextBridge` |
 | Renderer (React) | [src/renderer/src](src/renderer/src) | UI, Zustand stores, xyflow canvas, Monaco editor |
 | Shared | [src/shared](src/shared) | Types + IPC channel constants (cả 2 phía import) |
 
-### Hai chế độ điều khiển trình duyệt
+### Webview controller
 
-Cả hai implement `IBrowserController.executeAction(actionType, input)`:
+[src/main/playwright/webviewController.ts](src/main/playwright/webviewController.ts) — thin wrapper exposing `isConnected()` + `getURL()` cho `webContents` của Electron `<webview>` đã embed cho từng tài khoản FB. **Mọi browser automation thực sự** đi qua engine v2's `pageController.ts` để giữ session/cookies của user.
 
-- **PlaywrightController** ([src/main/playwright/controller.ts](src/main/playwright/controller.ts)) — Chromium độc lập với persistent profile. Dùng cho Workflow Editor v1 (test flow trong dev).
-- **WebviewController** ([src/main/playwright/webviewController.ts](src/main/playwright/webviewController.ts)) — inject JS vào `webContents` của Electron `<webview>` đã embed cho từng tài khoản FB. **Đây là controller chạy thật cho campaign** vì giữ session/cookies của user.
+`WebviewRegistry` trong cùng file maps `channelId → webContentsId`. Scheduler dùng `isRegistered()` trước khi kick off campaign; channelPoller dùng `listRegistered()` để skip dead tabs.
 
-Convention quan trọng (xem `userInstructions` từ memory `campaign_conventions.md`):
-- **Atomic actions**: tuyệt đối KHÔNG tạo "do-many-things" action. Compose existing primitives (`hover`/`click`/`type`/`waitForSelector`/...).
+Convention quan trọng (xem memory `campaign_conventions.md`):
+- **Atomic blocks**: tuyệt đối KHÔNG tạo "do-many-things" block. Compose existing primitives (`page.click`/`page.type`/`page.waitForSelector`/...).
 - **KHÔNG dùng tọa độ viewport** — webview có thể không focus, `getBoundingClientRect()` clientX/clientY có thể sai. Dispatch synthetic event với `{bubbles, cancelable, view: window}` (no coords).
-- **FB timestamp link** lazy-load qua `FocusEvent('focusin')`, không phải hover. Action `hover` trong webviewController dispatch `focusin` trước, rồi pointer/mouse.
+- **FB timestamp link** lazy-load qua `FocusEvent('focusin')`, không phải hover.
 
-### Hai engine workflow (chạy song song)
+### Workflow engine v2
 
-**Engine v1** (legacy — vẫn chạy cho campaigns chưa migrate):
-- [src/main/playwright/flowRunner.ts](src/main/playwright/flowRunner.ts) duyệt nodes tuần tự (topological sort)
-- Action enum đóng trong [src/shared/actions.ts](src/shared/actions.ts) (~30 actions: navigate/click/type + FB compound như `fbScrapePost`/`fbSharePost`/`fbPostReels`/`fbSendMessage`/`fbAddFriend`/`fbDetectPostPending`)
-- inputMapping qua `sourceNodeId`/`sourceField`
-- Bảng: `auto_actions`, `auto_flows`, `auto_runs`, `auto_run_steps`, `auto_elements`
-
-**Engine v2** ([src/main/v2/runtime/](src/main/v2/runtime/)) — kiến trúc mới, đã ship qua PR #39:
+[src/main/v2/runtime/](src/main/v2/runtime/) — engine duy nhất chạy campaign:
 - `workflowEngine.ts` — DAG executor cohort-based: parallel split (multiple outgoing edges), AND/OR join (mode='all'/'any' merge node), `ifElse` skip propagation, loop body re-exec với `vars.loopItem`/`vars.loopIndex`, `AbortSignal` cancellation. `allSteps[]` track loop iterations để scheduler log đầy đủ (snapshot `nodeStates` chỉ giữ iteration cuối).
 - `blockExecutor.ts` — `vm.createContext` sandbox. KHÔNG expose `process`/`require`/`Buffer`/`fs`. Block code = JS string, return object → output, throw → fail.
 - `pageController.ts` — wrap `webContents.executeJavaScript` thành API `page.click/type/fill/scroll/evaluate/$$/waitForSelector/uploadFile/dropFile/apiCall/downloadUrl`. Hỗ trợ XPath union `|` và CSS.
 - `blockHelpers.ts` — `sleep`/`log`/`randomBetween`/`normalizeFbUrl`/`extractUidFromInput`/`splitVariants`/`cycleVariant`/`element(name)`/`elementWith(name, vars)`. `element` query cached `auto_v2_elements`.
 - Bảng: `auto_v2_blocks`, `auto_v2_workflows`, `auto_v2_elements`, `auto_v2_runs`, `auto_v2_run_steps` (BIGSERIAL id, UNIQUE name cho idempotent seed).
 
-[campaignScheduler.ts](src/main/services/campaignScheduler.ts) branch theo `auto_campaign_actions.workflow_v2_id`: nếu set → `executeCampaignV2` (engine v2), ngược lại fallback engine v1.
+[campaignScheduler.ts](src/main/services/campaignScheduler.ts) lookup `auto_campaign_actions.workflow_v2_id` rồi gọi `executeCampaignV2`. Action không có `workflow_v2_id` → log lỗi + mark complete (không có fallback).
 
 ### Campaign system
 
-Domain (kể từ migration_v3 — 2 bảng cũ `auto_campaign_details` + `auto_campaign_detail_actions` còn để client cũ ngoài prod chạy được, code mới KHÔNG đụng):
+Domain (sau migration_v4 drop engine v1):
 - `auto_campaigns` — campaign config (action_id, channel_id, schedule, content, extra_settings)
-- `auto_campaign_actions` — template loại campaign (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`); column `workflow_id` (UUID, engine v1) + `workflow_v2_id` (BIGINT, engine v2)
+- `auto_campaign_actions` — template loại campaign (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`); column `workflow_v2_id` (BIGINT, FK auto_v2_workflows.id) là pointer duy nhất tới workflow.
 - `auto_campaign_data_inputs` — pool nguyên liệu thô (e.g. danh sách group để scrape members → sinh data_actions). Status: `'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'` (`'lỗi'` flag input không scrape được; admin re-trigger).
 - `auto_campaign_data_actions` — **việc-cần-làm thực thi** (mỗi target/profile/group = 1 row). Status: `'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành'` (KHÔNG có `'lỗi'` — lỗi action-level đã track ở result_actions; khi run fail set `'hoàn thành' + note=errMsg`). Cột `data_input_id BIGINT NULL` FK → data_inputs (nếu sinh từ scrape; NULL nếu user nhập tay).
 - `auto_campaign_result_actions` — **customer-visible "Lịch sử hành động"**: mỗi milestone (post, từng comment, friend request, message) ghi 1 row riêng. Status: `'thành công' | 'thất bại' | 'lỗi'` (thành công = OK; thất bại = nghiệp vụ FB từ chối; lỗi = exception/crash code). FK `data_action_id` (nullable cho simple campaign không có data_action).
 
 [CampaignScheduler](src/main/services/campaignScheduler.ts) — `setInterval(tick, 30s)`:
 1. Lấy channels + campaigns đến giờ
-2. Engine v2 hoặc v1 tuỳ flag
+2. Lookup action.workflow_v2_id → `executeCampaignV2`
 3. Mỗi data_action run workflow → log per-milestone vào `auto_campaign_result_actions` qua `logMilestonesV2` (scan `result.steps` theo `block_name`: `fb_click_post_button` → "Đăng bài", `fb_comment_at_position` → "Comment", `fb_send_message` → "Nhắn tin", `fb_add_friend` → "Kết bạn"). Status mapping: `step.status==='error'` → `'lỗi'`; `output.ok===false` không exception → `'thất bại'`; còn lại → `'thành công'`.
 4. Sleep `extra.actionLimits.sleepBetweenActions` giây giữa data_actions
 
-**Recovery**: `resetRunningCampaignStatuses()` + `resetRunningDataInputStatuses()` + `resetRunningDataActionStatuses()` chạy lúc app start — flip rows kẹt `'đang chạy'` về `'chờ xử lý'` (đề phòng crash mid-flow). `recoverStuckDataActions(campaignId, errMsg)` flip data_actions stuck thành `'hoàn thành'` + `note=errMsg` khi outer catch (enum không có `'lỗi'`).
+**Recovery**: `resetRunningStatuses()` chạy lúc app start (channels + campaigns + data_inputs + data_actions) — flip rows kẹt `'đang chạy'` về `'chờ xử lý'` (đề phòng crash mid-flow). `recoverStuckDataActions(campaignId, errMsg)` flip data_actions stuck thành `'hoàn thành'` + `note=errMsg` khi outer catch (enum không có `'lỗi'`).
 
 **Rate limit** ([campaignRepository.ts:getChannelRateLimitStatus](src/main/data/repositories/campaignRepository.ts)) đếm rows `auto_campaign_result_actions` theo `(channel_id, action_name)` filter `status IN ('thành công','thất bại')` (loại `'lỗi'` vì exception code chưa chạm tới FB → không tốn rate), trả `{ok, isDailyLimit, retryAfterMs, reason}`:
 - Hourly hit (e.g. `9 lần / 60 phút`) → reschedule `now + retryAfterMs` (oldest row + windowMs)
@@ -91,9 +82,15 @@ Domain (kể từ migration_v3 — 2 bảng cũ `auto_campaign_details` + `auto_
 - `requireCurrentUser()` ([currentUser.ts](src/main/data/currentUser.ts)) ném lỗi nếu chưa login → block IPC handler
 - `mapXxxFromDB(row)` trong [mappers.ts](src/main/data/mappers.ts) chuyển snake_case → camelCase
 - Built-in records gán về **admin tenant** (org có `is_admin_akabiz=true`) qua `resolveAdminTenant()`. Mọi staff thấy được khi list (filter `staff_id IN (currentStaff, NULL, adminStaff)`)
-- Seed dùng `*System()` variant không cần auth — gọi từ [main/index.ts](src/main/index.ts) lúc khởi động qua `seedBuiltinCampaignActions()` (v1) + `seedV2()` (v2)
+- Seed dùng `*System()` variant không cần auth — gọi từ [main/index.ts](src/main/index.ts) lúc khởi động qua `seedV2()`
 
-Migration pattern: viết SQL file ở root (`migration.sql` cho schema gốc, `migration_v2_workflow.sql` cho v2). Apply qua `mcp__supabase__apply_migration`. Idempotent UPSERT theo UNIQUE name (engine v2) hoặc explicit ID (engine v1).
+`seedV2()` (idempotent — UPSERT theo name UNIQUE):
+1. `seedElements()` — XPath snippets vào `auto_v2_elements`
+2. `seedBlocks()` — block library (system + JS) vào `auto_v2_blocks`
+3. `seedWorkflows()` — 3 workflows (group_post, timeline_post, message_friend) vào `auto_v2_workflows`
+4. `bindToActions()` — UPSERT 3 records `auto_campaign_actions` (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`) + bind `workflow_v2_id` → đảm bảo fresh DB cũng chạy được
+
+Migration pattern: viết SQL file ở root (`migration.sql` cho schema gốc, `migration_v2_workflow.sql` cho v2, `migration_v3_campaign_data.sql` cho data refactor, `migration_v4_drop_engine_v1.sql` cho dọn dẹp v1). Apply qua `mcp__supabase__apply_migration`. Idempotent UPSERT theo UNIQUE name (engine v2) hoặc explicit ID.
 
 ### Vietnamese UI conventions
 
@@ -117,9 +114,8 @@ Status values trong DB lưu **tiếng Việt có dấu**:
 [src/main/ipc/handlers.ts](src/main/ipc/handlers.ts) gom các nhóm trong `handlers/` directory:
 - `authHandlers` (login/logout/me)
 - `campaignHandlers` (CRUD campaign + scheduler control)
-- `browserHandlers` (Playwright launch/close + webview register/unregister, register cả `WebviewRegistry` cũ lẫn `PageControllerRegistry` v2)
-- `flowHandlers` (engine v1 run/stop)
-- `channelHandlers` / `channelContactHandlers` / `elementHandlers` / `runHandlers` / `updateHandlers`
+- `browserHandlers` ([handlers/browserHandlers.ts](src/main/ipc/handlers/browserHandlers.ts)) — webview register/unregister/status. Khi register cũng register vào cả `WebviewRegistry` (cho contactLoader / scheduler `isRegistered` check) lẫn `PageControllerRegistry` (engine v2)
+- `channelHandlers` / `channelContactHandlers` / `updateHandlers`
 - `v2Handlers` ([handlers/v2Handlers.ts](src/main/ipc/handlers/v2Handlers.ts)) — engine v2: BLOCK_LIST/SAVE/DELETE, WORKFLOW_LIST/GET/SAVE/DELETE, ELEMENT_LIST/SAVE/DELETE, WORKFLOW_TEST_RUN, BLOCK_TEST_RUN, RUN_STOP, RUN_PROGRESS broadcast, RUN_LOG broadcast
 
 Mỗi handler `ipcMain.handle(channel, fn)` → method tương ứng repository/service. Renderer gọi qua `electronAPI.xxx()` ([preload/index.ts](src/preload/index.ts), typed trong [electron.d.ts](src/renderer/src/types/electron.d.ts)).
@@ -129,8 +125,6 @@ Mỗi handler `ipcMain.handle(channel, fn)` → method tương ứng repository/
 [src/renderer/src/stores/](src/renderer/src/stores/):
 - `authStore` — current user, login/logout
 - `campaignStore` — channels, campaigns, action templates, log realtime broadcast
-- `flowStore` — engine v1 editor state (nodes/edges/selectedNode)
-- `executionStore` — engine v1 step progress
 - `blockLibraryStore` / `elementLibraryStore` / `workflowV2Store` — engine v2 editor state
 - `themeStore` / `uiStore` — UI prefs
 
@@ -154,9 +148,10 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 
 ## Common pitfalls
 
-- **inputMapping vs DAG data flow**: engine v1 dùng `inputMapping.sourceNodeId/sourceField`. Engine v2 KHÔNG có inputMapping — output của parent merge vào input của child theo edges, last-write-wins. Output `scrapedText` của block ở xa KHÔNG cascade qua chain — nếu cần dùng ở downstream chain dài, **mutate `vars`** thay vì rely on input merging.
 - **Loop iterations**: scheduler `logMilestonesV2` đọc `result.steps` từ engine. Engine v2 maintain `allSteps[]` (mỗi loop iteration 1 row riêng) thay vì snapshot `nodeStates`. Khi đọc per-iteration data, đọc `s.output` (block return value), KHÔNG `s.input` (chỉ là config + parents trực tiếp).
+- **Output cascade**: engine v2 KHÔNG có inputMapping — output của parent merge vào input của child theo edges, last-write-wins. Output `scrapedText` của block ở xa KHÔNG cascade qua chain — nếu cần dùng ở downstream chain dài, **mutate `vars`** thay vì rely on input merging.
 - **XPath union `|`**: timeline page và group page dùng selector khác nhau. Element store XPath với `|` để match cả hai. `document.evaluate` (XPath 1.0) hỗ trợ union, trả node đầu tiên match.
+- **`auto_v2_runs.workflow_id` column**: tên cột là `workflow_id` nhưng FK → `auto_v2_workflows.id` (BIGINT). Đừng nhầm với cột `workflow_id` (UUID) đã drop ở migration_v4 thuộc `auto_campaign_actions`.
 - **timeSleepBetween2** vs **actionLimits.sleepBetweenActions**: scheduler ưu tiên `actionLimits.sleepBetweenActions`, fallback `campaign.timeSleepBetween2`. Cả 2 tính bằng giây.
 - **Schedule edit** (`scheduleEndDate`): cột nullable, type `string | null | undefined`. Pass `null` (không phải `undefined`) để clear — `updateCampaign`'s `!== undefined` check sẽ skip undefined. Cho `scheduleType='daily'`, luôn gửi `null` (form date input disabled nhưng formData vẫn giữ default 7-day-ahead, sẽ silently stop campaign sau 1 tuần).
 - **Hidden vs disabled toggle** (`sharePost` pattern): feature có DB flag nhưng chưa implement → ẨN khỏi UI (don't render checkbox), giữ flag trong `formData` + `handleSave` payload (preserve roundtrip), backend log warning per run. KHÔNG `<input disabled>` (leak feature name).
@@ -166,8 +161,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 
 Khi xong 1 task **non-trivial** mà có 1 trong các thay đổi sau, update CLAUDE.md trước khi end turn:
 
-- Thêm/sửa table Supabase, IPC channel, action type, system block, status enum value
-- Thêm/sửa repository, service, runtime module (engine v1/v2)
+- Thêm/sửa table Supabase, IPC channel, system block, status enum value
+- Thêm/sửa repository, service, runtime module
 - Đổi convention log/UI tiếng Việt, emoji vocab, status string
 - Đổi command build/dev (npm scripts, tsconfig)
 - Phát hiện common pitfall mới (xếp vào "Common pitfalls")

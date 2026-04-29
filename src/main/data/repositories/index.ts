@@ -1,5 +1,3 @@
-export * as flowRepo from './flowRepository'
-export * as elementRepo from './elementRepository'
 export * as channelRepo from './channelRepository'
 export * as campaignRepo from './campaignRepository'
 export * as campaignActionRepo from './campaignActionRepository'

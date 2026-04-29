@@ -1,62 +1,4 @@
-import { FlowData, ExecutionRun, ExecutionStep, OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, CampaignDataStatus, CampaignResultStatus, OrgChannelContact, ContactType, ElementDefinition, ActionType } from '../../shared/types'
-
-export function mapFlowFromDB(row: Record<string, unknown>): FlowData {
-  return {
-    id: row.id as string,
-    name: row.name as string,
-    description: row.description as string,
-    nodes: row.nodes as FlowData['nodes'],
-    edges: row.edges as FlowData['edges'],
-    variables: row.variables as Record<string, unknown>,
-    inputSchema: row.input_schema as FlowData['inputSchema'],
-    outputSchema: row.output_schema as FlowData['outputSchema'],
-    isBlock: row.is_block as boolean,
-    staffId: row.staff_id as number | undefined,
-    organizationId: row.organization_id as number | undefined,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string
-  }
-}
-
-export function mapRunFromDB(row: Record<string, unknown>): ExecutionRun {
-  return {
-    id: row.id as string,
-    flowId: row.flow_id as string,
-    workflowId: row.workflow_id as string | undefined,
-    status: row.status as ExecutionRun['status'],
-    input: row.input as Record<string, unknown>,
-    output: row.output as Record<string, unknown>,
-    steps: [],
-    startedAt: row.started_at as string,
-    completedAt: row.completed_at as string,
-    error: row.error as string | undefined
-  }
-}
-
-export function mapRunStepFromDB(row: Record<string, unknown>): ExecutionStep {
-  return {
-    nodeId: row.node_id as string,
-    actionType: row.action_type as ActionType,
-    status: row.status as ExecutionStep['status'],
-    input: row.input as Record<string, unknown>,
-    output: row.output as Record<string, unknown>,
-    screenshotUrl: row.screenshot_url as string | undefined,
-    error: row.error as string | undefined,
-    durationMs: row.duration_ms as number | undefined,
-    executedAt: row.executed_at as string
-  }
-}
-
-export function mapElementFromDB(row: Record<string, unknown>): ElementDefinition {
-  return {
-    id: row.id as string,
-    name: row.name as string,
-    xpath: row.xpath as string,
-    description: row.description as string,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string
-  }
-}
+import { OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, CampaignDataStatus, CampaignResultStatus, OrgChannelContact, ContactType } from '../../shared/types'
 
 export function mapChannelFromDB(row: Record<string, unknown>): OrgChannel {
   return {
@@ -80,7 +22,6 @@ export function mapCampaignActionFromDB(row: Record<string, unknown>): CampaignA
     name: row.name as string,
     flatformType: row.flatform_type as string,
     isActive: row.is_active as boolean,
-    workflowId: row.workflow_id as string | undefined,
     workflowV2Id: row.workflow_v2_id as number | undefined,
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string
