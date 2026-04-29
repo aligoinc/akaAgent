@@ -65,21 +65,22 @@ Convention quan trọng (xem `userInstructions` từ memory `campaign_convention
 
 ### Campaign system
 
-Domain:
+Domain (kể từ migration_v3 — 2 bảng cũ `auto_campaign_details` + `auto_campaign_detail_actions` còn để client cũ ngoài prod chạy được, code mới KHÔNG đụng):
 - `auto_campaigns` — campaign config (action_id, channel_id, schedule, content, extra_settings)
 - `auto_campaign_actions` — template loại campaign (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`); column `workflow_id` (UUID, engine v1) + `workflow_v2_id` (BIGINT, engine v2)
-- `auto_campaign_details` — danh sách target (mỗi group/profile = 1 detail, status `'chờ xử lý' | 'đang chạy' | 'hoàn thành' | 'lỗi' | 'tạm dừng'`)
-- `auto_campaign_detail_actions` — **customer-visible "Lịch sử hành động"**: mỗi milestone (post, từng comment, friend request, message) ghi 1 row riêng
+- `auto_campaign_data_inputs` — pool nguyên liệu thô (e.g. danh sách group để scrape members → sinh data_actions). Status: `'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'` (`'lỗi'` flag input không scrape được; admin re-trigger).
+- `auto_campaign_data_actions` — **việc-cần-làm thực thi** (mỗi target/profile/group = 1 row). Status: `'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành'` (KHÔNG có `'lỗi'` — lỗi action-level đã track ở result_actions; khi run fail set `'hoàn thành' + note=errMsg`). Cột `data_input_id BIGINT NULL` FK → data_inputs (nếu sinh từ scrape; NULL nếu user nhập tay).
+- `auto_campaign_result_actions` — **customer-visible "Lịch sử hành động"**: mỗi milestone (post, từng comment, friend request, message) ghi 1 row riêng. Status: `'thành công' | 'thất bại' | 'lỗi'` (thành công = OK; thất bại = nghiệp vụ FB từ chối; lỗi = exception/crash code). FK `data_action_id` (nullable cho simple campaign không có data_action).
 
 [CampaignScheduler](src/main/services/campaignScheduler.ts) — `setInterval(tick, 30s)`:
 1. Lấy channels + campaigns đến giờ
 2. Engine v2 hoặc v1 tuỳ flag
-3. Mỗi detail run workflow → log per-milestone vào `auto_campaign_detail_actions` qua `logMilestonesV2` (scan `result.steps` theo `block_name`: `fb_click_post_button` → "Đăng bài", `fb_comment_at_position` → "Comment", `fb_send_message` → "Nhắn tin", `fb_add_friend` → "Kết bạn")
-4. Sleep `extra.actionLimits.sleepBetweenActions` giây giữa details
+3. Mỗi data_action run workflow → log per-milestone vào `auto_campaign_result_actions` qua `logMilestonesV2` (scan `result.steps` theo `block_name`: `fb_click_post_button` → "Đăng bài", `fb_comment_at_position` → "Comment", `fb_send_message` → "Nhắn tin", `fb_add_friend` → "Kết bạn"). Status mapping: `step.status==='error'` → `'lỗi'`; `output.ok===false` không exception → `'thất bại'`; còn lại → `'thành công'`.
+4. Sleep `extra.actionLimits.sleepBetweenActions` giây giữa data_actions
 
-**Recovery**: `resetRunningCampaignStatuses()` + `resetRunningDetailStatuses()` chạy lúc app start — flip rows kẹt `'đang chạy'` về `'chờ xử lý'` (đề phòng crash mid-flow). `recoverStuckDetails(campaignId, errMsg)` flip thành `'lỗi'` khi outer catch trong executor.
+**Recovery**: `resetRunningCampaignStatuses()` + `resetRunningDataInputStatuses()` + `resetRunningDataActionStatuses()` chạy lúc app start — flip rows kẹt `'đang chạy'` về `'chờ xử lý'` (đề phòng crash mid-flow). `recoverStuckDataActions(campaignId, errMsg)` flip data_actions stuck thành `'hoàn thành'` + `note=errMsg` khi outer catch (enum không có `'lỗi'`).
 
-**Rate limit** ([campaignRepository.ts:getChannelRateLimitStatus](src/main/data/repositories/campaignRepository.ts)) đếm rows `auto_campaign_detail_actions` theo `(channel_id, action_name)`, trả `{ok, isDailyLimit, retryAfterMs, reason}`:
+**Rate limit** ([campaignRepository.ts:getChannelRateLimitStatus](src/main/data/repositories/campaignRepository.ts)) đếm rows `auto_campaign_result_actions` theo `(channel_id, action_name)` filter `status IN ('thành công','thất bại')` (loại `'lỗi'` vì exception code chưa chạm tới FB → không tốn rate), trả `{ok, isDailyLimit, retryAfterMs, reason}`:
 - Hourly hit (e.g. `9 lần / 60 phút`) → reschedule `now + retryAfterMs` (oldest row + windowMs)
 - Daily hit + `continueNextDay=true` → reschedule tomorrow cùng giờ user set; ngược lại giữ schedule, status `'chờ xử lý'`
 
@@ -96,11 +97,15 @@ Migration pattern: viết SQL file ở root (`migration.sql` cho schema gốc, `
 
 ### Vietnamese UI conventions
 
-Status values trong DB lưu **tiếng Việt có dấu**: `'chờ xử lý'`, `'đang chạy'`, `'hoàn thành'`, `'lỗi'`, `'tạm dừng'`. Login status: `'đã đăng nhập'`, `'chưa đăng nhập'`, `'checkpoint'`.
+Status values trong DB lưu **tiếng Việt có dấu**:
+- Campaign / data_inputs: `'chờ xử lý'`, `'đang chạy'`, `'hoàn thành'`, `'lỗi'`, `'tạm dừng'`
+- data_actions: `'chờ xử lý'`, `'đang chạy'`, `'hoàn thành'`, `'tạm dừng'` (KHÔNG có `'lỗi'`)
+- result_actions: `'thành công'`, `'thất bại'`, `'lỗi'`
+- Login status: `'đã đăng nhập'`, `'chưa đăng nhập'`, `'checkpoint'`
 
-**Customer-facing log language** (rất quan trọng — log từ `sendLog()` và `auto_campaign_detail_actions.log` đều khách hàng đọc):
+**Customer-facing log language** (rất quan trọng — log từ `sendLog()` và `auto_campaign_result_actions.log` đều khách hàng đọc):
 - Viết tiếng Việt tự nhiên: `"Đã comment vào bài thứ 3: ..."`, `"Đăng bài thành công vào ..."`, `"Bài đang chờ duyệt"`
-- TRÁNH: `"Đã log X"`, `"lần X/Y"`, `"vị trí #N"`, ID strings, stacktraces, `"position"`, `"iteration"`, `"detail_action"` lộ ra UI
+- TRÁNH: `"Đã log X"`, `"lần X/Y"`, `"vị trí #N"`, ID strings, stacktraces, `"position"`, `"iteration"`, `"result_action"` lộ ra UI
 - Technical metadata (`commentPosition`, `iteration`, `commentType`) → JSONB `data` column, KHÔNG vào `log` string
 - **Log order**: action milestone trước (📝 Đăng bài), rồi metadata (⏳ Chờ duyệt), rồi link/artifact (🔗), milestones tiếp theo (💬), cuối cùng summary (✅/❌)
 - Emoji vocab thống nhất: 📝 Đăng bài • 💬 Comment/Nhắn tin • 🔗 Link • ⏳ Chờ duyệt • ✅ Hoàn thành • ❌ Lỗi • 👋 Rời nhóm • 🤝 Kết bạn/Tham gia • 🔀 Shuffle/Share • ⚠️ Cảnh báo • ℹ️ Info • 🎬 Reels

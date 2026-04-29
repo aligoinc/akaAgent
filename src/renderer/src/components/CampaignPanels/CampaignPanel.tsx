@@ -15,12 +15,12 @@ interface CampaignPanelProps {
 export default function CampaignPanel({ filterChannelId, onClearFilter }: CampaignPanelProps) {
   const {
     channels, campaigns, campaignActions,
-    campaignDetails, loadingDetails,
-    detailActions, loadingDetailActions,
+    dataActions, loadingDataActions,
+    resultActions, loadingResultActions,
     loadCampaigns, loadCampaignActions, loadChannels,
     createCampaign, updateCampaign, deleteCampaign, cloneCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
-    loadCampaignDetails, loadDetailActionsByCampaign
+    loadDataActions, loadResultActions
   } = useCampaignStore()
   const isAdminAkabiz = !!useAuthStore(s => s.user?.isAdminAkabiz)
 
@@ -40,13 +40,13 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
     loadChannels()
   }, [loadCampaigns, loadCampaignActions, loadChannels])
 
-  // Load details when a campaign is selected
+  // Load data + results when a campaign is selected
   useEffect(() => {
     if (selectedCampaignId) {
-      loadCampaignDetails(selectedCampaignId)
-      loadDetailActionsByCampaign(selectedCampaignId)
+      loadDataActions(selectedCampaignId)
+      loadResultActions(selectedCampaignId)
     }
-  }, [selectedCampaignId, loadCampaignDetails, loadDetailActionsByCampaign])
+  }, [selectedCampaignId, loadDataActions, loadResultActions])
 
   // Clear bulk selection when channel filter changes
   useEffect(() => {
@@ -171,12 +171,14 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      // Campaign / data layer status
       case 'đang chạy': return 'var(--accent-warning)'
       case 'hoàn thành': return 'var(--accent-success)'
-      case 'lỗi': return 'var(--accent-error)'
       case 'tạm dừng': return 'var(--accent-error)'
-      case 'success': return 'var(--accent-success)'
-      case 'error': return 'var(--accent-error)'
+      // Result actions status (per-milestone)
+      case 'thành công': return 'var(--accent-success)'
+      case 'thất bại': return 'var(--accent-warning)'   // vàng — nghiệp vụ FB từ chối
+      case 'lỗi': return 'var(--accent-error)'           // đỏ — exception/crash code
       default: return 'var(--text-tertiary)'
     }
   }
@@ -252,7 +254,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
             setEditingCampaign(null)
             setCloneFromId(undefined)
             loadCampaigns()
-            if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
+            if (selectedCampaignId) loadDataActions(selectedCampaignId)
           }} 
         />
       )}
@@ -358,26 +360,26 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                   className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
                   onClick={() => setDetailTab('data')}
                 >
-                  Dữ liệu ({campaignDetails.length})
+                  Dữ liệu ({dataActions.length})
                 </button>
                 <button
                   className={`detail-dock-tab ${detailTab === 'actions' ? 'active' : ''}`}
                   onClick={() => {
                     setDetailTab('actions')
-                    if (selectedCampaignId) loadDetailActionsByCampaign(selectedCampaignId)
+                    if (selectedCampaignId) loadResultActions(selectedCampaignId)
                   }}
                 >
-                  Lịch sử hành động ({detailActions.length})
+                  Lịch sử hành động ({resultActions.length})
                 </button>
               </div>
 
-              {/* Tab: Data */}
+              {/* Tab: Data Actions */}
               {detailTab === 'data' && (
                 <>
-                  {loadingDetails ? (
+                  {loadingDataActions ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
-                  ) : campaignDetails.length === 0 ? (
-                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có chi tiết nào</div>
+                  ) : dataActions.length === 0 ? (
+                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có dữ liệu nào</div>
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
@@ -391,7 +393,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                         </tr>
                       </thead>
                       <tbody>
-                        {campaignDetails.map(d => (
+                        {dataActions.map(d => (
                           <tr key={d.id}>
                             <td>{d.name || '-'}</td>
                             <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
@@ -409,12 +411,12 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                 </>
               )}
 
-              {/* Tab: Action Logs */}
+              {/* Tab: Result Actions (per-milestone log) */}
               {detailTab === 'actions' && (
                 <>
-                  {loadingDetailActions ? (
+                  {loadingResultActions ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
-                  ) : detailActions.length === 0 ? (
+                  ) : resultActions.length === 0 ? (
                     <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có hành động nào được ghi nhận</div>
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
@@ -427,7 +429,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                         </tr>
                       </thead>
                       <tbody>
-                        {detailActions.map(a => (
+                        {resultActions.map(a => (
                           <tr key={a.id}>
                             <td style={{ whiteSpace: 'nowrap' }}>
                               {a.createdAt ? new Date(a.createdAt).toLocaleString('vi-VN') : '-'}
@@ -437,7 +439,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                             </td>
                             <td>
                               <span style={{ color: getStatusColor(a.status) }}>
-                                {a.status === 'success' ? '✅ Thành công' : a.status === 'error' ? '❌ Lỗi' : a.status}
+                                {a.status === 'thành công' ? '✅ Thành công' : a.status === 'thất bại' ? '⚠️ Thất bại' : a.status === 'lỗi' ? '❌ Lỗi' : a.status}
                               </span>
                             </td>
                             <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

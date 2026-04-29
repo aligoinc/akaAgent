@@ -245,14 +245,22 @@ export interface Campaign {
   channelName?: string
 }
 
-export interface CampaignDetail {
+// Status enum cho data layer (data_inputs / data_actions):
+//   - data_inputs: 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'
+//     ('lỗi' để flag input không scrape được — admin re-trigger)
+//   - data_actions: 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành'
+//     (lỗi action-level đã track ở result_actions; khi run fail set 'hoàn thành' + note=errMsg)
+export type CampaignDataStatus = 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'
+
+// Pool nguyên liệu thô (e.g. danh sách group để scrape members → data_actions)
+export interface CampaignDataInput {
   id: number
   campaignId: number
   name?: string
   phone?: string
   uid?: string
   email?: string
-  status: string
+  status: CampaignDataStatus
   note?: string
   schedule?: string
   dateAction?: string
@@ -260,13 +268,36 @@ export interface CampaignDetail {
   createdAt?: string
 }
 
-export interface CampaignDetailAction {
+// Việc-cần-làm thực thi trong campaign loop (thay auto_campaign_details cũ)
+export interface CampaignDataAction {
   id: number
-  campaignDetailId?: number
+  campaignId: number
+  dataInputId?: number | null    // nullable: NULL = user nhập trực tiếp; số = sinh từ data_inputs (e.g. member của group)
+  name?: string
+  phone?: string
+  uid?: string
+  email?: string
+  status: CampaignDataStatus
+  note?: string
+  schedule?: string
+  dateAction?: string
+  isDelete: boolean
+  createdAt?: string
+}
+
+// Status enum cho result_actions (per-milestone log):
+//   - 'thành công': action OK (đã post, đã comment, đã kết bạn)
+//   - 'thất bại': nghiệp vụ FB từ chối (FB block message, post pending, kết bạn không gửi được)
+//   - 'lỗi': exception/crash code (selector not found, timeout, network)
+export type CampaignResultStatus = 'thành công' | 'thất bại' | 'lỗi'
+
+export interface CampaignResultAction {
+  id: number
+  dataActionId?: number | null
   campaignId: number
   channelId?: number
   actionName: string
-  status: string
+  status: CampaignResultStatus
   log?: string
   data?: Record<string, unknown>
   postUrl?: string               // URL of the post this action is related to (e.g. just-published post, commented post)
@@ -374,17 +405,23 @@ export const IPC_CHANNELS = {
   DB_DELETE_CAMPAIGN: 'db:delete-campaign',
   DB_CLONE_CAMPAIGN: 'db:clone-campaign',
 
-  // Database Campaign Details
-  DB_LIST_CAMPAIGN_DETAILS: 'db:list-campaign-details',
-  DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
-  DB_UPDATE_CAMPAIGN_DETAIL: 'db:update-campaign-detail',
-  DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
+  // Database Campaign Data Inputs (pool nguyên liệu thô — e.g. group list)
+  DB_LIST_DATA_INPUTS: 'db:list-data-inputs',
+  DB_CREATE_DATA_INPUT: 'db:create-data-input',
+  DB_UPDATE_DATA_INPUT: 'db:update-data-input',
+  DB_DELETE_DATA_INPUT: 'db:delete-data-input',
 
-  // Database Campaign Detail Actions (action logs)
-  DB_LIST_DETAIL_ACTIONS: 'db:list-detail-actions',
-  DB_LIST_DETAIL_ACTIONS_BY_CAMPAIGN: 'db:list-detail-actions-by-campaign',
-  DB_CREATE_DETAIL_ACTION: 'db:create-detail-action',
-  DB_DELETE_DETAIL_ACTION: 'db:delete-detail-action',
+  // Database Campaign Data Actions (việc-cần-làm thực thi)
+  DB_LIST_DATA_ACTIONS: 'db:list-data-actions',
+  DB_CREATE_DATA_ACTION: 'db:create-data-action',
+  DB_UPDATE_DATA_ACTION: 'db:update-data-action',
+  DB_DELETE_DATA_ACTION: 'db:delete-data-action',
+
+  // Database Campaign Result Actions (per-milestone log)
+  DB_LIST_RESULT_ACTIONS_BY_DATA_ACTION: 'db:list-result-actions',
+  DB_LIST_RESULT_ACTIONS_BY_CAMPAIGN: 'db:list-result-actions-by-campaign',
+  DB_CREATE_RESULT_ACTION: 'db:create-result-action',
+  DB_DELETE_RESULT_ACTION: 'db:delete-result-action',
 
   // Campaign Scheduler
   SCHEDULER_START: 'scheduler:start',

@@ -181,7 +181,8 @@ export class FlowRunner {
           const detailId = flowData.variables?.detailId as number
           const status = String(resolvedInput.status || 'hoàn thành')
           if (detailId) {
-            await this.supabase.updateCampaignDetail(detailId, { status })
+            // detailId here references the data_action.id (kept name for flow JSON compat)
+            await this.supabase.updateCampaignDataAction(detailId, { status: status as any })
           }
           result = { success: true, output: { status }, durationMs: 0 }
         } else if (node.data.actionType === 'writeCampaignLog') {
@@ -650,7 +651,7 @@ export class FlowRunner {
         const detailId = flowData.variables?.detailId as number
         const status = String(resolvedInput.status || 'hoàn thành')
         if (detailId) {
-          await this.supabase.updateCampaignDetail(detailId, { status })
+          await this.supabase.updateCampaignDataAction(detailId, { status: status as any })
         }
         result = { success: true, output: { status }, durationMs: 0 }
       } else if (bodyNode.data.actionType === 'writeCampaignLog') {

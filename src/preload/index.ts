@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, OrgChannel, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, OrgChannelContact, ContactType, AuthUser } from '../shared/types'
+import { IPC_CHANNELS, FlowData, ExecutionStep, ActionDefinition, OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, OrgChannelContact, ContactType, AuthUser } from '../shared/types'
 import { IPC_CHANNELS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -133,31 +133,44 @@ const electronAPI = {
   cloneCampaign: (id: number): Promise<Campaign> =>
     ipcRenderer.invoke(IPC_CHANNELS.DB_CLONE_CAMPAIGN, id),
 
-  // Campaign Details
-  listCampaignDetails: (campaignId: number): Promise<CampaignDetail[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_CAMPAIGN_DETAILS, campaignId),
+  // Campaign Data Inputs (pool nguyên liệu thô)
+  listCampaignDataInputs: (campaignId: number): Promise<CampaignDataInput[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_DATA_INPUTS, campaignId),
 
-  createCampaignDetail: (data: Partial<CampaignDetail>): Promise<CampaignDetail> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_CREATE_CAMPAIGN_DETAIL, data),
+  createCampaignDataInput: (data: Partial<CampaignDataInput>): Promise<CampaignDataInput> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_CREATE_DATA_INPUT, data),
 
-  updateCampaignDetail: (id: number, updates: Partial<CampaignDetail>): Promise<CampaignDetail> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_UPDATE_CAMPAIGN_DETAIL, id, updates),
+  updateCampaignDataInput: (id: number, updates: Partial<CampaignDataInput>): Promise<CampaignDataInput> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_UPDATE_DATA_INPUT, id, updates),
 
-  deleteCampaignDetail: (id: number): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_CAMPAIGN_DETAIL, id),
+  deleteCampaignDataInput: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_DATA_INPUT, id),
 
-  // Campaign Detail Actions (Action Logs)
-  listDetailActions: (detailId: number): Promise<CampaignDetailAction[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_DETAIL_ACTIONS, detailId),
+  // Campaign Data Actions (việc-cần-làm)
+  listCampaignDataActions: (campaignId: number): Promise<CampaignDataAction[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_DATA_ACTIONS, campaignId),
 
-  listDetailActionsByCampaign: (campaignId: number): Promise<CampaignDetailAction[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_DETAIL_ACTIONS_BY_CAMPAIGN, campaignId),
+  createCampaignDataAction: (data: Partial<CampaignDataAction>): Promise<CampaignDataAction> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_CREATE_DATA_ACTION, data),
 
-  createDetailAction: (data: Partial<CampaignDetailAction>): Promise<CampaignDetailAction> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_CREATE_DETAIL_ACTION, data),
+  updateCampaignDataAction: (id: number, updates: Partial<CampaignDataAction>): Promise<CampaignDataAction> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_UPDATE_DATA_ACTION, id, updates),
 
-  deleteDetailAction: (id: number): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_DETAIL_ACTION, id),
+  deleteCampaignDataAction: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_DATA_ACTION, id),
+
+  // Campaign Result Actions (per-milestone log)
+  listResultActionsByDataAction: (dataActionId: number): Promise<CampaignResultAction[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_RESULT_ACTIONS_BY_DATA_ACTION, dataActionId),
+
+  listResultActionsByCampaign: (campaignId: number): Promise<CampaignResultAction[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_RESULT_ACTIONS_BY_CAMPAIGN, campaignId),
+
+  createResultAction: (data: Partial<CampaignResultAction>): Promise<CampaignResultAction> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_CREATE_RESULT_ACTION, data),
+
+  deleteResultAction: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_DELETE_RESULT_ACTION, id),
 
   // Campaign Scheduler
   startScheduler: (): Promise<{ success: boolean }> =>

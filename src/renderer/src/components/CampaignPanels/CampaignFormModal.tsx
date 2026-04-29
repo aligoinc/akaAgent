@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
-import { Campaign, CampaignDetail, CampaignExtraSettings } from '../../../../shared/types'
+import { Campaign, CampaignDataAction, CampaignExtraSettings } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
 import FriendPickerModal from './FriendPickerModal'
 import GroupPickerModal from './GroupPickerModal'
@@ -106,7 +106,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const {
     channels, campaignActions,
     createCampaign, updateCampaign,
-    createCampaignDetail, loadCampaignDetails
+    createDataAction
   } = useCampaignStore()
 
   const contentRef = useRef<HTMLDivElement>(null)
@@ -187,7 +187,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     ? ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
     : ALL_STEPS
 
-  const [details, setDetails] = useState<Partial<CampaignDetail>[]>([])
+  const [details, setDetails] = useState<Partial<CampaignDataAction>[]>([])
   const [deletedIds, setDeletedIds] = useState<number[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [activeStep, setActiveStep] = useState('general')
@@ -213,7 +213,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       if (loadId && window.electronAPI) {
         setLoadingDetails(true)
         try {
-          const existingDetails = await window.electronAPI.listCampaignDetails(loadId)
+          const existingDetails = await window.electronAPI.listCampaignDataActions(loadId)
           if (cloneFromId) {
             // Clone: strip IDs and reset status, ALSO clear note
             setDetails(existingDetails.map(d => ({ ...d, id: undefined, status: 'chờ xử lý', note: '' })))
@@ -288,13 +288,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     }
 
     try {
-      const { deleteCampaignDetail, updateCampaignDetail, createCampaignDetail, createCampaign, updateCampaign } = useCampaignStore.getState()
+      const { deleteDataAction, updateDataAction, createDataAction, createCampaign, updateCampaign } = useCampaignStore.getState()
 
       for (const id of deletedIds) {
-        await deleteCampaignDetail(id)
+        await deleteDataAction(id)
       }
 
-      let channelChunks: Partial<CampaignDetail>[][] = [];
+      let channelChunks: Partial<CampaignDataAction>[][] = [];
       const numChannels = formData.channelIds.length;
       
       if (formData.splitDataAcrossChannels && numChannels > 1 && details.length > 0) {
@@ -371,7 +371,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           
           for (const d of currentDetails) {
             if (d.id) {
-              await updateCampaignDetail(d.id, {
+              await updateDataAction(d.id, {
                 name: d.name,
                 phone: d.phone,
                 uid: d.uid,
@@ -379,7 +379,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                 note: d.note,
               })
             } else {
-              await createCampaignDetail({
+              await createDataAction({
                 ...d,
                 campaignId: savedCampaign.id
               })
@@ -387,9 +387,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           }
         } else {
           savedCampaign = await createCampaign(campaignPayload)
-          
+
           for (const d of currentDetails) {
-            await createCampaignDetail({
+            await createDataAction({
               ...d,
               id: undefined,
               campaignId: savedCampaign.id
@@ -422,7 +422,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     })
   }
 
-  const updateDetailRow = (index: number, field: keyof CampaignDetail, value: string) => {
+  const updateDetailRow = (index: number, field: keyof CampaignDataAction, value: string) => {
     setDetails(prev => {
       const copy = [...prev]
       copy[index] = { ...copy[index], [field]: value }
@@ -452,7 +452,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           startIndex = 1
         }
 
-        const newRows: Partial<CampaignDetail>[] = []
+        const newRows: Partial<CampaignDataAction>[] = []
         for (let i = startIndex; i < data.length; i++) {
           const row = data[i]
           if (!row || row.length === 0 || row.every((c: any) => !c)) continue // skip empty rows
@@ -497,7 +497,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         // Mảng chứa các UID cắt bằng dấu phẩy hoặc xuống dòng
         const tokens = text.split(/[\r\n,]+/)
         
-        const newRows: Partial<CampaignDetail>[] = []
+        const newRows: Partial<CampaignDataAction>[] = []
         for (const token of tokens) {
           const uid = token.trim()
           if (!uid) continue
@@ -531,7 +531,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [showGroupPicker, setShowGroupPicker] = useState(false)
 
   const onFriendsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
-    const newRows: Partial<CampaignDetail>[] = contacts.map(c => ({
+    const newRows: Partial<CampaignDataAction>[] = contacts.map(c => ({
       name: c.name,
       uid: c.uid || '',
       phone: '',
@@ -544,7 +544,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   }
 
   const onGroupsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
-    const newRows: Partial<CampaignDetail>[] = contacts.map(c => ({
+    const newRows: Partial<CampaignDataAction>[] = contacts.map(c => ({
       name: c.name,
       uid: c.uid || '',
       phone: '',
