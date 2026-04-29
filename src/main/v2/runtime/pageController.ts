@@ -111,7 +111,10 @@ export class PageController {
         }
       })()
     `
-    const result: any = await this.wc.executeJavaScript(wrapped, true)
+    // userGesture=false để tránh Chromium kích hoạt host window activation
+    // (userGesture=true có thể trigger restore khi app đang minimize).
+    // execCommand('insertText'/'insertParagraph') vẫn hoạt động không cần user activation.
+    const result: any = await this.wc.executeJavaScript(wrapped, false)
     if (result && typeof result === 'object' && result.__error) {
       throw new Error(result.message)
     }
@@ -232,7 +235,10 @@ export class PageController {
       var el = resolveSelector(${safeJS(selector)});
       if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
       el.scrollIntoView({ block: "center", inline: "center" });
-      el.focus();
+      // KHÔNG dùng el.focus() — yêu cầu keyboard focus → Win32 restore window khi app minimize.
+      // Synthetic focusin đủ cho Lexical/FB observer; click() bên dưới mới mở composer thật sự.
+      var fInit = { bubbles: true, cancelable: true, view: window };
+      try { el.dispatchEvent(new FocusEvent("focusin", fInit)); } catch (e) {}
       if (!el.isContentEditable && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') el.click();
     `)
     await new Promise(r => setTimeout(r, 500))
@@ -252,7 +258,10 @@ export class PageController {
         if (all.length > 0) target = all[all.length - 1];
       }
       if (target && target.isContentEditable) {
-        target.focus();
+        // Synthetic focusin thay vì target.focus() để không un-minimize app trên Win32.
+        // execCommand('insertText') hoạt động trên Selection hiện tại, không cần activeElement.
+        var fInit = { bubbles: true, cancelable: true, view: window };
+        try { target.dispatchEvent(new FocusEvent("focusin", fInit)); } catch (e) {}
         if (${clearFirst}) {
           var range = document.createRange();
           range.selectNodeContents(target);
@@ -297,7 +306,10 @@ export class PageController {
       var el = resolveSelector(${safeJS(selector)});
       if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
       var text = ${safeJS(value)};
-      el.focus();
+      // Synthetic focusin thay vì el.focus() để không un-minimize app trên Win32.
+      // ClipboardEvent('paste') dispatch không cần keyboard focus.
+      var fInit = { bubbles: true, cancelable: true, view: window };
+      try { el.dispatchEvent(new FocusEvent("focusin", fInit)); } catch (e) {}
       if (el.isContentEditable) {
         var range = document.createRange();
         range.selectNodeContents(el);
@@ -334,7 +346,8 @@ export class PageController {
       el.scrollIntoView({ block: "center", inline: "center" });
       var init = { bubbles: true, cancelable: true, view: window };
       el.dispatchEvent(new FocusEvent("focusin", init));
-      try { if (typeof el.focus === "function") el.focus(); } catch (e) {}
+      // KHÔNG gọi el.focus() — FB chỉ listen "focusin" để lazy-load timestamp;
+      // .focus() thực sự sẽ làm Win32 restore window khi app đang minimize.
       var pInit = Object.assign({}, init, { pointerId: 1, pointerType: "mouse", isPrimary: true });
       try { el.dispatchEvent(new PointerEvent("pointerover", pInit)); } catch (e) {}
       try { el.dispatchEvent(new PointerEvent("pointerenter", pInit)); } catch (e) {}
@@ -439,7 +452,7 @@ export class PageController {
         ${code}
       })()
     `
-    return await this.wc.executeJavaScript(wrapped, true)
+    return await this.wc.executeJavaScript(wrapped, false)
   }
 
   // =========== NETWORK ===========
