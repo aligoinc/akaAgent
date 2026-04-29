@@ -1,4 +1,4 @@
-import { FlowData, ExecutionRun, ExecutionStep, OrgChannel, Campaign, CampaignAction, CampaignDetail, CampaignDetailAction, OrgChannelContact, ContactType, ElementDefinition } from '../../shared/types'
+import { FlowData, ExecutionRun, ExecutionStep, OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, OrgChannelContact, ContactType, ElementDefinition } from '../../shared/types'
 import * as flowRepo from '../data/repositories/flowRepository'
 import * as elementRepo from '../data/repositories/elementRepository'
 import * as channelRepo from '../data/repositories/channelRepository'
@@ -18,7 +18,8 @@ export class SupabaseService {
     console.log('[Supabase] Resetting "đang chạy" statuses to "chờ xử lý"...')
     await channelRepo.resetRunningChannelStatuses()
     await campaignRepo.resetRunningCampaignStatuses()
-    await campaignRepo.resetRunningDetailStatuses()
+    await campaignRepo.resetRunningDataInputStatuses()
+    await campaignRepo.resetRunningDataActionStatuses()
   }
 
   // =========== FLOWS ===========
@@ -64,17 +65,23 @@ export class SupabaseService {
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }
   getPendingCampaigns(channelId: number) { return campaignRepo.getPendingCampaigns(channelId) }
 
-  // =========== CAMPAIGN DETAILS ===========
-  listCampaignDetails(campaignId: number) { return campaignRepo.listCampaignDetails(campaignId) }
-  createCampaignDetail(detail: Partial<CampaignDetail>) { return campaignRepo.createCampaignDetail(detail) }
-  updateCampaignDetail(id: number, updates: Partial<CampaignDetail>) { return campaignRepo.updateCampaignDetail(id, updates) }
-  deleteCampaignDetail(id: number) { return campaignRepo.deleteCampaignDetail(id) }
+  // =========== CAMPAIGN DATA INPUTS (pool nguyên liệu) ===========
+  listCampaignDataInputs(campaignId: number) { return campaignRepo.listCampaignDataInputs(campaignId) }
+  createCampaignDataInput(input: Partial<CampaignDataInput>) { return campaignRepo.createCampaignDataInput(input) }
+  updateCampaignDataInput(id: number, updates: Partial<CampaignDataInput>) { return campaignRepo.updateCampaignDataInput(id, updates) }
+  deleteCampaignDataInput(id: number) { return campaignRepo.deleteCampaignDataInput(id) }
 
-  // =========== DETAIL ACTIONS ===========
-  listDetailActions(detailId: number) { return campaignRepo.listDetailActions(detailId) }
-  listDetailActionsByCampaign(campaignId: number) { return campaignRepo.listDetailActionsByCampaign(campaignId) }
-  createDetailAction(action: Partial<CampaignDetailAction>) { return campaignRepo.createDetailAction(action) }
-  deleteDetailAction(id: number) { return campaignRepo.deleteDetailAction(id) }
+  // =========== CAMPAIGN DATA ACTIONS (việc-cần-làm) ===========
+  listCampaignDataActions(campaignId: number) { return campaignRepo.listCampaignDataActions(campaignId) }
+  createCampaignDataAction(action: Partial<CampaignDataAction>) { return campaignRepo.createCampaignDataAction(action) }
+  updateCampaignDataAction(id: number, updates: Partial<CampaignDataAction>) { return campaignRepo.updateCampaignDataAction(id, updates) }
+  deleteCampaignDataAction(id: number) { return campaignRepo.deleteCampaignDataAction(id) }
+
+  // =========== RESULT ACTIONS (per-milestone log) ===========
+  listResultActionsByDataAction(dataActionId: number) { return campaignRepo.listResultActionsByDataAction(dataActionId) }
+  listResultActionsByCampaign(campaignId: number) { return campaignRepo.listResultActionsByCampaign(campaignId) }
+  createResultAction(action: Partial<CampaignResultAction>) { return campaignRepo.createResultAction(action) }
+  deleteResultAction(id: number) { return campaignRepo.deleteResultAction(id) }
   getChannelRateLimitStatus(channelId: number, actionName: string, limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }) { return campaignRepo.getChannelRateLimitStatus(channelId, actionName, limitConfig) }
 
   // =========== CONTACTS ===========

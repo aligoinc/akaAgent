@@ -140,7 +140,7 @@ export interface RunV2 {
   id?: number
   workflowId?: number
   campaignId?: number
-  campaignDetailId?: number
+  campaignDataActionId?: number     // FK auto_campaign_data_actions.id (cột legacy campaign_detail_id giữ NULL)
   channelId?: number
   status: RunStatus
   variables: Record<string, unknown>

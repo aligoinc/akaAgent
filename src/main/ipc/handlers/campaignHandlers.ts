@@ -46,38 +46,55 @@ export function registerCampaignHandlers(supabase: SupabaseService, campaignSche
     return supabase.cloneCampaign(id)
   })
 
-  // Campaign Details
-  ipcMain.handle(IPC_CHANNELS.DB_LIST_CAMPAIGN_DETAILS, async (_, campaignId: number) => {
-    return supabase.listCampaignDetails(campaignId)
+  // Campaign Data Inputs (pool nguyên liệu)
+  ipcMain.handle(IPC_CHANNELS.DB_LIST_DATA_INPUTS, async (_, campaignId: number) => {
+    return supabase.listCampaignDataInputs(campaignId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_CREATE_CAMPAIGN_DETAIL, async (_, detailData) => {
-    return supabase.createCampaignDetail(detailData)
+  ipcMain.handle(IPC_CHANNELS.DB_CREATE_DATA_INPUT, async (_, inputData) => {
+    return supabase.createCampaignDataInput(inputData)
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_UPDATE_CAMPAIGN_DETAIL, async (_, id: number, updates) => {
-    return supabase.updateCampaignDetail(id, updates)
+  ipcMain.handle(IPC_CHANNELS.DB_UPDATE_DATA_INPUT, async (_, id: number, updates) => {
+    return supabase.updateCampaignDataInput(id, updates)
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_DELETE_CAMPAIGN_DETAIL, async (_, id: number) => {
-    return supabase.deleteCampaignDetail(id)
+  ipcMain.handle(IPC_CHANNELS.DB_DELETE_DATA_INPUT, async (_, id: number) => {
+    return supabase.deleteCampaignDataInput(id)
   })
 
-  // Detail Actions
-  ipcMain.handle(IPC_CHANNELS.DB_LIST_DETAIL_ACTIONS, async (_, detailId: number) => {
-    return supabase.listDetailActions(detailId)
+  // Campaign Data Actions (việc-cần-làm)
+  ipcMain.handle(IPC_CHANNELS.DB_LIST_DATA_ACTIONS, async (_, campaignId: number) => {
+    return supabase.listCampaignDataActions(campaignId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_LIST_DETAIL_ACTIONS_BY_CAMPAIGN, async (_, campaignId: number) => {
-    return supabase.listDetailActionsByCampaign(campaignId)
+  ipcMain.handle(IPC_CHANNELS.DB_CREATE_DATA_ACTION, async (_, actionData) => {
+    return supabase.createCampaignDataAction(actionData)
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_CREATE_DETAIL_ACTION, async (_, actionData) => {
-    return supabase.createDetailAction(actionData)
+  ipcMain.handle(IPC_CHANNELS.DB_UPDATE_DATA_ACTION, async (_, id: number, updates) => {
+    return supabase.updateCampaignDataAction(id, updates)
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_DELETE_DETAIL_ACTION, async (_, id: number) => {
-    return supabase.deleteDetailAction(id)
+  ipcMain.handle(IPC_CHANNELS.DB_DELETE_DATA_ACTION, async (_, id: number) => {
+    return supabase.deleteCampaignDataAction(id)
+  })
+
+  // Result Actions (per-milestone log)
+  ipcMain.handle(IPC_CHANNELS.DB_LIST_RESULT_ACTIONS_BY_DATA_ACTION, async (_, dataActionId: number) => {
+    return supabase.listResultActionsByDataAction(dataActionId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DB_LIST_RESULT_ACTIONS_BY_CAMPAIGN, async (_, campaignId: number) => {
+    return supabase.listResultActionsByCampaign(campaignId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DB_CREATE_RESULT_ACTION, async (_, actionData) => {
+    return supabase.createResultAction(actionData)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DB_DELETE_RESULT_ACTION, async (_, id: number) => {
+    return supabase.deleteResultAction(id)
   })
 
   // Scheduler

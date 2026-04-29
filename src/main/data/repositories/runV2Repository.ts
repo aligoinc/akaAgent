@@ -8,7 +8,7 @@ function mapRunFromDB(row: Record<string, unknown>): RunV2 {
     id: row.id as number,
     workflowId: row.workflow_id as number | undefined,
     campaignId: row.campaign_id as number | undefined,
-    campaignDetailId: row.campaign_detail_id as number | undefined,
+    campaignDataActionId: row.campaign_data_action_id as number | undefined,
     channelId: row.channel_id as number | undefined,
     status: row.status as RunV2['status'],
     variables: (row.variables as Record<string, unknown>) || {},
@@ -42,7 +42,8 @@ export async function createRun(run: Omit<RunV2, 'id' | 'steps' | 'createdAt'>):
   const payload = {
     workflow_id: run.workflowId ?? null,
     campaign_id: run.campaignId ?? null,
-    campaign_detail_id: run.campaignDetailId ?? null,
+    campaign_detail_id: null,                                    // legacy column — luôn NULL với code mới
+    campaign_data_action_id: run.campaignDataActionId ?? null,
     channel_id: run.channelId ?? null,
     status: run.status,
     variables: run.variables,

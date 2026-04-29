@@ -1,4 +1,4 @@
-import { FlowData, ExecutionRun, ExecutionStep, OrgChannel, Campaign, CampaignAction, CampaignDetail, OrgChannelContact, ContactType, CampaignDetailAction, ElementDefinition, ActionType } from '../../shared/types'
+import { FlowData, ExecutionRun, ExecutionStep, OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, CampaignDataStatus, CampaignResultStatus, OrgChannelContact, ContactType, ElementDefinition, ActionType } from '../../shared/types'
 
 export function mapFlowFromDB(row: Record<string, unknown>): FlowData {
   return {
@@ -116,7 +116,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
   }
 }
 
-export function mapCampaignDetailFromDB(row: Record<string, unknown>): CampaignDetail {
+export function mapCampaignDataInputFromDB(row: Record<string, unknown>): CampaignDataInput {
   return {
     id: row.id as number,
     campaignId: row.campaign_id as number,
@@ -124,7 +124,25 @@ export function mapCampaignDetailFromDB(row: Record<string, unknown>): CampaignD
     phone: row.phone as string | undefined,
     uid: row.uid as string | undefined,
     email: row.email as string | undefined,
-    status: row.status as string,
+    status: row.status as CampaignDataStatus,
+    note: row.note as string | undefined,
+    schedule: row.schedule as string | undefined,
+    dateAction: row.date_action as string | undefined,
+    isDelete: row.is_delete as boolean,
+    createdAt: row.created_at as string
+  }
+}
+
+export function mapCampaignDataActionFromDB(row: Record<string, unknown>): CampaignDataAction {
+  return {
+    id: row.id as number,
+    campaignId: row.campaign_id as number,
+    dataInputId: (row.data_input_id as number | null) ?? null,
+    name: row.name as string | undefined,
+    phone: row.phone as string | undefined,
+    uid: row.uid as string | undefined,
+    email: row.email as string | undefined,
+    status: row.status as CampaignDataStatus,
     note: row.note as string | undefined,
     schedule: row.schedule as string | undefined,
     dateAction: row.date_action as string | undefined,
@@ -150,14 +168,14 @@ export function mapChannelContactFromDB(row: Record<string, unknown>): OrgChanne
   }
 }
 
-export function mapDetailActionFromDB(row: Record<string, unknown>): CampaignDetailAction {
+export function mapResultActionFromDB(row: Record<string, unknown>): CampaignResultAction {
   return {
     id: row.id as number,
-    campaignDetailId: row.campaign_detail_id as number | undefined,
+    dataActionId: (row.data_action_id as number | null) ?? null,
     campaignId: row.campaign_id as number,
     channelId: row.channel_id as number | undefined,
     actionName: row.action_name as string,
-    status: row.status as string,
+    status: row.status as CampaignResultStatus,
     log: row.log as string | undefined,
     data: row.data as Record<string, unknown> | undefined,
     postUrl: row.post_url as string | undefined,

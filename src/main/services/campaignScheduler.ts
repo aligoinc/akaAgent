@@ -3,7 +3,7 @@ import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { FlowRunner } from '../playwright/flowRunner'
-import { IPC_CHANNELS, ExecutionStep, Campaign, CampaignDetail } from '../../shared/types'
+import { IPC_CHANNELS, ExecutionStep, Campaign, CampaignDataAction } from '../../shared/types'
 import { IPC_CHANNELS_V2, RunStepV2 } from '../../shared/v2Types'
 import {
   FB_SHARE_POST_WORKFLOW_ID,
@@ -156,9 +156,9 @@ export class CampaignScheduler {
 
     if ((scheduleType === 'weekly' || scheduleType === 'monthly') && campaign.refreshData) {
       // Reset all detail statuses to pending
-      const details = await this.supabase.listCampaignDetails(campaign.id)
+      const details = await this.supabase.listCampaignDataActions(campaign.id)
       for (const detail of details) {
-        await this.supabase.updateCampaignDetail(detail.id, {
+        await this.supabase.updateCampaignDataAction(detail.id, {
           status: 'chờ xử lý',
           note: ''
         })
@@ -258,7 +258,7 @@ export class CampaignScheduler {
       }
 
       // Get campaign details
-      const details = await this.supabase.listCampaignDetails(campaign.id)
+      const details = await this.supabase.listCampaignDataActions(campaign.id)
 
       // Shuffle details if shuffleGroupList is enabled (Fisher-Yates shuffle)
       if (campaign.extraSettings?.shuffleGroupList && details.length > 1) {
@@ -375,20 +375,20 @@ export class CampaignScheduler {
       await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
-      await this.recoverStuckDetails(campaign.id, errMsg)
+      await this.recoverStuckDataActions(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
-      // Đối với simple campaign (không có detail row), ghi 1 entry vào detail_actions
+      // Đối với simple campaign (không có data_action row), ghi 1 entry vào result_actions
       // để khách hàng có lịch sử lỗi để xem.
       if (campaign.actionId === 'facebook_timeline_post') {
         try {
-          await this.supabase.createDetailAction({
+          await this.supabase.createResultAction({
             campaignId: campaign.id,
             channelId: channel.id,
             actionName: 'Đăng bài',
-            status: 'error',
+            status: 'lỗi',
             log: errMsg
           })
         } catch {}
@@ -420,7 +420,7 @@ export class CampaignScheduler {
     }
 
     // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
-    let details = await this.supabase.listCampaignDetails(campaign.id)
+    let details = await this.supabase.listCampaignDataActions(campaign.id)
 
     // Shuffle group list nếu enabled
     if (campaign.extraSettings?.shuffleGroupList && details.length > 1 && campaign.actionId === 'facebook_group_post') {
@@ -492,7 +492,7 @@ export class CampaignScheduler {
 
       // Update detail status running
       if (detail) {
-        await this.supabase.updateCampaignDetail(detail.id, {
+        await this.supabase.updateCampaignDataAction(detail.id, {
           status: 'đang chạy',
           dateAction: new Date().toISOString()
         })
@@ -507,7 +507,7 @@ export class CampaignScheduler {
         const result = await this.engineV2.run(workflowV2Id, variables, page, {
           channelId: channel.id,
           campaignId: campaign.id,
-          campaignDetailId: detail?.id,
+          campaignDataActionId: detail?.id,
           signal: abort.signal,
           persist: true,
           onStepProgress: (step: RunStepV2) => {
@@ -523,12 +523,13 @@ export class CampaignScheduler {
 
         if (detail) {
           if (result.status === 'completed') {
-            await this.supabase.updateCampaignDetail(detail.id, { status: 'hoàn thành' })
+            await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành' })
             await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detail.name || detail.uid || 'N/A'}`)
             this.sendLog(`✅ Hoàn thành "${detail.name || detail.uid || 'N/A'}"`)
           } else {
+            // data_actions enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở result_actions)
             const errMsg = result.error || 'Lỗi không xác định'
-            await this.supabase.updateCampaignDetail(detail.id, { status: 'lỗi', note: errMsg })
+            await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành', note: errMsg })
             await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detail.name || detail.uid || 'N/A'} - ${errMsg}`)
             this.sendLog(`❌ Lỗi "${detail.name || detail.uid || 'N/A'}": ${errMsg}`)
           }
@@ -536,7 +537,7 @@ export class CampaignScheduler {
       } catch (err: any) {
         const errMsg = err?.message || String(err)
         if (detail) {
-          await this.supabase.updateCampaignDetail(detail.id, { status: 'lỗi', note: errMsg })
+          await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành', note: errMsg })
         }
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
         this.sendLog(`❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
@@ -598,7 +599,7 @@ export class CampaignScheduler {
   /** Build variables object inject vào engine v2. Giữ key tương thích với scheduler cũ. */
   private buildVariablesV2(
     campaign: Campaign,
-    detail: CampaignDetail | null,
+    detail: CampaignDataAction | null,
     channelId: number,
     currentSourceLink: string,
     detailIndex: number
@@ -677,11 +678,14 @@ export class CampaignScheduler {
    *   - fb_comment_at_position → "Comment"
    *   - fb_send_message → "Nhắn tin"
    *   - fb_add_friend → "Kết bạn"
-   * Mỗi success milestone ghi 1 row vào auto_campaign_detail_actions.
+   * Mỗi milestone ghi 1 row vào auto_campaign_result_actions với status:
+   *   - 'thành công' = action OK
+   *   - 'thất bại'   = nghiệp vụ FB từ chối (output.ok=false không exception)
+   *   - 'lỗi'        = exception/crash code (step.status='error')
    */
   private async logMilestonesV2(
     campaign: Campaign,
-    detail: CampaignDetail | null,
+    detail: CampaignDataAction | null,
     channelId: number,
     steps: RunStepV2[],
     overallSuccess: boolean
@@ -694,13 +698,14 @@ export class CampaignScheduler {
     for (const s of postSteps) {
       try {
         const isPending = steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true
-        await this.supabase.createDetailAction({
-          campaignDetailId: detail?.id,
+        await this.supabase.createResultAction({
+          dataActionId: detail?.id,
           campaignId: campaign.id,
           channelId,
           actionName: 'Đăng bài',
-          status: 'success',
-          log: detail ? `Đăng bài thành công vào ${detailName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công'
+          status: 'thành công',
+          log: detail ? `Đăng bài thành công vào ${detailName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
+          data: isPending ? { isPending: true } : undefined
         })
         this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${detailName}"` : ''}`)
         if (isPending) this.sendLog(`⏳ Bài đang chờ duyệt`)
@@ -718,12 +723,12 @@ export class CampaignScheduler {
       const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
       const target = position === 1 ? 'bài của mình' : `bài thứ ${position}`
       try {
-        await this.supabase.createDetailAction({
-          campaignDetailId: detail?.id,
+        await this.supabase.createResultAction({
+          dataActionId: detail?.id,
           campaignId: campaign.id,
           channelId,
           actionName: 'Comment',
-          status: 'success',
+          status: 'thành công',
           log: `Đã comment vào ${target}: "${preview}"`,
           data: { commentPosition: position, iteration: i + 1, commentContent: text }
         })
@@ -731,26 +736,30 @@ export class CampaignScheduler {
       } catch (err) { console.error('Failed log comment:', err) }
     }
 
-    // Nhắn tin
+    // Nhắn tin — phân biệt 3 status: thành công / thất bại (FB block) / lỗi (exception)
     const msgSteps = steps.filter(s => s.blockName === 'fb_send_message')
     for (const s of msgSteps) {
-      const ok = s.status === 'success' && (s.output as any)?.ok === true
-      const errMsg = (s.output as any)?.error || s.error || 'Lỗi không xác định'
+      const out = (s.output as any) || {}
+      const errMsg = out.error || s.error || 'Lỗi không xác định'
+      const status: 'thành công' | 'thất bại' | 'lỗi' =
+        s.status === 'error' ? 'lỗi'
+        : out.ok === true ? 'thành công'
+        : 'thất bại'
       try {
-        await this.supabase.createDetailAction({
-          campaignDetailId: detail?.id,
+        await this.supabase.createResultAction({
+          dataActionId: detail?.id,
           campaignId: campaign.id,
           channelId,
           actionName: 'Nhắn tin',
-          status: ok ? 'success' : 'error',
-          log: ok ? `Nhắn tin thành công đến ${detailName}` : `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
+          status,
+          log: status === 'thành công' ? `Nhắn tin thành công đến ${detailName}` : `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
         })
-        if (ok) this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
+        if (status === 'thành công') this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
         else this.sendLog(`❌ Lỗi nhắn tin "${detailName}": ${errMsg}`)
       } catch (err) { console.error('Failed log message:', err) }
     }
 
-    // Kết bạn — phân biệt 3 case: clicked (kết bạn thật), alreadyFriend (đã là bạn / nút ẩn), error.
+    // Kết bạn — alreadyFriend / clicked = thành công; ok=false không exception = thất bại; exception = lỗi
     const friendSteps = steps.filter(s => s.blockName === 'fb_add_friend')
     for (const s of friendSteps) {
       const out = (s.output as any) || {}
@@ -761,34 +770,35 @@ export class CampaignScheduler {
 
       try {
         if (alreadyFriend) {
-          // Skip case — không phải lỗi, không phải success thật. Ghi info để khách hàng biết.
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail?.id,
+          await this.supabase.createResultAction({
+            dataActionId: detail?.id,
             campaignId: campaign.id,
             channelId,
             actionName: 'Kết bạn',
-            status: 'success',
+            status: 'thành công',
             log: `Bỏ qua kết bạn với ${detailName} (đã là bạn bè hoặc nút bị ẩn)`,
             data: { alreadyFriend: true }
           })
           this.sendLog(`ℹ️ Bỏ qua kết bạn với "${detailName}" (đã là bạn hoặc nút bị ẩn)`)
         } else if (clicked) {
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail?.id,
+          await this.supabase.createResultAction({
+            dataActionId: detail?.id,
             campaignId: campaign.id,
             channelId,
             actionName: 'Kết bạn',
-            status: 'success',
+            status: 'thành công',
             log: `Kết bạn thành công với ${detailName}`
           })
           this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
         } else {
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail?.id,
+          // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
+          const status: 'thất bại' | 'lỗi' = s.status === 'error' ? 'lỗi' : 'thất bại'
+          await this.supabase.createResultAction({
+            dataActionId: detail?.id,
             campaignId: campaign.id,
             channelId,
             actionName: 'Kết bạn',
-            status: 'error',
+            status,
             log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
           })
           this.sendLog(`❌ Lỗi kết bạn "${detailName}": ${errMsg}`)
@@ -797,19 +807,20 @@ export class CampaignScheduler {
     }
   }
 
-  private async recoverStuckDetails(campaignId: number, errMsg: string): Promise<void> {
+  private async recoverStuckDataActions(campaignId: number, errMsg: string): Promise<void> {
     try {
-      const details = await this.supabase.listCampaignDetails(campaignId)
+      const details = await this.supabase.listCampaignDataActions(campaignId)
       for (const d of details) {
         if (d.status === 'đang chạy') {
-          await this.supabase.updateCampaignDetail(d.id, {
-            status: 'lỗi',
+          // data_actions enum không có 'lỗi' — flag bằng 'hoàn thành' + note
+          await this.supabase.updateCampaignDataAction(d.id, {
+            status: 'hoàn thành',
             note: `Dừng đột ngột: ${errMsg}`
           })
         }
       }
     } catch (recoverErr) {
-      console.error('Failed to recover stuck details:', recoverErr)
+      console.error('Failed to recover stuck data actions:', recoverErr)
     }
   }
 
@@ -817,14 +828,14 @@ export class CampaignScheduler {
     channelId: number,
     campaign: Campaign,
     flow: import('../../shared/types').FlowData,
-    detail: CampaignDetail | null,
+    detail: CampaignDataAction | null,
     detailIndex: number = 0
   ): Promise<void> {
     const detailName = detail?.name || detail?.uid || 'N/A'
 
     // Update detail status
     if (detail) {
-      await this.supabase.updateCampaignDetail(detail.id, {
+      await this.supabase.updateCampaignDataAction(detail.id, {
         status: 'đang chạy',
         dateAction: new Date().toISOString()
       })
@@ -1001,15 +1012,15 @@ export class CampaignScheduler {
       if (result.status === 'completed') {
         this.sendLog(`📝 Đăng bài thành công`)
         try {
-          await this.supabase.createDetailAction({
+          await this.supabase.createResultAction({
             campaignId: campaign.id,
             channelId: channelId,
             actionName: 'Đăng bài',
-            status: 'success',
+            status: 'thành công',
             log: 'Đăng bài thành công'
           })
         } catch (logErr) {
-          console.error('Failed to log post detail action (no detail):', logErr)
+          console.error('Failed to log post result action (no data action):', logErr)
         }
       } else {
         // Throw để outer try/catch ghi 1 entry detail_action lỗi (campaign status
@@ -1027,16 +1038,17 @@ export class CampaignScheduler {
         if (isPendingPost) this.sendLog(`⏳ Bài đang chờ duyệt`)
 
         try {
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
+          await this.supabase.createResultAction({
+            dataActionId: detail.id,
             campaignId: campaign.id,
             channelId: channelId,
             actionName: 'Đăng bài',
-            status: 'success',
-            log: `Đăng bài thành công vào ${detailName}${postPendingNote ? ` (${postPendingNote})` : ''}`
+            status: 'thành công',
+            log: `Đăng bài thành công vào ${detailName}${postPendingNote ? ` (${postPendingNote})` : ''}`,
+            data: isPendingPost ? { isPending: true } : undefined
           })
         } catch (logErr) {
-          console.error('Failed to log post detail action:', logErr)
+          console.error('Failed to log post result action:', logErr)
         }
       }
 
@@ -1049,12 +1061,12 @@ export class CampaignScheduler {
           const preview = commentBody.length > 50 ? commentBody.substring(0, 50) + '...' : commentBody
           const target = commentType === 'own' ? 'bài của mình' : `bài thứ ${position}`
           try {
-            await this.supabase.createDetailAction({
-              campaignDetailId: detail.id,
+            await this.supabase.createResultAction({
+              dataActionId: detail.id,
               campaignId: campaign.id,
               channelId: channelId,
               actionName: 'Comment',
-              status: 'success',
+              status: 'thành công',
               log: `Đã comment vào ${target}: "${preview}"`,
               data: {
                 commentType,
@@ -1065,14 +1077,14 @@ export class CampaignScheduler {
             })
             this.sendLog(`💬 Đã comment vào ${target} tại "${detailName}"`)
           } catch (logErr) {
-            console.error('Failed to log comment detail action:', logErr)
+            console.error('Failed to log comment result action:', logErr)
           }
         }
       }
 
-      // ----- Overall detail status -----
+      // ----- Overall data_action status -----
       if (result.status === 'completed') {
-        await this.supabase.updateCampaignDetail(detail.id, {
+        await this.supabase.updateCampaignDataAction(detail.id, {
           status: 'hoàn thành',
           note: postPendingNote || undefined
         })
@@ -1092,24 +1104,25 @@ export class CampaignScheduler {
           failureLabel = 'Lỗi thực thi'
         }
 
-        await this.supabase.updateCampaignDetail(detail.id, {
-          status: 'lỗi',
+        // data_actions enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở result_actions)
+        await this.supabase.updateCampaignDataAction(detail.id, {
+          status: 'hoàn thành',
           note: errorMsg
         })
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detailName} - ${errorMsg}`)
         this.sendLog(`❌ Lỗi "${detailName}": ${errorMsg}`)
 
         try {
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
+          await this.supabase.createResultAction({
+            dataActionId: detail.id,
             campaignId: campaign.id,
             channelId: channelId,
             actionName: failureLabel,
-            status: 'error',
+            status: 'lỗi',
             log: errorMsg
           })
         } catch (logErr) {
-          console.error('Failed to log error action:', logErr)
+          console.error('Failed to log error result action:', logErr)
         }
       }
     }
@@ -1230,7 +1243,7 @@ export class CampaignScheduler {
       return
     }
 
-    const details = await this.supabase.listCampaignDetails(campaign.id)
+    const details = await this.supabase.listCampaignDataActions(campaign.id)
     if (details.length === 0) {
       await this.supabase.appendCampaignLog(campaign.id, 'Không có data để xử lý')
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
@@ -1263,13 +1276,14 @@ export class CampaignScheduler {
       const uid = detail.uid ? this.extractUidFromInput(detail.uid) : ''
 
       if (!uid) {
-        await this.supabase.updateCampaignDetail(detail.id, { status: 'lỗi', note: 'Thiếu UID' })
-        await this.supabase.createDetailAction({
-          campaignDetailId: detail.id,
+        // data_actions enum không có 'lỗi' — set 'hoàn thành' + note
+        await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành', note: 'Thiếu UID' })
+        await this.supabase.createResultAction({
+          dataActionId: detail.id,
           campaignId: campaign.id,
           channelId: channel.id,
           actionName: 'Bỏ qua',
-          status: 'error',
+          status: 'thất bại',                                 // data quality issue, không phải code crash
           log: `Bỏ qua ${detailName}: thiếu UID`
         })
         continue
@@ -1289,7 +1303,7 @@ export class CampaignScheduler {
         console.error('Rate limit check error:', err)
       }
 
-      await this.supabase.updateCampaignDetail(detail.id, {
+      await this.supabase.updateCampaignDataAction(detail.id, {
         status: 'đang chạy',
         dateAction: new Date().toISOString()
       })
@@ -1361,24 +1375,26 @@ export class CampaignScheduler {
       if (effectiveEnableMessage && msgStep) {
         const msgOk = msgStep.status === 'success' && (msgStep.output as any)?.ok === true
         if (msgOk) {
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
+          await this.supabase.createResultAction({
+            dataActionId: detail.id,
             campaignId: campaign.id,
             channelId: channel.id,
             actionName: 'Nhắn tin',
-            status: 'success',
+            status: 'thành công',
             log: `Nhắn tin thành công đến ${detailName}`
           })
           this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
         } else {
           detailSuccess = false
           const errMsg = (msgStep.output as any)?.error || msgStep.error || runError || 'Lỗi không xác định'
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
+          // step.status='error' → exception → 'lỗi'; ngược lại (output.ok=false) → FB từ chối → 'thất bại'
+          const status: 'thất bại' | 'lỗi' = msgStep.status === 'error' ? 'lỗi' : 'thất bại'
+          await this.supabase.createResultAction({
+            dataActionId: detail.id,
             campaignId: campaign.id,
             channelId: channel.id,
             actionName: 'Nhắn tin',
-            status: 'error',
+            status,
             log: `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
           })
           this.sendLog(`❌ Lỗi nhắn tin "${detailName}": ${errMsg}`)
@@ -1389,33 +1405,34 @@ export class CampaignScheduler {
       if (enableAddFriend && friendStep) {
         const frdOk = friendStep.status === 'success' && (friendStep.output as any)?.ok === true
         if (frdOk) {
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
+          await this.supabase.createResultAction({
+            dataActionId: detail.id,
             campaignId: campaign.id,
             channelId: channel.id,
             actionName: 'Kết bạn',
-            status: 'success',
+            status: 'thành công',
             log: `Kết bạn thành công với ${detailName}`
           })
           this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
         } else {
           detailSuccess = false
           const errMsg = (friendStep.output as any)?.error || friendStep.error || runError || 'Lỗi không xác định'
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
+          const status: 'thất bại' | 'lỗi' = friendStep.status === 'error' ? 'lỗi' : 'thất bại'
+          await this.supabase.createResultAction({
+            dataActionId: detail.id,
             campaignId: campaign.id,
             channelId: channel.id,
             actionName: 'Kết bạn',
-            status: 'error',
+            status,
             log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
           })
           this.sendLog(`❌ Lỗi kết bạn "${detailName}": ${errMsg}`)
         }
       }
 
-      // Update detail status
-      await this.supabase.updateCampaignDetail(detail.id, {
-        status: detailSuccess ? 'hoàn thành' : 'lỗi',
+      // Update data_action status — enum không có 'lỗi', dùng 'hoàn thành' + note (lỗi nằm ở result_actions)
+      await this.supabase.updateCampaignDataAction(detail.id, {
+        status: 'hoàn thành',
         note: detailSuccess ? '' : 'Có lỗi xảy ra'
       })
       await this.supabase.appendCampaignLog(campaign.id,
@@ -1559,11 +1576,11 @@ export class CampaignScheduler {
       // Bổ sung log specific cho share/reels (runWorkflowForDetail log "Đăng bài" chung)
       if (actionLabel !== 'Đăng bài') {
         try {
-          await this.supabase.createDetailAction({
+          await this.supabase.createResultAction({
             campaignId: campaign.id,
             channelId: channel.id,
             actionName: actionLabel,
-            status: 'success',
+            status: 'thành công',
             log: currentLink ? `${actionLabel} thành công (nguồn: ${currentLink})` : `${actionLabel} thành công`,
             postUrl: currentLink || undefined
           })
@@ -1576,11 +1593,11 @@ export class CampaignScheduler {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
       try {
-        await this.supabase.createDetailAction({
+        await this.supabase.createResultAction({
           campaignId: campaign.id,
           channelId: channel.id,
           actionName: actionLabel,
-          status: 'error',
+          status: 'lỗi',
           log: errMsg
         })
       } catch {}
