@@ -1,13 +1,13 @@
 import { BrowserWindow } from 'electron'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { IPC_CHANNELS, ContactType, FlatformContact } from '../../shared/types'
+import { IPC_CHANNELS, ContactType, OrgChannelContact } from '../../shared/types'
 
 type ProgressCallback = (message: string) => void
 
 /**
  * ContactLoader: scrapes Facebook friends list and groups list
- * from an account's embedded webview, then saves results to auto_flatform_contacts.
+ * from a channel's embedded webview, then saves results to org_channel_contacts.
  */
 export class ContactLoader {
   private supabase: SupabaseService
@@ -27,32 +27,32 @@ export class ContactLoader {
   }
 
   /**
-   * Load friends list for a Facebook account.
+   * Load friends list for a Facebook channel.
    */
-  async loadFriends(flatformAccountId: number): Promise<{ success: boolean; count: number; error?: string }> {
-    return this.loadContacts(flatformAccountId, 'friend', 'https://www.facebook.com/friends/list', this.scrapeFriends.bind(this))
+  async loadFriends(channelId: number): Promise<{ success: boolean; count: number; error?: string }> {
+    return this.loadContacts(channelId, 'friend', 'https://www.facebook.com/friends/list', this.scrapeFriends.bind(this))
   }
 
   /**
-   * Load groups list for a Facebook account.
+   * Load groups list for a Facebook channel.
    */
-  async loadGroups(flatformAccountId: number): Promise<{ success: boolean; count: number; error?: string }> {
-    return this.loadContacts(flatformAccountId, 'group', 'https://www.facebook.com/groups/joins/', this.scrapeGroups.bind(this))
+  async loadGroups(channelId: number): Promise<{ success: boolean; count: number; error?: string }> {
+    return this.loadContacts(channelId, 'group', 'https://www.facebook.com/groups/joins/', this.scrapeGroups.bind(this))
   }
 
   private async loadContacts(
-    flatformAccountId: number,
+    channelId: number,
     contactType: ContactType,
     targetUrl: string,
-    scrapeFn: (wc: Electron.WebContents) => Promise<Partial<FlatformContact>[]>
+    scrapeFn: (wc: Electron.WebContents) => Promise<Partial<OrgChannelContact>[]>
   ): Promise<{ success: boolean; count: number; error?: string }> {
     // Validate webview is available
-    const controller = this.webviewRegistry.getController(flatformAccountId)
+    const controller = this.webviewRegistry.getController(channelId)
     if (!controller || !controller.isConnected()) {
       return { success: false, count: 0, error: 'Tab trình duyệt chưa được mở hoặc không khả dụng' }
     }
 
-    const wcId = this.webviewRegistry.getWebContentsId(flatformAccountId)
+    const wcId = this.webviewRegistry.getWebContentsId(channelId)
     if (!wcId) {
       return { success: false, count: 0, error: 'Không tìm thấy webContents cho tài khoản này' }
     }
@@ -80,10 +80,10 @@ export class ContactLoader {
         return { success: false, count: 0, error: `Không tìm thấy ${typeName} nào` }
       }
 
-      // Add flatformAccountId and contactType to each contact
+      // Add channelId and contactType to each contact
       const contactsWithMeta = contacts.map(c => ({
         ...c,
-        flatformAccountId,
+        channelId,
         contactType
       }))
 
@@ -236,7 +236,7 @@ export class ContactLoader {
   /**
    * Scrape friends from facebook.com/friends/list page.
    */
-  private async scrapeFriends(wc: Electron.WebContents): Promise<Partial<FlatformContact>[]> {
+  private async scrapeFriends(wc: Electron.WebContents): Promise<Partial<OrgChannelContact>[]> {
     // Scroll to load all friends
     await this.scrollAndWait(wc, 50, 1500)
 
@@ -319,13 +319,13 @@ export class ContactLoader {
       })()
     `)
 
-    return (results || []) as Partial<FlatformContact>[]
+    return (results || []) as Partial<OrgChannelContact>[]
   }
 
   /**
    * Scrape groups from facebook.com/groups/joins/ page.
    */
-  private async scrapeGroups(wc: Electron.WebContents): Promise<Partial<FlatformContact>[]> {
+  private async scrapeGroups(wc: Electron.WebContents): Promise<Partial<OrgChannelContact>[]> {
     // Scroll to load all groups
     await this.scrollAndWait(wc, 30, 1500)
 
@@ -371,6 +371,6 @@ export class ContactLoader {
       })()
     `)
 
-    return (results || []) as Partial<FlatformContact>[]
+    return (results || []) as Partial<OrgChannelContact>[]
   }
 }

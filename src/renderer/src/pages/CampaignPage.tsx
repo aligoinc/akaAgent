@@ -1,15 +1,15 @@
 import { useState, useCallback, useRef } from 'react'
-import AccountPanel from '../components/CampaignPanels/AccountPanel'
+import ChannelPanel from '../components/CampaignPanels/ChannelPanel'
 import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
 
 interface CampaignPageProps {
-  onNavigateToBrowser?: (accountId: number) => void
+  onNavigateToBrowser?: (channelId: number) => void
 }
 
 export default function CampaignPage({ onNavigateToBrowser }: CampaignPageProps) {
-  const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
-  const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
+  const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // channelW, auto, logW
+  const [filterChannelId, setFilterChannelId] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef<{ index: number; startX: number; startWidths: number[] } | null>(null)
 
@@ -24,7 +24,7 @@ export default function CampaignPage({ onNavigateToBrowser }: CampaignPageProps)
       const newWidths = [...draggingRef.current.startWidths]
 
       if (draggingRef.current.index === 0) {
-        // Resize between account and campaign panels
+        // Resize between channel and campaign panels
         newWidths[0] = Math.max(180, Math.min(500, draggingRef.current.startWidths[0] + dx))
       } else if (draggingRef.current.index === 1) {
         // Resize between campaign and log panels
@@ -48,15 +48,15 @@ export default function CampaignPage({ onNavigateToBrowser }: CampaignPageProps)
     document.addEventListener('mouseup', handleMouseUp)
   }, [panelWidths])
 
-  const handleFilterCampaigns = useCallback((accountId: number | null) => {
-    setFilterAccountId(accountId)
+  const handleFilterCampaigns = useCallback((channelId: number | null) => {
+    setFilterChannelId(channelId)
   }, [])
 
   return (
     <div className="campaign-page" ref={containerRef}>
-      {/* Account Panel */}
+      {/* Channel Panel */}
       <div className="campaign-page-panel" style={{ width: panelWidths[0], minWidth: 180 }}>
-        <AccountPanel 
+        <ChannelPanel 
           onNavigateToBrowser={onNavigateToBrowser}
           onFilterCampaigns={handleFilterCampaigns}
         />
@@ -71,8 +71,8 @@ export default function CampaignPage({ onNavigateToBrowser }: CampaignPageProps)
       {/* Campaign Panel (takes remaining space) */}
       <div className="campaign-page-panel" style={{ flex: 1, minWidth: 300 }}>
         <CampaignPanel 
-          filterAccountId={filterAccountId}
-          onClearFilter={() => setFilterAccountId(null)}
+          filterChannelId={filterChannelId}
+          onClearFilter={() => setFilterChannelId(null)}
         />
       </div>
 

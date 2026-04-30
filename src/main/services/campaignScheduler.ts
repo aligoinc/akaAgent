@@ -2,21 +2,40 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { FlowRunner } from '../playwright/flowRunner'
-import { IPC_CHANNELS, ExecutionStep, Campaign, CampaignDetail } from '../../shared/types'
+import { IPC_CHANNELS, Campaign, CampaignDataAction } from '../../shared/types'
+import { IPC_CHANNELS_V2, RunStepV2 } from '../../shared/v2Types'
+import { PageControllerRegistry } from '../v2/runtime/pageController'
+import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
 
+/**
+ * Campaign scheduler: every 30s, scan eligible channels for due campaigns and
+ * run their associated workflow v2 against the channel's embedded webview.
+ *
+ * Engine v2 is the only execution path. Each campaign action template
+ * (`auto_campaign_actions.workflow_v2_id`) points to a workflow that already
+ * encodes the full per-action logic (post / share / reels / message / friend
+ * with internal ifElse on extraSettings flags). Scheduler only orchestrates
+ * scheduling, rate limits, and per-milestone logging.
+ */
 export class CampaignScheduler {
   private supabase: SupabaseService
   private webviewRegistry: WebviewRegistry
+  private pageRegistry: PageControllerRegistry | null = null
+  private engineV2 = new WorkflowEngineV2()
   private mainWindow: BrowserWindow
   private intervalId: ReturnType<typeof setInterval> | null = null
   private running = false
   private processing = false
+  private activeV2Aborts = new Map<number, AbortController>()
 
   constructor(supabase: SupabaseService, webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow) {
     this.supabase = supabase
     this.webviewRegistry = webviewRegistry
     this.mainWindow = mainWindow
+  }
+
+  setPageRegistry(reg: PageControllerRegistry): void {
+    this.pageRegistry = reg
   }
 
   start(): void {
@@ -46,26 +65,26 @@ export class CampaignScheduler {
     this.processing = true
 
     try {
-      // 1. Get eligible accounts
-      const accounts = await this.supabase.getEligibleAccounts()
-      if (accounts.length === 0) {
+      // 1. Get eligible channels
+      const channels = await this.supabase.getEligibleChannels()
+      if (channels.length === 0) {
         this.processing = false
         return
       }
 
-      for (const account of accounts) {
-        // 2. Get pending campaigns for this account
-        const campaigns = await this.supabase.getPendingCampaigns(account.id)
+      for (const channel of channels) {
+        // 2. Get pending campaigns for this channel
+        const campaigns = await this.supabase.getPendingCampaigns(channel.id)
         if (campaigns.length === 0) continue
 
-        // Check browser webview is registered for this account
-        if (!this.webviewRegistry.isRegistered(account.id)) {
-          this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở tab trình duyệt. Bỏ qua.`)
+        // Check browser webview is registered for this channel
+        if (!this.webviewRegistry.isRegistered(channel.id)) {
+          this.sendLog(`⚠️ Tài khoản "${channel.name}" chưa mở tab trình duyệt. Bỏ qua.`)
           continue
         }
 
         for (const campaign of campaigns) {
-          await this.executeCampaign(account, campaign)
+          await this.executeCampaign(channel, campaign)
         }
       }
     } catch (err) {
@@ -81,7 +100,7 @@ export class CampaignScheduler {
    */
   private shouldRunToday(campaign: Campaign): boolean {
     const now = new Date()
-    
+
     // Check if past the end date
     if (campaign.scheduleEndDate) {
       const endDate = new Date(campaign.scheduleEndDate)
@@ -129,8 +148,7 @@ export class CampaignScheduler {
     if (campaign.scheduleEndDate) {
       const endDate = new Date(campaign.scheduleEndDate)
       if (now >= endDate) {
-        // Past end date, mark as complete
-        await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
         await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch (đã hết ngày kết thúc)`)
         this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
         return
@@ -139,9 +157,9 @@ export class CampaignScheduler {
 
     if ((scheduleType === 'weekly' || scheduleType === 'monthly') && campaign.refreshData) {
       // Reset all detail statuses to pending
-      const details = await this.supabase.listCampaignDetails(campaign.id)
+      const details = await this.supabase.listCampaignDataActions(campaign.id)
       for (const detail of details) {
-        await this.supabase.updateCampaignDetail(detail.id, {
+        await this.supabase.updateCampaignDataAction(detail.id, {
           status: 'chờ xử lý',
           note: ''
         })
@@ -154,325 +172,490 @@ export class CampaignScheduler {
         tomorrow.setDate(tomorrow.getDate() + 1)
         tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
 
-        await this.supabase.updateCampaign(campaign.id, {
+        await this.updateCampaignAndBroadcast(campaign.id, {
           status: 'chờ xử lý',
           schedule: tomorrow.toISOString()
         })
         await this.supabase.appendCampaignLog(campaign.id, `Dữ liệu đã được làm mới. Chạy lại lúc ${tomorrow.toLocaleString('vi-VN')}`)
         this.sendLog(`🔄 Chiến dịch "${campaign.name}": dữ liệu đã reset, chạy lại ${tomorrow.toLocaleString('vi-VN')}`)
       } else {
-        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
       }
       return
     }
 
     // Default: mark as complete
-    await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
+    await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
     await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch`)
     this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
 
-  private async executeCampaign(account: import('../../shared/types').FlatformAccount, campaign: Campaign): Promise<void> {
-    // Check schedule type eligibility
-    if (!this.shouldRunToday(campaign)) {
-      return
-    }
+  private async executeCampaign(channel: import('../../shared/types').OrgChannel, campaign: Campaign): Promise<void> {
+    if (!this.shouldRunToday(campaign)) return
 
     try {
-      // Update campaign status to running
-      await this.supabase.updateCampaign(campaign.id, { status: 'đang chạy' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy' })
       await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
-      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
+      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${channel.name}"`)
 
-      // Update account status to running
-      await this.supabase.updateAccount(account.id, { status: 'đang chạy' })
+      await this.supabase.updateChannel(channel.id, { status: 'đang chạy' })
 
-      // Get the campaign action and its workflow
       const action = await this.supabase.getCampaignAction(campaign.actionId)
       if (!action) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy action "${campaign.actionId}"`)
         return
       }
 
-      // === Message & Friend Request campaign: no workflow, direct browser automation ===
-      if (campaign.actionId === 'facebook_message_friend') {
-        await this.executeMessageFriendCampaign(account, campaign)
+      if (!action.workflowV2Id) {
+        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Action "${action.name}" chưa được liên kết workflow v2`)
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+        this.sendLog(`❌ Chiến dịch "${campaign.name}": Action "${action.name}" chưa có workflow_v2_id`)
         return
       }
 
-      if (!action.workflowId) {
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy workflow`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
-        this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy workflow cho action "${campaign.actionId}"`)
-        return
+      if (!this.pageRegistry) {
+        throw new Error('pageRegistry chưa được set cho scheduler')
       }
 
-      // Load the workflow/flow
-      const flow = await this.supabase.loadFlow(action.workflowId)
-      if (!flow) {
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy flow ${action.workflowId}`)
-        await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
-        this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy flow`)
-        return
-      }
-
-      // Get campaign details
-      const details = await this.supabase.listCampaignDetails(campaign.id)
-
-      // Shuffle details if shuffleGroupList is enabled (Fisher-Yates shuffle)
-      if (campaign.extraSettings?.shuffleGroupList && details.length > 1) {
-        for (let i = details.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [details[i], details[j]] = [details[j], details[i]]
-        }
-        this.sendLog(`🔀 Đã xáo trộn danh sách ${details.length} group`)
-      }
-
-      if (details.length === 0) {
-        // No details, run workflow once with campaign info
-        // Check rate limits first
-        const limitConfig = campaign.extraSettings?.actionLimits
-        let overrideEnableComment = campaign.extraSettings?.enableComment ?? false
-
-        try {
-          const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, 'Đăng bài', limitConfig)
-          if (!limitStatus.ok) {
-            await this.supabase.appendCampaignLog(campaign.id, `Từ chối chạy do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
-            this.sendLog(`⚠️ Từ chối "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
-            await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
-            await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
-            return
-          }
-        } catch (err) {
-          console.error('Rate limit check error:', err)
-        }
-
-        const campaignToRun = {
-          ...campaign,
-          extraSettings: { ...campaign.extraSettings, enableComment: overrideEnableComment }
-        }
-        await this.runWorkflowForDetail(account.id, campaignToRun, flow, null)
-        await this.handleCampaignCompletion(campaign)
-      } else {
-        let rateLimitReached = false
-
-        // Run workflow for each detail
-        for (let i = 0; i < details.length; i++) {
-          // Kiểm tra xem chiến dịch có bị tạm dừng trong lúc đang chạy không
-          const currentCamp = await this.supabase.getCampaign(campaign.id);
-          if (currentCamp && currentCamp.status === 'tạm dừng') {
-            this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`);
-            await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
-            return; // Thoát khỏi chiến dịch hiện tại
-          }
-
-          const detail = details[i]
-          if (detail.status !== 'chờ xử lý') continue
-
-          const limitConfig = campaign.extraSettings?.actionLimits
-          let overrideEnableComment = campaign.extraSettings?.enableComment ?? false
-
-          // Check Rate limit before processing
-          try {
-            const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, 'Đăng bài', limitConfig)
-            if (!limitStatus.ok) {
-              rateLimitReached = true
-              await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng gửi do vượt giới hạn Đăng bài: ${limitStatus.reason}`)
-              this.sendLog(`⚠️ Tạm dừng "${campaign.name}" do giới hạn Đăng bài: ${limitStatus.reason}`)
-              break
-            }
-          } catch (err) {
-            console.error('Rate limit check error:', err)
-          }
-
-          const campaignToRun = {
-            ...campaign,
-            extraSettings: { ...campaign.extraSettings, enableComment: overrideEnableComment }
-          }
-          await this.runWorkflowForDetail(account.id, campaignToRun, flow, detail)
-
-          // Sleep between details
-          if (i < details.length - 1) {
-            const sleepTime = campaign.extraSettings?.actionLimits?.sleepBetweenActions || campaign.timeSleepBetween2 || 0
-              
-            if (sleepTime > 0) {
-              this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
-              await new Promise(resolve => setTimeout(resolve, sleepTime * 1000))
-            }
-          }
-        }
-
-        if (rateLimitReached) {
-          if (campaign.scheduleType === 'daily' && campaign.continueNextDay) {
-            // Update schedule to tomorrow, status to chờ xử lý
-            const now = new Date()
-            if (campaign.schedule) {
-              const schedDate = new Date(campaign.schedule)
-              const tomorrow = new Date(now)
-              tomorrow.setDate(tomorrow.getDate() + 1)
-              tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
-              
-              await this.supabase.updateCampaign(campaign.id, {
-                status: 'chờ xử lý',
-                schedule: tomorrow.toISOString()
-              })
-              await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do đạt giới hạn. Cập nhật lịch chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
-              this.sendLog(`🔄 Chiến dịch "${campaign.name}" sẽ chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
-            } else {
-              await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
-            }
-          } else {
-            await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
-          }
-        } else {
-          // Handle completion based on schedule type
-          await this.handleCampaignCompletion(campaign)
-        }
-      }
-
-      // Reset account status
-      await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+      await this.executeCampaignV2(channel, campaign, action.workflowV2Id)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
+      await this.recoverStuckDataActions(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
-      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
-      await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     }
   }
 
-  private async runWorkflowForDetail(
-    accountId: number,
+  // ============================================================
+  // V2 EXECUTOR — chạy workflow v2 cho campaign
+  // ============================================================
+  /**
+   * Engine v2 unified executor. Workflow v2 đã chứa logic ifElse cho các biến
+   * thể (sharePost / postAsReels / copyContentFromSource / enableComment /
+   * leaveGroup / joinGroup / enableMessage / enableAddFriend). Scheduler chỉ
+   * build variables, loop details, gọi engineV2.run.
+   */
+  private async executeCampaignV2(
+    channel: import('../../shared/types').OrgChannel,
     campaign: Campaign,
-    flow: import('../../shared/types').FlowData,
-    detail: CampaignDetail | null
+    workflowV2Id: number
   ): Promise<void> {
-    const detailName = detail?.name || detail?.uid || 'N/A'
-
-    // Update detail status
-    if (detail) {
-      await this.supabase.updateCampaignDetail(detail.id, {
-        status: 'đang chạy',
-        dateAction: new Date().toISOString()
-      })
-      await this.supabase.appendCampaignLog(campaign.id, `Đang xử lý: ${detailName}`)
-      this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
+    if (!this.pageRegistry) throw new Error('pageRegistry chưa được set cho scheduler')
+    const page = this.pageRegistry.get(channel.id)
+    if (!page) {
+      this.sendLog(`⚠️ Tài khoản "${channel.name}" chưa mở tab. Bỏ qua.`)
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
+      return
     }
 
-    // Resolve which images to process based on ExtraSettings
-    let finalImages: string[] = []
-    const imageOption = campaign.extraSettings?.imageOption || 'all'
-    const availableImages = campaign.images || []
-    
-    if (imageOption === 'all') {
-      finalImages = [...availableImages]
-    } else if (imageOption === 'random') {
-      const count = campaign.extraSettings?.randomImageCount || 3
-      const shuffled = [...availableImages].sort(() => 0.5 - Math.random())
-      finalImages = shuffled.slice(0, count)
+    // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
+    const details = await this.supabase.listCampaignDataActions(campaign.id)
+
+    // Shuffle group list nếu enabled
+    if (campaign.extraSettings?.shuffleGroupList && details.length > 1 && campaign.actionId === 'facebook_group_post') {
+      for (let i = details.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[details[i], details[j]] = [details[j], details[i]]
+      }
+      this.sendLog(`🔀 Đã xáo trộn danh sách ${details.length} group`)
+    }
+
+    // Resolve sourceLink rotation cho timeline_post
+    const extra = campaign.extraSettings || {}
+    let currentSourceLink = ''
+    if (campaign.actionId === 'facebook_timeline_post') {
+      const links = (extra.sourceLinks || '').split(',').map(s => s.trim()).filter(Boolean)
+      if (links.length > 0) {
+        const idx = (extra.sourceLinkIndex || 0) % links.length
+        currentSourceLink = links[idx]
+        const nextIdx = (idx + 1) % links.length
+        try {
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            extraSettings: { ...extra, sourceLinkIndex: nextIdx }
+          })
+        } catch {}
+        this.sendLog(`🔗 Link nguồn #${idx + 1}/${links.length}: ${currentSourceLink}`)
+      }
+    }
+
+    const runOnce = details.length === 0
+    const targets = runOnce ? [null] : details
+
+    let rateLimitReached = false
+    let rateLimitRetryAt: Date | null = null  // thời điểm có thể retry sau (cho hourly limit)
+    let rateLimitIsDaily = false
+    const limitConfig = extra.actionLimits
+
+    for (let i = 0; i < targets.length; i++) {
+      // Check pause
+      const cur = await this.supabase.getCampaign(campaign.id)
+      if (cur && cur.status === 'tạm dừng') {
+        this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+        return
+      }
+
+      const detail = targets[i]
+      if (detail && detail.status !== 'chờ xử lý') continue
+
+      // Rate limit
+      const actionLabel = campaign.actionId === 'facebook_message_friend' ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn') : 'Đăng bài'
+      try {
+        const limitStatus = await this.supabase.getChannelRateLimitStatus(channel.id, actionLabel, limitConfig)
+        if (!limitStatus.ok) {
+          rateLimitReached = true
+          rateLimitIsDaily = limitStatus.isDailyLimit === true
+          if (limitStatus.retryAfterMs && limitStatus.retryAfterMs > 0) {
+            rateLimitRetryAt = new Date(Date.now() + limitStatus.retryAfterMs)
+          }
+          await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do vượt giới hạn ${actionLabel}: ${limitStatus.reason}`)
+          this.sendLog(`⚠️ Tạm dừng "${campaign.name}" do giới hạn ${actionLabel}: ${limitStatus.reason}`)
+          break
+        }
+      } catch (err) {
+        console.error('Rate limit check error:', err)
+      }
+
+      // Build variables
+      const variables = this.buildVariablesV2(campaign, detail, channel.id, currentSourceLink, i)
+
+      // Update detail status running
+      if (detail) {
+        await this.supabase.updateCampaignDataAction(detail.id, {
+          status: 'đang chạy',
+          dateAction: new Date().toISOString()
+        })
+        const detailName = detail.name || detail.uid || 'N/A'
+        this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
+      }
+
+      // Run engine v2
+      const abort = new AbortController()
+      this.activeV2Aborts.set(campaign.id, abort)
+      try {
+        const result = await this.engineV2.run(workflowV2Id, variables, page, {
+          channelId: channel.id,
+          campaignId: campaign.id,
+          campaignDataActionId: detail?.id,
+          signal: abort.signal,
+          persist: true,
+          onStepProgress: (step: RunStepV2) => {
+            try { this.mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+          },
+          onLog: (entry) => {
+            try { this.mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+          }
+        })
+
+        // Per-milestone logging — scan steps theo block_name
+        await this.logMilestonesV2(campaign, detail, channel.id, result.steps, result.status === 'completed')
+
+        if (detail) {
+          if (result.status === 'completed') {
+            await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành' })
+            await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detail.name || detail.uid || 'N/A'}`)
+            this.sendLog(`✅ Hoàn thành "${detail.name || detail.uid || 'N/A'}"`)
+          } else {
+            // data_actions enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở result_actions)
+            const errMsg = result.error || 'Lỗi không xác định'
+            await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành', note: errMsg })
+            await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detail.name || detail.uid || 'N/A'} - ${errMsg}`)
+            this.sendLog(`❌ Lỗi "${detail.name || detail.uid || 'N/A'}": ${errMsg}`)
+          }
+        }
+      } catch (err: any) {
+        const errMsg = err?.message || String(err)
+        if (detail) {
+          await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành', note: errMsg })
+        }
+        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
+        this.sendLog(`❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
+      } finally {
+        this.activeV2Aborts.delete(campaign.id)
+      }
+
+      // Sleep between details
+      if (i < targets.length - 1) {
+        const sleepTime = extra.actionLimits?.sleepBetweenActions || campaign.timeSleepBetween2 || 0
+        if (sleepTime > 0) {
+          this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
+          await new Promise(r => setTimeout(r, sleepTime * 1000))
+        }
+      }
+    }
+
+    if (rateLimitReached) {
+      // Phân biệt 2 loại limit:
+      //   1. Hourly (rateLimitCount/rateLimitMinutes): chỉ cần đợi vài chục phút → reschedule = retryAt
+      //   2. Daily (dailyLimit): cần đợi sang ngày mai
+      //      - continueNextDay=true → schedule = tomorrow cùng giờ user set
+      //      - continueNextDay=false → giữ nguyên schedule, chỉ set status='chờ xử lý'
+      if (rateLimitIsDaily) {
+        if (campaign.scheduleType === 'daily' && campaign.continueNextDay && campaign.schedule) {
+          const now = new Date()
+          const schedDate = new Date(campaign.schedule)
+          const tomorrow = new Date(now)
+          tomorrow.setDate(tomorrow.getDate() + 1)
+          tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            status: 'chờ xử lý',
+            schedule: tomorrow.toISOString()
+          })
+          await this.supabase.appendCampaignLog(campaign.id, `Đạt giới hạn ngày. Lên lịch chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
+          this.sendLog(`🔄 Chiến dịch "${campaign.name}" sẽ chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
+        } else {
+          await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
+        }
+      } else if (rateLimitRetryAt) {
+        // Hourly limit: reschedule = thời điểm có chỗ trong window
+        await this.updateCampaignAndBroadcast(campaign.id, {
+          status: 'chờ xử lý',
+          schedule: rateLimitRetryAt.toISOString()
+        })
+        const minutesLeft = Math.ceil((rateLimitRetryAt.getTime() - Date.now()) / 60000)
+        await this.supabase.appendCampaignLog(campaign.id, `Đạt tốc độ giới hạn. Tiếp tục sau ${minutesLeft} phút (lúc ${rateLimitRetryAt.toLocaleTimeString('vi-VN')})`)
+        this.sendLog(`⏳ Chiến dịch "${campaign.name}" sẽ thử lại sau ${minutesLeft} phút`)
+      } else {
+        // Fallback: không có info retry → giữ nguyên schedule, status chờ xử lý
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
+      }
     } else {
-      // none
-      finalImages = []
+      await this.handleCampaignCompletion(campaign)
     }
+    await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+  }
 
-    // Validate file paths exist
-    const validImages = finalImages.filter(fp => {
-      if (fp.startsWith('data:')) return true
-      return existsSync(fp)
-    })
+  /** Build variables object inject vào engine v2. */
+  private buildVariablesV2(
+    campaign: Campaign,
+    detail: CampaignDataAction | null,
+    channelId: number,
+    currentSourceLink: string,
+    detailIndex: number
+  ): Record<string, unknown> {
+    const extra = campaign.extraSettings || {}
+    // Resolve images theo imageOption
+    let finalImages: string[] = []
+    const imageOption = extra.imageOption || 'all'
+    const availableImages = campaign.images || []
+    if (imageOption === 'all') finalImages = [...availableImages]
+    else if (imageOption === 'random') {
+      const count = extra.randomImageCount || 3
+      finalImages = [...availableImages].sort(() => 0.5 - Math.random()).slice(0, count)
+    }
+    const validImages = finalImages.filter(fp => fp.startsWith('data:') || existsSync(fp))
 
-    // Prepare flow variables with campaign/detail data
-    // The workflow nodes will consume these variables via blockInput/inputMapping
-    const flowCopy = JSON.parse(JSON.stringify(flow))
-    flowCopy.variables = {
-      ...flowCopy.variables,
+    // Comment iterations
+    const enableComment = extra.enableComment ?? false
+    const commentType = extra.commentType || 'own'
+    const commentCount = extra.commentCount ?? 3
+    let commentIndices: number[] = []
+    if (enableComment) {
+      if (commentType === 'own') commentIndices = [1]
+      else for (let i = 0; i < commentCount; i++) commentIndices.push(i + 2)
+    }
+    const postVariants = this.splitContentVariants(campaign.content)
+    const commentVariants = this.splitContentVariants(extra.commentContent)
+    const selectedPostContent = this.cycleVariant(postVariants, detailIndex)
+    const commentIterations = commentIndices.map((position, k) => ({
+      position,
+      text: this.cycleVariant(commentVariants, k)
+    }))
+
+    return {
       campaignId: campaign.id,
       campaignName: campaign.name,
-      campaignContent: campaign.content,
-      commentContent: campaign.extraSettings?.commentContent || '',
-      sharePost: campaign.extraSettings?.sharePost ?? false,
-      enableComment: campaign.extraSettings?.enableComment ?? false,
-      commentType: campaign.extraSettings?.commentType || 'own',
-      commentCount: campaign.extraSettings?.commentCount ?? 3,
+      campaignContent: selectedPostContent,
       images: validImages,
-      accountId: accountId,
+      channelId,
+      // Comment
+      enableComment,
+      commentType,
+      commentCount,
+      commentIterations,
+      // Group post extras
+      leaveGroupOnPendingApproval: extra.leaveGroupOnPendingApproval ?? false,
+      autoJoinGroupAfterPost: extra.autoJoinGroupAfterPost ?? false,
+      shuffleGroupList: extra.shuffleGroupList ?? false,
+      // Timeline post extras
+      sharePost: extra.sharePost ?? false,
+      copyContentFromSource: extra.copyContentFromSource ?? false,
+      includeSourceImages: extra.includeSourceImages ?? false,
+      postAsReels: extra.postAsReels ?? false,
+      sourceLink: currentSourceLink,
+      videoPath: validImages[0] || '',
+      // Message friend extras
+      enableMessage: extra.enableMessage ?? false,
+      enableAddFriend: extra.enableAddFriend ?? false,
+      // Detail-specific.
+      // detailUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
+      // `fb_resolve_url` sẽ verify/normalize tuỳ theo urlType (group/profile/messenger).
       ...(detail ? {
         detailId: detail.id,
         detailName: detail.name,
-        detailPhone: detail.phone,
         detailUid: detail.uid,
+        detailPhone: detail.phone,
         detailEmail: detail.email
-      } : {}),
-      // Group posting extra settings
-      leaveGroupOnPendingApproval: campaign.extraSettings?.leaveGroupOnPendingApproval ?? false,
-      autoJoinGroupAfterPost: campaign.extraSettings?.autoJoinGroupAfterPost ?? false,
-      shuffleGroupList: campaign.extraSettings?.shuffleGroupList ?? false
+      } : {})
     }
+  }
 
-    // Create a controller that uses the account's embedded webview
-    const controller = this.webviewRegistry.getController(accountId)
-    if (!controller) {
-      throw new Error(`Không tìm thấy tab trình duyệt cho tài khoản ${accountId}`)
-    }
-    
-    // Debug: Log the current URL
-    try {
-      const currentUrl = controller.getURL()
-      console.log(`Campaign ${campaign.id} detail ${detailName} running on URL: ${currentUrl}`)
-    } catch {}
+  /**
+   * Per-milestone logging cho engine v2.
+   * Scan steps theo block_name (cố định) để biết bước nào succeeded:
+   *   - fb_click_post_button → "Đăng bài"
+   *   - fb_comment_at_position → "Comment"
+   *   - fb_send_message → "Nhắn tin"
+   *   - fb_add_friend → "Kết bạn"
+   * Mỗi milestone ghi 1 row vào auto_campaign_result_actions với status:
+   *   - 'thành công' = action OK
+   *   - 'thất bại'   = nghiệp vụ FB từ chối (output.ok=false không exception)
+   *   - 'lỗi'        = exception/crash code (step.status='error')
+   */
+  private async logMilestonesV2(
+    campaign: Campaign,
+    detail: CampaignDataAction | null,
+    channelId: number,
+    steps: RunStepV2[],
+    overallSuccess: boolean
+  ): Promise<void> {
+    void overallSuccess
+    const detailName = detail?.name || detail?.uid || ''
 
-    // Run the workflow — all browser actions (click, setValue, dropFile, etc.)
-    // are defined as nodes in the workflow and executed by FlowRunner
-    const runner = new FlowRunner(controller, this.supabase, (step: ExecutionStep) => {
-      this.mainWindow.webContents.send(IPC_CHANNELS.FLOW_PROGRESS, step)
-    })
-
-    const result = await runner.run(flowCopy)
-
-    if (detail) {
-      if (result.status === 'completed') {
-        // Log individual actions into auto_campaign_detail_actions
-        try {
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
-            campaignId: campaign.id,
-            accountId: accountId,
-            actionName: 'Đăng bài',
-            status: 'success',
-            log: `Đăng bài thành công vào ${detailName}`
-          })
-          this.sendLog(`📝 Đăng bài thành công vào "${detailName}"`)
-        } catch (logErr) {
-          console.error('Failed to log detail actions:', logErr)
-        }
-
-        await this.supabase.updateCampaignDetail(detail.id, { status: 'hoàn thành' })
-        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detailName}`)
-        this.sendLog(`✅ Hoàn thành "${detailName}"`)
-      } else {
-        await this.supabase.updateCampaignDetail(detail.id, {
-          status: 'lỗi',
-          note: result.error || 'Unknown error'
+    // Đăng bài
+    const postSteps = steps.filter(s => s.blockName === 'fb_click_post_button' && s.status === 'success')
+    for (const s of postSteps) {
+      try {
+        const isPending = steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true
+        await this.supabase.createResultAction({
+          dataActionId: detail?.id,
+          campaignId: campaign.id,
+          channelId,
+          actionName: 'Đăng bài',
+          status: 'thành công',
+          log: detail ? `Đăng bài thành công vào ${detailName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
+          data: isPending ? { isPending: true } : undefined
         })
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detailName} - ${result.error}`)
-        this.sendLog(`❌ Lỗi "${detailName}": ${result.error}`)
+        this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${detailName}"` : ''}`)
+        if (isPending) this.sendLog(`⏳ Bài đang chờ duyệt`)
+      } catch (err) { console.error('Failed log post:', err) }
+      void s
+    }
 
-        // Log failed action
-        try {
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
+    // Comment — đọc position/text từ s.output (block return) thay vì s.input
+    const commentSteps = steps.filter(s => s.blockName === 'fb_comment_at_position' && s.status === 'success')
+    for (let i = 0; i < commentSteps.length; i++) {
+      const s = commentSteps[i]
+      const out = (s.output as any) || {}
+      const position = Number(out.position ?? (i + 1))
+      const text = String(out.text ?? '')
+      const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
+      const target = position === 1 ? 'bài của mình' : `bài thứ ${position}`
+      try {
+        await this.supabase.createResultAction({
+          dataActionId: detail?.id,
+          campaignId: campaign.id,
+          channelId,
+          actionName: 'Comment',
+          status: 'thành công',
+          log: `Đã comment vào ${target}: "${preview}"`,
+          data: { commentPosition: position, iteration: i + 1, commentContent: text }
+        })
+        this.sendLog(`💬 Đã comment vào ${target}${detail ? ` tại "${detailName}"` : ''}`)
+      } catch (err) { console.error('Failed log comment:', err) }
+    }
+
+    // Nhắn tin — phân biệt 3 status: thành công / thất bại (FB block) / lỗi (exception)
+    const msgSteps = steps.filter(s => s.blockName === 'fb_send_message')
+    for (const s of msgSteps) {
+      const out = (s.output as any) || {}
+      const errMsg = out.error || s.error || 'Lỗi không xác định'
+      const status: 'thành công' | 'thất bại' | 'lỗi' =
+        s.status === 'error' ? 'lỗi'
+        : out.ok === true ? 'thành công'
+        : 'thất bại'
+      try {
+        await this.supabase.createResultAction({
+          dataActionId: detail?.id,
+          campaignId: campaign.id,
+          channelId,
+          actionName: 'Nhắn tin',
+          status,
+          log: status === 'thành công' ? `Nhắn tin thành công đến ${detailName}` : `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
+        })
+        if (status === 'thành công') this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
+        else this.sendLog(`❌ Lỗi nhắn tin "${detailName}": ${errMsg}`)
+      } catch (err) { console.error('Failed log message:', err) }
+    }
+
+    // Kết bạn — alreadyFriend / clicked = thành công; ok=false không exception = thất bại; exception = lỗi
+    const friendSteps = steps.filter(s => s.blockName === 'fb_add_friend')
+    for (const s of friendSteps) {
+      const out = (s.output as any) || {}
+      const ok = s.status === 'success' && out.ok === true
+      const alreadyFriend = ok && out.alreadyFriend === true
+      const clicked = ok && out.clicked === true
+      const errMsg = out.error || s.error || 'Lỗi không xác định'
+
+      try {
+        if (alreadyFriend) {
+          await this.supabase.createResultAction({
+            dataActionId: detail?.id,
             campaignId: campaign.id,
-            accountId: accountId,
-            actionName: 'Lỗi thực thi',
-            status: 'error',
-            log: result.error || 'Unknown error'
+            channelId,
+            actionName: 'Kết bạn',
+            status: 'thành công',
+            log: `Bỏ qua kết bạn với ${detailName} (đã là bạn bè hoặc nút bị ẩn)`,
+            data: { alreadyFriend: true }
           })
-        } catch (logErr) {
-          console.error('Failed to log error action:', logErr)
+          this.sendLog(`ℹ️ Bỏ qua kết bạn với "${detailName}" (đã là bạn hoặc nút bị ẩn)`)
+        } else if (clicked) {
+          await this.supabase.createResultAction({
+            dataActionId: detail?.id,
+            campaignId: campaign.id,
+            channelId,
+            actionName: 'Kết bạn',
+            status: 'thành công',
+            log: `Kết bạn thành công với ${detailName}`
+          })
+          this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
+        } else {
+          // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
+          const status: 'thất bại' | 'lỗi' = s.status === 'error' ? 'lỗi' : 'thất bại'
+          await this.supabase.createResultAction({
+            dataActionId: detail?.id,
+            campaignId: campaign.id,
+            channelId,
+            actionName: 'Kết bạn',
+            status,
+            log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
+          })
+          this.sendLog(`❌ Lỗi kết bạn "${detailName}": ${errMsg}`)
+        }
+      } catch (err) { console.error('Failed log friend:', err) }
+    }
+  }
+
+  private async recoverStuckDataActions(campaignId: number, errMsg: string): Promise<void> {
+    try {
+      const details = await this.supabase.listCampaignDataActions(campaignId)
+      for (const d of details) {
+        if (d.status === 'đang chạy') {
+          // data_actions enum không có 'lỗi' — flag bằng 'hoàn thành' + note
+          await this.supabase.updateCampaignDataAction(d.id, {
+            status: 'hoàn thành',
+            note: `Dừng đột ngột: ${errMsg}`
+          })
         }
       }
+    } catch (recoverErr) {
+      console.error('Failed to recover stuck data actions:', recoverErr)
     }
   }
 
@@ -487,324 +670,37 @@ export class CampaignScheduler {
     }
   }
 
-  // =========== Facebook Message & Friend Request Campaign ===========
-
   /**
-   * Extract a clean UID/username from user input that may be a full Facebook URL.
-   * Examples:
-   *   "https://www.facebook.com/quangnhut27" → "quangnhut27"
-   *   "https://www.facebook.com/profile.php?id=100012345" → "100012345"
-   *   "https://facebook.com/quangnhut27/" → "quangnhut27"
-   *   "quangnhut27" → "quangnhut27"
-   *   "100012345" → "100012345"
+   * Cập nhật campaign xong push luôn ra renderer để UI hiện status realtime.
    */
-  private extractUidFromInput(raw: string): string {
-    const trimmed = raw.trim()
+  private async updateCampaignAndBroadcast(id: number, updates: Partial<Campaign>): Promise<Campaign> {
+    const updated = await this.supabase.updateCampaign(id, updates)
     try {
-      const url = new URL(trimmed)
-      // Handle profile.php?id=xxx
-      const idParam = url.searchParams.get('id')
-      if (idParam) return idParam
-      // Handle /username or /username/
-      const parts = url.pathname.split('/').filter(Boolean)
-      if (parts.length > 0) return parts[parts.length - 1]
+      this.mainWindow.webContents.send(IPC_CHANNELS.CAMPAIGN_STATUS_UPDATED, updated)
     } catch {
-      // Not a URL, return as-is
+      // Window may be closed
     }
-    return trimmed
-  }
-
-  private async executeMessageFriendCampaign(
-    account: import('../../shared/types').FlatformAccount,
-    campaign: Campaign
-  ): Promise<void> {
-    const enableMessage = campaign.extraSettings?.enableMessage ?? true
-    const enableAddFriend = campaign.extraSettings?.enableAddFriend ?? false
-    const messageContent = campaign.content || ''
-
-    if (!enableMessage && !enableAddFriend) {
-      await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Chưa chọn hành động nào (nhắn tin hoặc kết bạn)')
-      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
-      return
-    }
-
-    const details = await this.supabase.listCampaignDetails(campaign.id)
-    if (details.length === 0) {
-      await this.supabase.appendCampaignLog(campaign.id, 'Không có data để xử lý')
-      await this.supabase.updateCampaign(campaign.id, { status: 'hoàn thành' })
-      return
-    }
-
-    const controller = this.webviewRegistry.getController(account.id)
-    if (!controller) {
-      await this.supabase.appendCampaignLog(campaign.id, 'Lỗi: Không tìm thấy tab trình duyệt')
-      await this.supabase.updateCampaign(campaign.id, { status: 'lỗi' })
-      return
-    }
-
-    let rateLimitReached = false
-    const limitConfig = campaign.extraSettings?.actionLimits
-
-    for (let i = 0; i < details.length; i++) {
-      // Check if campaign was paused
-      const currentCamp = await this.supabase.getCampaign(campaign.id)
-      if (currentCamp && currentCamp.status === 'tạm dừng') {
-        this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
-        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
-        return
-      }
-
-      const detail = details[i]
-      if (detail.status !== 'chờ xử lý') continue
-
-      const detailName = detail.name || detail.uid || 'N/A'
-      const uid = detail.uid ? this.extractUidFromInput(detail.uid) : ''
-
-      if (!uid) {
-        await this.supabase.updateCampaignDetail(detail.id, { status: 'lỗi', note: 'Thiếu UID' })
-        await this.supabase.createDetailAction({
-          campaignDetailId: detail.id,
-          campaignId: campaign.id,
-          accountId: account.id,
-          actionName: 'Bỏ qua',
-          status: 'error',
-          log: `Bỏ qua ${detailName}: thiếu UID`
-        })
-        continue
-      }
-
-      // Check rate limit
-      const actionName = enableMessage ? 'Nhắn tin' : 'Kết bạn'
-      try {
-        const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionName, limitConfig)
-        if (!limitStatus.ok) {
-          rateLimitReached = true
-          await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do vượt giới hạn: ${limitStatus.reason}`)
-          this.sendLog(`⚠️ Tạm dừng "${campaign.name}" do giới hạn: ${limitStatus.reason}`)
-          break
-        }
-      } catch (err) {
-        console.error('Rate limit check error:', err)
-      }
-
-      await this.supabase.updateCampaignDetail(detail.id, {
-        status: 'đang chạy',
-        dateAction: new Date().toISOString()
-      })
-      this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
-
-      let detailSuccess = true
-
-      // --- Send Message ---
-      if (enableMessage && messageContent) {
-        try {
-          await this.sendFacebookMessage(controller, uid, messageContent)
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
-            campaignId: campaign.id,
-            accountId: account.id,
-            actionName: 'Nhắn tin',
-            status: 'success',
-            log: `Nhắn tin thành công đến ${detailName}`
-          })
-          this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
-        } catch (err: any) {
-          detailSuccess = false
-          const errMsg = err.message || String(err)
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
-            campaignId: campaign.id,
-            accountId: account.id,
-            actionName: 'Nhắn tin',
-            status: 'error',
-            log: `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
-          })
-          this.sendLog(`❌ Lỗi nhắn tin "${detailName}": ${errMsg}`)
-        }
-      }
-
-      // --- Add Friend ---
-      if (enableAddFriend) {
-        try {
-          await this.sendFriendRequest(controller, uid)
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
-            campaignId: campaign.id,
-            accountId: account.id,
-            actionName: 'Kết bạn',
-            status: 'success',
-            log: `Kết bạn thành công với ${detailName}`
-          })
-          this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
-        } catch (err: any) {
-          detailSuccess = false
-          const errMsg = err.message || String(err)
-          await this.supabase.createDetailAction({
-            campaignDetailId: detail.id,
-            campaignId: campaign.id,
-            accountId: account.id,
-            actionName: 'Kết bạn',
-            status: 'error',
-            log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
-          })
-          this.sendLog(`❌ Lỗi kết bạn "${detailName}": ${errMsg}`)
-        }
-      }
-
-      // Update detail status
-      await this.supabase.updateCampaignDetail(detail.id, {
-        status: detailSuccess ? 'hoàn thành' : 'lỗi',
-        note: detailSuccess ? '' : 'Có lỗi xảy ra'
-      })
-      await this.supabase.appendCampaignLog(campaign.id,
-        detailSuccess ? `Hoàn thành: ${detailName}` : `Lỗi: ${detailName}`
-      )
-
-      // Sleep between details
-      if (i < details.length - 1) {
-        const sleepTime = campaign.extraSettings?.actionLimits?.sleepBetweenActions || campaign.timeSleepBetween2 || 0
-        if (sleepTime > 0) {
-          this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
-          await new Promise(resolve => setTimeout(resolve, sleepTime * 1000))
-        }
-      }
-    }
-
-    if (rateLimitReached) {
-      if (campaign.scheduleType === 'daily' && campaign.continueNextDay && campaign.schedule) {
-        const now = new Date()
-        const schedDate = new Date(campaign.schedule)
-        const tomorrow = new Date(now)
-        tomorrow.setDate(tomorrow.getDate() + 1)
-        tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
-        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý', schedule: tomorrow.toISOString() })
-        await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do đạt giới hạn. Chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
-      } else {
-        await this.supabase.updateCampaign(campaign.id, { status: 'chờ xử lý' })
-      }
-    } else {
-      await this.handleCampaignCompletion(campaign)
-    }
-
-    await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+    return updated
   }
 
   /**
-   * Send a Facebook message to a user via Facebook Messenger.
-   * Navigate to facebook.com/messages/t/{uid}, type message, send.
-   * Handles two common blocking scenarios:
-   *   1) PIN recovery dialog ("Nhập mã PIN để khôi phục đoạn chat") → close it
-   *   2) "Tiếp tục" (Continue) button at the bottom → click it
+   * Tách nội dung theo dấu `|` thành mảng biến thể (đã trim, bỏ rỗng).
+   * Nếu input rỗng/null → `[]`; nếu không có dấu `|` → `[raw]`.
+   * Dùng cho cả `content` và `commentContent`.
    */
-  private async sendFacebookMessage(
-    controller: import('../../shared/types').IBrowserController,
-    uid: string,
-    message: string
-  ): Promise<void> {
-    // Navigate to Facebook messenger conversation
-    await controller.executeAction('navigate', { url: `https://www.facebook.com/messages/t/${uid}` })
-    await new Promise(r => setTimeout(r, 4000))
-
-    // --- Handle blocking scenario 1: PIN recovery dialog ---
-    // Try to close the dialog by clicking the X (close) button
-    // Use short timeout to avoid wasting time if no dialog exists
-    const pinDialogCheck = await controller.executeAction('waitForSelector', {
-      selector: '[aria-label="Đóng"], [aria-label="Close"]',
-      timeout: 3000
-    })
-    if (pinDialogCheck.success && pinDialogCheck.output?.found !== false) {
-      await controller.executeAction('click', {
-        selector: '[aria-label="Đóng"], [aria-label="Close"]'
-      })
-      this.sendLog('📌 Đã đóng dialog khôi phục đoạn chat')
-      await new Promise(r => setTimeout(r, 2000))
-
-      // --- Handle confirmation dialog: "Tiếp tục mà không khôi phục?" ---
-      // The blue button
-      const confirmCheck = await controller.executeAction('waitForSelector', {
-        selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]',
-        timeout: 3000
-      })
-      if (confirmCheck.success && confirmCheck.output?.found !== false) {
-        await controller.executeAction('click', {
-          selector: '//*[@role="button" and @aria-label="Không khôi phục tin nhắn" and @tabindex="0"]'
-        })
-        this.sendLog('📌 Đã nhấn "Không khôi phục tin nhắn"')
-        await new Promise(r => setTimeout(r, 2000))
-      }
-    }
-
-    // --- Handle blocking scenario 2: "Tiếp tục" button ---
-    // Facebook sometimes shows an end-to-end encryption notice with a "Tiếp tục" button
-    const continueCheck = await controller.executeAction('waitForSelector', {
-      selector: '//*[@role="button" and .="Tiếp tục"]',
-      timeout: 2000
-    })
-    if (continueCheck.success && continueCheck.output?.found !== false) {
-      await controller.executeAction('click', {
-        selector: '//*[@role="button" and .="Tiếp tục"]'
-      })
-      this.sendLog('📌 Đã nhấn nút Tiếp tục')
-      await new Promise(r => setTimeout(r, 2000))
-    }
-
-    // Wait for the message input to appear
-    await controller.executeAction('waitForSelector', {
-      selector: '[role="textbox"][contenteditable="true"]',
-      timeout: 15000
-    })
-    await new Promise(r => setTimeout(r, 1000))
-
-    // Click into the message input
-    await controller.executeAction('click', {
-      selector: '[role="textbox"][contenteditable="true"]'
-    })
-    await new Promise(r => setTimeout(r, 500))
-
-    // Set the message content (uses paste-based approach for multiline support)
-    await controller.executeAction('setValue', {
-      selector: '[role="textbox"][contenteditable="true"]',
-      value: message
-    })
-    await new Promise(r => setTimeout(r, 1000))
-
-    // Press Enter to send
-    await controller.executeAction('pressKey', { key: 'Enter' })
-    await new Promise(r => setTimeout(r, 2000))
+  private splitContentVariants(raw: string | undefined | null): string[] {
+    if (!raw) return []
+    if (!raw.includes('|')) return [raw]
+    return raw.split('|').map(s => s.trim()).filter(s => s.length > 0)
   }
 
   /**
-   * Send a friend request to a Facebook user.
-   * Navigate to their profile and click "Add Friend" button.
+   * Chọn biến thể theo chỉ số (cycle). `index` vượt quá length sẽ modulo về
+   * đầu. Mảng rỗng → `''`.
    */
-  private async sendFriendRequest(
-    controller: import('../../shared/types').IBrowserController,
-    uid: string
-  ): Promise<void> {
-    // Navigate to the user's profile
-    const profileUrl = uid.match(/^\d+$/)
-      ? `https://www.facebook.com/profile.php?id=${uid}`
-      : `https://www.facebook.com/${uid}`
-
-    await controller.executeAction('navigate', { url: profileUrl })
-    await new Promise(r => setTimeout(r, 3000))
-
-    // Wait for profile page
-    await controller.executeAction('waitForSelector', {
-      selector: '[role="main"]',
-      timeout: 10000
-    })
-    await new Promise(r => setTimeout(r, 1500))
-
-    // Click the "Thêm bạn bè" button using exact XPath
-    const addFriendResult = await controller.executeAction('click', {
-      selector: '//*[@role="button" and .="Thêm bạn bè"]'
-    })
-
-    if (!addFriendResult.success) {
-      throw new Error('Không tìm thấy nút Kết bạn. Có thể đã là bạn bè hoặc đã gửi lời mời.')
-    }
-
-    await new Promise(r => setTimeout(r, 2000))
+  private cycleVariant(variants: string[], index: number): string {
+    if (variants.length === 0) return ''
+    const safeIdx = ((index % variants.length) + variants.length) % variants.length
+    return variants[safeIdx]
   }
 }

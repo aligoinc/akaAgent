@@ -1,0 +1,550 @@
+import { Campaign, CampaignDataInput, CampaignDataAction, CampaignResultAction } from '../../../shared/types'
+import { getSupabaseClient } from '../supabaseClient'
+import { mapCampaignFromDB, mapCampaignDataInputFromDB, mapCampaignDataActionFromDB, mapResultActionFromDB } from '../mappers'
+import { requireCurrentUser } from '../currentUser'
+
+const client = () => getSupabaseClient()
+
+// =========== CAMPAIGNS ===========
+
+export async function getCampaign(id: number): Promise<Campaign | null> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .single()
+
+  if (error) return null
+  return mapCampaignFromDB(data)
+}
+
+export async function listCampaigns(): Promise<Campaign[]> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
+  return (data || []).map(row => mapCampaignFromDB(row))
+}
+
+export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
+  const u = requireCurrentUser()
+  const payload = {
+    name: campaign.name,
+    action_id: campaign.actionId,
+    channel_id: campaign.channelId,
+    status: campaign.status || 'chờ xử lý',
+    schedule: campaign.schedule || null,
+    schedule_type: campaign.scheduleType || 'daily',
+    schedule_end_date: campaign.scheduleEndDate || null,
+    schedule_days: campaign.scheduleDays || null,
+    schedule_week_days: campaign.scheduleWeekDays || null,
+    continue_next_day: campaign.continueNextDay ?? false,
+    refresh_data: campaign.refreshData ?? false,
+    time_sleep_between_2: campaign.timeSleepBetween2 || 30,
+    content: campaign.content || '',
+    extra_settings: campaign.extraSettings || {},
+    images: campaign.images || [],
+    log: '',
+    staff_id: u.staffId,
+    organization_id: u.organizationId
+  }
+
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .insert(payload)
+    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .single()
+
+  if (error) throw new Error(`Failed to create campaign: ${error.message}`)
+  return mapCampaignFromDB(data)
+}
+
+export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
+  const u = requireCurrentUser()
+  const payload: any = { updated_at: new Date().toISOString() }
+  if (updates.name !== undefined) payload.name = updates.name
+  if (updates.actionId !== undefined) payload.action_id = updates.actionId
+  if (updates.channelId !== undefined) payload.channel_id = updates.channelId
+  if (updates.status !== undefined) payload.status = updates.status
+  if (updates.schedule !== undefined) payload.schedule = updates.schedule
+  if (updates.scheduleType !== undefined) payload.schedule_type = updates.scheduleType
+  if (updates.scheduleEndDate !== undefined) payload.schedule_end_date = updates.scheduleEndDate
+  if (updates.scheduleDays !== undefined) payload.schedule_days = updates.scheduleDays
+  if (updates.scheduleWeekDays !== undefined) payload.schedule_week_days = updates.scheduleWeekDays
+  if (updates.continueNextDay !== undefined) payload.continue_next_day = updates.continueNextDay
+  if (updates.refreshData !== undefined) payload.refresh_data = updates.refreshData
+  if (updates.timeSleepBetween2 !== undefined) payload.time_sleep_between_2 = updates.timeSleepBetween2
+  if (updates.content !== undefined) payload.content = updates.content
+  if (updates.extraSettings !== undefined) payload.extra_settings = updates.extraSettings
+  if (updates.images !== undefined) payload.images = updates.images
+  if (updates.log !== undefined) payload.log = updates.log
+
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .update(payload)
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .single()
+
+  if (error) throw new Error(`Failed to update campaign: ${error.message}`)
+  return mapCampaignFromDB(data)
+}
+
+export async function deleteCampaign(id: number): Promise<void> {
+  const u = requireCurrentUser()
+  const { error } = await client()
+    .from('auto_campaigns')
+    .update({ is_delete: true, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+
+  if (error) throw new Error(`Failed to delete campaign: ${error.message}`)
+}
+
+export async function cloneCampaign(id: number): Promise<Campaign> {
+  const u = requireCurrentUser()
+  const { data: origCamp, error: errC } = await client()
+    .from('auto_campaigns')
+    .select('*')
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .single()
+
+  if (errC || !origCamp) throw new Error(`Campaign not found: ${errC?.message}`)
+
+  const { data: newCamp, error: errInsert } = await client()
+    .from('auto_campaigns')
+    .insert({
+      name: origCamp.name + ' (Copy)',
+      action_id: origCamp.action_id,
+      channel_id: origCamp.channel_id,
+      status: 'chờ xử lý',
+      schedule: origCamp.schedule,
+      schedule_type: origCamp.schedule_type,
+      schedule_end_date: origCamp.schedule_end_date,
+      schedule_days: origCamp.schedule_days,
+      schedule_week_days: origCamp.schedule_week_days,
+      continue_next_day: origCamp.continue_next_day,
+      refresh_data: origCamp.refresh_data,
+      time_sleep_between_2: origCamp.time_sleep_between_2,
+      content: origCamp.content,
+      extra_settings: origCamp.extra_settings,
+      images: origCamp.images,
+      log: '',
+      staff_id: u.staffId,
+      organization_id: u.organizationId
+    })
+    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .single()
+
+  if (errInsert || !newCamp) throw new Error(`Failed to insert cloned campaign: ${errInsert?.message}`)
+
+  // Clone data_inputs trước (để build map oldInputId → newInputId cho data_actions tham chiếu)
+  const inputIdMap = new Map<number, number>()
+  const { data: origInputs, error: errInputs } = await client()
+    .from('auto_campaign_data_inputs')
+    .select('*')
+    .eq('campaign_id', id)
+    .eq('is_delete', false)
+
+  if (errInputs) throw new Error(`Failed to fetch original data inputs: ${errInputs.message}`)
+
+  if (origInputs && origInputs.length > 0) {
+    for (const inp of origInputs) {
+      const { data: newInp, error: errInsertInp } = await client()
+        .from('auto_campaign_data_inputs')
+        .insert({
+          campaign_id: newCamp.id,
+          name: inp.name,
+          phone: inp.phone,
+          uid: inp.uid,
+          email: inp.email,
+          note: inp.note,
+          status: 'chờ xử lý',
+          schedule: inp.schedule
+        })
+        .select('id')
+        .single()
+      if (errInsertInp || !newInp) {
+        console.warn('Failed to clone data input:', errInsertInp)
+        continue
+      }
+      inputIdMap.set(inp.id as number, newInp.id as number)
+    }
+  }
+
+  // Clone data_actions, map data_input_id qua inputIdMap
+  const { data: origActions, error: errActions } = await client()
+    .from('auto_campaign_data_actions')
+    .select('*')
+    .eq('campaign_id', id)
+    .eq('is_delete', false)
+
+  if (errActions) throw new Error(`Failed to fetch original data actions: ${errActions.message}`)
+
+  if (origActions && origActions.length > 0) {
+    const actionsToInsert = origActions.map(d => ({
+      campaign_id: newCamp.id,
+      data_input_id: d.data_input_id != null ? (inputIdMap.get(d.data_input_id as number) ?? null) : null,
+      name: d.name,
+      phone: d.phone,
+      uid: d.uid,
+      email: d.email,
+      note: d.note,
+      status: 'chờ xử lý',
+      schedule: d.schedule
+    }))
+
+    const { error: errInsertActions } = await client()
+      .from('auto_campaign_data_actions')
+      .insert(actionsToInsert)
+
+    if (errInsertActions) {
+      console.warn('Failed to clone data actions:', errInsertActions)
+    }
+  }
+
+  return mapCampaignFromDB(newCamp)
+}
+
+export async function appendCampaignLog(campaignId: number, logText: string): Promise<void> {
+  const { data: current } = await client()
+    .from('auto_campaigns')
+    .select('log')
+    .eq('id', campaignId)
+    .single()
+
+  const timestamp = new Date().toLocaleString('vi-VN')
+  const newLog = `[${timestamp}] ${logText}`
+  const fullLog = current?.log ? `${current.log}\n${newLog}` : newLog
+
+  const { error } = await client()
+    .from('auto_campaigns')
+    .update({ log: fullLog, updated_at: new Date().toISOString() })
+    .eq('id', campaignId)
+
+  if (error) throw new Error(`Failed to append campaign log: ${error.message}`)
+}
+
+export async function getPendingCampaigns(channelId: number): Promise<Campaign[]> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .eq('channel_id', channelId)
+    .eq('staff_id', u.staffId)
+    .eq('status', 'chờ xử lý')
+    .eq('is_delete', false)
+    .lte('schedule', new Date().toISOString())
+
+  if (error) throw new Error(`Failed to get pending campaigns: ${error.message}`)
+  return (data || []).map(row => mapCampaignFromDB(row))
+}
+
+export async function resetRunningCampaignStatuses(): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaigns')
+    .update({ status: 'chờ xử lý' })
+    .eq('status', 'đang chạy')
+
+  if (error) console.error('Failed to reset campaign statuses:', error.message)
+}
+
+export async function resetRunningDataInputStatuses(): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_data_inputs')
+    .update({ status: 'chờ xử lý' })
+    .eq('status', 'đang chạy')
+
+  if (error) console.error('Failed to reset data input statuses:', error.message)
+}
+
+export async function resetRunningDataActionStatuses(): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_data_actions')
+    .update({ status: 'chờ xử lý' })
+    .eq('status', 'đang chạy')
+
+  if (error) console.error('Failed to reset data action statuses:', error.message)
+}
+
+// =========== CAMPAIGN DATA INPUTS (pool nguyên liệu) ===========
+
+export async function listCampaignDataInputs(campaignId: number): Promise<CampaignDataInput[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_data_inputs')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .order('created_at', { ascending: true })
+
+  if (error) throw new Error(`Failed to list campaign data inputs: ${error.message}`)
+  return (data || []).map(row => mapCampaignDataInputFromDB(row))
+}
+
+export async function createCampaignDataInput(input: Partial<CampaignDataInput>): Promise<CampaignDataInput> {
+  const payload = {
+    campaign_id: input.campaignId,
+    name: input.name || null,
+    phone: input.phone || null,
+    uid: input.uid || null,
+    email: input.email || null,
+    status: input.status || 'chờ xử lý',
+    note: input.note || null,
+    schedule: input.schedule || null
+  }
+
+  const { data, error } = await client()
+    .from('auto_campaign_data_inputs')
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to create data input: ${error.message}`)
+  return mapCampaignDataInputFromDB(data)
+}
+
+export async function updateCampaignDataInput(id: number, updates: Partial<CampaignDataInput>): Promise<CampaignDataInput> {
+  const payload: any = {}
+  if (updates.name !== undefined) payload.name = updates.name
+  if (updates.phone !== undefined) payload.phone = updates.phone
+  if (updates.uid !== undefined) payload.uid = updates.uid
+  if (updates.email !== undefined) payload.email = updates.email
+  if (updates.status !== undefined) payload.status = updates.status
+  if (updates.note !== undefined) payload.note = updates.note
+  if (updates.schedule !== undefined) payload.schedule = updates.schedule
+  if (updates.dateAction !== undefined) payload.date_action = updates.dateAction
+
+  const { data, error } = await client()
+    .from('auto_campaign_data_inputs')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to update data input: ${error.message}`)
+  return mapCampaignDataInputFromDB(data)
+}
+
+export async function deleteCampaignDataInput(id: number): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_data_inputs')
+    .update({ is_delete: true })
+    .eq('id', id)
+
+  if (error) throw new Error(`Failed to delete data input: ${error.message}`)
+}
+
+// =========== CAMPAIGN DATA ACTIONS (việc-cần-làm) ===========
+
+export async function listCampaignDataActions(campaignId: number): Promise<CampaignDataAction[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_data_actions')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .order('created_at', { ascending: true })
+
+  if (error) throw new Error(`Failed to list campaign data actions: ${error.message}`)
+  return (data || []).map(row => mapCampaignDataActionFromDB(row))
+}
+
+export async function createCampaignDataAction(action: Partial<CampaignDataAction>): Promise<CampaignDataAction> {
+  const payload = {
+    campaign_id: action.campaignId,
+    data_input_id: action.dataInputId ?? null,
+    name: action.name || null,
+    phone: action.phone || null,
+    uid: action.uid || null,
+    email: action.email || null,
+    status: action.status || 'chờ xử lý',
+    note: action.note || null,
+    schedule: action.schedule || null
+  }
+
+  const { data, error } = await client()
+    .from('auto_campaign_data_actions')
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to create data action: ${error.message}`)
+  return mapCampaignDataActionFromDB(data)
+}
+
+export async function updateCampaignDataAction(id: number, updates: Partial<CampaignDataAction>): Promise<CampaignDataAction> {
+  const payload: any = {}
+  if (updates.dataInputId !== undefined) payload.data_input_id = updates.dataInputId
+  if (updates.name !== undefined) payload.name = updates.name
+  if (updates.phone !== undefined) payload.phone = updates.phone
+  if (updates.uid !== undefined) payload.uid = updates.uid
+  if (updates.email !== undefined) payload.email = updates.email
+  if (updates.status !== undefined) payload.status = updates.status
+  if (updates.note !== undefined) payload.note = updates.note
+  if (updates.schedule !== undefined) payload.schedule = updates.schedule
+  if (updates.dateAction !== undefined) payload.date_action = updates.dateAction
+
+  const { data, error } = await client()
+    .from('auto_campaign_data_actions')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to update data action: ${error.message}`)
+  return mapCampaignDataActionFromDB(data)
+}
+
+export async function deleteCampaignDataAction(id: number): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_data_actions')
+    .update({ is_delete: true })
+    .eq('id', id)
+
+  if (error) throw new Error(`Failed to delete data action: ${error.message}`)
+}
+
+// =========== CAMPAIGN RESULT ACTIONS (per-milestone log) ===========
+
+export async function listResultActionsByDataAction(dataActionId: number): Promise<CampaignResultAction[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_result_actions')
+    .select('*')
+    .eq('data_action_id', dataActionId)
+    .eq('is_delete', false)
+    .order('created_at', { ascending: true })
+
+  if (error) throw new Error(`Failed to list result actions: ${error.message}`)
+  return (data || []).map(row => mapResultActionFromDB(row))
+}
+
+export async function listResultActionsByCampaign(campaignId: number): Promise<CampaignResultAction[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_result_actions')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  if (error) throw new Error(`Failed to list result actions by campaign: ${error.message}`)
+  return (data || []).map(row => mapResultActionFromDB(row))
+}
+
+export async function createResultAction(action: Partial<CampaignResultAction>): Promise<CampaignResultAction> {
+  const payload = {
+    data_action_id: action.dataActionId ?? null,
+    campaign_id: action.campaignId,
+    channel_id: action.channelId,
+    action_name: action.actionName,
+    status: action.status || 'thành công',
+    log: action.log || null,
+    data: action.data || null,
+    post_url: action.postUrl || null
+  }
+
+  const { data, error } = await client()
+    .from('auto_campaign_result_actions')
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to create result action: ${error.message}`)
+  return mapResultActionFromDB(data)
+}
+
+export async function deleteResultAction(id: number): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_result_actions')
+    .update({ is_delete: true })
+    .eq('id', id)
+
+  if (error) throw new Error(`Failed to delete result action: ${error.message}`)
+}
+
+export async function getChannelRateLimitStatus(
+  channelId: number,
+  actionName: string,
+  limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }
+): Promise<{ ok: boolean; reason?: string; isDailyLimit?: boolean; retryAfterMs?: number }> {
+  const dailyLimit = limitConfig?.dailyLimit && limitConfig.dailyLimit > 0 ? limitConfig.dailyLimit : 30
+  const rateLimitCount = limitConfig?.rateLimitCount && limitConfig.rateLimitCount > 0 ? limitConfig.rateLimitCount : 9
+  const rateLimitMinutes = limitConfig?.rateLimitMinutes && limitConfig.rateLimitMinutes > 0 ? limitConfig.rateLimitMinutes : 60
+
+  // Chỉ đếm 'thành công' + 'thất bại' (action chạm tới FB).
+  // 'lỗi' = exception code → action chưa xảy ra với FB → không tốn rate limit.
+  const ratedStatuses = ['thành công', 'thất bại']
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const { count: dailyActionCount, error: dailyErr } = await client()
+    .from('auto_campaign_result_actions')
+    .select('*', { count: 'exact', head: true })
+    .eq('channel_id', channelId)
+    .eq('action_name', actionName)
+    .in('status', ratedStatuses)
+    .gte('created_at', today.toISOString())
+
+  if (dailyErr) throw new Error(`Daily count query error: ${dailyErr.message}`)
+
+  if ((dailyActionCount ?? 0) >= dailyLimit) {
+    // Daily limit → đợi tới 00:00 ngày mai mới reset
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(0, 0, 0, 0)
+    return {
+      ok: false,
+      isDailyLimit: true,
+      retryAfterMs: tomorrow.getTime() - Date.now(),
+      reason: `Đạt giới hạn ngày cho hành động "${actionName}" (${dailyActionCount}/${dailyLimit})`
+    }
+  }
+
+  const timeFrameStart = new Date(new Date().getTime() - rateLimitMinutes * 60 * 1000)
+
+  const { count: windowActionCount, error: winErr } = await client()
+    .from('auto_campaign_result_actions')
+    .select('*', { count: 'exact', head: true })
+    .eq('channel_id', channelId)
+    .eq('action_name', actionName)
+    .in('status', ratedStatuses)
+    .gte('created_at', timeFrameStart.toISOString())
+
+  if (winErr) throw new Error(`Window count query error: ${winErr.message}`)
+
+  if ((windowActionCount ?? 0) >= rateLimitCount) {
+    // Hourly limit → đợi tới khi row cũ nhất trong window > rateLimitMinutes phút
+    const { data: oldestRow } = await client()
+      .from('auto_campaign_result_actions')
+      .select('created_at')
+      .eq('channel_id', channelId)
+      .eq('action_name', actionName)
+      .in('status', ratedStatuses)
+      .gte('created_at', timeFrameStart.toISOString())
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    let retryAfterMs = rateLimitMinutes * 60 * 1000
+    if (oldestRow?.created_at) {
+      const oldestTime = new Date(oldestRow.created_at as string).getTime()
+      retryAfterMs = Math.max(60 * 1000, (oldestTime + rateLimitMinutes * 60 * 1000) - Date.now())
+    }
+    return {
+      ok: false,
+      isDailyLimit: false,
+      retryAfterMs,
+      reason: `Đạt tốc độ giới hạn hành động "${actionName}" (${windowActionCount}/${rateLimitCount} lần / ${rateLimitMinutes} phút)`
+    }
+  }
+
+  return { ok: true }
+}

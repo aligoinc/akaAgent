@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit3, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
-import { CampaignAction, FlowData } from '../../../../shared/types'
+import { CampaignAction } from '../../../../shared/types'
+import { WorkflowDef } from '../../../../shared/v2Types'
 
 interface ActionManagerModalProps {
   onClose: () => void
@@ -10,24 +11,24 @@ interface ActionManagerModalProps {
 
 export default function ActionManagerModal({ onClose }: ActionManagerModalProps) {
   const { allCampaignActions, loadAllCampaignActions, createCampaignAction, updateCampaignAction, deleteCampaignAction } = useCampaignStore()
-  
-  const [flows, setFlows] = useState<FlowData[]>([])
+
+  const [workflows, setWorkflows] = useState<WorkflowDef[]>([])
   const [editingAction, setEditingAction] = useState<CampaignAction | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{ id: string; name: string; flatformType: string; workflowV2Id: number | ''; isActive: boolean }>({
     id: '',
     name: '',
     flatformType: 'facebook',
-    workflowId: '',
+    workflowV2Id: '',
     isActive: true
   })
 
   useEffect(() => {
     loadAllCampaignActions()
-    
-    // Load flows for the dropdown
-    if (window.electronAPI) {
-      window.electronAPI.listFlows().then(setFlows).catch(console.error)
+
+    // Load workflows v2 for the dropdown
+    if (window.electronAPI?.v2?.listWorkflows) {
+      window.electronAPI.v2.listWorkflows().then(setWorkflows).catch(console.error)
     }
   }, [loadAllCampaignActions])
 
@@ -37,7 +38,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       id: '',
       name: '',
       flatformType: 'facebook',
-      workflowId: '',
+      workflowV2Id: '',
       isActive: true
     })
     setShowForm(true)
@@ -49,20 +50,25 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       id: action.id,
       name: action.name,
       flatformType: action.flatformType,
-      workflowId: action.workflowId || '',
+      workflowV2Id: action.workflowV2Id ?? '',
       isActive: action.isActive
     })
     setShowForm(true)
   }
 
-  const handleDelete = async (action: CampaignAction) => {
-    if (!confirm(`Xoá hành động "${action.name}"?`)) return
-    try {
-      await deleteCampaignAction(action.id)
-    } catch (err) {
-      console.error('Failed to delete action:', err)
-      useUiStore.getState().showAlert('', 'error')
-    }
+  const handleDelete = (action: CampaignAction) => {
+    useUiStore.getState().showConfirm(
+      `Xoá hành động "${action.name}"?`,
+      async () => {
+        try {
+          await deleteCampaignAction(action.id)
+        } catch (err) {
+          console.error('Failed to delete action:', err)
+          useUiStore.getState().showAlert('', 'error')
+        }
+      },
+      { title: 'Xoá hành động', confirmText: 'Xoá', variant: 'danger' }
+    )
   }
 
   const handleSubmit = async () => {
@@ -71,11 +77,19 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       return
     }
 
+    const payload: Partial<CampaignAction> = {
+      id: formData.id,
+      name: formData.name,
+      flatformType: formData.flatformType,
+      isActive: formData.isActive,
+      workflowV2Id: formData.workflowV2Id === '' ? undefined : Number(formData.workflowV2Id)
+    }
+
     try {
       if (editingAction) {
-        await updateCampaignAction(editingAction.id, formData)
+        await updateCampaignAction(editingAction.id, payload)
       } else {
-        await createCampaignAction(formData)
+        await createCampaignAction(payload)
       }
       setShowForm(false)
     } catch (err) {
@@ -93,7 +107,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
         </div>
 
         <div className="campaign-modal-body" style={{ flexDirection: 'row', overflow: 'hidden' }}>
-          
+
           {/* Main List */}
           <div className="campaign-grid-container" style={{ flex: 1, padding: 16 }}>
             <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
@@ -102,7 +116,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                 <Plus size={14} style={{ marginRight: 4 }} /> Thêm Hành động
               </button>
             </div>
-            
+
             <table className="campaign-grid">
               <thead>
                 <tr>
@@ -126,7 +140,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                       <td style={{ fontWeight: 500 }}>{action.name}</td>
                       <td><span className="badge">{action.flatformType}</span></td>
                       <td>
-                        {action.workflowId ? (
+                        {action.workflowV2Id ? (
                            <span className="text-success" style={{ fontSize: 11 }}>Đã liên kết</span>
                         ) : (
                           <span className="text-error" style={{ fontSize: 11 }}>Chưa liên kết</span>
@@ -158,7 +172,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
           {showForm && (
             <div className="campaign-settings-panel" style={{ width: 300, borderLeft: '1px solid var(--border-default)', borderRight: 'none' }}>
               <h3 className="section-title">{editingAction ? 'Sửa hành động' : 'Têm hành động'}</h3>
-              
+
               <div className="form-group row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                 <label>ID Hành động (Mã duy nhất, không dấu):</label>
                 <input
@@ -203,18 +217,18 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
               <div className="form-group row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                 <label>Workflow Liên Kết:</label>
                 <select
-                  value={formData.workflowId}
-                  onChange={e => setFormData(prev => ({ ...prev, workflowId: e.target.value }))}
+                  value={formData.workflowV2Id}
+                  onChange={e => setFormData(prev => ({ ...prev, workflowV2Id: e.target.value === '' ? '' : Number(e.target.value) }))}
                   className="panel-input"
                   style={{ width: '100%' }}
                 >
                   <option value="">-- Chọn Workflow --</option>
-                  {flows.map(f => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
+                  {workflows.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
                   ))}
                 </select>
                 <span className="text-secondary" style={{ fontSize: 10, marginTop: 4 }}>
-                  Workflow lõi sẽ chạy khi hành động này được gọi.
+                  Workflow v2 sẽ chạy khi hành động này được gọi.
                 </span>
               </div>
 

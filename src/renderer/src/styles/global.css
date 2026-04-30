@@ -1402,7 +1402,7 @@ body {
 }
 
 /* =========== ACCOUNT CARD (single-column table) =========== */
-.account-card {
+.channel-card {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1414,13 +1414,13 @@ body {
   background: var(--bg-elevated);
 }
 
-.account-card:hover {
+.channel-card:hover {
   border-color: var(--accent-primary);
   background: var(--bg-hover);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.08);
 }
 
-.account-card-info {
+.channel-card-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1428,7 +1428,7 @@ body {
   min-width: 0;
 }
 
-.account-card-name {
+.channel-card-name {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
@@ -1437,7 +1437,7 @@ body {
   white-space: nowrap;
 }
 
-.account-card-meta {
+.channel-card-meta {
   font-size: 10px;
   color: var(--text-tertiary);
   display: flex;
@@ -1445,7 +1445,7 @@ body {
   gap: 6px;
 }
 
-.account-tag {
+.channel-tag {
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1454,23 +1454,23 @@ body {
   background: rgba(56, 189, 248, 0.1);
 }
 
-.account-tag.inactive {
+.channel-tag.inactive {
   background: rgba(244, 63, 94, 0.1);
   color: var(--accent-error);
 }
 
-.account-card-actions {
+.channel-card-actions {
   display: flex;
   gap: 2px;
   opacity: 0.4;
   transition: opacity var(--transition-fast);
 }
 
-.account-card:hover .account-card-actions {
+.channel-card:hover .channel-card-actions {
   opacity: 1;
 }
 
-.account-card-actions .btn-icon {
+.channel-card-actions .btn-icon {
   padding: 4px;
   background: transparent;
   border: none;
@@ -1480,7 +1480,7 @@ body {
   transition: all var(--transition-fast);
 }
 
-.account-card-actions .btn-icon:hover {
+.channel-card-actions .btn-icon:hover {
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
@@ -1540,7 +1540,7 @@ body {
   flex: 2;
   min-width: 0;
 }
-.col-account {
+.col-channel {
   flex: 1.5;
   min-width: 0;
 }
@@ -1581,6 +1581,58 @@ body {
   padding: 2px 8px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.04);
+}
+
+.col-checkbox {
+  width: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.col-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  margin: 0;
+}
+
+.campaign-table-row.multi-selected {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.campaign-table-row.multi-selected.selected {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.campaign-bulk-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.bulk-action-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.bulk-action-buttons .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.bulk-action-buttons .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* =========== LOG PANEL =========== */
@@ -2488,16 +2540,16 @@ body {
 }
 
 /* =========== DISABLED ACCOUNT CARD =========== */
-.account-card.disabled {
+.channel-card.disabled {
   opacity: 0.55;
   border-style: dashed;
 }
 
-.account-card.disabled:hover {
+.channel-card.disabled:hover {
   opacity: 0.75;
 }
 
-.account-status-icon {
+.channel-status-icon {
   margin-right: 4px;
   font-size: 10px;
 }

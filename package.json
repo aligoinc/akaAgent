@@ -1,6 +1,6 @@
 {
   "name": "aka-biz-auto",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Browser Automation Desktop App with Visual Flow Builder",
   "main": "./out/main/index.js",
   "author": "akaBiz",
@@ -14,10 +14,12 @@
     "build:mac": "npm run build && electron-builder --mac --config"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@supabase/supabase-js": "^2.49.1",
     "@xyflow/react": "^12.4.4",
     "dotenv": "^17.3.1",
     "lucide-react": "^0.469.0",
+    "monaco-editor": "^0.55.1",
     "playwright": "^1.58.2",
     "uuid": "^11.1.0",
     "xlsx": "^0.18.5",
@@ -45,6 +47,12 @@
     },
     "files": [
       "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "version.txt",
+        "to": "version.txt"
+      }
     ],
     "asarUnpack": [
       "node_modules/playwright-core/**/*"
