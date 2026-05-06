@@ -4,12 +4,13 @@ import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { IPC_CHANNELS, Campaign, CampaignDataAction } from '../../shared/types'
 import { IPC_CHANNELS_V2, RunStepV2 } from '../../shared/v2Types'
-import { PageControllerRegistry } from '../v2/runtime/pageController'
+import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
+import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 
 /**
  * Campaign scheduler: every 30s, scan eligible channels for due campaigns and
- * run their associated workflow v2 against the channel's embedded webview.
+ * run their associated workflow v2 against the channel browser session.
  *
  * Engine v2 is the only execution path. Each campaign action template
  * (`auto_campaign_actions.workflow_v2_id`) points to a workflow that already
@@ -27,6 +28,7 @@ export class CampaignScheduler {
   private running = false
   private processing = false
   private activeV2Aborts = new Map<number, AbortController>()
+  private backgroundPages = new BackgroundPageManager()
 
   constructor(supabase: SupabaseService, webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow) {
     this.supabase = supabase
@@ -53,6 +55,7 @@ export class CampaignScheduler {
       clearInterval(this.intervalId)
       this.intervalId = null
     }
+    this.backgroundPages.destroyAll()
     this.sendLog('⏹ Scheduler đã dừng.')
   }
 
@@ -217,10 +220,6 @@ export class CampaignScheduler {
         return
       }
 
-      if (!this.pageRegistry) {
-        throw new Error('pageRegistry chưa được set cho scheduler')
-      }
-
       await this.executeCampaignV2(channel, campaign, action.workflowV2Id)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
@@ -246,14 +245,6 @@ export class CampaignScheduler {
     campaign: Campaign,
     workflowV2Id: number
   ): Promise<void> {
-    if (!this.pageRegistry) throw new Error('pageRegistry chưa được set cho scheduler')
-    const page = this.pageRegistry.get(channel.id)
-    if (!page) {
-      this.sendLog(`⚠️ Tài khoản "${channel.name}" chưa mở tab. Bỏ qua.`)
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
-      return
-    }
-
     // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
     const details = await this.supabase.listCampaignDataActions(campaign.id)
 
@@ -303,6 +294,8 @@ export class CampaignScheduler {
 
       const detail = targets[i]
       if (detail && detail.status !== 'chờ xử lý') continue
+
+      const page = this.getAutomationPage(channel)
 
       // Rate limit
       const actionLabel = campaign.actionId === 'facebook_message_friend' ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn') : 'Đăng bài'
@@ -668,6 +661,10 @@ export class CampaignScheduler {
     } catch {
       // Window may be closed
     }
+  }
+
+  private getAutomationPage(channel: import('../../shared/types').OrgChannel): PageController {
+    return this.backgroundPages.getOrCreate(channel.id, channel.flatformType)
   }
 
   /**
