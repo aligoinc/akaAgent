@@ -1,6 +1,6 @@
-import { Campaign, CampaignDataInput, CampaignDataAction, CampaignResultAction } from '../../../shared/types'
+import { Campaign, CampaignInput, CampaignInputData, CampaignDetail } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
-import { mapCampaignFromDB, mapCampaignDataInputFromDB, mapCampaignDataActionFromDB, mapResultActionFromDB } from '../mappers'
+import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
@@ -11,7 +11,7 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .single()
@@ -24,7 +24,7 @@ export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
@@ -38,7 +38,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
-    channel_id: campaign.channelId,
+    account_id: campaign.accountId,
     status: campaign.status || 'chờ xử lý',
     schedule: campaign.schedule || null,
     schedule_type: campaign.scheduleType || 'daily',
@@ -59,7 +59,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const { data, error } = await client()
     .from('auto_campaigns')
     .insert(payload)
-    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .single()
 
   if (error) throw new Error(`Failed to create campaign: ${error.message}`)
@@ -71,7 +71,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.actionId !== undefined) payload.action_id = updates.actionId
-  if (updates.channelId !== undefined) payload.channel_id = updates.channelId
+  if (updates.accountId !== undefined) payload.account_id = updates.accountId
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.schedule !== undefined) payload.schedule = updates.schedule
   if (updates.scheduleType !== undefined) payload.schedule_type = updates.scheduleType
@@ -91,7 +91,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
-    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .single()
 
   if (error) throw new Error(`Failed to update campaign: ${error.message}`)
@@ -125,7 +125,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
     .insert({
       name: origCamp.name + ' (Copy)',
       action_id: origCamp.action_id,
-      channel_id: origCamp.channel_id,
+      account_id: origCamp.account_id,
       status: 'chờ xử lý',
       schedule: origCamp.schedule,
       schedule_type: origCamp.schedule_type,
@@ -142,25 +142,25 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       staff_id: u.staffId,
       organization_id: u.organizationId
     })
-    .select('*, auto_campaign_actions(name), org_channels(name)')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .single()
 
   if (errInsert || !newCamp) throw new Error(`Failed to insert cloned campaign: ${errInsert?.message}`)
 
-  // Clone data_inputs trước (để build map oldInputId → newInputId cho data_actions tham chiếu)
+  // Clone campaign_inputs trước (để build map oldInputId → newInputId cho input_data tham chiếu)
   const inputIdMap = new Map<number, number>()
   const { data: origInputs, error: errInputs } = await client()
-    .from('auto_campaign_data_inputs')
+    .from('auto_campaign_inputs')
     .select('*')
     .eq('campaign_id', id)
     .eq('is_delete', false)
 
-  if (errInputs) throw new Error(`Failed to fetch original data inputs: ${errInputs.message}`)
+  if (errInputs) throw new Error(`Failed to fetch original campaign inputs: ${errInputs.message}`)
 
   if (origInputs && origInputs.length > 0) {
     for (const inp of origInputs) {
       const { data: newInp, error: errInsertInp } = await client()
-        .from('auto_campaign_data_inputs')
+        .from('auto_campaign_inputs')
         .insert({
           campaign_id: newCamp.id,
           name: inp.name,
@@ -174,26 +174,26 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
         .select('id')
         .single()
       if (errInsertInp || !newInp) {
-        console.warn('Failed to clone data input:', errInsertInp)
+        console.warn('Failed to clone campaign input:', errInsertInp)
         continue
       }
       inputIdMap.set(inp.id as number, newInp.id as number)
     }
   }
 
-  // Clone data_actions, map data_input_id qua inputIdMap
+  // Clone campaign_input_data, map input_id qua inputIdMap
   const { data: origActions, error: errActions } = await client()
-    .from('auto_campaign_data_actions')
+    .from('auto_campaign_input_data')
     .select('*')
     .eq('campaign_id', id)
     .eq('is_delete', false)
 
-  if (errActions) throw new Error(`Failed to fetch original data actions: ${errActions.message}`)
+  if (errActions) throw new Error(`Failed to fetch original campaign input data: ${errActions.message}`)
 
   if (origActions && origActions.length > 0) {
     const actionsToInsert = origActions.map(d => ({
       campaign_id: newCamp.id,
-      data_input_id: d.data_input_id != null ? (inputIdMap.get(d.data_input_id as number) ?? null) : null,
+      input_id: d.input_id != null ? (inputIdMap.get(d.input_id as number) ?? null) : null,
       name: d.name,
       phone: d.phone,
       uid: d.uid,
@@ -204,11 +204,11 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
     }))
 
     const { error: errInsertActions } = await client()
-      .from('auto_campaign_data_actions')
+      .from('auto_campaign_input_data')
       .insert(actionsToInsert)
 
     if (errInsertActions) {
-      console.warn('Failed to clone data actions:', errInsertActions)
+      console.warn('Failed to clone campaign input data:', errInsertActions)
     }
   }
 
@@ -234,12 +234,12 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
   if (error) throw new Error(`Failed to append campaign log: ${error.message}`)
 }
 
-export async function getPendingCampaigns(channelId: number): Promise<Campaign[]> {
+export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), org_channels(name)')
-    .eq('channel_id', channelId)
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .eq('account_id', accountId)
     .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
     .eq('is_delete', false)
@@ -258,39 +258,39 @@ export async function resetRunningCampaignStatuses(): Promise<void> {
   if (error) console.error('Failed to reset campaign statuses:', error.message)
 }
 
-export async function resetRunningDataInputStatuses(): Promise<void> {
+export async function resetRunningCampaignInputStatuses(): Promise<void> {
   const { error } = await client()
-    .from('auto_campaign_data_inputs')
+    .from('auto_campaign_inputs')
     .update({ status: 'chờ xử lý' })
     .eq('status', 'đang chạy')
 
-  if (error) console.error('Failed to reset data input statuses:', error.message)
+  if (error) console.error('Failed to reset campaign input statuses:', error.message)
 }
 
-export async function resetRunningDataActionStatuses(): Promise<void> {
+export async function resetRunningCampaignInputDataStatuses(): Promise<void> {
   const { error } = await client()
-    .from('auto_campaign_data_actions')
+    .from('auto_campaign_input_data')
     .update({ status: 'chờ xử lý' })
     .eq('status', 'đang chạy')
 
-  if (error) console.error('Failed to reset data action statuses:', error.message)
+  if (error) console.error('Failed to reset campaign input data statuses:', error.message)
 }
 
-// =========== CAMPAIGN DATA INPUTS (pool nguyên liệu) ===========
+// =========== CAMPAIGN INPUTS (pool nguyên liệu) ===========
 
-export async function listCampaignDataInputs(campaignId: number): Promise<CampaignDataInput[]> {
+export async function listCampaignInputs(campaignId: number): Promise<CampaignInput[]> {
   const { data, error } = await client()
-    .from('auto_campaign_data_inputs')
+    .from('auto_campaign_inputs')
     .select('*')
     .eq('campaign_id', campaignId)
     .eq('is_delete', false)
     .order('created_at', { ascending: true })
 
-  if (error) throw new Error(`Failed to list campaign data inputs: ${error.message}`)
-  return (data || []).map(row => mapCampaignDataInputFromDB(row))
+  if (error) throw new Error(`Failed to list campaign inputs: ${error.message}`)
+  return (data || []).map(row => mapCampaignInputFromDB(row))
 }
 
-export async function createCampaignDataInput(input: Partial<CampaignDataInput>): Promise<CampaignDataInput> {
+export async function createCampaignInput(input: Partial<CampaignInput>): Promise<CampaignInput> {
   const payload = {
     campaign_id: input.campaignId,
     name: input.name || null,
@@ -303,16 +303,16 @@ export async function createCampaignDataInput(input: Partial<CampaignDataInput>)
   }
 
   const { data, error } = await client()
-    .from('auto_campaign_data_inputs')
+    .from('auto_campaign_inputs')
     .insert(payload)
     .select()
     .single()
 
-  if (error) throw new Error(`Failed to create data input: ${error.message}`)
-  return mapCampaignDataInputFromDB(data)
+  if (error) throw new Error(`Failed to create campaign input: ${error.message}`)
+  return mapCampaignInputFromDB(data)
 }
 
-export async function updateCampaignDataInput(id: number, updates: Partial<CampaignDataInput>): Promise<CampaignDataInput> {
+export async function updateCampaignInput(id: number, updates: Partial<CampaignInput>): Promise<CampaignInput> {
   const payload: any = {}
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.phone !== undefined) payload.phone = updates.phone
@@ -324,43 +324,43 @@ export async function updateCampaignDataInput(id: number, updates: Partial<Campa
   if (updates.dateAction !== undefined) payload.date_action = updates.dateAction
 
   const { data, error } = await client()
-    .from('auto_campaign_data_inputs')
+    .from('auto_campaign_inputs')
     .update(payload)
     .eq('id', id)
     .select()
     .single()
 
-  if (error) throw new Error(`Failed to update data input: ${error.message}`)
-  return mapCampaignDataInputFromDB(data)
+  if (error) throw new Error(`Failed to update campaign input: ${error.message}`)
+  return mapCampaignInputFromDB(data)
 }
 
-export async function deleteCampaignDataInput(id: number): Promise<void> {
+export async function deleteCampaignInput(id: number): Promise<void> {
   const { error } = await client()
-    .from('auto_campaign_data_inputs')
+    .from('auto_campaign_inputs')
     .update({ is_delete: true })
     .eq('id', id)
 
-  if (error) throw new Error(`Failed to delete data input: ${error.message}`)
+  if (error) throw new Error(`Failed to delete campaign input: ${error.message}`)
 }
 
-// =========== CAMPAIGN DATA ACTIONS (việc-cần-làm) ===========
+// =========== CAMPAIGN INPUT DATA (việc-cần-làm) ===========
 
-export async function listCampaignDataActions(campaignId: number): Promise<CampaignDataAction[]> {
+export async function listCampaignInputData(campaignId: number): Promise<CampaignInputData[]> {
   const { data, error } = await client()
-    .from('auto_campaign_data_actions')
+    .from('auto_campaign_input_data')
     .select('*')
     .eq('campaign_id', campaignId)
     .eq('is_delete', false)
     .order('created_at', { ascending: true })
 
-  if (error) throw new Error(`Failed to list campaign data actions: ${error.message}`)
-  return (data || []).map(row => mapCampaignDataActionFromDB(row))
+  if (error) throw new Error(`Failed to list campaign input data: ${error.message}`)
+  return (data || []).map(row => mapCampaignInputDataFromDB(row))
 }
 
-export async function createCampaignDataAction(action: Partial<CampaignDataAction>): Promise<CampaignDataAction> {
+export async function createCampaignInputData(action: Partial<CampaignInputData>): Promise<CampaignInputData> {
   const payload = {
     campaign_id: action.campaignId,
-    data_input_id: action.dataInputId ?? null,
+    input_id: action.inputId ?? null,
     name: action.name || null,
     phone: action.phone || null,
     uid: action.uid || null,
@@ -371,18 +371,18 @@ export async function createCampaignDataAction(action: Partial<CampaignDataActio
   }
 
   const { data, error } = await client()
-    .from('auto_campaign_data_actions')
+    .from('auto_campaign_input_data')
     .insert(payload)
     .select()
     .single()
 
-  if (error) throw new Error(`Failed to create data action: ${error.message}`)
-  return mapCampaignDataActionFromDB(data)
+  if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
+  return mapCampaignInputDataFromDB(data)
 }
 
-export async function updateCampaignDataAction(id: number, updates: Partial<CampaignDataAction>): Promise<CampaignDataAction> {
+export async function updateCampaignInputData(id: number, updates: Partial<CampaignInputData>): Promise<CampaignInputData> {
   const payload: any = {}
-  if (updates.dataInputId !== undefined) payload.data_input_id = updates.dataInputId
+  if (updates.inputId !== undefined) payload.input_id = updates.inputId
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.phone !== undefined) payload.phone = updates.phone
   if (updates.uid !== undefined) payload.uid = updates.uid
@@ -393,57 +393,57 @@ export async function updateCampaignDataAction(id: number, updates: Partial<Camp
   if (updates.dateAction !== undefined) payload.date_action = updates.dateAction
 
   const { data, error } = await client()
-    .from('auto_campaign_data_actions')
+    .from('auto_campaign_input_data')
     .update(payload)
     .eq('id', id)
     .select()
     .single()
 
-  if (error) throw new Error(`Failed to update data action: ${error.message}`)
-  return mapCampaignDataActionFromDB(data)
+  if (error) throw new Error(`Failed to update campaign input data: ${error.message}`)
+  return mapCampaignInputDataFromDB(data)
 }
 
-export async function deleteCampaignDataAction(id: number): Promise<void> {
+export async function deleteCampaignInputData(id: number): Promise<void> {
   const { error } = await client()
-    .from('auto_campaign_data_actions')
+    .from('auto_campaign_input_data')
     .update({ is_delete: true })
     .eq('id', id)
 
-  if (error) throw new Error(`Failed to delete data action: ${error.message}`)
+  if (error) throw new Error(`Failed to delete campaign input data: ${error.message}`)
 }
 
-// =========== CAMPAIGN RESULT ACTIONS (per-milestone log) ===========
+// =========== CAMPAIGN DETAILS (per-milestone log) ===========
 
-export async function listResultActionsByDataAction(dataActionId: number): Promise<CampaignResultAction[]> {
+export async function listCampaignDetailsByInputData(inputDataId: number): Promise<CampaignDetail[]> {
   const { data, error } = await client()
-    .from('auto_campaign_result_actions')
+    .from('auto_campaign_details')
     .select('*')
-    .eq('data_action_id', dataActionId)
+    .eq('input_data_id', inputDataId)
     .eq('is_delete', false)
     .order('created_at', { ascending: true })
 
-  if (error) throw new Error(`Failed to list result actions: ${error.message}`)
-  return (data || []).map(row => mapResultActionFromDB(row))
+  if (error) throw new Error(`Failed to list campaign details: ${error.message}`)
+  return (data || []).map(row => mapCampaignDetailFromDB(row))
 }
 
-export async function listResultActionsByCampaign(campaignId: number): Promise<CampaignResultAction[]> {
+export async function listCampaignDetailsByCampaign(campaignId: number): Promise<CampaignDetail[]> {
   const { data, error } = await client()
-    .from('auto_campaign_result_actions')
+    .from('auto_campaign_details')
     .select('*')
     .eq('campaign_id', campaignId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
     .limit(500)
 
-  if (error) throw new Error(`Failed to list result actions by campaign: ${error.message}`)
-  return (data || []).map(row => mapResultActionFromDB(row))
+  if (error) throw new Error(`Failed to list campaign details by campaign: ${error.message}`)
+  return (data || []).map(row => mapCampaignDetailFromDB(row))
 }
 
-export async function createResultAction(action: Partial<CampaignResultAction>): Promise<CampaignResultAction> {
+export async function createCampaignDetail(action: Partial<CampaignDetail>): Promise<CampaignDetail> {
   const payload = {
-    data_action_id: action.dataActionId ?? null,
+    input_data_id: action.inputDataId ?? null,
     campaign_id: action.campaignId,
-    channel_id: action.channelId,
+    account_id: action.accountId,
     action_name: action.actionName,
     status: action.status || 'thành công',
     log: action.log || null,
@@ -452,26 +452,26 @@ export async function createResultAction(action: Partial<CampaignResultAction>):
   }
 
   const { data, error } = await client()
-    .from('auto_campaign_result_actions')
+    .from('auto_campaign_details')
     .insert(payload)
     .select()
     .single()
 
-  if (error) throw new Error(`Failed to create result action: ${error.message}`)
-  return mapResultActionFromDB(data)
+  if (error) throw new Error(`Failed to create campaign detail: ${error.message}`)
+  return mapCampaignDetailFromDB(data)
 }
 
-export async function deleteResultAction(id: number): Promise<void> {
+export async function deleteCampaignDetail(id: number): Promise<void> {
   const { error } = await client()
-    .from('auto_campaign_result_actions')
+    .from('auto_campaign_details')
     .update({ is_delete: true })
     .eq('id', id)
 
-  if (error) throw new Error(`Failed to delete result action: ${error.message}`)
+  if (error) throw new Error(`Failed to delete campaign detail: ${error.message}`)
 }
 
-export async function getChannelRateLimitStatus(
-  channelId: number,
+export async function getAccountRateLimitStatus(
+  accountId: number,
   actionName: string,
   limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }
 ): Promise<{ ok: boolean; reason?: string; isDailyLimit?: boolean; retryAfterMs?: number }> {
@@ -487,9 +487,9 @@ export async function getChannelRateLimitStatus(
   today.setHours(0, 0, 0, 0)
 
   const { count: dailyActionCount, error: dailyErr } = await client()
-    .from('auto_campaign_result_actions')
+    .from('auto_campaign_details')
     .select('*', { count: 'exact', head: true })
-    .eq('channel_id', channelId)
+    .eq('account_id', accountId)
     .eq('action_name', actionName)
     .in('status', ratedStatuses)
     .gte('created_at', today.toISOString())
@@ -512,9 +512,9 @@ export async function getChannelRateLimitStatus(
   const timeFrameStart = new Date(new Date().getTime() - rateLimitMinutes * 60 * 1000)
 
   const { count: windowActionCount, error: winErr } = await client()
-    .from('auto_campaign_result_actions')
+    .from('auto_campaign_details')
     .select('*', { count: 'exact', head: true })
-    .eq('channel_id', channelId)
+    .eq('account_id', accountId)
     .eq('action_name', actionName)
     .in('status', ratedStatuses)
     .gte('created_at', timeFrameStart.toISOString())
@@ -524,9 +524,9 @@ export async function getChannelRateLimitStatus(
   if ((windowActionCount ?? 0) >= rateLimitCount) {
     // Hourly limit → đợi tới khi row cũ nhất trong window > rateLimitMinutes phút
     const { data: oldestRow } = await client()
-      .from('auto_campaign_result_actions')
+      .from('auto_campaign_details')
       .select('created_at')
-      .eq('channel_id', channelId)
+      .eq('account_id', accountId)
       .eq('action_name', actionName)
       .in('status', ratedStatuses)
       .gte('created_at', timeFrameStart.toISOString())

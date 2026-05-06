@@ -16,14 +16,14 @@ export default function App() {
   const isAdminAkabiz = !!user?.isAdminAkabiz
   // Default to campaigns; if user is not akaBiz admin, workflow-editor is hidden anyway.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
-  const [focusChannelId, setFocusChannelId] = useState<number | null>(null)
+  const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
 
   // Bootstrap auth: re-login from stored creds (or land on LoginPage).
   useEffect(() => {
     rehydrateFromStorage()
   }, [rehydrateFromStorage])
 
-  // Snap workflow-editor → campaigns if user loses admin access (e.g. after switching channel).
+  // Snap workflow-editor → campaigns if user loses admin access (e.g. after switching account).
   useEffect(() => {
     if (!isAdminAkabiz && activePage === 'workflow-editor') {
       setActivePage('campaigns')
@@ -31,7 +31,7 @@ export default function App() {
   }, [isAdminAkabiz, activePage])
 
   const { theme } = useThemeStore()
-  const { loadChannels, upsertCampaign } = useCampaignStore()
+  const { loadAccounts, upsertCampaign } = useCampaignStore()
 
   const [updateInfo, setUpdateInfo] = useState<{ localVersion: string; remoteVersion: string } | null>(null)
 
@@ -55,12 +55,12 @@ export default function App() {
 
   // Listen for auto-check login status updates from main process
   useEffect(() => {
-    if (!window.electronAPI?.onChannelStatusUpdated) return
-    const unsubscribe = window.electronAPI.onChannelStatusUpdated(() => {
-      loadChannels()
+    if (!window.electronAPI?.onAccountStatusUpdated) return
+    const unsubscribe = window.electronAPI.onAccountStatusUpdated(() => {
+      loadAccounts()
     })
     return unsubscribe
-  }, [loadChannels])
+  }, [loadAccounts])
 
   // Listen for realtime campaign status updates (scheduler → renderer)
   useEffect(() => {
@@ -123,8 +123,8 @@ export default function App() {
       <TopBar activePage={activePage} onPageChange={setActivePage} />
 
       <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <CampaignPage onNavigateToBrowser={(channelId) => {
-          setFocusChannelId(channelId)
+        <CampaignPage onNavigateToBrowser={(accountId) => {
+          setFocusAccountId(accountId)
           setActivePage('browsers')
         }} />
       </div>
@@ -133,7 +133,7 @@ export default function App() {
         ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
         : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
       }>
-        <BrowserPage focusChannelId={focusChannelId} onFocusHandled={() => setFocusChannelId(null)} />
+        <BrowserPage focusAccountId={focusAccountId} onFocusHandled={() => setFocusAccountId(null)} />
       </div>
 
       {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}

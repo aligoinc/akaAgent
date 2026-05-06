@@ -1,19 +1,14 @@
-# Copy this file to `.codex/config.toml` for local Codex MCP setup.
-# Do not commit `.codex/config.toml`; it may contain service-role credentials.
-
 [mcp_servers.supabase]
 command = "cmd"
 args = [
   "/c",
   "npx",
   "-y",
-  "-p",
-  "supabase-mcp@latest",
-  "supabase-mcp-claude",
+  "@supabase/mcp-server-supabase@latest",
+  "--access-token",
+  "%SUPABASE_ACCESS_TOKEN%",
+  "--project-ref",
+  "your-project-ref",
+  "--features",
+  "database,docs",
 ]
-
-[mcp_servers.supabase.env]
-MCP_API_KEY = "replace-with-local-key"
-SUPABASE_URL = "https://your-project.supabase.co"
-SUPABASE_ANON_KEY = "replace-with-anon-key"
-SUPABASE_SERVICE_ROLE_KEY = "replace-with-service-role-key"

@@ -1,30 +1,30 @@
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '../../../shared/types'
+import { IPC_EVENTS } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { WebviewRegistry } from '../../playwright/webviewController'
 
-export function registerChannelHandlers(supabase: SupabaseService, webviewRegistry: WebviewRegistry): void {
-  ipcMain.handle(IPC_CHANNELS.DB_LIST_CHANNELS, async () => {
-    return supabase.listChannels()
+export function registerAccountHandlers(supabase: SupabaseService, webviewRegistry: WebviewRegistry): void {
+  ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNTS, async () => {
+    return supabase.listAccounts()
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_CREATE_CHANNEL, async (_, channelData) => {
-    return supabase.createChannel(channelData)
+  ipcMain.handle(IPC_EVENTS.DB_CREATE_ACCOUNT, async (_, accountData) => {
+    return supabase.createAccount(accountData)
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_UPDATE_CHANNEL, async (_, id: number, updates) => {
-    return supabase.updateChannel(id, updates)
+  ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
+    return supabase.updateAccount(id, updates)
   })
 
-  ipcMain.handle(IPC_CHANNELS.DB_DELETE_CHANNEL, async (_, id: number) => {
+  ipcMain.handle(IPC_EVENTS.DB_DELETE_ACCOUNT, async (_, id: number) => {
     if (webviewRegistry.isRegistered(id)) {
       webviewRegistry.unregister(id)
     }
-    return supabase.deleteChannel(id)
+    return supabase.deleteAccount(id)
   })
 
-  ipcMain.handle(IPC_CHANNELS.CHANNEL_RELOAD_PAGE, async (_, channelId: number, flatformType: string) => {
-    const wcId = webviewRegistry.getWebContentsId(channelId)
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, async (_, accountId: number, flatformType: string) => {
+    const wcId = webviewRegistry.getWebContentsId(accountId)
     if (!wcId) {
       return { success: false, reason: 'Tab trình duyệt chưa được mở' }
     }
@@ -49,8 +49,8 @@ export function registerChannelHandlers(supabase: SupabaseService, webviewRegist
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.CHANNEL_CHECK_FB_LOGIN, async (_, channelId: number) => {
-    const webContentsId = webviewRegistry.getWebContentsId(channelId)
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_CHECK_FB_LOGIN, async (_, accountId: number) => {
+    const webContentsId = webviewRegistry.getWebContentsId(accountId)
     if (!webContentsId) {
       return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt chưa được mở' }
     }
@@ -77,13 +77,13 @@ export function registerChannelHandlers(supabase: SupabaseService, webviewRegist
         })()
       `)
       if (result.loggedIn) {
-        await supabase.updateChannel(channelId, { loginStatus: 'đã đăng nhập' })
+        await supabase.updateAccount(accountId, { loginStatus: 'đã đăng nhập' })
         return { loggedIn: true, status: 'đã đăng nhập' }
       } else if (result.checkpoint) {
-        await supabase.updateChannel(channelId, { loginStatus: 'checkpoint' })
+        await supabase.updateAccount(accountId, { loginStatus: 'checkpoint' })
         return { loggedIn: false, status: 'checkpoint', reason: 'Tài khoản bị checkpoint' }
       } else {
-        await supabase.updateChannel(channelId, { loginStatus: 'chưa đăng nhập' })
+        await supabase.updateAccount(accountId, { loginStatus: 'chưa đăng nhập' })
         return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa đăng nhập Facebook' }
       }
     } catch (err: any) {

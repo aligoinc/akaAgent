@@ -1,19 +1,19 @@
 ---
 name: add-builtin-block
-description: Use when adding a new built-in block to seedV2 — viết JS code chạy trong vm.createContext sandbox với context (input, page, vars, helpers, signal). Cũng dùng khi refactor block có sẵn (đổi config schema, đổi code). KHÔNG dùng cho block custom user tự tạo qua UI — đó là run-time CRUD qua BlockCrudModal.
+description: Use when adding or updating a built-in block in auto_blocks — viết JS code chạy trong vm.createContext sandbox với context (input, page, vars, helpers, signal). Cũng dùng khi refactor block có sẵn (đổi config schema, đổi code). KHÔNG dùng cho block custom user tự tạo qua UI — đó là run-time CRUD qua BlockCrudModal.
 ---
 
 # Add / Update built-in block trong engine v2
 
 ## Bối cảnh
 
-Built-in blocks seed qua [src/main/data/seed/seedV2.ts](src/main/data/seed/seedV2.ts) với `is_builtin=true`. UPSERT theo UNIQUE `name` → mỗi lần app start sync code mới nhất. Block code chạy trong sandbox với context:
+Built-in blocks live in Supabase `auto_blocks` with `is_builtin=true`. DB is the source of truth; there is no `seedV2` file or app-start reseed. Update built-ins through the admin UI/IPC path or an explicit SQL migration. Block code chạy trong sandbox với context:
 
 ```typescript
 {
   input: Record<string, unknown>     // node.config + parents output merged
   page: PageController                // page.click/type/fill/scroll/evaluate/$$/...
-  vars: Record<string, unknown>      // workflow vars (campaignContent, detailUid, ...)
+  vars: Record<string, unknown>      // workflow vars (campaignContent, inputDataUid, targetUrl, ...)
   helpers: BlockHelpers              // sleep, log, element(name), normalizeFbUrl, ...
   signal: AbortSignal                // check signal.aborted trong long loops
 }
@@ -34,7 +34,7 @@ Block return object → output. Throw → block fail. Output cascade qua edges c
 | `file` | Upload/drop file |
 | `control` | System blocks (kind='system': ifElse, loop, parallel, merge) |
 | `facebook` | FB-specific compound (fb_open_composer, fb_send_message) |
-| `custom` | User block (KHÔNG seed) |
+| `custom` | User block |
 
 ### 2. Define configSchema + outputSchema
 
@@ -116,11 +116,11 @@ CÓ thể dùng:
 
 ### 5. Test trong UI
 
-Restart `npm run dev` → seedV2 UPSERT block. Vào "Cài đặt Workflow":
+Save the block to DB through "Cài đặt Workflow" or an explicit SQL UPSERT. Restart `npm run dev` only when you need a fresh main-process cache/session. Vào "Cài đặt Workflow":
 - Block xuất hiện trong sidebar Library (đúng category)
 - Drag vào canvas → ConfigPanel render đúng schema
 - "Sửa code (Monaco)" → autocomplete `page.*`/`helpers.*` hoạt động (intellisense từ blockApiTypes.ts)
-- Test panel: chọn channel webview → "Test block" → log realtime
+- Test panel: chọn account webview → "Test block" → log realtime
 
 ### 6. Per-milestone logging (FB blocks dùng cho campaign)
 

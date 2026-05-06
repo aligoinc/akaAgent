@@ -75,7 +75,7 @@ export interface ApiCallResult {
  * PageController v2 — wrapper trên WebContents.executeJavaScript exposing
  * Playwright-style API cho block JS dùng trong sandbox.
  *
- * Chia sẻ session với <webview> đã embed cho 1 channel FB → giữ login.
+ * Chia sẻ session với <webview> đã embed cho 1 account FB → giữ login.
  *
  * Khác với engine cũ (executeAction switch theo enum), pageController có
  * method tường minh per primitive — đọc trong block dễ hơn, intellisense tốt.
@@ -682,8 +682,8 @@ export class PageController {
 }
 
 /**
- * Registry mapping channelId → PageController. Engine v2 lookup PageController
- * theo channel hiện tại để chạy block. Đăng ký bởi BrowserPage qua IPC khi
+ * Registry mapping accountId → PageController. Engine v2 lookup PageController
+ * theo account hiện tại để chạy block. Đăng ký bởi BrowserPage qua IPC khi
  * webview mount/unmount.
  *
  * Pattern này tách biệt với WebviewRegistry cũ (bên webviewController.ts) để
@@ -692,19 +692,19 @@ export class PageController {
 export class PageControllerRegistry {
   private map = new Map<number, PageController>()
 
-  register(channelId: number, wc: WebContents): void {
-    this.map.set(channelId, new PageController(wc))
+  register(accountId: number, wc: WebContents): void {
+    this.map.set(accountId, new PageController(wc))
   }
 
-  unregister(channelId: number): void {
-    this.map.delete(channelId)
+  unregister(accountId: number): void {
+    this.map.delete(accountId)
   }
 
-  get(channelId: number): PageController | null {
-    return this.map.get(channelId) ?? null
+  get(accountId: number): PageController | null {
+    return this.map.get(accountId) ?? null
   }
 
-  isRegistered(channelId: number): boolean {
-    return this.map.has(channelId)
+  isRegistered(accountId: number): boolean {
+    return this.map.has(accountId)
   }
 }

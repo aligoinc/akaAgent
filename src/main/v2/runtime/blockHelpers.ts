@@ -15,7 +15,7 @@ export interface BlockHelpers {
   splitVariants(content: string | undefined | null): string[]
   /** Cycle 1 biến thể theo index (modulo). Empty array → '' */
   cycleVariant(variants: string[], index: number): string
-  /** Lookup XPath snippet từ auto_v2_elements bằng name. Throws nếu không tìm thấy. */
+  /** Lookup XPath snippet từ auto_elements bằng name. Throws nếu không tìm thấy. */
   element(name: string): Promise<string>
   /** Concat multiple XPath snippets bằng name + replace ${var} placeholder */
   elementWith(name: string, vars: Record<string, string | number>): Promise<string>

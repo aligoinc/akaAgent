@@ -9,12 +9,12 @@ interface Contact {
 }
 
 interface FriendPickerModalProps {
-  channelId: number
+  accountId: number
   onClose: () => void
   onSelect: (contacts: Contact[]) => void
 }
 
-export default function FriendPickerModal({ channelId, onClose, onSelect }: FriendPickerModalProps) {
+export default function FriendPickerModal({ accountId, onClose, onSelect }: FriendPickerModalProps) {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -25,7 +25,7 @@ export default function FriendPickerModal({ channelId, onClose, onSelect }: Frie
       setLoading(true)
       try {
         if (window.electronAPI) {
-          const data = await window.electronAPI.listContacts(channelId, 'friend')
+          const data = await window.electronAPI.listContacts(accountId, 'friend')
           setContacts(data)
         }
       } catch (err) {
@@ -35,7 +35,7 @@ export default function FriendPickerModal({ channelId, onClose, onSelect }: Frie
       }
     }
     load()
-  }, [channelId])
+  }, [accountId])
 
   const filtered = contacts.filter(c => {
     if (!search.trim()) return true

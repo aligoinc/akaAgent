@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { IPC_CHANNELS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2 } from '../../../shared/v2Types'
+import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2 } from '../../../shared/v2Types'
 import * as blockRepo from '../../data/repositories/blockRepository'
 import * as workflowV2Repo from '../../data/repositories/workflowV2Repository'
 import * as elementV2Repo from '../../data/repositories/elementV2Repository'
@@ -15,48 +15,48 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
   const blockExec = new BlockExecutor()
 
   // ===== Block library CRUD =====
-  ipcMain.handle(IPC_CHANNELS_V2.BLOCK_LIST, async () => blockRepo.listBlocks())
-  ipcMain.handle(IPC_CHANNELS_V2.BLOCK_GET, async (_, id: number) => blockRepo.getBlock(id))
-  ipcMain.handle(IPC_CHANNELS_V2.BLOCK_SAVE, async (_, payload: Partial<BlockDef> & { name: string; category: BlockDef['category']; kind: BlockDef['kind'] }) => {
+  ipcMain.handle(IPC_EVENTS_V2.BLOCK_LIST, async () => blockRepo.listBlocks())
+  ipcMain.handle(IPC_EVENTS_V2.BLOCK_GET, async (_, id: number) => blockRepo.getBlock(id))
+  ipcMain.handle(IPC_EVENTS_V2.BLOCK_SAVE, async (_, payload: Partial<BlockDef> & { name: string; category: BlockDef['category']; kind: BlockDef['kind'] }) => {
     return blockRepo.saveBlock(payload)
   })
-  ipcMain.handle(IPC_CHANNELS_V2.BLOCK_DELETE, async (_, id: number) => {
+  ipcMain.handle(IPC_EVENTS_V2.BLOCK_DELETE, async (_, id: number) => {
     await blockRepo.deleteBlock(id)
     return { success: true }
   })
 
   // ===== Workflow CRUD =====
-  ipcMain.handle(IPC_CHANNELS_V2.WORKFLOW_LIST, async () => workflowV2Repo.listWorkflows())
-  ipcMain.handle(IPC_CHANNELS_V2.WORKFLOW_GET, async (_, id: number) => workflowV2Repo.getWorkflow(id))
-  ipcMain.handle(IPC_CHANNELS_V2.WORKFLOW_SAVE, async (_, payload: Partial<WorkflowDef> & { name: string }) => {
+  ipcMain.handle(IPC_EVENTS_V2.WORKFLOW_LIST, async () => workflowV2Repo.listWorkflows())
+  ipcMain.handle(IPC_EVENTS_V2.WORKFLOW_GET, async (_, id: number) => workflowV2Repo.getWorkflow(id))
+  ipcMain.handle(IPC_EVENTS_V2.WORKFLOW_SAVE, async (_, payload: Partial<WorkflowDef> & { name: string }) => {
     return workflowV2Repo.saveWorkflow(payload)
   })
-  ipcMain.handle(IPC_CHANNELS_V2.WORKFLOW_DELETE, async (_, id: number) => {
+  ipcMain.handle(IPC_EVENTS_V2.WORKFLOW_DELETE, async (_, id: number) => {
     await workflowV2Repo.deleteWorkflow(id)
     return { success: true }
   })
 
   // ===== Element library CRUD =====
-  ipcMain.handle(IPC_CHANNELS_V2.ELEMENT_LIST, async () => elementV2Repo.listElements())
-  ipcMain.handle(IPC_CHANNELS_V2.ELEMENT_GET, async (_, id: number) => elementV2Repo.getElement(id))
-  ipcMain.handle(IPC_CHANNELS_V2.ELEMENT_SAVE, async (_, payload: Partial<ElementDef> & { name: string; xpath: string }) => {
+  ipcMain.handle(IPC_EVENTS_V2.ELEMENT_LIST, async () => elementV2Repo.listElements())
+  ipcMain.handle(IPC_EVENTS_V2.ELEMENT_GET, async (_, id: number) => elementV2Repo.getElement(id))
+  ipcMain.handle(IPC_EVENTS_V2.ELEMENT_SAVE, async (_, payload: Partial<ElementDef> & { name: string; xpath: string }) => {
     return elementV2Repo.saveElement(payload)
   })
-  ipcMain.handle(IPC_CHANNELS_V2.ELEMENT_DELETE, async (_, id: number) => {
+  ipcMain.handle(IPC_EVENTS_V2.ELEMENT_DELETE, async (_, id: number) => {
     await elementV2Repo.deleteElement(id)
     return { success: true }
   })
 
   // ===== Test runs (in editor) =====
-  ipcMain.handle(IPC_CHANNELS_V2.WORKFLOW_TEST_RUN, async (_, args: {
+  ipcMain.handle(IPC_EVENTS_V2.WORKFLOW_TEST_RUN, async (_, args: {
     runKey: string
     workflowId?: number
     workflow?: WorkflowDef
-    channelId: number
+    accountId: number
     variables: Record<string, unknown>
   }) => {
-    const page = pageRegistry.get(args.channelId)
-    if (!page) throw new Error(`Tài khoản chưa mở trình duyệt (channelId=${args.channelId})`)
+    const page = pageRegistry.get(args.accountId)
+    if (!page) throw new Error(`Tài khoản chưa mở trình duyệt (accountId=${args.accountId})`)
 
     const abort = new AbortController()
     _activeAborts.set(args.runKey, abort)
@@ -69,14 +69,14 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
         args.variables ?? {},
         page,
         {
-          channelId: args.channelId,
+          accountId: args.accountId,
           signal: abort.signal,
           persist: true,
           onStepProgress: (step: RunStepV2) => {
-            mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_PROGRESS, { runKey: args.runKey, step })
+            mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: args.runKey, step })
           },
           onLog: (entry) => {
-            mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_LOG, { runKey: args.runKey, ...entry })
+            mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: args.runKey, ...entry })
           }
         }
       )
@@ -86,17 +86,17 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS_V2.BLOCK_TEST_RUN, async (_, args: {
+  ipcMain.handle(IPC_EVENTS_V2.BLOCK_TEST_RUN, async (_, args: {
     runKey: string
     blockId?: number
     code?: string
     blockName?: string
     config: Record<string, unknown>
-    channelId: number
+    accountId: number
     variables: Record<string, unknown>
   }) => {
-    const page = pageRegistry.get(args.channelId)
-    if (!page) throw new Error(`Tài khoản chưa mở trình duyệt (channelId=${args.channelId})`)
+    const page = pageRegistry.get(args.accountId)
+    if (!page) throw new Error(`Tài khoản chưa mở trình duyệt (accountId=${args.accountId})`)
 
     let code = args.code ?? ''
     let blockName = args.blockName ?? 'test'
@@ -119,7 +119,7 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
           vars: args.variables ?? {},
           signal: abort.signal,
           onLog: (line: string) => {
-            mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_LOG, { runKey: args.runKey, nodeId: 'standalone', line })
+            mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: args.runKey, nodeId: 'standalone', line })
           }
         }
       )
@@ -129,7 +129,7 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS_V2.RUN_STOP, (_, runKey: string) => {
+  ipcMain.handle(IPC_EVENTS_V2.RUN_STOP, (_, runKey: string) => {
     const abort = _activeAborts.get(runKey)
     if (abort) {
       abort.abort()

@@ -26,7 +26,7 @@ Chạy theo thứ tự:
    - List commits sẽ vào PR
 
 4. **CLAUDE.md check**: review các thay đổi commits:
-   - Có thêm/sửa table Supabase, IPC channel, action type, system block, status enum?
+   - Có thêm/sửa table Supabase, IPC account, action type, system block, status enum?
    - Có thêm/sửa repository, runtime module, convention log/UI?
    - Có common pitfall mới?
    - Nếu YES bất kỳ → update CLAUDE.md (section liên quan + Common pitfalls)

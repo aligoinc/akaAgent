@@ -4,7 +4,7 @@ import {
   Unlock, Ban, Edit3, Trash2, ListFilter,
   Database, Users, FolderOpen, ChevronRight
 } from 'lucide-react'
-import { OrgChannel } from '../../../../shared/types'
+import { AutoAccount } from '../../../../shared/types'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -14,26 +14,26 @@ const PLATFORM_URLS: Record<string, string> = {
   instagram: 'https://www.instagram.com',
 }
 
-interface ChannelContextMenuProps {
-  channel: OrgChannel
+interface AccountContextMenuProps {
+  account: AutoAccount
   position: { x: number; y: number }
   onClose: () => void
-  onViewBrowser: (channelId: number) => void
-  onReloadPage: (channel: OrgChannel) => void
-  onCheckLogin: (channel: OrgChannel) => void
-  onResume: (channel: OrgChannel) => void
-  onPause: (channel: OrgChannel) => void
-  onEnable: (channel: OrgChannel) => void
-  onDisable: (channel: OrgChannel) => void
-  onEdit: (channel: OrgChannel) => void
-  onDelete: (channel: OrgChannel) => void
-  onFilterCampaigns: (channelId: number) => void
-  onLoadFriends: (channel: OrgChannel) => void
-  onLoadGroups: (channel: OrgChannel) => void
+  onViewBrowser: (accountId: number) => void
+  onReloadPage: (account: AutoAccount) => void
+  onCheckLogin: (account: AutoAccount) => void
+  onResume: (account: AutoAccount) => void
+  onPause: (account: AutoAccount) => void
+  onEnable: (account: AutoAccount) => void
+  onDisable: (account: AutoAccount) => void
+  onEdit: (account: AutoAccount) => void
+  onDelete: (account: AutoAccount) => void
+  onFilterCampaigns: (accountId: number) => void
+  onLoadFriends: (account: AutoAccount) => void
+  onLoadGroups: (account: AutoAccount) => void
 }
 
-export default function ChannelContextMenu({
-  channel,
+export default function AccountContextMenu({
+  account,
   position,
   onClose,
   onViewBrowser,
@@ -48,7 +48,7 @@ export default function ChannelContextMenu({
   onFilterCampaigns,
   onLoadFriends,
   onLoadGroups
-}: ChannelContextMenuProps) {
+}: AccountContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const [showLoadData, setShowLoadData] = useState(false)
 
@@ -89,8 +89,8 @@ export default function ChannelContextMenu({
     onClose()
   }, [onClose])
 
-  const isPaused = channel.status === 'tạm dừng'
-  const isDisabled = !channel.isActive
+  const isPaused = account.status === 'tạm dừng'
+  const isDisabled = !account.isActive
 
   return (
     <div
@@ -104,24 +104,24 @@ export default function ChannelContextMenu({
           <>
             <button
               className="context-menu-item"
-              onClick={() => handleAction(() => onViewBrowser(channel.id))}
+              onClick={() => handleAction(() => onViewBrowser(account.id))}
             >
               <Globe size={14} />
               <span>Hiển thị & xem trang web</span>
             </button>
             <button
               className="context-menu-item"
-              onClick={() => handleAction(() => onReloadPage(channel))}
+              onClick={() => handleAction(() => onReloadPage(account))}
             >
               <RefreshCw size={14} />
               <span>Load lại trang web</span>
             </button>
           </>
         )}
-        {!isDisabled && channel.flatformType === 'facebook' && (
+        {!isDisabled && account.flatformType === 'facebook' && (
           <button
             className="context-menu-item"
-            onClick={() => handleAction(() => onCheckLogin(channel))}
+            onClick={() => handleAction(() => onCheckLogin(account))}
           >
             <Shield size={14} />
             <span>Kiểm tra đăng nhập</span>
@@ -135,7 +135,7 @@ export default function ChannelContextMenu({
           {isPaused ? (
             <button
               className="context-menu-item accent-success"
-              onClick={() => handleAction(() => onResume(channel))}
+              onClick={() => handleAction(() => onResume(account))}
             >
               <Play size={14} />
               <span>TIẾP TỤC hoạt động</span>
@@ -143,7 +143,7 @@ export default function ChannelContextMenu({
           ) : (
             <button
               className="context-menu-item accent-warning"
-              onClick={() => handleAction(() => onPause(channel))}
+              onClick={() => handleAction(() => onPause(account))}
             >
               <Pause size={14} />
               <span>TẠM DỪNG hoạt động</span>
@@ -157,7 +157,7 @@ export default function ChannelContextMenu({
         {isDisabled ? (
           <button
             className="context-menu-item accent-success"
-            onClick={() => handleAction(() => onEnable(channel))}
+            onClick={() => handleAction(() => onEnable(account))}
           >
             <Unlock size={14} />
             <span>MỞ lại tài khoản</span>
@@ -165,7 +165,7 @@ export default function ChannelContextMenu({
         ) : (
           <button
             className="context-menu-item accent-error"
-            onClick={() => handleAction(() => onDisable(channel))}
+            onClick={() => handleAction(() => onDisable(account))}
           >
             <Ban size={14} />
             <span>VÔ HIỆU HOÁ tài khoản</span>
@@ -177,14 +177,14 @@ export default function ChannelContextMenu({
       <div className="context-menu-group">
         <button
           className="context-menu-item"
-          onClick={() => handleAction(() => onEdit(channel))}
+          onClick={() => handleAction(() => onEdit(account))}
         >
           <Edit3 size={14} />
           <span>Sửa tài khoản</span>
         </button>
         <button
           className="context-menu-item accent-error"
-          onClick={() => handleAction(() => onDelete(channel))}
+          onClick={() => handleAction(() => onDelete(account))}
         >
           <Trash2 size={14} />
           <span>Xoá tài khoản</span>
@@ -192,7 +192,7 @@ export default function ChannelContextMenu({
       </div>
 
       {/* Load Data Group */}
-      {!isDisabled && channel.flatformType === 'facebook' && channel.loginStatus === 'đã đăng nhập' && (
+      {!isDisabled && account.flatformType === 'facebook' && account.loginStatus === 'đã đăng nhập' && (
         <div className="context-menu-group">
           <div className="context-menu-submenu">
             <button
@@ -207,14 +207,14 @@ export default function ChannelContextMenu({
               <div className="context-submenu-items">
                 <button
                   className="context-menu-item"
-                  onClick={() => handleAction(() => onLoadFriends(channel))}
+                  onClick={() => handleAction(() => onLoadFriends(account))}
                 >
                   <Users size={14} />
                   <span>Load danh sách bạn bè</span>
                 </button>
                 <button
                   className="context-menu-item"
-                  onClick={() => handleAction(() => onLoadGroups(channel))}
+                  onClick={() => handleAction(() => onLoadGroups(account))}
                 >
                   <FolderOpen size={14} />
                   <span>Load danh sách group</span>
@@ -229,7 +229,7 @@ export default function ChannelContextMenu({
       <div className="context-menu-group">
         <button
           className="context-menu-item"
-          onClick={() => handleAction(() => onFilterCampaigns(channel.id))}
+          onClick={() => handleAction(() => onFilterCampaigns(account.id))}
         >
           <ListFilter size={14} />
           <span>Hiển thị chiến dịch</span>

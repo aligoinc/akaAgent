@@ -9,9 +9,9 @@ import * as workflowV2Repo from '../../data/repositories/workflowV2Repository'
 import * as runV2Repo from '../../data/repositories/runV2Repository'
 
 export interface RunContext {
-  channelId?: number
+  accountId?: number
   campaignId?: number
-  campaignDataActionId?: number
+  campaignInputDataId?: number
   signal?: AbortSignal
   /** Realtime callback cho mỗi step transition (running → success/error/skipped) */
   onStepProgress?: (step: RunStepV2) => void
@@ -85,8 +85,8 @@ export class WorkflowEngineV2 {
         runId = await runV2Repo.createRun({
           workflowId: workflow.id,
           campaignId: ctx.campaignId,
-          campaignDataActionId: ctx.campaignDataActionId,
-          channelId: ctx.channelId,
+          campaignInputDataId: ctx.campaignInputDataId,
+          accountId: ctx.accountId,
           status: 'running',
           variables,
           output: {},

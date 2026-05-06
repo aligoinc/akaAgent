@@ -1,16 +1,16 @@
-import { OrgChannelContact, ContactType } from '../../../shared/types'
+import { AutoAccountContact, ContactType } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
-import { mapChannelContactFromDB } from '../mappers'
+import { mapAccountContactFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
 
-export async function listContacts(channelId: number, contactType?: ContactType): Promise<OrgChannelContact[]> {
+export async function listContacts(accountId: number, contactType?: ContactType): Promise<AutoAccountContact[]> {
   const u = requireCurrentUser()
   let query = client()
-    .from('org_channel_contacts')
+    .from('auto_account_contacts')
     .select('*')
-    .eq('channel_id', channelId)
+    .eq('account_id', accountId)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('name', { ascending: true })
@@ -21,10 +21,10 @@ export async function listContacts(channelId: number, contactType?: ContactType)
 
   const { data, error } = await query
   if (error) throw new Error(`Failed to list contacts: ${error.message}`)
-  return (data || []).map(row => mapChannelContactFromDB(row))
+  return (data || []).map(row => mapAccountContactFromDB(row))
 }
 
-export async function upsertContacts(contacts: Partial<OrgChannelContact>[]): Promise<number> {
+export async function upsertContacts(contacts: Partial<AutoAccountContact>[]): Promise<number> {
   if (contacts.length === 0) return 0
 
   const u = requireCurrentUser()
@@ -37,7 +37,7 @@ export async function upsertContacts(contacts: Partial<OrgChannelContact>[]): Pr
   for (let i = 0; i < validContacts.length; i += chunkSize) {
     const chunk = validContacts.slice(i, i + chunkSize)
     const payloads = chunk.map(c => ({
-      channel_id: c.channelId,
+      account_id: c.accountId,
       contact_type: c.contactType,
       name: c.name,
       uid: c.uid,
@@ -50,8 +50,8 @@ export async function upsertContacts(contacts: Partial<OrgChannelContact>[]): Pr
     }))
 
     const { data, error } = await client()
-      .from('org_channel_contacts')
-      .upsert(payloads, { onConflict: 'channel_id,contact_type,uid' })
+      .from('auto_account_contacts')
+      .upsert(payloads, { onConflict: 'account_id,contact_type,uid' })
       .select()
 
     if (error) throw new Error(`Failed to upsert contacts: ${error.message}`)
@@ -61,12 +61,12 @@ export async function upsertContacts(contacts: Partial<OrgChannelContact>[]): Pr
   return totalSaved
 }
 
-export async function deleteContacts(channelId: number, contactType: ContactType): Promise<void> {
+export async function deleteContacts(accountId: number, contactType: ContactType): Promise<void> {
   const u = requireCurrentUser()
   const { error } = await client()
-    .from('org_channel_contacts')
+    .from('auto_account_contacts')
     .update({ is_delete: true, updated_at: new Date().toISOString() })
-    .eq('channel_id', channelId)
+    .eq('account_id', accountId)
     .eq('staff_id', u.staffId)
     .eq('contact_type', contactType)
 

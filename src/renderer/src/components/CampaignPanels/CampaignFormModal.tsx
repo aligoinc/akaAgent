@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
-import { Campaign, CampaignDataAction, CampaignExtraSettings } from '../../../../shared/types'
+import { Campaign, CampaignInputData, CampaignExtraSettings } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
 import FriendPickerModal from './FriendPickerModal'
 import GroupPickerModal from './GroupPickerModal'
@@ -55,7 +55,7 @@ const ALL_STEPS: StepDef[] = [
     title: 'Cài đặt chung',
     fields: [
       { key: 'actionId', label: 'Chiến dịch' },
-      { key: 'channelIds', label: 'Tài khoản' },
+      { key: 'accountIds', label: 'Tài khoản' },
       { key: 'name', label: 'Tên chiến dịch' }
     ]
   },
@@ -104,9 +104,9 @@ const ALL_STEPS: StepDef[] = [
 
 export default function CampaignFormModal({ campaign, cloneFromId, onClose }: CampaignFormModalProps) {
   const {
-    channels, campaignActions,
+    accounts, campaignActions,
     createCampaign, updateCampaign,
-    createDataAction
+    createCampaignInputData
   } = useCampaignStore()
 
   const contentRef = useRef<HTMLDivElement>(null)
@@ -141,7 +141,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
     actionId: campaign?.actionId || '',
-    channelIds: campaign?.channelId ? [campaign.channelId] : [] as number[],
+    accountIds: campaign?.accountId ? [campaign.accountId] : [] as number[],
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
     scheduleEndDate: initEndDate(),
@@ -163,7 +163,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     imageOption: (campaign?.extraSettings?.imageOption || 'none') as 'none' | 'all' | 'random',
     randomImageCount: campaign?.extraSettings?.randomImageCount || 3,
     images: campaign?.images || [] as string[],
-    splitDataAcrossChannels: false,
+    splitDataAcrossAccounts: false,
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
@@ -187,18 +187,18 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     ? ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
     : ALL_STEPS
 
-  const [details, setDetails] = useState<Partial<CampaignDataAction>[]>([])
+  const [details, setDetails] = useState<Partial<CampaignInputData>[]>([])
   const [deletedIds, setDeletedIds] = useState<number[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [activeStep, setActiveStep] = useState('general')
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
-  const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false)
-  const channelDropdownRef = useRef<HTMLDivElement>(null)
+  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
+  const accountDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (channelDropdownRef.current && !channelDropdownRef.current.contains(event.target as Node)) {
-        setIsChannelDropdownOpen(false)
+      if (accountDropdownRef.current && !accountDropdownRef.current.contains(event.target as Node)) {
+        setIsAccountDropdownOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -213,7 +213,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       if (loadId && window.electronAPI) {
         setLoadingDetails(true)
         try {
-          const existingDetails = await window.electronAPI.listCampaignDataActions(loadId)
+          const existingDetails = await window.electronAPI.listCampaignInputData(loadId)
           if (cloneFromId) {
             // Clone: strip IDs and reset status, ALSO clear note
             setDetails(existingDetails.map(d => ({ ...d, id: undefined, status: 'chờ xử lý', note: '' })))
@@ -246,7 +246,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isFieldComplete = (key: string): boolean => {
     switch (key) {
       case 'actionId': return !!formData.actionId
-      case 'channelIds': return formData.channelIds.length > 0
+      case 'accountIds': return formData.accountIds.length > 0
       case 'name': return formData.name.trim().length > 0
       case 'schedule': return !!formData.schedule
       case 'scheduleType': return !!formData.scheduleType
@@ -282,46 +282,46 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   }
 
   const handleSave = async () => {
-    if (!formData.name.trim() || !formData.actionId || formData.channelIds.length === 0) {
+    if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
     }
 
     try {
-      const { deleteDataAction, updateDataAction, createDataAction, createCampaign, updateCampaign } = useCampaignStore.getState()
+      const { deleteCampaignInputData, updateCampaignInputData, createCampaignInputData, createCampaign, updateCampaign } = useCampaignStore.getState()
 
       for (const id of deletedIds) {
-        await deleteDataAction(id)
+        await deleteCampaignInputData(id)
       }
 
-      let channelChunks: Partial<CampaignDataAction>[][] = [];
-      const numChannels = formData.channelIds.length;
-      
-      if (formData.splitDataAcrossChannels && numChannels > 1 && details.length > 0) {
+      let accountChunks: Partial<CampaignInputData>[][] = [];
+      const numAccounts = formData.accountIds.length;
+
+      if (formData.splitDataAcrossAccounts && numAccounts > 1 && details.length > 0) {
         // Khởi tạo mảng con cho mỗi tài khoản
-        for (let i = 0; i < numChannels; i++) {
-          channelChunks.push([]);
+        for (let i = 0; i < numAccounts; i++) {
+          accountChunks.push([]);
         }
         // Chia data lần lượt (round-robin)
         for (let i = 0; i < details.length; i++) {
-          const channelIndex = i % numChannels;
-          channelChunks[channelIndex].push(details[i]);
+          const accountIndex = i % numAccounts;
+          accountChunks[accountIndex].push(details[i]);
         }
       } else {
-        for (let i = 0; i < numChannels; i++) {
-          channelChunks.push(details);
+        for (let i = 0; i < numAccounts; i++) {
+          accountChunks.push(details);
         }
       }
 
-      for (let i = 0; i < numChannels; i++) {
-        const channelId = formData.channelIds[i]
+      for (let i = 0; i < numAccounts; i++) {
+        const accountId = formData.accountIds[i]
         const isFirst = (i === 0)
-        const currentDetails = channelChunks[i] || [];
+        const currentDetails = accountChunks[i] || [];
 
         const campaignPayload = {
           name: formData.name,
           actionId: formData.actionId,
-          channelId: channelId,
+          accountId: accountId,
           schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
           scheduleType: formData.scheduleType,
           scheduleEndDate: formData.scheduleType === 'daily'
@@ -368,10 +368,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         if (campaign && campaign.id && isFirst) {
           await updateCampaign(campaign.id, campaignPayload)
           savedCampaign = campaign
-          
+
           for (const d of currentDetails) {
             if (d.id) {
-              await updateDataAction(d.id, {
+              await updateCampaignInputData(d.id, {
                 name: d.name,
                 phone: d.phone,
                 uid: d.uid,
@@ -379,7 +379,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                 note: d.note,
               })
             } else {
-              await createDataAction({
+              await createCampaignInputData({
                 ...d,
                 campaignId: savedCampaign.id
               })
@@ -389,7 +389,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           savedCampaign = await createCampaign(campaignPayload)
 
           for (const d of currentDetails) {
-            await createDataAction({
+            await createCampaignInputData({
               ...d,
               id: undefined,
               campaignId: savedCampaign.id
@@ -422,7 +422,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     })
   }
 
-  const updateDetailRow = (index: number, field: keyof CampaignDataAction, value: string) => {
+  const updateDetailRow = (index: number, field: keyof CampaignInputData, value: string) => {
     setDetails(prev => {
       const copy = [...prev]
       copy[index] = { ...copy[index], [field]: value }
@@ -441,18 +441,18 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         const wb = read(bstr, { type: 'binary' })
         const wsname = wb.SheetNames[0]
         const ws = wb.Sheets[wsname]
-        
-        // Convert to array of arrays, treating header row as ordinary data for a moment 
+
+        // Convert to array of arrays, treating header row as ordinary data for a moment
         // using header: 1 to get raw 2D array
         const data = utils.sheet_to_json<any[]>(ws, { header: 1 })
-        
+
         // Find index of first data row (skip header if 'Tên', 'Uid', etc. is in A1)
         let startIndex = 0
         if (data.length > 0 && String(data[0][0] || '').toLowerCase().includes('tên')) {
           startIndex = 1
         }
 
-        const newRows: Partial<CampaignDataAction>[] = []
+        const newRows: Partial<CampaignInputData>[] = []
         for (let i = startIndex; i < data.length; i++) {
           const row = data[i]
           if (!row || row.length === 0 || row.every((c: any) => !c)) continue // skip empty rows
@@ -496,8 +496,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
         // Mảng chứa các UID cắt bằng dấu phẩy hoặc xuống dòng
         const tokens = text.split(/[\r\n,]+/)
-        
-        const newRows: Partial<CampaignDataAction>[] = []
+
+        const newRows: Partial<CampaignInputData>[] = []
         for (const token of tokens) {
           const uid = token.trim()
           if (!uid) continue
@@ -531,7 +531,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [showGroupPicker, setShowGroupPicker] = useState(false)
 
   const onFriendsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
-    const newRows: Partial<CampaignDataAction>[] = contacts.map(c => ({
+    const newRows: Partial<CampaignInputData>[] = contacts.map(c => ({
       name: c.name,
       uid: c.uid || '',
       phone: '',
@@ -544,7 +544,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   }
 
   const onGroupsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
-    const newRows: Partial<CampaignDataAction>[] = contacts.map(c => ({
+    const newRows: Partial<CampaignInputData>[] = contacts.map(c => ({
       name: c.name,
       uid: c.uid || '',
       phone: '',
@@ -634,65 +634,65 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     </select>
                   </div>
 
-                  <div className="stepper-form-group" ref={channelDropdownRef}>
+                  <div className="stepper-form-group" ref={accountDropdownRef}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <label style={{ margin: 0 }}>Tài khoản <span className="required">*</span></label>
-                      {channels.length > 0 && !(campaign && campaign.id) && (
-                        <button 
-                          type="button" 
-                          className="btn btn-ghost" 
+                      {accounts.length > 0 && !(campaign && campaign.id) && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
                           style={{ padding: '2px 8px', fontSize: '12px', height: 'auto' }}
                           onClick={() => {
-                            const allSelected = formData.channelIds.length === channels.length;
+                            const allSelected = formData.accountIds.length === accounts.length;
                             setFormData(p => ({
                               ...p,
-                              channelIds: allSelected ? [] : channels.map(a => a.id)
+                              accountIds: allSelected ? [] : accounts.map(a => a.id)
                             }));
                           }}
                         >
-                          {formData.channelIds.length === channels.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                          {formData.accountIds.length === accounts.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                         </button>
                       )}
                     </div>
                     <div style={{ position: 'relative' }}>
-                      <div 
-                        className="stepper-input" 
-                        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isChannelDropdownOpen ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}
-                        onClick={() => setIsChannelDropdownOpen(!isChannelDropdownOpen)}
+                      <div
+                        className="stepper-input"
+                        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isAccountDropdownOpen ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}
+                        onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
                       >
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 8 }}>
-                          {formData.channelIds.length === 0 
-                            ? '-- Chọn tài khoản --' 
-                            : formData.channelIds.length === 1 
-                              ? channels.find(a => a.id === formData.channelIds[0])?.name || 'Đã chọn 1 tài khoản'
-                              : `Đã chọn ${formData.channelIds.length} tài khoản`}
+                          {formData.accountIds.length === 0
+                            ? '-- Chọn tài khoản --'
+                            : formData.accountIds.length === 1
+                              ? accounts.find(a => a.id === formData.accountIds[0])?.name || 'Đã chọn 1 tài khoản'
+                              : `Đã chọn ${formData.accountIds.length} tài khoản`}
                         </span>
-                        <ChevronDown size={16} style={{ flexShrink: 0, transform: isChannelDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                        <ChevronDown size={16} style={{ flexShrink: 0, transform: isAccountDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                       </div>
-                      
-                      {isChannelDropdownOpen && (
+
+                      {isAccountDropdownOpen && (
                         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 10, background: 'var(--bg-primary)', border: '1px solid var(--border-default)', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-                          <div className="channel-checkbox-list" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '12px', maxHeight: '250px', overflowY: 'auto' }}>
-                            {channels.map(a => (
+                          <div className="account-checkbox-list" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', padding: '12px', maxHeight: '250px', overflowY: 'auto' }}>
+                            {accounts.map(a => (
                               <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-primary)' }}>
                                 <input
                                   type={campaign && campaign.id ? "radio" : "checkbox"}
-                                  name={campaign && campaign.id ? "channel-selection" : undefined}
-                                  checked={formData.channelIds.includes(a.id)}
+                                  name={campaign && campaign.id ? "account-selection" : undefined}
+                                  checked={formData.accountIds.includes(a.id)}
                                   onChange={(e) => {
                                     const checked = e.target.checked;
                                     if (campaign && campaign.id) {
                                       setFormData(p => ({
                                         ...p,
-                                        channelIds: [a.id]
+                                        accountIds: [a.id]
                                       }))
-                                      setIsChannelDropdownOpen(false) // auto close if it is a radio select
+                                      setIsAccountDropdownOpen(false) // auto close if it is a radio select
                                     } else {
                                       setFormData(p => ({
                                         ...p,
-                                        channelIds: checked 
-                                          ? [...p.channelIds, a.id]
-                                          : p.channelIds.filter(id => id !== a.id)
+                                        accountIds: checked
+                                          ? [...p.accountIds, a.id]
+                                          : p.accountIds.filter(id => id !== a.id)
                                       }))
                                     }
                                   }}
@@ -700,7 +700,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${a.name} (${a.flatformType})`}>{a.name} ({a.flatformType})</span>
                               </label>
                             ))}
-                            {channels.length === 0 && (
+                            {accounts.length === 0 && (
                               <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>Chưa có tài khoản nào</div>
                             )}
                           </div>
@@ -1013,7 +1013,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                   {/* Media section */}
                   <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>Media</div>
-                    
+
                     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
                       {/* Left side */}
                       <div style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1329,13 +1329,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
               {!collapsedSections['details'] && (
                 <div className="stepper-section-body">
-                  {formData.channelIds.length > 1 && (
+                  {formData.accountIds.length > 1 && (
                     <div className="stepper-form-group" style={{ marginBottom: 12 }}>
                       <label className="schedule-checkbox-label" style={{ fontWeight: 500 }}>
                         <input
                           type="checkbox"
-                          checked={formData.splitDataAcrossChannels}
-                          onChange={e => setFormData(p => ({ ...p, splitDataAcrossChannels: e.target.checked }))}
+                          checked={formData.splitDataAcrossAccounts}
+                          onChange={e => setFormData(p => ({ ...p, splitDataAcrossAccounts: e.target.checked }))}
                         />
                         <span>Chia đều data cho các tài khoản <span className="schedule-hint-inline" style={{ fontWeight: 'normal' }}>(Mặc định là tất cả tài khoản chung 1 data)</span></span>
                       </label>
@@ -1345,14 +1345,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     <button className="btn btn-secondary" onClick={addDetailRow}>
                       <Plus size={14} /> Thêm data
                     </button>
-                    <button 
-                      className="btn btn-secondary" 
+                    <button
+                      className="btn btn-secondary"
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Upload size={14} /> Upload Excel
                     </button>
-                    <button 
-                      className="btn btn-secondary" 
+                    <button
+                      className="btn btn-secondary"
                       onClick={() => txtFileInputRef.current?.click()}
                     >
                       <Upload size={14} /> Upload TXT
@@ -1361,7 +1361,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       <button
                         className="btn btn-secondary"
                         onClick={() => {
-                          if (formData.channelIds.length === 0) {
+                          if (formData.accountIds.length === 0) {
                             showAlert('Vui lòng chọn tài khoản trước.', 'error')
                             return
                           }
@@ -1376,7 +1376,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       <button
                         className="btn btn-secondary"
                         onClick={() => {
-                          if (formData.channelIds.length === 0) {
+                          if (formData.accountIds.length === 0) {
                             showAlert('Vui lòng chọn tài khoản trước.', 'error')
                             return
                           }
@@ -1458,17 +1458,17 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         </div>
       </div>
       {/* Friend Picker Modal */}
-      {showFriendPicker && formData.channelIds.length > 0 && (
+      {showFriendPicker && formData.accountIds.length > 0 && (
         <FriendPickerModal
-          channelId={formData.channelIds[0]}
+          accountId={formData.accountIds[0]}
           onClose={() => setShowFriendPicker(false)}
           onSelect={onFriendsSelected}
         />
       )}
       {/* Group Picker Modal */}
-      {showGroupPicker && formData.channelIds.length > 0 && (
+      {showGroupPicker && formData.accountIds.length > 0 && (
         <GroupPickerModal
-          channelId={formData.channelIds[0]}
+          accountId={formData.accountIds[0]}
           onClose={() => setShowGroupPicker(false)}
           onSelect={onGroupsSelected}
         />

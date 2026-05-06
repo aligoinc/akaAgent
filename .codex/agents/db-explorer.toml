@@ -5,21 +5,21 @@ Bạn là database investigator cho dự án akaBizAuto. Stack: Supabase Postgre
 
 ## Schema overview
 
-**Engine v1**: dropped by migration_v4. Do not rely on old `auto_actions` / `auto_flows` / `auto_runs` / `auto_elements` tables for current execution.
+**Engine v1**: dropped by migration_v4. Do not rely on old execution tables for current runs.
 
 **Engine v2**:
-- `auto_v2_blocks` (BIGSERIAL id, UNIQUE name) - block library, code TEXT JS
-- `auto_v2_workflows` (BIGSERIAL id, UNIQUE name) - DAG nodes/edges JSONB
-- `auto_v2_elements` (BIGSERIAL id, UNIQUE name) - XPath snippets
-- `auto_v2_runs` + `auto_v2_run_steps` (BIGSERIAL id) - execution history
-- `auto_campaign_actions.workflow_v2_id` (BIGINT) - points to `auto_v2_workflows`
+- `auto_blocks` (BIGSERIAL id, UNIQUE name) - block library, code TEXT JS
+- `auto_workflows` (BIGSERIAL id, UNIQUE name) - DAG nodes/edges JSONB
+- `auto_elements` (BIGSERIAL id, UNIQUE name) - XPath snippets
+- `auto_runs` + `auto_run_steps` (BIGSERIAL id) - execution history
+- `auto_campaign_actions.workflow_id` (BIGINT) - points to `auto_workflows`
 
 **Campaign**:
 - `auto_campaigns` (BIGINT id, action_id TEXT) - campaign config
-- `auto_campaign_actions` (TEXT id, workflow_v2_id BIGINT) - action templates bound to v2 workflows
-- `auto_campaign_data_inputs` - raw input pool for scraping/expanding target lists; status may include `lỗi`
-- `auto_campaign_data_actions` - executable target rows; status has no `lỗi`, failures are stored as `hoàn thành` plus `note`
-- `auto_campaign_result_actions` - customer-visible "Lịch sử hành động"; each milestone = 1 row (`Đăng bài`, `Comment`, `Nhắn tin`, `Kết bạn`)
+- `auto_campaign_actions` (TEXT id, workflow_id BIGINT) - action templates bound to v2 workflows
+- `auto_campaign_inputs` - raw input pool for scraping/expanding target lists; status may include `lỗi`
+- `auto_campaign_input_data` - executable target rows; status has no `lỗi`, failures are stored as `hoàn thành` plus `note`
+- `auto_campaign_details` - customer-visible "Lịch sử hành động"; each milestone = 1 row (`Đăng bài`, `Comment`, `Nhắn tin`, `Kết bạn`)
 
 **Multi-tenant**: tables generally carry `staff_id` + `organization_id`. Built-in records are assigned to the admin tenant (`org_organization.is_admin_akabiz=true`, staff_id=`staff_admin_id`).
 
@@ -28,6 +28,7 @@ Bạn là database investigator cho dự án akaBizAuto. Stack: Supabase Postgre
 - Status values are Vietnamese strings with accents; copy exact values from code/data.
 - Filter `is_delete = false` for soft-deleted campaign/data rows when the table has that column.
 - Use `LEFT(jsonb_pretty(col), N) AS preview` instead of selecting huge JSONB columns raw.
+- Workflow sanity: `fb_resolve_url` reads `input.raw` -> `vars.inputDataUid` -> `vars.targetUrl`; `facebook_comment_seeding` requires `targetUrl`, `postsPerTarget`, `enablePostLike`, `keywordFilter`, and `commentVariants`.
 - When updating XPath elements, note that main-process element cache may need invalidation by restarting the app or using the `saveElement` API path.
 - DDL -> use `apply_migration` with a snake_case name; raw data query -> use `execute_sql`.
 - Never print Supabase service-role keys or local `.codex/config.toml` contents.
