@@ -15,3 +15,6 @@ electron.vite.config.*.mjs
 # Claude Code — worktrees auto-tạo bởi Agent isolation, plans là session-specific
 .claude/worktrees/
 .claude/plans/
+
+# Codex local runtime config may contain private MCP credentials.
+.codex/config.toml
