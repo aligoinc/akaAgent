@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"Nhắc AGENTS.md: nếu task vừa làm có pattern/bảng/IPC channel/convention/command mới mà chưa được note trong AGENTS.md, update file đó trước khi end turn (xem section Maintenance). Skip cho bug fix nhỏ / UI tweak / refactor đơn thuần.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}
