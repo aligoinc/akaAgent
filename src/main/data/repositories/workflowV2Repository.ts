@@ -61,7 +61,7 @@ export async function listWorkflows(): Promise<WorkflowDef[]> {
     orClauses.push(`staff_id.eq.${admin.staffId}`)
   }
   const { data, error } = await client()
-    .from('auto_v2_workflows')
+    .from('auto_workflows')
     .select('*')
     .or(orClauses.join(','))
     .order('updated_at', { ascending: false })
@@ -72,7 +72,7 @@ export async function listWorkflows(): Promise<WorkflowDef[]> {
 
 export async function getWorkflow(id: number): Promise<WorkflowDef | null> {
   const { data, error } = await client()
-    .from('auto_v2_workflows')
+    .from('auto_workflows')
     .select('*')
     .eq('id', id)
     .maybeSingle()
@@ -82,7 +82,7 @@ export async function getWorkflow(id: number): Promise<WorkflowDef | null> {
 
 export async function getWorkflowByName(name: string): Promise<WorkflowDef | null> {
   const { data, error } = await client()
-    .from('auto_v2_workflows')
+    .from('auto_workflows')
     .select('*')
     .eq('name', name)
     .maybeSingle()
@@ -92,13 +92,15 @@ export async function getWorkflowByName(name: string): Promise<WorkflowDef | nul
 
 export async function saveWorkflow(wf: Partial<WorkflowDef> & { name: string }): Promise<WorkflowDef> {
   const u = requireCurrentUser()
+  const existing = await getWorkflowByName(wf.name)
   const payload = toPayload({
     ...wf,
-    staffId: wf.staffId ?? u.staffId,
-    organizationId: wf.organizationId ?? u.organizationId
+    isBuiltin: wf.isBuiltin ?? existing?.isBuiltin ?? false,
+    staffId: wf.staffId ?? existing?.staffId ?? u.staffId,
+    organizationId: wf.organizationId ?? existing?.organizationId ?? u.organizationId
   })
   const { data, error } = await client()
-    .from('auto_v2_workflows')
+    .from('auto_workflows')
     .upsert(payload, { onConflict: 'name' })
     .select()
     .single()
@@ -106,27 +108,10 @@ export async function saveWorkflow(wf: Partial<WorkflowDef> & { name: string }):
   return mapFromDB(data)
 }
 
-export async function saveWorkflowSystem(wf: Partial<WorkflowDef> & { name: string }): Promise<WorkflowDef> {
-  const admin = await resolveAdminTenant()
-  const payload = toPayload({
-    ...wf,
-    isBuiltin: true,
-    staffId: admin?.staffId ?? undefined,
-    organizationId: admin?.organizationId ?? undefined
-  })
-  const { data, error } = await client()
-    .from('auto_v2_workflows')
-    .upsert(payload, { onConflict: 'name' })
-    .select()
-    .single()
-  if (error) throw new Error(`Failed to save system workflow: ${error.message}`)
-  return mapFromDB(data)
-}
-
 export async function deleteWorkflow(id: number): Promise<void> {
   const u = requireCurrentUser()
   const { error } = await client()
-    .from('auto_v2_workflows')
+    .from('auto_workflows')
     .delete()
     .eq('id', id)
     .eq('staff_id', u.staffId)

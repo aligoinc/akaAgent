@@ -140,8 +140,8 @@ export interface RunV2 {
   id?: number
   workflowId?: number
   campaignId?: number
-  campaignDataActionId?: number     // FK auto_campaign_data_actions.id (cột legacy campaign_detail_id giữ NULL)
-  channelId?: number
+  campaignInputDataId?: number     // FK auto_campaign_input_data.id (cột legacy campaign_detail_id giữ NULL)
+  accountId?: number
   status: RunStatus
   variables: Record<string, unknown>
   output: Record<string, unknown>
@@ -161,9 +161,9 @@ export interface BlockResult {
 }
 
 // ============================================================
-// IPC channels v2
+// IPC events v2
 // ============================================================
-export const IPC_CHANNELS_V2 = {
+export const IPC_EVENTS_V2 = {
   // Block library
   BLOCK_LIST: 'v2:block:list',
   BLOCK_GET: 'v2:block:get',

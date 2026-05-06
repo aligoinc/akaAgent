@@ -15,11 +15,11 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([])
   const [editingAction, setEditingAction] = useState<CampaignAction | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState<{ id: string; name: string; flatformType: string; workflowV2Id: number | ''; isActive: boolean }>({
+  const [formData, setFormData] = useState<{ id: string; name: string; flatformType: string; workflowId: number | ''; isActive: boolean }>({
     id: '',
     name: '',
     flatformType: 'facebook',
-    workflowV2Id: '',
+    workflowId: '',
     isActive: true
   })
 
@@ -38,7 +38,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       id: '',
       name: '',
       flatformType: 'facebook',
-      workflowV2Id: '',
+      workflowId: '',
       isActive: true
     })
     setShowForm(true)
@@ -50,7 +50,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       id: action.id,
       name: action.name,
       flatformType: action.flatformType,
-      workflowV2Id: action.workflowV2Id ?? '',
+      workflowId: action.workflowId ?? '',
       isActive: action.isActive
     })
     setShowForm(true)
@@ -82,7 +82,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       name: formData.name,
       flatformType: formData.flatformType,
       isActive: formData.isActive,
-      workflowV2Id: formData.workflowV2Id === '' ? undefined : Number(formData.workflowV2Id)
+      workflowId: formData.workflowId === '' ? undefined : Number(formData.workflowId)
     }
 
     try {
@@ -140,7 +140,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                       <td style={{ fontWeight: 500 }}>{action.name}</td>
                       <td><span className="badge">{action.flatformType}</span></td>
                       <td>
-                        {action.workflowV2Id ? (
+                        {action.workflowId ? (
                            <span className="text-success" style={{ fontSize: 11 }}>Đã liên kết</span>
                         ) : (
                           <span className="text-error" style={{ fontSize: 11 }}>Chưa liên kết</span>
@@ -217,8 +217,8 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
               <div className="form-group row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                 <label>Workflow Liên Kết:</label>
                 <select
-                  value={formData.workflowV2Id}
-                  onChange={e => setFormData(prev => ({ ...prev, workflowV2Id: e.target.value === '' ? '' : Number(e.target.value) }))}
+                  value={formData.workflowId}
+                  onChange={e => setFormData(prev => ({ ...prev, workflowId: e.target.value === '' ? '' : Number(e.target.value) }))}
                   className="panel-input"
                   style={{ width: '100%' }}
                 >

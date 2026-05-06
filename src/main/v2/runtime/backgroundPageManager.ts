@@ -25,8 +25,8 @@ interface BackgroundPageEntry {
 export class BackgroundPageManager {
   private pages = new Map<number, BackgroundPageEntry>()
 
-  getOrCreate(channelId: number, platformType: string): PageController {
-    const existing = this.pages.get(channelId)
+  getOrCreate(accountId: number, platformType: string): PageController {
+    const existing = this.pages.get(accountId)
     if (existing && !existing.win.isDestroyed() && existing.page.isConnected()) {
       return existing.page
     }
@@ -39,7 +39,7 @@ export class BackgroundPageManager {
       frame: false,
       paintWhenInitiallyHidden: true,
       webPreferences: {
-        partition: `persist:channel_${channelId}`,
+        partition: `persist:account_${accountId}`,
         sandbox: false,
         contextIsolation: true,
         nodeIntegration: false,
@@ -51,11 +51,11 @@ export class BackgroundPageManager {
     win.setMenuBarVisibility(false)
     win.webContents.setUserAgent(DEFAULT_USER_AGENT)
     win.webContents.setBackgroundThrottling(false)
-    win.webContents.on('render-process-gone', () => this.destroy(channelId))
-    win.on('closed', () => this.pages.delete(channelId))
+    win.webContents.on('render-process-gone', () => this.destroy(accountId))
+    win.on('closed', () => this.pages.delete(accountId))
 
     const page = new PageController(win.webContents)
-    this.pages.set(channelId, { win, page })
+    this.pages.set(accountId, { win, page })
 
     const initialUrl = PLATFORM_URLS[platformType] || 'about:blank'
     win.loadURL(initialUrl).catch((err) => {
@@ -65,9 +65,9 @@ export class BackgroundPageManager {
     return page
   }
 
-  destroy(channelId: number): void {
-    const entry = this.pages.get(channelId)
-    this.pages.delete(channelId)
+  destroy(accountId: number): void {
+    const entry = this.pages.get(accountId)
+    this.pages.delete(accountId)
     if (!entry || entry.win.isDestroyed()) return
     try {
       entry.win.destroy()
@@ -75,8 +75,8 @@ export class BackgroundPageManager {
   }
 
   destroyAll(): void {
-    for (const channelId of Array.from(this.pages.keys())) {
-      this.destroy(channelId)
+    for (const accountId of Array.from(this.pages.keys())) {
+      this.destroy(accountId)
     }
   }
 }

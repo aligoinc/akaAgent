@@ -8,8 +8,8 @@ function mapRunFromDB(row: Record<string, unknown>): RunV2 {
     id: row.id as number,
     workflowId: row.workflow_id as number | undefined,
     campaignId: row.campaign_id as number | undefined,
-    campaignDataActionId: row.campaign_data_action_id as number | undefined,
-    channelId: row.channel_id as number | undefined,
+    campaignInputDataId: row.campaign_input_data_id as number | undefined,
+    accountId: row.account_id as number | undefined,
     status: row.status as RunV2['status'],
     variables: (row.variables as Record<string, unknown>) || {},
     output: (row.output as Record<string, unknown>) || {},
@@ -43,8 +43,8 @@ export async function createRun(run: Omit<RunV2, 'id' | 'steps' | 'createdAt'>):
     workflow_id: run.workflowId ?? null,
     campaign_id: run.campaignId ?? null,
     campaign_detail_id: null,                                    // legacy column — luôn NULL với code mới
-    campaign_data_action_id: run.campaignDataActionId ?? null,
-    channel_id: run.channelId ?? null,
+    campaign_input_data_id: run.campaignInputDataId ?? null,
+    account_id: run.accountId ?? null,
     status: run.status,
     variables: run.variables,
     output: run.output,
@@ -53,7 +53,7 @@ export async function createRun(run: Omit<RunV2, 'id' | 'steps' | 'createdAt'>):
     completed_at: run.completedAt ?? null
   }
   const { data, error } = await client()
-    .from('auto_v2_runs')
+    .from('auto_runs')
     .insert(payload)
     .select('id')
     .single()
@@ -69,7 +69,7 @@ export async function updateRun(runId: number, patch: Partial<Pick<RunV2, 'statu
   if (patch.completedAt !== undefined) payload.completed_at = patch.completedAt
 
   const { error } = await client()
-    .from('auto_v2_runs')
+    .from('auto_runs')
     .update(payload)
     .eq('id', runId)
   if (error) throw new Error(`Failed to update run: ${error.message}`)
@@ -90,7 +90,7 @@ export async function createRunStep(runId: number, step: Omit<RunStepV2, 'id' | 
     completed_at: step.completedAt ?? null
   }
   const { data, error } = await client()
-    .from('auto_v2_run_steps')
+    .from('auto_run_steps')
     .insert(payload)
     .select('id')
     .single()
@@ -107,7 +107,7 @@ export async function updateRunStep(stepId: number, patch: Partial<Pick<RunStepV
   if (patch.completedAt !== undefined) payload.completed_at = patch.completedAt
 
   const { error } = await client()
-    .from('auto_v2_run_steps')
+    .from('auto_run_steps')
     .update(payload)
     .eq('id', stepId)
   if (error) throw new Error(`Failed to update run step: ${error.message}`)
@@ -115,7 +115,7 @@ export async function updateRunStep(stepId: number, patch: Partial<Pick<RunStepV
 
 export async function listRunsByWorkflow(workflowId: number, limit = 50): Promise<RunV2[]> {
   const { data, error } = await client()
-    .from('auto_v2_runs')
+    .from('auto_runs')
     .select('*')
     .eq('workflow_id', workflowId)
     .order('created_at', { ascending: false })
@@ -126,7 +126,7 @@ export async function listRunsByWorkflow(workflowId: number, limit = 50): Promis
 
 export async function listRunSteps(runId: number): Promise<RunStepV2[]> {
   const { data, error } = await client()
-    .from('auto_v2_run_steps')
+    .from('auto_run_steps')
     .select('*')
     .eq('run_id', runId)
     .order('started_at', { ascending: true })

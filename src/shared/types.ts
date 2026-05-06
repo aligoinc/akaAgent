@@ -2,7 +2,7 @@
 // Campaign Automation Types
 // ============================================
 
-export interface OrgChannel {
+export interface AutoAccount {
   id: number
   name: string
   flatformType: string
@@ -21,7 +21,7 @@ export interface CampaignAction {
   name: string
   flatformType: string
   isActive: boolean
-  workflowV2Id?: number       // engine v2 (BIGINT, FK auto_v2_workflows.id)
+  workflowId?: number       // engine v2 (BIGINT, FK auto_workflows.id)
   isDelete: boolean
   createdAt?: string
 }
@@ -32,7 +32,11 @@ export interface CampaignExtraSettings {
   commentType?: 'own' | 'others' // comment vào bài mình / bài khác
   commentCount?: number          // số lượng comment (khi commentType = 'others')
   commentContent?: string        // nội dung comment
-  actionLimits?: {               // giới hạn gửi (được lưu theo campaign nhưng check theo channel_id + actionName)
+  enablePostLike?: boolean
+  postsPerTarget?: number
+  postKeywordFilter?: string
+  keywordFilter?: string
+  actionLimits?: {               // giới hạn gửi (được lưu theo campaign nhưng check theo account_id + actionName)
     sleepBetweenActions?: number
     dailyLimit?: number
     rateLimitCount?: number
@@ -58,7 +62,7 @@ export interface Campaign {
   id: number
   name: string
   actionId: string
-  channelId: number
+  accountId: number
   status: string
   schedule?: string
   scheduleType?: 'daily' | 'weekly' | 'monthly'
@@ -79,25 +83,25 @@ export interface Campaign {
   updatedAt?: string
   // Joined fields
   actionName?: string
-  channelName?: string
+  accountName?: string
 }
 
-// Status enum cho data layer (data_inputs / data_actions):
-//   - data_inputs: 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'
+// Status enum cho data layer (campaign_inputs / campaign_input_data):
+//   - campaign_inputs: 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'
 //     ('lỗi' để flag input không scrape được — admin re-trigger)
-//   - data_actions: 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành'
-//     (lỗi action-level đã track ở result_actions; khi run fail set 'hoàn thành' + note=errMsg)
-export type CampaignDataStatus = 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'
+//   - campaign_input_data: 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành'
+//     (lỗi action-level đã track ở campaign_details; khi run fail set 'hoàn thành' + note=errMsg)
+export type CampaignInputStatus = 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'
 
-// Pool nguyên liệu thô (e.g. danh sách group để scrape members → data_actions)
-export interface CampaignDataInput {
+// Pool nguyên liệu thô (e.g. danh sách group để scrape members → campaign_input_data)
+export interface CampaignInput {
   id: number
   campaignId: number
   name?: string
   phone?: string
   uid?: string
   email?: string
-  status: CampaignDataStatus
+  status: CampaignInputStatus
   note?: string
   schedule?: string
   dateAction?: string
@@ -106,15 +110,15 @@ export interface CampaignDataInput {
 }
 
 // Việc-cần-làm thực thi trong campaign loop
-export interface CampaignDataAction {
+export interface CampaignInputData {
   id: number
   campaignId: number
-  dataInputId?: number | null    // nullable: NULL = user nhập trực tiếp; số = sinh từ data_inputs (e.g. member của group)
+  inputId?: number | null    // nullable: NULL = user nhập trực tiếp; số = sinh từ campaign_inputs (e.g. member của group)
   name?: string
   phone?: string
   uid?: string
   email?: string
-  status: CampaignDataStatus
+  status: CampaignInputStatus
   note?: string
   schedule?: string
   dateAction?: string
@@ -122,19 +126,19 @@ export interface CampaignDataAction {
   createdAt?: string
 }
 
-// Status enum cho result_actions (per-milestone log):
+// Status enum cho campaign_details (per-milestone log):
 //   - 'thành công': action OK (đã post, đã comment, đã kết bạn)
 //   - 'thất bại': nghiệp vụ FB từ chối (FB block message, post pending, kết bạn không gửi được)
 //   - 'lỗi': exception/crash code (selector not found, timeout, network)
-export type CampaignResultStatus = 'thành công' | 'thất bại' | 'lỗi'
+export type CampaignDetailStatus = 'thành công' | 'thất bại' | 'lỗi'
 
-export interface CampaignResultAction {
+export interface CampaignDetail {
   id: number
-  dataActionId?: number | null
+  inputDataId?: number | null
   campaignId: number
-  channelId?: number
+  accountId?: number
   actionName: string
-  status: CampaignResultStatus
+  status: CampaignDetailStatus
   log?: string
   data?: Record<string, unknown>
   postUrl?: string               // URL of the post this action is related to (e.g. just-published post, commented post)
@@ -143,14 +147,14 @@ export interface CampaignResultAction {
 }
 
 // ============================================
-// Channel Contact Types
+// Account Contact Types
 // ============================================
 
 export type ContactType = 'friend' | 'group'
 
-export interface OrgChannelContact {
+export interface AutoAccountContact {
   id: number
-  channelId: number
+  accountId: number
   contactType: ContactType
   name: string
   uid?: string
@@ -177,10 +181,10 @@ export interface AuthUser {
 }
 
 // ============================================
-// IPC Channel Types
+// IPC Event Types
 // ============================================
 
-export const IPC_CHANNELS = {
+export const IPC_EVENTS = {
   // Theme
   THEME_CHANGE: 'theme:change',
 
@@ -189,11 +193,11 @@ export const IPC_CHANNELS = {
   AUTH_LOGOUT: 'auth:logout',
   AUTH_ME: 'auth:me',
 
-  // Database Org Channels
-  DB_LIST_CHANNELS: 'db:list-channels',
-  DB_CREATE_CHANNEL: 'db:create-channel',
-  DB_UPDATE_CHANNEL: 'db:update-channel',
-  DB_DELETE_CHANNEL: 'db:delete-channel',
+  // Database Auto Accounts
+  DB_LIST_ACCOUNTS: 'db:list-accounts',
+  DB_CREATE_ACCOUNT: 'db:create-account',
+  DB_UPDATE_ACCOUNT: 'db:update-account',
+  DB_DELETE_ACCOUNT: 'db:delete-account',
 
   // Database Campaign Actions
   DB_LIST_CAMPAIGN_ACTIONS: 'db:list-campaign-actions',
@@ -209,23 +213,23 @@ export const IPC_CHANNELS = {
   DB_DELETE_CAMPAIGN: 'db:delete-campaign',
   DB_CLONE_CAMPAIGN: 'db:clone-campaign',
 
-  // Database Campaign Data Inputs (pool nguyên liệu thô — e.g. group list)
-  DB_LIST_DATA_INPUTS: 'db:list-data-inputs',
-  DB_CREATE_DATA_INPUT: 'db:create-data-input',
-  DB_UPDATE_DATA_INPUT: 'db:update-data-input',
-  DB_DELETE_DATA_INPUT: 'db:delete-data-input',
+  // Database Campaign Inputs (pool nguyên liệu thô — e.g. group list)
+  DB_LIST_CAMPAIGN_INPUTS: 'db:list-campaign-inputs',
+  DB_CREATE_CAMPAIGN_INPUT: 'db:create-campaign-input',
+  DB_UPDATE_CAMPAIGN_INPUT: 'db:update-campaign-input',
+  DB_DELETE_CAMPAIGN_INPUT: 'db:delete-campaign-input',
 
-  // Database Campaign Data Actions (việc-cần-làm thực thi)
-  DB_LIST_DATA_ACTIONS: 'db:list-data-actions',
-  DB_CREATE_DATA_ACTION: 'db:create-data-action',
-  DB_UPDATE_DATA_ACTION: 'db:update-data-action',
-  DB_DELETE_DATA_ACTION: 'db:delete-data-action',
+  // Database Campaign Input Data (việc-cần-làm thực thi)
+  DB_LIST_CAMPAIGN_INPUT_DATA: 'db:list-campaign-input-data',
+  DB_CREATE_CAMPAIGN_INPUT_DATA: 'db:create-campaign-input-data',
+  DB_UPDATE_CAMPAIGN_INPUT_DATA: 'db:update-campaign-input-data',
+  DB_DELETE_CAMPAIGN_INPUT_DATA: 'db:delete-campaign-input-data',
 
-  // Database Campaign Result Actions (per-milestone log)
-  DB_LIST_RESULT_ACTIONS_BY_DATA_ACTION: 'db:list-result-actions',
-  DB_LIST_RESULT_ACTIONS_BY_CAMPAIGN: 'db:list-result-actions-by-campaign',
-  DB_CREATE_RESULT_ACTION: 'db:create-result-action',
-  DB_DELETE_RESULT_ACTION: 'db:delete-result-action',
+  // Database Campaign Details (per-milestone log)
+  DB_LIST_CAMPAIGN_DETAILS_BY_INPUT_DATA: 'db:list-campaign-details',
+  DB_LIST_CAMPAIGN_DETAILS_BY_CAMPAIGN: 'db:list-campaign-details-by-campaign',
+  DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
+  DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
 
   // Campaign Scheduler
   SCHEDULER_START: 'scheduler:start',
@@ -243,10 +247,10 @@ export const IPC_CHANNELS = {
   // Campaign Status (real-time: main → renderer whenever a campaign row changes)
   CAMPAIGN_STATUS_UPDATED: 'campaign:status-updated',
 
-  // Channel Actions
-  CHANNEL_CHECK_FB_LOGIN: 'channel:check-fb-login',
-  CHANNEL_RELOAD_PAGE: 'channel:reload-page',
-  CHANNEL_STATUS_UPDATED: 'channel:status-updated',
+  // Account Actions
+  ACCOUNT_CHECK_FB_LOGIN: 'account:check-fb-login',
+  ACCOUNT_RELOAD_PAGE: 'account:reload-page',
+  ACCOUNT_STATUS_UPDATED: 'account:status-updated',
 
   // Contacts (Load data)
   CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',

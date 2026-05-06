@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"📝 Nhắc CLAUDE.md: nếu task vừa làm có pattern/bảng/IPC channel/convention/command mới mà chưa được note trong CLAUDE.md, update file đó trước khi end turn (xem section Maintenance). Skip cho bug fix nhỏ / UI tweak / refactor đơn thuần.\"}}'"
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"📝 Nhắc CLAUDE.md: nếu task vừa làm có pattern/bảng/IPC event/convention/command mới mà chưa được note trong CLAUDE.md, update file đó trước khi end turn (xem section Maintenance). Skip cho bug fix nhỏ / UI tweak / refactor đơn thuần.\"}}'"
           }
         ]
       }

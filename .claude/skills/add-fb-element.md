@@ -1,6 +1,6 @@
 ---
 name: add-fb-element
-description: Use when adding a new XPath element to auto_v2_elements (FB selector pattern reusable bởi blocks qua helpers.element). Cũng dùng khi update XPath cho element có sẵn (FB đổi UI). Walks through DB UPSERT + sync seedV2.ts để restart không ghi đè ngược.
+description: Use when adding a new XPath element to auto_elements (FB selector pattern reusable bởi blocks qua helpers.element). Cũng dùng khi update XPath cho element có sẵn (FB đổi UI). DB is the source of truth; there is no seedV2 sync.
 ---
 
 # Add / Update XPath element trong engine v2
@@ -26,7 +26,7 @@ Pattern phổ biến trong project:
 ### 2. UPSERT vào DB qua Supabase MCP
 
 ```sql
-INSERT INTO auto_v2_elements (name, xpath, description, category, is_builtin, staff_id, organization_id)
+INSERT INTO auto_elements (name, xpath, description, category, is_builtin, staff_id, organization_id)
 VALUES ('fb_<name>', '<xpath>', '<desc>', 'facebook', true, 1, 1)
 ON CONFLICT (name) DO UPDATE
   SET xpath = EXCLUDED.xpath, description = EXCLUDED.description;
@@ -38,20 +38,16 @@ ON CONFLICT (name) DO UPDATE
 
 Element cache trong main process (`elementV2Repository.ts:_xpathCache`) chỉ invalidate khi save qua API `saveElement`. Update SQL trực tiếp KHÔNG invalidate cache. **Phải restart app** để cache reset, HOẶC update qua UI "Cài đặt Workflow → Elements" (gọi IPC `v2:element:save`).
 
-### 4. Sync `seedV2.ts`
+### 4. DB source of truth
 
-File [src/main/data/seed/seedV2.ts](src/main/data/seed/seedV2.ts), function `seedElements()` — array `elements`. Update entry tương ứng (hoặc thêm mới). Lý do: seed UPSERT chạy mỗi lần app start, sẽ ghi đè XPath SQL update nếu seed file vẫn giữ XPath cũ.
-
-```typescript
-{ name: 'fb_<name>', xpath: '<NEW xpath>', description: '...', category: 'facebook' }
-```
+`auto_elements` is the only source of truth for reusable XPath entries. There is no `seedV2` file and restart will not overwrite SQL/UI changes.
 
 ### 5. Verify
 
-Restart `npm run dev` → seed UPSERT chạy → cache load lại → test campaign liên quan. Element listing ở "Cài đặt Workflow → Elements" cũng phản ánh giá trị mới.
+Restart `npm run dev` if the main-process element cache was already loaded, then test the related campaign. Element listing ở "Cài đặt Workflow → Elements" cũng phản ánh giá trị mới.
 
 ## Anti-patterns
 
 - KHÔNG hardcode XPath inline trong block code — luôn dùng `helpers.element('name')` để admin sửa được qua UI mà không build lại app
-- KHÔNG thêm element trong UI rồi quên sync seed → restart sẽ revert
+- KHÔNG update SQL trực tiếp rồi quên invalidate cache/restart
 - KHÔNG dùng tọa độ viewport trong XPath (vd `[x=100]`) — webview có thể không focus

@@ -70,7 +70,7 @@ export async function listBlocks(): Promise<BlockDef[]> {
     orClauses.push(`staff_id.eq.${admin.staffId}`)
   }
   const { data, error } = await client()
-    .from('auto_v2_blocks')
+    .from('auto_blocks')
     .select('*')
     .or(orClauses.join(','))
     .order('category', { ascending: true })
@@ -82,7 +82,7 @@ export async function listBlocks(): Promise<BlockDef[]> {
 
 export async function getBlock(id: number): Promise<BlockDef | null> {
   const { data, error } = await client()
-    .from('auto_v2_blocks')
+    .from('auto_blocks')
     .select('*')
     .eq('id', id)
     .maybeSingle()
@@ -92,7 +92,7 @@ export async function getBlock(id: number): Promise<BlockDef | null> {
 
 export async function getBlockByName(name: string): Promise<BlockDef | null> {
   const { data, error } = await client()
-    .from('auto_v2_blocks')
+    .from('auto_blocks')
     .select('*')
     .eq('name', name)
     .maybeSingle()
@@ -102,14 +102,16 @@ export async function getBlockByName(name: string): Promise<BlockDef | null> {
 
 export async function saveBlock(block: Partial<BlockDef> & { name: string; category: BlockDef['category']; kind: BlockDef['kind'] }): Promise<BlockDef> {
   const u = requireCurrentUser()
+  const existing = await getBlockByName(block.name)
   const payload = toPayload({
     ...block,
-    staffId: block.staffId ?? u.staffId,
-    organizationId: block.organizationId ?? u.organizationId
+    isBuiltin: block.isBuiltin ?? existing?.isBuiltin ?? false,
+    staffId: block.staffId ?? existing?.staffId ?? u.staffId,
+    organizationId: block.organizationId ?? existing?.organizationId ?? u.organizationId
   })
   // Upsert by name (UNIQUE constraint)
   const { data, error } = await client()
-    .from('auto_v2_blocks')
+    .from('auto_blocks')
     .upsert(payload, { onConflict: 'name' })
     .select()
     .single()
@@ -117,29 +119,11 @@ export async function saveBlock(block: Partial<BlockDef> & { name: string; categ
   return mapFromDB(data)
 }
 
-// System-level upsert for seeding built-in blocks (no auth required).
-export async function saveBlockSystem(block: Partial<BlockDef> & { name: string; category: BlockDef['category']; kind: BlockDef['kind'] }): Promise<BlockDef> {
-  const admin = await resolveAdminTenant()
-  const payload = toPayload({
-    ...block,
-    isBuiltin: true,
-    staffId: admin?.staffId ?? undefined,
-    organizationId: admin?.organizationId ?? undefined
-  })
-  const { data, error } = await client()
-    .from('auto_v2_blocks')
-    .upsert(payload, { onConflict: 'name' })
-    .select()
-    .single()
-  if (error) throw new Error(`Failed to save system block: ${error.message}`)
-  return mapFromDB(data)
-}
-
 export async function deleteBlock(id: number): Promise<void> {
   const u = requireCurrentUser()
   // Block built-in không cho xóa qua API thông thường
   const { error } = await client()
-    .from('auto_v2_blocks')
+    .from('auto_blocks')
     .delete()
     .eq('id', id)
     .eq('staff_id', u.staffId)

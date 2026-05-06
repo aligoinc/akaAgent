@@ -9,12 +9,12 @@ interface Contact {
 }
 
 interface GroupPickerModalProps {
-  channelId: number
+  accountId: number
   onClose: () => void
   onSelect: (contacts: Contact[]) => void
 }
 
-export default function GroupPickerModal({ channelId, onClose, onSelect }: GroupPickerModalProps) {
+export default function GroupPickerModal({ accountId, onClose, onSelect }: GroupPickerModalProps) {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -25,7 +25,7 @@ export default function GroupPickerModal({ channelId, onClose, onSelect }: Group
       setLoading(true)
       try {
         if (window.electronAPI) {
-          const data = await window.electronAPI.listContacts(channelId, 'group')
+          const data = await window.electronAPI.listContacts(accountId, 'group')
           setContacts(data)
         }
       } catch (err) {
@@ -35,7 +35,7 @@ export default function GroupPickerModal({ channelId, onClose, onSelect }: Group
       }
     }
     load()
-  }, [channelId])
+  }, [accountId])
 
   const filtered = contacts.filter(c => {
     if (!search.trim()) return true

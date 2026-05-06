@@ -1,11 +1,11 @@
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '../../../shared/types'
+import { IPC_EVENTS } from '../../../shared/types'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import { PageControllerRegistry } from '../../v2/runtime/pageController'
 
 /**
  * Webview register/unregister/status handlers.
- * Each Electron <webview> tag (one per channel) registers its webContentsId here
+ * Each Electron <webview> tag (one per account) registers its webContentsId here
  * so engine v2 can dispatch JS via PageController and the scheduler can verify
  * the tab is still mounted before kicking off a campaign.
  */
@@ -13,8 +13,8 @@ export function registerBrowserHandlers(
   webviewRegistry: WebviewRegistry,
   pageRegistry: PageControllerRegistry
 ): void {
-  ipcMain.handle(IPC_CHANNELS.WEBVIEW_REGISTER, (_, channelId: number, webContentsId: number) => {
-    webviewRegistry.register(channelId, webContentsId)
+  ipcMain.handle(IPC_EVENTS.WEBVIEW_REGISTER, (_, accountId: number, webContentsId: number) => {
+    webviewRegistry.register(accountId, webContentsId)
 
     try {
       const { webContents } = require('electron')
@@ -22,20 +22,20 @@ export function registerBrowserHandlers(
       if (wc && !wc.isDestroyed()) {
         wc.setBackgroundThrottling(false)
         // v2 engine: register PageController cùng lúc để workflow v2 dùng được
-        pageRegistry.register(channelId, wc)
+        pageRegistry.register(accountId, wc)
       }
     } catch {}
 
     return { success: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WEBVIEW_UNREGISTER, (_, channelId: number) => {
-    webviewRegistry.unregister(channelId)
-    pageRegistry.unregister(channelId)
+  ipcMain.handle(IPC_EVENTS.WEBVIEW_UNREGISTER, (_, accountId: number) => {
+    webviewRegistry.unregister(accountId)
+    pageRegistry.unregister(accountId)
     return { success: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WEBVIEW_STATUS, (_, channelId: number) => {
-    return { connected: webviewRegistry.isRegistered(channelId) }
+  ipcMain.handle(IPC_EVENTS.WEBVIEW_STATUS, (_, accountId: number) => {
+    return { connected: webviewRegistry.isRegistered(accountId) }
   })
 }

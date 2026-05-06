@@ -2,18 +2,18 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { IPC_CHANNELS, Campaign, CampaignDataAction } from '../../shared/types'
-import { IPC_CHANNELS_V2, RunStepV2 } from '../../shared/v2Types'
+import { IPC_EVENTS, Campaign, CampaignInputData } from '../../shared/types'
+import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 
 /**
- * Campaign scheduler: every 30s, scan eligible channels for due campaigns and
- * run their associated workflow v2 against the channel browser session.
+ * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
+ * run their associated workflow v2 against the account browser session.
  *
  * Engine v2 is the only execution path. Each campaign action template
- * (`auto_campaign_actions.workflow_v2_id`) points to a workflow that already
+ * (`auto_campaign_actions.workflow_id`) points to a workflow that already
  * encodes the full per-action logic (post / share / reels / message / friend
  * with internal ifElse on extraSettings flags). Scheduler only orchestrates
  * scheduling, rate limits, and per-milestone logging.
@@ -68,26 +68,26 @@ export class CampaignScheduler {
     this.processing = true
 
     try {
-      // 1. Get eligible channels
-      const channels = await this.supabase.getEligibleChannels()
-      if (channels.length === 0) {
+      // 1. Get eligible accounts
+      const accounts = await this.supabase.getEligibleAccounts()
+      if (accounts.length === 0) {
         this.processing = false
         return
       }
 
-      for (const channel of channels) {
-        // 2. Get pending campaigns for this channel
-        const campaigns = await this.supabase.getPendingCampaigns(channel.id)
+      for (const account of accounts) {
+        // 2. Get pending campaigns for this account
+        const campaigns = await this.supabase.getPendingCampaigns(account.id)
         if (campaigns.length === 0) continue
 
-        // Check browser webview is registered for this channel
-        if (!this.webviewRegistry.isRegistered(channel.id)) {
-          this.sendLog(`⚠️ Tài khoản "${channel.name}" chưa mở tab trình duyệt. Bỏ qua.`)
+        // Check browser webview is registered for this account
+        if (!this.webviewRegistry.isRegistered(account.id)) {
+          this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở tab trình duyệt. Bỏ qua.`)
           continue
         }
 
         for (const campaign of campaigns) {
-          await this.executeCampaign(channel, campaign)
+          await this.executeCampaign(account, campaign)
         }
       }
     } catch (err) {
@@ -160,9 +160,9 @@ export class CampaignScheduler {
 
     if ((scheduleType === 'weekly' || scheduleType === 'monthly') && campaign.refreshData) {
       // Reset all detail statuses to pending
-      const details = await this.supabase.listCampaignDataActions(campaign.id)
+      const details = await this.supabase.listCampaignInputData(campaign.id)
       for (const detail of details) {
-        await this.supabase.updateCampaignDataAction(detail.id, {
+        await this.supabase.updateCampaignInputData(detail.id, {
           status: 'chờ xử lý',
           note: ''
         })
@@ -193,40 +193,40 @@ export class CampaignScheduler {
     this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
 
-  private async executeCampaign(channel: import('../../shared/types').OrgChannel, campaign: Campaign): Promise<void> {
+  private async executeCampaign(account: import('../../shared/types').AutoAccount, campaign: Campaign): Promise<void> {
     if (!this.shouldRunToday(campaign)) return
 
     try {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy' })
       await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
-      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${channel.name}"`)
+      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
-      await this.supabase.updateChannel(channel.id, { status: 'đang chạy' })
+      await this.supabase.updateAccount(account.id, { status: 'đang chạy' })
 
       const action = await this.supabase.getCampaignAction(campaign.actionId)
       if (!action) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action`)
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
         this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy action "${campaign.actionId}"`)
         return
       }
 
-      if (!action.workflowV2Id) {
+      if (!action.workflowId) {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Action "${action.name}" chưa được liên kết workflow v2`)
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
-        this.sendLog(`❌ Chiến dịch "${campaign.name}": Action "${action.name}" chưa có workflow_v2_id`)
+        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+        this.sendLog(`❌ Chiến dịch "${campaign.name}": Action "${action.name}" chưa có workflow_id`)
         return
       }
 
-      await this.executeCampaignV2(channel, campaign, action.workflowV2Id)
+      await this.executeCampaignV2(account, campaign, action.workflowId)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
-      await this.recoverStuckDataActions(campaign.id, errMsg)
+      await this.recoverStuckCampaignInputData(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+      await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     }
   }
@@ -241,12 +241,12 @@ export class CampaignScheduler {
    * build variables, loop details, gọi engineV2.run.
    */
   private async executeCampaignV2(
-    channel: import('../../shared/types').OrgChannel,
+    account: import('../../shared/types').AutoAccount,
     campaign: Campaign,
-    workflowV2Id: number
+    workflowId: number
   ): Promise<void> {
     // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
-    const details = await this.supabase.listCampaignDataActions(campaign.id)
+    const details = await this.supabase.listCampaignInputData(campaign.id)
 
     // Shuffle group list nếu enabled
     if (campaign.extraSettings?.shuffleGroupList && details.length > 1 && campaign.actionId === 'facebook_group_post') {
@@ -288,19 +288,19 @@ export class CampaignScheduler {
       const cur = await this.supabase.getCampaign(campaign.id)
       if (cur && cur.status === 'tạm dừng') {
         this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
-        await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
         return
       }
 
       const detail = targets[i]
       if (detail && detail.status !== 'chờ xử lý') continue
 
-      const page = this.getAutomationPage(channel)
+      const page = this.getAutomationPage(account)
 
       // Rate limit
       const actionLabel = campaign.actionId === 'facebook_message_friend' ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn') : 'Đăng bài'
       try {
-        const limitStatus = await this.supabase.getChannelRateLimitStatus(channel.id, actionLabel, limitConfig)
+        const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionLabel, limitConfig)
         if (!limitStatus.ok) {
           rateLimitReached = true
           rateLimitIsDaily = limitStatus.isDailyLimit === true
@@ -316,48 +316,48 @@ export class CampaignScheduler {
       }
 
       // Build variables
-      const variables = this.buildVariablesV2(campaign, detail, channel.id, currentSourceLink, i)
+      const variables = this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i)
 
       // Update detail status running
       if (detail) {
-        await this.supabase.updateCampaignDataAction(detail.id, {
+        await this.supabase.updateCampaignInputData(detail.id, {
           status: 'đang chạy',
           dateAction: new Date().toISOString()
         })
-        const detailName = detail.name || detail.uid || 'N/A'
-        this.sendLog(`▶️ Xử lý "${detailName}" trong chiến dịch "${campaign.name}"`)
+        const inputDataName = detail.name || detail.uid || 'N/A'
+        this.sendLog(`▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
       }
 
       // Run engine v2
       const abort = new AbortController()
       this.activeV2Aborts.set(campaign.id, abort)
       try {
-        const result = await this.engineV2.run(workflowV2Id, variables, page, {
-          channelId: channel.id,
+        const result = await this.engineV2.run(workflowId, variables, page, {
+          accountId: account.id,
           campaignId: campaign.id,
-          campaignDataActionId: detail?.id,
+          campaignInputDataId: detail?.id,
           signal: abort.signal,
           persist: true,
           onStepProgress: (step: RunStepV2) => {
-            try { this.mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+            try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
           },
           onLog: (entry) => {
-            try { this.mainWindow.webContents.send(IPC_CHANNELS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+            try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
           }
         })
 
         // Per-milestone logging — scan steps theo block_name
-        await this.logMilestonesV2(campaign, detail, channel.id, result.steps, result.status === 'completed')
+        await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed')
 
         if (detail) {
           if (result.status === 'completed') {
-            await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành' })
+            await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
             await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detail.name || detail.uid || 'N/A'}`)
             this.sendLog(`✅ Hoàn thành "${detail.name || detail.uid || 'N/A'}"`)
           } else {
-            // data_actions enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở result_actions)
+            // campaign_input_data enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở campaign_details)
             const errMsg = result.error || 'Lỗi không xác định'
-            await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành', note: errMsg })
+            await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
             await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detail.name || detail.uid || 'N/A'} - ${errMsg}`)
             this.sendLog(`❌ Lỗi "${detail.name || detail.uid || 'N/A'}": ${errMsg}`)
           }
@@ -365,7 +365,7 @@ export class CampaignScheduler {
       } catch (err: any) {
         const errMsg = err?.message || String(err)
         if (detail) {
-          await this.supabase.updateCampaignDataAction(detail.id, { status: 'hoàn thành', note: errMsg })
+          await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
         }
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
         this.sendLog(`❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
@@ -421,14 +421,14 @@ export class CampaignScheduler {
     } else {
       await this.handleCampaignCompletion(campaign)
     }
-    await this.supabase.updateChannel(channel.id, { status: 'chờ xử lý' })
+    await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
   }
 
   /** Build variables object inject vào engine v2. */
   private buildVariablesV2(
     campaign: Campaign,
-    detail: CampaignDataAction | null,
-    channelId: number,
+    detail: CampaignInputData | null,
+    accountId: number,
     currentSourceLink: string,
     detailIndex: number
   ): Record<string, unknown> {
@@ -466,12 +466,16 @@ export class CampaignScheduler {
       campaignName: campaign.name,
       campaignContent: selectedPostContent,
       images: validImages,
-      channelId,
+      accountId,
       // Comment
       enableComment,
       commentType,
       commentCount,
       commentIterations,
+      commentVariants,
+      enablePostLike: extra.enablePostLike ?? false,
+      postsPerTarget: extra.postsPerTarget ?? commentCount,
+      keywordFilter: extra.postKeywordFilter ?? extra.keywordFilter ?? '',
       // Group post extras
       leaveGroupOnPendingApproval: extra.leaveGroupOnPendingApproval ?? false,
       autoJoinGroupAfterPost: extra.autoJoinGroupAfterPost ?? false,
@@ -482,19 +486,20 @@ export class CampaignScheduler {
       includeSourceImages: extra.includeSourceImages ?? false,
       postAsReels: extra.postAsReels ?? false,
       sourceLink: currentSourceLink,
+      targetUrl: detail?.uid || currentSourceLink,
       videoPath: validImages[0] || '',
       // Message friend extras
       enableMessage: extra.enableMessage ?? false,
       enableAddFriend: extra.enableAddFriend ?? false,
       // Detail-specific.
-      // detailUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
+      // inputDataUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
       // `fb_resolve_url` sẽ verify/normalize tuỳ theo urlType (group/profile/messenger).
       ...(detail ? {
-        detailId: detail.id,
-        detailName: detail.name,
-        detailUid: detail.uid,
-        detailPhone: detail.phone,
-        detailEmail: detail.email
+        inputDataId: detail.id,
+        inputDataName: detail.name,
+        inputDataUid: detail.uid,
+        inputDataPhone: detail.phone,
+        inputDataEmail: detail.email
       } : {})
     }
   }
@@ -506,36 +511,36 @@ export class CampaignScheduler {
    *   - fb_comment_at_position → "Comment"
    *   - fb_send_message → "Nhắn tin"
    *   - fb_add_friend → "Kết bạn"
-   * Mỗi milestone ghi 1 row vào auto_campaign_result_actions với status:
+   * Mỗi milestone ghi 1 row vào auto_campaign_details với status:
    *   - 'thành công' = action OK
    *   - 'thất bại'   = nghiệp vụ FB từ chối (output.ok=false không exception)
    *   - 'lỗi'        = exception/crash code (step.status='error')
    */
   private async logMilestonesV2(
     campaign: Campaign,
-    detail: CampaignDataAction | null,
-    channelId: number,
+    detail: CampaignInputData | null,
+    accountId: number,
     steps: RunStepV2[],
     overallSuccess: boolean
   ): Promise<void> {
     void overallSuccess
-    const detailName = detail?.name || detail?.uid || ''
+    const inputDataName = detail?.name || detail?.uid || ''
 
     // Đăng bài
     const postSteps = steps.filter(s => s.blockName === 'fb_click_post_button' && s.status === 'success')
     for (const s of postSteps) {
       try {
         const isPending = steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true
-        await this.supabase.createResultAction({
-          dataActionId: detail?.id,
+        await this.supabase.createCampaignDetail({
+          inputDataId: detail?.id,
           campaignId: campaign.id,
-          channelId,
+          accountId,
           actionName: 'Đăng bài',
           status: 'thành công',
-          log: detail ? `Đăng bài thành công vào ${detailName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
+          log: detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
           data: isPending ? { isPending: true } : undefined
         })
-        this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${detailName}"` : ''}`)
+        this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
         if (isPending) this.sendLog(`⏳ Bài đang chờ duyệt`)
       } catch (err) { console.error('Failed log post:', err) }
       void s
@@ -551,16 +556,16 @@ export class CampaignScheduler {
       const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
       const target = position === 1 ? 'bài của mình' : `bài thứ ${position}`
       try {
-        await this.supabase.createResultAction({
-          dataActionId: detail?.id,
+        await this.supabase.createCampaignDetail({
+          inputDataId: detail?.id,
           campaignId: campaign.id,
-          channelId,
+          accountId,
           actionName: 'Comment',
           status: 'thành công',
           log: `Đã comment vào ${target}: "${preview}"`,
           data: { commentPosition: position, iteration: i + 1, commentContent: text }
         })
-        this.sendLog(`💬 Đã comment vào ${target}${detail ? ` tại "${detailName}"` : ''}`)
+        this.sendLog(`💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
       } catch (err) { console.error('Failed log comment:', err) }
     }
 
@@ -574,16 +579,16 @@ export class CampaignScheduler {
         : out.ok === true ? 'thành công'
         : 'thất bại'
       try {
-        await this.supabase.createResultAction({
-          dataActionId: detail?.id,
+        await this.supabase.createCampaignDetail({
+          inputDataId: detail?.id,
           campaignId: campaign.id,
-          channelId,
+          accountId,
           actionName: 'Nhắn tin',
           status,
-          log: status === 'thành công' ? `Nhắn tin thành công đến ${detailName}` : `Lỗi nhắn tin đến ${detailName}: ${errMsg}`
+          log: status === 'thành công' ? `Nhắn tin thành công đến ${inputDataName}` : `Lỗi nhắn tin đến ${inputDataName}: ${errMsg}`
         })
-        if (status === 'thành công') this.sendLog(`💬 Nhắn tin thành công đến "${detailName}"`)
-        else this.sendLog(`❌ Lỗi nhắn tin "${detailName}": ${errMsg}`)
+        if (status === 'thành công') this.sendLog(`💬 Nhắn tin thành công đến "${inputDataName}"`)
+        else this.sendLog(`❌ Lỗi nhắn tin "${inputDataName}": ${errMsg}`)
       } catch (err) { console.error('Failed log message:', err) }
     }
 
@@ -598,63 +603,63 @@ export class CampaignScheduler {
 
       try {
         if (alreadyFriend) {
-          await this.supabase.createResultAction({
-            dataActionId: detail?.id,
+          await this.supabase.createCampaignDetail({
+            inputDataId: detail?.id,
             campaignId: campaign.id,
-            channelId,
+            accountId,
             actionName: 'Kết bạn',
             status: 'thành công',
-            log: `Bỏ qua kết bạn với ${detailName} (đã là bạn bè hoặc nút bị ẩn)`,
+            log: `Bỏ qua kết bạn với ${inputDataName} (đã là bạn bè hoặc nút bị ẩn)`,
             data: { alreadyFriend: true }
           })
-          this.sendLog(`ℹ️ Bỏ qua kết bạn với "${detailName}" (đã là bạn hoặc nút bị ẩn)`)
+          this.sendLog(`ℹ️ Bỏ qua kết bạn với "${inputDataName}" (đã là bạn hoặc nút bị ẩn)`)
         } else if (clicked) {
-          await this.supabase.createResultAction({
-            dataActionId: detail?.id,
+          await this.supabase.createCampaignDetail({
+            inputDataId: detail?.id,
             campaignId: campaign.id,
-            channelId,
+            accountId,
             actionName: 'Kết bạn',
             status: 'thành công',
-            log: `Kết bạn thành công với ${detailName}`
+            log: `Kết bạn thành công với ${inputDataName}`
           })
-          this.sendLog(`🤝 Kết bạn thành công với "${detailName}"`)
+          this.sendLog(`🤝 Kết bạn thành công với "${inputDataName}"`)
         } else {
           // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
           const status: 'thất bại' | 'lỗi' = s.status === 'error' ? 'lỗi' : 'thất bại'
-          await this.supabase.createResultAction({
-            dataActionId: detail?.id,
+          await this.supabase.createCampaignDetail({
+            inputDataId: detail?.id,
             campaignId: campaign.id,
-            channelId,
+            accountId,
             actionName: 'Kết bạn',
             status,
-            log: `Lỗi kết bạn với ${detailName}: ${errMsg}`
+            log: `Lỗi kết bạn với ${inputDataName}: ${errMsg}`
           })
-          this.sendLog(`❌ Lỗi kết bạn "${detailName}": ${errMsg}`)
+          this.sendLog(`❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
         }
       } catch (err) { console.error('Failed log friend:', err) }
     }
   }
 
-  private async recoverStuckDataActions(campaignId: number, errMsg: string): Promise<void> {
+  private async recoverStuckCampaignInputData(campaignId: number, errMsg: string): Promise<void> {
     try {
-      const details = await this.supabase.listCampaignDataActions(campaignId)
+      const details = await this.supabase.listCampaignInputData(campaignId)
       for (const d of details) {
         if (d.status === 'đang chạy') {
-          // data_actions enum không có 'lỗi' — flag bằng 'hoàn thành' + note
-          await this.supabase.updateCampaignDataAction(d.id, {
+          // campaign_input_data enum không có 'lỗi' — flag bằng 'hoàn thành' + note
+          await this.supabase.updateCampaignInputData(d.id, {
             status: 'hoàn thành',
             note: `Dừng đột ngột: ${errMsg}`
           })
         }
       }
     } catch (recoverErr) {
-      console.error('Failed to recover stuck data actions:', recoverErr)
+      console.error('Failed to recover stuck campaign input data:', recoverErr)
     }
   }
 
   private sendLog(message: string): void {
     try {
-      this.mainWindow.webContents.send(IPC_CHANNELS.CAMPAIGN_LOG, {
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_LOG, {
         timestamp: new Date().toISOString(),
         message
       })
@@ -663,8 +668,8 @@ export class CampaignScheduler {
     }
   }
 
-  private getAutomationPage(channel: import('../../shared/types').OrgChannel): PageController {
-    return this.backgroundPages.getOrCreate(channel.id, channel.flatformType)
+  private getAutomationPage(account: import('../../shared/types').AutoAccount): PageController {
+    return this.backgroundPages.getOrCreate(account.id, account.flatformType)
   }
 
   /**
@@ -673,7 +678,7 @@ export class CampaignScheduler {
   private async updateCampaignAndBroadcast(id: number, updates: Partial<Campaign>): Promise<Campaign> {
     const updated = await this.supabase.updateCampaign(id, updates)
     try {
-      this.mainWindow.webContents.send(IPC_CHANNELS.CAMPAIGN_STATUS_UPDATED, updated)
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, updated)
     } catch {
       // Window may be closed
     }

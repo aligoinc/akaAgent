@@ -1402,7 +1402,7 @@ body {
 }
 
 /* =========== ACCOUNT CARD (single-column table) =========== */
-.channel-card {
+.account-card {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1414,13 +1414,13 @@ body {
   background: var(--bg-elevated);
 }
 
-.channel-card:hover {
+.account-card:hover {
   border-color: var(--accent-primary);
   background: var(--bg-hover);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.08);
 }
 
-.channel-card-info {
+.account-card-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1428,7 +1428,7 @@ body {
   min-width: 0;
 }
 
-.channel-card-name {
+.account-card-name {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
@@ -1437,7 +1437,7 @@ body {
   white-space: nowrap;
 }
 
-.channel-card-meta {
+.account-card-meta {
   font-size: 10px;
   color: var(--text-tertiary);
   display: flex;
@@ -1445,7 +1445,7 @@ body {
   gap: 6px;
 }
 
-.channel-tag {
+.account-tag {
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1454,23 +1454,23 @@ body {
   background: rgba(56, 189, 248, 0.1);
 }
 
-.channel-tag.inactive {
+.account-tag.inactive {
   background: rgba(244, 63, 94, 0.1);
   color: var(--accent-error);
 }
 
-.channel-card-actions {
+.account-card-actions {
   display: flex;
   gap: 2px;
   opacity: 0.4;
   transition: opacity var(--transition-fast);
 }
 
-.channel-card:hover .channel-card-actions {
+.account-card:hover .account-card-actions {
   opacity: 1;
 }
 
-.channel-card-actions .btn-icon {
+.account-card-actions .btn-icon {
   padding: 4px;
   background: transparent;
   border: none;
@@ -1480,7 +1480,7 @@ body {
   transition: all var(--transition-fast);
 }
 
-.channel-card-actions .btn-icon:hover {
+.account-card-actions .btn-icon:hover {
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
@@ -1540,7 +1540,7 @@ body {
   flex: 2;
   min-width: 0;
 }
-.col-channel {
+.col-account {
   flex: 1.5;
   min-width: 0;
 }
@@ -2540,16 +2540,16 @@ body {
 }
 
 /* =========== DISABLED ACCOUNT CARD =========== */
-.channel-card.disabled {
+.account-card.disabled {
   opacity: 0.55;
   border-style: dashed;
 }
 
-.channel-card.disabled:hover {
+.account-card.disabled:hover {
   opacity: 0.75;
 }
 
-.channel-status-icon {
+.account-status-icon {
   margin-right: 4px;
   font-size: 10px;
 }

@@ -5,7 +5,7 @@ import { join } from 'path'
 import * as https from 'https'
 import * as http from 'http'
 import { URL } from 'url'
-import { IPC_CHANNELS } from '../../shared/types'
+import { IPC_EVENTS } from '../../shared/types'
 
 const VERSION_URL = 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_win.txt'
 const INSTALLER_URL = 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.exe'
@@ -176,7 +176,7 @@ export async function downloadAndInstall(
 
   const emit = (payload: UpdateProgress): void => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(IPC_CHANNELS.UPDATE_PROGRESS, payload)
+      mainWindow.webContents.send(IPC_EVENTS.UPDATE_PROGRESS, payload)
     }
   }
 

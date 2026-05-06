@@ -8,19 +8,19 @@ import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
 
 interface CampaignPanelProps {
-  filterChannelId?: number | null
+  filterAccountId?: number | null
   onClearFilter?: () => void
 }
 
-export default function CampaignPanel({ filterChannelId, onClearFilter }: CampaignPanelProps) {
+export default function CampaignPanel({ filterAccountId, onClearFilter }: CampaignPanelProps) {
   const {
-    channels, campaigns, campaignActions,
-    dataActions, loadingDataActions,
-    resultActions, loadingResultActions,
-    loadCampaigns, loadCampaignActions, loadChannels,
+    accounts, campaigns, campaignActions,
+    campaignInputData, loadingCampaignInputData,
+    campaignDetails, loadingCampaignDetails,
+    loadCampaigns, loadCampaignActions, loadAccounts,
     createCampaign, updateCampaign, deleteCampaign, cloneCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
-    loadDataActions, loadResultActions
+    loadCampaignInputData, loadCampaignDetails
   } = useCampaignStore()
   const isAdminAkabiz = !!useAuthStore(s => s.user?.isAdminAkabiz)
 
@@ -37,21 +37,21 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
   useEffect(() => {
     loadCampaigns()
     loadCampaignActions()
-    loadChannels()
-  }, [loadCampaigns, loadCampaignActions, loadChannels])
+    loadAccounts()
+  }, [loadCampaigns, loadCampaignActions, loadAccounts])
 
   // Load data + results when a campaign is selected
   useEffect(() => {
     if (selectedCampaignId) {
-      loadDataActions(selectedCampaignId)
-      loadResultActions(selectedCampaignId)
+      loadCampaignInputData(selectedCampaignId)
+      loadCampaignDetails(selectedCampaignId)
     }
-  }, [selectedCampaignId, loadDataActions, loadResultActions])
+  }, [selectedCampaignId, loadCampaignInputData, loadCampaignDetails])
 
-  // Clear bulk selection when channel filter changes
+  // Clear bulk selection when account filter changes
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [filterChannelId])
+  }, [filterAccountId])
 
   const handleEdit = (campaign: Campaign) => {
     setEditingCampaign(campaign)
@@ -185,14 +185,14 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
 
-  // Filter campaigns by channel if filter is active
+  // Filter campaigns by account if filter is active
   const filteredCampaigns = useMemo(() => {
-    if (!filterChannelId) return campaigns
-    return campaigns.filter(c => c.channelId === filterChannelId)
-  }, [campaigns, filterChannelId])
+    if (!filterAccountId) return campaigns
+    return campaigns.filter(c => c.accountId === filterAccountId)
+  }, [campaigns, filterAccountId])
 
-  const filterChannelName = filterChannelId 
-    ? channels.find(a => a.id === filterChannelId)?.name || `ID: ${filterChannelId}`
+  const filterAccountName = filterAccountId
+    ? accounts.find(a => a.id === filterAccountId)?.name || `ID: ${filterAccountId}`
     : null
 
   return (
@@ -215,9 +215,9 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
       </div>
 
       {/* Filter indicator */}
-      {filterChannelId && (
+      {filterAccountId && (
         <div className="campaign-filter-bar">
-          <span>🔍 Lọc theo: <strong>{filterChannelName}</strong></span>
+          <span>🔍 Lọc theo: <strong>{filterAccountName}</strong></span>
           <button className="btn-icon" onClick={onClearFilter} title="Bỏ lọc">
             <X size={12} />
           </button>
@@ -246,7 +246,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
       )}
 
       {showForm && (
-        <CampaignFormModal 
+        <CampaignFormModal
           campaign={editingCampaign}
           cloneFromId={cloneFromId}
           onClose={() => {
@@ -254,8 +254,8 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
             setEditingCampaign(null)
             setCloneFromId(undefined)
             loadCampaigns()
-            if (selectedCampaignId) loadDataActions(selectedCampaignId)
-          }} 
+            if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
+          }}
         />
       )}
 
@@ -269,7 +269,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
       {/* Campaign Table */}
       <div className="campaign-panel-content" style={{ flex: 1, minHeight: 0 }}>
         {filteredCampaigns.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-text">{filterChannelId ? 'Không có chiến dịch cho tài khoản này' : 'Chưa có chiến dịch'}</div></div>
+          <div className="empty-state"><div className="empty-state-text">{filterAccountId ? 'Không có chiến dịch cho tài khoản này' : 'Chưa có chiến dịch'}</div></div>
         ) : (
           <div className="campaign-table">
             <div className="campaign-table-header">
@@ -283,7 +283,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
               </div>
               <div className="campaign-col col-name">Tên</div>
               <div className="campaign-col col-action">Hành động</div>
-              <div className="campaign-col col-channel">Tài khoản</div>
+              <div className="campaign-col col-account">Tài khoản</div>
               <div className="campaign-col col-status">Trạng thái</div>
               <div className="campaign-col col-schedule">Lịch chạy</div>
               <div className="campaign-col col-ops"></div>
@@ -304,7 +304,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                 </div>
                 <div className="campaign-col col-name">{campaign.name}</div>
                 <div className="campaign-col col-action">{campaign.actionName || campaign.actionId}</div>
-                <div className="campaign-col col-channel">{campaign.channelName || '-'}</div>
+                <div className="campaign-col col-account">{campaign.accountName || '-'}</div>
                 <div className="campaign-col col-status">
                   <span className="status-badge" style={{ color: getStatusColor(campaign.status) }}>
                     {campaign.status}
@@ -360,25 +360,25 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                   className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
                   onClick={() => setDetailTab('data')}
                 >
-                  Dữ liệu ({dataActions.length})
+                  Dữ liệu ({campaignInputData.length})
                 </button>
                 <button
                   className={`detail-dock-tab ${detailTab === 'actions' ? 'active' : ''}`}
                   onClick={() => {
                     setDetailTab('actions')
-                    if (selectedCampaignId) loadResultActions(selectedCampaignId)
+                    if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
                   }}
                 >
-                  Lịch sử hành động ({resultActions.length})
+                  Lịch sử hành động ({campaignDetails.length})
                 </button>
               </div>
 
-              {/* Tab: Data Actions */}
+              {/* Tab: Campaign Input Data */}
               {detailTab === 'data' && (
                 <>
-                  {loadingDataActions ? (
+                  {loadingCampaignInputData ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
-                  ) : dataActions.length === 0 ? (
+                  ) : campaignInputData.length === 0 ? (
                     <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có dữ liệu nào</div>
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
@@ -393,7 +393,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                         </tr>
                       </thead>
                       <tbody>
-                        {dataActions.map(d => (
+                        {campaignInputData.map(d => (
                           <tr key={d.id}>
                             <td>{d.name || '-'}</td>
                             <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
@@ -411,12 +411,12 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                 </>
               )}
 
-              {/* Tab: Result Actions (per-milestone log) */}
+              {/* Tab: Campaign Details (per-milestone log) */}
               {detailTab === 'actions' && (
                 <>
-                  {loadingResultActions ? (
+                  {loadingCampaignDetails ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
-                  ) : resultActions.length === 0 ? (
+                  ) : campaignDetails.length === 0 ? (
                     <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có hành động nào được ghi nhận</div>
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
@@ -429,7 +429,7 @@ export default function CampaignPanel({ filterChannelId, onClearFilter }: Campai
                         </tr>
                       </thead>
                       <tbody>
-                        {resultActions.map(a => (
+                        {campaignDetails.map(a => (
                           <tr key={a.id}>
                             <td style={{ whiteSpace: 'nowrap' }}>
                               {a.createdAt ? new Date(a.createdAt).toLocaleString('vi-VN') : '-'}

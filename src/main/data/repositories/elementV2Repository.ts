@@ -56,7 +56,7 @@ let _cacheReady = false
 async function ensureCache(): Promise<void> {
   if (_cacheReady) return
   const { data, error } = await client()
-    .from('auto_v2_elements')
+    .from('auto_elements')
     .select('name, xpath')
   if (error) throw new Error(`Failed to load elements cache: ${error.message}`)
   _xpathCache.clear()
@@ -93,7 +93,7 @@ export async function listElements(): Promise<ElementDef[]> {
     orClauses.push(`staff_id.eq.${admin.staffId}`)
   }
   const { data, error } = await client()
-    .from('auto_v2_elements')
+    .from('auto_elements')
     .select('*')
     .or(orClauses.join(','))
     .order('category', { ascending: true })
@@ -105,7 +105,7 @@ export async function listElements(): Promise<ElementDef[]> {
 
 export async function getElement(id: number): Promise<ElementDef | null> {
   const { data, error } = await client()
-    .from('auto_v2_elements')
+    .from('auto_elements')
     .select('*')
     .eq('id', id)
     .maybeSingle()
@@ -115,13 +115,15 @@ export async function getElement(id: number): Promise<ElementDef | null> {
 
 export async function saveElement(el: Partial<ElementDef> & { name: string; xpath: string }): Promise<ElementDef> {
   const u = requireCurrentUser()
+  const existing = await getElementByName(el.name)
   const payload = toPayload({
     ...el,
-    staffId: el.staffId ?? u.staffId,
-    organizationId: el.organizationId ?? u.organizationId
+    isBuiltin: el.isBuiltin ?? existing?.isBuiltin ?? false,
+    staffId: el.staffId ?? existing?.staffId ?? u.staffId,
+    organizationId: el.organizationId ?? existing?.organizationId ?? u.organizationId
   })
   const { data, error } = await client()
-    .from('auto_v2_elements')
+    .from('auto_elements')
     .upsert(payload, { onConflict: 'name' })
     .select()
     .single()
@@ -130,28 +132,20 @@ export async function saveElement(el: Partial<ElementDef> & { name: string; xpat
   return mapFromDB(data)
 }
 
-export async function saveElementSystem(el: Partial<ElementDef> & { name: string; xpath: string }): Promise<ElementDef> {
-  const admin = await resolveAdminTenant()
-  const payload = toPayload({
-    ...el,
-    isBuiltin: true,
-    staffId: admin?.staffId ?? undefined,
-    organizationId: admin?.organizationId ?? undefined
-  })
+async function getElementByName(name: string): Promise<ElementDef | null> {
   const { data, error } = await client()
-    .from('auto_v2_elements')
-    .upsert(payload, { onConflict: 'name' })
-    .select()
-    .single()
-  if (error) throw new Error(`Failed to save system element: ${error.message}`)
-  invalidateElementCache()
+    .from('auto_elements')
+    .select('*')
+    .eq('name', name)
+    .maybeSingle()
+  if (error || !data) return null
   return mapFromDB(data)
 }
 
 export async function deleteElement(id: number): Promise<void> {
   const u = requireCurrentUser()
   const { error } = await client()
-    .from('auto_v2_elements')
+    .from('auto_elements')
     .delete()
     .eq('id', id)
     .eq('staff_id', u.staffId)

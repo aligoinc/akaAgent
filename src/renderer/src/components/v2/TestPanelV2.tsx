@@ -4,8 +4,8 @@ import { useCampaignStore } from '../../stores/campaignStore'
 
 export default function TestPanelV2() {
   const { current: workflow, isTesting, testRunKey, testStatusByNode, testLogs, startTest, recordStep, appendLog, endTest, clearTest } = useWorkflowV2Store()
-  const channels = useCampaignStore(s => s.channels)
-  const [channelId, setChannelId] = useState<number | null>(null)
+  const accounts = useCampaignStore(s => s.accounts)
+  const [accountId, setAccountId] = useState<number | null>(null)
   const [variablesJson, setVariablesJson] = useState('{}')
   const [collapsed, setCollapsed] = useState(false)
 
@@ -32,7 +32,7 @@ export default function TestPanelV2() {
   const stepsArray = useMemo(() => Array.from(testStatusByNode.values()), [testStatusByNode])
 
   const onTestWorkflow = async () => {
-    if (!workflow || !channelId) return
+    if (!workflow || !accountId) return
     const runKey = `wf-test-${Date.now()}`
     let variables: Record<string, unknown>
     try { variables = JSON.parse(variablesJson) } catch { alert('Variables JSON không hợp lệ'); return }
@@ -42,7 +42,7 @@ export default function TestPanelV2() {
         runKey,
         workflowId: workflow.id || undefined,
         workflow: workflow.id ? undefined : workflow,
-        channelId,
+        accountId,
         variables
       })
     } catch (err: any) {
@@ -76,16 +76,16 @@ export default function TestPanelV2() {
         {!collapsed && (
           <>
             <select
-              value={channelId ?? ''}
-              onChange={(e) => setChannelId(e.target.value ? Number(e.target.value) : null)}
+              value={accountId ?? ''}
+              onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : null)}
               style={{ padding: '4px 6px', fontSize: 12, background: 'var(--bg-primary, #0e0e15)', border: '1px solid var(--border, #2a2a35)', borderRadius: 4, color: 'var(--text, #e0e0e0)' }}
             >
               <option value="">— Chọn TK —</option>
-              {channels.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {accounts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
 
             {!isTesting ? (
-              <button className="btn btn-sm" onClick={onTestWorkflow} disabled={!workflow || !channelId}>
+              <button className="btn btn-sm" onClick={onTestWorkflow} disabled={!workflow || !accountId}>
                 ▶ Test workflow
               </button>
             ) : (

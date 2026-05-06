@@ -1,30 +1,29 @@
-import { OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction, OrgChannelContact, ContactType } from '../../shared/types'
-import * as channelRepo from '../data/repositories/channelRepository'
+import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType } from '../../shared/types'
+import * as accountRepo from '../data/repositories/accountRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
-import * as channelContactRepo from '../data/repositories/channelContactRepository'
+import * as accountContactRepo from '../data/repositories/accountContactRepository'
 
 /**
  * Facade that delegates to individual repositories.
- * Keeps backward-compatible API so existing callers (campaignScheduler,
- * contactLoader, handlers) continue to work unchanged.
+ * Keeps a thin service API so callers do not know repository boundaries.
  */
 export class SupabaseService {
   // =========== STARTUP ===========
   async resetRunningStatuses(): Promise<void> {
     console.log('[Supabase] Resetting "đang chạy" statuses to "chờ xử lý"...')
-    await channelRepo.resetRunningChannelStatuses()
+    await accountRepo.resetRunningAccountStatuses()
     await campaignRepo.resetRunningCampaignStatuses()
-    await campaignRepo.resetRunningDataInputStatuses()
-    await campaignRepo.resetRunningDataActionStatuses()
+    await campaignRepo.resetRunningCampaignInputStatuses()
+    await campaignRepo.resetRunningCampaignInputDataStatuses()
   }
 
-  // =========== CHANNELS ===========
-  listChannels() { return channelRepo.listChannels() }
-  createChannel(channel: Partial<OrgChannel>) { return channelRepo.createChannel(channel) }
-  updateChannel(id: number, updates: Partial<OrgChannel>) { return channelRepo.updateChannel(id, updates) }
-  deleteChannel(id: number) { return channelRepo.deleteChannel(id) }
-  getEligibleChannels() { return channelRepo.getEligibleChannels() }
+  // =========== ACCOUNTS ===========
+  listAccounts() { return accountRepo.listAccounts() }
+  createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }
+  updateAccount(id: number, updates: Partial<AutoAccount>) { return accountRepo.updateAccount(id, updates) }
+  deleteAccount(id: number) { return accountRepo.deleteAccount(id) }
+  getEligibleAccounts() { return accountRepo.getEligibleAccounts() }
 
   // =========== CAMPAIGN ACTIONS ===========
   listCampaignActions() { return campaignActionRepo.listCampaignActions() }
@@ -42,29 +41,29 @@ export class SupabaseService {
   deleteCampaign(id: number) { return campaignRepo.deleteCampaign(id) }
   cloneCampaign(id: number) { return campaignRepo.cloneCampaign(id) }
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }
-  getPendingCampaigns(channelId: number) { return campaignRepo.getPendingCampaigns(channelId) }
+  getPendingCampaigns(accountId: number) { return campaignRepo.getPendingCampaigns(accountId) }
 
-  // =========== CAMPAIGN DATA INPUTS (pool nguyên liệu) ===========
-  listCampaignDataInputs(campaignId: number) { return campaignRepo.listCampaignDataInputs(campaignId) }
-  createCampaignDataInput(input: Partial<CampaignDataInput>) { return campaignRepo.createCampaignDataInput(input) }
-  updateCampaignDataInput(id: number, updates: Partial<CampaignDataInput>) { return campaignRepo.updateCampaignDataInput(id, updates) }
-  deleteCampaignDataInput(id: number) { return campaignRepo.deleteCampaignDataInput(id) }
+  // =========== CAMPAIGN INPUTS (pool nguyên liệu) ===========
+  listCampaignInputs(campaignId: number) { return campaignRepo.listCampaignInputs(campaignId) }
+  createCampaignInput(input: Partial<CampaignInput>) { return campaignRepo.createCampaignInput(input) }
+  updateCampaignInput(id: number, updates: Partial<CampaignInput>) { return campaignRepo.updateCampaignInput(id, updates) }
+  deleteCampaignInput(id: number) { return campaignRepo.deleteCampaignInput(id) }
 
-  // =========== CAMPAIGN DATA ACTIONS (việc-cần-làm) ===========
-  listCampaignDataActions(campaignId: number) { return campaignRepo.listCampaignDataActions(campaignId) }
-  createCampaignDataAction(action: Partial<CampaignDataAction>) { return campaignRepo.createCampaignDataAction(action) }
-  updateCampaignDataAction(id: number, updates: Partial<CampaignDataAction>) { return campaignRepo.updateCampaignDataAction(id, updates) }
-  deleteCampaignDataAction(id: number) { return campaignRepo.deleteCampaignDataAction(id) }
+  // =========== CAMPAIGN INPUT DATA (việc-cần-làm) ===========
+  listCampaignInputData(campaignId: number) { return campaignRepo.listCampaignInputData(campaignId) }
+  createCampaignInputData(action: Partial<CampaignInputData>) { return campaignRepo.createCampaignInputData(action) }
+  updateCampaignInputData(id: number, updates: Partial<CampaignInputData>) { return campaignRepo.updateCampaignInputData(id, updates) }
+  deleteCampaignInputData(id: number) { return campaignRepo.deleteCampaignInputData(id) }
 
-  // =========== RESULT ACTIONS (per-milestone log) ===========
-  listResultActionsByDataAction(dataActionId: number) { return campaignRepo.listResultActionsByDataAction(dataActionId) }
-  listResultActionsByCampaign(campaignId: number) { return campaignRepo.listResultActionsByCampaign(campaignId) }
-  createResultAction(action: Partial<CampaignResultAction>) { return campaignRepo.createResultAction(action) }
-  deleteResultAction(id: number) { return campaignRepo.deleteResultAction(id) }
-  getChannelRateLimitStatus(channelId: number, actionName: string, limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }) { return campaignRepo.getChannelRateLimitStatus(channelId, actionName, limitConfig) }
+  // =========== CAMPAIGN DETAILS (per-milestone log) ===========
+  listCampaignDetailsByInputData(inputDataId: number) { return campaignRepo.listCampaignDetailsByInputData(inputDataId) }
+  listCampaignDetailsByCampaign(campaignId: number) { return campaignRepo.listCampaignDetailsByCampaign(campaignId) }
+  createCampaignDetail(action: Partial<CampaignDetail>) { return campaignRepo.createCampaignDetail(action) }
+  deleteCampaignDetail(id: number) { return campaignRepo.deleteCampaignDetail(id) }
+  getAccountRateLimitStatus(accountId: number, actionName: string, limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }) { return campaignRepo.getAccountRateLimitStatus(accountId, actionName, limitConfig) }
 
   // =========== CONTACTS ===========
-  listContacts(channelId: number, contactType?: ContactType) { return channelContactRepo.listContacts(channelId, contactType) }
-  upsertContacts(contacts: Partial<OrgChannelContact>[]) { return channelContactRepo.upsertContacts(contacts) }
-  deleteContacts(channelId: number, contactType: ContactType) { return channelContactRepo.deleteContacts(channelId, contactType) }
+  listContacts(accountId: number, contactType?: ContactType) { return accountContactRepo.listContacts(accountId, contactType) }
+  upsertContacts(contacts: Partial<AutoAccountContact>[]) { return accountContactRepo.upsertContacts(contacts) }
+  deleteContacts(accountId: number, contactType: ContactType) { return accountContactRepo.deleteContacts(accountId, contactType) }
 }

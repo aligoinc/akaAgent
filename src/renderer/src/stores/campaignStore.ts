@@ -1,14 +1,14 @@
 import { create } from 'zustand'
-import { OrgChannel, Campaign, CampaignAction, CampaignDataInput, CampaignDataAction, CampaignResultAction } from '../../../shared/types'
+import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail } from '../../../shared/types'
 
 interface CampaignStore {
-  // Channels
-  channels: OrgChannel[]
-  loadingChannels: boolean
-  loadChannels: () => Promise<void>
-  createChannel: (data: Partial<OrgChannel>) => Promise<OrgChannel>
-  updateChannel: (id: number, updates: Partial<OrgChannel>) => Promise<void>
-  deleteChannel: (id: number) => Promise<void>
+  // Accounts
+  accounts: AutoAccount[]
+  loadingAccounts: boolean
+  loadAccounts: () => Promise<void>
+  createAccount: (data: Partial<AutoAccount>) => Promise<AutoAccount>
+  updateAccount: (id: number, updates: Partial<AutoAccount>) => Promise<void>
+  deleteAccount: (id: number) => Promise<void>
 
   // Campaign Actions
   campaignActions: CampaignAction[] // active only
@@ -35,26 +35,26 @@ interface CampaignStore {
   selectedCampaignId: number | null
   setSelectedCampaignId: (id: number | null) => void
 
-  // Campaign Data Inputs (pool nguyên liệu thô — e.g. groups → scrape members)
-  dataInputs: CampaignDataInput[]
-  loadingDataInputs: boolean
-  loadDataInputs: (campaignId: number) => Promise<void>
-  createDataInput: (data: Partial<CampaignDataInput>) => Promise<CampaignDataInput>
-  updateDataInput: (id: number, updates: Partial<CampaignDataInput>) => Promise<void>
-  deleteDataInput: (id: number) => Promise<void>
+  // Campaign Inputs (pool nguyên liệu thô — e.g. groups → scrape members)
+  campaignInputs: CampaignInput[]
+  loadingCampaignInputs: boolean
+  loadCampaignInputs: (campaignId: number) => Promise<void>
+  createCampaignInput: (data: Partial<CampaignInput>) => Promise<CampaignInput>
+  updateCampaignInput: (id: number, updates: Partial<CampaignInput>) => Promise<void>
+  deleteCampaignInput: (id: number) => Promise<void>
 
-  // Campaign Data Actions (việc-cần-làm thực thi)
-  dataActions: CampaignDataAction[]
-  loadingDataActions: boolean
-  loadDataActions: (campaignId: number) => Promise<void>
-  createDataAction: (data: Partial<CampaignDataAction>) => Promise<CampaignDataAction>
-  updateDataAction: (id: number, updates: Partial<CampaignDataAction>) => Promise<void>
-  deleteDataAction: (id: number) => Promise<void>
+  // Campaign Input Data (việc-cần-làm thực thi)
+  campaignInputData: CampaignInputData[]
+  loadingCampaignInputData: boolean
+  loadCampaignInputData: (campaignId: number) => Promise<void>
+  createCampaignInputData: (data: Partial<CampaignInputData>) => Promise<CampaignInputData>
+  updateCampaignInputData: (id: number, updates: Partial<CampaignInputData>) => Promise<void>
+  deleteCampaignInputData: (id: number) => Promise<void>
 
-  // Result Actions (per-milestone log) — status: 'thành công' | 'thất bại' | 'lỗi'
-  resultActions: CampaignResultAction[]
-  loadingResultActions: boolean
-  loadResultActions: (campaignId: number) => Promise<void>
+  // Campaign Details (per-milestone log) — status: 'thành công' | 'thất bại' | 'lỗi'
+  campaignDetails: CampaignDetail[]
+  loadingCampaignDetails: boolean
+  loadCampaignDetails: (campaignId: number) => Promise<void>
 
   // Logs
   logs: { timestamp: string; message: string }[]
@@ -68,39 +68,39 @@ interface CampaignStore {
 
 export const useCampaignStore = create<CampaignStore>((set, get) => ({
   // =========== ACCOUNTS ===========
-  channels: [],
-  loadingChannels: false,
+  accounts: [],
+  loadingAccounts: false,
 
-  loadChannels: async () => {
+  loadAccounts: async () => {
     if (!window.electronAPI) return
-    set({ loadingChannels: true })
+    set({ loadingAccounts: true })
     try {
-      const channels = await window.electronAPI.listChannels()
-      set({ channels })
+      const accounts = await window.electronAPI.listAccounts()
+      set({ accounts })
     } catch (err) {
-      console.error('Failed to load channels:', err)
+      console.error('Failed to load accounts:', err)
     } finally {
-      set({ loadingChannels: false })
+      set({ loadingAccounts: false })
     }
   },
 
-  createChannel: async (data) => {
+  createAccount: async (data) => {
     if (!window.electronAPI) throw new Error('API not available')
-    const channel = await window.electronAPI.createChannel(data)
-    await get().loadChannels()
-    return channel
+    const account = await window.electronAPI.createAccount(data)
+    await get().loadAccounts()
+    return account
   },
 
-  updateChannel: async (id, updates) => {
+  updateAccount: async (id, updates) => {
     if (!window.electronAPI) return
-    await window.electronAPI.updateChannel(id, updates)
-    await get().loadChannels()
+    await window.electronAPI.updateAccount(id, updates)
+    await get().loadAccounts()
   },
 
-  deleteChannel: async (id) => {
+  deleteAccount: async (id) => {
     if (!window.electronAPI) return
-    await window.electronAPI.deleteChannel(id)
-    await get().loadChannels()
+    await window.electronAPI.deleteAccount(id)
+    await get().loadAccounts()
   },
 
   // =========== CAMPAIGN ACTIONS ===========
@@ -221,101 +221,101 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
 
   setSelectedCampaignId: (id) => {
     set({ selectedCampaignId: id })
-    if (id) get().loadDataActions(id)
+    if (id) get().loadCampaignInputData(id)
   },
 
-  // =========== CAMPAIGN DATA INPUTS ===========
-  dataInputs: [],
-  loadingDataInputs: false,
+  // =========== CAMPAIGN INPUTS ===========
+  campaignInputs: [],
+  loadingCampaignInputs: false,
 
-  loadDataInputs: async (campaignId) => {
+  loadCampaignInputs: async (campaignId) => {
     if (!window.electronAPI) return
-    set({ loadingDataInputs: true })
+    set({ loadingCampaignInputs: true })
     try {
-      const inputs = await window.electronAPI.listCampaignDataInputs(campaignId)
-      set({ dataInputs: inputs })
+      const inputs = await window.electronAPI.listCampaignInputs(campaignId)
+      set({ campaignInputs: inputs })
     } catch (err) {
-      console.error('Failed to load campaign data inputs:', err)
+      console.error('Failed to load campaign inputs:', err)
     } finally {
-      set({ loadingDataInputs: false })
+      set({ loadingCampaignInputs: false })
     }
   },
 
-  createDataInput: async (data) => {
+  createCampaignInput: async (data) => {
     if (!window.electronAPI) throw new Error('API not available')
-    const input = await window.electronAPI.createCampaignDataInput(data)
+    const input = await window.electronAPI.createCampaignInput(data)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadDataInputs(selectedCampaignId)
+    if (selectedCampaignId) await get().loadCampaignInputs(selectedCampaignId)
     return input
   },
 
-  updateDataInput: async (id, updates) => {
+  updateCampaignInput: async (id, updates) => {
     if (!window.electronAPI) return
-    await window.electronAPI.updateCampaignDataInput(id, updates)
+    await window.electronAPI.updateCampaignInput(id, updates)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadDataInputs(selectedCampaignId)
+    if (selectedCampaignId) await get().loadCampaignInputs(selectedCampaignId)
   },
 
-  deleteDataInput: async (id) => {
+  deleteCampaignInput: async (id) => {
     if (!window.electronAPI) return
-    await window.electronAPI.deleteCampaignDataInput(id)
+    await window.electronAPI.deleteCampaignInput(id)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadDataInputs(selectedCampaignId)
+    if (selectedCampaignId) await get().loadCampaignInputs(selectedCampaignId)
   },
 
-  // =========== CAMPAIGN DATA ACTIONS ===========
-  dataActions: [],
-  loadingDataActions: false,
+  // =========== CAMPAIGN INPUT DATA ===========
+  campaignInputData: [],
+  loadingCampaignInputData: false,
 
-  loadDataActions: async (campaignId) => {
+  loadCampaignInputData: async (campaignId) => {
     if (!window.electronAPI) return
-    set({ loadingDataActions: true })
+    set({ loadingCampaignInputData: true })
     try {
-      const actions = await window.electronAPI.listCampaignDataActions(campaignId)
-      set({ dataActions: actions })
+      const actions = await window.electronAPI.listCampaignInputData(campaignId)
+      set({ campaignInputData: actions })
     } catch (err) {
-      console.error('Failed to load campaign data actions:', err)
+      console.error('Failed to load campaign input data:', err)
     } finally {
-      set({ loadingDataActions: false })
+      set({ loadingCampaignInputData: false })
     }
   },
 
-  createDataAction: async (data) => {
+  createCampaignInputData: async (data) => {
     if (!window.electronAPI) throw new Error('API not available')
-    const action = await window.electronAPI.createCampaignDataAction(data)
+    const action = await window.electronAPI.createCampaignInputData(data)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadDataActions(selectedCampaignId)
+    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
     return action
   },
 
-  updateDataAction: async (id, updates) => {
+  updateCampaignInputData: async (id, updates) => {
     if (!window.electronAPI) return
-    await window.electronAPI.updateCampaignDataAction(id, updates)
+    await window.electronAPI.updateCampaignInputData(id, updates)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadDataActions(selectedCampaignId)
+    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
   },
 
-  deleteDataAction: async (id) => {
+  deleteCampaignInputData: async (id) => {
     if (!window.electronAPI) return
-    await window.electronAPI.deleteCampaignDataAction(id)
+    await window.electronAPI.deleteCampaignInputData(id)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadDataActions(selectedCampaignId)
+    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
   },
 
-  // =========== RESULT ACTIONS ===========
-  resultActions: [],
-  loadingResultActions: false,
+  // =========== CAMPAIGN DETAILS ===========
+  campaignDetails: [],
+  loadingCampaignDetails: false,
 
-  loadResultActions: async (campaignId) => {
+  loadCampaignDetails: async (campaignId) => {
     if (!window.electronAPI) return
-    set({ loadingResultActions: true })
+    set({ loadingCampaignDetails: true })
     try {
-      const actions = await window.electronAPI.listResultActionsByCampaign(campaignId)
-      set({ resultActions: actions })
+      const actions = await window.electronAPI.listCampaignDetailsByCampaign(campaignId)
+      set({ campaignDetails: actions })
     } catch (err) {
-      console.error('Failed to load result actions:', err)
+      console.error('Failed to load campaign details:', err)
     } finally {
-      set({ loadingResultActions: false })
+      set({ loadingCampaignDetails: false })
     }
   },
 

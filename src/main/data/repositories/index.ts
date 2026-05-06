@@ -1,7 +1,7 @@
-export * as channelRepo from './channelRepository'
+export * as accountRepo from './accountRepository'
 export * as campaignRepo from './campaignRepository'
 export * as campaignActionRepo from './campaignActionRepository'
-export * as channelContactRepo from './channelContactRepository'
+export * as accountContactRepo from './accountContactRepository'
 
 // v2 — workflow redesign
 export * as blockRepo from './blockRepository'
