@@ -164,6 +164,7 @@ export class PageController {
     const state = opts.state ?? 'visible'
     const startTime = Date.now()
     const interval = 200
+    let polls = 0
     while (Date.now() - startTime < timeout) {
       const found = await this.exec<boolean>(`
         var el = resolveSelector(${safeJS(selector)});
@@ -174,9 +175,26 @@ export class PageController {
             : 'return !!el;' /* resolveSelector đã filter visible */}
       `).catch(() => false)
       if (found) return true
+      polls++
+      if (state !== 'hidden' && this.shouldLazyLoadFacebookCommentBox(selector) && polls % 3 === 0) {
+        await this.exec(`
+          window.scrollBy(0, Math.max(600, Math.floor((window.innerHeight || 800) * 0.85)));
+          return true;
+        `).catch(() => false)
+        await new Promise(r => setTimeout(r, 500))
+        continue
+      }
       await new Promise(r => setTimeout(r, interval))
     }
     throw new Error(`waitForSelector timeout: ${selector}`)
+  }
+
+  private shouldLazyLoadFacebookCommentBox(selector: string): boolean {
+    return (
+      selector.includes('Write a comment') ||
+      selector.includes('Viết bình luận') ||
+      selector.includes('Viáº¿t bÃ¬nh luáº­n')
+    )
   }
 
   // =========== ELEMENT QUERY ===========
@@ -208,19 +226,17 @@ export class PageController {
       var el = resolveSelector(${safeJS(selector)});
       if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
       el.scrollIntoView({ block: "center", inline: "center" });
-      setTimeout(function() {
-        var rect = el.getBoundingClientRect();
-        var cx = rect.left + rect.width / 2;
-        var cy = rect.top + rect.height / 2;
-        var evtInit = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
-        for (var i = 0; i < ${Number(clickCount)}; i++) {
-          el.dispatchEvent(new PointerEvent("pointerdown", Object.assign({}, evtInit, { pointerId: 1, pointerType: "mouse" })));
-          el.dispatchEvent(new MouseEvent("mousedown", evtInit));
-          el.dispatchEvent(new PointerEvent("pointerup", Object.assign({}, evtInit, { pointerId: 1, pointerType: "mouse" })));
-          el.dispatchEvent(new MouseEvent("mouseup", evtInit));
-          el.click();
-        }
-      }, 50);
+      var rect = el.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2;
+      var cy = rect.top + rect.height / 2;
+      var evtInit = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
+      for (var i = 0; i < ${Number(clickCount)}; i++) {
+        el.dispatchEvent(new PointerEvent("pointerdown", Object.assign({}, evtInit, { pointerId: 1, pointerType: "mouse" })));
+        el.dispatchEvent(new MouseEvent("mousedown", evtInit));
+        el.dispatchEvent(new PointerEvent("pointerup", Object.assign({}, evtInit, { pointerId: 1, pointerType: "mouse" })));
+        el.dispatchEvent(new MouseEvent("mouseup", evtInit));
+        el.click();
+      }
       return true;
     `)
   }
@@ -361,12 +377,10 @@ export class PageController {
         "Space": { key: " ", code: "Space", keyCode: 32 }
       };
       var keyInfo = keyMap[${safeJS(key)}] || { key: ${safeJS(key)}, code: ${safeJS(key)}, keyCode: 0 };
-      setTimeout(function() {
-        var target = document.activeElement || document.body;
-        target.dispatchEvent(new KeyboardEvent("keydown", Object.assign({}, keyInfo, { bubbles: true })));
-        target.dispatchEvent(new KeyboardEvent("keypress", Object.assign({}, keyInfo, { bubbles: true })));
-        target.dispatchEvent(new KeyboardEvent("keyup", Object.assign({}, keyInfo, { bubbles: true })));
-      }, 50);
+      var target = document.activeElement || document.body;
+      target.dispatchEvent(new KeyboardEvent("keydown", Object.assign({}, keyInfo, { bubbles: true })));
+      target.dispatchEvent(new KeyboardEvent("keypress", Object.assign({}, keyInfo, { bubbles: true })));
+      target.dispatchEvent(new KeyboardEvent("keyup", Object.assign({}, keyInfo, { bubbles: true })));
       return true;
     `)
   }
