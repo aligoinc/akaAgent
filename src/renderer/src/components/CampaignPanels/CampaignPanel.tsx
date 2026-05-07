@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import { Campaign, CampaignDetail } from '../../../../shared/types'
+import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
 
@@ -60,6 +61,26 @@ const getFoundDataKindLabel = (kind: FoundDataKind) => {
   }
 }
 
+const formatExportTimestamp = (date = new Date()) => {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join('') + '-' + [pad(date.getHours()), pad(date.getMinutes()), pad(date.getSeconds())].join('')
+}
+
+const sanitizeFileSegment = (value: string) => {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60) || 'campaign'
+}
+
 export default function CampaignPanel({ filterAccountId, onClearFilter }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
@@ -71,6 +92,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     loadCampaignInputData, loadCampaignDetails
   } = useCampaignStore()
   const isAdminAkabiz = !!useAuthStore(s => s.user?.isAdminAkabiz)
+  const showAlert = useUiStore(s => s.showAlert)
 
   const [showForm, setShowForm] = useState(false)
   const [showActionManager, setShowActionManager] = useState(false)
@@ -291,6 +313,55 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
         </div>
       </div>
     )
+  }
+
+  const handleExportCampaignDetails = () => {
+    if (!selectedCampaign) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (campaignDetails.length === 0) {
+      showAlert('Chưa có lịch sử hành động để xuất.', 'info')
+      return
+    }
+
+    try {
+      const rows = campaignDetails.map((detail, index) => ({
+        STT: index + 1,
+        'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
+        'Chiến dịch': selectedCampaign.name,
+        'Campaign ID': selectedCampaign.id,
+        'Account ID': detail.accountId ?? selectedCampaign.accountId ?? '',
+        'Input Data ID': detail.inputDataId ?? '',
+        'Hành động': detail.actionName,
+        'Trạng thái': detail.status,
+        'Chi tiết': detail.log || '',
+        'Post URL': detail.postUrl || '',
+        'Data JSON': detail.data ? JSON.stringify(detail.data) : ''
+      }))
+      const sheet = utils.json_to_sheet(rows)
+      sheet['!cols'] = [
+        { wch: 6 },
+        { wch: 22 },
+        { wch: 28 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 14 },
+        { wch: 60 },
+        { wch: 36 },
+        { wch: 50 }
+      ]
+      const workbook = utils.book_new()
+      utils.book_append_sheet(workbook, sheet, 'Lich su hanh dong')
+      const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
+      writeFile(workbook, `campaign-history-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      showAlert('Đã xuất lịch sử hành động ra Excel.', 'success')
+    } catch (err) {
+      console.error('Failed to export campaign details:', err)
+      showAlert('Không thể xuất file Excel lịch sử hành động.', 'error')
+    }
   }
 
   // Filter campaigns by account if filter is active
@@ -533,6 +604,16 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
               {/* Tab: Campaign Details (per-milestone log) */}
               {detailTab === 'actions' && (
                 <>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 0 8px' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleExportCampaignDetails}
+                      disabled={loadingCampaignDetails || campaignDetails.length === 0}
+                      title="Xuất lịch sử hành động ra Excel"
+                    >
+                      <Download size={14} /> Xuất Excel
+                    </button>
+                  </div>
                   {loadingCampaignDetails ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
                   ) : campaignDetails.length === 0 ? (

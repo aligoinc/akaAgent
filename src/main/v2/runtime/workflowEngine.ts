@@ -427,6 +427,12 @@ export class WorkflowEngineV2 {
       return { success: true, output: { iterations: 0 }, durationMs: Date.now() - startTime, logs: [] }
     }
     const bodyNodeIds = this.collectBodySubgraph(bodyStartIds, node.id, graph)
+    const markPendingBodySkipped = () => {
+      for (const id of bodyNodeIds) {
+        const s = nodeStates.get(id)
+        if (s?.status === 'pending') s.status = 'skipped'
+      }
+    }
 
     // Helper: chạy 1 iteration body
     const runIteration = async (iterIdx: number, item: unknown | undefined) => {
@@ -482,6 +488,7 @@ export class WorkflowEngineV2 {
         }
         i++
       }
+      if (i === 0) markPendingBodySkipped()
       return { success: true, output: { iterations: i }, durationMs: Date.now() - startTime, logs: [] }
     } else {
       let completed = 0
@@ -497,6 +504,7 @@ export class WorkflowEngineV2 {
         }
         completed++
       }
+      if (completed === 0) markPendingBodySkipped()
       return { success: true, output: { iterations: completed }, durationMs: Date.now() - startTime, logs: [] }
     }
   }
@@ -559,9 +567,11 @@ export class WorkflowEngineV2 {
     excludeFromParents: string | null
   ): WorkflowNode[] {
     const subsetSet = subset ? (Array.isArray(subset) ? new Set(subset) : subset) : null
+    const topLevelLoopBodyNodes = subsetSet ? null : this.collectAllLoopBodySubgraphs(workflow, graph)
     const ready: WorkflowNode[] = []
     for (const node of workflow.nodes) {
       if (subsetSet && !subsetSet.has(node.id)) continue
+      if (topLevelLoopBodyNodes?.has(node.id)) continue
       const state = nodeStates.get(node.id)!
       if (state.status !== 'pending') continue
 
@@ -678,6 +688,20 @@ export class WorkflowEngineV2 {
       const childEdges = graph.children.get(id) ?? []
       for (const e of childEdges) {
         if (e.target !== loopNodeId) queue.push(e.target)
+      }
+    }
+    return result
+  }
+
+  private collectAllLoopBodySubgraphs(workflow: WorkflowDef, graph: Graph): Set<string> {
+    const result = new Set<string>()
+    for (const node of workflow.nodes) {
+      if (node.systemType !== 'loop') continue
+      const bodyStartIds = (graph.children.get(node.id) ?? [])
+        .filter(e => e.sourceHandle === 'body')
+        .map(e => e.target)
+      for (const id of this.collectBodySubgraph(bodyStartIds, node.id, graph)) {
+        result.add(id)
       }
     }
     return result
