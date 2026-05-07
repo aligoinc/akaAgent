@@ -38,7 +38,7 @@ Project KHÔNG có test framework / lint config. Verify bằng tsc + manual smok
 
 `WebviewRegistry` maps `accountId -> webContentsId`. Scheduler uses `isRegistered()` to ensure the account has mounted a browser tab at least once; accountPoller uses `listRegistered()` to skip dead tabs. Runtime uses `accountId` and partition `persist:account_${accountId}`; browser profiles from the previous partition prefix are not reused.
 
-Campaign automation không drive visible `<webview>` trực tiếp nữa. [src/main/v2/runtime/backgroundPageManager.ts](src/main/v2/runtime/backgroundPageManager.ts) tạo hidden/offscreen `BrowserWindow` theo từng account, dùng chung partition `persist:account_${accountId}` nên giữ login/session mà không bật app khỏi trạng thái minimized. Scheduler lấy `PageController` từ manager này, còn test/editor vẫn dùng `PageControllerRegistry` của webview visible.
+Campaign automation chạy qua [src/main/v2/runtime/backgroundPageManager.ts](src/main/v2/runtime/backgroundPageManager.ts) hidden/offscreen `BrowserWindow` theo từng account để minimized vẫn render ổn định. Renderer không tự chuyển page/focus; BrowserPage chọn sẵn account bằng `campaign:browser-select` và hiển thị preview stream bằng `campaign:browser-preview` để user tự vào quan sát. Test/editor vẫn dùng `PageControllerRegistry` của webview visible.
 
 Convention quan trọng (xem memory `campaign_conventions.md`):
 - **Atomic blocks**: tuyệt đối KHÔNG tạo "do-many-things" block. Compose existing primitives (`page.click`/`page.type`/`page.waitForSelector`/...).
@@ -159,7 +159,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 - **timeSleepBetween2** vs **actionLimits.sleepBetweenActions**: scheduler ưu tiên `actionLimits.sleepBetweenActions`, fallback `campaign.timeSleepBetween2`. Cả 2 tính bằng giây.
 - **Schedule edit** (`scheduleEndDate`): cột nullable, type `string | null | undefined`. Pass `null` (không phải `undefined`) để clear — `updateCampaign`'s `!== undefined` check sẽ skip undefined. Cho `scheduleType='daily'`, luôn gửi `null` (form date input disabled nhưng formData vẫn giữ default 7-day-ahead, sẽ silently stop campaign sau 1 tuần).
 - **Hidden vs disabled toggle** (`sharePost` pattern): feature có DB flag nhưng chưa implement → ẨN khỏi UI (don't render checkbox), giữ flag trong `formData` + `handleSave` payload (preserve roundtrip), backend log warning per run. KHÔNG `<input disabled>` (leak feature name).
-- **Minimized campaign runs**: scheduler phải chạy qua hidden/offscreen `BackgroundPageManager`, không gọi `show()`/`showInactive()`/`focus()` và không tự chuyển tab renderer. Visible webview chỉ cần mounted để có partition/session và status.
+- **Minimized campaign runs**: scheduler chạy campaign bằng hidden/offscreen `BackgroundPageManager`; visible webview có thể không paint khi minimized/hidden nên chỉ dùng cho login/test/manual. BrowserPage quan sát qua preview stream.
+- **Electron `ERR_ABORTED` navigation**: hidden page preload can be superseded by workflow `page.navigate()`; `src/main/v2/runtime/pageController.ts` treats `ERR_ABORTED`/`-3` as non-fatal and later selectors validate page state.
 - **Emojis trong source files**: KHÔNG viết emoji vào TS/TSX trừ khi user yêu cầu. Emoji trong **log strings** (`📝`/`✅`/`❌`/...) là customer-facing vocabulary đã agreed, được expected trong `sendLog`/`appendCampaignLog`/block code.
 
 ## Maintenance — keep this file fresh

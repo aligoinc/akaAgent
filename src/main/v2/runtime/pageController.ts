@@ -1,5 +1,14 @@
 import { WebContents } from 'electron'
 
+export function isNavigationAbortError(err: unknown): boolean {
+  const e = err as { code?: string; errno?: number; message?: string } | null
+  return (
+    e?.code === 'ERR_ABORTED' ||
+    e?.errno === -3 ||
+    (typeof e?.message === 'string' && e.message.includes('ERR_ABORTED'))
+  )
+}
+
 // JS code injected vào webview để resolve cả CSS selector và XPath với visibility filter.
 const SELECTOR_RESOLVER_JS = `
 function resolveSelector(selector) {
@@ -120,7 +129,15 @@ export class PageController {
 
   // =========== NAVIGATION ===========
   async navigate(url: string): Promise<void> {
-    await this.wc.loadURL(url)
+    try {
+      await this.wc.loadURL(url)
+    } catch (err) {
+      // Electron reports ERR_ABORTED when a navigation is superseded by another
+      // main-frame navigation. Facebook does this often with redirects/SPAs, and
+      // the following workflow steps will still validate the actual page state.
+      if (isNavigationAbortError(err)) return
+      throw err
+    }
   }
 
   async reload(): Promise<void> {

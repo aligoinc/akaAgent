@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { PageController } from './pageController'
+import { PageController, isNavigationAbortError } from './pageController'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -32,8 +32,8 @@ export class BackgroundPageManager {
     }
 
     const win = new BrowserWindow({
-      width: 1365,
-      height: 900,
+      width: 1920,
+      height: 1080,
       show: false,
       skipTaskbar: true,
       frame: false,
@@ -59,6 +59,7 @@ export class BackgroundPageManager {
 
     const initialUrl = PLATFORM_URLS[platformType] || 'about:blank'
     win.loadURL(initialUrl).catch((err) => {
+      if (isNavigationAbortError(err)) return
       console.warn(`[BackgroundPageManager] Failed to load ${initialUrl}:`, err)
     })
 
