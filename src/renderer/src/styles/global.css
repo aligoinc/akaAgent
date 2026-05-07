@@ -2296,6 +2296,74 @@ body {
   border-bottom-color: var(--accent-primary);
 }
 
+.campaign-detail-log-cell {
+  max-width: 360px;
+}
+
+.campaign-detail-log-text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.find-data-history-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.find-data-result-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.find-data-chip,
+.find-data-kind {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.find-data-chip {
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.find-data-kind {
+  padding: 3px 7px;
+}
+
+.find-data-chip-phone,
+.find-data-kind-phone {
+  color: var(--accent-success);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.find-data-chip-zalo,
+.find-data-kind-zalo {
+  color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.find-data-chip-uid,
+.find-data-kind-uid {
+  color: var(--accent-warning);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.find-data-value-cell,
+.find-data-group-cell {
+  max-width: 280px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* =========== Browser Page =========== */
 .browser-page {
   display: flex;
