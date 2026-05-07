@@ -1,14 +1,9 @@
 [mcp_servers.supabase]
-command = "cmd"
+command = "powershell"
 args = [
-  "/c",
-  "npx",
-  "-y",
-  "@supabase/mcp-server-supabase@latest",
-  "--access-token",
-  "%SUPABASE_ACCESS_TOKEN%",
-  "--project-ref",
-  "your-project-ref",
-  "--features",
-  "database,docs",
+  "-NoProfile",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-Command",
+  "$env:SUPABASE_ACCESS_TOKEN=[Environment]::GetEnvironmentVariable('SUPABASE_ACCESS_TOKEN','User'); & npx.cmd -y @supabase/mcp-server-supabase@0.8.1 --project-ref your-project-ref --features database,docs",
 ]

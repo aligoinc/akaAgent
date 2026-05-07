@@ -302,7 +302,9 @@ export class CampaignScheduler {
         ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn')
         : campaign.actionId === 'facebook_find_data_group'
           ? 'Tìm data'
-          : 'Đăng bài'
+          : campaign.actionId === 'facebook_comment_seeding'
+            ? 'Comment'
+            : 'Đăng bài'
       try {
         const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionLabel, limitConfig)
         if (!limitStatus.ok) {
@@ -632,7 +634,9 @@ export class CampaignScheduler {
       const position = Number(out.position ?? (i + 1))
       const text = String(out.text ?? '')
       const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
-      const target = position === 1 ? 'bài của mình' : `bài thứ ${position}`
+      const target = campaign.actionId === 'facebook_comment_seeding'
+        ? this.formatOrdinalPost(i + 1)
+        : (position === 1 ? 'bài của mình' : this.formatOrdinalPost(position))
       try {
         await this.supabase.createCampaignDetail({
           inputDataId: detail?.id,
@@ -778,6 +782,10 @@ export class CampaignScheduler {
 
   private normalizeUidForCompare(uid: string): string {
     return String(uid || '').trim().replace(/\/+$/g, '').toLowerCase()
+  }
+
+  private formatOrdinalPost(position: number): string {
+    return position === 1 ? 'bài đầu tiên' : `bài thứ ${position}`
   }
 
   private async recoverStuckCampaignInputData(campaignId: number, errMsg: string): Promise<void> {
