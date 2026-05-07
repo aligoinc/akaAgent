@@ -224,6 +224,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
+  const canPickGroups = isGroupPostCampaign || isCommentSeedingCampaign
   const STEPS = (() => {
     if (isSimpleCampaign) return ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
     if (isCommentSeedingCampaign) {
@@ -415,6 +416,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     }
     if (isCommentSeedingCampaign && !formData.commentContent.trim()) {
       showAlert('Vui lòng nhập nội dung comment.', 'error')
+      return
+    }
+    if (isCommentSeedingCampaign && details.length === 0) {
+      showAlert('Vui lòng thêm ít nhất một group hoặc link bài viết vào danh sách mục tiêu.', 'error')
       return
     }
 
@@ -1774,7 +1779,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         <Users size={14} /> Chọn bạn bè
                       </button>
                     )}
-                    {isGroupPostCampaign && (
+                    {canPickGroups && (
                       <button
                         className="btn btn-secondary"
                         onClick={() => {
@@ -1784,7 +1789,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                           }
                           setShowGroupPicker(true)
                         }}
-                        title="Chọn nhóm từ danh sách đã tham gia"
+                        title={isCommentSeedingCampaign ? 'Chọn group để comment seeding' : 'Chọn nhóm từ danh sách đã tham gia'}
                       >
                         <Users size={14} /> Chọn nhóm
                       </button>

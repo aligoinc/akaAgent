@@ -643,14 +643,17 @@ export class CampaignScheduler {
 
     // Comment — đọc position/text từ s.output (block return) thay vì s.input
     const commentSteps = steps.filter(s => s.blockName === 'fb_comment_at_position' && s.status === 'success')
+    let loggedCommentCount = 0
     for (let i = 0; i < commentSteps.length; i++) {
       const s = commentSteps[i]
       const out = (s.output as any) || {}
       const position = Number(out.position ?? (i + 1))
       const text = String(out.text ?? '')
+      if (out.commented === false || text.trim().length === 0) continue
+      loggedCommentCount++
       const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
       const target = campaign.actionId === 'facebook_comment_seeding'
-        ? this.formatOrdinalPost(i + 1)
+        ? this.formatOrdinalPost(loggedCommentCount)
         : (position === 1 ? 'bài của mình' : this.formatOrdinalPost(position))
       try {
         await this.supabase.createCampaignDetail({
@@ -660,10 +663,33 @@ export class CampaignScheduler {
           actionName: 'Comment',
           status: 'thành công',
           log: `Đã comment vào ${target}: "${preview}"`,
-          data: { commentPosition: position, iteration: i + 1, commentContent: text }
+          data: { commentPosition: position, iteration: loggedCommentCount, commentContent: text }
         })
         this.sendLog(`💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
       } catch (err) { console.error('Failed log comment:', err) }
+    }
+
+    // Comment seeding: không có bài phù hợp thì chỉ ghi log chiến dịch, không tạo campaign_detail.
+    if (campaign.actionId === 'facebook_comment_seeding' && loggedCommentCount === 0) {
+      const prepareStep = steps.find(s => s.blockName === 'fb_prepare_seeding_iterations')
+      const out = (prepareStep?.output as any) || {}
+      const matchedCount = Number(out.matchedCount ?? 0)
+      if (prepareStep?.status === 'success' && matchedCount === 0) {
+        const totalCount = Number(out.totalCount ?? 0)
+        const keyword = String(campaign.extraSettings?.postKeywordFilter ?? campaign.extraSettings?.keywordFilter ?? '').trim()
+        const targetName = inputDataName || 'mục tiêu'
+        const reason = keyword
+          ? (totalCount > 0
+            ? `Không tìm thấy bài phù hợp với từ khoá "${keyword}" trong ${targetName}`
+            : `Không tìm thấy bài nào để lọc từ khoá "${keyword}" trong ${targetName}`)
+          : `Không tìm thấy bài phù hợp để comment trong ${targetName}`
+        try {
+          await this.supabase.appendCampaignLog(campaign.id, reason)
+        } catch (err) {
+          console.error('Failed append no-match comment seeding log:', err)
+        }
+        this.sendLog(`ℹ️ ${reason}`)
+      }
     }
 
     // Nhắn tin — phân biệt 3 status: thành công / thất bại (FB block) / lỗi (exception)

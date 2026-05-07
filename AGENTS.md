@@ -94,7 +94,7 @@ For `facebook_find_data_group`, workflow/blocks/elements/action are seeded by [m
 - `mapXxxFromDB(row)` trong [mappers.ts](src/main/data/mappers.ts) chuyển snake_case → camelCase
 - Built-in records live in Supabase DB (`auto_blocks`, `auto_workflows`, `auto_elements`) and DB is the source of truth. There is no `seedV2` runtime/source fallback; update built-ins via admin UI/IPC or explicit SQL migration.
 
-Migration pattern: write SQL files at repo root (`migration.sql` for base schema, `migration_v2_workflow.sql` for v2, `migration_v3_campaign_data.sql` for data refactor, `migration_v4_drop_engine_v1.sql` for v1 cleanup, `migration_v5_*` for account schema rename, `migration_v6_rename_campaign_workflow_tables.sql` for final table/key names, `migration_v7_*` for package account-limit names). Apply via `mcp__supabase__apply_migration`. Use idempotent UPSERT by UNIQUE name for engine v2 or explicit IDs where appropriate.
+Migration pattern: write SQL files at repo root (`migration.sql` for base schema, `migration_v2_workflow.sql` for v2, `migration_v3_campaign_data.sql` for data refactor, `migration_v4_drop_engine_v1.sql` for v1 cleanup, `migration_v5_*` for account schema rename, `migration_v6_rename_campaign_workflow_tables.sql` for final table/key names, `migration_v7_*` for package account-limit names, `migration_v11_*`/`migration_v12_*` for contact upsert key repair, `migration_v13_*` for comment seeding keyword matching). Apply via `mcp__supabase__apply_migration`. Use idempotent UPSERT by UNIQUE name for engine v2 or explicit IDs where appropriate.
 
 ### Vietnamese UI conventions
 
@@ -157,6 +157,7 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 ## Common pitfalls
 
 - **Loop iterations**: scheduler `logMilestonesV2` đọc `result.steps` từ engine. Engine v2 maintain `allSteps[]` (mỗi loop iteration 1 row riêng) thay vì snapshot `nodeStates`. Khi đọc per-iteration data, đọc `s.output` (block return value), KHÔNG `s.input` (chỉ là config + parents trực tiếp).
+- **Comment seeding keyword miss**: `fb_prepare_seeding_iterations` có thể trả `commentIterations=[]`; loop body chỉ được chạy bên trong loop executor, scheduler chỉ ghi detail `Comment` khi `fb_comment_at_position.output.commented===true` + text không rỗng, và keyword/text phải normalize bỏ dấu + whitespace trước khi match ([workflowEngine.ts](src/main/v2/runtime/workflowEngine.ts), [campaignScheduler.ts](src/main/services/campaignScheduler.ts), [migration_v13_comment_seeding_keyword_match.sql](migration_v13_comment_seeding_keyword_match.sql)).
 - **Output cascade**: engine v2 KHÔNG có inputMapping — output của parent merge vào input của child theo edges, last-write-wins. Output `scrapedText` của block ở xa KHÔNG cascade qua chain — nếu cần dùng ở downstream chain dài, **mutate `vars`** thay vì rely on input merging.
 - **XPath union `|`**: timeline page và group page dùng selector khác nhau. Element store XPath với `|` để match cả hai. `document.evaluate` (XPath 1.0) hỗ trợ union, trả node đầu tiên match.
 - **`auto_runs.workflow_id` column**: tên cột là `workflow_id` nhưng FK → `auto_workflows.id` (BIGINT). Đừng nhầm với cột `workflow_id` (UUID) đã drop ở migration_v4 thuộc `auto_campaign_actions`.
