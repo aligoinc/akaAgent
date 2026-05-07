@@ -64,7 +64,7 @@ Domain (sau migration_v4 drop engine v1):
 - `auto_accounts` — tài khoản/social profile để login và chạy automation (trước đây là `org_accounts`)
 - `auto_account_contacts` — danh bạ friend/group theo account (trước đây là `org_account_contacts`)
 - `auto_campaigns` — campaign config (action_id, account_id, schedule, content, extra_settings)
-- `auto_campaign_actions` — template loại campaign (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`); column `workflow_id` (BIGINT, FK auto_workflows.id) là pointer duy nhất tới workflow.
+- `auto_campaign_actions` — template loại campaign (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`/`facebook_find_data_group`); column `workflow_id` (BIGINT, FK auto_workflows.id) là pointer duy nhất tới workflow.
 - `auto_campaign_inputs` — pool nguyên liệu thô (e.g. danh sách group để scrape members → sinh input_data). Status: `'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'` (`'lỗi'` flag input không scrape được; admin re-trigger).
 - `auto_campaign_input_data` — **việc-cần-làm thực thi** (mỗi target/profile/group = 1 row). Status: `'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành'` (KHÔNG có `'lỗi'` — lỗi action-level đã track ở campaign_details; khi run fail set `'hoàn thành' + note=errMsg`). Cột `input_id BIGINT NULL` FK → `auto_campaign_inputs.id` (nếu sinh từ scrape; NULL nếu user nhập tay).
 - `auto_campaign_details` — **customer-visible "Lịch sử hành động"**: mỗi milestone (post, từng comment, friend request, message) ghi 1 row riêng. Status: `'thành công' | 'thất bại' | 'lỗi'` (thành công = OK; thất bại = nghiệp vụ FB từ chối; lỗi = exception/crash code). FK `input_data_id` (nullable cho simple campaign không có input_data).
@@ -76,6 +76,8 @@ Domain (sau migration_v4 drop engine v1):
 4. Sleep `extra.actionLimits.sleepBetweenActions` giây giữa input_data rows
 
 For `facebook_comment_seeding`, `buildVariablesV2()` must provide `targetUrl`, `postsPerTarget`, `enablePostLike`, `keywordFilter`, and `commentVariants` from campaign `extra_settings`/input_data because the DB workflow depends on those vars.
+
+For `facebook_find_data_group`, workflow/blocks/elements/action are seeded by [migration_v8_find_data_group.sql](migration_v8_find_data_group.sql). `logMilestonesV2()` writes one `"Tìm data"` detail row with phones/Zalo links/UIDs in JSONB `data`; `isFindByContentAI/contentAI` are UI-stored only until the AI block is implemented. `findUidTargetCampaignIds` fans found UIDs into selected `facebook_message_friend` campaigns, dedupes by `uid`, and flips completed target campaigns back to `'chờ xử lý'`.
 
 **Recovery**: `resetRunningStatuses()` chạy lúc app start (accounts + campaigns + campaign_inputs + campaign_input_data) — flip rows kẹt `'đang chạy'` về `'chờ xử lý'` (đề phòng crash mid-flow). `recoverStuckCampaignInputData(campaignId, errMsg)` flip input_data stuck thành `'hoàn thành'` + `note=errMsg` khi outer catch (enum không có `'lỗi'`). `stop()` cũng đóng toàn bộ hidden background pages để không giữ tài nguyên nền.
 
