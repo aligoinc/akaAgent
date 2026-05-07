@@ -124,6 +124,10 @@ Status values trong DB lưu **tiếng Việt có dấu**:
 
 Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repository/service. Renderer gọi qua `electronAPI.xxx()` ([preload/index.ts](src/preload/index.ts), typed trong [electron.d.ts](src/renderer/src/types/electron.d.ts)).
 
+### Auto-update
+
+[src/main/services/updater.ts](src/main/services/updater.ts) đọc local version từ `resources/version.txt` (dev fallback `version.txt`/`app.getVersion()`) và remote từ `version_win.txt`. Version phải dùng format `x.x.x`; compare numeric theo major/minor/patch.
+
 ### Renderer state (Zustand stores)
 
 [src/renderer/src/stores/](src/renderer/src/stores/):

@@ -26,9 +26,19 @@ export interface UpdateProgress {
   message?: string
 }
 
+const VERSION_PATTERN = /\b(\d+)\.(\d+)\.(\d+)\b/
+
 function normalizeVersion(raw: string): string {
-  const m = String(raw).match(/\d+/)
-  return m ? m[0] : ''
+  const match = String(raw).trim().match(VERSION_PATTERN)
+  if (!match) return ''
+  return match.slice(1).map((part) => String(Number.parseInt(part, 10))).join('.')
+}
+
+function parseVersion(version: string): [number, number, number] | null {
+  const normalized = normalizeVersion(version)
+  if (!normalized) return null
+  const [major, minor, patch] = normalized.split('.').map((part) => Number.parseInt(part, 10))
+  return [major, minor, patch]
 }
 
 export function getLocalVersion(): string {
@@ -48,14 +58,19 @@ export function getLocalVersion(): string {
       // ignore and try next
     }
   }
-  // Fallback: first integer chunk of package.json version (e.g. "1.0.0" -> "1")
-  return normalizeVersion(app.getVersion()) || '0'
+  // Fallback: package.json/app version.
+  return normalizeVersion(app.getVersion()) || '0.0.0'
 }
 
 export function compareVersions(a: string, b: string): number {
-  const na = parseInt(String(a).trim(), 10) || 0
-  const nb = parseInt(String(b).trim(), 10) || 0
-  return na - nb
+  const va = parseVersion(a) || [0, 0, 0]
+  const vb = parseVersion(b) || [0, 0, 0]
+
+  for (let i = 0; i < va.length; i += 1) {
+    const diff = va[i] - vb[i]
+    if (diff !== 0) return diff
+  }
+  return 0
 }
 
 function httpGet(url: string, maxRedirects = 5): Promise<http.IncomingMessage> {
