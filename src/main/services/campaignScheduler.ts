@@ -8,6 +8,11 @@ import { PageController, PageControllerRegistry } from '../v2/runtime/pageContro
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 
+interface AutomationPageRef {
+  page: PageController
+  source: 'visible' | 'background'
+}
+
 /**
  * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
  * run their associated workflow v2 against the account browser session.
@@ -29,6 +34,8 @@ export class CampaignScheduler {
   private processing = false
   private activeV2Aborts = new Map<number, AbortController>()
   private backgroundPages = new BackgroundPageManager()
+  private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
+  private backgroundPreviewCapturing = new Set<string>()
 
   constructor(supabase: SupabaseService, webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow) {
     this.supabase = supabase
@@ -55,6 +62,7 @@ export class CampaignScheduler {
       clearInterval(this.intervalId)
       this.intervalId = null
     }
+    this.stopAllBackgroundPreviews()
     this.backgroundPages.destroyAll()
     this.sendLog('⏹ Scheduler đã dừng.')
   }
@@ -295,8 +303,6 @@ export class CampaignScheduler {
       const detail = targets[i]
       if (detail && detail.status !== 'chờ xử lý') continue
 
-      const page = this.getAutomationPage(account)
-
       // Rate limit
       const actionLabel = campaign.actionId === 'facebook_message_friend'
         ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn')
@@ -321,6 +327,9 @@ export class CampaignScheduler {
         console.error('Rate limit check error:', err)
       }
 
+      const automationPage = this.getAutomationPage(account, campaign.id)
+      const page = automationPage.page
+
       // Build variables
       const variables = this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i)
 
@@ -337,6 +346,9 @@ export class CampaignScheduler {
       // Run engine v2
       const abort = new AbortController()
       this.activeV2Aborts.set(campaign.id, abort)
+      if (automationPage.source === 'background') {
+        this.startBackgroundPreview(account.id, campaign.id, page)
+      }
       try {
         const result = await this.engineV2.run(workflowId, variables, page, {
           accountId: account.id,
@@ -376,6 +388,9 @@ export class CampaignScheduler {
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
         this.sendLog(`❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
       } finally {
+        if (automationPage.source === 'background') {
+          this.stopBackgroundPreview(account.id, campaign.id)
+        }
         this.activeV2Aborts.delete(campaign.id)
       }
 
@@ -816,8 +831,74 @@ export class CampaignScheduler {
     }
   }
 
-  private getAutomationPage(account: import('../../shared/types').AutoAccount): PageController {
-    return this.backgroundPages.getOrCreate(account.id, account.flatformType)
+  private getAutomationPage(account: import('../../shared/types').AutoAccount, campaignId?: number): AutomationPageRef {
+    this.selectAutomationBrowser(account.id, campaignId)
+    return {
+      page: this.backgroundPages.getOrCreate(account.id, account.flatformType),
+      source: 'background'
+    }
+  }
+
+  private selectAutomationBrowser(accountId: number, campaignId?: number): void {
+    try {
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_SELECT, { accountId, campaignId })
+    } catch {}
+  }
+
+  private startBackgroundPreview(accountId: number, campaignId: number, page: PageController): void {
+    const key = this.backgroundPreviewKey(accountId, campaignId)
+    if (this.backgroundPreviewTimers.has(key)) return
+
+    const capture = async (): Promise<void> => {
+      if (this.backgroundPreviewCapturing.has(key)) return
+      this.backgroundPreviewCapturing.add(key)
+      try {
+        if (!page.isConnected()) return
+        const image = await page.screenshot()
+        this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, {
+          accountId,
+          campaignId,
+          active: true,
+          image: `data:image/png;base64,${image}`,
+          timestamp: new Date().toISOString()
+        })
+      } catch {
+        // Preview is best-effort; workflow steps remain the source of truth.
+      } finally {
+        this.backgroundPreviewCapturing.delete(key)
+      }
+    }
+
+    void capture()
+    this.backgroundPreviewTimers.set(key, setInterval(() => void capture(), 2000))
+  }
+
+  private stopBackgroundPreview(accountId: number, campaignId: number): void {
+    const key = this.backgroundPreviewKey(accountId, campaignId)
+    const timer = this.backgroundPreviewTimers.get(key)
+    if (timer) clearInterval(timer)
+    this.backgroundPreviewTimers.delete(key)
+    this.backgroundPreviewCapturing.delete(key)
+    try {
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, {
+        accountId,
+        campaignId,
+        active: false,
+        timestamp: new Date().toISOString()
+      })
+    } catch {}
+  }
+
+  private stopAllBackgroundPreviews(): void {
+    for (const timer of this.backgroundPreviewTimers.values()) {
+      clearInterval(timer)
+    }
+    this.backgroundPreviewTimers.clear()
+    this.backgroundPreviewCapturing.clear()
+  }
+
+  private backgroundPreviewKey(accountId: number, campaignId: number): string {
+    return `${accountId}:${campaignId}`
   }
 
   /**

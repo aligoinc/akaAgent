@@ -19,6 +19,11 @@ interface BrowserPageProps {
 export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserPageProps) {
   const { accounts, loadAccounts } = useCampaignStore()
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
+  const [backgroundPreviews, setBackgroundPreviews] = useState<Map<number, {
+    active: boolean
+    image?: string
+    timestamp: string
+  }>>(new Map())
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
 
@@ -45,6 +50,25 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
     }
   }, [focusAccountId, onFocusHandled])
 
+  // Background/offscreen campaign runs stream previews here so users can observe
+  // without the app forcing focus or relying on minimized webview painting.
+  useEffect(() => {
+    if (!window.electronAPI?.onCampaignBrowserPreview) return
+    return window.electronAPI.onCampaignBrowserPreview((preview) => {
+      setActiveAccountId(preview.accountId)
+      setBackgroundPreviews(prev => {
+        const next = new Map(prev)
+        const existing = next.get(preview.accountId)
+        next.set(preview.accountId, {
+          active: preview.active,
+          image: preview.image || existing?.image,
+          timestamp: preview.timestamp
+        })
+        return next
+      })
+    })
+  }, [])
+
   // Cleanup: unregister all webviews on unmount
   useEffect(() => {
     return () => {
@@ -69,6 +93,8 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
       if (wv) wv.reload()
     }
   }
+
+  const activeBackgroundPreview = activeAccountId ? backgroundPreviews.get(activeAccountId) : null
 
   // Register webview with main process when it's ready
   const handleWebviewRef = useCallback((account: AutoAccount, el: any) => {
@@ -100,11 +126,12 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
           {activeAccounts.map(account => (
             <div
               key={account.id}
-              className={`browser-tab ${activeAccountId === account.id ? 'active' : ''}`}
+              className={`browser-tab ${activeAccountId === account.id ? 'active' : ''} ${backgroundPreviews.get(account.id)?.active ? 'is-running' : ''}`}
               onClick={() => setActiveAccountId(account.id)}
             >
               <span className="browser-tab-label">{account.name}</span>
               <span className="browser-tab-platform">{account.flatformType}</span>
+              {backgroundPreviews.get(account.id)?.active && <span className="browser-tab-live-dot" />}
             </div>
           ))}
         </div>
@@ -143,6 +170,25 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
               useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             />
           ))
+        )}
+
+        {activeBackgroundPreview?.active && activeBackgroundPreview.image && (
+          <div className="browser-background-preview">
+            <img src={activeBackgroundPreview.image} alt="Background campaign preview" className="browser-background-preview-image" />
+            <div className="browser-background-preview-gradient top" />
+            <div className="browser-background-preview-gradient bottom" />
+            <div className="browser-background-preview-toolbar">
+              <div className="browser-background-preview-status">
+                <span className="browser-background-preview-pulse" />
+                <span>Đang chạy nền</span>
+              </div>
+              <div className="browser-background-preview-meta">Live preview</div>
+            </div>
+            <div className="browser-background-preview-footer">
+              <span>Automation đang chạy trong trình duyệt nền.</span>
+              <span>{new Date(activeBackgroundPreview.timestamp).toLocaleTimeString('vi-VN')}</span>
+            </div>
+          </div>
         )}
       </div>
     </div>

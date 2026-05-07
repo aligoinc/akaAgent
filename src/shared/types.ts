@@ -262,6 +262,10 @@ export const IPC_EVENTS = {
   // Campaign Status (real-time: main → renderer whenever a campaign row changes)
   CAMPAIGN_STATUS_UPDATED: 'campaign:status-updated',
 
+  // Campaign browser selection/preview (main → renderer when an automation run starts)
+  CAMPAIGN_BROWSER_SELECT: 'campaign:browser-select',
+  CAMPAIGN_BROWSER_PREVIEW: 'campaign:browser-preview',
+
   // Account Actions
   ACCOUNT_CHECK_FB_LOGIN: 'account:check-fb-login',
   ACCOUNT_RELOAD_PAGE: 'account:reload-page',

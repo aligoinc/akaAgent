@@ -137,6 +137,40 @@ const electronAPI = {
     return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, handler)
   },
 
+  onCampaignBrowserSelect: (
+    callback: (payload: { accountId: number; campaignId: number }) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: { accountId: number; campaignId: number }
+    ): void => callback(payload)
+    ipcRenderer.on(IPC_EVENTS.CAMPAIGN_BROWSER_SELECT, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_BROWSER_SELECT, handler)
+  },
+
+  onCampaignBrowserPreview: (
+    callback: (payload: {
+      accountId: number
+      campaignId: number
+      active: boolean
+      image?: string
+      timestamp: string
+    }) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: {
+        accountId: number
+        campaignId: number
+        active: boolean
+        image?: string
+        timestamp: string
+      }
+    ): void => callback(payload)
+    ipcRenderer.on(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, handler)
+  },
+
   // Account Actions
   checkFacebookLogin: (accountId: number): Promise<{ loggedIn: boolean; status: string; reason?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CHECK_FB_LOGIN, accountId),

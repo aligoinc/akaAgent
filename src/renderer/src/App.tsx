@@ -71,6 +71,15 @@ export default function App() {
     return unsubscribe
   }, [upsertCampaign])
 
+  // Keep BrowserPage pointed at the account being automated without stealing the current page.
+  useEffect(() => {
+    if (!window.electronAPI?.onCampaignBrowserSelect) return
+    const unsubscribe = window.electronAPI.onCampaignBrowserSelect(({ accountId }) => {
+      setFocusAccountId(accountId)
+    })
+    return unsubscribe
+  }, [])
+
   // Apply theme class to body
   useEffect(() => {
     if (theme === 'light') {
