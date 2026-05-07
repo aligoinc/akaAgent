@@ -4,8 +4,8 @@ import { join } from 'path'
 
 dotenv.config({ path: join(process.cwd(), '.env') })
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://yfkvwgapqmywaoftwuzc.supabase.co'
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlma3Z3Z2FwcW15d2FvZnR3dXpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMDIxMjcsImV4cCI6MjA3OTg3ODEyN30.zqpDOfAFH4pajrTGpRze-RJIdKAKm_dvOGHTPkGhpYY'
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://cgjbsmqtfhqvttudyjzq.supabase.co'
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNnamJzbXF0ZmhxdnR0dWR5anpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxOTA0MzIsImV4cCI6MjA4MTc2NjQzMn0.UAukwYkUuoxWckoMUVgw0q1Eiptd9kGaPRddruf2ZOA'
 
 let _client: SupabaseClient | null = null
 
