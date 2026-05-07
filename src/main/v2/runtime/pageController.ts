@@ -599,53 +599,61 @@ export class PageController {
           var b = resolveSelector(${safeJS(selector)});
           if (!b) throw new Error("Drop target not found");
           var c = b.ownerDocument;
-          var attempt = 0;
-          while (true) {
-            var rect = b.getBoundingClientRect();
-            var cx = rect.left + rect.width / 2;
-            var cy = rect.top + rect.height / 2;
-            var hit = c.elementFromPoint(cx, cy);
-            if (hit && b.contains(hit)) break;
-            if (1 < ++attempt) { b.scrollIntoView({behavior:'instant', block:'center'}); break; }
-            b.scrollIntoView({behavior:'instant', block:'center'});
-          }
+          try { b.scrollIntoView({behavior:'instant', block:'center'}); } catch (e) {}
           var a = c.createElement('INPUT');
           a.setAttribute('type', 'file');
           a.setAttribute('multiple', 'true');
           a.setAttribute('data-drop-id', ${safeJS(uniqueId)});
           a.setAttribute('style', 'position:fixed;z-index:2147483647;left:0;top:0;opacity:0;');
           a.onchange = function() {
-            var rect2 = b.getBoundingClientRect();
-            var cx2 = rect2.left + rect2.width / 2;
-            var cy2 = rect2.top + rect2.height / 2;
-            var target = c.elementFromPoint(cx2, cy2) || b;
-            var dt = {
-              effectAllowed: 'all', dropEffect: 'none',
-              types: ['Files'], files: this.files,
-              setData: function(){}, getData: function(){},
-              clearData: function(){}, setDragImage: function(){}
-            };
-            if (window.DataTransferItemList) {
-              var items = [];
-              for (var i = 0; i < this.files.length; i++) {
-                items.push(Object.setPrototypeOf({
-                  kind: 'file', type: this.files[i].type, file: this.files[i],
-                  getAsFile: function() { return this.file; },
-                  getAsString: function(cb) { var r = new FileReader(); r.onload = function(e){ cb(e.target.result); }; r.readAsText(this.file); }
-                }, DataTransferItem.prototype));
-              }
-              dt.items = Object.setPrototypeOf(items, DataTransferItemList.prototype);
+            var files = Array.from(this.files || []);
+            var dt = null;
+            try {
+              dt = new DataTransfer();
+              files.forEach(function(file) { dt.items.add(file); });
+            } catch (e) {
+              dt = {
+                items: [],
+                files: this.files,
+                types: ['Files'],
+                effectAllowed: 'all',
+                dropEffect: 'copy',
+                setData: function(){},
+                getData: function(){ return ''; },
+                clearData: function(){},
+                setDragImage: function(){}
+              };
             }
-            Object.setPrototypeOf(dt, DataTransfer.prototype);
+            dt.effectAllowed = 'all';
+            dt.dropEffect = 'copy';
+
+            var targets = [];
+            function addTarget(el) {
+              if (el && targets.indexOf(el) === -1) targets.push(el);
+            }
+            addTarget(b);
+            addTarget(b.querySelector('[contenteditable="true"]'));
+            addTarget(b.querySelector('[role="textbox"]'));
+            addTarget(b.querySelector('[aria-label*="Photo"], [aria-label*="photo"], [aria-label*="Ảnh"], [aria-label*="ảnh"]'));
+            addTarget(c.querySelector('[role="dialog"] [contenteditable="true"]'));
+            addTarget(c.querySelector('[role="dialog"]'));
+
             ['dragenter', 'dragover', 'drop'].forEach(function(name) {
-              var d = c.createEvent('DragEvent');
-              d.initMouseEvent(name, true, true, c.defaultView, 0, 0, 0, cx2, cy2, false, false, false, false, 0, null);
-              Object.setPrototypeOf(d, null);
-              d.dataTransfer = dt;
-              Object.setPrototypeOf(d, DragEvent.prototype);
-              target.dispatchEvent(d);
+              targets.forEach(function(target) {
+                var eventInit = { bubbles: true, cancelable: true, composed: true, dataTransfer: dt, view: c.defaultView };
+                var d;
+                try {
+                  d = new DragEvent(name, eventInit);
+                } catch (e) {
+                  d = c.createEvent('DragEvent');
+                  d.initEvent(name, true, true);
+                }
+                try { Object.defineProperty(d, 'dataTransfer', { value: dt }); } catch (e) {}
+                target.dispatchEvent(d);
+              });
             });
-            a.parentElement.removeChild(a);
+
+            if (a.parentElement) a.parentElement.removeChild(a);
           };
           c.documentElement.appendChild(a);
           a.getBoundingClientRect();
@@ -661,6 +669,13 @@ export class PageController {
           })
           if (!nodeId) throw new Error('Cannot locate drop input via CDP')
           await this.wc.debugger.sendCommand('DOM.setFileInputFiles', { nodeId, files: [filePath] })
+          await this.exec(`
+            var el = document.querySelector('[data-drop-id="${uniqueId}"]');
+            if (el) {
+              el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            }
+          `)
           count++
           await new Promise(r => setTimeout(r, 2000))
         } finally {
