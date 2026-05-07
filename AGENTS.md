@@ -76,6 +76,7 @@ Domain (sau migration_v4 drop engine v1):
 4. Sleep `extra.actionLimits.sleepBetweenActions` giây giữa input_data rows
 
 For `facebook_comment_seeding`, `buildVariablesV2()` must provide `targetUrl`, `postsPerTarget`, `enablePostLike`, `keywordFilter`, and `commentVariants` from campaign `extra_settings`/input_data because the DB workflow depends on those vars.
+`facebook_comment_seeding` rate-limit/action detail label is `"Comment"`; customer logs say `"bài đầu tiên"`/`"bài thứ N"`, while raw position/iteration stays in JSONB `data`.
 
 For `facebook_find_data_group`, workflow/blocks/elements/action are seeded by [migration_v8_find_data_group.sql](migration_v8_find_data_group.sql); [migration_v9_find_data_extract_patterns.sql](migration_v9_find_data_extract_patterns.sql) tightens phone/Zalo regex in the extractor blocks. `logMilestonesV2()` writes one `"Tìm data"` detail row with phones/Zalo links/UIDs in JSONB `data`; `isFindByContentAI/contentAI` are UI-stored only until the AI block is implemented. `findUidTargetCampaignIds` fans found UIDs into selected `facebook_message_friend` campaigns, dedupes by `uid`, and flips completed target campaigns back to `'chờ xử lý'`.
 

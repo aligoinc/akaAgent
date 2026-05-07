@@ -54,6 +54,10 @@ const FIND_DATA_GROUP_ACTIONS = new Set([
   'facebook_find_data_group'
 ])
 
+const COMMENT_SEEDING_ACTIONS = new Set([
+  'facebook_comment_seeding'
+])
+
 const POST_SORT_OPTIONS = [
   { value: 'most_relevant', label: 'Phù hợp nhất' },
   { value: 'recent_activity', label: 'Hoạt động mới đây' },
@@ -174,6 +178,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     commentType: (campaign?.extraSettings?.commentType || 'own') as 'own' | 'others',
     commentCount: campaign?.extraSettings?.commentCount ?? 3,
     commentContent: campaign?.extraSettings?.commentContent || '',
+    enablePostLike: campaign?.extraSettings?.enablePostLike ?? false,
+    postsPerTarget: campaign?.extraSettings?.postsPerTarget ?? campaign?.extraSettings?.commentCount ?? 3,
+    postKeywordFilter: campaign?.extraSettings?.postKeywordFilter ?? campaign?.extraSettings?.keywordFilter ?? '',
     dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
     rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
     rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? 60,
@@ -216,8 +223,35 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
+  const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const STEPS = (() => {
     if (isSimpleCampaign) return ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
+    if (isCommentSeedingCampaign) {
+      return ALL_STEPS
+        .filter(s => s.id !== 'extra')
+        .map(s => {
+          if (s.id === 'content') {
+            return {
+              ...s,
+              title: 'Cấu hình comment',
+              fields: [
+                { key: 'commentContent', label: 'Nội dung comment' },
+                { key: 'postsPerTarget', label: 'Số bài mỗi mục tiêu' },
+                { key: 'postKeywordFilter', label: 'Lọc từ khoá' },
+                { key: 'enablePostLike', label: 'Like bài' }
+              ]
+            }
+          }
+          if (s.id === 'details') {
+            return {
+              ...s,
+              title: 'Danh sách mục tiêu',
+              fields: [{ key: 'details', label: 'Mục tiêu' }]
+            }
+          }
+          return s
+        })
+    }
     if (isFindDataGroupCampaign) {
       return ALL_STEPS
         .filter(s => s.id !== 'extra')
@@ -328,6 +362,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       case 'rateLimitCount': return formData.rateLimitCount >= 0
       case 'rateLimitMinutes': return formData.rateLimitMinutes >= 0
       case 'content': return isFindDataGroupCampaign ? true : formData.content.trim().length > 0
+      case 'commentContent': return formData.commentContent.trim().length > 0
+      case 'postsPerTarget': return formData.postsPerTarget > 0
+      case 'postKeywordFilter': return true
+      case 'enablePostLike': return true
       case 'sharePost': return true  // optional, always "complete"
       case 'enableComment': return true  // optional
       case 'images': return true  // optional
@@ -374,6 +412,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
         return
       }
+    }
+    if (isCommentSeedingCampaign && !formData.commentContent.trim()) {
+      showAlert('Vui lòng nhập nội dung comment.', 'error')
+      return
     }
 
     try {
@@ -424,10 +466,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           content: formData.content,
           extraSettings: {
             sharePost: formData.sharePost,
-            enableComment: formData.enableComment,
+            enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentType: formData.commentType,
-            commentCount: formData.commentCount,
+            commentCount: isCommentSeedingCampaign ? formData.postsPerTarget : formData.commentCount,
             commentContent: formData.commentContent,
+            enablePostLike: formData.enablePostLike,
+            postsPerTarget: formData.postsPerTarget,
+            postKeywordFilter: formData.postKeywordFilter,
+            keywordFilter: formData.postKeywordFilter,
             actionLimits: {
               sleepBetweenActions: formData.timeSleepBetween2,
               dailyLimit: formData.dailyLimit,
@@ -852,6 +898,58 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     </div>
   )
 
+  const renderCommentSeedingSettings = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="stepper-form-group">
+        <label>Nội dung comment <span className="required">*</span></label>
+        <textarea
+          className="stepper-textarea"
+          placeholder="Nhập nội dung comment. Dùng dấu | để tách nhiều nội dung, hệ thống sẽ xoay vòng theo từng lần comment."
+          value={formData.commentContent}
+          onChange={e => setFormData(p => ({ ...p, commentContent: e.target.value }))}
+          rows={6}
+        />
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+          Mẹo: tách nhiều nội dung bằng dấu <code>|</code> để tránh lặp cùng một comment.
+        </div>
+      </div>
+
+      <div className="stepper-form-row">
+        <div className="stepper-form-group half">
+          <label>Số bài cần comment trên mỗi mục tiêu</label>
+          <input
+            type="number"
+            min={1}
+            value={formData.postsPerTarget}
+            onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
+            className="stepper-input"
+          />
+        </div>
+        <div className="stepper-form-group half">
+          <label>Lọc bài theo từ khoá</label>
+          <input
+            type="text"
+            value={formData.postKeywordFilter}
+            onChange={e => setFormData(p => ({ ...p, postKeywordFilter: e.target.value }))}
+            className="stepper-input"
+            placeholder="Ví dụ: tuyển dụng, cần mua, hỏi giá"
+          />
+        </div>
+      </div>
+
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.enablePostLike}
+            onChange={e => setFormData(p => ({ ...p, enablePostLike: e.target.checked }))}
+          />
+          <span>Like bài trước khi comment</span>
+        </label>
+      </div>
+    </div>
+  )
+
   return (
     <div className="modal-overlay">
       <div className="campaign-full-modal stepper-modal">
@@ -1219,14 +1317,16 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               >
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('content')}</span>
-                  <span className="stepper-section-title">{isFindDataGroupCampaign ? 'Cấu hình tìm kiếm' : 'Nội dung'}</span>
+                  <span className="stepper-section-title">
+                    {isFindDataGroupCampaign ? 'Cấu hình tìm kiếm' : isCommentSeedingCampaign ? 'Cấu hình comment' : 'Nội dung'}
+                  </span>
                 </div>
                 {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
               </div>
 
               {!collapsedSections['content'] && (
                 <div className="stepper-section-body">
-                  {isFindDataGroupCampaign ? renderFindDataGroupSettings() : (
+                  {isFindDataGroupCampaign ? renderFindDataGroupSettings() : isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
                     <>
                   {/* === Nguồn đăng bài (chỉ hiện cho đăng trang cá nhân) === */}
                   {isTimelinePostCampaign && (
@@ -1439,7 +1539,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               )}
             </div>
 
-            {!isSimpleCampaign && !isFindDataGroupCampaign && <div
+            {!isSimpleCampaign && !isFindDataGroupCampaign && !isCommentSeedingCampaign && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['extra'] = el }}
             >
@@ -1619,7 +1719,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               >
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('details')}</span>
-                  <span className="stepper-section-title">{isFindDataGroupCampaign ? 'Danh sách group' : 'Danh sách data'}</span>
+                  <span className="stepper-section-title">
+                    {isFindDataGroupCampaign ? 'Danh sách group' : isCommentSeedingCampaign ? 'Danh sách mục tiêu' : 'Danh sách data'}
+                  </span>
                   {details.length > 0 && (
                     <span className="stepper-section-badge">{details.length}</span>
                   )}
