@@ -3,13 +3,61 @@ import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
-import { Campaign } from '../../../../shared/types'
+import { Campaign, CampaignDetail } from '../../../../shared/types'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
 
 interface CampaignPanelProps {
   filterAccountId?: number | null
   onClearFilter?: () => void
+}
+
+type DetailTab = 'data' | 'actions' | 'foundData'
+type FoundDataKind = 'phone' | 'zalo' | 'uid'
+
+interface FoundDataPayload {
+  phones: string[]
+  linkGroupZalos: string[]
+  uids: string[]
+  groupUrl: string
+  total: number
+}
+
+interface FoundDataItem {
+  key: string
+  kind: FoundDataKind
+  label: string
+  value: string
+  groupUrl: string
+  createdAt?: string
+}
+
+const toStringList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return []
+  return value.map(item => String(item || '').trim()).filter(Boolean)
+}
+
+const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
+  const data = detail.data || {}
+  const phones = toStringList(data.phones)
+  const linkGroupZalos = toStringList(data.linkGroupZalos)
+  const uids = toStringList(data.uids)
+  const groupUrl = typeof data.groupUrl === 'string' ? data.groupUrl : ''
+  return {
+    phones,
+    linkGroupZalos,
+    uids,
+    groupUrl,
+    total: phones.length + linkGroupZalos.length + uids.length
+  }
+}
+
+const getFoundDataKindLabel = (kind: FoundDataKind) => {
+  switch (kind) {
+    case 'phone': return 'Số điện thoại'
+    case 'zalo': return 'Link group Zalo'
+    case 'uid': return 'UID'
+  }
 }
 
 export default function CampaignPanel({ filterAccountId, onClearFilter }: CampaignPanelProps) {
@@ -30,7 +78,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
-  const [detailTab, setDetailTab] = useState<'data' | 'actions'>('data')
+  const [detailTab, setDetailTab] = useState<DetailTab>('data')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
 
@@ -184,6 +232,66 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
   }
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
+  const isSelectedFindDataCampaign = selectedCampaign?.actionId === 'facebook_find_data_group'
+
+  const foundDataItems = useMemo<FoundDataItem[]>(() => {
+    return campaignDetails.flatMap(detail => {
+      const payload = getFindDataPayload(detail)
+      if (payload.total === 0) return []
+      const groupUrl = payload.groupUrl || '-'
+      const createdAt = detail.createdAt
+      return [
+        ...payload.phones.map((value, index) => ({
+          key: `${detail.id}-phone-${index}`,
+          kind: 'phone' as const,
+          label: getFoundDataKindLabel('phone'),
+          value,
+          groupUrl,
+          createdAt
+        })),
+        ...payload.linkGroupZalos.map((value, index) => ({
+          key: `${detail.id}-zalo-${index}`,
+          kind: 'zalo' as const,
+          label: getFoundDataKindLabel('zalo'),
+          value,
+          groupUrl,
+          createdAt
+        })),
+        ...payload.uids.map((value, index) => ({
+          key: `${detail.id}-uid-${index}`,
+          kind: 'uid' as const,
+          label: getFoundDataKindLabel('uid'),
+          value,
+          groupUrl,
+          createdAt
+        }))
+      ]
+    })
+  }, [campaignDetails])
+
+  useEffect(() => {
+    if (detailTab === 'foundData' && !isSelectedFindDataCampaign) {
+      setDetailTab('actions')
+    }
+  }, [detailTab, isSelectedFindDataCampaign])
+
+  const renderCampaignDetailLog = (detail: CampaignDetail) => {
+    const payload = getFindDataPayload(detail)
+    if (payload.total === 0) {
+      return <span className="campaign-detail-log-text">{detail.log || '-'}</span>
+    }
+
+    return (
+      <div className="find-data-history-cell">
+        <div className="campaign-detail-log-text">{detail.log || '-'}</div>
+        <div className="find-data-result-chips">
+          <span className="find-data-chip find-data-chip-phone">SĐT: {payload.phones.length}</span>
+          <span className="find-data-chip find-data-chip-zalo">Zalo: {payload.linkGroupZalos.length}</span>
+          <span className="find-data-chip find-data-chip-uid">UID: {payload.uids.length}</span>
+        </div>
+      </div>
+    )
+  }
 
   // Filter campaigns by account if filter is active
   const filteredCampaigns = useMemo(() => {
@@ -371,6 +479,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                 >
                   Lịch sử hành động ({campaignDetails.length})
                 </button>
+                {isSelectedFindDataCampaign && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'foundData' ? 'active' : ''}`}
+                    onClick={() => {
+                      setDetailTab('foundData')
+                      if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
+                    }}
+                  >
+                    Data tìm được ({foundDataItems.length})
+                  </button>
+                )}
               </div>
 
               {/* Tab: Campaign Input Data */}
@@ -442,8 +561,46 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                                 {a.status === 'thành công' ? '✅ Thành công' : a.status === 'thất bại' ? '⚠️ Thất bại' : a.status === 'lỗi' ? '❌ Lỗi' : a.status}
                               </span>
                             </td>
-                            <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {a.log || '-'}
+                            <td className="campaign-detail-log-cell">
+                              {renderCampaignDetailLog(a)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
+              )}
+
+              {/* Tab: Found data extracted by facebook_find_data_group */}
+              {detailTab === 'foundData' && (
+                <>
+                  {loadingCampaignDetails ? (
+                    <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
+                  ) : foundDataItems.length === 0 ? (
+                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa tìm thấy data nào</div>
+                  ) : (
+                    <table className="campaign-grid find-data-result-grid" style={{ fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th>Loại data</th>
+                          <th>Giá trị</th>
+                          <th>Group</th>
+                          <th>Thời gian</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {foundDataItems.map(item => (
+                          <tr key={item.key}>
+                            <td>
+                              <span className={`find-data-kind find-data-kind-${item.kind}`}>
+                                {item.label}
+                              </span>
+                            </td>
+                            <td className="find-data-value-cell">{item.value}</td>
+                            <td className="find-data-group-cell">{item.groupUrl}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : '-'}
                             </td>
                           </tr>
                         ))}
