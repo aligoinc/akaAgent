@@ -56,6 +56,21 @@ export interface CampaignExtraSettings {
   postAsReels?: boolean                    // Đăng video dưới dạng Reels thay vì post thường
   sourceLinks?: string                     // Danh sách uid/link nguồn, phẩy ngăn cách (page, profile, group, post)
   sourceLinkIndex?: number                 // Con trỏ rotation qua danh sách sourceLinks (tăng mỗi lần chạy)
+  // Tìm kiếm data trong group
+  isFindPhone?: boolean
+  isFindLinkGroupZalo?: boolean
+  isFindUid?: boolean
+  isFindInPost?: boolean
+  sortTypePost?: 'most_relevant' | 'recent_activity' | 'new_posts'
+  countPostFindData?: number
+  isFindInComment?: boolean
+  sortTypeComment?: 'most_relevant' | 'all_comments' | 'newest'
+  countCommentFindData?: number
+  isFindByKeywords?: boolean
+  keywords?: string
+  isFindByContentAI?: boolean
+  contentAI?: string
+  findUidTargetCampaignIds?: number[]          // Khi tìm UID, tự thêm UID vào các campaign nhắn tin/kết bạn đã chọn
 }
 
 export interface Campaign {

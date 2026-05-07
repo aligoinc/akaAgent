@@ -298,7 +298,11 @@ export class CampaignScheduler {
       const page = this.getAutomationPage(account)
 
       // Rate limit
-      const actionLabel = campaign.actionId === 'facebook_message_friend' ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn') : 'Đăng bài'
+      const actionLabel = campaign.actionId === 'facebook_message_friend'
+        ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn')
+        : campaign.actionId === 'facebook_find_data_group'
+          ? 'Tìm data'
+          : 'Đăng bài'
       try {
         const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionLabel, limitConfig)
         if (!limitStatus.ok) {
@@ -491,6 +495,20 @@ export class CampaignScheduler {
       // Message friend extras
       enableMessage: extra.enableMessage ?? false,
       enableAddFriend: extra.enableAddFriend ?? false,
+      // Find data in group extras
+      isFindPhone: extra.isFindPhone ?? false,
+      isFindLinkGroupZalo: extra.isFindLinkGroupZalo ?? false,
+      isFindUid: extra.isFindUid ?? false,
+      isFindInPost: extra.isFindInPost ?? false,
+      sortTypePost: extra.sortTypePost ?? 'most_relevant',
+      countPostFindData: extra.countPostFindData ?? 10,
+      isFindInComment: extra.isFindInComment ?? false,
+      sortTypeComment: extra.sortTypeComment ?? 'most_relevant',
+      countCommentFindData: extra.countCommentFindData ?? 30,
+      isFindByKeywords: extra.isFindByKeywords ?? false,
+      keywords: extra.keywords ?? '',
+      isFindByContentAI: extra.isFindByContentAI ?? false,
+      contentAI: extra.contentAI ?? '',
       // Detail-specific.
       // inputDataUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
       // `fb_resolve_url` sẽ verify/normalize tuỳ theo urlType (group/profile/messenger).
@@ -525,6 +543,66 @@ export class CampaignScheduler {
   ): Promise<void> {
     void overallSuccess
     const inputDataName = detail?.name || detail?.uid || ''
+
+    // Tìm kiếm data trong group — 1 milestone tổng kết theo group, dữ liệu chi tiết nằm trong JSONB data.
+    if (campaign.actionId === 'facebook_find_data_group') {
+      const summaryStep = steps.find(s => s.blockName === 'fb_find_group_data_summary')
+      const errorStep = steps.find(s => s.status === 'error')
+      const out = ((summaryStep?.output as any) || {}) as {
+        phones?: unknown[]
+        linkGroupZalos?: unknown[]
+        uids?: unknown[]
+        message?: string
+        groupUrl?: string
+        total?: number
+        error?: string
+      }
+      const phones = Array.isArray(out.phones) ? out.phones.map(String) : []
+      const linkGroupZalos = Array.isArray(out.linkGroupZalos) ? out.linkGroupZalos.map(String) : []
+      const uids = Array.isArray(out.uids) ? out.uids.map(String) : []
+      const findUidTargetCampaignIds = Array.isArray(campaign.extraSettings?.findUidTargetCampaignIds)
+        ? campaign.extraSettings.findUidTargetCampaignIds
+        : []
+      const total = Number(out.total ?? (phones.length + linkGroupZalos.length + uids.length))
+      const targetName = inputDataName || out.groupUrl || 'group'
+      const isSuccess = summaryStep?.status === 'success'
+      const notes: string[] = []
+      if (campaign.extraSettings?.isFindPhone) notes.push(`${phones.length} số điện thoại`)
+      if (campaign.extraSettings?.isFindLinkGroupZalo) notes.push(`${linkGroupZalos.length} link group Zalo`)
+      if (campaign.extraSettings?.isFindUid) notes.push(`${uids.length} UID`)
+      const errMsg = out.error || summaryStep?.error || errorStep?.error || 'Lỗi không xác định'
+
+      try {
+        await this.supabase.createCampaignDetail({
+          inputDataId: detail?.id,
+          campaignId: campaign.id,
+          accountId,
+          actionName: 'Tìm data',
+          status: isSuccess ? 'thành công' : 'lỗi',
+          log: isSuccess
+            ? (total > 0
+              ? `Đã tìm data trong ${targetName}: ${notes.join(' - ')}`
+              : `Không tìm thấy data phù hợp trong ${targetName}`)
+            : `Lỗi tìm data trong ${targetName}: ${errMsg}`,
+          data: {
+            groupUrl: out.groupUrl || detail?.uid,
+            phones,
+            linkGroupZalos,
+            uids,
+            counts: { phones: phones.length, linkGroupZalos: linkGroupZalos.length, uids: uids.length, total },
+            findUidTargetCampaignIds,
+            errorBlock: errorStep?.blockName
+          }
+        })
+        if (isSuccess) this.sendLog(`✅ ${total > 0 ? `Đã tìm data trong "${targetName}": ${notes.join(' - ')}` : `Không tìm thấy data phù hợp trong "${targetName}"`}`)
+        else this.sendLog(`❌ Lỗi tìm data trong "${targetName}": ${errMsg}`)
+      } catch (err) { console.error('Failed log find data:', err) }
+
+      if (isSuccess) {
+        await this.pushFoundUidsToTargetCampaigns(campaign, uids)
+      }
+      return
+    }
 
     // Đăng bài
     const postSteps = steps.filter(s => s.blockName === 'fb_click_post_button' && s.status === 'success')
@@ -638,6 +716,68 @@ export class CampaignScheduler {
         }
       } catch (err) { console.error('Failed log friend:', err) }
     }
+  }
+
+  private async pushFoundUidsToTargetCampaigns(sourceCampaign: Campaign, rawUids: string[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindUid) return
+
+    const targetCampaignIds = Array.from(new Set(
+      (sourceCampaign.extraSettings.findUidTargetCampaignIds || [])
+        .map(id => Number(id))
+        .filter(id => Number.isFinite(id) && id > 0 && id !== sourceCampaign.id)
+    ))
+    if (targetCampaignIds.length === 0) return
+
+    const uidMap = new Map<string, string>()
+    for (const rawUid of rawUids) {
+      const uid = String(rawUid || '').trim()
+      const normalizedUid = this.normalizeUidForCompare(uid)
+      if (uid && normalizedUid && !uidMap.has(normalizedUid)) {
+        uidMap.set(normalizedUid, uid)
+      }
+    }
+    const uids = Array.from(uidMap.values())
+    if (uids.length === 0) return
+
+    for (const targetCampaignId of targetCampaignIds) {
+      try {
+        const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
+        if (!targetCampaign || targetCampaign.actionId !== 'facebook_message_friend') continue
+
+        const existingRows = await this.supabase.listCampaignInputData(targetCampaign.id)
+        const existingUids = new Set(
+          existingRows
+            .map(row => this.normalizeUidForCompare(row.uid || ''))
+            .filter(Boolean)
+        )
+        const newUids = uids.filter(uid => !existingUids.has(this.normalizeUidForCompare(uid)))
+        if (newUids.length === 0) continue
+
+        for (const uid of newUids) {
+          await this.supabase.createCampaignInputData({
+            campaignId: targetCampaign.id,
+            uid,
+            status: 'chờ xử lý',
+            note: `Tự động thêm từ chiến dịch "${sourceCampaign.name}"`
+          })
+        }
+
+        await this.supabase.appendCampaignLog(
+          targetCampaign.id,
+          `Đã thêm ${newUids.length} UID từ chiến dịch "${sourceCampaign.name}"`
+        )
+        if (targetCampaign.status === 'hoàn thành') {
+          await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
+        }
+        this.sendLog(`✅ Đã thêm ${newUids.length} UID vào chiến dịch "${targetCampaign.name}"`)
+      } catch (err) {
+        console.error('Failed to push found UIDs to target campaign:', err)
+      }
+    }
+  }
+
+  private normalizeUidForCompare(uid: string): string {
+    return String(uid || '').trim().replace(/\/+$/g, '').toLowerCase()
   }
 
   private async recoverStuckCampaignInputData(campaignId: number, errMsg: string): Promise<void> {
