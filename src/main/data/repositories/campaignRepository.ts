@@ -1,7 +1,9 @@
-import { Campaign, CampaignInput, CampaignInputData, CampaignDetail } from '../../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, Campaign, CampaignInput, CampaignInputData, CampaignDetail } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
+import * as accountActionRepo from './accountActionRepository'
+import * as errorPolicyRepo from './errorPolicyRepository'
 
 const client = () => getSupabaseClient()
 
@@ -52,6 +54,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     extra_settings: campaign.extraSettings || {},
     images: campaign.images || [],
     log: '',
+    note: campaign.note ?? null,
     staff_id: u.staffId,
     organization_id: u.organizationId
   }
@@ -85,6 +88,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   if (updates.extraSettings !== undefined) payload.extra_settings = updates.extraSettings
   if (updates.images !== undefined) payload.images = updates.images
   if (updates.log !== undefined) payload.log = updates.log
+  if (updates.note !== undefined) payload.note = updates.note
 
   const { data, error } = await client()
     .from('auto_campaigns')
@@ -139,6 +143,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       extra_settings: origCamp.extra_settings,
       images: origCamp.images,
       log: '',
+      note: null,
       staff_id: u.staffId,
       organization_id: u.organizationId
     })
@@ -256,6 +261,15 @@ export async function resetRunningCampaignStatuses(): Promise<void> {
     .eq('status', 'đang chạy')
 
   if (error) console.error('Failed to reset campaign statuses:', error.message)
+}
+
+export async function resetCampaignNotes(): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaigns')
+    .update({ note: null, updated_at: new Date().toISOString() })
+    .not('note', 'is', null)
+
+  if (error) console.error('Failed to reset campaign notes:', error.message)
 }
 
 export async function resetRunningCampaignInputStatuses(): Promise<void> {
@@ -444,8 +458,10 @@ export async function createCampaignDetail(action: Partial<CampaignDetail>): Pro
     input_data_id: action.inputDataId ?? null,
     campaign_id: action.campaignId,
     account_id: action.accountId,
+    action_code: action.actionCode ?? null,
     action_name: action.actionName,
     status: action.status || 'thành công',
+    error_code: action.errorCode ?? null,
     log: action.log || null,
     data: action.data || null,
     post_url: action.postUrl || null
@@ -458,7 +474,21 @@ export async function createCampaignDetail(action: Partial<CampaignDetail>): Pro
     .single()
 
   if (error) throw new Error(`Failed to create campaign detail: ${error.message}`)
-  return mapCampaignDetailFromDB(data)
+  const detail = mapCampaignDetailFromDB(data)
+  const shouldCountAction = detail.accountId && detail.actionCode && (
+    detail.status === 'thành công' || detail.status === 'thất bại'
+  )
+
+  if (shouldCountAction) {
+    try {
+      await accountActionRepo.incrementAccountActionCount(detail.accountId as number, detail.actionCode as string, 1)
+      await errorPolicyRepo.resetConsecutiveErrors(detail.accountId as number, detail.actionCode as string)
+    } catch (countErr) {
+      console.error('Failed to update account action counters:', countErr)
+    }
+  }
+
+  return detail
 }
 
 export async function deleteCampaignDetail(id: number): Promise<void> {
@@ -472,39 +502,54 @@ export async function deleteCampaignDetail(id: number): Promise<void> {
 
 export async function getAccountRateLimitStatus(
   accountId: number,
+  actionCode: string,
   actionName: string,
-  limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }
-): Promise<{ ok: boolean; reason?: string; isDailyLimit?: boolean; retryAfterMs?: number }> {
+  limitConfig?: ActionLimitConfig
+): Promise<AccountActionLimitStatus> {
+  const normalizedActionCode = actionCode.trim()
+  if (!normalizedActionCode) return { ok: true }
+
   const dailyLimit = limitConfig?.dailyLimit && limitConfig.dailyLimit > 0 ? limitConfig.dailyLimit : 30
   const rateLimitCount = limitConfig?.rateLimitCount && limitConfig.rateLimitCount > 0 ? limitConfig.rateLimitCount : 9
   const rateLimitMinutes = limitConfig?.rateLimitMinutes && limitConfig.rateLimitMinutes > 0 ? limitConfig.rateLimitMinutes : 60
+  const actionStatus = await accountActionRepo.getAccountActionStatus(accountId, normalizedActionCode)
+
+  if (actionStatus.isDisable) {
+    const retryAfterMs = actionStatus.dateEnable
+      ? Math.max(0, new Date(actionStatus.dateEnable).getTime() - Date.now())
+      : undefined
+    if (!actionStatus.dateEnable || retryAfterMs === undefined || retryAfterMs > 0) {
+      return {
+        ok: false,
+        actionCode: normalizedActionCode,
+        actionName,
+        retryAfterMs,
+        reason: retryAfterMs
+          ? `Hành động "${actionName}" đang tạm dừng, còn khoảng ${Math.ceil(retryAfterMs / 60000)} phút`
+          : `Hành động "${actionName}" đang tạm dừng`
+      }
+    }
+  }
 
   // Chỉ đếm 'thành công' + 'thất bại' (action chạm tới FB).
   // 'lỗi' = exception code → action chưa xảy ra với FB → không tốn rate limit.
   const ratedStatuses = ['thành công', 'thất bại']
+  const dailyActionCount = actionStatus.countActionInDay
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const { count: dailyActionCount, error: dailyErr } = await client()
-    .from('auto_campaign_details')
-    .select('*', { count: 'exact', head: true })
-    .eq('account_id', accountId)
-    .eq('action_name', actionName)
-    .in('status', ratedStatuses)
-    .gte('created_at', today.toISOString())
-
-  if (dailyErr) throw new Error(`Daily count query error: ${dailyErr.message}`)
-
-  if ((dailyActionCount ?? 0) >= dailyLimit) {
+  if (dailyActionCount >= dailyLimit) {
     // Daily limit → đợi tới 00:00 ngày mai mới reset
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     tomorrow.setHours(0, 0, 0, 0)
     return {
       ok: false,
+      actionCode: normalizedActionCode,
+      actionName,
+      errorCode: 'error_limit_in_day',
       isDailyLimit: true,
       retryAfterMs: tomorrow.getTime() - Date.now(),
+      currentCount: dailyActionCount,
+      limit: dailyLimit,
       reason: `Đạt giới hạn ngày cho hành động "${actionName}" (${dailyActionCount}/${dailyLimit})`
     }
   }
@@ -515,7 +560,7 @@ export async function getAccountRateLimitStatus(
     .from('auto_campaign_details')
     .select('*', { count: 'exact', head: true })
     .eq('account_id', accountId)
-    .eq('action_name', actionName)
+    .eq('action_code', normalizedActionCode)
     .in('status', ratedStatuses)
     .gte('created_at', timeFrameStart.toISOString())
 
@@ -527,7 +572,7 @@ export async function getAccountRateLimitStatus(
       .from('auto_campaign_details')
       .select('created_at')
       .eq('account_id', accountId)
-      .eq('action_name', actionName)
+      .eq('action_code', normalizedActionCode)
       .in('status', ratedStatuses)
       .gte('created_at', timeFrameStart.toISOString())
       .order('created_at', { ascending: true })
@@ -540,8 +585,13 @@ export async function getAccountRateLimitStatus(
     }
     return {
       ok: false,
+      actionCode: normalizedActionCode,
+      actionName,
+      errorCode: 'error_limit_in_hour',
       isDailyLimit: false,
       retryAfterMs,
+      currentCount: windowActionCount ?? 0,
+      limit: rateLimitCount,
       reason: `Đạt tốc độ giới hạn hành động "${actionName}" (${windowActionCount}/${rateLimitCount} lần / ${rateLimitMinutes} phút)`
     }
   }

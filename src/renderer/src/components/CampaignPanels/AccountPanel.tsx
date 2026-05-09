@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { AutoAccount } from '../../../../shared/types'
 import AccountContextMenu from './AccountContextMenu'
+import AccountInfoModal from './AccountInfoModal'
 import { useUiStore } from '../../stores/uiStore'
 
 interface AccountPanelProps {
@@ -14,6 +15,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const { accounts, loadAccounts, createAccount, updateAccount, deleteAccount } = useCampaignStore()
   const [showForm, setShowForm] = useState(false)
   const [editingAccount, setEditingAccount] = useState<AutoAccount | null>(null)
+  const [infoAccount, setInfoAccount] = useState<AutoAccount | null>(null)
   const [formData, setFormData] = useState({ 
     name: '', 
     flatformType: 'facebook'
@@ -110,7 +112,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleResume = async (account: AutoAccount) => {
-    await updateAccount(account.id, { status: 'hoạt động' })
+    await updateAccount(account.id, { status: 'chờ xử lý' })
   }
 
   const handlePause = async (account: AutoAccount) => {
@@ -118,11 +120,15 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleEnable = async (account: AutoAccount) => {
-    await updateAccount(account.id, { isActive: true, status: 'hoạt động' })
+    await updateAccount(account.id, { isActive: true, status: 'chờ xử lý' })
   }
 
   const handleDisable = async (account: AutoAccount) => {
-    await updateAccount(account.id, { isActive: false, status: 'vô hiệu hoá' })
+    await updateAccount(account.id, { isActive: false, status: 'tạm dừng' })
+  }
+
+  const handleViewInfo = (account: AutoAccount) => {
+    setInfoAccount(account)
   }
 
   const handleFilterCampaigns = (accountId: number) => {
@@ -165,11 +171,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'hoạt động': return 'var(--accent-success)'
+      case 'chờ xử lý': return 'var(--accent-info)'
       case 'đang chạy': return 'var(--accent-success)'
       case 'tạm dừng': return 'var(--accent-warning)'
-      case 'vô hiệu hoá': return 'var(--accent-error)'
-      case 'lỗi': return 'var(--accent-error)'
       default: return 'var(--text-tertiary)'
     }
   }
@@ -185,7 +189,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const getStatusIcon = (account: AutoAccount) => {
     if (!account.isActive) return '🚫'
     if (account.status === 'tạm dừng') return '⏸️'
-    if (account.status === 'hoạt động' || account.status === 'đang chạy') return '🟢'
+    if (account.status === 'đang chạy') return '🟢'
     return '⏳'
   }
 
@@ -269,11 +273,19 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           onPause={handlePause}
           onEnable={handleEnable}
           onDisable={handleDisable}
+          onViewInfo={handleViewInfo}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onFilterCampaigns={handleFilterCampaigns}
           onLoadFriends={handleLoadFriends}
           onLoadGroups={handleLoadGroups}
+        />
+      )}
+
+      {infoAccount && (
+        <AccountInfoModal
+          account={infoAccount}
+          onClose={() => setInfoAccount(null)}
         />
       )}
     </div>

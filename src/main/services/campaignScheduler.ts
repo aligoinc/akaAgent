@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { IPC_EVENTS, Campaign, CampaignInputData } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignInputData } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -11,6 +11,17 @@ import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 interface AutomationPageRef {
   page: PageController
   source: 'visible' | 'background'
+}
+
+interface CampaignActionDescriptor {
+  code: string
+  name: string
+}
+
+interface RuntimeErrorResult {
+  triggered: boolean
+  message: string
+  policy?: AutoErrorPolicy
 }
 
 /**
@@ -76,6 +87,10 @@ export class CampaignScheduler {
     this.processing = true
 
     try {
+      await this.supabase.enableDueAccountActions().catch(err => {
+        console.error('Failed to enable due account actions:', err)
+      })
+
       // 1. Get eligible accounts
       const accounts = await this.supabase.getEligibleAccounts()
       if (accounts.length === 0) {
@@ -84,6 +99,10 @@ export class CampaignScheduler {
       }
 
       for (const account of accounts) {
+        if (account.status !== 'chờ xử lý' || account.loginStatus !== 'đã đăng nhập') {
+          continue
+        }
+
         // 2. Get pending campaigns for this account
         const campaigns = await this.supabase.getPendingCampaigns(account.id)
         if (campaigns.length === 0) continue
@@ -201,39 +220,50 @@ export class CampaignScheduler {
     this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
 
-  private async executeCampaign(account: import('../../shared/types').AutoAccount, campaign: Campaign): Promise<void> {
+  private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
     if (!this.shouldRunToday(campaign)) return
 
     try {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy' })
+      const startBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý')
+      if (startBlockReason) {
+        await this.updateCampaignPreflightNote(campaign, startBlockReason)
+        return
+      }
+
+      const action = await this.supabase.getCampaignAction(campaign.actionId)
+      if (!action) {
+        await this.updateCampaignPreflightNote(campaign, 'Không tìm thấy loại chiến dịch')
+        return
+      }
+
+      if (!action.workflowId) {
+        await this.updateCampaignPreflightNote(campaign, 'Loại chiến dịch chưa được liên kết workflow')
+        return
+      }
+
+      const preflightLimit = await this.checkActionLimits(
+        account.id,
+        campaign,
+        this.getCampaignActionDescriptors(campaign, action),
+        campaign.extraSettings?.actionLimits
+      )
+      if (preflightLimit && !preflightLimit.ok) {
+        await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(preflightLimit))
+        return
+      }
+
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy', note: null })
       await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
       this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
       await this.supabase.updateAccount(account.id, { status: 'đang chạy' })
 
-      const action = await this.supabase.getCampaignAction(campaign.actionId)
-      if (!action) {
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Không tìm thấy action`)
-        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
-        this.sendLog(`❌ Chiến dịch "${campaign.name}": Không tìm thấy action "${campaign.actionId}"`)
-        return
-      }
-
-      if (!action.workflowId) {
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: Action "${action.name}" chưa được liên kết workflow v2`)
-        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
-        this.sendLog(`❌ Chiến dịch "${campaign.name}": Action "${action.name}" chưa có workflow_id`)
-        return
-      }
-
-      await this.executeCampaignV2(account, campaign, action.workflowId)
+      await this.executeCampaignV2(account, campaign, action.workflowId, this.getCampaignActionDescriptors(campaign, action))
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.recoverStuckCampaignInputData(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.handleRuntimeError(account, campaign, 'err_undefined', undefined, { message: errMsg })
       await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     }
@@ -249,9 +279,10 @@ export class CampaignScheduler {
    * build variables, loop details, gọi engineV2.run.
    */
   private async executeCampaignV2(
-    account: import('../../shared/types').AutoAccount,
+    account: AutoAccount,
     campaign: Campaign,
-    workflowId: number
+    workflowId: number,
+    actionDescriptors: CampaignActionDescriptor[]
   ): Promise<void> {
     // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
     const details = await this.supabase.listCampaignInputData(campaign.id)
@@ -286,10 +317,8 @@ export class CampaignScheduler {
     const runOnce = details.length === 0
     const targets = runOnce ? [null] : details
 
-    let rateLimitReached = false
-    let rateLimitRetryAt: Date | null = null  // thời điểm có thể retry sau (cho hourly limit)
-    let rateLimitIsDaily = false
     const limitConfig = extra.actionLimits
+    let stoppedBeforeCompletion = false
 
     for (let i = 0; i < targets.length; i++) {
       // Check pause
@@ -300,27 +329,22 @@ export class CampaignScheduler {
         return
       }
 
+      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+      if (accountBlockReason) {
+        stoppedBeforeCompletion = true
+        await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
+        return
+      }
+
       const detail = targets[i]
       if (detail && detail.status !== 'chờ xử lý') continue
 
-      // Rate limit
-      const actionLabel = campaign.actionId === 'facebook_message_friend'
-        ? (extra.enableMessage ? 'Nhắn tin' : 'Kết bạn')
-        : campaign.actionId === 'facebook_find_data_group'
-          ? 'Tìm data'
-          : campaign.actionId === 'facebook_comment_seeding'
-            ? 'Comment'
-            : 'Đăng bài'
+      // Check action disable/rate limit immediately before each target.
       try {
-        const limitStatus = await this.supabase.getAccountRateLimitStatus(account.id, actionLabel, limitConfig)
-        if (!limitStatus.ok) {
-          rateLimitReached = true
-          rateLimitIsDaily = limitStatus.isDailyLimit === true
-          if (limitStatus.retryAfterMs && limitStatus.retryAfterMs > 0) {
-            rateLimitRetryAt = new Date(Date.now() + limitStatus.retryAfterMs)
-          }
-          await this.supabase.appendCampaignLog(campaign.id, `Tạm dừng do vượt giới hạn ${actionLabel}: ${limitStatus.reason}`)
-          this.sendLog(`⚠️ Tạm dừng "${campaign.name}" do giới hạn ${actionLabel}: ${limitStatus.reason}`)
+        const limitStatus = await this.checkActionLimits(account.id, campaign, actionDescriptors, limitConfig)
+        if (limitStatus && !limitStatus.ok) {
+          stoppedBeforeCompletion = true
+          await this.handleLimitStatus(account, campaign, limitStatus)
           break
         }
       } catch (err) {
@@ -345,6 +369,20 @@ export class CampaignScheduler {
 
       // Run engine v2
       const abort = new AbortController()
+      let accountStopReason: string | null = null
+      let shouldStopAfterTarget = false
+      const accountGuard = setInterval(() => {
+        void (async () => {
+          if (accountStopReason || abort.signal.aborted) return
+          const reason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+          if (reason) {
+            accountStopReason = reason
+            abort.abort()
+          }
+        })().catch(err => {
+          console.error('Account run guard error:', err)
+        })
+      }, 5000)
       this.activeV2Aborts.set(campaign.id, abort)
       if (automationPage.source === 'background') {
         this.startBackgroundPreview(account.id, campaign.id, page)
@@ -367,7 +405,15 @@ export class CampaignScheduler {
         // Per-milestone logging — scan steps theo block_name
         await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed')
 
-        if (detail) {
+        if (accountStopReason) {
+          if (detail) {
+            await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: accountStopReason })
+          }
+          await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+          shouldStopAfterTarget = true
+        }
+
+        if (detail && !accountStopReason) {
           if (result.status === 'completed') {
             await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
             await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detail.name || detail.uid || 'N/A'}`)
@@ -380,18 +426,45 @@ export class CampaignScheduler {
             this.sendLog(`❌ Lỗi "${detail.name || detail.uid || 'N/A'}": ${errMsg}`)
           }
         }
+
+        if (!accountStopReason && result.status !== 'completed') {
+          const runtimeError = this.normalizeRuntimeError(campaign, result.steps, result.error)
+          const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
+            message: runtimeError.message
+          })
+          shouldStopAfterTarget = handled.triggered
+        }
       } catch (err: any) {
         const errMsg = err?.message || String(err)
         if (detail) {
-          await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
+          await this.supabase.updateCampaignInputData(detail.id, {
+            status: accountStopReason ? 'chờ xử lý' : 'hoàn thành',
+            note: accountStopReason || errMsg
+          })
+        }
+        if (accountStopReason) {
+          await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+          shouldStopAfterTarget = true
+        } else {
+          const runtimeError = this.normalizeRuntimeError(campaign, [], errMsg)
+          const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
+            message: runtimeError.message
+          })
+          shouldStopAfterTarget = handled.triggered
         }
         await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
         this.sendLog(`❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
       } finally {
+        clearInterval(accountGuard)
         if (automationPage.source === 'background') {
           this.stopBackgroundPreview(account.id, campaign.id)
         }
         this.activeV2Aborts.delete(campaign.id)
+      }
+
+      if (shouldStopAfterTarget) {
+        stoppedBeforeCompletion = true
+        break
       }
 
       // Sleep between details
@@ -404,45 +477,332 @@ export class CampaignScheduler {
       }
     }
 
-    if (rateLimitReached) {
-      // Phân biệt 2 loại limit:
-      //   1. Hourly (rateLimitCount/rateLimitMinutes): chỉ cần đợi vài chục phút → reschedule = retryAt
-      //   2. Daily (dailyLimit): cần đợi sang ngày mai
-      //      - continueNextDay=true → schedule = tomorrow cùng giờ user set
-      //      - continueNextDay=false → giữ nguyên schedule, chỉ set status='chờ xử lý'
-      if (rateLimitIsDaily) {
-        if (campaign.scheduleType === 'daily' && campaign.continueNextDay && campaign.schedule) {
-          const now = new Date()
-          const schedDate = new Date(campaign.schedule)
-          const tomorrow = new Date(now)
-          tomorrow.setDate(tomorrow.getDate() + 1)
-          tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
-          await this.updateCampaignAndBroadcast(campaign.id, {
-            status: 'chờ xử lý',
-            schedule: tomorrow.toISOString()
-          })
-          await this.supabase.appendCampaignLog(campaign.id, `Đạt giới hạn ngày. Lên lịch chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
-          this.sendLog(`🔄 Chiến dịch "${campaign.name}" sẽ chạy tiếp vào ${tomorrow.toLocaleString('vi-VN')}`)
-        } else {
-          await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
-        }
-      } else if (rateLimitRetryAt) {
-        // Hourly limit: reschedule = thời điểm có chỗ trong window
-        await this.updateCampaignAndBroadcast(campaign.id, {
-          status: 'chờ xử lý',
-          schedule: rateLimitRetryAt.toISOString()
-        })
-        const minutesLeft = Math.ceil((rateLimitRetryAt.getTime() - Date.now()) / 60000)
-        await this.supabase.appendCampaignLog(campaign.id, `Đạt tốc độ giới hạn. Tiếp tục sau ${minutesLeft} phút (lúc ${rateLimitRetryAt.toLocaleTimeString('vi-VN')})`)
-        this.sendLog(`⏳ Chiến dịch "${campaign.name}" sẽ thử lại sau ${minutesLeft} phút`)
-      } else {
-        // Fallback: không có info retry → giữ nguyên schedule, status chờ xử lý
-        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
-      }
-    } else {
+    if (!stoppedBeforeCompletion) {
       await this.handleCampaignCompletion(campaign)
     }
     await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+  }
+
+  private getCampaignActionDescriptors(campaign: Campaign, campaignAction?: CampaignAction): CampaignActionDescriptor[] {
+    if (campaignAction && Array.isArray(campaignAction.limitCheckActionCodes)) {
+      return this.filterCampaignActionDescriptors(
+        campaign,
+        this.normalizeActionDescriptors(campaignAction.limitCheckActionCodes)
+      )
+    }
+
+    const extra = campaign.extraSettings || {}
+    const actions: CampaignActionDescriptor[] = []
+
+    switch (campaign.actionId) {
+      case 'facebook_group_post':
+        actions.push({ code: 'fb_post_group', name: 'Đăng bài group' })
+        if (extra.enableComment) actions.push({ code: 'fb_comment', name: 'Comment' })
+        if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
+        break
+      case 'facebook_timeline_post':
+        actions.push({ code: 'fb_post_my_profile', name: 'Đăng bài trang cá nhân' })
+        if (extra.enableComment) actions.push({ code: 'fb_comment', name: 'Comment' })
+        if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
+        break
+      case 'facebook_message_friend':
+        if (extra.enableMessage !== false) actions.push({ code: 'fb_message_friend', name: 'Nhắn tin bạn bè' })
+        if (extra.enableAddFriend) actions.push({ code: 'fb_add_friend', name: 'Kết bạn' })
+        break
+      case 'facebook_comment_seeding':
+        actions.push({ code: 'fb_comment', name: 'Comment' })
+        if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
+        break
+    }
+
+    return this.filterCampaignActionDescriptors(campaign, this.dedupeActionDescriptors(actions))
+  }
+
+  private filterCampaignActionDescriptors(
+    campaign: Campaign,
+    actions: CampaignActionDescriptor[]
+  ): CampaignActionDescriptor[] {
+    const configuredCodes = campaign.extraSettings?.actionLimits?.enabledActionCodes
+    const configuredSet = Array.isArray(configuredCodes) ? new Set(configuredCodes) : null
+    return actions.filter(action => {
+      if (configuredSet && !configuredSet.has(action.code)) return false
+      return this.isActionCheckEnabledForCampaign(campaign, action.code)
+    })
+  }
+
+  private isActionCheckEnabledForCampaign(campaign: Campaign, actionCode: string): boolean {
+    const extra = campaign.extraSettings || {}
+    switch (actionCode) {
+      case 'fb_message_friend':
+        return campaign.actionId !== 'facebook_message_friend' || extra.enableMessage !== false
+      case 'fb_add_friend':
+        return campaign.actionId !== 'facebook_message_friend' || extra.enableAddFriend === true
+      case 'fb_comment':
+        if (campaign.actionId === 'facebook_comment_seeding') return true
+        return extra.enableComment === true
+      case 'fb_like_post':
+        return extra.enablePostLike === true
+      default:
+        return true
+    }
+  }
+
+  private normalizeActionDescriptors(actionCodes: string[]): CampaignActionDescriptor[] {
+    return this.dedupeActionDescriptors(actionCodes.map(code => {
+      const normalizedCode = code.trim()
+      return { code: normalizedCode, name: this.getAccountActionName(normalizedCode) }
+    }).filter(action => action.code))
+  }
+
+  private dedupeActionDescriptors(actions: CampaignActionDescriptor[]): CampaignActionDescriptor[] {
+    const seen = new Set<string>()
+    return actions.filter(action => {
+      if (seen.has(action.code)) return false
+      seen.add(action.code)
+      return true
+    })
+  }
+
+  private getAccountActionName(actionCode: string): string {
+    switch (actionCode) {
+      case 'fb_post_group': return 'Đăng bài group'
+      case 'fb_post_my_profile': return 'Đăng bài trang cá nhân'
+      case 'fb_comment': return 'Comment'
+      case 'fb_message_stranger': return 'Nhắn tin người lạ'
+      case 'fb_message_friend': return 'Nhắn tin bạn bè'
+      case 'fb_add_friend': return 'Kết bạn'
+      case 'fb_like_post': return 'Like post'
+      default: return actionCode
+    }
+  }
+
+  private getPostActionCode(campaign: Campaign): string | null {
+    if (campaign.actionId === 'facebook_group_post') return 'fb_post_group'
+    if (campaign.actionId === 'facebook_timeline_post') return 'fb_post_my_profile'
+    return null
+  }
+
+  private getMessageActionCode(campaign: Campaign): string {
+    void campaign
+    return 'fb_message_friend'
+  }
+
+  private async checkActionLimits(
+    accountId: number,
+    campaign: Campaign,
+    actionDescriptors: CampaignActionDescriptor[],
+    limitConfig?: CampaignActionLimitSettings
+  ): Promise<AccountActionLimitStatus | null> {
+    void campaign
+    for (const action of actionDescriptors) {
+      const limitStatus = await this.supabase.getAccountRateLimitStatus(
+        accountId,
+        action.code,
+        action.name,
+        this.getActionLimitConfig(action.code, limitConfig)
+      )
+      if (!limitStatus.ok) return limitStatus
+    }
+    return null
+  }
+
+  private getActionLimitConfig(
+    actionCode: string,
+    limitConfig?: CampaignActionLimitSettings
+  ): ActionLimitConfig | undefined {
+    const byActionCode = limitConfig?.byActionCode?.[actionCode]
+    if (byActionCode) return byActionCode
+    if (!limitConfig) return undefined
+    return {
+      dailyLimit: limitConfig.dailyLimit,
+      rateLimitCount: limitConfig.rateLimitCount,
+      rateLimitMinutes: limitConfig.rateLimitMinutes
+    }
+  }
+
+  private async getAccountRunBlockReason(
+    accountId: number,
+    expectedStatus: 'chờ xử lý' | 'đang chạy'
+  ): Promise<string | null> {
+    const account = await this.supabase.getAccount(accountId)
+    if (!account) return 'Không tìm thấy tài khoản'
+    if (account.loginStatus !== 'đã đăng nhập') return 'Tài khoản bị đăng xuất'
+    if (account.status !== expectedStatus) return `Tài khoản đang ở trạng thái ${account.status}`
+    return null
+  }
+
+  private async stopCampaignForAccountCondition(
+    account: AutoAccount,
+    campaign: Campaign,
+    reason: string
+  ): Promise<void> {
+    if (reason.includes('đăng xuất')) {
+      await this.handleRuntimeError(account, campaign, 'err_logout', undefined, { message: reason })
+    } else {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: reason })
+      await this.supabase.appendCampaignLog(campaign.id, reason)
+      this.sendLog(`⚠️ Dừng chiến dịch "${campaign.name}": ${reason}`)
+    }
+  }
+
+  private async handleLimitStatus(
+    account: AutoAccount,
+    campaign: Campaign,
+    limitStatus: AccountActionLimitStatus
+  ): Promise<void> {
+    const actionName = this.getLimitActionName(limitStatus)
+    const replacements = this.buildLimitReplacements(limitStatus)
+    const message = this.addActionContextToMessage(
+      limitStatus.reason || `Hành động "${actionName}" đang tạm dừng`,
+      replacements
+    )
+
+    if (limitStatus.errorCode) {
+      await this.handleRuntimeError(account, campaign, limitStatus.errorCode, limitStatus.actionCode, replacements)
+    } else {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+      await this.supabase.appendCampaignLog(campaign.id, message)
+      this.sendLog(`⚠️ Tạm dừng "${campaign.name}": ${message}`)
+    }
+  }
+
+  private async updateCampaignPreflightNote(campaign: Campaign, note: string): Promise<void> {
+    const message = note || 'Không đủ điều kiện chạy'
+    if (campaign.status === 'chờ xử lý' && campaign.note === message) return
+    await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+  }
+
+  private async buildLimitPreflightNote(limitStatus: AccountActionLimitStatus): Promise<string> {
+    const replacements = this.buildLimitReplacements(limitStatus)
+
+    if (limitStatus.errorCode) {
+      const policy = await this.supabase.getErrorPolicy(limitStatus.errorCode)
+      const message = this.renderPolicyMessage(policy?.notiCampaign || policy?.notiRunningProcess, replacements)
+      if (message) return this.addActionContextToMessage(message, replacements)
+    }
+
+    return this.addActionContextToMessage(limitStatus.reason || 'Không đủ điều kiện chạy', replacements)
+  }
+
+  private buildLimitReplacements(limitStatus: AccountActionLimitStatus): Record<string, string | undefined> {
+    const minutes = limitStatus.retryAfterMs ? Math.ceil(limitStatus.retryAfterMs / 60000) : undefined
+    const actionName = this.getLimitActionName(limitStatus)
+    return {
+      x: String(limitStatus.currentCount ?? limitStatus.limit ?? ''),
+      t: String(minutes ?? ''),
+      actionName,
+      action: actionName,
+      a: actionName,
+      actionCode: limitStatus.actionCode,
+      action_code: limitStatus.actionCode,
+      message: limitStatus.reason
+    }
+  }
+
+  private getLimitActionName(limitStatus: AccountActionLimitStatus): string {
+    return limitStatus.actionName || limitStatus.actionCode || 'hành động'
+  }
+
+  private addActionContextToMessage(message: string, replacements: Record<string, string | undefined>): string {
+    const actionName = replacements.actionName || replacements.action || replacements.a
+    const text = (message || '').trim()
+    if (!actionName || !text || text.includes(actionName)) return text
+    return `${actionName}: ${text}`
+  }
+
+  private normalizeRuntimeError(
+    campaign: Campaign,
+    steps: RunStepV2[],
+    fallbackError?: string
+  ): { errorCode: string; actionCode?: string; message: string } {
+    const errorStep = [...steps].reverse().find(step => step.status === 'error')
+    const rawMessage = String(
+      fallbackError ||
+      errorStep?.error ||
+      (errorStep?.output as any)?.error ||
+      'Lỗi không xác định'
+    )
+    const message = rawMessage.trim() || 'Lỗi không xác định'
+    const lowerMessage = message.toLowerCase()
+    let actionCode: string | undefined
+
+    if (errorStep?.blockName === 'fb_send_message') actionCode = this.getMessageActionCode(campaign)
+    else if (errorStep?.blockName === 'fb_add_friend') actionCode = 'fb_add_friend'
+    else if (errorStep?.blockName === 'fb_comment_at_position') actionCode = 'fb_comment'
+    else if (errorStep?.blockName === 'fb_click_post_button') actionCode = this.getPostActionCode(campaign) || undefined
+    else actionCode = this.getCampaignActionDescriptors(campaign)[0]?.code
+
+    if (lowerMessage.includes('bạn đã đạt giới hạn về số tin nhắn đang chờ')) {
+      return { errorCode: 'err_limit_waiting_message', actionCode, message }
+    }
+
+    return { errorCode: 'err_undefined', actionCode, message }
+  }
+
+  private async handleRuntimeError(
+    account: AutoAccount,
+    campaign: Campaign,
+    errorCode: string,
+    actionCode: string | undefined,
+    replacements: Record<string, string | undefined> = {}
+  ): Promise<RuntimeErrorResult> {
+    const policy = await this.supabase.getErrorPolicy(errorCode) || await this.supabase.getErrorPolicy('err_undefined')
+    if (!policy) {
+      const message = replacements.message || 'Có lỗi xảy ra'
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+      return { triggered: true, message }
+    }
+
+    const threshold = policy.countConsecutiveErrors && policy.countConsecutiveErrors > 0
+      ? policy.countConsecutiveErrors
+      : null
+    if (threshold) {
+      const count = await this.supabase.incrementConsecutiveError(account.id, actionCode, policy.errorCode)
+      if (count < threshold) {
+        const notice = this.addActionContextToMessage(
+          this.renderPolicyMessage(policy.notiRunningProcess, replacements) || policy.errorName,
+          replacements
+        )
+        return {
+          triggered: false,
+          message: `${notice} (${count}/${threshold})`,
+          policy
+        }
+      }
+    }
+
+    const message = this.addActionContextToMessage(
+      this.renderPolicyMessage(policy.notiCampaign || policy.notiRunningProcess, replacements)
+      || replacements.message
+      || policy.errorDesc
+      || policy.errorName,
+      replacements
+    )
+    const campaignStatus = policy.updateStatusCampaign || 'chờ xử lý'
+
+    if (policy.updateStatusAccount) {
+      await this.supabase.updateAccount(account.id, { status: policy.updateStatusAccount })
+    }
+    if (policy.disableActionCodes.length > 0) {
+      await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions)
+    }
+
+    await this.updateCampaignAndBroadcast(campaign.id, { status: campaignStatus, note: message })
+    await this.supabase.appendCampaignLog(campaign.id, message)
+    this.sendLog(`⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
+
+    return { triggered: true, message, policy }
+  }
+
+  private renderPolicyMessage(template: string | null | undefined, replacements: Record<string, string | undefined>): string {
+    if (!template) return ''
+    return template
+      .replace(/\[x\]/g, replacements.x || replacements.message || '')
+      .replace(/\[t\]/g, replacements.t || '')
+      .replace(/\[a\]/g, replacements.actionName || replacements.action || replacements.a || '')
+      .replace(/\[action\]/g, replacements.actionName || replacements.action || replacements.a || '')
+      .replace(/\[action_code\]/g, replacements.actionCode || replacements.action_code || '')
+      .trim()
   }
 
   /** Build variables object inject vào engine v2. */
@@ -630,6 +990,7 @@ export class CampaignScheduler {
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
+          actionCode: this.getPostActionCode(campaign),
           actionName: 'Đăng bài',
           status: 'thành công',
           log: detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
@@ -660,6 +1021,7 @@ export class CampaignScheduler {
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
+          actionCode: 'fb_comment',
           actionName: 'Comment',
           status: 'thành công',
           log: `Đã comment vào ${target}: "${preview}"`,
@@ -693,7 +1055,10 @@ export class CampaignScheduler {
     }
 
     // Nhắn tin — phân biệt 3 status: thành công / thất bại (FB block) / lỗi (exception)
-    const msgSteps = steps.filter(s => s.blockName === 'fb_send_message')
+    const msgSteps = steps.filter(s =>
+      s.blockName === 'fb_send_message' &&
+      (s.status === 'success' || s.status === 'error')
+    )
     for (const s of msgSteps) {
       const out = (s.output as any) || {}
       const errMsg = out.error || s.error || 'Lỗi không xác định'
@@ -701,13 +1066,16 @@ export class CampaignScheduler {
         s.status === 'error' ? 'lỗi'
         : out.ok === true ? 'thành công'
         : 'thất bại'
+      const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined
       try {
         await this.supabase.createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
+          actionCode: this.getMessageActionCode(campaign),
           actionName: 'Nhắn tin',
           status,
+          errorCode,
           log: status === 'thành công' ? `Nhắn tin thành công đến ${inputDataName}` : `Lỗi nhắn tin đến ${inputDataName}: ${errMsg}`
         })
         if (status === 'thành công') this.sendLog(`💬 Nhắn tin thành công đến "${inputDataName}"`)
@@ -716,7 +1084,10 @@ export class CampaignScheduler {
     }
 
     // Kết bạn — alreadyFriend / clicked = thành công; ok=false không exception = thất bại; exception = lỗi
-    const friendSteps = steps.filter(s => s.blockName === 'fb_add_friend')
+    const friendSteps = steps.filter(s =>
+      s.blockName === 'fb_add_friend' &&
+      (s.status === 'success' || s.status === 'error')
+    )
     for (const s of friendSteps) {
       const out = (s.output as any) || {}
       const ok = s.status === 'success' && out.ok === true
@@ -730,6 +1101,7 @@ export class CampaignScheduler {
             inputDataId: detail?.id,
             campaignId: campaign.id,
             accountId,
+            actionCode: 'fb_add_friend',
             actionName: 'Kết bạn',
             status: 'thành công',
             log: `Bỏ qua kết bạn với ${inputDataName} (đã là bạn bè hoặc nút bị ẩn)`,
@@ -741,6 +1113,7 @@ export class CampaignScheduler {
             inputDataId: detail?.id,
             campaignId: campaign.id,
             accountId,
+            actionCode: 'fb_add_friend',
             actionName: 'Kết bạn',
             status: 'thành công',
             log: `Kết bạn thành công với ${inputDataName}`
@@ -749,12 +1122,15 @@ export class CampaignScheduler {
         } else {
           // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
           const status: 'thất bại' | 'lỗi' = s.status === 'error' ? 'lỗi' : 'thất bại'
+          const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined
           await this.supabase.createCampaignDetail({
             inputDataId: detail?.id,
             campaignId: campaign.id,
             accountId,
+            actionCode: 'fb_add_friend',
             actionName: 'Kết bạn',
             status,
+            errorCode,
             log: `Lỗi kết bạn với ${inputDataName}: ${errMsg}`
           })
           this.sendLog(`❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
@@ -857,7 +1233,7 @@ export class CampaignScheduler {
     }
   }
 
-  private getAutomationPage(account: import('../../shared/types').AutoAccount, campaignId?: number): AutomationPageRef {
+  private getAutomationPage(account: AutoAccount, campaignId?: number): AutomationPageRef {
     this.selectAutomationBrowser(account.id, campaignId)
     return {
       page: this.backgroundPages.getOrCreate(account.id, account.flatformType),

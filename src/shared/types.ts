@@ -22,8 +22,81 @@ export interface CampaignAction {
   flatformType: string
   isActive: boolean
   workflowId?: number       // engine v2 (BIGINT, FK auto_workflows.id)
+  limitCheckActionCodes: string[]
   isDelete: boolean
   createdAt?: string
+}
+
+export interface AutoAccountAction {
+  id: number
+  flatformType: string
+  name: string
+  code: string
+  isActive: boolean
+  isDelete: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AutoAccountActionStatus {
+  id: number
+  accountId: number
+  actionCode: string
+  countActionInDay: number
+  countDate: string
+  isDisable: boolean
+  dateEnable?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AutoErrorPolicy {
+  id: number
+  errorType: string
+  errorName: string
+  errorDesc?: string | null
+  errorCode: string
+  errorElement?: string | null
+  notiRunningProcess?: string | null
+  notiCampaign?: string | null
+  updateStatusAccount?: string | null
+  updateStatusCampaign?: string | null
+  disableActionCodes: string[]
+  timeDisableActions?: number | null
+  countConsecutiveErrors?: number | null
+  isActive: boolean
+  isDelete: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AccountActionLimitStatus {
+  ok: boolean
+  actionCode?: string
+  actionName?: string
+  errorCode?: string
+  reason?: string
+  isDailyLimit?: boolean
+  retryAfterMs?: number
+  currentCount?: number
+  limit?: number
+}
+
+export interface AccountActionOverview {
+  action: AutoAccountAction
+  status: AutoAccountActionStatus
+}
+
+export interface ActionLimitConfig {
+  dailyLimit?: number
+  rateLimitCount?: number
+  rateLimitMinutes?: number
+}
+
+export interface CampaignActionLimitSettings extends ActionLimitConfig {
+  sleepBetweenActions?: number
+  enabledActionCodes?: string[]
+  byActionCode?: Record<string, ActionLimitConfig>
 }
 
 export interface CampaignExtraSettings {
@@ -36,12 +109,7 @@ export interface CampaignExtraSettings {
   postsPerTarget?: number
   postKeywordFilter?: string
   keywordFilter?: string
-  actionLimits?: {               // giới hạn gửi (được lưu theo campaign nhưng check theo account_id + actionName)
-    sleepBetweenActions?: number
-    dailyLimit?: number
-    rateLimitCount?: number
-    rateLimitMinutes?: number
-  }
+  actionLimits?: CampaignActionLimitSettings // giới hạn gửi theo action_code; top-level là fallback cho campaign cũ
   imageOption?: 'none' | 'all' | 'random'
   randomImageCount?: number
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
@@ -88,6 +156,7 @@ export interface Campaign {
   refreshData?: boolean          // weekly/monthly: reset data to pending when all done
   timeSleepBetween2: number   // seconds
   log: string
+  note?: string | null
   content?: string
   extraSettings?: CampaignExtraSettings
   images?: string[]              // file paths or base64 strings
@@ -152,8 +221,10 @@ export interface CampaignDetail {
   inputDataId?: number | null
   campaignId: number
   accountId?: number
+  actionCode?: string | null
   actionName: string
   status: CampaignDetailStatus
+  errorCode?: string | null
   log?: string
   data?: Record<string, unknown>
   postUrl?: string               // URL of the post this action is related to (e.g. just-published post, commented post)
@@ -213,6 +284,7 @@ export const IPC_EVENTS = {
   DB_CREATE_ACCOUNT: 'db:create-account',
   DB_UPDATE_ACCOUNT: 'db:update-account',
   DB_DELETE_ACCOUNT: 'db:delete-account',
+  DB_LIST_ACCOUNT_ACTIONS: 'db:list-account-actions',
 
   // Database Campaign Actions
   DB_LIST_CAMPAIGN_ACTIONS: 'db:list-campaign-actions',
@@ -270,6 +342,7 @@ export const IPC_EVENTS = {
   ACCOUNT_CHECK_FB_LOGIN: 'account:check-fb-login',
   ACCOUNT_RELOAD_PAGE: 'account:reload-page',
   ACCOUNT_STATUS_UPDATED: 'account:status-updated',
+  ACCOUNT_ACTION_OVERVIEW: 'account:action-overview',
 
   // Contacts (Load data)
   CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',
