@@ -244,6 +244,79 @@ export class ContactLoader {
       (function() {
         var friends = [];
         var seen = new Set();
+        var reservedPaths = new Set([
+          'friends', 'groups', 'pages', 'photo', 'photos', 'story', 'watch', 'reel', 'reels',
+          'hashtag', 'events', 'marketplace', 'gaming', 'settings', 'notifications',
+          'messages', 'bookmarks', 'help', 'privacy', 'policies', 'ads', 'search'
+        ]);
+
+        function toFacebookUrl(href) {
+          try {
+            var url = new URL(href, window.location.origin);
+            var host = url.hostname.replace(/^www\\./i, '').replace(/^web\\./i, '').replace(/^m\\./i, '');
+            if (host !== 'facebook.com' && host !== 'fb.com') return null;
+            return url;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function extractProfileTarget(href) {
+          var url = toFacebookUrl(href);
+          if (!url) return null;
+
+          if (url.pathname === '/profile.php') {
+            var id = url.searchParams.get('id');
+            if (!id) return null;
+            return {
+              uid: id,
+              url: 'https://www.facebook.com/profile.php?id=' + id
+            };
+          }
+
+          var parts = url.pathname.split('/').filter(Boolean);
+          if (parts.length !== 1) return null;
+          var slug = parts[0];
+          if (!slug || reservedPaths.has(slug.toLowerCase())) return null;
+          if (!/^[a-zA-Z0-9._-]+$/.test(slug)) return null;
+
+          return {
+            uid: slug,
+            url: 'https://www.facebook.com/' + slug
+          };
+        }
+
+        function cleanFriendName(a) {
+          function clean(txt) {
+            return String(txt || '')
+              .replace(/\\s+/g, ' ')
+              .replace(/\\d+\\s*bạn chung.*$/i, '')
+              .replace(/Có\\s*[\\d,.]+[KkMm]?\\s*người theo dõi.*$/i, '')
+              .replace(/\\d+\\s*mutual friends?.*$/i, '')
+              .replace(/\\d+\\s*followers?.*$/i, '')
+              .trim();
+          }
+
+          function bad(txt) {
+            return !txt ||
+              /bạn chung|mutual friends?|người theo dõi|followers?/i.test(txt) ||
+              /^(Bạn bè|Friends|Thêm bạn bè|Add friend|Nhắn tin|Message|Theo dõi|Follow)$/i.test(txt);
+          }
+
+          var spans = a.querySelectorAll('span, strong, h2, h3');
+          for (var s = 0; s < spans.length; s++) {
+            var span = spans[s];
+            if (span.querySelector('span, strong, h2, h3')) continue;
+            var candidate = clean(span.textContent);
+            if (candidate.length >= 2 && candidate.length <= 80 && !bad(candidate)) {
+              return candidate;
+            }
+          }
+
+          var text = clean(a.innerText || a.textContent);
+          if (text.length >= 2 && text.length <= 100 && !bad(text)) return text;
+          return '';
+        }
 
         // Facebook friends list: look for links that contain profile URLs
         // The friends page typically renders cards with <a> links to user profiles
@@ -252,67 +325,22 @@ export class ContactLoader {
         for (var i = 0; i < links.length; i++) {
           var a = links[i];
           var href = a.href || '';
+          var target = extractProfileTarget(href);
+          if (!target) continue;
 
-          // Skip non-profile links
-          if (href.includes('/friends') || href.includes('/groups') || href.includes('/pages') ||
-              href.includes('/photo') || href.includes('/story') || href.includes('/watch') ||
-              href.includes('/reel') || href.includes('/hashtag') || href.includes('/events') ||
-              href.includes('/marketplace') || href.includes('/gaming') ||
-              href.includes('/settings') || href.includes('/notifications') ||
-              href.includes('/messages') || href.includes('/bookmarks') ||
-              href.includes('?') || href.includes('#')) {
-            continue;
-          }
-
-          // Must match a profile pattern: facebook.com/username or facebook.com/profile.php?id=xxx
-          var profileMatch = href.match(/facebook\\.com\\/(profile\\.php\\?id=(\\d+)|([a-zA-Z0-9._]+))\\/?$/);
-          if (!profileMatch) continue;
-
-          var uid = profileMatch[2] || profileMatch[3] || '';
-          if (!uid || uid === 'friends' || uid === 'groups' || uid === 'pages') continue;
-
-          // Get the name text from the link — must extract ONLY the name,
-          // not subtitles like "5 bạn chung" or "Có 7,6K người theo dõi".
-          // Facebook renders each friend card with nested spans:
-          //   <span>Name</span><span>subtitle</span>
-          // Strategy: find the first meaningful <span> with short, clean text.
-          var name = '';
-          var spans = a.querySelectorAll('span');
-          for (var s = 0; s < spans.length; s++) {
-            var span = spans[s];
-            // Skip spans that contain other spans (parent containers)
-            if (span.querySelector('span')) continue;
-            var txt = (span.textContent || '').trim();
-            // The name span is typically 2-50 chars and does NOT contain subtitle keywords
-            if (txt.length >= 2 && txt.length <= 50 &&
-                !txt.match(/bạn chung/i) &&
-                !txt.match(/người theo dõi/i) &&
-                !txt.match(/follower/i) &&
-                !txt.match(/mutual friend/i)) {
-              name = txt;
-              break;
-            }
-          }
-          // Fallback: use textContent but strip known subtitle patterns
-          if (!name) {
-            name = (a.textContent || '').trim();
-            // Remove Vietnamese subtitle patterns
-            name = name.replace(/\d+\s*bạn chung.*$/i, '').trim();
-            name = name.replace(/Có\s*[\d,.]+[KkMm]?\s*người theo dõi.*$/i, '').trim();
-            name = name.replace(/\d+\s*mutual friend.*$/i, '').trim();
-            name = name.replace(/\d+\s*follower.*$/i, '').trim();
-          }
+          var uid = target.uid;
+          var name = cleanFriendName(a);
           if (!name || name.length < 2 || name.length > 100) continue;
-
-          // Deduplicate
           if (seen.has(uid)) continue;
           seen.add(uid);
 
           friends.push({
             name: name,
             uid: uid,
-            url: href.split('?')[0]
+            url: target.url,
+            extraData: { source: 'facebook_friends_list' }
           });
+          continue;
         }
 
         return friends;
@@ -333,6 +361,87 @@ export class ContactLoader {
       (function() {
         var groups = [];
         var seen = new Set();
+        var reservedGroupPaths = new Set([
+          'feed', 'joins', 'discover', 'create', 'category', 'notifications',
+          'your_groups', 'membership', 'browse'
+        ]);
+
+        function toFacebookUrl(href) {
+          try {
+            var url = new URL(href, window.location.origin);
+            var host = url.hostname.replace(/^www\\./i, '').replace(/^web\\./i, '').replace(/^m\\./i, '');
+            if (host !== 'facebook.com' && host !== 'fb.com') return null;
+            return url;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function extractGroupTarget(href) {
+          var url = toFacebookUrl(href);
+          if (!url) return null;
+          var parts = url.pathname.split('/').filter(Boolean);
+          var idx = parts.findIndex(function(part) { return part.toLowerCase() === 'groups'; });
+          if (idx === -1 || idx + 1 >= parts.length) return null;
+          var groupKey = parts[idx + 1];
+          if (!groupKey || reservedGroupPaths.has(groupKey.toLowerCase())) return null;
+          if (!/^[a-zA-Z0-9._-]+$/.test(groupKey)) return null;
+          return {
+            uid: groupKey,
+            url: 'https://www.facebook.com/groups/' + groupKey
+          };
+        }
+
+        function normalizeText(txt) {
+          return String(txt || '').replace(/\\s+/g, ' ').trim();
+        }
+
+        function isActivityText(txt) {
+          return /Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity/i.test(txt);
+        }
+
+        function extractActivityText(a) {
+          var lines = String(a.innerText || a.textContent || '')
+            .split(/\\n+/)
+            .map(normalizeText)
+            .filter(Boolean);
+          for (var i = 0; i < lines.length; i++) {
+            if (isActivityText(lines[i])) return lines[i];
+          }
+          var full = normalizeText(a.textContent);
+          var match = full.match(/(Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity)[:：]?.*$/i);
+          return match ? normalizeText(match[0]) : '';
+        }
+
+        function cleanGroupName(a) {
+          function stripActivity(txt) {
+            return normalizeText(txt)
+              .replace(/\\s*(Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity)[:：]?.*$/i, '')
+              .trim();
+          }
+
+          var lines = String(a.innerText || '')
+            .split(/\\n+/)
+            .map(stripActivity)
+            .filter(Boolean);
+          for (var l = 0; l < lines.length; l++) {
+            if (!isActivityText(lines[l]) && lines[l].length >= 2 && lines[l].length <= 180) {
+              return lines[l];
+            }
+          }
+
+          var spans = a.querySelectorAll('span, strong, h2, h3');
+          for (var s = 0; s < spans.length; s++) {
+            var span = spans[s];
+            if (span.querySelector('span, strong, h2, h3')) continue;
+            var candidate = stripActivity(span.textContent);
+            if (!isActivityText(candidate) && candidate.length >= 2 && candidate.length <= 180) {
+              return candidate;
+            }
+          }
+
+          return stripActivity(a.textContent);
+        }
 
         // Facebook groups page: look for links to group pages
         var links = document.querySelectorAll('a[href*="/groups/"]');
@@ -340,31 +449,26 @@ export class ContactLoader {
         for (var i = 0; i < links.length; i++) {
           var a = links[i];
           var href = a.href || '';
+          var target = extractGroupTarget(href);
+          if (!target) continue;
 
-          // Must match pattern: facebook.com/groups/{groupId}/
-          var groupMatch = href.match(/facebook\\.com\\/groups\\/([0-9]+)/);
-          if (!groupMatch) continue;
-
-          var groupId = groupMatch[1];
-          if (!groupId) continue;
-
-          // Get the name text
-          var name = (a.textContent || '').trim();
+          var groupId = target.uid;
+          var name = cleanGroupName(a);
+          var activityText = extractActivityText(a);
           if (!name || name.length < 2 || name.length > 200) continue;
-
-          // Skip navigation links like "Create group", "Discover", etc.
-          if (name.includes('Tạo') || name.includes('Create') || name.includes('Khám phá') ||
-              name.includes('Discover') || name.includes('Bảng tin') || name.includes('Feed')) continue;
-
-          // Deduplicate
           if (seen.has(groupId)) continue;
           seen.add(groupId);
 
           groups.push({
             name: name,
             uid: groupId,
-            url: 'https://www.facebook.com/groups/' + groupId
+            url: target.url,
+            extraData: {
+              source: 'facebook_groups_joined',
+              lastActivityText: activityText || null
+            }
           });
+          continue;
         }
 
         return groups;

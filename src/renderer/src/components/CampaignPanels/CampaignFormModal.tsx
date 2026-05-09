@@ -516,12 +516,24 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         return
       }
     }
+    if (formData.actionId === 'facebook_group_post' && details.length === 0) {
+      showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
+      return
+    }
+    if (isMessageFriendCampaign && details.length === 0) {
+      showAlert('Vui lòng thêm ít nhất một bạn bè hoặc UID vào danh sách data.', 'error')
+      return
+    }
     if (isCommentSeedingCampaign && !formData.commentContent.trim()) {
       showAlert('Vui lòng nhập nội dung comment.', 'error')
       return
     }
     if (isCommentSeedingCampaign && details.length === 0) {
       showAlert('Vui lòng thêm ít nhất một group hoặc link bài viết vào danh sách mục tiêu.', 'error')
+      return
+    }
+    if ((isGroupPostCampaign || isCommentSeedingCampaign || isMessageFriendCampaign) && details.some(d => !String(d.uid || '').trim())) {
+      showAlert('Vui lòng nhập UID hoặc link cho tất cả dòng trong danh sách data.', 'error')
       return
     }
 
@@ -800,10 +812,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [showFriendPicker, setShowFriendPicker] = useState(false)
   const [showGroupPicker, setShowGroupPicker] = useState(false)
 
-  const onFriendsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
+  const onFriendsSelected = (contacts: { id: number; name: string; uid?: string; url?: string }[]) => {
     const newRows: Partial<CampaignInputData>[] = contacts.map(c => ({
       name: c.name,
-      uid: c.uid || '',
+      uid: c.url || c.uid || '',
       phone: '',
       email: '',
       note: '',
@@ -813,10 +825,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     showAlert(`Đã thêm ${newRows.length} bạn bè.`, 'success')
   }
 
-  const onGroupsSelected = (contacts: { id: number; name: string; uid?: string }[]) => {
+  const onGroupsSelected = (contacts: { id: number; name: string; uid?: string; url?: string }[]) => {
     const newRows: Partial<CampaignInputData>[] = contacts.map(c => ({
       name: c.name,
-      uid: c.uid || '',
+      uid: c.url || (c.uid ? `https://www.facebook.com/groups/${c.uid}` : ''),
       phone: '',
       email: '',
       note: '',

@@ -1216,7 +1216,7 @@ body {
 }
 
 .account-info-modal {
-  width: min(860px, calc(100vw - 48px));
+  width: min(960px, calc(100vw - 48px));
   max-height: min(760px, calc(100vh - 48px));
 }
 
@@ -1279,10 +1279,61 @@ body {
   font-size: 12px;
 }
 
+.account-info-view-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .account-info-actions-title {
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
+}
+
+.account-info-contact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.account-info-contact-count {
+  margin-top: 3px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.account-info-contact-search {
+  position: relative;
+  width: min(320px, 100%);
+}
+
+.account-info-contact-search svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.account-info-contact-search input {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 12px;
+  padding: 7px 10px 7px 30px;
+  outline: none;
+}
+
+.account-info-contact-search input:focus {
+  border-color: var(--accent-primary);
 }
 
 .account-info-loading {
@@ -1297,6 +1348,30 @@ body {
   color: var(--text-tertiary);
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
   font-size: 11px;
+}
+
+.account-info-contact-table td {
+  vertical-align: top;
+}
+
+.account-info-contact-name {
+  min-width: 160px;
+  overflow-wrap: anywhere;
+}
+
+.account-info-contact-link {
+  display: block;
+  max-width: 280px;
+  color: var(--accent-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-info-contact-muted {
+  max-width: 240px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .account-info-status {
@@ -1318,6 +1393,11 @@ body {
 @media (max-width: 720px) {
   .account-info-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-info-view-actions .btn,
+  .account-info-contact-search {
+    flex: 1 1 160px;
   }
 }
 
