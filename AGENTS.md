@@ -65,9 +65,16 @@ Domain (sau migration_v4 drop engine v1):
 - `auto_account_contacts` — danh bạ friend/group theo account (trước đây là `org_account_contacts`)
 - `auto_campaigns` — campaign config (action_id, account_id, schedule, content, extra_settings)
 - `auto_campaign_actions` — template loại campaign (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`/`facebook_find_data_group`); column `workflow_id` (BIGINT, FK auto_workflows.id) là pointer duy nhất tới workflow.
+  - `limit_check_action_codes text[]` controls which `auto_account_actions.code` values scheduler checks for rate limit/disable before running this campaign action.
+- `auto_account_actions` — định nghĩa action theo account (`fb_post_group`/`fb_comment`/`fb_message_friend`/...). Limit/error policy dùng `code`, KHÔNG dùng `auto_campaign_actions.id`.
+- `auto_account_action_status` — counter + trạng thái disable theo `(account_id, action_code)`: `count_action_in_day`, `is_disable`, `date_enable`; Supabase cron reset/ngày và enable action quá hạn.
+- `auto_error` + `auto_account_error_state` — policy lỗi chuẩn hoá + bộ đếm lỗi liên tục. Lỗi chưa định nghĩa quy về `err_undefined`.
+- Error policy DB mutations (update campaign/account/action status) chạy ở scheduler/service layer; workflow blocks chỉ nên phát hiện/chuẩn hoá lỗi, không tự update Supabase.
 - `auto_campaign_inputs` — pool nguyên liệu thô (e.g. danh sách group để scrape members → sinh input_data). Status: `'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'` (`'lỗi'` flag input không scrape được; admin re-trigger).
 - `auto_campaign_input_data` — **việc-cần-làm thực thi** (mỗi target/profile/group = 1 row). Status: `'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành'` (KHÔNG có `'lỗi'` — lỗi action-level đã track ở campaign_details; khi run fail set `'hoàn thành' + note=errMsg`). Cột `input_id BIGINT NULL` FK → `auto_campaign_inputs.id` (nếu sinh từ scrape; NULL nếu user nhập tay).
 - `auto_campaign_details` — **customer-visible "Lịch sử hành động"**: mỗi milestone (post, từng comment, friend request, message) ghi 1 row riêng. Status: `'thành công' | 'thất bại' | 'lỗi'` (thành công = OK; thất bại = nghiệp vụ FB từ chối; lỗi = exception/crash code). FK `input_data_id` (nullable cho simple campaign không có input_data).
+  - `action_code` gắn tới `auto_account_actions.code`; khi detail status `thành công/thất bại`, repository tăng `auto_account_action_status.count_action_in_day`.
+  - `error_code` gắn tới `auto_error.error_code` khi detail ghi lỗi chuẩn hoá.
 
 [CampaignScheduler](src/main/services/campaignScheduler.ts) — `setInterval(tick, 30s)`:
 1. Lấy accounts + campaigns đến giờ
@@ -82,9 +89,12 @@ For `facebook_find_data_group`, workflow/blocks/elements/action are seeded by [m
 
 **Recovery**: `resetRunningStatuses()` chạy lúc app start (accounts + campaigns + campaign_inputs + campaign_input_data) — flip rows kẹt `'đang chạy'` về `'chờ xử lý'` (đề phòng crash mid-flow). `recoverStuckCampaignInputData(campaignId, errMsg)` flip input_data stuck thành `'hoàn thành'` + `note=errMsg` khi outer catch (enum không có `'lỗi'`). `stop()` cũng đóng toàn bộ hidden background pages để không giữ tài nguyên nền.
 
-**Rate limit** ([campaignRepository.ts:getAccountRateLimitStatus](src/main/data/repositories/campaignRepository.ts)) đếm rows `auto_campaign_details` theo `(account_id, action_name)` filter `status IN ('thành công','thất bại')` (loại `'lỗi'` vì exception code chưa chạm tới FB → không tốn rate), trả `{ok, isDailyLimit, retryAfterMs, reason}`:
-- Hourly hit (e.g. `9 lần / 60 phút`) → reschedule `now + retryAfterMs` (oldest row + windowMs)
-- Daily hit + `continueNextDay=true` → reschedule tomorrow cùng giờ user set; ngược lại giữ schedule, status `'chờ xử lý'`
+**Rate limit** ([campaignRepository.ts:getAccountRateLimitStatus](src/main/data/repositories/campaignRepository.ts)) dùng `action_code`:
+- Daily limit so với `auto_account_action_status.count_action_in_day` (reset 00:00 Asia/Saigon).
+- Hourly limit query `auto_campaign_details` theo `(account_id, action_code, created_at)` với `status IN ('thành công','thất bại')`.
+- Campaign form stores enabled per-campaign limit checks in `extra_settings.actionLimits.enabledActionCodes` and thresholds in `extra_settings.actionLimits.byActionCode[action_code]`; scheduler also filters out checks for campaign actions disabled by toggles such as `enableAddFriend=false`.
+- Limit notes/logs must include the exact action name; `auto_error` messages may use `[a]`/`[action]` and `[action_code]` placeholders.
+- Khi hit limit/disable action: campaign về `'chờ xử lý'`, ghi `note`; KHÔNG đổi schedule.
 
 ### Data layer
 
@@ -94,7 +104,7 @@ For `facebook_find_data_group`, workflow/blocks/elements/action are seeded by [m
 - `mapXxxFromDB(row)` trong [mappers.ts](src/main/data/mappers.ts) chuyển snake_case → camelCase
 - Built-in records live in Supabase DB (`auto_blocks`, `auto_workflows`, `auto_elements`) and DB is the source of truth. There is no `seedV2` runtime/source fallback; update built-ins via admin UI/IPC or explicit SQL migration.
 
-Migration pattern: write SQL files at repo root (`migration.sql` for base schema, `migration_v2_workflow.sql` for v2, `migration_v3_campaign_data.sql` for data refactor, `migration_v4_drop_engine_v1.sql` for v1 cleanup, `migration_v5_*` for account schema rename, `migration_v6_rename_campaign_workflow_tables.sql` for final table/key names, `migration_v7_*` for package account-limit names, `migration_v11_*`/`migration_v12_*` for contact upsert key repair, `migration_v13_*` for comment seeding keyword matching). Apply via `mcp__supabase__apply_migration`. Use idempotent UPSERT by UNIQUE name for engine v2 or explicit IDs where appropriate.
+Migration pattern: write SQL files at repo root (`migration.sql` for base schema, `migration_v2_workflow.sql` for v2, `migration_v3_campaign_data.sql` for data refactor, `migration_v4_drop_engine_v1.sql` for v1 cleanup, `migration_v5_*` for account schema rename, `migration_v6_rename_campaign_workflow_tables.sql` for final table/key names, `migration_v7_*` for package account-limit names, `migration_v11_*`/`migration_v12_*` for contact upsert key repair, `migration_v13_*` for comment seeding keyword matching, `migration_v15_account_action_limits_errors.sql` for account action/error policy, `migration_v16_campaign_action_limit_codes.sql` for campaign-action limit check config). Apply via `mcp__supabase__apply_migration`. Use idempotent UPSERT by UNIQUE name for engine v2 or explicit IDs where appropriate.
 
 ### Vietnamese UI conventions
 
@@ -120,6 +130,7 @@ Status values trong DB lưu **tiếng Việt có dấu**:
 - `campaignHandlers` (CRUD campaign + scheduler control)
 - `browserHandlers` ([handlers/browserHandlers.ts](src/main/ipc/handlers/browserHandlers.ts)) — webview register/unregister/status. Khi register cũng register vào cả `WebviewRegistry` (cho contactLoader / scheduler `isRegistered` check) lẫn `PageControllerRegistry` (editor/test runs dùng visible webview)
 - `accountHandlers` / `accountContactHandlers` / `updateHandlers`
+  - `DB_LIST_ACCOUNT_ACTIONS` returns active `auto_account_actions`; `ACCOUNT_ACTION_OVERVIEW` returns `auto_account_actions` + `auto_account_action_status` for account modals ([accountActionRepository.ts](src/main/data/repositories/accountActionRepository.ts)).
 - `v2Handlers` ([handlers/v2Handlers.ts](src/main/ipc/handlers/v2Handlers.ts)) — engine v2: BLOCK_LIST/SAVE/DELETE, WORKFLOW_LIST/GET/SAVE/DELETE, ELEMENT_LIST/SAVE/DELETE, WORKFLOW_TEST_RUN, BLOCK_TEST_RUN, RUN_STOP, RUN_PROGRESS broadcast, RUN_LOG broadcast
 
 Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repository/service. Renderer gọi qua `electronAPI.xxx()` ([preload/index.ts](src/preload/index.ts), typed trong [electron.d.ts](src/renderer/src/types/electron.d.ts)).
@@ -157,6 +168,7 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 ## Common pitfalls
 
 - **Loop iterations**: scheduler `logMilestonesV2` đọc `result.steps` từ engine. Engine v2 maintain `allSteps[]` (mỗi loop iteration 1 row riêng) thay vì snapshot `nodeStates`. Khi đọc per-iteration data, đọc `s.output` (block return value), KHÔNG `s.input` (chỉ là config + parents trực tiếp).
+- **Skipped action steps**: `logMilestonesV2` must ignore `status='skipped'` action blocks. Optional workflow branches (e.g. `enableAddFriend=false`) still return snapshot steps, but they are not real user actions.
 - **Comment seeding keyword miss**: `fb_prepare_seeding_iterations` có thể trả `commentIterations=[]`; loop body chỉ chạy bên trong loop executor, keyword/text phải normalize bỏ dấu + whitespace, và text bài phải lấy bằng `fb_post_in_uid` + `fb_content_in_post_in_uid` thay vì raw `[role=article]` ([migration_v14_comment_seeding_find_data_content.sql](migration_v14_comment_seeding_find_data_content.sql)).
 - **Output cascade**: engine v2 KHÔNG có inputMapping — output của parent merge vào input của child theo edges, last-write-wins. Output `scrapedText` của block ở xa KHÔNG cascade qua chain — nếu cần dùng ở downstream chain dài, **mutate `vars`** thay vì rely on input merging.
 - **XPath union `|`**: timeline page và group page dùng selector khác nhau. Element store XPath với `|` để match cả hai. `document.evaluate` (XPath 1.0) hỗ trợ union, trả node đầu tiên match.

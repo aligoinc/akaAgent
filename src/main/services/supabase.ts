@@ -1,8 +1,10 @@
-import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
 import * as accountContactRepo from '../data/repositories/accountContactRepository'
+import * as accountActionRepo from '../data/repositories/accountActionRepository'
+import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -14,11 +16,14 @@ export class SupabaseService {
     console.log('[Supabase] Resetting "đang chạy" statuses to "chờ xử lý"...')
     await accountRepo.resetRunningAccountStatuses()
     await campaignRepo.resetRunningCampaignStatuses()
+    await campaignRepo.resetCampaignNotes()
     await campaignRepo.resetRunningCampaignInputStatuses()
     await campaignRepo.resetRunningCampaignInputDataStatuses()
+    await accountActionRepo.enableDueAccountActions()
   }
 
   // =========== ACCOUNTS ===========
+  getAccount(id: number) { return accountRepo.getAccount(id) }
   listAccounts() { return accountRepo.listAccounts() }
   createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }
   updateAccount(id: number, updates: Partial<AutoAccount>) { return accountRepo.updateAccount(id, updates) }
@@ -60,7 +65,24 @@ export class SupabaseService {
   listCampaignDetailsByCampaign(campaignId: number) { return campaignRepo.listCampaignDetailsByCampaign(campaignId) }
   createCampaignDetail(action: Partial<CampaignDetail>) { return campaignRepo.createCampaignDetail(action) }
   deleteCampaignDetail(id: number) { return campaignRepo.deleteCampaignDetail(id) }
-  getAccountRateLimitStatus(accountId: number, actionName: string, limitConfig?: { dailyLimit?: number; rateLimitCount?: number; rateLimitMinutes?: number }) { return campaignRepo.getAccountRateLimitStatus(accountId, actionName, limitConfig) }
+  getAccountRateLimitStatus(accountId: number, actionCode: string, actionName: string, limitConfig?: ActionLimitConfig) {
+    return campaignRepo.getAccountRateLimitStatus(accountId, actionCode, actionName, limitConfig)
+  }
+
+  // =========== ACCOUNT ACTION LIMITS / ERRORS ===========
+  listAccountActions(flatformType?: string) { return accountActionRepo.listAccountActions(flatformType) }
+  listAccountActionOverview(accountId: number) { return accountActionRepo.listAccountActionOverview(accountId) }
+  getAccountActionStatus(accountId: number, actionCode: string) { return accountActionRepo.getAccountActionStatus(accountId, actionCode) }
+  disableAccountActions(accountId: number, actionCodes: string[], minutes?: number | null) { return accountActionRepo.disableAccountActions(accountId, actionCodes, minutes) }
+  enableDueAccountActions() { return accountActionRepo.enableDueAccountActions() }
+  getErrorPolicy(errorCode: string) { return errorPolicyRepo.getErrorPolicy(errorCode) }
+  listErrorPolicies() { return errorPolicyRepo.listErrorPolicies() }
+  incrementConsecutiveError(accountId: number, actionCode: string | null | undefined, errorCode: string) {
+    return errorPolicyRepo.incrementConsecutiveError(accountId, actionCode, errorCode)
+  }
+  resetConsecutiveErrors(accountId: number, actionCode?: string | null) {
+    return errorPolicyRepo.resetConsecutiveErrors(accountId, actionCode)
+  }
 
   // =========== CONTACTS ===========
   listContacts(accountId: number, contactType?: ContactType) { return accountContactRepo.listContacts(accountId, contactType) }

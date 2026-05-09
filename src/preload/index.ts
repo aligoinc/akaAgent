@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, AuthUser } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, AuthUser, AccountActionOverview, AutoAccountAction } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -41,6 +41,9 @@ const electronAPI = {
 
   deleteAccount: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_ACCOUNT, id),
+
+  listAccountActions: (flatformType?: string): Promise<AutoAccountAction[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, flatformType),
 
   // Campaign Actions
   listCampaignActions: (): Promise<CampaignAction[]> =>
@@ -177,6 +180,9 @@ const electronAPI = {
 
   reloadAccountPage: (accountId: number, flatformType: string): Promise<{ success: boolean; reason?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, accountId, flatformType),
+
+  getAccountActionOverview: (accountId: number): Promise<AccountActionOverview[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, accountId),
 
   onAccountStatusUpdated: (callback: () => void): () => void => {
     const handler = () => callback()

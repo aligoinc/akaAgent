@@ -333,8 +333,10 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
         'Campaign ID': selectedCampaign.id,
         'Account ID': detail.accountId ?? selectedCampaign.accountId ?? '',
         'Input Data ID': detail.inputDataId ?? '',
+        'Action Code': detail.actionCode ?? '',
         'Hành động': detail.actionName,
         'Trạng thái': detail.status,
+        'Error Code': detail.errorCode ?? '',
         'Chi tiết': detail.log || '',
         'Post URL': detail.postUrl || '',
         'Data JSON': detail.data ? JSON.stringify(detail.data) : ''
@@ -348,7 +350,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
         { wch: 12 },
         { wch: 14 },
         { wch: 18 },
+        { wch: 18 },
         { wch: 14 },
+        { wch: 18 },
         { wch: 60 },
         { wch: 36 },
         { wch: 50 }
@@ -465,6 +469,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
               <div className="campaign-col col-account">Tài khoản</div>
               <div className="campaign-col col-status">Trạng thái</div>
               <div className="campaign-col col-schedule">Lịch chạy</div>
+              <div className="campaign-col col-note">Ghi chú</div>
               <div className="campaign-col col-ops"></div>
             </div>
             {filteredCampaigns.map(campaign => (
@@ -481,7 +486,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                     onChange={() => toggleSelectOne(campaign.id)}
                   />
                 </div>
-                <div className="campaign-col col-name">{campaign.name}</div>
+                <div className="campaign-col col-name">
+                  <div>{campaign.name}</div>
+                </div>
                 <div className="campaign-col col-action">{campaign.actionName || campaign.actionId}</div>
                 <div className="campaign-col col-account">{campaign.accountName || '-'}</div>
                 <div className="campaign-col col-status">
@@ -491,6 +498,11 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                 </div>
                 <div className="campaign-col col-schedule">
                   {campaign.schedule ? new Date(campaign.schedule).toLocaleString('vi-VN') : '-'}
+                </div>
+                <div className="campaign-col col-note">
+                  {campaign.note ? (
+                    <span className="campaign-note-text">{campaign.note}</span>
+                  ) : '-'}
                 </div>
                 <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
                   {(campaign.status === 'đang chạy' || campaign.status === 'chờ xử lý') && (

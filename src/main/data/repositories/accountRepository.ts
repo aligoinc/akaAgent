@@ -5,6 +5,20 @@ import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
 
+export async function getAccount(id: number): Promise<AutoAccount | null> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_accounts')
+    .select('*')
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to get account: ${error.message}`)
+  return data ? mapAccountFromDB(data) : null
+}
+
 export async function listAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()

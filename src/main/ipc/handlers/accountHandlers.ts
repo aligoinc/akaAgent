@@ -23,6 +23,14 @@ export function registerAccountHandlers(supabase: SupabaseService, webviewRegist
     return supabase.deleteAccount(id)
   })
 
+  ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, async (_, flatformType?: string) => {
+    return supabase.listAccountActions(flatformType)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, async (_, accountId: number) => {
+    return supabase.listAccountActionOverview(accountId)
+  })
+
   ipcMain.handle(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, async (_, accountId: number, flatformType: string) => {
     const wcId = webviewRegistry.getWebContentsId(accountId)
     if (!wcId) {

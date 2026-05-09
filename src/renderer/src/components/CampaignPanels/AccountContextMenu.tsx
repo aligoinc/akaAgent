@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
-  Database, Users, FolderOpen, ChevronRight
+  Database, Users, FolderOpen, ChevronRight, Info
 } from 'lucide-react'
 import { AutoAccount } from '../../../../shared/types'
 
@@ -25,6 +25,7 @@ interface AccountContextMenuProps {
   onPause: (account: AutoAccount) => void
   onEnable: (account: AutoAccount) => void
   onDisable: (account: AutoAccount) => void
+  onViewInfo: (account: AutoAccount) => void
   onEdit: (account: AutoAccount) => void
   onDelete: (account: AutoAccount) => void
   onFilterCampaigns: (accountId: number) => void
@@ -43,6 +44,7 @@ export default function AccountContextMenu({
   onPause,
   onEnable,
   onDisable,
+  onViewInfo,
   onEdit,
   onDelete,
   onFilterCampaigns,
@@ -98,6 +100,16 @@ export default function AccountContextMenu({
       className="context-menu animate-fadeIn"
       style={{ left: position.x, top: position.y }}
     >
+      <div className="context-menu-group">
+        <button
+          className="context-menu-item"
+          onClick={() => handleAction(() => onViewInfo(account))}
+        >
+          <Info size={14} />
+          <span>Thông tin tài khoản</span>
+        </button>
+      </div>
+
       {/* Browser Group */}
       <div className="context-menu-group">
         {!isDisabled && (

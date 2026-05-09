@@ -1,59 +1,106 @@
-import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit3, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Edit3, Plus, Save, Trash2, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
-import { CampaignAction } from '../../../../shared/types'
+import { AutoAccountAction, CampaignAction } from '../../../../shared/types'
 import { WorkflowDef } from '../../../../shared/v2Types'
 
 interface ActionManagerModalProps {
   onClose: () => void
 }
 
+interface ActionFormData {
+  id: string
+  name: string
+  flatformType: string
+  workflowId: number | ''
+  limitCheckActionCodes: string[]
+  isActive: boolean
+}
+
+const emptyForm: ActionFormData = {
+  id: '',
+  name: '',
+  flatformType: 'facebook',
+  workflowId: '',
+  limitCheckActionCodes: [],
+  isActive: true
+}
+
+const formatActionCodes = (codes?: string[]) => {
+  return codes && codes.length > 0 ? codes.join(', ') : '-'
+}
+
 export default function ActionManagerModal({ onClose }: ActionManagerModalProps) {
-  const { allCampaignActions, loadAllCampaignActions, createCampaignAction, updateCampaignAction, deleteCampaignAction } = useCampaignStore()
+  const {
+    allCampaignActions,
+    loadAllCampaignActions,
+    createCampaignAction,
+    updateCampaignAction,
+    deleteCampaignAction
+  } = useCampaignStore()
 
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([])
+  const [accountActions, setAccountActions] = useState<AutoAccountAction[]>([])
   const [editingAction, setEditingAction] = useState<CampaignAction | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState<{ id: string; name: string; flatformType: string; workflowId: number | ''; isActive: boolean }>({
-    id: '',
-    name: '',
-    flatformType: 'facebook',
-    workflowId: '',
-    isActive: true
-  })
+  const [formData, setFormData] = useState<ActionFormData>(emptyForm)
+  const [isEditing, setIsEditing] = useState(false)
 
   useEffect(() => {
     loadAllCampaignActions()
 
-    // Load workflows v2 for the dropdown
     if (window.electronAPI?.v2?.listWorkflows) {
       window.electronAPI.v2.listWorkflows().then(setWorkflows).catch(console.error)
     }
+    if (window.electronAPI?.listAccountActions) {
+      window.electronAPI.listAccountActions().then(setAccountActions).catch(console.error)
+    }
   }, [loadAllCampaignActions])
 
-  const handleAddNew = () => {
+  const visibleAccountActions = useMemo(() => {
+    return accountActions.filter(action => action.flatformType === formData.flatformType)
+  }, [accountActions, formData.flatformType])
+
+  const selectedCodeSet = useMemo(() => new Set(formData.limitCheckActionCodes), [formData.limitCheckActionCodes])
+
+  const openCreateForm = () => {
     setEditingAction(null)
-    setFormData({
-      id: '',
-      name: '',
-      flatformType: 'facebook',
-      workflowId: '',
-      isActive: true
-    })
-    setShowForm(true)
+    setFormData(emptyForm)
+    setIsEditing(true)
   }
 
-  const handleEdit = (action: CampaignAction) => {
+  const openEditForm = (action: CampaignAction) => {
     setEditingAction(action)
     setFormData({
       id: action.id,
       name: action.name,
       flatformType: action.flatformType,
       workflowId: action.workflowId ?? '',
+      limitCheckActionCodes: action.limitCheckActionCodes || [],
       isActive: action.isActive
     })
-    setShowForm(true)
+    setIsEditing(true)
+  }
+
+  const handlePlatformChange = (flatformType: string) => {
+    const allowedCodes = new Set(accountActions.filter(action => action.flatformType === flatformType).map(action => action.code))
+    setFormData(prev => ({
+      ...prev,
+      flatformType,
+      limitCheckActionCodes: prev.limitCheckActionCodes.filter(code => allowedCodes.has(code))
+    }))
+  }
+
+  const toggleLimitCode = (code: string) => {
+    setFormData(prev => {
+      const exists = prev.limitCheckActionCodes.includes(code)
+      return {
+        ...prev,
+        limitCheckActionCodes: exists
+          ? prev.limitCheckActionCodes.filter(item => item !== code)
+          : [...prev.limitCheckActionCodes, code]
+      }
+    })
   }
 
   const handleDelete = (action: CampaignAction) => {
@@ -62,9 +109,14 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       async () => {
         try {
           await deleteCampaignAction(action.id)
+          if (editingAction?.id === action.id) {
+            setEditingAction(null)
+            setIsEditing(false)
+            setFormData(emptyForm)
+          }
         } catch (err) {
           console.error('Failed to delete action:', err)
-          useUiStore.getState().showAlert('', 'error')
+          useUiStore.getState().showAlert('Không thể xoá hành động chiến dịch.', 'error')
         }
       },
       { title: 'Xoá hành động', confirmText: 'Xoá', variant: 'danger' }
@@ -73,180 +125,205 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
 
   const handleSubmit = async () => {
     if (!formData.id.trim() || !formData.name.trim()) {
-      useUiStore.getState().showAlert('', 'error')
+      useUiStore.getState().showAlert('Vui lòng nhập ID và tên hành động.', 'error')
       return
     }
 
     const payload: Partial<CampaignAction> = {
-      id: formData.id,
-      name: formData.name,
+      id: formData.id.trim(),
+      name: formData.name.trim(),
       flatformType: formData.flatformType,
       isActive: formData.isActive,
-      workflowId: formData.workflowId === '' ? undefined : Number(formData.workflowId)
+      workflowId: formData.workflowId === '' ? undefined : Number(formData.workflowId),
+      limitCheckActionCodes: formData.limitCheckActionCodes
     }
 
     try {
       if (editingAction) {
         await updateCampaignAction(editingAction.id, payload)
       } else {
-        await createCampaignAction(payload)
+        const created = await createCampaignAction(payload)
+        setEditingAction(created)
       }
-      setShowForm(false)
+      setIsEditing(false)
     } catch (err) {
       console.error('Failed to save action:', err)
-      useUiStore.getState().showAlert('', 'error')
+      useUiStore.getState().showAlert('Không thể lưu hành động chiến dịch.', 'error')
     }
   }
 
   return (
     <div className="modal-overlay">
-      <div className="campaign-full-modal" style={{ width: '800px', height: '600px' }}>
-        <div className="campaign-modal-top" style={{ height: 'auto', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-default)' }}>
-          <h2 className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>Quản lý Hành động Chiến dịch</h2>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
+      <div className="action-manager-modal">
+        <div className="action-manager-header">
+          <div>
+            <h2>Quản lý Hành động Chiến dịch</h2>
+            <span>{allCampaignActions.length} hành động</span>
+          </div>
+          <button className="btn-icon" onClick={onClose} title="Đóng">
+            <X size={18} />
+          </button>
         </div>
 
-        <div className="campaign-modal-body" style={{ flexDirection: 'row', overflow: 'hidden' }}>
-
-          {/* Main List */}
-          <div className="campaign-grid-container" style={{ flex: 1, padding: 16 }}>
-            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
-              <span className="text-secondary" style={{ fontSize: 13 }}>Danh sách hành động trong hệ thống</span>
-              <button className="btn btn-primary" onClick={handleAddNew} style={{ padding: '4px 12px', fontSize: 12 }}>
-                <Plus size={14} style={{ marginRight: 4 }} /> Thêm Hành động
+        <div className="action-manager-body">
+          <div className="action-manager-list-pane">
+            <div className="action-manager-list-toolbar">
+              <strong>Danh sách</strong>
+              <button className="btn btn-primary btn-sm" onClick={openCreateForm}>
+                <Plus size={13} /> Thêm
               </button>
             </div>
 
-            <table className="campaign-grid">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Tên</th>
-                  <th>Nền tảng</th>
-                  <th>Workflow</th>
-                  <th>Trạng thái</th>
-                  <th style={{ width: 60, textAlign: 'center' }}>Ops</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allCampaignActions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center text-muted" style={{ padding: 24 }}>Chưa có hành động nào</td>
-                  </tr>
-                ) : (
-                  allCampaignActions.map(action => (
-                    <tr key={action.id}>
-                      <td>{action.id}</td>
-                      <td style={{ fontWeight: 500 }}>{action.name}</td>
-                      <td><span className="badge">{action.flatformType}</span></td>
-                      <td>
-                        {action.workflowId ? (
-                           <span className="text-success" style={{ fontSize: 11 }}>Đã liên kết</span>
-                        ) : (
-                          <span className="text-error" style={{ fontSize: 11 }}>Chưa liên kết</span>
-                        )}
-                      </td>
-                      <td>
-                        <span style={{ color: action.isActive ? 'var(--accent-success)' : 'var(--text-tertiary)' }}>
-                          {action.isActive ? 'Hoạt động' : 'Đã tắt'}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                          <button className="btn-icon" onClick={() => handleEdit(action)} title="Sửa">
-                            <Edit3 size={14} />
-                          </button>
-                          <button className="btn-icon" onClick={() => handleDelete(action)} title="Xoá">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <div className="action-manager-list">
+              {allCampaignActions.length === 0 ? (
+                <div className="action-manager-empty">Chưa có hành động nào</div>
+              ) : (
+                allCampaignActions.map(action => (
+                  <button
+                    key={action.id}
+                    className={`action-manager-list-item ${editingAction?.id === action.id ? 'active' : ''}`}
+                    onClick={() => openEditForm(action)}
+                  >
+                    <div className="action-manager-list-item-main">
+                      <span>{action.name}</span>
+                      <code>{action.id}</code>
+                    </div>
+                    <div className="action-manager-list-item-meta">
+                      <span>{action.flatformType}</span>
+                      <span className={action.isActive ? 'text-success' : 'text-muted'}>
+                        {action.isActive ? 'Bật' : 'Tắt'}
+                      </span>
+                    </div>
+                    <div className="action-manager-code-line">
+                      {formatActionCodes(action.limitCheckActionCodes)}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
 
-          {/* Form Panel (Side) */}
-          {showForm && (
-            <div className="campaign-settings-panel" style={{ width: 300, borderLeft: '1px solid var(--border-default)', borderRight: 'none' }}>
-              <h3 className="section-title">{editingAction ? 'Sửa hành động' : 'Têm hành động'}</h3>
-
-              <div className="form-group row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                <label>ID Hành động (Mã duy nhất, không dấu):</label>
-                <input
-                  type="text"
-                  value={formData.id}
-                  onChange={e => setFormData(prev => ({ ...prev, id: e.target.value }))}
-                  className="panel-input"
-                  style={{ width: '100%' }}
-                  disabled={!!editingAction}
-                  placeholder="vd: facebook_like"
-                />
+          <div className="action-manager-editor-pane">
+            {!isEditing ? (
+              <div className="action-manager-editor-empty">
+                <Edit3 size={22} />
+                <span>Chọn một hành động để sửa hoặc tạo hành động mới.</span>
               </div>
+            ) : (
+              <>
+                <div className="action-manager-editor-header">
+                  <div>
+                    <h3>{editingAction ? 'Sửa hành động' : 'Thêm hành động'}</h3>
+                    <span>{formData.id || 'Hành động mới'}</span>
+                  </div>
+                  {editingAction && (
+                    <button className="btn-icon text-error" onClick={() => handleDelete(editingAction)} title="Xoá">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
 
-              <div className="form-group row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                <label>Tên Hành động:</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="panel-input"
-                  style={{ width: '100%' }}
-                  placeholder="vd: Facebook - Thích bài viết"
-                />
-              </div>
+                <div className="action-manager-form">
+                  <div className="action-manager-form-grid">
+                    <div className="form-group">
+                      <label>ID</label>
+                      <input
+                        type="text"
+                        value={formData.id}
+                        onChange={e => setFormData(prev => ({ ...prev, id: e.target.value }))}
+                        className="panel-input"
+                        disabled={!!editingAction}
+                        placeholder="facebook_group_post"
+                      />
+                    </div>
 
-              <div className="form-group row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                <label>Nền tảng:</label>
-                <select
-                  value={formData.flatformType}
-                  onChange={e => setFormData(prev => ({ ...prev, flatformType: e.target.value }))}
-                  className="panel-input"
-                  style={{ width: '100%' }}
-                >
-                  <option value="facebook">Facebook</option>
-                  <option value="zalo">Zalo</option>
-                  <option value="tiktok">TikTok</option>
-                  <option value="shopee">Shopee</option>
-                  <option value="other">Khác</option>
-                </select>
-              </div>
+                    <div className="form-group">
+                      <label>Tên</label>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                        className="panel-input"
+                        placeholder="Facebook - Đăng bài vào group"
+                      />
+                    </div>
 
-              <div className="form-group row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                <label>Workflow Liên Kết:</label>
-                <select
-                  value={formData.workflowId}
-                  onChange={e => setFormData(prev => ({ ...prev, workflowId: e.target.value === '' ? '' : Number(e.target.value) }))}
-                  className="panel-input"
-                  style={{ width: '100%' }}
-                >
-                  <option value="">-- Chọn Workflow --</option>
-                  {workflows.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
-                  ))}
-                </select>
-                <span className="text-secondary" style={{ fontSize: 10, marginTop: 4 }}>
-                  Workflow v2 sẽ chạy khi hành động này được gọi.
-                </span>
-              </div>
+                    <div className="form-group">
+                      <label>Nền tảng</label>
+                      <select
+                        value={formData.flatformType}
+                        onChange={e => handlePlatformChange(e.target.value)}
+                        className="panel-input"
+                      >
+                        <option value="facebook">Facebook</option>
+                        <option value="zalo">Zalo</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="shopee">Shopee</option>
+                        <option value="other">Khác</option>
+                      </select>
+                    </div>
 
-              <div className="form-group row" style={{ marginTop: 16 }}>
-                <label>Đang hoạt động:</label>
-                <input
-                  type="checkbox"
-                  checked={formData.isActive}
-                  onChange={e => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
-                />
-              </div>
+                    <div className="form-group">
+                      <label>Workflow</label>
+                      <select
+                        value={formData.workflowId}
+                        onChange={e => setFormData(prev => ({ ...prev, workflowId: e.target.value === '' ? '' : Number(e.target.value) }))}
+                        className="panel-input"
+                      >
+                        <option value="">Chưa liên kết</option>
+                        {workflows.map(workflow => (
+                          <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
-              <div style={{ display: 'flex', gap: 8, marginTop: 24, justifyContent: 'flex-end' }}>
-                <button className="btn btn-ghost" onClick={() => setShowForm(false)}>Huỷ</button>
-                <button className="btn btn-primary" onClick={handleSubmit}>Lưu Hành Động</button>
-              </div>
-            </div>
-          )}
+                  <label className="action-manager-toggle">
+                    <input
+                      type="checkbox"
+                      checked={formData.isActive}
+                      onChange={e => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                    />
+                    <span>Đang hoạt động</span>
+                  </label>
+
+                  <div className="action-code-picker-block">
+                    <div className="action-code-picker-title">
+                      <strong>Check giới hạn</strong>
+                      <span>{formData.limitCheckActionCodes.length} action</span>
+                    </div>
+                    <div className="action-code-picker">
+                      {visibleAccountActions.length === 0 ? (
+                        <div className="action-manager-empty">Chưa có action code cho nền tảng này</div>
+                      ) : (
+                        visibleAccountActions.map(action => (
+                          <label
+                            key={action.code}
+                            className={`action-code-option ${selectedCodeSet.has(action.code) ? 'selected' : ''}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedCodeSet.has(action.code)}
+                              onChange={() => toggleLimitCode(action.code)}
+                            />
+                            <span>{action.name}</span>
+                            <code>{action.code}</code>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="action-manager-footer">
+                  <button className="btn btn-ghost" onClick={() => setIsEditing(false)}>Huỷ</button>
+                  <button className="btn btn-primary" onClick={handleSubmit}>
+                    <Save size={14} /> Lưu
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

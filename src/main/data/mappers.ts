@@ -1,4 +1,4 @@
-import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, ContactType } from '../../shared/types'
+import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   return {
@@ -23,8 +23,58 @@ export function mapCampaignActionFromDB(row: Record<string, unknown>): CampaignA
     flatformType: row.flatform_type as string,
     isActive: row.is_active as boolean,
     workflowId: row.workflow_id as number | undefined,
+    limitCheckActionCodes: Array.isArray(row.limit_check_action_codes) ? row.limit_check_action_codes as string[] : [],
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string
+  }
+}
+
+export function mapAutoAccountActionFromDB(row: Record<string, unknown>): AutoAccountAction {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    code: row.code as string,
+    flatformType: row.flatform_type as string,
+    isActive: row.is_active as boolean,
+    isDelete: row.is_delete as boolean,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapAutoAccountActionStatusFromDB(row: Record<string, unknown>): AutoAccountActionStatus {
+  return {
+    id: row.id as number,
+    accountId: row.account_id as number,
+    actionCode: row.action_code as string,
+    countActionInDay: row.count_action_in_day as number,
+    countDate: row.count_date as string,
+    isDisable: row.is_disable as boolean,
+    dateEnable: (row.date_enable as string | null) ?? null,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapAutoErrorPolicyFromDB(row: Record<string, unknown>): AutoErrorPolicy {
+  return {
+    id: row.id as number,
+    errorType: row.error_type as string,
+    errorName: row.error_name as string,
+    errorDesc: (row.error_desc as string | null) ?? null,
+    errorCode: row.error_code as string,
+    errorElement: (row.error_element as string | null) ?? null,
+    notiRunningProcess: (row.noti_running_process as string | null) ?? null,
+    notiCampaign: (row.noti_campaign as string | null) ?? null,
+    updateStatusAccount: (row.update_status_account as string | null) ?? null,
+    updateStatusCampaign: (row.update_status_campaign as string | null) ?? null,
+    disableActionCodes: Array.isArray(row.disable_action_codes) ? row.disable_action_codes as string[] : [],
+    timeDisableActions: (row.time_disable_actions as number | null) ?? null,
+    countConsecutiveErrors: (row.count_consecutive_errors as number | null) ?? null,
+    isActive: row.is_active as boolean,
+    isDelete: row.is_delete as boolean,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
   }
 }
 
@@ -47,6 +97,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     extraSettings: (row.extra_settings as Campaign['extraSettings']) || {},
     images: (row.images as string[]) || [],
     log: (row.log as string) || '',
+    note: (row.note as string | null) ?? null,
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,
@@ -115,8 +166,10 @@ export function mapCampaignDetailFromDB(row: Record<string, unknown>): CampaignD
     inputDataId: (row.input_data_id as number | null) ?? null,
     campaignId: row.campaign_id as number,
     accountId: row.account_id as number | undefined,
+    actionCode: (row.action_code as string | null) ?? null,
     actionName: row.action_name as string,
     status: row.status as CampaignDetailStatus,
+    errorCode: (row.error_code as string | null) ?? null,
     log: row.log as string | undefined,
     data: row.data as Record<string, unknown> | undefined,
     postUrl: row.post_url as string | undefined,
