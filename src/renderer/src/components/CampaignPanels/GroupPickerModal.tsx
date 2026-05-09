@@ -5,6 +5,7 @@ interface Contact {
   id: number
   name: string
   uid?: string
+  url?: string
   type?: string
 }
 
