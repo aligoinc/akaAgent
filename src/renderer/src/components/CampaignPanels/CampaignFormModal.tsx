@@ -20,6 +20,8 @@ interface StepDef {
 }
 
 type ActionLimitForm = Required<Pick<ActionLimitConfig, 'dailyLimit' | 'rateLimitCount' | 'rateLimitMinutes'>>
+type ImageOption = 'none' | 'all' | 'random'
+type CommentImageOption = 'none' | 'all'
 
 const DEFAULT_ACTION_LIMIT: ActionLimitForm = {
   dailyLimit: 30,
@@ -188,6 +190,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   }
 
+  const savedCommentImages = (campaign?.extraSettings?.commentImages || []).slice(0, 1)
+  const savedCommentImageOption: CommentImageOption =
+    (campaign?.extraSettings?.commentImageOption && campaign.extraSettings.commentImageOption !== 'none' && savedCommentImages.length > 0)
+      ? 'all'
+      : 'none'
+
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
     actionId: campaign?.actionId || '',
@@ -228,6 +236,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     imageOption: (campaign?.extraSettings?.imageOption || 'none') as 'none' | 'all' | 'random',
     randomImageCount: campaign?.extraSettings?.randomImageCount || 3,
     images: campaign?.images || [] as string[],
+    commentImageOption: savedCommentImageOption,
+    commentImages: savedCommentImages,
     splitDataAcrossAccounts: false,
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
@@ -257,6 +267,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     findUidTargetCampaignIds: campaign?.extraSettings?.findUidTargetCampaignIds || [] as number[]
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const commentImageInputRef = useRef<HTMLInputElement>(null)
 
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
@@ -281,6 +292,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               title: 'Cấu hình comment',
               fields: [
                 { key: 'commentContent', label: 'Nội dung comment' },
+                { key: 'commentImages', label: 'Ảnh comment' },
                 { key: 'postsPerTarget', label: 'Số bài mỗi mục tiêu' },
                 { key: 'postKeywordFilter', label: 'Lọc từ khoá' },
                 { key: 'enablePostLike', label: 'Like bài' }
@@ -435,13 +447,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       case 'rateLimitCount': return formData.rateLimitCount >= 0
       case 'rateLimitMinutes': return formData.rateLimitMinutes >= 0
       case 'content': return isFindDataGroupCampaign ? true : formData.content.trim().length > 0
-      case 'commentContent': return formData.commentContent.trim().length > 0
+      case 'commentContent': return formData.commentContent.trim().length > 0 || (formData.commentImageOption !== 'none' && formData.commentImages.length > 0)
       case 'postsPerTarget': return formData.postsPerTarget > 0
       case 'postKeywordFilter': return true
       case 'enablePostLike': return true
       case 'sharePost': return true  // optional, always "complete"
       case 'enableComment': return true  // optional
       case 'images': return true  // optional
+      case 'commentImages': return true  // optional
       case 'findDataScope': return formData.isFindInPost || formData.isFindInComment
       case 'findDataContent': return true
       case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid
@@ -524,8 +537,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       showAlert('Vui lòng thêm ít nhất một bạn bè hoặc UID vào danh sách data.', 'error')
       return
     }
-    if (isCommentSeedingCampaign && !formData.commentContent.trim()) {
-      showAlert('Vui lòng nhập nội dung comment.', 'error')
+    const hasCommentImages = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
+    if (isCommentSeedingCampaign && !formData.commentContent.trim() && !hasCommentImages) {
+      showAlert('Vui lòng nhập nội dung comment hoặc chọn ảnh comment.', 'error')
       return
     }
     if (isCommentSeedingCampaign && details.length === 0) {
@@ -614,6 +628,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             },
             imageOption: formData.imageOption,
             randomImageCount: formData.randomImageCount,
+            commentImageOption: formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none',
+            commentImages: formData.commentImages.slice(0, 1),
             leaveGroupOnPendingApproval: formData.leaveGroupOnPendingApproval,
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
@@ -851,6 +867,175 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     })
   }
 
+  const handleImagePickerChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: 'post' | 'comment'
+  ) => {
+    const files = Array.from(e.target.files || [])
+    const paths = files
+      .map(f => {
+        try {
+          return window.electronAPI.getPathForFile(f)
+        } catch {
+          return ''
+        }
+      })
+      .filter(Boolean)
+
+    if (paths.length < files.length) {
+      showAlert('Một số ảnh không xác định được đường dẫn và đã bị bỏ qua.', 'error')
+    }
+    if (paths.length > 0) {
+      setFormData(p => target === 'comment'
+        ? ({ ...p, commentImages: paths.slice(0, 1), commentImageOption: 'all' })
+        : ({ ...p, images: [...p.images, ...paths] })
+      )
+    }
+    e.target.value = ''
+  }
+
+  const renderImagePicker = (target: 'post' | 'comment', title: string) => {
+    const isComment = target === 'comment'
+    const option = isComment ? formData.commentImageOption : formData.imageOption
+    const randomCount = formData.randomImageCount
+    const images = isComment ? formData.commentImages : formData.images
+    const inputRef = isComment ? commentImageInputRef : imageInputRef
+    const radioName = isComment ? 'commentImageOption' : 'imageOption'
+
+    const setOption = (value: ImageOption) => {
+      setFormData(p => isComment
+        ? ({ ...p, commentImageOption: value === 'none' ? 'none' : 'all' })
+        : ({ ...p, imageOption: value })
+      )
+    }
+
+    const setRandomCount = (value: number) => {
+      const count = Math.max(1, value || 1)
+      setFormData(p => ({ ...p, randomImageCount: count }))
+    }
+
+    const removeImage = (index: number) => {
+      setFormData(p => isComment
+        ? ({ ...p, commentImages: p.commentImages.filter((_, i) => i !== index) })
+        : ({ ...p, images: p.images.filter((_, i) => i !== index) })
+      )
+    }
+
+    return (
+      <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>{title}</div>
+        {isComment && (
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: -8, marginBottom: 16 }}>
+            Lưu ý: Facebook chỉ cho phép comment 1 ảnh.
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+          <div style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => inputRef.current?.click()}
+              style={{ width: 'fit-content', opacity: option === 'none' ? 0.6 : 1 }}
+              disabled={option === 'none'}
+            >
+              Tải hoặc chọn ảnh
+            </button>
+            <input
+              type="file"
+              ref={inputRef}
+              style={{ display: 'none' }}
+              accept="image/*"
+              multiple={!isComment}
+              onChange={e => handleImagePickerChange(e, target)}
+            />
+
+            <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+              <label className="schedule-radio-label">
+                <input
+                  type="radio"
+                  name={radioName}
+                  checked={option === 'none'}
+                  onChange={() => setOption('none')}
+                />
+                <span>Không gửi ảnh</span>
+              </label>
+              <label className="schedule-radio-label">
+                <input
+                  type="radio"
+                  name={radioName}
+                  checked={option === 'all'}
+                  onChange={() => setOption('all')}
+                />
+                <span>Gửi ảnh đã chọn</span>
+              </label>
+              {!isComment && <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <label className="schedule-radio-label">
+                  <input
+                    type="radio"
+                    name={radioName}
+                    checked={option === 'random'}
+                    onChange={() => setOption('random')}
+                  />
+                  <span>Gửi ngẫu nhiên số ảnh trong ảnh đã chọn</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={randomCount}
+                  onChange={e => setRandomCount(Number(e.target.value))}
+                  className="stepper-input"
+                  style={{ width: 60, padding: '4px 8px' }}
+                  disabled={option !== 'random'}
+                />
+              </div>}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Ảnh đã chọn</div>
+            <div className="stepper-grid-container" style={{ margin: 0, maxHeight: 300, overflowY: 'auto' }}>
+              <table className="campaign-grid">
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                  <tr>
+                    <th style={{ width: 50, textAlign: 'center' }}>STT</th>
+                    <th>Link</th>
+                    <th style={{ width: 40, textAlign: 'center' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {images.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="text-center text-muted" style={{ padding: '24px 0' }}>Chưa có ảnh nào được chọn</td>
+                    </tr>
+                  ) : (
+                    images.map((img, idx) => (
+                      <tr key={`${target}-${idx}-${img}`}>
+                        <td className="text-center">{idx + 1}</td>
+                        <td className="text-truncate" style={{ maxWidth: 200 }} title={img}>{img.split(/[\\/]/).pop() || img}</td>
+                        <td className="text-center">
+                          <button
+                            type="button"
+                            className="btn-icon text-error action-btn"
+                            style={{ display: 'inline-flex' }}
+                            onClick={() => removeImage(idx)}
+                            title="Xóa"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const renderFindDataGroupSettings = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="extra-comment-options">
@@ -1045,6 +1230,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           Mẹo: tách nhiều nội dung bằng dấu <code>|</code> để tránh lặp cùng một comment.
         </div>
       </div>
+
+      {renderImagePicker('comment', 'Ảnh comment')}
 
       <div className="stepper-form-row">
         <div className="stepper-form-group half">
@@ -1574,131 +1761,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     </div>
                   </div>
 
-                  {/* Media section */}
-                  <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>Media</div>
-
-                    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-                      {/* Left side */}
-                      <div style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => imageInputRef.current?.click()}
-                          style={{ width: 'fit-content', opacity: formData.imageOption === 'none' ? 0.6 : 1 }}
-                          disabled={formData.imageOption === 'none'}
-                        >
-                          Tải hoặc chọn ảnh
-                        </button>
-                        <input
-                          type="file"
-                          ref={imageInputRef}
-                          style={{ display: 'none' }}
-                          accept="image/*"
-                          multiple
-                          onChange={e => {
-                            const files = Array.from(e.target.files || [])
-                            const paths = files
-                              .map(f => {
-                                try {
-                                  return window.electronAPI.getPathForFile(f)
-                                } catch {
-                                  return ''
-                                }
-                              })
-                              .filter(Boolean)
-                            if (paths.length < files.length) {
-                              showAlert('Một số ảnh không xác định được đường dẫn và đã bị bỏ qua.', 'error')
-                            }
-                            if (paths.length > 0) {
-                              setFormData(p => ({ ...p, images: [...p.images, ...paths] }))
-                            }
-                            e.target.value = ''
-                          }}
-                        />
-
-                        <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
-                          <label className="schedule-radio-label">
-                            <input
-                              type="radio"
-                              name="imageOption"
-                              checked={formData.imageOption === 'none'}
-                              onChange={() => setFormData(p => ({ ...p, imageOption: 'none' }))}
-                            />
-                            <span>Không gửi ảnh</span>
-                          </label>
-                          <label className="schedule-radio-label">
-                            <input
-                              type="radio"
-                              name="imageOption"
-                              checked={formData.imageOption === 'all'}
-                              onChange={() => setFormData(p => ({ ...p, imageOption: 'all' }))}
-                            />
-                            <span>Gửi ảnh đã chọn</span>
-                          </label>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <label className="schedule-radio-label">
-                              <input
-                                type="radio"
-                                name="imageOption"
-                                checked={formData.imageOption === 'random'}
-                                onChange={() => setFormData(p => ({ ...p, imageOption: 'random' }))}
-                              />
-                              <span>Gửi ngẫu nhiên số ảnh trong ảnh đã chọn</span>
-                            </label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={formData.randomImageCount}
-                              onChange={e => setFormData(p => ({ ...p, randomImageCount: Number(e.target.value) }))}
-                              className="stepper-input"
-                              style={{ width: 60, padding: '4px 8px' }}
-                              disabled={formData.imageOption !== 'random'}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right side - Table */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Ảnh đã chọn</div>
-                        <div className="stepper-grid-container" style={{ margin: 0, maxHeight: 300, overflowY: 'auto' }}>
-                          <table className="campaign-grid">
-                            <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-                              <tr>
-                                <th style={{ width: 50, textAlign: 'center' }}>STT</th>
-                                <th>Link</th>
-                                <th style={{ width: 40, textAlign: 'center' }}></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {formData.images.length === 0 ? (
-                                <tr>
-                                  <td colSpan={3} className="text-center text-muted" style={{ padding: '24px 0' }}>Chưa có ảnh nào được chọn</td>
-                                </tr>
-                              ) : (
-                                formData.images.map((img, idx) => (
-                                  <tr key={idx}>
-                                    <td className="text-center">{idx + 1}</td>
-                                    <td className="text-truncate" style={{ maxWidth: 200 }} title={img}>{img.split(/[\\/]/).pop() || img}</td>
-                                    <td className="text-center">
-                                      <button
-                                        className="btn-icon text-error action-btn"
-                                        style={{ display: 'inline-flex' }}
-                                        onClick={() => setFormData(p => ({ ...p, images: p.images.filter((_, i) => i !== idx) }))}
-                                        title="Xóa"
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  {renderImagePicker('post', 'Media')}
                     </>
                   )}
                 </div>
@@ -1822,6 +1885,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                               Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — comment thứ K trong group dùng nội dung thứ K (lặp lại từ đầu khi hết biến thể).
                             </div>
                           </div>
+
+                          {renderImagePicker('comment', 'Ảnh comment')}
                         </div>
                       )}
 

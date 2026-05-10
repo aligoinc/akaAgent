@@ -814,16 +814,8 @@ export class CampaignScheduler {
     detailIndex: number
   ): Record<string, unknown> {
     const extra = campaign.extraSettings || {}
-    // Resolve images theo imageOption
-    let finalImages: string[] = []
-    const imageOption = extra.imageOption || 'all'
-    const availableImages = campaign.images || []
-    if (imageOption === 'all') finalImages = [...availableImages]
-    else if (imageOption === 'random') {
-      const count = extra.randomImageCount || 3
-      finalImages = [...availableImages].sort(() => 0.5 - Math.random()).slice(0, count)
-    }
-    const validImages = finalImages.filter(fp => fp.startsWith('data:') || existsSync(fp))
+    const validImages = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
+    const validCommentImages = (extra.commentImages || []).filter(fp => this.isUsableImagePath(fp)).slice(0, 1)
 
     // Comment iterations
     const enableComment = extra.enableComment ?? false
@@ -837,9 +829,17 @@ export class CampaignScheduler {
     const postVariants = this.splitContentVariants(campaign.content)
     const commentVariants = this.splitContentVariants(extra.commentContent)
     const selectedPostContent = this.cycleVariant(postVariants, detailIndex)
+    const storedCommentImageOption = String(extra.commentImageOption || 'none')
+    const commentImageOption = storedCommentImageOption === 'none' ? 'none' : 'all'
+    const selectedCommentImages = commentImageOption === 'all' ? validCommentImages : []
+    const commentBatchCount = Math.max(commentIndices.length, Number(extra.postsPerTarget ?? commentCount), 1)
+    const commentImageBatches = Array.from({ length: commentBatchCount }, () =>
+      [...selectedCommentImages]
+    )
     const commentIterations = commentIndices.map((position, k) => ({
       position,
-      text: this.cycleVariant(commentVariants, k)
+      text: this.cycleVariant(commentVariants, k),
+      images: commentImageBatches[k] || []
     }))
 
     return {
@@ -854,6 +854,9 @@ export class CampaignScheduler {
       commentCount,
       commentIterations,
       commentVariants,
+      commentImages: commentImageBatches[0] || [],
+      commentImageBatches,
+      commentImageOption,
       enablePostLike: extra.enablePostLike ?? false,
       postsPerTarget: extra.postsPerTarget ?? commentCount,
       keywordFilter: extra.postKeywordFilter ?? extra.keywordFilter ?? '',
@@ -1010,12 +1013,16 @@ export class CampaignScheduler {
       const out = (s.output as any) || {}
       const position = Number(out.position ?? (i + 1))
       const text = String(out.text ?? '')
-      if (out.commented === false || text.trim().length === 0) continue
+      const imageCount = Number(out.imageCount || 0)
+      if (out.commented === false || (text.trim().length === 0 && imageCount <= 0)) continue
       loggedCommentCount++
       const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
       const target = campaign.actionId === 'facebook_comment_seeding'
         ? this.formatOrdinalPost(loggedCommentCount)
         : (position === 1 ? 'bài của mình' : this.formatOrdinalPost(position))
+      const logText = text.trim().length > 0
+        ? `Đã comment vào ${target}: "${preview}"`
+        : `Đã comment vào ${target}`
       try {
         await this.supabase.createCampaignDetail({
           inputDataId: detail?.id,
@@ -1024,8 +1031,8 @@ export class CampaignScheduler {
           actionCode: 'fb_comment',
           actionName: 'Comment',
           status: 'thành công',
-          log: `Đã comment vào ${target}: "${preview}"`,
-          data: { commentPosition: position, iteration: loggedCommentCount, commentContent: text }
+          log: logText,
+          data: { commentPosition: position, iteration: loggedCommentCount, commentContent: text, commentImageCount: imageCount }
         })
         this.sendLog(`💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
       } catch (err) { console.error('Failed log comment:', err) }
@@ -1314,6 +1321,30 @@ export class CampaignScheduler {
       // Window may be closed
     }
     return updated
+  }
+
+  private resolveImageSelection(
+    availableImages: string[],
+    option: 'none' | 'all' | 'random',
+    randomCount: number
+  ): string[] {
+    const validImages = availableImages.filter(fp => this.isUsableImagePath(fp))
+    return this.selectImagesFromValid(validImages, option, randomCount)
+  }
+
+  private selectImagesFromValid(
+    validImages: string[],
+    option: 'none' | 'all' | 'random',
+    randomCount: number
+  ): string[] {
+    if (option === 'none') return []
+    if (option === 'all') return [...validImages]
+    const count = Math.max(1, randomCount || 1)
+    return [...validImages].sort(() => 0.5 - Math.random()).slice(0, count)
+  }
+
+  private isUsableImagePath(path: string): boolean {
+    return typeof path === 'string' && (path.startsWith('data:') || existsSync(path))
   }
 
   /**

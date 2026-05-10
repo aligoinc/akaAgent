@@ -105,6 +105,8 @@ export interface CampaignExtraSettings {
   commentType?: 'own' | 'others' // comment vào bài mình / bài khác
   commentCount?: number          // số lượng comment (khi commentType = 'others')
   commentContent?: string        // nội dung comment
+  commentImageOption?: 'none' | 'all'
+  commentImages?: string[]        // tối đa 1 ảnh cho mỗi comment
   enablePostLike?: boolean
   postsPerTarget?: number
   postKeywordFilter?: string
