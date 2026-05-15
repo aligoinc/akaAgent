@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import Editor from '@monaco-editor/react'
 import { initMonaco } from '../../lib/monacoSetup'
+import { Save, X } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -47,7 +48,7 @@ export default function CodeEditorDrawer({ open, title, initialCode, hint, onClo
       boxShadow: '-4px 0 16px rgba(0, 0, 0, 0.4)',
       zIndex: 1000, display: 'flex', flexDirection: 'column'
     }}>
-      {/* Header — padding-right 150px để chừa Windows native controls (─ ☐ ✕) */}
+      {/* Header padding-right chừa Windows native controls */}
       <div style={{
         padding: '8px 150px 8px 12px',
         borderBottom: '1px solid var(--border, #2a2a35)',
@@ -60,8 +61,8 @@ export default function CodeEditorDrawer({ open, title, initialCode, hint, onClo
             Reset
           </button>
         )}
-        <button className="btn btn-sm" onClick={() => onSave(code)}>💾 Lưu</button>
-        <button className="btn btn-sm btn-ghost" onClick={onClose} title="Đóng">✕ Đóng</button>
+        <button className="btn btn-sm" onClick={() => onSave(code)}><Save size={13} /> Lưu</button>
+        <button className="btn btn-sm btn-ghost" onClick={onClose} title="Đóng"><X size={13} /> Đóng</button>
       </div>
 
       {/* Hint */}

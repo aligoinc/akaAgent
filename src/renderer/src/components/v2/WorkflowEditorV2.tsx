@@ -8,6 +8,7 @@ import ElementCrudModal from './ElementCrudModal'
 import { useWorkflowV2Store } from '../../stores/workflowV2Store'
 import { useBlockLibraryStore } from '../../stores/blockLibraryStore'
 import { BlockDef, WorkflowDef } from '../../../../shared/v2Types'
+import { FileText, Save, Search, X } from 'lucide-react'
 
 export default function WorkflowEditorV2() {
   const { current: workflow, workflows, loadWorkflows, loadWorkflow, newWorkflow, saveCurrent, selectedNodeId, setVariables, setDefaultVariables } = useWorkflowV2Store()
@@ -36,15 +37,16 @@ export default function WorkflowEditorV2() {
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: 8, padding: '6px 12px', borderBottom: '1px solid var(--border, #2a2a35)', background: 'var(--bg-primary, #0e0e15)', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text, #e0e0e0)' }}>
-          {workflow ? `📝 ${workflow.name}` : 'Workflow Editor v2'}
+        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text, #e0e0e0)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {workflow && <FileText size={14} />}
+          {workflow ? workflow.name : 'Workflow Editor v2'}
         </span>
         {workflow && (
           <button className="btn btn-sm btn-ghost" onClick={() => setEditingMeta(true)}>Sửa meta</button>
         )}
         <div style={{ flex: 1 }} />
-        <button className="btn btn-sm btn-ghost" onClick={() => setShowElementModal(true)}>🔍 Elements</button>
-        <button className="btn btn-sm" onClick={handleSave} disabled={!workflow}>💾 Lưu</button>
+        <button className="btn btn-sm btn-ghost" onClick={() => setShowElementModal(true)}><Search size={13} /> Elements</button>
+        <button className="btn btn-sm" onClick={handleSave} disabled={!workflow}><Save size={13} /> Lưu</button>
       </div>
 
       {/* Body */}
@@ -74,7 +76,7 @@ export default function WorkflowEditorV2() {
           <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 500 }}>
             <div className="modal-header">
               <span className="modal-title">Mở workflow ({workflows.length})</span>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowWorkflowList(false)}>✕</button>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowWorkflowList(false)} title="Đóng"><X size={14} /></button>
             </div>
             <div className="modal-body" style={{ maxHeight: 500, overflowY: 'auto' }}>
               {workflows.length === 0 && <div style={{ color: '#666', textAlign: 'center', padding: 20 }}>Chưa có workflow nào.</div>}
@@ -123,7 +125,7 @@ function WorkflowMetaModal({ workflow, onClose, onSave }: {
       <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 600 }}>
         <div className="modal-header">
           <span className="modal-title">Meta: {workflow.name}</span>
-          <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} title="Đóng"><X size={14} /></button>
         </div>
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div>

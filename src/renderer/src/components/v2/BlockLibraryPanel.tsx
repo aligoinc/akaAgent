@@ -63,8 +63,12 @@ export default function BlockLibraryPanel({ onOpenBlockEditor, onOpenWorkflowLis
       <div style={{ padding: 12, borderBottom: '1px solid var(--border, #2a2a35)' }}>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           <button className="btn btn-sm" style={{ flex: 1 }} onClick={onNewWorkflow}>+ Workflow mới</button>
-          <button className="btn btn-sm btn-ghost" onClick={onOpenWorkflowList} title="Mở workflow đã có">📂</button>
-          <button className="btn btn-sm btn-ghost" onClick={loadBlocks} title="Reload danh sách block">🔄</button>
+          <button className="btn btn-sm btn-ghost" onClick={onOpenWorkflowList} title="Mở workflow đã có">
+            <Icons.FolderOpen size={13} />
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={loadBlocks} title="Reload danh sách block">
+            <Icons.RefreshCw size={13} />
+          </button>
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary, #999)' }}>
           {workflow ? `Đang sửa: ${workflow.name}` : 'Chưa chọn workflow'}

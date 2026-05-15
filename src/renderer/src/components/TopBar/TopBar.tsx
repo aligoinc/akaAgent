@@ -118,8 +118,8 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan }: Top
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '4px 10px',
               fontSize: 12,
-              color: 'var(--text-secondary, #aaa)',
-              border: '1px solid var(--border-color, #27272f)',
+              color: 'var(--text-topbar-muted, var(--text-secondary, #aaa))',
+              border: '1px solid var(--border-topbar, var(--border-default, #27272f))',
               borderRadius: 6,
               marginRight: 8
             }}
