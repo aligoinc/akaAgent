@@ -135,40 +135,6 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     onFilterCampaigns?.(accountId)
   }
 
-  const handleLoadFriends = async (account: AutoAccount) => {
-    if (!window.electronAPI?.loadFriends) {
-      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
-      return
-    }
-    try {
-      const result = await window.electronAPI.loadFriends(account.id)
-      if (result.success) {
-        useUiStore.getState().showAlert(`✅ Đã load ${result.count} bạn bè cho "${account.name}"`, 'success')
-      } else {
-        useUiStore.getState().showAlert(`❌ Lỗi: ${result.error}`, 'error')
-      }
-    } catch (err: any) {
-      useUiStore.getState().showAlert(`Lỗi load bạn bè: ${err.message}`, 'error')
-    }
-  }
-
-  const handleLoadGroups = async (account: AutoAccount) => {
-    if (!window.electronAPI?.loadGroups) {
-      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
-      return
-    }
-    try {
-      const result = await window.electronAPI.loadGroups(account.id)
-      if (result.success) {
-        useUiStore.getState().showAlert(`✅ Đã load ${result.count} group cho "${account.name}"`, 'success')
-      } else {
-        useUiStore.getState().showAlert(`❌ Lỗi: ${result.error}`, 'error')
-      }
-    } catch (err: any) {
-      useUiStore.getState().showAlert(`Lỗi load group: ${err.message}`, 'error')
-    }
-  }
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'chờ xử lý': return 'var(--accent-info)'
@@ -277,8 +243,6 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           onEdit={handleEdit}
           onDelete={handleDelete}
           onFilterCampaigns={handleFilterCampaigns}
-          onLoadFriends={handleLoadFriends}
-          onLoadGroups={handleLoadGroups}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Zap, Layers, Settings, Play, Pause, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor } from 'lucide-react'
+import { Zap, Layers, Settings, Play, Pause, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -8,9 +8,10 @@ import { useUiStore } from '../../stores/uiStore'
 interface TopBarProps {
   activePage: 'campaigns' | 'workflow-editor' | 'browsers'
   onPageChange: (page: 'campaigns' | 'workflow-editor' | 'browsers') => void
+  onOpenDataScan: () => void
 }
 
-export default function TopBar({ activePage, onPageChange }: TopBarProps) {
+export default function TopBar({ activePage, onPageChange, onOpenDataScan }: TopBarProps) {
   const { schedulerRunning, setSchedulerRunning } = useCampaignStore()
   const { theme, toggleTheme } = useThemeStore()
   const { user, logout, resetDeviceLock } = useAuthStore()
@@ -110,6 +111,13 @@ export default function TopBar({ activePage, onPageChange }: TopBarProps) {
         >
           <Globe size={15} />
           Trình duyệt
+        </button>
+        <button
+          className="topbar-nav-item"
+          onClick={onOpenDataScan}
+        >
+          <Database size={15} />
+          Quét data
         </button>
         {isAdminAkabiz && (
           <button
