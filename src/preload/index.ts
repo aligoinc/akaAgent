@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, AuthUser, AccountActionOverview, AutoAccountAction } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -15,9 +15,19 @@ const electronAPI = {
   getCurrentUser: (): Promise<AuthUser | null> =>
     ipcRenderer.invoke(IPC_EVENTS.AUTH_ME),
 
+  resetDeviceLock: (): Promise<DeviceLockResetResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTH_RESET_DEVICE_LOCK),
+
   // Theme
   setTheme: (theme: 'light' | 'dark'): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.THEME_CHANGE, theme),
+
+  // App settings
+  getStartupSetting: (): Promise<StartupSettingResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.APP_GET_STARTUP_SETTING),
+
+  setStartupSetting: (enabled: boolean): Promise<StartupSettingResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.APP_SET_STARTUP_SETTING, enabled),
 
   // Webview registration (embedded browser tabs)
   registerWebview: (accountId: number, webContentsId: number): Promise<{ success: boolean }> =>

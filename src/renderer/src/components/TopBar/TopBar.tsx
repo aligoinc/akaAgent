@@ -1,4 +1,5 @@
-import { Zap, Layers, Settings, Play, Pause, Globe, Sun, Moon, LogOut, User } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Zap, Layers, Settings, Play, Pause, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -12,8 +13,30 @@ interface TopBarProps {
 export default function TopBar({ activePage, onPageChange }: TopBarProps) {
   const { schedulerRunning, setSchedulerRunning } = useCampaignStore()
   const { theme, toggleTheme } = useThemeStore()
-  const { user, logout } = useAuthStore()
+  const { user, logout, resetDeviceLock } = useAuthStore()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = useRef<HTMLDivElement>(null)
   const isAdminAkabiz = !!user?.isAdminAkabiz
+
+  useEffect(() => {
+    if (!settingsOpen) return
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (!settingsRef.current?.contains(event.target as Node)) {
+        setSettingsOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSettingsOpen(false)
+    }
+
+    document.addEventListener('mousedown', handleMouseDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [settingsOpen])
 
   const handleToggleScheduler = async () => {
     if (!window.electronAPI) return
@@ -41,6 +64,26 @@ export default function TopBar({ activePage, onPageChange }: TopBarProps) {
         await logout()
       },
       { title: 'Đăng xuất', confirmText: 'Đăng xuất', variant: 'primary' }
+    )
+  }
+
+  const handleToggleTheme = () => {
+    toggleTheme()
+  }
+
+  const handleResetDeviceLock = () => {
+    setSettingsOpen(false)
+    useUiStore.getState().showConfirm(
+      'Bạn có muốn đổi máy tính không?',
+      async () => {
+        try {
+          await resetDeviceLock()
+          useUiStore.getState().showAlert('Đã reset máy tính. Bạn có thể đăng nhập tài khoản này trên máy mới.', 'success')
+        } catch (err: any) {
+          useUiStore.getState().showAlert(err?.message || 'Đổi máy tính thất bại', 'error')
+        }
+      },
+      { title: 'Đổi máy tính', confirmText: 'Đổi máy tính', variant: 'primary' }
     )
   }
 
@@ -101,15 +144,6 @@ export default function TopBar({ activePage, onPageChange }: TopBarProps) {
         )}
 
         <button
-          className="btn btn-ghost btn-icon"
-          onClick={toggleTheme}
-          title={theme === 'light' ? 'Chế độ tối' : 'Chế độ sáng'}
-          style={{ marginRight: 8 }}
-        >
-          {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-        </button>
-
-        <button
           className={`btn ${schedulerRunning ? 'btn-danger' : 'btn-success'}`}
           onClick={handleToggleScheduler}
           title={schedulerRunning ? 'Dừng scheduler' : 'Bắt đầu scheduler'}
@@ -119,6 +153,39 @@ export default function TopBar({ activePage, onPageChange }: TopBarProps) {
           {schedulerRunning ? 'Dừng' : 'Chạy'} Scheduler
           {schedulerRunning && <span className="status-dot running" style={{ marginLeft: 4 }} />}
         </button>
+
+        <div className="topbar-settings-menu-wrap" ref={settingsRef}>
+          <button
+            className={`btn btn-ghost topbar-settings-button ${settingsOpen ? 'active' : ''}`}
+            onClick={() => setSettingsOpen(open => !open)}
+            title="Cài đặt"
+            aria-haspopup="menu"
+            aria-expanded={settingsOpen}
+          >
+            <Settings size={15} />
+            <ChevronDown size={12} />
+          </button>
+          {settingsOpen && (
+            <div className="topbar-settings-menu" role="menu">
+              <button className="topbar-settings-item" role="menuitem" onClick={handleResetDeviceLock}>
+                <Monitor size={14} />
+                <span>Đổi máy tính</span>
+              </button>
+              <button
+                className="topbar-settings-item topbar-theme-toggle-item"
+                role="menuitemcheckbox"
+                aria-checked={theme === 'dark'}
+                onClick={handleToggleTheme}
+              >
+                {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+                <span>Giao diện sáng/tối</span>
+                <span className={`topbar-theme-switch ${theme === 'dark' ? 'on' : ''}`}>
+                  <span className="topbar-theme-switch-thumb" />
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
 
         <button
           className="btn btn-ghost btn-icon"

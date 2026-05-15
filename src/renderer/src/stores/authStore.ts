@@ -7,9 +7,13 @@ interface AuthState {
   initializing: boolean
   loggingIn: boolean
   errorMessage: string | null
+  loginOptions: LoginOptions
+  savedCredentials: PersistedCreds | null
 
-  login: (username: string, password: string) => Promise<void>
+  setLoginOptions: (updates: Partial<LoginOptions>) => void
+  login: (username: string, password: string, options?: LoginOptions) => Promise<void>
   logout: () => Promise<void>
+  resetDeviceLock: () => Promise<void>
   rehydrateFromStorage: () => Promise<void>
   clearError: () => void
 }
@@ -19,7 +23,45 @@ interface PersistedCreds {
   password: string
 }
 
+export interface LoginOptions {
+  rememberLogin: boolean
+  autoLogin: boolean
+}
+
 const CREDS_KEY = 'aka-biz-auth-creds'
+const USER_STATE_KEY = 'aka-biz-auth-user'
+const LOGIN_OPTIONS_KEY = 'aka-biz-login-options'
+const DEFAULT_LOGIN_OPTIONS: LoginOptions = {
+  rememberLogin: true,
+  autoLogin: true
+}
+
+function normalizeLoginOptions(options: LoginOptions): LoginOptions {
+  if (options.autoLogin) {
+    return { rememberLogin: true, autoLogin: true }
+  }
+  if (!options.rememberLogin) {
+    return { rememberLogin: false, autoLogin: false }
+  }
+  return { rememberLogin: true, autoLogin: false }
+}
+
+function readLoginOptions(): LoginOptions {
+  try {
+    const raw = localStorage.getItem(LOGIN_OPTIONS_KEY)
+    if (!raw) return DEFAULT_LOGIN_OPTIONS
+    return normalizeLoginOptions({
+      ...DEFAULT_LOGIN_OPTIONS,
+      ...(JSON.parse(raw) as Partial<LoginOptions>)
+    })
+  } catch {
+    return DEFAULT_LOGIN_OPTIONS
+  }
+}
+
+function writeLoginOptions(options: LoginOptions): void {
+  localStorage.setItem(LOGIN_OPTIONS_KEY, JSON.stringify(normalizeLoginOptions(options)))
+}
 
 function readStoredCreds(): PersistedCreds | null {
   try {
@@ -39,6 +81,14 @@ function writeStoredCreds(creds: PersistedCreds | null): void {
   localStorage.setItem(CREDS_KEY, JSON.stringify(creds))
 }
 
+function clearStoredUserState(): void {
+  try {
+    localStorage.removeItem(USER_STATE_KEY)
+  } catch {
+    // ignore storage failures
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -46,17 +96,48 @@ export const useAuthStore = create<AuthState>()(
       initializing: true,
       loggingIn: false,
       errorMessage: null,
+      loginOptions: readLoginOptions(),
+      savedCredentials: readStoredCreds(),
 
-      login: async (username, password) => {
+      setLoginOptions: (updates) => set((state) => {
+        const mergedOptions = { ...state.loginOptions, ...updates }
+        if (updates.rememberLogin === false) mergedOptions.autoLogin = false
+        if (updates.autoLogin === true) mergedOptions.rememberLogin = true
+        const nextOptions = normalizeLoginOptions(mergedOptions)
+        writeLoginOptions(nextOptions)
+        if (!nextOptions.rememberLogin) {
+          writeStoredCreds(null)
+          return { loginOptions: nextOptions, savedCredentials: null }
+        }
+        return { loginOptions: nextOptions }
+      }),
+
+      login: async (username, password, options) => {
         if (!window.electronAPI) throw new Error('API not available')
+        const loginOptions = normalizeLoginOptions(options || useAuthStore.getState().loginOptions)
+        writeLoginOptions(loginOptions)
         set({ loggingIn: true, errorMessage: null })
         try {
           const user = await window.electronAPI.login(username, password)
-          writeStoredCreds({ username, password })
-          set({ user, loggingIn: false, errorMessage: null })
+          const savedCredentials = loginOptions.rememberLogin ? { username, password } : null
+          writeStoredCreds(savedCredentials)
+          if (!savedCredentials) clearStoredUserState()
+          set({
+            user,
+            loggingIn: false,
+            errorMessage: null,
+            loginOptions,
+            savedCredentials
+          })
         } catch (err: any) {
           writeStoredCreds(null)
-          set({ user: null, loggingIn: false, errorMessage: err?.message || 'Đăng nhập thất bại' })
+          set({
+            user: null,
+            loggingIn: false,
+            errorMessage: err?.message || 'Đăng nhập thất bại',
+            loginOptions,
+            savedCredentials: null
+          })
           throw err
         }
       },
@@ -66,7 +147,15 @@ export const useAuthStore = create<AuthState>()(
           try { await window.electronAPI.logout() } catch { /* ignore */ }
         }
         writeStoredCreds(null)
-        set({ user: null, errorMessage: null })
+        set({ user: null, errorMessage: null, savedCredentials: null })
+      },
+
+      resetDeviceLock: async () => {
+        if (!window.electronAPI) throw new Error('API not available')
+        await window.electronAPI.resetDeviceLock()
+        writeStoredCreds(null)
+        clearStoredUserState()
+        set({ savedCredentials: null })
       },
 
       rehydrateFromStorage: async () => {
@@ -74,24 +163,56 @@ export const useAuthStore = create<AuthState>()(
           set({ initializing: false })
           return
         }
-        const creds = readStoredCreds()
+        const loginOptions = readLoginOptions()
+        let creds = readStoredCreds()
+        if (!loginOptions.rememberLogin && creds) {
+          writeStoredCreds(null)
+          creds = null
+        }
         if (!creds) {
-          set({ initializing: false })
+          set({
+            user: null,
+            initializing: false,
+            loginOptions,
+            savedCredentials: null
+          })
+          return
+        }
+        if (!loginOptions.autoLogin) {
+          set({
+            user: null,
+            initializing: false,
+            errorMessage: null,
+            loginOptions,
+            savedCredentials: creds
+          })
           return
         }
         try {
           const user = await window.electronAPI.login(creds.username, creds.password)
-          set({ user, initializing: false, errorMessage: null })
-        } catch {
+          set({
+            user,
+            initializing: false,
+            errorMessage: null,
+            loginOptions,
+            savedCredentials: creds
+          })
+        } catch (err: any) {
           writeStoredCreds(null)
-          set({ user: null, initializing: false })
+          set({
+            user: null,
+            initializing: false,
+            errorMessage: err?.message || 'Đăng nhập tự động thất bại',
+            loginOptions,
+            savedCredentials: null
+          })
         }
       },
 
       clearError: () => set({ errorMessage: null })
     }),
     {
-      name: 'aka-biz-auth-user',
+      name: USER_STATE_KEY,
       partialize: (state) => ({ user: state.user })
     }
   )

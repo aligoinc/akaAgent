@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, BrowserWindow } from 'electron'
 import { IPC_EVENTS } from '../../shared/types'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { PageControllerRegistry } from '../v2/runtime/pageController'
@@ -78,11 +78,22 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   // Theme
   ipcMain.handle(IPC_EVENTS.THEME_CHANGE, (_, theme: 'light' | 'dark') => {
+    if (typeof mainWindow.setTitleBarOverlay !== 'function') return
     if (theme === 'light') {
       mainWindow.setTitleBarOverlay({ color: '#7c3aed', symbolColor: '#ffffff' })
     } else {
       mainWindow.setTitleBarOverlay({ color: '#0a0a0f', symbolColor: '#a0a0b0' })
     }
+  })
+
+  // App settings
+  ipcMain.handle(IPC_EVENTS.APP_GET_STARTUP_SETTING, () => {
+    return { enabled: app.getLoginItemSettings().openAtLogin }
+  })
+
+  ipcMain.handle(IPC_EVENTS.APP_SET_STARTUP_SETTING, (_, enabled: boolean) => {
+    app.setLoginItemSettings({ openAtLogin: !!enabled })
+    return { enabled: app.getLoginItemSettings().openAtLogin }
   })
 
   // Register domain handlers
