@@ -24,6 +24,9 @@ interface RuntimeErrorResult {
   policy?: AutoErrorPolicy
 }
 
+const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
+const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
+
 /**
  * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
  * run their associated workflow v2 against the account browser session.
@@ -56,6 +59,14 @@ export class CampaignScheduler {
 
   setPageRegistry(reg: PageControllerRegistry): void {
     this.pageRegistry = reg
+  }
+
+  private isCommentSeedingCampaign(actionId: string): boolean {
+    return actionId === COMMENT_SEEDING_FEED_ACTION_ID || actionId === COMMENT_SEEDING_POST_ACTION_ID
+  }
+
+  private isCommentSeedingPostCampaign(actionId: string): boolean {
+    return actionId === COMMENT_SEEDING_POST_ACTION_ID
   }
 
   start(): void {
@@ -434,7 +445,8 @@ export class CampaignScheduler {
         if (extra.enableMessage !== false) actions.push({ code: 'fb_message_friend', name: 'Nhắn tin bạn bè' })
         if (extra.enableAddFriend) actions.push({ code: 'fb_add_friend', name: 'Kết bạn' })
         break
-      case 'facebook_comment_seeding':
+      case COMMENT_SEEDING_FEED_ACTION_ID:
+      case COMMENT_SEEDING_POST_ACTION_ID:
         actions.push({ code: 'fb_comment', name: 'Comment' })
         if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
         break
@@ -463,7 +475,7 @@ export class CampaignScheduler {
       case 'fb_add_friend':
         return campaign.actionId !== 'facebook_message_friend' || extra.enableAddFriend === true
       case 'fb_comment':
-        if (campaign.actionId === 'facebook_comment_seeding') return true
+        if (this.isCommentSeedingCampaign(campaign.actionId)) return true
         return extra.enableComment === true
       case 'fb_like_post':
         return extra.enablePostLike === true
@@ -653,7 +665,8 @@ export class CampaignScheduler {
 
     if (errorStep?.blockName === 'fb_send_message') actionCode = this.getMessageActionCode(campaign)
     else if (errorStep?.blockName === 'fb_add_friend') actionCode = 'fb_add_friend'
-    else if (errorStep?.blockName === 'fb_comment_at_position') actionCode = 'fb_comment'
+    else if (errorStep?.blockName === 'fb_comment_at_position' || errorStep?.blockName === 'fb_comment_current_post') actionCode = 'fb_comment'
+    else if (errorStep?.blockName === 'fb_click_like_current_post') actionCode = 'fb_like_post'
     else if (errorStep?.blockName === 'fb_click_post_button') actionCode = this.getPostActionCode(campaign) || undefined
     else actionCode = this.getCampaignActionDescriptors(campaign)[0]?.code
 
@@ -831,7 +844,7 @@ export class CampaignScheduler {
    * Per-milestone logging cho engine v2.
    * Scan steps theo block_name (cố định) để biết bước nào succeeded:
    *   - fb_click_post_button → "Đăng bài"
-   *   - fb_comment_at_position → "Comment"
+   *   - fb_comment_at_position/fb_comment_current_post → "Comment"
    *   - fb_send_message → "Nhắn tin"
    *   - fb_add_friend → "Kết bạn"
    * Mỗi milestone ghi 1 row vào auto_campaign_details với status:
@@ -931,7 +944,10 @@ export class CampaignScheduler {
     }
 
     // Comment — đọc position/text từ s.output (block return) thay vì s.input
-    const commentSteps = steps.filter(s => s.blockName === 'fb_comment_at_position' && s.status === 'success')
+    const commentSteps = steps.filter(s =>
+      (s.blockName === 'fb_comment_at_position' || s.blockName === 'fb_comment_current_post') &&
+      s.status === 'success'
+    )
     let loggedCommentCount = 0
     for (let i = 0; i < commentSteps.length; i++) {
       const s = commentSteps[i]
@@ -942,9 +958,11 @@ export class CampaignScheduler {
       if (out.commented === false || (text.trim().length === 0 && imageCount <= 0)) continue
       loggedCommentCount++
       const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
-      const target = campaign.actionId === 'facebook_comment_seeding'
-        ? this.formatOrdinalPost(loggedCommentCount)
-        : (position === 1 ? 'bài của mình' : this.formatOrdinalPost(position))
+      const target = this.isCommentSeedingPostCampaign(campaign.actionId)
+        ? 'bài post'
+        : (campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID
+          ? this.formatOrdinalPost(loggedCommentCount)
+          : (position === 1 ? 'bài của mình' : this.formatOrdinalPost(position)))
       const logText = text.trim().length > 0
         ? `Đã comment vào ${target}: "${preview}"`
         : `Đã comment vào ${target}`
@@ -964,7 +982,7 @@ export class CampaignScheduler {
     }
 
     // Comment seeding: không có bài phù hợp thì chỉ ghi log chiến dịch, không tạo campaign_detail.
-    if (campaign.actionId === 'facebook_comment_seeding' && loggedCommentCount === 0) {
+    if (campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID && loggedCommentCount === 0) {
       const prepareStep = steps.find(s => s.blockName === 'fb_prepare_seeding_iterations')
       const out = (prepareStep?.output as any) || {}
       const matchedCount = Number(out.matchedCount ?? 0)

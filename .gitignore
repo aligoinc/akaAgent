@@ -8,6 +8,7 @@ dist/
 .DS_Store
 Thumbs.db
 release/
+supabase/.temp/
 
 # Vite electron config cache (timestamped backups, regenerated tự động)
 electron.vite.config.*.mjs
