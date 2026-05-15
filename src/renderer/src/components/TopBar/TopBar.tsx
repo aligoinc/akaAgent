@@ -16,6 +16,7 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan }: Top
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
   const isAdminAkabiz = !!user?.isAdminAkabiz
+  const canOpenWorkflowEditor = user?.staffId === 1
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -98,7 +99,7 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan }: Top
           <Database size={15} />
           Quét data
         </button>
-        {isAdminAkabiz && (
+        {canOpenWorkflowEditor && (
           <button
             className={`topbar-nav-item ${activePage === 'workflow-editor' ? 'active' : ''}`}
             onClick={() => onPageChange('workflow-editor')}

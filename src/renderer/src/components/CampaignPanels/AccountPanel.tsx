@@ -135,12 +135,12 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     onFilterCampaigns?.(accountId)
   }
 
-  const getStatusColor = (status: string) => {
+  const getAccountStatusClass = (status: string) => {
     switch (status) {
-      case 'chờ xử lý': return 'var(--accent-info)'
-      case 'đang chạy': return 'var(--accent-success)'
-      case 'tạm dừng': return 'var(--accent-warning)'
-      default: return 'var(--text-tertiary)'
+      case 'chờ xử lý': return 'status-pending'
+      case 'đang chạy': return 'status-running'
+      case 'tạm dừng': return 'status-paused'
+      default: return 'status-unknown'
     }
   }
 
@@ -155,7 +155,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const getStatusIcon = (account: AutoAccount) => {
     if (!account.isActive) return '🚫'
     if (account.status === 'tạm dừng') return '⏸️'
-    if (account.status === 'đang chạy') return '🟢'
+    if (account.status === 'đang chạy') return '⏳'
     return '⏳'
   }
 
@@ -204,7 +204,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           accounts.map(account => (
             <div 
               key={account.id}
-              className={`account-card ${!account.isActive ? 'disabled' : ''}`}
+              className={`account-card ${getAccountStatusClass(account.status)} ${!account.isActive ? 'disabled' : ''}`}
               onContextMenu={(e) => handleContextMenu(e, account)}
               title="Nhấn chuột phải để xem menu"
             >
@@ -218,7 +218,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                   <span style={{ color: getLoginColor(account.loginStatus), fontSize: '10px' }}>{account.loginStatus}</span>
                 </div>
                 <div className="account-card-meta">
-                  <span style={{ color: getStatusColor(account.status), fontSize: '10px', fontWeight: 600 }}>{account.status}</span>
+                  <span className="account-card-status">{account.status}</span>
                 </div>
               </div>
             </div>

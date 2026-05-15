@@ -277,6 +277,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     }
   }
 
+  const getCampaignStatusClass = (status: string) => {
+    switch (status) {
+      case 'chờ xử lý': return 'status-pending'
+      case 'đang chạy': return 'status-running'
+      case 'hoàn thành': return 'status-completed'
+      case 'tạm dừng': return 'status-paused'
+      case 'lỗi': return 'status-error'
+      default: return 'status-unknown'
+    }
+  }
+
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
   const isSelectedFindDataCampaign = selectedCampaign?.actionId === 'facebook_find_data_group'
 
@@ -650,7 +661,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
             {filteredCampaigns.map(campaign => (
               <div
                 key={campaign.id}
-                className={`campaign-table-row ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
+                className={`campaign-table-row ${getCampaignStatusClass(campaign.status)} ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
                 onClick={() => handleRowClick(campaign)}
                 style={{ cursor: 'pointer' }}
               >
@@ -667,7 +678,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                 <div className="campaign-col col-action">{campaign.actionName || campaign.actionId}</div>
                 <div className="campaign-col col-account">{campaign.accountName || '-'}</div>
                 <div className="campaign-col col-status">
-                  <span className="status-badge" style={{ color: getStatusColor(campaign.status) }}>
+                  <span className="status-badge">
                     {campaign.status}
                   </span>
                 </div>
