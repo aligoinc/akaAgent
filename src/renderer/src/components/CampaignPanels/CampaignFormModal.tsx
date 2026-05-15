@@ -110,6 +110,19 @@ const COMMENT_SORT_OPTIONS = [
   { value: 'newest', label: 'Mới nhất' }
 ] as const
 
+const DEFAULT_DAILY_STOP_TIME = '18:00'
+
+const formatDateTimeLocal = (date: Date): string => {
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const normalizeTimeInput = (value?: string | null): string => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})/)
+  if (!match) return ''
+  return `${match[1].padStart(2, '0')}:${match[2]}`
+}
+
 const ALL_STEPS: StepDef[] = [
   {
     id: 'general',
@@ -126,7 +139,8 @@ const ALL_STEPS: StepDef[] = [
     fields: [
       { key: 'scheduleType', label: 'Loại lịch' },
       { key: 'schedule', label: 'Ngày chạy' },
-      { key: 'scheduleEndDate', label: 'Ngày kết thúc' }
+      { key: 'scheduleEndDate', label: 'Ngày kết thúc' },
+      { key: 'dailyStopTime', label: 'Giờ dừng' }
     ]
   },
   {
@@ -176,14 +190,11 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const txtFileInputRef = useRef<HTMLInputElement>(null)
 
   const initSchedule = () => {
+    if (cloneFromId) return formatDateTimeLocal(new Date())
     if (campaign?.schedule) {
-      const d = new Date(campaign.schedule)
-      const pad = (n: number) => n.toString().padStart(2, '0')
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+      return formatDateTimeLocal(new Date(campaign.schedule))
     }
-    const now = new Date()
-    const pad = (n: number) => n.toString().padStart(2, '0')
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+    return formatDateTimeLocal(new Date())
   }
 
   const initEndDate = () => {
@@ -204,6 +215,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     (campaign?.extraSettings?.commentImageOption && campaign.extraSettings.commentImageOption !== 'none' && savedCommentImages.length > 0)
       ? 'all'
       : 'none'
+  const savedDailyStopTime = normalizeTimeInput(campaign?.dailyStopTime)
 
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
@@ -212,6 +224,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
     scheduleEndDate: initEndDate(),
+    useDailyStopTime: campaign ? !!savedDailyStopTime : true,
+    dailyStopTime: savedDailyStopTime || DEFAULT_DAILY_STOP_TIME,
     scheduleDays: campaign?.scheduleDays || '',
     scheduleWeekDays: campaign?.scheduleWeekDays || '',
     continueNextDay: campaign?.continueNextDay ?? true,
@@ -466,6 +480,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       case 'schedule': return !!formData.schedule
       case 'scheduleType': return !!formData.scheduleType
       case 'scheduleEndDate': return !!formData.scheduleEndDate
+      case 'dailyStopTime': return true
       case 'timeSleepBetween2': return formData.timeSleepBetween2 >= 0
       case 'dailyLimit': return formData.dailyLimit >= 0
       case 'rateLimitCount': return formData.rateLimitCount >= 0
@@ -639,6 +654,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           scheduleEndDate: formData.scheduleType === 'daily'
             ? null
             : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null),
+          dailyStopTime: formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null,
           scheduleDays: formData.scheduleDays || undefined,
           scheduleWeekDays: formData.scheduleWeekDays || undefined,
           continueNextDay: formData.continueNextDay,
@@ -1599,6 +1615,29 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         disabled={formData.scheduleType === 'daily'}
                       />
                     </div>
+                  </div>
+
+                  <div className="stepper-form-group" style={{ maxWidth: 320 }}>
+                    <label className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.useDailyStopTime}
+                        onChange={e => setFormData(p => ({
+                          ...p,
+                          useDailyStopTime: e.target.checked,
+                          dailyStopTime: p.dailyStopTime || DEFAULT_DAILY_STOP_TIME
+                        }))}
+                      />
+                      <span>Giờ dừng chạy trong ngày</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.dailyStopTime}
+                      onChange={e => setFormData(p => ({ ...p, dailyStopTime: e.target.value }))}
+                      className="stepper-input"
+                      disabled={!formData.useDailyStopTime}
+                      title="Để trống nếu không giới hạn"
+                    />
                   </div>
 
                   {/* Monthly days */}

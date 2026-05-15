@@ -154,6 +154,7 @@ export interface Campaign {
   schedule?: string
   scheduleType?: 'daily' | 'weekly' | 'monthly'
   scheduleEndDate?: string | null
+  dailyStopTime?: string | null     // HH:mm / HH:mm:ss, Asia/Ho_Chi_Minh; null = no daily cutoff
   scheduleDays?: string          // comma-separated days of month e.g. "5,10,19,25"
   scheduleWeekDays?: string      // comma-separated weekday numbers e.g. "2,3,5" (2=Mon..8=Sun)
   continueNextDay?: boolean      // daily: continue at scheduled time next day if not finished
