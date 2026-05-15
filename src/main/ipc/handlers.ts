@@ -14,6 +14,18 @@ import { registerAccountContactHandlers } from './handlers/accountContactHandler
 import { registerAuthHandlers } from './handlers/authHandlers'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
+import { getCurrentUser } from '../data/currentUser'
+
+const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+
+function getVietnamDateKey(date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date)
+}
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const supabase = new SupabaseService()
@@ -24,9 +36,45 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow)
 
   // Startup reset
-  supabase.resetRunningStatuses().catch(err => {
+  const startupReset = supabase.resetRunningStatuses().catch(err => {
     console.error('Failed to reset running statuses:', err)
   })
+
+  let lastScheduleMaintenanceDay = getVietnamDateKey()
+  let scheduleMaintenanceRunning = false
+  const runScheduleMaintenance = async (reason: 'login' | 'new-day'): Promise<void> => {
+    if (!getCurrentUser() || scheduleMaintenanceRunning) return
+    scheduleMaintenanceRunning = true
+    try {
+      await startupReset
+      const updatedCampaigns = await supabase.maintainCampaignSchedules()
+      for (const campaign of updatedCampaigns) {
+        try {
+          mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
+        } catch {
+          // Window may be closed
+        }
+      }
+      if (updatedCampaigns.length > 0) {
+        console.log(`[ScheduleMaintenance] ${reason}: updated ${updatedCampaigns.length} campaign schedules.`)
+      }
+    } catch (err) {
+      console.error('Failed to maintain campaign schedules:', err)
+    } finally {
+      lastScheduleMaintenanceDay = getVietnamDateKey()
+      scheduleMaintenanceRunning = false
+    }
+  }
+
+  setInterval(() => {
+    const todayKey = getVietnamDateKey()
+    if (todayKey === lastScheduleMaintenanceDay) return
+    if (!getCurrentUser()) {
+      lastScheduleMaintenanceDay = todayKey
+      return
+    }
+    void runScheduleMaintenance('new-day')
+  }, 60 * 1000)
 
   // Theme
   ipcMain.handle(IPC_EVENTS.THEME_CHANGE, (_, theme: 'light' | 'dark') => {
@@ -38,7 +86,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   // Register domain handlers
-  registerAuthHandlers()
+  registerAuthHandlers(() => runScheduleMaintenance('login'))
   registerUpdateHandlers(mainWindow)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)

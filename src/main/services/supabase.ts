@@ -47,6 +47,7 @@ export class SupabaseService {
   cloneCampaign(id: number) { return campaignRepo.cloneCampaign(id) }
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }
   getPendingCampaigns(accountId: number) { return campaignRepo.getPendingCampaigns(accountId) }
+  maintainCampaignSchedules() { return campaignRepo.maintainCampaignSchedules() }
 
   // =========== CAMPAIGN INPUTS (pool nguyên liệu) ===========
   listCampaignInputs(campaignId: number) { return campaignRepo.listCampaignInputs(campaignId) }

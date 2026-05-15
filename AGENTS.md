@@ -90,6 +90,8 @@ For `facebook_find_data_group`, workflow/blocks/elements/action are seeded by [m
 
 **Recovery**: `resetRunningStatuses()` chạy lúc app start (accounts + campaigns + campaign_inputs + campaign_input_data) — flip rows kẹt `'đang chạy'` về `'chờ xử lý'` (đề phòng crash mid-flow). `recoverStuckCampaignInputData(campaignId, errMsg)` flip input_data stuck thành `'hoàn thành'` + `note=errMsg` khi outer catch (enum không có `'lỗi'`). `stop()` cũng đóng toàn bộ hidden background pages để không giữ tài nguyên nền.
 
+**Schedule maintenance**: sau startup reset và sau login, `maintainCampaignSchedules()` ([campaignRepository.ts](src/main/data/repositories/campaignRepository.ts)) dọn campaign stale theo ngày `Asia/Ho_Chi_Minh`; day-change watcher trong [handlers.ts](src/main/ipc/handlers.ts) gọi lại khi app treo qua đêm. Weekly/monthly `refreshData=true` reset `auto_campaign_input_data` rồi bật lại `chờ xử lý`; completed no-refresh chỉ update `schedule`.
+
 **Rate limit** ([campaignRepository.ts:getAccountRateLimitStatus](src/main/data/repositories/campaignRepository.ts)) dùng `action_code`:
 - Daily limit so với `auto_account_action_status.count_action_in_day` (reset 00:00 Asia/Saigon).
 - Hourly limit query `auto_campaign_details` theo `(account_id, action_code, created_at)` với `status IN ('thành công','thất bại')`.
