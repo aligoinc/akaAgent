@@ -143,7 +143,7 @@ Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repositor
 
 ### Auto-update
 
-[src/main/services/updater.ts](src/main/services/updater.ts) đọc local version từ `resources/version.txt` (dev fallback `version.txt`/`app.getVersion()`) và remote từ `version_win.txt`. Version phải dùng format `x.x.x`; compare numeric theo major/minor/patch.
+[src/main/services/updater.ts](src/main/services/updater.ts) đọc local version từ `resources/version.txt` (dev fallback `version.txt`/`app.getVersion()`) và chọn remote theo platform: Windows `version_win.txt`/`akaAgent.exe`, macOS `version_mac.txt`/`akaAgent.dmg`. Version phải dùng format `x.x.x`; compare numeric theo major/minor/patch.
 
 ### Renderer state (Zustand stores)
 

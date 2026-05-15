@@ -127,7 +127,7 @@ export default function UpdateModal({ localVersion, remoteVersion, onClose }: Up
 
           {phase === 'idle' && (
             <div style={{ color: 'var(--text-secondary, #aaa)', fontSize: 13, lineHeight: 1.5 }}>
-              Nhấn "Cập nhật ngay" để tải và cài đặt phiên bản mới. Ứng dụng sẽ tự đóng và trình cài đặt sẽ chạy.
+              Nhấn "Cập nhật ngay" để tải phiên bản mới. Sau khi tải xong, ứng dụng sẽ mở file cập nhật phù hợp với hệ điều hành.
             </div>
           )}
 
@@ -162,7 +162,7 @@ export default function UpdateModal({ localVersion, remoteVersion, onClose }: Up
               >
                 <span>
                   {phase === 'downloading' && `Đang tải… ${percent}%`}
-                  {phase === 'installing' && (message || 'Đang khởi chạy bộ cài đặt…')}
+                  {phase === 'installing' && (message || 'Đang mở file cập nhật…')}
                   {phase === 'done' && (message || 'Hoàn tất')}
                 </span>
                 {phase === 'downloading' && total > 0 && (
@@ -226,8 +226,8 @@ export default function UpdateModal({ localVersion, remoteVersion, onClose }: Up
             </button>
           )}
           {phase === 'done' && (
-            <button className="btn btn-primary" disabled style={{ opacity: 0.7 }}>
-              Đang thoát ứng dụng…
+            <button className="btn btn-primary" onClick={onClose}>
+              Đóng
             </button>
           )}
         </div>
