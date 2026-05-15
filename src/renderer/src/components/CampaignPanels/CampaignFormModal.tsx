@@ -85,8 +85,17 @@ const FIND_DATA_GROUP_ACTIONS = new Set([
   'facebook_find_data_group'
 ])
 
-const COMMENT_SEEDING_ACTIONS = new Set([
+const COMMENT_SEEDING_FEED_ACTIONS = new Set([
   'facebook_comment_seeding'
+])
+
+const COMMENT_SEEDING_POST_ACTIONS = new Set([
+  'facebook_comment_seeding_post'
+])
+
+const COMMENT_SEEDING_ACTIONS = new Set([
+  'facebook_comment_seeding',
+  'facebook_comment_seeding_post'
 ])
 
 const POST_SORT_OPTIONS = [
@@ -276,7 +285,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
-  const canPickGroups = isGroupPostCampaign || isCommentSeedingCampaign
+  const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
+  const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
+  const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign
   const selectedCampaignAction = campaignActions.find(action => action.id === formData.actionId)
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
@@ -290,20 +301,26 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             return {
               ...s,
               title: 'Cấu hình comment',
-              fields: [
-                { key: 'commentContent', label: 'Nội dung comment' },
-                { key: 'commentImages', label: 'Ảnh comment' },
-                { key: 'postsPerTarget', label: 'Số bài mỗi mục tiêu' },
-                { key: 'postKeywordFilter', label: 'Lọc từ khoá' },
-                { key: 'enablePostLike', label: 'Like bài' }
-              ]
+              fields: isCommentSeedingPostCampaign
+                ? [
+                  { key: 'commentContent', label: 'Nội dung comment' },
+                  { key: 'commentImages', label: 'Ảnh comment' },
+                  { key: 'enablePostLike', label: 'Like bài' }
+                ]
+                : [
+                  { key: 'commentContent', label: 'Nội dung comment' },
+                  { key: 'commentImages', label: 'Ảnh comment' },
+                  { key: 'postsPerTarget', label: 'Số bài mỗi mục tiêu' },
+                  { key: 'postKeywordFilter', label: 'Lọc từ khoá' },
+                  { key: 'enablePostLike', label: 'Like bài' }
+                ]
             }
           }
           if (s.id === 'details') {
             return {
               ...s,
-              title: 'Danh sách mục tiêu',
-              fields: [{ key: 'details', label: 'Mục tiêu' }]
+              title: isCommentSeedingPostCampaign ? 'Danh sách bài post' : 'Danh sách group/page/profile',
+              fields: [{ key: 'details', label: isCommentSeedingPostCampaign ? 'Link bài post' : 'Mục tiêu' }]
             }
           }
           return s
@@ -543,11 +560,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       return
     }
     if (isCommentSeedingCampaign && details.length === 0) {
-      showAlert('Vui lòng thêm ít nhất một group hoặc link bài viết vào danh sách mục tiêu.', 'error')
+      showAlert(
+        isCommentSeedingPostCampaign
+          ? 'Vui lòng thêm ít nhất một link bài post vào danh sách mục tiêu.'
+          : 'Vui lòng thêm ít nhất một group/page/profile vào danh sách mục tiêu.',
+        'error'
+      )
       return
     }
     if ((isGroupPostCampaign || isCommentSeedingCampaign || isMessageFriendCampaign) && details.some(d => !String(d.uid || '').trim())) {
-      showAlert('Vui lòng nhập UID hoặc link cho tất cả dòng trong danh sách data.', 'error')
+      showAlert(
+        isCommentSeedingPostCampaign
+          ? 'Vui lòng nhập link bài post cho tất cả dòng trong danh sách data.'
+          : 'Vui lòng nhập UID hoặc link cho tất cả dòng trong danh sách data.',
+        'error'
+      )
       return
     }
 
@@ -593,6 +620,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           ])
         )
 
+        const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
+        const effectivePostKeywordFilter = isCommentSeedingPostCampaign ? '' : formData.postKeywordFilter
+
         const campaignPayload = {
           name: formData.name,
           actionId: formData.actionId,
@@ -612,12 +642,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             sharePost: formData.sharePost,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentType: formData.commentType,
-            commentCount: isCommentSeedingCampaign ? formData.postsPerTarget : formData.commentCount,
+            commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : formData.commentCount,
             commentContent: formData.commentContent,
             enablePostLike: formData.enablePostLike,
-            postsPerTarget: formData.postsPerTarget,
-            postKeywordFilter: formData.postKeywordFilter,
-            keywordFilter: formData.postKeywordFilter,
+            postsPerTarget: effectivePostsPerTarget,
+            postKeywordFilter: effectivePostKeywordFilter,
+            keywordFilter: effectivePostKeywordFilter,
             actionLimits: {
               sleepBetweenActions: formData.timeSleepBetween2,
               enabledActionCodes: formData.limitCheckActionCodes,
@@ -746,7 +776,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
         // Find index of first data row (skip header if 'Tên', 'Uid', etc. is in A1)
         let startIndex = 0
-        if (data.length > 0 && String(data[0][0] || '').toLowerCase().includes('tên')) {
+        const firstRow = Array.isArray(data[0]) ? data[0].map(cell => String(cell || '').toLowerCase()) : []
+        if (
+          data.length > 0 &&
+          (String(data[0][0] || '').toLowerCase().includes('tên') ||
+            (isCommentSeedingPostCampaign && firstRow.some(cell => cell.includes('link') || cell.includes('url') || cell.includes('bài'))))
+        ) {
           startIndex = 1
         }
 
@@ -756,10 +791,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           if (!row || row.length === 0 || row.every((c: any) => !c)) continue // skip empty rows
 
           // A: Tên (0), B: Uid (1), C: Sđt (2), D: Email (3)
-          const name = String(row[0] || '').trim()
-          const uid = String(row[1] || '').trim()
-          const phone = String(row[2] || '').trim()
-          const email = String(row[3] || '').trim()
+          const cells = row.map((cell: any) => String(cell || '').trim())
+          const postLink = cells.find(cell => /^https?:\/\//i.test(cell) || /facebook\.com|fb\.watch/i.test(cell)) || cells[1] || cells[0] || ''
+          const name = isCommentSeedingPostCampaign ? '' : String(row[0] || '').trim()
+          const uid = isCommentSeedingPostCampaign ? postLink : String(row[1] || '').trim()
+          const phone = isCommentSeedingPostCampaign ? '' : String(row[2] || '').trim()
+          const email = isCommentSeedingPostCampaign ? '' : String(row[3] || '').trim()
 
           newRows.push({
             name,
@@ -812,9 +849,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
         if (newRows.length > 0) {
           setDetails(prev => [...prev, ...newRows])
-          showAlert(`Đã thêm ${newRows.length} UID từ file TXT.`, 'success')
+          showAlert(`Đã thêm ${newRows.length} ${isCommentSeedingPostCampaign ? 'link bài post' : 'UID'} từ file TXT.`, 'success')
         } else {
-          showAlert('File TXT trống hoặc không có UID hợp lệ.', 'error')
+          showAlert(isCommentSeedingPostCampaign ? 'File TXT trống hoặc không có link bài post hợp lệ.' : 'File TXT trống hoặc không có UID hợp lệ.', 'error')
         }
       } catch (err) {
         console.error('Lỗi khi đọc file TXT:', err)
@@ -1233,28 +1270,30 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
       {renderImagePicker('comment', 'Ảnh comment')}
 
-      <div className="stepper-form-row">
-        <div className="stepper-form-group half">
-          <label>Số bài cần comment trên mỗi mục tiêu</label>
-          <input
-            type="number"
-            min={1}
-            value={formData.postsPerTarget}
-            onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
-            className="stepper-input"
-          />
+      {!isCommentSeedingPostCampaign && (
+        <div className="stepper-form-row">
+          <div className="stepper-form-group half">
+            <label>Số bài cần comment trên mỗi mục tiêu</label>
+            <input
+              type="number"
+              min={1}
+              value={formData.postsPerTarget}
+              onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
+              className="stepper-input"
+            />
+          </div>
+          <div className="stepper-form-group half">
+            <label>Lọc bài theo từ khoá</label>
+            <input
+              type="text"
+              value={formData.postKeywordFilter}
+              onChange={e => setFormData(p => ({ ...p, postKeywordFilter: e.target.value }))}
+              className="stepper-input"
+              placeholder="Ví dụ: tuyển dụng, cần mua, hỏi giá"
+            />
+          </div>
         </div>
-        <div className="stepper-form-group half">
-          <label>Lọc bài theo từ khoá</label>
-          <input
-            type="text"
-            value={formData.postKeywordFilter}
-            onChange={e => setFormData(p => ({ ...p, postKeywordFilter: e.target.value }))}
-            className="stepper-input"
-            placeholder="Ví dụ: tuyển dụng, cần mua, hỏi giá"
-          />
-        </div>
-      </div>
+      )}
 
       <div className="stepper-form-group">
         <label className="schedule-checkbox-label">
@@ -1951,7 +1990,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('details')}</span>
                   <span className="stepper-section-title">
-                    {isFindDataGroupCampaign ? 'Danh sách group' : isCommentSeedingCampaign ? 'Danh sách mục tiêu' : 'Danh sách data'}
+                    {isFindDataGroupCampaign
+                      ? 'Danh sách group'
+                      : isCommentSeedingPostCampaign
+                        ? 'Danh sách bài post'
+                        : isCommentSeedingCampaign
+                          ? 'Danh sách group/page/profile'
+                          : 'Danh sách data'}
                   </span>
                   {details.length > 0 && (
                     <span className="stepper-section-badge">{details.length}</span>
@@ -1976,7 +2021,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                   )}
                   <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
                     <button className="btn btn-secondary" onClick={addDetailRow}>
-                      <Plus size={14} /> Thêm data
+                      <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -2015,7 +2060,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                           }
                           setShowGroupPicker(true)
                         }}
-                        title={isCommentSeedingCampaign ? 'Chọn group để comment seeding' : 'Chọn nhóm từ danh sách đã tham gia'}
+                        title={isCommentSeedingFeedCampaign ? 'Chọn group để comment seeding' : 'Chọn nhóm từ danh sách đã tham gia'}
                       >
                         <Users size={14} /> Chọn nhóm
                       </button>
@@ -2041,34 +2086,54 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                   <div className="stepper-grid-container">
                     <table className="campaign-grid">
                       <thead>
-                        <tr>
-                          <th>Tên</th>
-                          <th>Số điện thoại</th>
-                          <th>Uid</th>
-                          <th>Email</th>
-                          <th style={{ width: 40 }}></th>
-                        </tr>
+                        {isCommentSeedingPostCampaign ? (
+                          <tr>
+                            <th>Link bài post</th>
+                            <th style={{ width: 40 }}></th>
+                          </tr>
+                        ) : (
+                          <tr>
+                            <th>Tên</th>
+                            <th>Số điện thoại</th>
+                            <th>Uid</th>
+                            <th>Email</th>
+                            <th style={{ width: 40 }}></th>
+                          </tr>
+                        )}
                       </thead>
                       <tbody>
                         {loadingDetails ? (
-                          <tr><td colSpan={5} className="text-center">Đang tải data...</td></tr>
+                          <tr><td colSpan={isCommentSeedingPostCampaign ? 2 : 5} className="text-center">Đang tải data...</td></tr>
                         ) : details.length === 0 ? (
-                          <tr><td colSpan={5} className="text-center text-muted">Chưa có data nào.</td></tr>
+                          <tr><td colSpan={isCommentSeedingPostCampaign ? 2 : 5} className="text-center text-muted">Chưa có data nào.</td></tr>
                         ) : (
                           details.map((d, i) => (
                             <tr key={d.id || `new-${i}`}>
-                              <td>
-                                <input type="text" value={d.name || ''} onChange={e => updateDetailRow(i, 'name', e.target.value)} placeholder="Tên..." />
-                              </td>
-                              <td>
-                                <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." />
-                              </td>
-                              <td>
-                                <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder="UID..." />
-                              </td>
-                              <td>
-                                <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." />
-                              </td>
+                              {isCommentSeedingPostCampaign ? (
+                                <td>
+                                  <input
+                                    type="text"
+                                    value={d.uid || ''}
+                                    onChange={e => updateDetailRow(i, 'uid', e.target.value)}
+                                    placeholder="Dán link bài post..."
+                                  />
+                                </td>
+                              ) : (
+                                <>
+                                  <td>
+                                    <input type="text" value={d.name || ''} onChange={e => updateDetailRow(i, 'name', e.target.value)} placeholder="Tên..." />
+                                  </td>
+                                  <td>
+                                    <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." />
+                                  </td>
+                                  <td>
+                                    <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder="UID hoặc link..." />
+                                  </td>
+                                  <td>
+                                    <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." />
+                                  </td>
+                                </>
+                              )}
                               <td>
                                 <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
                               </td>
