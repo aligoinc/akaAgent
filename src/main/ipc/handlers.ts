@@ -35,10 +35,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   campaignScheduler.setPageRegistry(pageRegistry)
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow)
 
-  // Startup reset
-  const startupReset = supabase.resetRunningStatuses().catch(err => {
-    console.error('Failed to reset running statuses:', err)
-  })
+  const runScopedRecovery = async (reason: 'login' | 'logout' | 'quit'): Promise<void> => {
+    const user = getCurrentUser()
+    if (!user) return
+    try {
+      await supabase.resetRunningStatuses(user.staffId)
+    } catch (err) {
+      console.error(`[Recovery] ${reason}: failed to reset running statuses:`, err)
+    }
+  }
 
   let lastScheduleMaintenanceDay = getVietnamDateKey()
   let scheduleMaintenanceRunning = false
@@ -46,7 +51,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (!getCurrentUser() || scheduleMaintenanceRunning) return
     scheduleMaintenanceRunning = true
     try {
-      await startupReset
       const updatedCampaigns = await supabase.maintainCampaignSchedules()
       for (const campaign of updatedCampaigns) {
         try {
@@ -76,6 +80,36 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     void runScheduleMaintenance('new-day')
   }, 60 * 1000)
 
+  let quitCleanupStarted = false
+  let quitCleanupCompleted = false
+  app.on('before-quit', (event) => {
+    if (quitCleanupCompleted) return
+    if (quitCleanupStarted) {
+      event.preventDefault()
+      return
+    }
+
+    const user = getCurrentUser()
+    if (!user) {
+      quitCleanupCompleted = true
+      return
+    }
+
+    event.preventDefault()
+    quitCleanupStarted = true
+    void (async () => {
+      try {
+        campaignScheduler.stop()
+        await supabase.resetRunningStatuses(user.staffId)
+      } catch (err) {
+        console.error('[Recovery] quit: failed to reset running statuses:', err)
+      } finally {
+        quitCleanupCompleted = true
+        app.quit()
+      }
+    })()
+  })
+
   // Theme
   ipcMain.handle(IPC_EVENTS.THEME_CHANGE, (_, theme: 'light' | 'dark') => {
     if (typeof mainWindow.setTitleBarOverlay !== 'function') return
@@ -100,12 +134,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAuthHandlers({
     afterLogin: async () => {
       try {
+        await runScopedRecovery('login')
         await runScheduleMaintenance('login')
       } finally {
         campaignScheduler.start()
       }
     },
-    beforeLogout: () => campaignScheduler.stop()
+    beforeLogout: async () => {
+      campaignScheduler.stop()
+      await runScopedRecovery('logout')
+    }
   })
   registerUpdateHandlers(mainWindow)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
