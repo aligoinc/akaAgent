@@ -241,7 +241,20 @@ export interface CampaignDetail {
 // Account Contact Types
 // ============================================
 
-export type ContactType = 'friend' | 'group'
+export type ContactType = 'friend' | 'group' | 'page'
+
+export interface ContactLoadResult {
+  success: boolean
+  count: number
+  error?: string
+  stopped?: boolean
+}
+
+export interface ContactLoadCompleted {
+  accountId: number
+  contactType: ContactType
+  result: ContactLoadResult
+}
 
 export interface AutoAccountContact {
   id: number
@@ -369,9 +382,12 @@ export const IPC_EVENTS = {
   // Contacts (Load data)
   CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',
   CONTACTS_LOAD_GROUPS: 'contacts:load-groups',
+  CONTACTS_LOAD_PAGES: 'contacts:load-pages',
+  CONTACTS_CANCEL_LOAD: 'contacts:cancel-load',
   CONTACTS_LIST: 'contacts:list',
   CONTACTS_DELETE: 'contacts:delete',
   CONTACTS_PROGRESS: 'contacts:progress',
+  CONTACTS_COMPLETED: 'contacts:completed',
 
   // Auto-update
   UPDATE_CHECK: 'update:check',

@@ -1,18 +1,32 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, webContents } from 'electron'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { IPC_EVENTS, ContactType, AutoAccountContact } from '../../shared/types'
+import { IPC_EVENTS, ContactType, AutoAccountContact, ContactLoadResult } from '../../shared/types'
 
 type ProgressCallback = (message: string) => void
 
+interface FacebookGraphPage {
+  id?: unknown
+  name?: unknown
+  category?: unknown
+}
+
+interface FacebookGraphPageResponse {
+  data?: FacebookGraphPage[]
+  paging?: { next?: unknown }
+  error?: { message?: unknown }
+}
+
 /**
- * ContactLoader: scrapes Facebook friends list and groups list
+ * ContactLoader: scrapes Facebook friends, groups and pages
  * from an account's embedded webview, then saves results to auto_account_contacts.
  */
 export class ContactLoader {
   private supabase: SupabaseService
   private webviewRegistry: WebviewRegistry
   private mainWindow: BrowserWindow
+  private cancelledLoads = new Set<number>()
+  private activeLoadControllers = new Map<number, AbortController>()
 
   constructor(supabase: SupabaseService, webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow) {
     this.supabase = supabase
@@ -26,58 +40,181 @@ export class ContactLoader {
     } catch {}
   }
 
+  private completeLoad(accountId: number, contactType: ContactType, result: ContactLoadResult): ContactLoadResult {
+    try {
+      this.mainWindow.webContents.send(IPC_EVENTS.CONTACTS_COMPLETED, {
+        accountId,
+        contactType,
+        result
+      })
+    } catch {}
+    return result
+  }
+
+  cancelLoad(accountId: number): void {
+    this.cancelledLoads.add(accountId)
+    this.activeLoadControllers.get(accountId)?.abort()
+    this.sendProgress('Đã dừng quét data.')
+    const wcId = this.webviewRegistry.getWebContentsId(accountId)
+    const wc = wcId ? webContents.fromId(wcId) : null
+    if (wc && !wc.isDestroyed() && wc.isLoading()) {
+      wc.stop()
+    }
+  }
+
+  private isLoadCancelled(accountId: number): boolean {
+    return this.cancelledLoads.has(accountId)
+  }
+
+  private startLoad(accountId: number): AbortController {
+    this.cancelledLoads.delete(accountId)
+    this.activeLoadControllers.get(accountId)?.abort()
+    const controller = new AbortController()
+    this.activeLoadControllers.set(accountId, controller)
+    return controller
+  }
+
+  private async raceWithCancel<T>(
+    accountId: number,
+    promise: Promise<T>,
+    signal: AbortSignal
+  ): Promise<T | undefined> {
+    if (signal.aborted || this.isLoadCancelled(accountId)) return undefined
+
+    let removeAbortListener = () => {}
+    const cancelPromise = new Promise<undefined>(resolve => {
+      const onAbort = () => resolve(undefined)
+      signal.addEventListener('abort', onAbort, { once: true })
+      removeAbortListener = () => signal.removeEventListener('abort', onAbort)
+    })
+    const guardedPromise = promise.catch(err => {
+      if (signal.aborted || this.isLoadCancelled(accountId)) return undefined
+      throw err
+    })
+
+    try {
+      return await Promise.race([guardedPromise, cancelPromise])
+    } finally {
+      removeAbortListener()
+    }
+  }
+
+  private async waitForDelay(accountId: number, ms: number, signal: AbortSignal): Promise<boolean> {
+    if (signal.aborted || this.isLoadCancelled(accountId)) return false
+
+    return new Promise(resolve => {
+      let settled = false
+      let timer: ReturnType<typeof setTimeout>
+      const cleanup = (completed: boolean) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        signal.removeEventListener('abort', onAbort)
+        resolve(completed)
+      }
+      const onAbort = () => cleanup(false)
+      timer = setTimeout(() => cleanup(true), ms)
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+  }
+
   /**
    * Load friends list for a Facebook account.
    */
-  async loadFriends(accountId: number): Promise<{ success: boolean; count: number; error?: string }> {
+  async loadFriends(accountId: number): Promise<ContactLoadResult> {
     return this.loadContacts(accountId, 'friend', 'https://www.facebook.com/friends/list', this.scrapeFriends.bind(this))
   }
 
   /**
    * Load groups list for a Facebook account.
    */
-  async loadGroups(accountId: number): Promise<{ success: boolean; count: number; error?: string }> {
+  async loadGroups(accountId: number): Promise<ContactLoadResult> {
     return this.loadContacts(accountId, 'group', 'https://www.facebook.com/groups/joins/', this.scrapeGroups.bind(this))
+  }
+
+  /**
+   * Load managed Facebook pages for a Facebook account.
+   */
+  async loadPages(accountId: number): Promise<ContactLoadResult> {
+    return this.loadContacts(accountId, 'page', 'https://business.facebook.com/content_management', this.scrapePages.bind(this))
+  }
+
+  private getContactTypeName(contactType: ContactType): string {
+    switch (contactType) {
+      case 'friend': return 'bạn bè'
+      case 'group': return 'group'
+      case 'page': return 'page'
+    }
   }
 
   private async loadContacts(
     accountId: number,
     contactType: ContactType,
     targetUrl: string,
-    scrapeFn: (wc: Electron.WebContents) => Promise<Partial<AutoAccountContact>[]>
-  ): Promise<{ success: boolean; count: number; error?: string }> {
+    scrapeFn: (wc: Electron.WebContents, accountId: number) => Promise<Partial<AutoAccountContact>[]>
+  ): Promise<ContactLoadResult> {
     // Validate webview is available
     const controller = this.webviewRegistry.getController(accountId)
     if (!controller || !controller.isConnected()) {
-      return { success: false, count: 0, error: 'Tab trình duyệt chưa được mở hoặc không khả dụng' }
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: 'Tab trình duyệt chưa được mở hoặc không khả dụng'
+      })
     }
 
     const wcId = this.webviewRegistry.getWebContentsId(accountId)
     if (!wcId) {
-      return { success: false, count: 0, error: 'Không tìm thấy webContents cho tài khoản này' }
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: 'Không tìm thấy webContents cho tài khoản này'
+      })
     }
 
-    const { webContents } = require('electron')
     const wc = webContents.fromId(wcId)
     if (!wc || wc.isDestroyed()) {
-      return { success: false, count: 0, error: 'WebContents đã bị huỷ' }
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: 'WebContents đã bị huỷ'
+      })
     }
 
-    const typeName = contactType === 'friend' ? 'bạn bè' : 'group'
+    const loadController = this.startLoad(accountId)
+    const signal = loadController.signal
+    const typeName = this.getContactTypeName(contactType)
     this.sendProgress(`🔄 Đang load danh sách ${typeName}...`)
 
     try {
+      let navigationCompleted = false
       // Navigate to the target page
-      await wc.loadURL(targetUrl)
+      if (!this.isLoadCancelled(accountId)) {
+        const navigated = await this.raceWithCancel(accountId, wc.loadURL(targetUrl).then(() => true), signal)
+        navigationCompleted = navigated === true
+      }
       // Wait for page to load
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      if (!this.isLoadCancelled(accountId)) {
+        await this.waitForDelay(accountId, 3000, signal)
+      }
 
       // Scroll and scrape
-      const contacts = await scrapeFn(wc)
+      const canScrape = navigationCompleted || !this.isLoadCancelled(accountId) || wc.getURL().startsWith('https://www.facebook.com/')
+      const contacts = canScrape ? await scrapeFn(wc, accountId) : []
+      const stoppedBeforeSave = this.isLoadCancelled(accountId)
 
       if (contacts.length === 0) {
+        if (stoppedBeforeSave) {
+          await this.supabase.deleteContacts(accountId, contactType)
+          this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu 0 data cho lần quét này.`)
+          return this.completeLoad(accountId, contactType, { success: true, count: 0, stopped: true })
+        }
         this.sendProgress(`⚠️ Không tìm thấy ${typeName} nào. Kiểm tra tài khoản đã đăng nhập chưa.`)
-        return { success: false, count: 0, error: `Không tìm thấy ${typeName} nào` }
+        return this.completeLoad(accountId, contactType, {
+          success: false,
+          count: 0,
+          error: `Không tìm thấy ${typeName} nào`
+        })
       }
 
       // Add accountId and contactType to each contact
@@ -90,13 +227,24 @@ export class ContactLoader {
       // Save to DB
       this.sendProgress(`💾 Đang lưu ${contactsWithMeta.length} ${typeName}...`)
       const saved = await this.supabase.upsertContacts(contactsWithMeta)
+      const stoppedAfterSave = this.isLoadCancelled(accountId) || stoppedBeforeSave
+
+      if (stoppedAfterSave) {
+        this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu ${saved} data cho lần quét này.`)
+        return this.completeLoad(accountId, contactType, { success: true, count: saved, stopped: true })
+      }
 
       this.sendProgress(`✅ Đã load ${saved} ${typeName} thành công!`)
-      return { success: true, count: saved }
+      return this.completeLoad(accountId, contactType, { success: true, count: saved })
     } catch (err: any) {
       const errMsg = err.message || String(err)
       this.sendProgress(`❌ Lỗi load ${typeName}: ${errMsg}`)
-      return { success: false, count: 0, error: errMsg }
+      return this.completeLoad(accountId, contactType, { success: false, count: 0, error: errMsg })
+    } finally {
+      if (this.activeLoadControllers.get(accountId) === loadController) {
+        this.activeLoadControllers.delete(accountId)
+        this.cancelledLoads.delete(accountId)
+      }
     }
   }
 
@@ -106,12 +254,25 @@ export class ContactLoader {
    * NOT the main window. We must find the correct scrollable ancestor
    * of the friend cards and scroll that element.
    */
-  private async scrollAndWait(wc: Electron.WebContents, maxScrolls: number = 30, delayMs: number = 1500): Promise<void> {
+  private async scrollAndWait(
+    wc: Electron.WebContents,
+    accountId: number,
+    maxScrolls: number = 30,
+    delayMs: number = 1500
+  ): Promise<void> {
     let prevCount = 0
     let noChangeCount = 0
+    const signal = this.activeLoadControllers.get(accountId)?.signal
 
     for (let i = 0; i < maxScrolls; i++) {
-      const currentCount = await wc.executeJavaScript(`
+      if (this.isLoadCancelled(accountId)) {
+        this.sendProgress('Đã nhận lệnh dừng, ngưng cuộn trang.')
+        break
+      }
+
+      let currentCount = 0
+      try {
+        const scrollPromise = wc.executeJavaScript(`
         (function() {
           // Strategy: find the scrollable container that holds the friend/group cards.
           // Facebook's friends list is inside a sidebar with overflow-y: auto/scroll.
@@ -155,6 +316,17 @@ export class ContactLoader {
               var href = groupLinks[i].href || '';
               if (href.match(/\\/groups\\/[0-9]+/)) {
                 anchorEl = groupLinks[i];
+                break;
+              }
+            }
+          }
+
+          if (!anchorEl) {
+            var pageLinks = document.querySelectorAll('a[href*="facebook.com/"]');
+            for (var p = 0; p < pageLinks.length; p++) {
+              var pageHref = pageLinks[p].href || '';
+              if (pageHref.includes('/pages/') || pageHref.match(/facebook\\.com\\/[a-zA-Z0-9._-]+\\/?(\\?|$)/)) {
+                anchorEl = pageLinks[p];
                 break;
               }
             }
@@ -215,9 +387,31 @@ export class ContactLoader {
           return document.querySelectorAll('a[href]').length;
         })()
       `)
+        const scrollResult = signal
+          ? await this.raceWithCancel(accountId, scrollPromise, signal)
+          : await scrollPromise
+        if (typeof scrollResult !== 'number') break
+        currentCount = scrollResult
+      } catch (err) {
+        if (this.isLoadCancelled(accountId)) {
+          this.sendProgress('Đã nhận lệnh dừng, dùng dữ liệu hiện có trên trang.')
+          break
+        }
+        throw err
+      }
 
-      this.sendProgress(`📜 Đang cuộn trang... (${i + 1}/${maxScrolls}) - ${currentCount} phần tử`)
-      await new Promise(resolve => setTimeout(resolve, delayMs))
+      this.sendProgress(`📜 Đang cuộn trang... (${i + 1}/${maxScrolls})`)
+      const delayCompleted = signal
+        ? await this.waitForDelay(accountId, delayMs, signal)
+        : await new Promise<boolean>(resolve => setTimeout(() => resolve(true), delayMs))
+      if (!delayCompleted) {
+        this.sendProgress('Đã nhận lệnh dừng, dùng dữ liệu hiện có trên trang.')
+        break
+      }
+      if (this.isLoadCancelled(accountId)) {
+        this.sendProgress('Đã nhận lệnh dừng, dùng dữ liệu hiện có trên trang.')
+        break
+      }
 
       // Check if new content was loaded
       if (currentCount === prevCount) {
@@ -236,9 +430,9 @@ export class ContactLoader {
   /**
    * Scrape friends from facebook.com/friends/list page.
    */
-  private async scrapeFriends(wc: Electron.WebContents): Promise<Partial<AutoAccountContact>[]> {
+  private async scrapeFriends(wc: Electron.WebContents, accountId: number): Promise<Partial<AutoAccountContact>[]> {
     // Scroll to load all friends
-    await this.scrollAndWait(wc, 50, 1500)
+    await this.scrollAndWait(wc, accountId, 50, 1500)
 
     const results = await wc.executeJavaScript(`
       (function() {
@@ -353,9 +547,9 @@ export class ContactLoader {
   /**
    * Scrape groups from facebook.com/groups/joins/ page.
    */
-  private async scrapeGroups(wc: Electron.WebContents): Promise<Partial<AutoAccountContact>[]> {
+  private async scrapeGroups(wc: Electron.WebContents, accountId: number): Promise<Partial<AutoAccountContact>[]> {
     // Scroll to load all groups
-    await this.scrollAndWait(wc, 30, 1500)
+    await this.scrollAndWait(wc, accountId, 30, 1500)
 
     const results = await wc.executeJavaScript(`
       (function() {
@@ -477,4 +671,96 @@ export class ContactLoader {
 
     return (results || []) as Partial<AutoAccountContact>[]
   }
+
+  /**
+   * Load managed pages through the same Graph API path used by akaBizAuto.
+   */
+  private async scrapePages(wc: Electron.WebContents, accountId: number): Promise<Partial<AutoAccountContact>[]> {
+    this.sendProgress('Đang lấy quyền truy cập page...')
+    if (this.isLoadCancelled(accountId)) return []
+    let token = ''
+    try {
+      const tokenPromise = this.extractFacebookAccessToken(wc)
+      const signal = this.activeLoadControllers.get(accountId)?.signal
+      token = signal
+        ? await this.raceWithCancel(accountId, tokenPromise, signal) || ''
+        : await tokenPromise
+    } catch (err) {
+      if (this.isLoadCancelled(accountId)) return []
+      throw err
+    }
+    if (this.isLoadCancelled(accountId)) return []
+    this.sendProgress('Đang tải danh sách page qua Facebook API...')
+    return this.loadPagesFromGraph(token, accountId)
+  }
+
+  private async extractFacebookAccessToken(wc: Electron.WebContents): Promise<string> {
+    const token = await wc.executeJavaScript(`
+      (function() {
+        var body = document.body ? document.body.innerHTML : '';
+        var match = body.match(/EAAG[A-Za-z0-9_-]{20,}/);
+        return match ? match[0] : '';
+      })()
+    `)
+    const value = String(token || '').trim()
+    if (!value) throw new Error('Không tìm thấy user access token')
+    return value
+  }
+
+  private async loadPagesFromGraph(token: string, accountId: number): Promise<Partial<AutoAccountContact>[]> {
+    const pages: Partial<AutoAccountContact>[] = []
+    const seen = new Set<string>()
+    let nextPage = `https://graph.facebook.com/me/accounts?access_token=${encodeURIComponent(token)}`
+    let pageIndex = 0
+    const signal = this.activeLoadControllers.get(accountId)?.signal
+
+    while (nextPage && pageIndex < 25) {
+      if (this.isLoadCancelled(accountId)) break
+      pageIndex++
+      let response: Awaited<ReturnType<typeof fetch>>
+      try {
+        response = await fetch(nextPage, signal ? { signal } : undefined)
+      } catch (err) {
+        if (signal?.aborted || this.isLoadCancelled(accountId)) break
+        throw err
+      }
+      if (!response.ok) {
+        if (signal?.aborted || this.isLoadCancelled(accountId)) break
+        throw new Error(`Facebook API HTTP ${response.status}`)
+      }
+
+      let json: FacebookGraphPageResponse
+      try {
+        json = await response.json() as FacebookGraphPageResponse
+      } catch (err) {
+        if (signal?.aborted || this.isLoadCancelled(accountId)) break
+        throw err
+      }
+      if (json.error) {
+        if (signal?.aborted || this.isLoadCancelled(accountId)) break
+        throw new Error(String(json.error.message || 'Facebook API trả lỗi'))
+      }
+
+      for (const page of json.data || []) {
+        const uid = String(page.id || '').trim()
+        const name = String(page.name || '').replace(/\s+/g, ' ').trim()
+        if (!uid || !name || seen.has(uid)) continue
+        seen.add(uid)
+        pages.push({
+          name,
+          uid,
+          url: `https://www.facebook.com/${uid}`,
+          extraData: {
+            source: 'facebook_graph_me_accounts',
+            category: String(page.category || '').trim() || null
+          }
+        })
+      }
+
+      nextPage = typeof json.paging?.next === 'string' ? json.paging.next : ''
+    }
+
+    return pages
+  }
+
 }

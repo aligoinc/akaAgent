@@ -12,6 +12,15 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
     return contactLoader.loadGroups(accountId)
   })
 
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_PAGES, async (_, accountId: number) => {
+    return contactLoader.loadPages(accountId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACTS_CANCEL_LOAD, async (_, accountId: number) => {
+    contactLoader.cancelLoad(accountId)
+    return { success: true }
+  })
+
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST, async (_, accountId: number, contactType?: string) => {
     return supabase.listContacts(accountId, contactType as any)
   })

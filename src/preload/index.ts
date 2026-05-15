@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContactLoadResult, ContactLoadCompleted, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -201,11 +201,17 @@ const electronAPI = {
   },
 
   // Contacts (Load data)
-  loadFriends: (accountId: number): Promise<{ success: boolean; count: number; error?: string }> =>
+  loadFriends: (accountId: number): Promise<ContactLoadResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_FRIENDS, accountId),
 
-  loadGroups: (accountId: number): Promise<{ success: boolean; count: number; error?: string }> =>
+  loadGroups: (accountId: number): Promise<ContactLoadResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_GROUPS, accountId),
+
+  loadPages: (accountId: number): Promise<ContactLoadResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_PAGES, accountId),
+
+  cancelContactLoad: (accountId: number): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_CANCEL_LOAD, accountId),
 
   listContacts: (accountId: number, contactType?: ContactType): Promise<AutoAccountContact[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST, accountId, contactType),
@@ -217,6 +223,12 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, data: { message: string }) => callback(data)
     ipcRenderer.on(IPC_EVENTS.CONTACTS_PROGRESS, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.CONTACTS_PROGRESS, handler)
+  },
+
+  onContactsCompleted: (callback: (data: ContactLoadCompleted) => void): () => void => {
+    const handler = (_event: Electron.IpcRendererEvent, data: ContactLoadCompleted) => callback(data)
+    ipcRenderer.on(IPC_EVENTS.CONTACTS_COMPLETED, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.CONTACTS_COMPLETED, handler)
   },
 
   // Resolve absolute disk path for a File object selected via <input type="file">.

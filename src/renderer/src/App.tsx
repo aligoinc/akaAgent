@@ -10,6 +10,7 @@ import { useAuthStore } from './stores/authStore'
 import AlertModal from './components/CampaignPanels/AlertModal'
 import ConfirmModal from './components/CampaignPanels/ConfirmModal'
 import UpdateModal from './components/UpdateModal/UpdateModal'
+import DataScanModal from './components/DataScan/DataScanModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
@@ -17,6 +18,7 @@ export default function App() {
   // Default to campaigns; if user is not akaBiz admin, workflow-editor is hidden anyway.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
   const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
+  const [showDataScan, setShowDataScan] = useState(false)
 
   // Bootstrap auth: re-login from stored creds (or land on LoginPage).
   useEffect(() => {
@@ -129,7 +131,7 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      <TopBar activePage={activePage} onPageChange={setActivePage} />
+      <TopBar activePage={activePage} onPageChange={setActivePage} onOpenDataScan={() => setShowDataScan(true)} />
 
       <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <CampaignPage onNavigateToBrowser={(accountId) => {
@@ -154,6 +156,9 @@ export default function App() {
 
       <AlertModal />
       <ConfirmModal />
+      {showDataScan && (
+        <DataScanModal onClose={() => setShowDataScan(false)} />
+      )}
       {updateInfo && (
         <UpdateModal
           localVersion={updateInfo.localVersion}

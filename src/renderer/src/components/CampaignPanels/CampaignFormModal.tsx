@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
-import { ActionLimitConfig, Campaign, CampaignInputData, CampaignExtraSettings } from '../../../../shared/types'
+import { ActionLimitConfig, AutoAccountContact, Campaign, CampaignInputData, CampaignExtraSettings } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
-import FriendPickerModal from './FriendPickerModal'
-import GroupPickerModal from './GroupPickerModal'
+import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import { useUiStore } from '../../stores/uiStore'
 
 interface CampaignFormModalProps {
@@ -315,6 +314,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
   const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign
+  const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
+  const detailsColumnCount = isCommentSeedingPostCampaign
+    ? (isEditingSavedCampaign ? 1 : 2)
+    : (isEditingSavedCampaign ? 4 : 5)
   const selectedCampaignAction = campaignActions.find(action => action.id === formData.actionId)
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
@@ -447,7 +450,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     })
   }, [formData.actionId, selectedCampaignAction?.id, limitActionCodesKey])
 
-  const { showAlert } = useUiStore()
+  const { showAlert, showConfirm } = useUiStore()
 
   useEffect(() => {
     async function fetchDetails() {
@@ -576,16 +579,16 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         showAlert('Vui lòng chọn ít nhất một loại data cần tìm.', 'error')
         return
       }
-      if (details.length === 0) {
+      if (!isEditingSavedCampaign && details.length === 0) {
         showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
         return
       }
     }
-    if (formData.actionId === 'facebook_group_post' && details.length === 0) {
+    if (!isEditingSavedCampaign && formData.actionId === 'facebook_group_post' && details.length === 0) {
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
-    if (isMessageFriendCampaign && details.length === 0) {
+    if (!isEditingSavedCampaign && isMessageFriendCampaign && details.length === 0) {
       showAlert('Vui lòng thêm ít nhất một bạn bè hoặc UID vào danh sách data.', 'error')
       return
     }
@@ -594,7 +597,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       showAlert('Vui lòng nhập nội dung comment hoặc chọn ảnh comment.', 'error')
       return
     }
-    if (isCommentSeedingCampaign && details.length === 0) {
+    if (!isEditingSavedCampaign && isCommentSeedingCampaign && details.length === 0) {
       showAlert(
         isCommentSeedingPostCampaign
           ? 'Vui lòng thêm ít nhất một link bài post vào danh sách mục tiêu.'
@@ -603,7 +606,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       )
       return
     }
-    if ((isGroupPostCampaign || isCommentSeedingCampaign || isMessageFriendCampaign) && details.some(d => !String(d.uid || '').trim())) {
+    if (!isEditingSavedCampaign && (isGroupPostCampaign || isCommentSeedingCampaign || isMessageFriendCampaign) && details.some(d => !String(d.uid || '').trim())) {
       showAlert(
         isCommentSeedingPostCampaign
           ? 'Vui lòng nhập link bài post cho tất cả dòng trong danh sách data.'
@@ -616,8 +619,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     try {
       const { deleteCampaignInputData, updateCampaignInputData, createCampaignInputData, createCampaign, updateCampaign } = useCampaignStore.getState()
 
-      for (const id of deletedIds) {
-        await deleteCampaignInputData(id)
+      if (!isEditingSavedCampaign) {
+        for (const id of deletedIds) {
+          await deleteCampaignInputData(id)
+        }
       }
 
       let accountChunks: Partial<CampaignInputData>[][] = [];
@@ -735,20 +740,22 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           await updateCampaign(campaign.id, campaignPayload)
           savedCampaign = campaign
 
-          for (const d of currentDetails) {
-            if (d.id) {
-              await updateCampaignInputData(d.id, {
-                name: d.name,
-                phone: d.phone,
-                uid: d.uid,
-                email: d.email,
-                note: d.note,
-              })
-            } else {
-              await createCampaignInputData({
-                ...d,
-                campaignId: savedCampaign.id
-              })
+          if (!isEditingSavedCampaign) {
+            for (const d of currentDetails) {
+              if (d.id) {
+                await updateCampaignInputData(d.id, {
+                  name: d.name,
+                  phone: d.phone,
+                  uid: d.uid,
+                  email: d.email,
+                  note: d.note,
+                })
+              } else {
+                await createCampaignInputData({
+                  ...d,
+                  campaignId: savedCampaign.id
+                })
+              }
             }
           }
         } else {
@@ -786,6 +793,22 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       }
       return copy
     })
+  }
+
+  const removeAllDetailRows = () => {
+    if (details.length === 0) return
+
+    showConfirm(
+      `Xoá hết ${details.length} dòng data trong danh sách?`,
+      () => {
+        const ids = details
+          .map(item => item.id)
+          .filter((id): id is number => typeof id === 'number')
+        setDeletedIds(prev => Array.from(new Set([...prev, ...ids])))
+        setDetails([])
+      },
+      { title: 'Xoá hết data', confirmText: 'Xoá hết', variant: 'danger' }
+    )
   }
 
   const updateDetailRow = (index: number, field: keyof CampaignInputData, value: string) => {
@@ -900,10 +923,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     if (txtFileInputRef.current) txtFileInputRef.current.value = ''
   }
 
-  const [showFriendPicker, setShowFriendPicker] = useState(false)
-  const [showGroupPicker, setShowGroupPicker] = useState(false)
+  const [dataScanPicker, setDataScanPicker] = useState<{ action: DataScanAction } | null>(null)
 
-  const onFriendsSelected = (contacts: { id: number; name: string; uid?: string; url?: string }[]) => {
+  const onFriendsSelected = (contacts: AutoAccountContact[]) => {
     const newRows: Partial<CampaignInputData>[] = contacts.map(c => ({
       name: c.name,
       uid: c.url || c.uid || '',
@@ -916,7 +938,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     showAlert(`Đã thêm ${newRows.length} bạn bè.`, 'success')
   }
 
-  const onGroupsSelected = (contacts: { id: number; name: string; uid?: string; url?: string }[]) => {
+  const onGroupsSelected = (contacts: AutoAccountContact[]) => {
     const newRows: Partial<CampaignInputData>[] = contacts.map(c => ({
       name: c.name,
       uid: c.url || (c.uid ? `https://www.facebook.com/groups/${c.uid}` : ''),
@@ -2215,7 +2237,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
               {!collapsedSections['details'] && (
                 <div className="stepper-section-body">
-                  {formData.accountIds.length > 1 && (
+                  {isEditingSavedCampaign && (
+                    <div className="text-muted" style={{ marginBottom: 12, fontSize: 12 }}>
+                      Danh sách data đã lưu không chỉnh sửa trong form sửa chiến dịch.
+                    </div>
+                  )}
+                  {!isEditingSavedCampaign && formData.accountIds.length > 1 && (
                     <div className="stepper-form-group" style={{ marginBottom: 12 }}>
                       <label className="schedule-checkbox-label" style={{ fontWeight: 500 }}>
                         <input
@@ -2227,69 +2254,80 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       </label>
                     </div>
                   )}
-                  <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
-                    <button className="btn btn-secondary" onClick={addDetailRow}>
-                      <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload size={14} /> Upload Excel
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => txtFileInputRef.current?.click()}
-                    >
-                      <Upload size={14} /> Upload TXT
-                    </button>
-                    {isMessageFriendCampaign && (
+                  {!isEditingSavedCampaign && (
+                    <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-secondary" onClick={addDetailRow}>
+                        <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
+                      </button>
                       <button
                         className="btn btn-secondary"
-                        onClick={() => {
-                          if (formData.accountIds.length === 0) {
-                            showAlert('Vui lòng chọn tài khoản trước.', 'error')
-                            return
-                          }
-                          setShowFriendPicker(true)
-                        }}
-                        title="Chọn bạn bè từ danh sách liên hệ"
+                        onClick={() => fileInputRef.current?.click()}
                       >
-                        <Users size={14} /> Chọn bạn bè
+                        <Upload size={14} /> Upload Excel
                       </button>
-                    )}
-                    {canPickGroups && (
                       <button
                         className="btn btn-secondary"
-                        onClick={() => {
-                          if (formData.accountIds.length === 0) {
-                            showAlert('Vui lòng chọn tài khoản trước.', 'error')
-                            return
-                          }
-                          setShowGroupPicker(true)
-                        }}
-                        title={isCommentSeedingFeedCampaign ? 'Chọn group để comment seeding' : 'Chọn nhóm từ danh sách đã tham gia'}
+                        onClick={() => txtFileInputRef.current?.click()}
                       >
-                        <Users size={14} /> Chọn nhóm
+                        <Upload size={14} /> Upload TXT
                       </button>
-                    )}
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      style={{ display: 'none' }}
-                      accept=".xlsx, .xls, .csv"
-                      onChange={handleFileUpload}
-                      title="Upload Excel"
-                    />
-                    <input
-                      type="file"
-                      ref={txtFileInputRef}
-                      style={{ display: 'none' }}
-                      accept=".txt"
-                      onChange={handleTxtFileUpload}
-                      title="Upload TXT"
-                    />
-                  </div>
+                      {isMessageFriendCampaign && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            if (formData.accountIds.length === 0) {
+                              showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                              return
+                            }
+                            setDataScanPicker({ action: 'facebook_friends' })
+                          }}
+                          title="Chọn bạn bè từ danh sách liên hệ"
+                        >
+                          <Users size={14} /> Chọn bạn bè
+                        </button>
+                      )}
+                      {canPickGroups && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            if (formData.accountIds.length === 0) {
+                              showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                              return
+                            }
+                            setDataScanPicker({ action: 'facebook_groups' })
+                          }}
+                          title={isCommentSeedingFeedCampaign ? 'Chọn group để comment seeding' : 'Chọn nhóm từ danh sách đã tham gia'}
+                        >
+                          <Users size={14} /> Chọn nhóm
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={removeAllDetailRows}
+                        disabled={loadingDetails || details.length === 0}
+                        title="Xoá hết data trong danh sách"
+                      >
+                        <Trash2 size={14} /> Xoá hết
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        style={{ display: 'none' }}
+                        accept=".xlsx, .xls, .csv"
+                        onChange={handleFileUpload}
+                        title="Upload Excel"
+                      />
+                      <input
+                        type="file"
+                        ref={txtFileInputRef}
+                        style={{ display: 'none' }}
+                        accept=".txt"
+                        onChange={handleTxtFileUpload}
+                        title="Upload TXT"
+                      />
+                    </div>
+                  )}
 
                   <div className="stepper-grid-container">
                     <table className="campaign-grid">
@@ -2297,7 +2335,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         {isCommentSeedingPostCampaign ? (
                           <tr>
                             <th>Link bài post</th>
-                            <th style={{ width: 40 }}></th>
+                            {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                           </tr>
                         ) : (
                           <tr>
@@ -2305,15 +2343,15 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                             <th>Số điện thoại</th>
                             <th>Uid</th>
                             <th>Email</th>
-                            <th style={{ width: 40 }}></th>
+                            {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                           </tr>
                         )}
                       </thead>
                       <tbody>
                         {loadingDetails ? (
-                          <tr><td colSpan={isCommentSeedingPostCampaign ? 2 : 5} className="text-center">Đang tải data...</td></tr>
+                          <tr><td colSpan={detailsColumnCount} className="text-center">Đang tải data...</td></tr>
                         ) : details.length === 0 ? (
-                          <tr><td colSpan={isCommentSeedingPostCampaign ? 2 : 5} className="text-center text-muted">Chưa có data nào.</td></tr>
+                          <tr><td colSpan={detailsColumnCount} className="text-center text-muted">Chưa có data nào.</td></tr>
                         ) : (
                           details.map((d, i) => (
                             <tr key={d.id || `new-${i}`}>
@@ -2324,27 +2362,30 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                                     value={d.uid || ''}
                                     onChange={e => updateDetailRow(i, 'uid', e.target.value)}
                                     placeholder="Dán link bài post..."
+                                    disabled={isEditingSavedCampaign}
                                   />
                                 </td>
                               ) : (
                                 <>
                                   <td>
-                                    <input type="text" value={d.name || ''} onChange={e => updateDetailRow(i, 'name', e.target.value)} placeholder="Tên..." />
+                                    <input type="text" value={d.name || ''} onChange={e => updateDetailRow(i, 'name', e.target.value)} placeholder="Tên..." disabled={isEditingSavedCampaign} />
                                   </td>
                                   <td>
-                                    <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." />
+                                    <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." disabled={isEditingSavedCampaign} />
                                   </td>
                                   <td>
-                                    <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder="UID hoặc link..." />
+                                    <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder="UID hoặc link..." disabled={isEditingSavedCampaign} />
                                   </td>
                                   <td>
-                                    <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." />
+                                    <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />
                                   </td>
                                 </>
                               )}
-                              <td>
-                                <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
-                              </td>
+                              {!isEditingSavedCampaign && (
+                                <td>
+                                  <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
+                                </td>
+                              )}
                             </tr>
                           ))
                         )}
@@ -2363,20 +2404,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           <button className="btn btn-primary" onClick={handleSave}>Lưu chiến dịch</button>
         </div>
       </div>
-      {/* Friend Picker Modal */}
-      {showFriendPicker && formData.accountIds.length > 0 && (
-        <FriendPickerModal
-          accountId={formData.accountIds[0]}
-          onClose={() => setShowFriendPicker(false)}
-          onSelect={onFriendsSelected}
-        />
-      )}
-      {/* Group Picker Modal */}
-      {showGroupPicker && formData.accountIds.length > 0 && (
-        <GroupPickerModal
-          accountId={formData.accountIds[0]}
-          onClose={() => setShowGroupPicker(false)}
-          onSelect={onGroupsSelected}
+      {dataScanPicker && formData.accountIds.length > 0 && (
+        <DataScanModal
+          initialAction={dataScanPicker.action}
+          initialAccountId={formData.accountIds[0]}
+          lockAction
+          onClose={() => setDataScanPicker(null)}
+          onSelect={dataScanPicker.action === 'facebook_friends' ? onFriendsSelected : onGroupsSelected}
         />
       )}
     </div>

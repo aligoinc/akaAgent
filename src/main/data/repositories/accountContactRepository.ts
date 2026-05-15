@@ -3,6 +3,10 @@ import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountContactFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 
+interface UpsertContactsOptions {
+  markMissingDeleted?: boolean
+}
+
 const client = () => getSupabaseClient()
 const GROUP_ACTIVITY_RE = /\s*(Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity)[:：]?.*$/i
 
@@ -23,6 +27,10 @@ function extractUid(value: string | undefined, contactType: ContactType): string
   if (contactType === 'group' && /^groups\//i.test(cleaned)) {
     return cleaned.split('/').filter(Boolean)[1] || cleaned
   }
+  if (contactType === 'page' && /^pages\//i.test(cleaned)) {
+    const parts = cleaned.split('/').filter(Boolean)
+    return parts[parts.length - 1] || cleaned
+  }
   const url = parseFacebookUrl(raw)
   if (!url) return cleaned
 
@@ -35,6 +43,9 @@ function extractUid(value: string | undefined, contactType: ContactType): string
   const idParam = url.searchParams.get('id')
   if (idParam) return idParam
   const parts = url.pathname.split('/').filter(Boolean)
+  if (contactType === 'page' && parts[0]?.toLowerCase() === 'pages' && parts.length > 1) {
+    return parts[parts.length - 1] || raw
+  }
   return parts[0] || raw
 }
 
@@ -43,6 +54,7 @@ function normalizeContactUrl(uid: string, url: string | undefined, contactType: 
   if (rawUrl) return rawUrl
   if (!uid) return null
   if (contactType === 'group') return `https://www.facebook.com/groups/${uid}`
+  if (contactType === 'page') return `https://www.facebook.com/${uid}`
   if (/^\d+$/.test(uid)) return `https://www.facebook.com/profile.php?id=${uid}`
   return `https://www.facebook.com/${uid}`
 }
@@ -145,7 +157,10 @@ export async function listContacts(accountId: number, contactType?: ContactType)
   return (data || []).map(row => mapAccountContactFromDB(row))
 }
 
-export async function upsertContacts(contacts: Partial<AutoAccountContact>[]): Promise<number> {
+export async function upsertContacts(
+  contacts: Partial<AutoAccountContact>[],
+  options: UpsertContactsOptions = {}
+): Promise<number> {
   if (contacts.length === 0) return 0
 
   const u = requireCurrentUser()
@@ -179,7 +194,9 @@ export async function upsertContacts(contacts: Partial<AutoAccountContact>[]): P
     totalSaved += data?.length || 0
   }
 
-  await markMissingContactsDeleted(validContacts, u.staffId)
+  if (options.markMissingDeleted !== false) {
+    await markMissingContactsDeleted(validContacts, u.staffId)
+  }
 
   return totalSaved
 }

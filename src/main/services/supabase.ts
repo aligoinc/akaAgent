@@ -87,6 +87,9 @@ export class SupabaseService {
 
   // =========== CONTACTS ===========
   listContacts(accountId: number, contactType?: ContactType) { return accountContactRepo.listContacts(accountId, contactType) }
-  upsertContacts(contacts: Partial<AutoAccountContact>[]) { return accountContactRepo.upsertContacts(contacts) }
+  upsertContacts(
+    contacts: Partial<AutoAccountContact>[],
+    options?: Parameters<typeof accountContactRepo.upsertContacts>[1]
+  ) { return accountContactRepo.upsertContacts(contacts, options) }
   deleteContacts(accountId: number, contactType: ContactType) { return accountContactRepo.deleteContacts(accountId, contactType) }
 }
