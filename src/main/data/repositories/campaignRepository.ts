@@ -88,6 +88,11 @@ function withVietnamTime(day: Date, time: Pick<VietnamDateTimeParts, 'hour' | 'm
   })
 }
 
+function formatVietnamTimeForQuery(date = new Date()): string {
+  const parts = parseVietnamParts(date)
+  return `${pad2(parts.hour)}:${pad2(parts.minute)}:${pad2(parts.second)}`
+}
+
 function getVietnamWeekdayNumber(date: Date): number {
   const weekday = vietnamWeekdayFormatter.format(date)
   switch (weekday) {
@@ -194,6 +199,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     schedule: campaign.schedule || null,
     schedule_type: campaign.scheduleType || 'daily',
     schedule_end_date: campaign.scheduleEndDate || null,
+    daily_stop_time: campaign.dailyStopTime || null,
     schedule_days: campaign.scheduleDays || null,
     schedule_week_days: campaign.scheduleWeekDays || null,
     continue_next_day: campaign.continueNextDay ?? false,
@@ -228,6 +234,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   if (updates.schedule !== undefined) payload.schedule = updates.schedule
   if (updates.scheduleType !== undefined) payload.schedule_type = updates.scheduleType
   if (updates.scheduleEndDate !== undefined) payload.schedule_end_date = updates.scheduleEndDate
+  if (updates.dailyStopTime !== undefined) payload.daily_stop_time = updates.dailyStopTime || null
   if (updates.scheduleDays !== undefined) payload.schedule_days = updates.scheduleDays
   if (updates.scheduleWeekDays !== undefined) payload.schedule_week_days = updates.scheduleWeekDays
   if (updates.continueNextDay !== undefined) payload.continue_next_day = updates.continueNextDay
@@ -283,6 +290,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       schedule: origCamp.schedule,
       schedule_type: origCamp.schedule_type,
       schedule_end_date: origCamp.schedule_end_date,
+      daily_stop_time: origCamp.daily_stop_time,
       schedule_days: origCamp.schedule_days,
       schedule_week_days: origCamp.schedule_week_days,
       continue_next_day: origCamp.continue_next_day,
@@ -390,6 +398,8 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
 
 export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {
   const u = requireCurrentUser()
+  const now = new Date()
+  const currentVietnamTime = formatVietnamTimeForQuery(now)
   const { data, error } = await client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
@@ -397,7 +407,8 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
     .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
     .eq('is_delete', false)
-    .lte('schedule', new Date().toISOString())
+    .lte('schedule', now.toISOString())
+    .or(`daily_stop_time.is.null,daily_stop_time.gte.${currentVietnamTime}`)
 
   if (error) throw new Error(`Failed to get pending campaigns: ${error.message}`)
   return (data || []).map(row => mapCampaignFromDB(row))

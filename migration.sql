@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS public.auto_campaigns (
   content text DEFAULT ''::text,
   schedule_type text DEFAULT 'daily'::text,
   schedule_end_date timestamptz,
+  daily_stop_time time without time zone,
   schedule_days text,
   schedule_week_days text,
   continue_next_day boolean DEFAULT false,
@@ -662,6 +663,7 @@ COMMENT ON COLUMN public.org_channels.staff_id IS 'Staff sở hữu kênh này (
 COMMENT ON COLUMN public.org_channels.organization_id IS 'Tổ chức sở hữu (audit / future cross-staff sharing)';
 COMMENT ON COLUMN public.auto_campaigns.schedule_type IS 'Schedule type: daily, weekly, monthly';
 COMMENT ON COLUMN public.auto_campaigns.schedule_end_date IS 'End date for the campaign schedule';
+COMMENT ON COLUMN public.auto_campaigns.daily_stop_time IS 'Daily cutoff time in Asia/Ho_Chi_Minh; scheduler skips pending campaigns after this time';
 COMMENT ON COLUMN public.auto_campaigns.schedule_days IS 'Comma-separated days of month for monthly schedule, e.g. 5,10,19,25';
 COMMENT ON COLUMN public.auto_campaigns.schedule_week_days IS 'Comma-separated weekday numbers for weekly schedule (2=Mon..8=Sun)';
 COMMENT ON COLUMN public.auto_campaigns.continue_next_day IS 'Daily mode: continue at scheduled time next day if not finished';

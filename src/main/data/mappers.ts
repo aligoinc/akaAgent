@@ -88,6 +88,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     schedule: row.schedule as string | undefined,
     scheduleType: (row.schedule_type as Campaign['scheduleType']) || 'daily',
     scheduleEndDate: row.schedule_end_date as string | undefined,
+    dailyStopTime: (row.daily_stop_time as string | null) ?? null,
     scheduleDays: row.schedule_days as string | undefined,
     scheduleWeekDays: row.schedule_week_days as string | undefined,
     continueNextDay: (row.continue_next_day as boolean) ?? false,
