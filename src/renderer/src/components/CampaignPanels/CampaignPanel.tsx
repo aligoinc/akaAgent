@@ -111,7 +111,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     loadCampaignInputData, loadCampaignDetails
   } = useCampaignStore()
-  const isAdminAkabiz = !!useAuthStore(s => s.user?.isAdminAkabiz)
+  const canManageCampaignActions = useAuthStore(s => s.user?.staffId === 1)
   const showAlert = useUiStore(s => s.showAlert)
 
   const [showForm, setShowForm] = useState(false)
@@ -569,7 +569,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       <div className="campaign-panel-header">
         <span className="campaign-panel-title">Chiến dịch</span>
         <div style={{ display: 'flex', gap: 4 }}>
-          {isAdminAkabiz && (
+          {canManageCampaignActions && (
             <button className="btn btn-ghost btn-icon" onClick={() => setShowActionManager(true)} title="Quản lý Hành động">
               <Settings2 size={14} />
             </button>
@@ -628,7 +628,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
         />
       )}
 
-      {showActionManager && isAdminAkabiz && (
+      {showActionManager && canManageCampaignActions && (
         <ActionManagerModal onClose={() => {
           setShowActionManager(false)
           loadCampaignActions()
