@@ -353,11 +353,6 @@ export const IPC_EVENTS = {
   DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
   DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
 
-  // Campaign Scheduler
-  SCHEDULER_START: 'scheduler:start',
-  SCHEDULER_STOP: 'scheduler:stop',
-  SCHEDULER_STATUS: 'scheduler:status',
-
   // Webview registration (embedded browser tabs)
   WEBVIEW_REGISTER: 'webview:register',
   WEBVIEW_UNREGISTER: 'webview:unregister',

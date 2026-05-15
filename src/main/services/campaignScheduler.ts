@@ -192,7 +192,7 @@ export class CampaignScheduler {
       await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
       this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
-      await this.supabase.updateAccount(account.id, { status: 'đang chạy' })
+      await this.updateAccountAndBroadcast(account.id, { status: 'đang chạy' })
 
       await this.executeCampaignV2(account, campaign, action.workflowId, this.getCampaignActionDescriptors(campaign, action))
     } catch (err) {
@@ -200,7 +200,7 @@ export class CampaignScheduler {
       await this.recoverStuckCampaignInputData(campaign.id, errMsg)
       await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
       await this.handleRuntimeError(account, campaign, 'err_undefined', undefined, { message: errMsg })
-      await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+      await this.releaseRunningAccount(account.id)
       this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     }
   }
@@ -261,7 +261,7 @@ export class CampaignScheduler {
       const cur = await this.supabase.getCampaign(campaign.id)
       if (cur && cur.status === 'tạm dừng') {
         this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
-        await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+        await this.releaseRunningAccount(account.id)
         return
       }
 
@@ -269,6 +269,7 @@ export class CampaignScheduler {
       if (accountBlockReason) {
         stoppedBeforeCompletion = true
         await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
+        await this.releaseRunningAccount(account.id)
         return
       }
 
@@ -416,7 +417,7 @@ export class CampaignScheduler {
     if (!stoppedBeforeCompletion) {
       await this.handleCampaignCompletion(campaign)
     }
-    await this.supabase.updateAccount(account.id, { status: 'chờ xử lý' })
+    await this.releaseRunningAccount(account.id)
   }
 
   private getCampaignActionDescriptors(campaign: Campaign, campaignAction?: CampaignAction): CampaignActionDescriptor[] {
@@ -719,7 +720,7 @@ export class CampaignScheduler {
     const campaignStatus = policy.updateStatusCampaign || 'chờ xử lý'
 
     if (policy.updateStatusAccount) {
-      await this.supabase.updateAccount(account.id, { status: policy.updateStatusAccount })
+      await this.updateAccountAndBroadcast(account.id, { status: policy.updateStatusAccount })
     }
     if (policy.disableActionCodes.length > 0) {
       await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions)
@@ -1382,6 +1383,25 @@ export class CampaignScheduler {
       // Window may be closed
     }
     return updated
+  }
+
+  /**
+   * Cập nhật account xong push event để panel tài khoản reload realtime.
+   */
+  private async updateAccountAndBroadcast(id: number, updates: Partial<AutoAccount>): Promise<AutoAccount> {
+    const updated = await this.supabase.updateAccount(id, updates)
+    try {
+      this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+    } catch {
+      // Window may be closed
+    }
+    return updated
+  }
+
+  private async releaseRunningAccount(accountId: number): Promise<void> {
+    const account = await this.supabase.getAccount(accountId)
+    if (!account || account.status !== 'đang chạy') return
+    await this.updateAccountAndBroadcast(accountId, { status: 'chờ xử lý' })
   }
 
   private resolveImageSelection(

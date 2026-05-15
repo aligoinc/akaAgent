@@ -1,9 +1,8 @@
 import { ipcMain } from 'electron'
 import { IPC_EVENTS } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
-import { CampaignScheduler } from '../../services/campaignScheduler'
 
-export function registerCampaignHandlers(supabase: SupabaseService, campaignScheduler: CampaignScheduler): void {
+export function registerCampaignHandlers(supabase: SupabaseService): void {
   // Campaign Actions
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_ACTIONS, async () => {
     return supabase.listCampaignActions()
@@ -95,20 +94,5 @@ export function registerCampaignHandlers(supabase: SupabaseService, campaignSche
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_CAMPAIGN_DETAIL, async (_, id: number) => {
     return supabase.deleteCampaignDetail(id)
-  })
-
-  // Scheduler
-  ipcMain.handle(IPC_EVENTS.SCHEDULER_START, () => {
-    campaignScheduler.start()
-    return { success: true }
-  })
-
-  ipcMain.handle(IPC_EVENTS.SCHEDULER_STOP, () => {
-    campaignScheduler.stop()
-    return { success: true }
-  })
-
-  ipcMain.handle(IPC_EVENTS.SCHEDULER_STATUS, () => {
-    return { running: campaignScheduler.isRunning() }
   })
 }

@@ -126,16 +126,6 @@ const electronAPI = {
   deleteCampaignDetail: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CAMPAIGN_DETAIL, id),
 
-  // Campaign Scheduler
-  startScheduler: (): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_EVENTS.SCHEDULER_START),
-
-  stopScheduler: (): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_EVENTS.SCHEDULER_STOP),
-
-  getSchedulerStatus: (): Promise<{ running: boolean }> =>
-    ipcRenderer.invoke(IPC_EVENTS.SCHEDULER_STATUS),
-
   // Campaign Log (real-time)
   onCampaignLog: (callback: (log: { timestamp: string; message: string }) => void): () => void => {
     const handler = (_event: Electron.IpcRendererEvent, log: { timestamp: string; message: string }) => callback(log)
