@@ -187,7 +187,7 @@ function CanvasInner() {
 
   if (!workflow) {
     return (
-      <div ref={wrapperRef} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+      <div ref={wrapperRef} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary, #666)' }}>
         Chọn 1 workflow ở sidebar hoặc tạo mới để bắt đầu.
       </div>
     )

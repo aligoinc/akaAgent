@@ -152,13 +152,6 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     }
   }
 
-  const getStatusIcon = (account: AutoAccount) => {
-    if (!account.isActive) return '🚫'
-    if (account.status === 'tạm dừng') return '⏸️'
-    if (account.status === 'đang chạy') return '⏳'
-    return '⏳'
-  }
-
   return (
     <div className="campaign-panel">
       <div className="campaign-panel-header">
@@ -210,8 +203,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
             >
               <div className="account-card-info">
                 <div className="account-card-name">
-                  <span className="account-status-icon">{getStatusIcon(account)}</span>
-                  {account.name}
+                  <span className={`account-status-dot ${!account.isActive ? 'is-disabled' : getAccountStatusClass(account.status)}`} aria-hidden="true" />
+                  <span className="account-card-name-text" title={account.name}>{account.name}</span>
                 </div>
                 <div className="account-card-meta">
                   <span className="account-tag" style={{ color: 'var(--accent-info)' }}>{account.flatformType}</span>

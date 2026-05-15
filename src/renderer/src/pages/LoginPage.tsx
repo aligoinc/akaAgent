@@ -88,8 +88,8 @@ export default function LoginPage() {
           maxWidth: 380,
           padding: 28,
           background: 'var(--bg-secondary, #14141c)',
-          border: '1px solid var(--border-color, #27272f)',
-          borderRadius: 10,
+          border: '1px solid var(--border-default, #27272f)',
+          borderRadius: 8,
           display: 'flex',
           flexDirection: 'column',
           gap: 16,
@@ -123,7 +123,7 @@ export default function LoginPage() {
               padding: '9px 12px',
               fontSize: 13,
               background: 'var(--bg-primary, #0a0a0f)',
-              border: '1px solid var(--border-color, #27272f)',
+              border: '1px solid var(--border-default, #27272f)',
               borderRadius: 6,
               color: 'var(--text-primary, #fff)',
               outline: 'none'
@@ -143,7 +143,7 @@ export default function LoginPage() {
               padding: '9px 12px',
               fontSize: 13,
               background: 'var(--bg-primary, #0a0a0f)',
-              border: '1px solid var(--border-color, #27272f)',
+              border: '1px solid var(--border-default, #27272f)',
               borderRadius: 6,
               color: 'var(--text-primary, #fff)',
               outline: 'none'

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWorkflowV2Store } from '../../stores/workflowV2Store'
 import { useCampaignStore } from '../../stores/campaignStore'
+import { ChevronDown, ChevronUp, Play, Square } from 'lucide-react'
 
 export default function TestPanelV2() {
   const { current: workflow, isTesting, testRunKey, testStatusByNode, testLogs, startTest, recordStep, appendLog, endTest, clearTest } = useWorkflowV2Store()
@@ -69,7 +70,7 @@ export default function TestPanelV2() {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderBottom: '1px solid var(--border, #2a2a35)' }}>
         <button className="btn btn-sm btn-ghost" onClick={() => setCollapsed(!collapsed)} style={{ minWidth: 28 }}>
-          {collapsed ? '▲' : '▼'}
+          {collapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </button>
         <span style={{ fontSize: 12, color: 'var(--text, #e0e0e0)', fontWeight: 500 }}>Test panel</span>
 
@@ -86,11 +87,11 @@ export default function TestPanelV2() {
 
             {!isTesting ? (
               <button className="btn btn-sm" onClick={onTestWorkflow} disabled={!workflow || !accountId}>
-                ▶ Test workflow
+                <Play size={12} /> Test workflow
               </button>
             ) : (
               <button className="btn btn-sm" onClick={onStop} style={{ background: '#ef4444' }}>
-                ■ Stop
+                <Square size={12} /> Stop
               </button>
             )}
 
@@ -105,8 +106,8 @@ export default function TestPanelV2() {
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 200px', minHeight: 0 }}>
           {/* Steps */}
           <div style={{ padding: 8, overflowY: 'auto', borderRight: '1px solid var(--border, #2a2a35)' }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Steps</div>
-            {stepsArray.length === 0 && <div style={{ fontSize: 11, color: '#666' }}>(chưa có step)</div>}
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary, #888)', marginBottom: 4 }}>Steps</div>
+            {stepsArray.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-tertiary, #666)' }}>(chưa có step)</div>}
             {stepsArray.map((s, i) => (
               <div key={i} style={{ fontSize: 11, padding: '2px 4px', display: 'flex', gap: 6 }}>
                 <span style={{
@@ -114,27 +115,27 @@ export default function TestPanelV2() {
                   background: s.status === 'success' ? '#22c55e' : s.status === 'error' ? '#ef4444' : s.status === 'running' ? '#fbbf24' : '#666'
                 }} />
                 <span style={{ flex: 1 }}>
-                  <span style={{ color: '#e0e0e0' }}>{s.blockName || s.nodeId}</span>
-                  <span style={{ color: '#666', marginLeft: 4 }}>({s.nodeId})</span>
+                  <span style={{ color: 'var(--text-primary, #e0e0e0)' }}>{s.blockName || s.nodeId}</span>
+                  <span style={{ color: 'var(--text-tertiary, #666)', marginLeft: 4 }}>({s.nodeId})</span>
                   {s.error && <div style={{ color: '#ef4444' }}>{s.error}</div>}
                 </span>
-                {s.durationMs && <span style={{ color: '#666' }}>{s.durationMs}ms</span>}
+                {s.durationMs && <span style={{ color: 'var(--text-tertiary, #666)' }}>{s.durationMs}ms</span>}
               </div>
             ))}
           </div>
 
           {/* Logs */}
           <div style={{ padding: 8, overflowY: 'auto', borderRight: '1px solid var(--border, #2a2a35)' }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Logs</div>
-            {testLogs.length === 0 && <div style={{ fontSize: 11, color: '#666' }}>(chưa có log)</div>}
-            <pre style={{ fontSize: 11, fontFamily: 'monospace', color: '#ddd', margin: 0, whiteSpace: 'pre-wrap' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary, #888)', marginBottom: 4 }}>Logs</div>
+            {testLogs.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-tertiary, #666)' }}>(chưa có log)</div>}
+            <pre style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-primary, #ddd)', margin: 0, whiteSpace: 'pre-wrap' }}>
               {testLogs.map((l, i) => `[${l.nodeId}] ${l.line}`).join('\n')}
             </pre>
           </div>
 
           {/* Variables editor */}
           <div style={{ padding: 8, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Variables (JSON)</div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary, #888)', marginBottom: 4 }}>Variables (JSON)</div>
             <textarea
               value={variablesJson}
               onChange={(e) => setVariablesJson(e.target.value)}

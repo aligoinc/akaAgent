@@ -586,7 +586,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       {/* Filter indicator */}
       {filterAccountId && (
         <div className="campaign-filter-bar">
-          <span>🔍 Lọc theo: <strong>{filterAccountName}</strong></span>
+          <span>Lọc theo: <strong>{filterAccountName}</strong></span>
           <button className="btn-icon" onClick={onClearFilter} title="Bỏ lọc">
             <X size={12} />
           </button>
@@ -658,61 +658,67 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
               <div className="campaign-col col-note">Ghi chú</div>
               <div className="campaign-col col-ops"></div>
             </div>
-            {filteredCampaigns.map(campaign => (
-              <div
-                key={campaign.id}
-                className={`campaign-table-row ${getCampaignStatusClass(campaign.status)} ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
-                onClick={() => handleRowClick(campaign)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="campaign-col col-checkbox" onClick={e => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(campaign.id)}
-                    onChange={() => toggleSelectOne(campaign.id)}
-                  />
-                </div>
-                <div className="campaign-col col-name">
-                  <div>{campaign.name}</div>
-                </div>
-                <div className="campaign-col col-action">{campaign.actionName || campaign.actionId}</div>
-                <div className="campaign-col col-account">{campaign.accountName || '-'}</div>
-                <div className="campaign-col col-status">
-                  <span className="status-badge">
-                    {campaign.status}
-                  </span>
-                </div>
-                <div className="campaign-col col-schedule">
-                  {campaign.schedule ? new Date(campaign.schedule).toLocaleString('vi-VN') : '-'}
-                </div>
-                <div className="campaign-col col-note">
-                  {campaign.note ? (
-                    <span className="campaign-note-text">{campaign.note}</span>
-                  ) : '-'}
-                </div>
-                <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
-                  {(campaign.status === 'đang chạy' || campaign.status === 'chờ xử lý') && (
-                    <button className="btn-icon" onClick={() => handlePause(campaign)} title="Tạm dừng">
-                      <Pause size={12} />
+            {filteredCampaigns.map(campaign => {
+              const actionLabel = campaign.actionName || campaign.actionId
+              const accountLabel = campaign.accountName || '-'
+              const scheduleLabel = campaign.schedule ? new Date(campaign.schedule).toLocaleString('vi-VN') : '-'
+
+              return (
+                <div
+                  key={campaign.id}
+                  className={`campaign-table-row ${getCampaignStatusClass(campaign.status)} ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
+                  onClick={() => handleRowClick(campaign)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="campaign-col col-checkbox" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(campaign.id)}
+                      onChange={() => toggleSelectOne(campaign.id)}
+                    />
+                  </div>
+                  <div className="campaign-col col-name" title={campaign.name}>
+                    <div>{campaign.name}</div>
+                  </div>
+                  <div className="campaign-col col-action" title={actionLabel}>{actionLabel}</div>
+                  <div className="campaign-col col-account" title={accountLabel}>{accountLabel}</div>
+                  <div className="campaign-col col-status" title={campaign.status}>
+                    <span className="status-badge">
+                      {campaign.status}
+                    </span>
+                  </div>
+                  <div className="campaign-col col-schedule" title={scheduleLabel}>
+                    {scheduleLabel}
+                  </div>
+                  <div className="campaign-col col-note" title={campaign.note || ''}>
+                    {campaign.note ? (
+                      <span className="campaign-note-text">{campaign.note}</span>
+                    ) : '-'}
+                  </div>
+                  <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
+                    {(campaign.status === 'đang chạy' || campaign.status === 'chờ xử lý') && (
+                      <button className="btn-icon" onClick={() => handlePause(campaign)} title="Tạm dừng">
+                        <Pause size={12} />
+                      </button>
+                    )}
+                    {campaign.status === 'tạm dừng' && (
+                      <button className="btn-icon" onClick={() => handleResume(campaign)} title="Tiếp tục">
+                        <Play size={12} />
+                      </button>
+                    )}
+                    <button className="btn-icon" onClick={() => handleClone(campaign)} title="Nhân bản">
+                      <Copy size={12} />
                     </button>
-                  )}
-                  {campaign.status === 'tạm dừng' && (
-                    <button className="btn-icon" onClick={() => handleResume(campaign)} title="Tiếp tục">
-                      <Play size={12} />
+                    <button className="btn-icon" onClick={() => handleEdit(campaign)} title="Sửa">
+                      <Edit3 size={12} />
                     </button>
-                  )}
-                  <button className="btn-icon" onClick={() => handleClone(campaign)} title="Nhân bản">
-                    <Copy size={12} />
-                  </button>
-                  <button className="btn-icon" onClick={() => handleEdit(campaign)} title="Sửa">
-                    <Edit3 size={12} />
-                  </button>
-                  <button className="btn-icon" onClick={() => handleDelete(campaign)} title="Xoá">
-                    <Trash2 size={12} />
-                  </button>
+                    <button className="btn-icon" onClick={() => handleDelete(campaign)} title="Xoá">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
