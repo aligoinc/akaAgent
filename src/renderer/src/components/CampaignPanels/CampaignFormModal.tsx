@@ -22,6 +22,8 @@ interface StepDef {
 type ActionLimitForm = Required<Pick<ActionLimitConfig, 'dailyLimit' | 'rateLimitCount' | 'rateLimitMinutes'>>
 type ImageOption = 'none' | 'all' | 'random'
 type CommentImageOption = 'none' | 'all'
+type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
+type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 
 const DEFAULT_ACTION_LIMIT: ActionLimitForm = {
   dailyLimit: 30,
@@ -112,6 +114,14 @@ const COMMENT_SORT_OPTIONS = [
 
 const DEFAULT_DAILY_STOP_TIME = '18:00'
 
+const MESSAGE_FULL_NAME_TOKEN = '#{FULL_NAME}'
+const MESSAGE_DATE_OPTIONS: { value: MessageDateOption; label: string; token: string }[] = [
+  { value: 'today', label: 'Hôm nay', token: 'TODAY' },
+  { value: 'tomorrow', label: 'Ngày mai', token: 'TOMORROW' },
+  { value: 'yesterday', label: 'Hôm qua', token: 'YESTERDAY' }
+]
+const MESSAGE_DATE_FORMATS: MessageDateFormat[] = ['DD/MM/YYYY', 'MM/DD/YYYY']
+
 const formatDateTimeLocal = (date: Date): string => {
   const pad = (n: number) => n.toString().padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
@@ -185,6 +195,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   } = useCampaignStore()
 
   const contentRef = useRef<HTMLDivElement>(null)
+  const campaignContentTextareaRef = useRef<HTMLTextAreaElement>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const txtFileInputRef = useRef<HTMLInputElement>(null)
@@ -388,6 +399,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [activeStep, setActiveStep] = useState('general')
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
+  const [messageDateOption, setMessageDateOption] = useState<MessageDateOption>('today')
+  const [messageDateFormat, setMessageDateFormat] = useState<MessageDateFormat>('DD/MM/YYYY')
   const accountDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -967,6 +980,92 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       )
     }
     e.target.value = ''
+  }
+
+  const insertCampaignContentToken = (token: string) => {
+    const textarea = campaignContentTextareaRef.current
+    const start = textarea?.selectionStart ?? formData.content.length
+    const end = textarea?.selectionEnd ?? start
+    const safeStart = Math.max(0, Math.min(start, formData.content.length))
+    const safeEnd = Math.max(safeStart, Math.min(end, formData.content.length))
+    const nextContent =
+      formData.content.slice(0, safeStart) +
+      token +
+      formData.content.slice(safeEnd)
+    const nextCursor = safeStart + token.length
+
+    setFormData(p => ({ ...p, content: nextContent }))
+    window.requestAnimationFrame(() => {
+      textarea?.focus()
+      textarea?.setSelectionRange(nextCursor, nextCursor)
+    })
+  }
+
+  const renderMessageInsertPanel = () => {
+    const dateTokenName = MESSAGE_DATE_OPTIONS.find(opt => opt.value === messageDateOption)?.token || 'TODAY'
+    const dateToken = `#{${dateTokenName}(${messageDateFormat})}`
+
+    return (
+      <aside className="message-template-panel" aria-label="Chèn thông tin">
+        <div className="message-template-title">Chèn thông tin</div>
+
+        <div className="message-template-section">
+          <div className="message-template-section-title">
+            <Users size={16} />
+            <span>Khách hàng</span>
+          </div>
+          <label>Tên hiển thị</label>
+          <button
+            type="button"
+            className="message-template-token"
+            onClick={() => insertCampaignContentToken(MESSAGE_FULL_NAME_TOKEN)}
+          >
+            {MESSAGE_FULL_NAME_TOKEN}
+          </button>
+        </div>
+
+        <div className="message-template-section">
+          <div className="message-template-section-title">
+            <Calendar size={16} />
+            <span>Chọn thời gian</span>
+          </div>
+          <div className="message-template-control-row">
+            <div className="message-template-control">
+              <label>Chọn ngày:</label>
+              <select
+                className="stepper-input"
+                value={messageDateOption}
+                onChange={e => setMessageDateOption(e.target.value as MessageDateOption)}
+              >
+                {MESSAGE_DATE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="message-template-control">
+              <label>Chọn định dạng:</label>
+              <select
+                className="stepper-input"
+                value={messageDateFormat}
+                onChange={e => setMessageDateFormat(e.target.value as MessageDateFormat)}
+              >
+                {MESSAGE_DATE_FORMATS.map(format => (
+                  <option key={format} value={format}>{format}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <label>Chèn định dạng ngày</label>
+          <button
+            type="button"
+            className="message-template-token"
+            onClick={() => insertCampaignContentToken(dateToken)}
+          >
+            {dateToken}
+          </button>
+        </div>
+      </aside>
+    )
   }
 
   const renderImagePicker = (target: 'post' | 'comment', title: string) => {
@@ -1887,20 +1986,26 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     </div>
                   )}
 
-                  <div className="stepper-form-group">
-                    <label>Nội dung chiến dịch</label>
-                    <textarea
-                      className="stepper-textarea"
-                      placeholder={isTimelinePostCampaign && formData.copyContentFromSource
-                        ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
-                        : "Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."}
-                      value={formData.content}
-                      onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
-                      rows={8}
-                    />
-                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                      Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
+                  <div className={isMessageFriendCampaign ? 'campaign-content-template-layout' : undefined}>
+                    <div className="stepper-form-group">
+                      <label>{isMessageFriendCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
+                      <textarea
+                        ref={campaignContentTextareaRef}
+                        className="stepper-textarea"
+                        placeholder={isTimelinePostCampaign && formData.copyContentFromSource
+                          ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
+                          : isMessageFriendCampaign
+                            ? "Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."
+                            : "Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."}
+                        value={formData.content}
+                        onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
+                        rows={8}
+                      />
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                        Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
+                      </div>
                     </div>
+                    {isMessageFriendCampaign && renderMessageInsertPanel()}
                   </div>
 
                   {renderImagePicker('post', 'Media')}
