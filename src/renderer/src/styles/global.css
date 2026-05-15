@@ -2886,9 +2886,36 @@ body {
   border-top: 1px solid var(--border-default);
   background: var(--bg-primary);
   flex-shrink: 0;
-  max-height: 220px;
   display: flex;
   flex-direction: column;
+  min-height: 34px;
+  max-height: calc(100vh - 96px);
+}
+
+.detail-dock-resize-handle {
+  position: relative;
+  height: 7px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-default);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.detail-dock-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 48px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transform: translateX(-50%);
+}
+
+.detail-dock-resize-handle:hover {
+  background: var(--bg-hover);
 }
 
 .detail-dock-header {
@@ -2978,6 +3005,27 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.find-data-export-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 8px;
+}
+
+.find-data-export-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.find-data-export-options .schedule-checkbox-label {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .find-data-chip,

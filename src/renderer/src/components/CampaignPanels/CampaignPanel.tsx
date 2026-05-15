@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -33,6 +33,22 @@ interface FoundDataItem {
   groupUrl: string
   createdAt?: string
 }
+
+const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
+
+const FOUND_DATA_EXPORT_OPTIONS: { kind: FoundDataKind; label: string }[] = [
+  { kind: 'phone', label: 'SĐT' },
+  { kind: 'uid', label: 'UID' },
+  { kind: 'zalo', label: 'Link group Zalo' },
+  { kind: 'postLink', label: 'Link bài post' }
+]
+
+const DETAIL_DOCK_DEFAULT_HEIGHT = 220
+const DETAIL_DOCK_MIN_HEIGHT = 140
+const DETAIL_DOCK_MAX_HEIGHT = 900
+const DETAIL_DOCK_TOP_RESERVED_HEIGHT = 96
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
 const toStringList = (value: unknown): string[] => {
   if (!Array.isArray(value)) return []
@@ -107,6 +123,10 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
   const [detailTab, setDetailTab] = useState<DetailTab>('data')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [detailDockHeight, setDetailDockHeight] = useState(DETAIL_DOCK_DEFAULT_HEIGHT)
+  const [foundDataExportKinds, setFoundDataExportKinds] = useState<Set<FoundDataKind>>(
+    () => new Set(FOUND_DATA_EXPORT_OPTIONS.map(option => option.kind))
+  )
 
   useEffect(() => {
     loadCampaigns()
@@ -303,11 +323,64 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     })
   }, [campaignDetails])
 
+  const selectedFoundDataItems = useMemo(() => {
+    return foundDataItems.filter(item => foundDataExportKinds.has(item.kind))
+  }, [foundDataItems, foundDataExportKinds])
+
   useEffect(() => {
     if (detailTab === 'foundData' && !isSelectedFindDataCampaign) {
       setDetailTab('actions')
     }
   }, [detailTab, isSelectedFindDataCampaign])
+
+  const toggleFoundDataExportKind = (kind: FoundDataKind) => {
+    setFoundDataExportKinds(prev => {
+      const next = new Set(prev)
+      if (next.has(kind)) next.delete(kind)
+      else next.add(kind)
+      return next
+    })
+  }
+
+  const getDetailDockMaxHeight = () => {
+    const availableHeight = window.innerHeight - DETAIL_DOCK_TOP_RESERVED_HEIGHT
+    return Math.max(DETAIL_DOCK_MIN_HEIGHT, Math.min(DETAIL_DOCK_MAX_HEIGHT, availableHeight))
+  }
+
+  const handleDetailDockResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    event.preventDefault()
+
+    const startY = event.clientY
+    const startHeight = detailDockHeight
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault()
+      const deltaY = moveEvent.clientY - startY
+      setDetailDockHeight(clamp(
+        startHeight - deltaY,
+        DETAIL_DOCK_MIN_HEIGHT,
+        getDetailDockMaxHeight()
+      ))
+    }
+
+    const stopResize = () => {
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', stopResize)
+      window.removeEventListener('pointercancel', stopResize)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', stopResize, { once: true })
+    window.addEventListener('pointercancel', stopResize, { once: true })
+  }
 
   const renderCampaignDetailLog = (detail: CampaignDetail) => {
     const payload = getFindDataPayload(detail)
@@ -342,33 +415,19 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       const rows = campaignDetails.map((detail, index) => ({
         STT: index + 1,
         'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
-        'Chiến dịch': selectedCampaign.name,
-        'Campaign ID': selectedCampaign.id,
-        'Account ID': detail.accountId ?? selectedCampaign.accountId ?? '',
-        'Input Data ID': detail.inputDataId ?? '',
-        'Action Code': detail.actionCode ?? '',
-        'Hành động': detail.actionName,
+        'Hành động': detail.actionName || '',
         'Trạng thái': detail.status,
-        'Error Code': detail.errorCode ?? '',
         'Chi tiết': detail.log || '',
-        'Post URL': detail.postUrl || '',
-        'Data JSON': detail.data ? JSON.stringify(detail.data) : ''
+        'Link bài viết': detail.postUrl || ''
       }))
       const sheet = utils.json_to_sheet(rows)
       sheet['!cols'] = [
         { wch: 6 },
         { wch: 22 },
-        { wch: 28 },
-        { wch: 12 },
-        { wch: 12 },
-        { wch: 14 },
-        { wch: 18 },
         { wch: 18 },
         { wch: 14 },
-        { wch: 18 },
-        { wch: 60 },
-        { wch: 36 },
-        { wch: 50 }
+        { wch: 70 },
+        { wch: 40 }
       ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Lich su hanh dong')
@@ -378,6 +437,109 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     } catch (err) {
       console.error('Failed to export campaign details:', err)
       showAlert('Không thể xuất file Excel lịch sử hành động.', 'error')
+    }
+  }
+
+  const handleExportFoundData = () => {
+    if (!selectedCampaign) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (foundDataExportKinds.size === 0) {
+      showAlert('Vui lòng chọn ít nhất một loại data để xuất.', 'error')
+      return
+    }
+    if (selectedFoundDataItems.length === 0) {
+      showAlert('Không có data phù hợp với tuỳ chọn xuất.', 'info')
+      return
+    }
+
+    try {
+      const rows = [
+        FOUND_DATA_TEMPLATE_HEADERS,
+        ...selectedFoundDataItems.map(item => {
+          const isPhone = item.kind === 'phone'
+          return [
+            '',
+            isPhone ? '' : item.value,
+            isPhone ? item.value : '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            ''
+          ]
+        })
+      ]
+      const sheet = utils.aoa_to_sheet(rows)
+      sheet['!cols'] = [
+        { wch: 24 },
+        { wch: 48 },
+        { wch: 18 },
+        { wch: 28 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 }
+      ]
+      const workbook = utils.book_new()
+      utils.book_append_sheet(workbook, sheet, 'Sheet1')
+      const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
+      writeFile(workbook, `found-data-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      showAlert('Đã xuất data tìm được ra Excel.', 'success')
+    } catch (err) {
+      console.error('Failed to export found data:', err)
+      showAlert('Không thể xuất file Excel data tìm được.', 'error')
+    }
+  }
+
+  const handleExportCampaignInputData = () => {
+    if (!selectedCampaign) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (campaignInputData.length === 0) {
+      showAlert('Chưa có dữ liệu để xuất.', 'info')
+      return
+    }
+
+    try {
+      const rows = [
+        FOUND_DATA_TEMPLATE_HEADERS,
+        ...campaignInputData.map(item => [
+          item.name || '',
+          item.uid || '',
+          item.phone || '',
+          item.email || '',
+          '',
+          '',
+          '',
+          '',
+          ''
+        ])
+      ]
+      const sheet = utils.aoa_to_sheet(rows)
+      sheet['!cols'] = [
+        { wch: 24 },
+        { wch: 48 },
+        { wch: 18 },
+        { wch: 28 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 }
+      ]
+      const workbook = utils.book_new()
+      utils.book_append_sheet(workbook, sheet, 'Sheet1')
+      const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
+      writeFile(workbook, `campaign-data-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      showAlert('Đã xuất dữ liệu ra Excel.', 'success')
+    } catch (err) {
+      console.error('Failed to export campaign input data:', err)
+      showAlert('Không thể xuất file Excel dữ liệu.', 'error')
     }
   }
 
@@ -546,7 +708,19 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
 
       {/* Bottom Detail Dock */}
       {selectedCampaignId && (
-        <div className="campaign-detail-dock">
+        <div
+          className="campaign-detail-dock"
+          style={detailDockOpen ? { height: detailDockHeight } : undefined}
+        >
+          {detailDockOpen && (
+            <div
+              className="detail-dock-resize-handle"
+              onPointerDown={handleDetailDockResizeStart}
+              role="separator"
+              aria-orientation="horizontal"
+              title="Kéo để thay đổi chiều cao"
+            />
+          )}
           <div className="detail-dock-header" onClick={() => setDetailDockOpen(!detailDockOpen)}>
             <span className="detail-dock-title">
               Chi tiết: <strong>{selectedCampaign?.name || ''}</strong>
@@ -591,6 +765,16 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
               {/* Tab: Campaign Input Data */}
               {detailTab === 'data' && (
                 <>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 0 8px' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleExportCampaignInputData}
+                      disabled={loadingCampaignInputData || campaignInputData.length === 0}
+                      title="Xuất dữ liệu ra Excel"
+                    >
+                      <Download size={14} /> Xuất Excel
+                    </button>
+                  </div>
                   {loadingCampaignInputData ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
                   ) : campaignInputData.length === 0 ? (
@@ -681,6 +865,29 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
               {/* Tab: Found data extracted by facebook_find_data_group */}
               {detailTab === 'foundData' && (
                 <>
+                  <div className="find-data-export-bar">
+                    <div className="find-data-export-options">
+                      {FOUND_DATA_EXPORT_OPTIONS.map(option => (
+                        <label key={option.kind} className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={foundDataExportKinds.has(option.kind)}
+                            onChange={() => toggleFoundDataExportKind(option.kind)}
+                            disabled={loadingCampaignDetails}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleExportFoundData}
+                      disabled={loadingCampaignDetails || selectedFoundDataItems.length === 0}
+                      title="Xuất data tìm được ra Excel"
+                    >
+                      <Download size={14} /> Xuất Excel
+                    </button>
+                  </div>
                   {loadingCampaignDetails ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
                   ) : foundDataItems.length === 0 ? (
