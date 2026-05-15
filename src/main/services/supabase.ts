@@ -11,14 +11,14 @@ import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
  * Keeps a thin service API so callers do not know repository boundaries.
  */
 export class SupabaseService {
-  // =========== STARTUP ===========
-  async resetRunningStatuses(): Promise<void> {
-    console.log('[Supabase] Resetting "đang chạy" statuses to "chờ xử lý"...')
-    await accountRepo.resetRunningAccountStatuses()
-    await campaignRepo.resetRunningCampaignStatuses()
-    await campaignRepo.resetCampaignNotes()
-    await campaignRepo.resetRunningCampaignInputStatuses()
-    await campaignRepo.resetRunningCampaignInputDataStatuses()
+  // =========== RECOVERY ===========
+  async resetRunningStatuses(staffId: number): Promise<void> {
+    console.log(`[Supabase] Resetting "đang chạy" statuses to "chờ xử lý" for staff ${staffId}...`)
+    await accountRepo.resetRunningAccountStatuses(staffId)
+    await campaignRepo.resetRunningCampaignStatuses(staffId)
+    await campaignRepo.resetCampaignNotes(staffId)
+    await campaignRepo.resetRunningCampaignInputStatuses(staffId)
+    await campaignRepo.resetRunningCampaignInputDataStatuses(staffId)
     await accountActionRepo.enableDueAccountActions()
   }
 

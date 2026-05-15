@@ -99,10 +99,11 @@ export async function getEligibleAccounts(): Promise<AutoAccount[]> {
   return (data || []).map(row => mapAccountFromDB(row))
 }
 
-export async function resetRunningAccountStatuses(): Promise<void> {
+export async function resetRunningAccountStatuses(staffId: number): Promise<void> {
   const { error } = await client()
     .from('auto_accounts')
     .update({ status: 'ch\u1edd x\u1eed l\u00fd' })
+    .eq('staff_id', staffId)
     .eq('status', '\u0111ang ch\u1ea1y')
 
   if (error) console.error('Failed to reset account statuses:', error.message)

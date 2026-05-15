@@ -504,37 +504,61 @@ export async function maintainCampaignSchedules(): Promise<Campaign[]> {
   return updatedCampaigns
 }
 
-export async function resetRunningCampaignStatuses(): Promise<void> {
+async function listStaffCampaignIds(staffId: number, context: string): Promise<number[]> {
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('id')
+    .eq('staff_id', staffId)
+
+  if (error) {
+    console.error(`Failed to list staff campaign ids for ${context}:`, error.message)
+    return []
+  }
+
+  return (data || []).map(row => row.id as number)
+}
+
+export async function resetRunningCampaignStatuses(staffId: number): Promise<void> {
   const { error } = await client()
     .from('auto_campaigns')
     .update({ status: 'chờ xử lý' })
+    .eq('staff_id', staffId)
     .eq('status', 'đang chạy')
 
   if (error) console.error('Failed to reset campaign statuses:', error.message)
 }
 
-export async function resetCampaignNotes(): Promise<void> {
+export async function resetCampaignNotes(staffId: number): Promise<void> {
   const { error } = await client()
     .from('auto_campaigns')
     .update({ note: null, updated_at: new Date().toISOString() })
+    .eq('staff_id', staffId)
     .not('note', 'is', null)
 
   if (error) console.error('Failed to reset campaign notes:', error.message)
 }
 
-export async function resetRunningCampaignInputStatuses(): Promise<void> {
+export async function resetRunningCampaignInputStatuses(staffId: number): Promise<void> {
+  const campaignIds = await listStaffCampaignIds(staffId, 'campaign input reset')
+  if (campaignIds.length === 0) return
+
   const { error } = await client()
     .from('auto_campaign_inputs')
     .update({ status: 'chờ xử lý' })
+    .in('campaign_id', campaignIds)
     .eq('status', 'đang chạy')
 
   if (error) console.error('Failed to reset campaign input statuses:', error.message)
 }
 
-export async function resetRunningCampaignInputDataStatuses(): Promise<void> {
+export async function resetRunningCampaignInputDataStatuses(staffId: number): Promise<void> {
+  const campaignIds = await listStaffCampaignIds(staffId, 'campaign input data reset')
+  if (campaignIds.length === 0) return
+
   const { error } = await client()
     .from('auto_campaign_input_data')
     .update({ status: 'chờ xử lý' })
+    .in('campaign_id', campaignIds)
     .eq('status', 'đang chạy')
 
   if (error) console.error('Failed to reset campaign input data statuses:', error.message)
