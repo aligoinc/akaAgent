@@ -61,9 +61,6 @@ interface CampaignStore {
   addLog: (log: { timestamp: string; message: string }) => void
   clearLogs: () => void
 
-  // Scheduler
-  schedulerRunning: boolean
-  setSchedulerRunning: (running: boolean) => void
 }
 
 export const useCampaignStore = create<CampaignStore>((set, get) => ({
@@ -329,8 +326,4 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   },
 
   clearLogs: () => set({ logs: [] }),
-
-  // =========== SCHEDULER ===========
-  schedulerRunning: false,
-  setSchedulerRunning: (running) => set({ schedulerRunning: running }),
 }))

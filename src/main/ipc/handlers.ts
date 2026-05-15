@@ -97,10 +97,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   // Register domain handlers
-  registerAuthHandlers(() => runScheduleMaintenance('login'))
+  registerAuthHandlers({
+    afterLogin: async () => {
+      try {
+        await runScheduleMaintenance('login')
+      } finally {
+        campaignScheduler.start()
+      }
+    },
+    beforeLogout: () => campaignScheduler.stop()
+  })
   registerUpdateHandlers(mainWindow)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
-  registerCampaignHandlers(supabase, campaignScheduler)
+  registerCampaignHandlers(supabase)
   registerAccountHandlers(supabase, webviewRegistry)
   registerAccountContactHandlers(supabase, contactLoader)
   registerV2Handlers(mainWindow, pageRegistry)

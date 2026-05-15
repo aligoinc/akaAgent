@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Zap, Layers, Settings, Play, Pause, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database } from 'lucide-react'
-import { useCampaignStore } from '../../stores/campaignStore'
+import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -12,7 +11,6 @@ interface TopBarProps {
 }
 
 export default function TopBar({ activePage, onPageChange, onOpenDataScan }: TopBarProps) {
-  const { schedulerRunning, setSchedulerRunning } = useCampaignStore()
   const { theme, toggleTheme } = useThemeStore()
   const { user, logout, resetDeviceLock } = useAuthStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -39,29 +37,10 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan }: Top
     }
   }, [settingsOpen])
 
-  const handleToggleScheduler = async () => {
-    if (!window.electronAPI) return
-    try {
-      if (schedulerRunning) {
-        await window.electronAPI.stopScheduler()
-        setSchedulerRunning(false)
-      } else {
-        await window.electronAPI.startScheduler()
-        setSchedulerRunning(true)
-      }
-    } catch (err) {
-      console.error('Scheduler toggle error:', err)
-    }
-  }
-
   const handleLogout = () => {
     useUiStore.getState().showConfirm(
       'Đăng xuất khỏi tài khoản?',
       async () => {
-        if (schedulerRunning) {
-          try { await window.electronAPI?.stopScheduler() } catch { /* ignore */ }
-          setSchedulerRunning(false)
-        }
         await logout()
       },
       { title: 'Đăng xuất', confirmText: 'Đăng xuất', variant: 'primary' }
@@ -150,17 +129,6 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan }: Top
             </span>
           </div>
         )}
-
-        <button
-          className={`btn ${schedulerRunning ? 'btn-danger' : 'btn-success'}`}
-          onClick={handleToggleScheduler}
-          title={schedulerRunning ? 'Dừng scheduler' : 'Bắt đầu scheduler'}
-          style={{ marginRight: 8 }}
-        >
-          {schedulerRunning ? <Pause size={14} /> : <Play size={14} />}
-          {schedulerRunning ? 'Dừng' : 'Chạy'} Scheduler
-          {schedulerRunning && <span className="status-dot running" style={{ marginLeft: 4 }} />}
-        </button>
 
         <div className="topbar-settings-menu-wrap" ref={settingsRef}>
           <button

@@ -3,21 +3,33 @@ import { IPC_EVENTS } from '../../../shared/types'
 import { login as loginQuery, resetDeviceLock } from '../../data/repositories/authRepository'
 import { setCurrentUser, getCurrentUser } from '../../data/currentUser'
 
-export function registerAuthHandlers(afterLogin?: () => Promise<void>): void {
+interface AuthLifecycleHooks {
+  afterLogin?: () => Promise<void> | void
+  beforeLogout?: () => Promise<void> | void
+}
+
+export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
   ipcMain.handle(IPC_EVENTS.AUTH_LOGIN, async (_, username: string, password: string) => {
     const user = await loginQuery(username, password)
     setCurrentUser(user)
-    if (afterLogin) {
+    if (hooks.afterLogin) {
       try {
-        await afterLogin()
+        await hooks.afterLogin()
       } catch (err) {
-        console.error('Post-login maintenance failed:', err)
+        console.error('Post-login hook failed:', err)
       }
     }
     return user
   })
 
   ipcMain.handle(IPC_EVENTS.AUTH_LOGOUT, async () => {
+    if (hooks.beforeLogout) {
+      try {
+        await hooks.beforeLogout()
+      } catch (err) {
+        console.error('Pre-logout hook failed:', err)
+      }
+    }
     setCurrentUser(null)
     return { success: true }
   })
