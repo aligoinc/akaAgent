@@ -1,4 +1,4 @@
-import { WebContents } from 'electron'
+import { WebContents, type Event } from 'electron'
 
 export function isNavigationAbortError(err: unknown): boolean {
   const e = err as { code?: string; errno?: number; message?: string } | null
@@ -6,6 +6,18 @@ export function isNavigationAbortError(err: unknown): boolean {
     e?.code === 'ERR_ABORTED' ||
     e?.errno === -3 ||
     (typeof e?.message === 'string' && e.message.includes('ERR_ABORTED'))
+  )
+}
+
+export function isNavigationFailedError(err: unknown): boolean {
+  const e = err as { code?: string; errno?: number; message?: string } | null
+  return (
+    e?.code === 'ERR_FAILED' ||
+    e?.errno === -2 ||
+    (typeof e?.message === 'string' && (
+      e.message.includes('ERR_FAILED') ||
+      e.message.includes('(-2)')
+    ))
   )
 }
 
@@ -32,8 +44,12 @@ function resolveSelector(selector) {
       }
       return visibleEls[index] || null;
     }
-    var r = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-    return r.singleNodeValue;
+    var r = document.evaluate(selector, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    for (var j = 0; j < r.snapshotLength; j++) {
+      var node = r.snapshotItem(j);
+      if (isVisible(node)) return node;
+    }
+    return null;
   }
   var els = document.querySelectorAll(selector);
   for (var i = 0; i < els.length; i++) {
@@ -129,6 +145,12 @@ export class PageController {
 
   // =========== NAVIGATION ===========
   async navigate(url: string): Promise<void> {
+    let preventedUnload = false
+    const onWillPreventUnload = (event: Event) => {
+      preventedUnload = true
+      event.preventDefault()
+    }
+    this.wc.on('will-prevent-unload', onWillPreventUnload)
     try {
       await this.wc.loadURL(url)
     } catch (err) {
@@ -136,7 +158,18 @@ export class PageController {
       // main-frame navigation. Facebook does this often with redirects/SPAs, and
       // the following workflow steps will still validate the actual page state.
       if (isNavigationAbortError(err)) return
+      if (preventedUnload && isNavigationFailedError(err)) {
+        try {
+          await this.wc.loadURL(url)
+          return
+        } catch (retryErr) {
+          if (isNavigationAbortError(retryErr)) return
+          throw retryErr
+        }
+      }
       throw err
+    } finally {
+      this.wc.removeListener('will-prevent-unload', onWillPreventUnload)
     }
   }
 
@@ -207,10 +240,19 @@ export class PageController {
   }
 
   private shouldLazyLoadFacebookCommentBox(selector: string): boolean {
+    const normalized = selector.toLowerCase()
+    const hasTextboxRole =
+      normalized.includes("role='textbox'") ||
+      normalized.includes('role="textbox"')
+    const hasCommentLabel =
+      normalized.includes('bình luận') ||
+      normalized.includes('comment') ||
+      normalized.includes('trả lời')
     return (
-      selector.includes('Write a comment') ||
-      selector.includes('Viết bình luận') ||
-      selector.includes('Viáº¿t bÃ¬nh luáº­n')
+      normalized.includes('write a comment') ||
+      normalized.includes('viết bình luận') ||
+      normalized.includes('viáº¿t bã¬nh luáº­n') ||
+      (hasTextboxRole && hasCommentLabel)
     )
   }
 
