@@ -6,6 +6,155 @@ import * as accountActionRepo from './accountActionRepository'
 import * as errorPolicyRepo from './errorPolicyRepository'
 
 const client = () => getSupabaseClient()
+const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+const VIETNAM_UTC_OFFSET = '+07:00'
+
+type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
+
+interface VietnamDateTimeParts {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  second: number
+}
+
+const vietnamDateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: VIETNAM_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23'
+})
+
+const vietnamWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: VIETNAM_TIME_ZONE,
+  weekday: 'short'
+})
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function parseVietnamParts(date: Date): VietnamDateTimeParts {
+  const parts = Object.fromEntries(
+    vietnamDateTimeFormatter
+      .formatToParts(date)
+      .filter(part => part.type !== 'literal')
+      .map(part => [part.type, part.value])
+  ) as Record<string, string>
+
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second)
+  }
+}
+
+function makeVietnamDate(parts: Partial<VietnamDateTimeParts> & Pick<VietnamDateTimeParts, 'year' | 'month' | 'day'>): Date {
+  const hour = parts.hour ?? 0
+  const minute = parts.minute ?? 0
+  const second = parts.second ?? 0
+  return new Date(
+    `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}T${pad2(hour)}:${pad2(minute)}:${pad2(second)}${VIETNAM_UTC_OFFSET}`
+  )
+}
+
+function startOfVietnamDay(date = new Date()): Date {
+  const parts = parseVietnamParts(date)
+  return makeVietnamDate({ year: parts.year, month: parts.month, day: parts.day })
+}
+
+function addVietnamDays(day: Date, amount: number): Date {
+  return new Date(day.getTime() + amount * 24 * 60 * 60 * 1000)
+}
+
+function withVietnamTime(day: Date, time: Pick<VietnamDateTimeParts, 'hour' | 'minute' | 'second'>): Date {
+  const parts = parseVietnamParts(day)
+  return makeVietnamDate({
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: time.hour,
+    minute: time.minute,
+    second: time.second
+  })
+}
+
+function getVietnamWeekdayNumber(date: Date): number {
+  const weekday = vietnamWeekdayFormatter.format(date)
+  switch (weekday) {
+    case 'Mon': return 2
+    case 'Tue': return 3
+    case 'Wed': return 4
+    case 'Thu': return 5
+    case 'Fri': return 6
+    case 'Sat': return 7
+    case 'Sun': return 8
+    default: return 0
+  }
+}
+
+function parseNumberList(value: string | undefined, min: number, max: number): number[] {
+  return Array.from(new Set(
+    String(value || '')
+      .split(',')
+      .map(item => Number(item.trim()))
+      .filter(item => Number.isInteger(item) && item >= min && item <= max)
+  )).sort((a, b) => a - b)
+}
+
+function resolveNextSchedule(campaign: Campaign, todayStart: Date): Date | null {
+  if (!campaign.schedule) return null
+
+  const scheduleType: CampaignScheduleType = campaign.scheduleType || 'daily'
+  const scheduleTime = parseVietnamParts(new Date(campaign.schedule))
+
+  if (scheduleType === 'daily') {
+    return withVietnamTime(todayStart, scheduleTime)
+  }
+
+  if (scheduleType === 'weekly') {
+    const weekDays = parseNumberList(campaign.scheduleWeekDays, 2, 8)
+    if (weekDays.length === 0) return null
+
+    for (let i = 0; i < 14; i++) {
+      const candidateDay = addVietnamDays(todayStart, i)
+      if (weekDays.includes(getVietnamWeekdayNumber(candidateDay))) {
+        return withVietnamTime(candidateDay, scheduleTime)
+      }
+    }
+    return null
+  }
+
+  if (scheduleType === 'monthly') {
+    const monthDays = parseNumberList(campaign.scheduleDays, 1, 31)
+    if (monthDays.length === 0) return null
+
+    for (let i = 0; i < 370; i++) {
+      const candidateDay = addVietnamDays(todayStart, i)
+      const dayOfMonth = parseVietnamParts(candidateDay).day
+      if (monthDays.includes(dayOfMonth)) {
+        return withVietnamTime(candidateDay, scheduleTime)
+      }
+    }
+    return null
+  }
+
+  return null
+}
+
+function isPastScheduleEnd(campaign: Campaign, schedule: Date): boolean {
+  if (!campaign.scheduleEndDate) return false
+  return schedule.getTime() > new Date(campaign.scheduleEndDate).getTime()
+}
 
 // =========== CAMPAIGNS ===========
 
@@ -252,6 +401,96 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
 
   if (error) throw new Error(`Failed to get pending campaigns: ${error.message}`)
   return (data || []).map(row => mapCampaignFromDB(row))
+}
+
+export async function maintainCampaignSchedules(): Promise<Campaign[]> {
+  const u = requireCurrentUser()
+  const todayStart = startOfVietnamDay()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .not('schedule', 'is', null)
+    .lt('schedule', todayStart.toISOString())
+    .in('status', ['chờ xử lý', 'hoàn thành'])
+
+  if (error) throw new Error(`Failed to list stale campaign schedules: ${error.message}`)
+
+  const updatedCampaigns: Campaign[] = []
+  const campaigns = (data || []).map(row => mapCampaignFromDB(row))
+
+  for (const campaign of campaigns) {
+    try {
+      const scheduleType = campaign.scheduleType || 'daily'
+      const nextSchedule = resolveNextSchedule(campaign, todayStart)
+      if (!nextSchedule) continue
+
+      if (isPastScheduleEnd(campaign, nextSchedule)) {
+        const updated = await updateCampaign(campaign.id, {
+          schedule: nextSchedule.toISOString(),
+          ...(campaign.status !== 'hoàn thành'
+            ? {
+              status: 'hoàn thành',
+              note: 'Chiến dịch đã hết ngày kết thúc'
+            }
+            : {})
+        })
+        updatedCampaigns.push(updated)
+        continue
+      }
+
+      if (scheduleType === 'daily') {
+        if (campaign.status !== 'chờ xử lý') continue
+
+        if (campaign.continueNextDay) {
+          const updated = await updateCampaign(campaign.id, {
+            schedule: nextSchedule.toISOString()
+          })
+          updatedCampaigns.push(updated)
+        }
+        continue
+      }
+
+      const details = await listCampaignInputData(campaign.id)
+      const allDataDone = details.length > 0 && details.every(detail => detail.status === 'hoàn thành')
+      const shouldRefreshData = campaign.refreshData && (allDataDone || details.length === 0)
+
+      if (shouldRefreshData) {
+        if (details.length > 0) {
+          const { error: resetError } = await client()
+            .from('auto_campaign_input_data')
+            .update({
+              status: 'chờ xử lý',
+              note: '',
+              date_action: null
+            })
+            .eq('campaign_id', campaign.id)
+            .eq('is_delete', false)
+            .neq('status', 'tạm dừng')
+
+          if (resetError) throw new Error(`Failed to reset campaign input data: ${resetError.message}`)
+        }
+
+        const updated = await updateCampaign(campaign.id, {
+          status: 'chờ xử lý',
+          schedule: nextSchedule.toISOString(),
+          note: null
+        })
+        updatedCampaigns.push(updated)
+        continue
+      }
+
+      const updated = await updateCampaign(campaign.id, {
+        schedule: nextSchedule.toISOString()
+      })
+      updatedCampaigns.push(updated)
+    } catch (err) {
+      console.error(`Failed to maintain campaign schedule ${campaign.id}:`, err)
+    }
+  }
+
+  return updatedCampaigns
 }
 
 export async function resetRunningCampaignStatuses(): Promise<void> {
@@ -538,9 +777,7 @@ export async function getAccountRateLimitStatus(
 
   if (dailyActionCount >= dailyLimit) {
     // Daily limit → đợi tới 00:00 ngày mai mới reset
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    tomorrow.setHours(0, 0, 0, 0)
+    const tomorrow = addVietnamDays(startOfVietnamDay(), 1)
     return {
       ok: false,
       actionCode: normalizedActionCode,

@@ -126,53 +126,10 @@ export class CampaignScheduler {
   }
 
   /**
-   * Check if a campaign should run today based on its schedule type.
-   */
-  private shouldRunToday(campaign: Campaign): boolean {
-    const now = new Date()
-
-    // Check if past the end date
-    if (campaign.scheduleEndDate) {
-      const endDate = new Date(campaign.scheduleEndDate)
-      if (now > endDate) return false
-    }
-
-    const scheduleType = campaign.scheduleType || 'daily'
-
-    switch (scheduleType) {
-      case 'daily':
-        // Daily: always eligible (schedule time check is done by getPendingCampaigns)
-        return true
-
-      case 'weekly': {
-        // JS: 0=Sun, 1=Mon ... 6=Sat
-        // Our format: 2=Mon, 3=Tue ... 7=Sat, 8=Sun
-        const jsDay = now.getDay() // 0-6
-        const ourDay = jsDay === 0 ? 8 : jsDay + 1 // convert to 2-8
-        const weekDays = (campaign.scheduleWeekDays || '').split(',').map(d => d.trim()).filter(Boolean)
-        return weekDays.includes(String(ourDay))
-      }
-
-      case 'monthly': {
-        const dayOfMonth = now.getDate()
-        const monthDays = (campaign.scheduleDays || '').split(',').map(d => d.trim()).filter(Boolean)
-        return monthDays.includes(String(dayOfMonth))
-      }
-
-      default:
-        return true
-    }
-  }
-
-  /**
-   * Handle post-campaign completion logic based on schedule type.
-   * - Daily + continueNextDay: reset schedule to tomorrow same time, set status back to pending
-   * - Weekly/Monthly + refreshData: reset all details to pending, set campaign back to pending
-   * - Otherwise: mark campaign as complete
+   * Handle post-campaign completion. Recurring schedule maintenance runs after
+   * login / day change; completion itself should not move weekly/monthly dates.
    */
   private async handleCampaignCompletion(campaign: Campaign): Promise<void> {
-    const scheduleType = campaign.scheduleType || 'daily'
-
     // Check end date
     const now = new Date()
     if (campaign.scheduleEndDate) {
@@ -185,44 +142,12 @@ export class CampaignScheduler {
       }
     }
 
-    if ((scheduleType === 'weekly' || scheduleType === 'monthly') && campaign.refreshData) {
-      // Reset all detail statuses to pending
-      const details = await this.supabase.listCampaignInputData(campaign.id)
-      for (const detail of details) {
-        await this.supabase.updateCampaignInputData(detail.id, {
-          status: 'chờ xử lý',
-          note: ''
-        })
-      }
-
-      // Reset schedule to tomorrow same time
-      if (campaign.schedule) {
-        const schedDate = new Date(campaign.schedule)
-        const tomorrow = new Date(now)
-        tomorrow.setDate(tomorrow.getDate() + 1)
-        tomorrow.setHours(schedDate.getHours(), schedDate.getMinutes(), 0, 0)
-
-        await this.updateCampaignAndBroadcast(campaign.id, {
-          status: 'chờ xử lý',
-          schedule: tomorrow.toISOString()
-        })
-        await this.supabase.appendCampaignLog(campaign.id, `Dữ liệu đã được làm mới. Chạy lại lúc ${tomorrow.toLocaleString('vi-VN')}`)
-        this.sendLog(`🔄 Chiến dịch "${campaign.name}": dữ liệu đã reset, chạy lại ${tomorrow.toLocaleString('vi-VN')}`)
-      } else {
-        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
-      }
-      return
-    }
-
-    // Default: mark as complete
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
     await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch`)
     this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
 
   private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
-    if (!this.shouldRunToday(campaign)) return
-
     try {
       const startBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý')
       if (startBlockReason) {
