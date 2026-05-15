@@ -263,6 +263,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     isFindPhone: campaign?.extraSettings?.isFindPhone ?? false,
     isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
     isFindUid: campaign?.extraSettings?.isFindUid ?? false,
+    isFindPostLink: campaign?.extraSettings?.isFindPostLink ?? false,
     isFindInPost: campaign?.extraSettings?.isFindInPost ?? false,
     sortTypePost: (campaign?.extraSettings?.sortTypePost || 'most_relevant') as CampaignExtraSettings['sortTypePost'],
     countPostFindData: campaign?.extraSettings?.countPostFindData ?? 10,
@@ -273,7 +274,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     keywords: campaign?.extraSettings?.keywords || '',
     isFindByContentAI: campaign?.extraSettings?.isFindByContentAI ?? false,
     contentAI: campaign?.extraSettings?.contentAI || '',
-    findUidTargetCampaignIds: campaign?.extraSettings?.findUidTargetCampaignIds || [] as number[]
+    findUidTargetCampaignIds: campaign?.extraSettings?.findUidTargetCampaignIds || [] as number[],
+    findPostLinkTargetCampaignIds: campaign?.extraSettings?.findPostLinkTargetCampaignIds || [] as number[]
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
   const commentImageInputRef = useRef<HTMLInputElement>(null)
@@ -357,6 +359,11 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
   const messageFriendCampaignOptions = campaigns.filter(c =>
     c.actionId === 'facebook_message_friend' &&
+    c.id !== campaign?.id &&
+    !c.isDelete
+  )
+  const postLinkCommentCampaignOptions = campaigns.filter(c =>
+    c.actionId === 'facebook_comment_seeding_post' &&
     c.id !== campaign?.id &&
     !c.isDelete
   )
@@ -472,9 +479,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       case 'enableComment': return true  // optional
       case 'images': return true  // optional
       case 'commentImages': return true  // optional
-      case 'findDataScope': return formData.isFindInPost || formData.isFindInComment
+      case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink
       case 'findDataContent': return true
-      case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid
+      case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink
       case 'details': return details.length > 0
       default: return false
     }
@@ -533,11 +540,11 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       return
     }
     if (isFindDataGroupCampaign) {
-      if (!formData.isFindInPost && !formData.isFindInComment) {
+      if (!formData.isFindInPost && !formData.isFindInComment && !formData.isFindPostLink) {
         showAlert('Vui lòng chọn tìm trên bài post hoặc trong comment.', 'error')
         return
       }
-      if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid) {
+      if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink) {
         showAlert('Vui lòng chọn ít nhất một loại data cần tìm.', 'error')
         return
       }
@@ -676,6 +683,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             isFindPhone: formData.isFindPhone,
             isFindLinkGroupZalo: formData.isFindLinkGroupZalo,
             isFindUid: formData.isFindUid,
+            isFindPostLink: formData.isFindPostLink,
             isFindInPost: formData.isFindInPost,
             sortTypePost: formData.sortTypePost,
             countPostFindData: formData.countPostFindData,
@@ -686,7 +694,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             keywords: formData.keywords,
             isFindByContentAI: formData.isFindByContentAI,
             contentAI: formData.contentAI,
-            findUidTargetCampaignIds: formData.findUidTargetCampaignIds
+            findUidTargetCampaignIds: formData.findUidTargetCampaignIds,
+            findPostLinkTargetCampaignIds: formData.findPostLinkTargetCampaignIds
           } as CampaignExtraSettings,
           images: formData.images
         }
@@ -898,6 +907,19 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       return {
         ...prev,
         findUidTargetCampaignIds: exists
+          ? current.filter(id => id !== campaignId)
+          : [...current, campaignId]
+      }
+    })
+  }
+
+  const toggleFindPostLinkTargetCampaign = (campaignId: number) => {
+    setFormData(prev => {
+      const current = prev.findPostLinkTargetCampaignIds || []
+      const exists = current.includes(campaignId)
+      return {
+        ...prev,
+        findPostLinkTargetCampaignIds: exists
           ? current.filter(id => id !== campaignId)
           : [...current, campaignId]
       }
@@ -1222,6 +1244,22 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           />
           <span>Tìm UID của người đăng bài hoặc comment</span>
         </label>
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.isFindPostLink}
+            onChange={e => {
+              const checked = e.target.checked
+              setFormData(p => ({
+                ...p,
+                isFindPostLink: checked,
+                isFindInPost: checked ? true : p.isFindInPost,
+                findPostLinkTargetCampaignIds: checked ? p.findPostLinkTargetCampaignIds : []
+              }))
+            }}
+          />
+          <span>Tìm link bài post</span>
+        </label>
       </div>
 
       {formData.isFindUid && (
@@ -1239,6 +1277,32 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     type="checkbox"
                     checked={(formData.findUidTargetCampaignIds || []).includes(target.id)}
                     onChange={() => toggleFindUidTargetCampaign(target.id)}
+                  />
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {target.name} <span style={{ color: 'var(--text-tertiary)' }}>({target.status})</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {formData.isFindPostLink && (
+        <div className="extra-comment-options">
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Đẩy link bài post sang chiến dịch</div>
+          {postLinkCommentCampaignOptions.length === 0 ? (
+            <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+              Chưa có chiến dịch Comment seeding vào danh sách bài post để nhận link.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
+              {postLinkCommentCampaignOptions.map(target => (
+                <label key={target.id} className="schedule-checkbox-label" title={target.name}>
+                  <input
+                    type="checkbox"
+                    checked={(formData.findPostLinkTargetCampaignIds || []).includes(target.id)}
+                    onChange={() => toggleFindPostLinkTargetCampaign(target.id)}
                   />
                   <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {target.name} <span style={{ color: 'var(--text-tertiary)' }}>({target.status})</span>

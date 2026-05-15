@@ -817,6 +817,7 @@ export class CampaignScheduler {
       isFindPhone: extra.isFindPhone ?? false,
       isFindLinkGroupZalo: extra.isFindLinkGroupZalo ?? false,
       isFindUid: extra.isFindUid ?? false,
+      isFindPostLink: extra.isFindPostLink ?? false,
       isFindInPost: extra.isFindInPost ?? false,
       sortTypePost: extra.sortTypePost ?? 'most_relevant',
       countPostFindData: extra.countPostFindData ?? 10,
@@ -870,6 +871,7 @@ export class CampaignScheduler {
         phones?: unknown[]
         linkGroupZalos?: unknown[]
         uids?: unknown[]
+        postLinks?: unknown[]
         message?: string
         groupUrl?: string
         total?: number
@@ -878,16 +880,23 @@ export class CampaignScheduler {
       const phones = Array.isArray(out.phones) ? out.phones.map(String) : []
       const linkGroupZalos = Array.isArray(out.linkGroupZalos) ? out.linkGroupZalos.map(String) : []
       const uids = Array.isArray(out.uids) ? out.uids.map(String) : []
+      const postLinks = Array.isArray(out.postLinks)
+        ? out.postLinks.map(link => this.cleanPostLinkForStorage(String(link))).filter(Boolean)
+        : []
       const findUidTargetCampaignIds = Array.isArray(campaign.extraSettings?.findUidTargetCampaignIds)
         ? campaign.extraSettings.findUidTargetCampaignIds
         : []
-      const total = Number(out.total ?? (phones.length + linkGroupZalos.length + uids.length))
+      const findPostLinkTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPostLinkTargetCampaignIds)
+        ? campaign.extraSettings.findPostLinkTargetCampaignIds
+        : []
+      const total = Number(out.total ?? (phones.length + linkGroupZalos.length + uids.length + postLinks.length))
       const targetName = inputDataName || out.groupUrl || 'group'
       const isSuccess = summaryStep?.status === 'success'
       const notes: string[] = []
       if (campaign.extraSettings?.isFindPhone) notes.push(`${phones.length} số điện thoại`)
       if (campaign.extraSettings?.isFindLinkGroupZalo) notes.push(`${linkGroupZalos.length} link group Zalo`)
       if (campaign.extraSettings?.isFindUid) notes.push(`${uids.length} UID`)
+      if (campaign.extraSettings?.isFindPostLink) notes.push(`${postLinks.length} link bài post`)
       const errMsg = out.error || summaryStep?.error || errorStep?.error || 'Lỗi không xác định'
 
       try {
@@ -907,8 +916,10 @@ export class CampaignScheduler {
             phones,
             linkGroupZalos,
             uids,
-            counts: { phones: phones.length, linkGroupZalos: linkGroupZalos.length, uids: uids.length, total },
+            postLinks,
+            counts: { phones: phones.length, linkGroupZalos: linkGroupZalos.length, uids: uids.length, postLinks: postLinks.length, total },
             findUidTargetCampaignIds,
+            findPostLinkTargetCampaignIds,
             errorBlock: errorStep?.blockName
           }
         })
@@ -918,6 +929,7 @@ export class CampaignScheduler {
 
       if (isSuccess) {
         await this.pushFoundUidsToTargetCampaigns(campaign, uids)
+        await this.pushFoundPostLinksToTargetCampaigns(campaign, postLinks)
       }
       return
     }
@@ -1147,8 +1159,114 @@ export class CampaignScheduler {
     }
   }
 
+  private async pushFoundPostLinksToTargetCampaigns(sourceCampaign: Campaign, rawPostLinks: string[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindPostLink) return
+
+    const targetCampaignIds = Array.from(new Set(
+      (sourceCampaign.extraSettings.findPostLinkTargetCampaignIds || [])
+        .map(id => Number(id))
+        .filter(id => Number.isFinite(id) && id > 0 && id !== sourceCampaign.id)
+    ))
+    if (targetCampaignIds.length === 0) return
+
+    const linkMap = new Map<string, string>()
+    for (const rawLink of rawPostLinks) {
+      const link = this.cleanPostLinkForStorage(rawLink)
+      const normalizedLink = this.normalizePostLinkForCompare(link)
+      if (link && normalizedLink && !linkMap.has(normalizedLink)) {
+        linkMap.set(normalizedLink, link)
+      }
+    }
+    const postLinks = Array.from(linkMap.values())
+    if (postLinks.length === 0) return
+
+    for (const targetCampaignId of targetCampaignIds) {
+      try {
+        const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
+        if (!targetCampaign || targetCampaign.actionId !== COMMENT_SEEDING_POST_ACTION_ID) continue
+
+        const existingRows = await this.supabase.listCampaignInputData(targetCampaign.id)
+        const existingLinks = new Set(
+          existingRows
+            .map(row => this.normalizePostLinkForCompare(row.uid || ''))
+            .filter(Boolean)
+        )
+        const newPostLinks = postLinks.filter(link => !existingLinks.has(this.normalizePostLinkForCompare(link)))
+        if (newPostLinks.length === 0) continue
+        const skippedExistingCount = postLinks.length - newPostLinks.length
+
+        for (const postLink of newPostLinks) {
+          await this.supabase.createCampaignInputData({
+            campaignId: targetCampaign.id,
+            uid: postLink,
+            status: 'chờ xử lý',
+            note: `Tự động thêm từ chiến dịch "${sourceCampaign.name}"`
+          })
+        }
+
+        await this.supabase.appendCampaignLog(
+          targetCampaign.id,
+          `Đã thêm ${newPostLinks.length} link bài post từ chiến dịch "${sourceCampaign.name}"${skippedExistingCount > 0 ? `, bỏ qua ${skippedExistingCount} link đã có` : ''}`
+        )
+        if (targetCampaign.status === 'hoàn thành') {
+          await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
+        }
+        this.sendLog(`✅ Đã thêm ${newPostLinks.length} link bài post vào chiến dịch "${targetCampaign.name}"${skippedExistingCount > 0 ? `, bỏ qua ${skippedExistingCount} link đã có` : ''}`)
+      } catch (err) {
+        console.error('Failed to push found post links to target campaign:', err)
+      }
+    }
+  }
+
   private normalizeUidForCompare(uid: string): string {
     return String(uid || '').trim().replace(/\/+$/g, '').toLowerCase()
+  }
+
+  private normalizePostLinkForCompare(link: string): string {
+    const raw = this.cleanPostLinkForStorage(link)
+    if (!raw) return ''
+    try {
+      const url = new URL(raw, 'https://www.facebook.com')
+      if (/^(m|mbasic|mobile)\.facebook\.com$/i.test(url.hostname)) {
+        url.hostname = 'www.facebook.com'
+      }
+      url.hash = ''
+      for (const key of Array.from(url.searchParams.keys())) {
+        if (key.startsWith('__') || key === 'mibextid' || key === 'ref' || key === 'locale') {
+          url.searchParams.delete(key)
+        }
+      }
+      return url.toString().replace(/\/+$/g, '').toLowerCase()
+    } catch {
+      return raw.replace(/\/+$/g, '').toLowerCase()
+    }
+  }
+
+  private cleanPostLinkForStorage(link: string): string {
+    const raw = String(link || '').trim()
+    if (!raw) return ''
+    try {
+      const url = new URL(raw, 'https://www.facebook.com')
+      if (/^(m|mbasic|mobile)\.facebook\.com$/i.test(url.hostname)) {
+        url.hostname = 'www.facebook.com'
+      }
+      url.hash = ''
+      for (const key of Array.from(url.searchParams.keys())) {
+        if (
+          key.startsWith('__') ||
+          key === 'mibextid' ||
+          key === 'ref' ||
+          key === 'locale' ||
+          key === 'comment_id' ||
+          key === 'reply_comment_id'
+        ) {
+          url.searchParams.delete(key)
+        }
+      }
+      return url.toString()
+    } catch {
+      return raw
+    }
   }
 
   private formatOrdinalPost(position: number): string {
