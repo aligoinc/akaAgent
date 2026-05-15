@@ -58,7 +58,7 @@ export class BackgroundPageManager {
     this.pages.set(accountId, { win, page })
 
     const initialUrl = PLATFORM_URLS[platformType] || 'about:blank'
-    win.loadURL(initialUrl).catch((err) => {
+    page.navigate(initialUrl).catch((err) => {
       if (isNavigationAbortError(err)) return
       console.warn(`[BackgroundPageManager] Failed to load ${initialUrl}:`, err)
     })
