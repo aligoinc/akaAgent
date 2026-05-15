@@ -2005,21 +2005,46 @@ body {
 
 /* =========== ACCOUNT CARD (single-column table) =========== */
 .account-card {
+  --account-card-accent: var(--border-default);
+  --account-card-bg: var(--bg-elevated);
+  --account-card-hover-bg: var(--bg-hover);
+  --account-card-status-bg: rgba(0, 0, 0, 0.04);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   padding: 10px 12px;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--account-card-accent);
   border-radius: 8px;
   margin-bottom: 6px;
   transition: all var(--transition-fast);
-  background: var(--bg-elevated);
+  background: var(--account-card-bg);
 }
 
 .account-card:hover {
-  border-color: var(--accent-primary);
-  background: var(--bg-hover);
+  border-color: var(--account-card-accent);
+  background: var(--account-card-hover-bg);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.08);
+}
+
+.account-card.status-pending {
+  --account-card-accent: var(--accent-info);
+  --account-card-bg: rgba(56, 189, 248, 0.08);
+  --account-card-hover-bg: rgba(56, 189, 248, 0.13);
+  --account-card-status-bg: rgba(56, 189, 248, 0.14);
+}
+
+.account-card.status-running {
+  --account-card-accent: var(--accent-warning);
+  --account-card-bg: rgba(251, 191, 36, 0.08);
+  --account-card-hover-bg: rgba(251, 191, 36, 0.13);
+  --account-card-status-bg: rgba(251, 191, 36, 0.14);
+}
+
+.account-card.status-paused {
+  --account-card-accent: var(--accent-error);
+  --account-card-bg: rgba(244, 63, 94, 0.08);
+  --account-card-hover-bg: rgba(244, 63, 94, 0.13);
+  --account-card-status-bg: rgba(244, 63, 94, 0.15);
 }
 
 .account-card-info {
@@ -2045,6 +2070,15 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.account-card-status {
+  color: var(--account-card-accent);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--account-card-status-bg);
 }
 
 .account-tag {
@@ -2109,20 +2143,69 @@ body {
 }
 
 .campaign-table-row {
+  --campaign-row-accent: var(--text-tertiary);
+  --campaign-row-bg: transparent;
+  --campaign-row-hover-bg: var(--bg-hover);
+  --campaign-row-selected-bg: rgba(99, 102, 241, 0.08);
+  --campaign-row-multi-bg: rgba(99, 102, 241, 0.05);
+  --campaign-row-status-bg: rgba(0, 0, 0, 0.04);
   display: flex;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 9px;
+  border-left: 3px solid transparent;
   border-bottom: 1px solid var(--border-default);
   transition: all var(--transition-fast);
   align-items: center;
   border-radius: 0;
+  background: var(--campaign-row-bg);
 }
 
 .campaign-table-row:hover {
-  background: var(--bg-hover);
+  background: var(--campaign-row-hover-bg);
+}
+
+.campaign-table-row.status-pending {
+  --campaign-row-accent: var(--accent-info);
+  --campaign-row-bg: rgba(56, 189, 248, 0.07);
+  --campaign-row-hover-bg: rgba(56, 189, 248, 0.12);
+  --campaign-row-selected-bg: rgba(56, 189, 248, 0.16);
+  --campaign-row-multi-bg: rgba(56, 189, 248, 0.13);
+  --campaign-row-status-bg: rgba(56, 189, 248, 0.14);
+  border-left-color: var(--campaign-row-accent);
+}
+
+.campaign-table-row.status-running {
+  --campaign-row-accent: var(--accent-warning);
+  --campaign-row-bg: rgba(251, 191, 36, 0.08);
+  --campaign-row-hover-bg: rgba(251, 191, 36, 0.13);
+  --campaign-row-selected-bg: rgba(251, 191, 36, 0.17);
+  --campaign-row-multi-bg: rgba(251, 191, 36, 0.14);
+  --campaign-row-status-bg: rgba(251, 191, 36, 0.15);
+  border-left-color: var(--campaign-row-accent);
+}
+
+.campaign-table-row.status-completed {
+  --campaign-row-accent: var(--accent-success);
+  --campaign-row-bg: rgba(52, 211, 153, 0.08);
+  --campaign-row-hover-bg: rgba(52, 211, 153, 0.13);
+  --campaign-row-selected-bg: rgba(52, 211, 153, 0.17);
+  --campaign-row-multi-bg: rgba(52, 211, 153, 0.14);
+  --campaign-row-status-bg: rgba(52, 211, 153, 0.14);
+  border-left-color: var(--campaign-row-accent);
+}
+
+.campaign-table-row.status-paused,
+.campaign-table-row.status-error {
+  --campaign-row-accent: var(--accent-error);
+  --campaign-row-bg: rgba(244, 63, 94, 0.08);
+  --campaign-row-hover-bg: rgba(244, 63, 94, 0.13);
+  --campaign-row-selected-bg: rgba(244, 63, 94, 0.17);
+  --campaign-row-multi-bg: rgba(244, 63, 94, 0.14);
+  --campaign-row-status-bg: rgba(244, 63, 94, 0.15);
+  border-left-color: var(--campaign-row-accent);
 }
 
 .campaign-table-row.selected {
-  background: rgba(99, 102, 241, 0.08);
+  background: var(--campaign-row-selected-bg);
   border-left: 3px solid var(--accent-primary);
   padding-left: 9px;
 }
@@ -2193,11 +2276,12 @@ body {
 }
 
 .status-badge {
+  color: var(--campaign-row-accent);
   font-weight: 600;
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--campaign-row-status-bg);
 }
 
 .col-checkbox {
@@ -2215,11 +2299,11 @@ body {
 }
 
 .campaign-table-row.multi-selected {
-  background: rgba(99, 102, 241, 0.05);
+  background: var(--campaign-row-multi-bg);
 }
 
 .campaign-table-row.multi-selected.selected {
-  background: rgba(99, 102, 241, 0.12);
+  background: var(--campaign-row-selected-bg);
 }
 
 .campaign-bulk-action-bar {

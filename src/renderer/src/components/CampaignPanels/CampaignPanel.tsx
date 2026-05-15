@@ -111,7 +111,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     loadCampaignInputData, loadCampaignDetails
   } = useCampaignStore()
-  const isAdminAkabiz = !!useAuthStore(s => s.user?.isAdminAkabiz)
+  const canManageCampaignActions = useAuthStore(s => s.user?.staffId === 1)
   const showAlert = useUiStore(s => s.showAlert)
 
   const [showForm, setShowForm] = useState(false)
@@ -274,6 +274,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       case 'thất bại': return 'var(--accent-warning)'   // vàng — nghiệp vụ FB từ chối
       case 'lỗi': return 'var(--accent-error)'           // đỏ — exception/crash code
       default: return 'var(--text-tertiary)'
+    }
+  }
+
+  const getCampaignStatusClass = (status: string) => {
+    switch (status) {
+      case 'chờ xử lý': return 'status-pending'
+      case 'đang chạy': return 'status-running'
+      case 'hoàn thành': return 'status-completed'
+      case 'tạm dừng': return 'status-paused'
+      case 'lỗi': return 'status-error'
+      default: return 'status-unknown'
     }
   }
 
@@ -558,7 +569,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
       <div className="campaign-panel-header">
         <span className="campaign-panel-title">Chiến dịch</span>
         <div style={{ display: 'flex', gap: 4 }}>
-          {isAdminAkabiz && (
+          {canManageCampaignActions && (
             <button className="btn btn-ghost btn-icon" onClick={() => setShowActionManager(true)} title="Quản lý Hành động">
               <Settings2 size={14} />
             </button>
@@ -617,7 +628,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
         />
       )}
 
-      {showActionManager && isAdminAkabiz && (
+      {showActionManager && canManageCampaignActions && (
         <ActionManagerModal onClose={() => {
           setShowActionManager(false)
           loadCampaignActions()
@@ -650,7 +661,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
             {filteredCampaigns.map(campaign => (
               <div
                 key={campaign.id}
-                className={`campaign-table-row ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
+                className={`campaign-table-row ${getCampaignStatusClass(campaign.status)} ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
                 onClick={() => handleRowClick(campaign)}
                 style={{ cursor: 'pointer' }}
               >
@@ -667,7 +678,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                 <div className="campaign-col col-action">{campaign.actionName || campaign.actionId}</div>
                 <div className="campaign-col col-account">{campaign.accountName || '-'}</div>
                 <div className="campaign-col col-status">
-                  <span className="status-badge" style={{ color: getStatusColor(campaign.status) }}>
+                  <span className="status-badge">
                     {campaign.status}
                   </span>
                 </div>

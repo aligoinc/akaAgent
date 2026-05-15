@@ -14,8 +14,8 @@ import DataScanModal from './components/DataScan/DataScanModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
-  const isAdminAkabiz = !!user?.isAdminAkabiz
-  // Default to campaigns; if user is not akaBiz admin, workflow-editor is hidden anyway.
+  const canOpenWorkflowEditor = user?.staffId === 1
+  // Default to campaigns; workflow-editor is only available for staff #1.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
   const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
   const [showDataScan, setShowDataScan] = useState(false)
@@ -25,12 +25,12 @@ export default function App() {
     rehydrateFromStorage()
   }, [rehydrateFromStorage])
 
-  // Snap workflow-editor → campaigns if user loses admin access (e.g. after switching account).
+  // Snap workflow-editor -> campaigns if user loses workflow access (e.g. after switching account).
   useEffect(() => {
-    if (!isAdminAkabiz && activePage === 'workflow-editor') {
+    if (!canOpenWorkflowEditor && activePage === 'workflow-editor') {
       setActivePage('campaigns')
     }
-  }, [isAdminAkabiz, activePage])
+  }, [canOpenWorkflowEditor, activePage])
 
   const { theme } = useThemeStore()
   const { loadAccounts, upsertCampaign } = useCampaignStore()
@@ -148,7 +148,7 @@ export default function App() {
       </div>
 
       {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}
-      {activePage === 'workflow-editor' && isAdminAkabiz && (
+      {activePage === 'workflow-editor' && canOpenWorkflowEditor && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <WorkflowEditorV2 />
         </div>

@@ -155,7 +155,8 @@ Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repositor
 
 ### Workflow Editor v2 UI
 
-[src/renderer/src/components/v2/](src/renderer/src/components/v2/) — admin-only (button "Cài đặt Workflow" trong TopBar khi `user.isAdminAkabiz`):
+[src/renderer/src/components/v2/](src/renderer/src/components/v2/) — staff-root only (button "Cài đặt Workflow" trong TopBar khi `user.staffId === 1`):
+- Campaign action manager ("Quản lý Hành động") cũng chỉ render khi `user.staffId === 1`.
 - `WorkflowEditorV2.tsx` — container layout 4 vùng (BlockLibrary | Canvas+Test | ConfigPanel)
 - `BlockLibraryPanel.tsx` — sidebar trái, drag block vào canvas, tabs Built-in/Custom/System
 - `WorkflowCanvasV2.tsx` — `useNodesState`/`useEdgesState` (LOCAL state, sync ngược store chỉ ở user actions để tránh infinite render từ dimension changes)
