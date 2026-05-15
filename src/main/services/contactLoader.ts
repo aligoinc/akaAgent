@@ -153,6 +153,49 @@ export class ContactLoader {
     targetUrl: string,
     scrapeFn: (wc: Electron.WebContents, accountId: number) => Promise<Partial<AutoAccountContact>[]>
   ): Promise<ContactLoadResult> {
+    let account: Awaited<ReturnType<SupabaseService['getAccount']>>
+    try {
+      account = await this.supabase.getAccount(accountId)
+    } catch (err: any) {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: `Không thể kiểm tra trạng thái tài khoản: ${err.message || String(err)}`
+      })
+    }
+
+    if (!account) {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: 'Không tìm thấy tài khoản'
+      })
+    }
+
+    if (!account.isActive) {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: 'Tài khoản đang bị tắt, không thể quét data'
+      })
+    }
+
+    if (account.loginStatus !== 'đã đăng nhập') {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: 'Tài khoản chưa đăng nhập Facebook'
+      })
+    }
+
+    if (account.status !== 'chờ xử lý' && account.status !== 'tạm dừng') {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: `tài khoản ${account.status || 'không xác định'} không thể quét data`
+      })
+    }
+
     // Validate webview is available
     const controller = this.webviewRegistry.getController(accountId)
     if (!controller || !controller.isConnected()) {
@@ -257,20 +300,22 @@ export class ContactLoader {
   private async scrollAndWait(
     wc: Electron.WebContents,
     accountId: number,
-    maxScrolls: number = 30,
+    contactType: 'friend' | 'group',
     delayMs: number = 1500
   ): Promise<void> {
     let prevCount = 0
     let noChangeCount = 0
+    let scrollCount = 0
     const signal = this.activeLoadControllers.get(accountId)?.signal
+    const typeName = this.getContactTypeName(contactType)
 
-    for (let i = 0; i < maxScrolls; i++) {
+    while (true) {
       if (this.isLoadCancelled(accountId)) {
         this.sendProgress('Đã nhận lệnh dừng, ngưng cuộn trang.')
         break
       }
+      scrollCount++
 
-      let currentCount = 0
       try {
         const scrollPromise = wc.executeJavaScript(`
         (function() {
@@ -383,15 +428,13 @@ export class ContactLoader {
             }
           }
 
-          // Count loaded profile/group links as progress indicator
-          return document.querySelectorAll('a[href]').length;
+          return true;
         })()
       `)
         const scrollResult = signal
           ? await this.raceWithCancel(accountId, scrollPromise, signal)
           : await scrollPromise
-        if (typeof scrollResult !== 'number') break
-        currentCount = scrollResult
+        if (scrollResult !== true) break
       } catch (err) {
         if (this.isLoadCancelled(accountId)) {
           this.sendProgress('Đã nhận lệnh dừng, dùng dữ liệu hiện có trên trang.')
@@ -400,7 +443,6 @@ export class ContactLoader {
         throw err
       }
 
-      this.sendProgress(`📜 Đang cuộn trang... (${i + 1}/${maxScrolls})`)
       const delayCompleted = signal
         ? await this.waitForDelay(accountId, delayMs, signal)
         : await new Promise<boolean>(resolve => setTimeout(() => resolve(true), delayMs))
@@ -413,17 +455,200 @@ export class ContactLoader {
         break
       }
 
-      // Check if new content was loaded
-      if (currentCount === prevCount) {
+      const currentCount = await this.countLoadedContacts(wc, accountId, contactType)
+      if (typeof currentCount !== 'number') break
+
+      this.sendProgress(`📜 Đang cuộn trang... lần ${scrollCount}, đã thấy ${currentCount} ${typeName}`)
+
+      // Stop only after 3 scroll cycles without any newly parsed valid contacts.
+      if (currentCount > prevCount) {
+        noChangeCount = 0
+        prevCount = currentCount
+      } else {
         noChangeCount++
         if (noChangeCount >= 3) {
-          // No new content after 3 consecutive scrolls, done
           break
         }
-      } else {
-        noChangeCount = 0
       }
-      prevCount = currentCount
+    }
+  }
+
+  private async countLoadedContacts(
+    wc: Electron.WebContents,
+    accountId: number,
+    contactType: 'friend' | 'group'
+  ): Promise<number | undefined> {
+    if (this.isLoadCancelled(accountId)) return undefined
+
+    const script = contactType === 'friend'
+      ? `
+        (function() {
+          var seen = new Set();
+          var reservedPaths = new Set([
+            'friends', 'groups', 'pages', 'photo', 'photos', 'story', 'watch', 'reel', 'reels',
+            'hashtag', 'events', 'marketplace', 'gaming', 'settings', 'notifications',
+            'messages', 'bookmarks', 'help', 'privacy', 'policies', 'ads', 'search'
+          ]);
+
+          function toFacebookUrl(href) {
+            try {
+              var url = new URL(href, window.location.origin);
+              var host = url.hostname.replace(/^www\\./i, '').replace(/^web\\./i, '').replace(/^m\\./i, '');
+              if (host !== 'facebook.com' && host !== 'fb.com') return null;
+              return url;
+            } catch (e) {
+              return null;
+            }
+          }
+
+          function extractProfileTarget(href) {
+            var url = toFacebookUrl(href);
+            if (!url) return null;
+
+            if (url.pathname === '/profile.php') {
+              var id = url.searchParams.get('id');
+              if (!id) return null;
+              return { uid: id };
+            }
+
+            var parts = url.pathname.split('/').filter(Boolean);
+            if (parts.length !== 1) return null;
+            var slug = parts[0];
+            if (!slug || reservedPaths.has(slug.toLowerCase())) return null;
+            if (!/^[a-zA-Z0-9._-]+$/.test(slug)) return null;
+            return { uid: slug };
+          }
+
+          function cleanFriendName(a) {
+            function clean(txt) {
+              return String(txt || '')
+                .replace(/\\s+/g, ' ')
+                .replace(/\\d+\\s*bạn chung.*$/i, '')
+                .replace(/Có\\s*[\\d,.]+[KkMm]?\\s*người theo dõi.*$/i, '')
+                .replace(/\\d+\\s*mutual friends?.*$/i, '')
+                .replace(/\\d+\\s*followers?.*$/i, '')
+                .trim();
+            }
+
+            function bad(txt) {
+              return !txt ||
+                /bạn chung|mutual friends?|người theo dõi|followers?/i.test(txt) ||
+                /^(Bạn bè|Friends|Thêm bạn bè|Add friend|Nhắn tin|Message|Theo dõi|Follow)$/i.test(txt);
+            }
+
+            var spans = a.querySelectorAll('span, strong, h2, h3');
+            for (var s = 0; s < spans.length; s++) {
+              var span = spans[s];
+              if (span.querySelector('span, strong, h2, h3')) continue;
+              var candidate = clean(span.textContent);
+              if (candidate.length >= 2 && candidate.length <= 80 && !bad(candidate)) return candidate;
+            }
+
+            var text = clean(a.innerText || a.textContent);
+            if (text.length >= 2 && text.length <= 100 && !bad(text)) return text;
+            return '';
+          }
+
+          var links = document.querySelectorAll('a[href*="facebook.com/"]');
+          for (var i = 0; i < links.length; i++) {
+            var target = extractProfileTarget(links[i].href || '');
+            if (!target) continue;
+            var name = cleanFriendName(links[i]);
+            if (!name || name.length < 2 || name.length > 100) continue;
+            seen.add(target.uid);
+          }
+
+          return seen.size;
+        })()
+      `
+      : `
+        (function() {
+          var seen = new Set();
+          var reservedGroupPaths = new Set([
+            'feed', 'joins', 'discover', 'create', 'category', 'notifications',
+            'your_groups', 'membership', 'browse'
+          ]);
+
+          function toFacebookUrl(href) {
+            try {
+              var url = new URL(href, window.location.origin);
+              var host = url.hostname.replace(/^www\\./i, '').replace(/^web\\./i, '').replace(/^m\\./i, '');
+              if (host !== 'facebook.com' && host !== 'fb.com') return null;
+              return url;
+            } catch (e) {
+              return null;
+            }
+          }
+
+          function extractGroupTarget(href) {
+            var url = toFacebookUrl(href);
+            if (!url) return null;
+            var parts = url.pathname.split('/').filter(Boolean);
+            var idx = parts.findIndex(function(part) { return part.toLowerCase() === 'groups'; });
+            if (idx === -1 || idx + 1 >= parts.length) return null;
+            var groupKey = parts[idx + 1];
+            if (!groupKey || reservedGroupPaths.has(groupKey.toLowerCase())) return null;
+            if (!/^[a-zA-Z0-9._-]+$/.test(groupKey)) return null;
+            return { uid: groupKey };
+          }
+
+          function normalizeText(txt) {
+            return String(txt || '').replace(/\\s+/g, ' ').trim();
+          }
+
+          function isActivityText(txt) {
+            return /Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity/i.test(txt);
+          }
+
+          function cleanGroupName(a) {
+            function stripActivity(txt) {
+              return normalizeText(txt)
+                .replace(/\\s*(Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity)[:：]?.*$/i, '')
+                .trim();
+            }
+
+            var lines = String(a.innerText || '')
+              .split(/\\n+/)
+              .map(stripActivity)
+              .filter(Boolean);
+            for (var l = 0; l < lines.length; l++) {
+              if (!isActivityText(lines[l]) && lines[l].length >= 2 && lines[l].length <= 180) return lines[l];
+            }
+
+            var spans = a.querySelectorAll('span, strong, h2, h3');
+            for (var s = 0; s < spans.length; s++) {
+              var span = spans[s];
+              if (span.querySelector('span, strong, h2, h3')) continue;
+              var candidate = stripActivity(span.textContent);
+              if (!isActivityText(candidate) && candidate.length >= 2 && candidate.length <= 180) return candidate;
+            }
+
+            return stripActivity(a.textContent);
+          }
+
+          var links = document.querySelectorAll('a[href*="/groups/"]');
+          for (var i = 0; i < links.length; i++) {
+            var target = extractGroupTarget(links[i].href || '');
+            if (!target) continue;
+            var name = cleanGroupName(links[i]);
+            if (!name || name.length < 2 || name.length > 200) continue;
+            seen.add(target.uid);
+          }
+
+          return seen.size;
+        })()
+      `
+
+    try {
+      const countPromise = wc.executeJavaScript(script)
+      const signal = this.activeLoadControllers.get(accountId)?.signal
+      const result = signal
+        ? await this.raceWithCancel(accountId, countPromise, signal)
+        : await countPromise
+      return typeof result === 'number' ? result : undefined
+    } catch (err) {
+      if (this.isLoadCancelled(accountId)) return undefined
+      throw err
     }
   }
 
@@ -432,7 +657,7 @@ export class ContactLoader {
    */
   private async scrapeFriends(wc: Electron.WebContents, accountId: number): Promise<Partial<AutoAccountContact>[]> {
     // Scroll to load all friends
-    await this.scrollAndWait(wc, accountId, 50, 1500)
+    await this.scrollAndWait(wc, accountId, 'friend', 1500)
 
     const results = await wc.executeJavaScript(`
       (function() {
@@ -549,7 +774,7 @@ export class ContactLoader {
    */
   private async scrapeGroups(wc: Electron.WebContents, accountId: number): Promise<Partial<AutoAccountContact>[]> {
     // Scroll to load all groups
-    await this.scrollAndWait(wc, accountId, 30, 1500)
+    await this.scrollAndWait(wc, accountId, 'group', 1500)
 
     const results = await wc.executeJavaScript(`
       (function() {
