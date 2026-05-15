@@ -1795,6 +1795,109 @@ body {
   color: var(--text-topbar);
 }
 
+.topbar-settings-menu-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.topbar-settings-button {
+  padding: 6px 8px;
+  color: var(--text-topbar-muted);
+}
+
+.topbar-settings-button.active {
+  background: var(--bg-topbar-active);
+  color: var(--text-topbar);
+}
+
+.topbar-settings-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 2200;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  animation: contextMenuIn 0.12s ease-out;
+}
+
+.topbar-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.topbar-settings-item:hover {
+  background: var(--bg-hover);
+}
+
+.topbar-settings-item svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.topbar-settings-item:hover svg {
+  color: var(--accent-primary);
+}
+
+.topbar-theme-toggle-item {
+  justify-content: flex-start;
+}
+
+.topbar-theme-toggle-item span:nth-child(2) {
+  flex: 1;
+}
+
+.topbar-theme-switch {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.topbar-theme-switch.on {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.topbar-theme-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.topbar-theme-switch.on .topbar-theme-switch-thumb {
+  transform: translateX(16px);
+  background: #ffffff;
+}
+
 /* =========== CAMPAIGN PAGE LAYOUT =========== */
 .campaign-page {
   display: flex;

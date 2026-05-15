@@ -1,20 +1,75 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Zap, LogIn, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
 export default function LoginPage() {
-  const { login, loggingIn, errorMessage, clearError } = useAuthStore()
+  const {
+    login,
+    loggingIn,
+    errorMessage,
+    clearError,
+    loginOptions,
+    setLoginOptions,
+    savedCredentials
+  } = useAuthStore()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [startupEnabled, setStartupEnabled] = useState(false)
+
+  useEffect(() => {
+    if (!loginOptions.rememberLogin || !savedCredentials) return
+    setUsername(savedCredentials.username)
+    setPassword(savedCredentials.password)
+  }, [loginOptions.rememberLogin, savedCredentials])
+
+  useEffect(() => {
+    let active = true
+    if (!window.electronAPI?.getStartupSetting) return
+    window.electronAPI.getStartupSetting()
+      .then(res => {
+        if (active) setStartupEnabled(!!res.enabled)
+      })
+      .catch(err => console.warn('Get startup setting failed:', err))
+    return () => {
+      active = false
+    }
+  }, [])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!username.trim() || !password) return
     try {
-      await login(username.trim(), password)
+      await login(username.trim(), password, loginOptions)
     } catch {
       /* error đã được set vào store, render bên dưới */
     }
+  }
+
+  const handleStartupChange = async (checked: boolean) => {
+    setStartupEnabled(checked)
+    try {
+      const res = await window.electronAPI.setStartupSetting(checked)
+      setStartupEnabled(!!res.enabled)
+    } catch (err) {
+      setStartupEnabled(!checked)
+      console.error('Set startup setting failed:', err)
+    }
+  }
+
+  const optionStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: 12,
+    color: 'var(--text-secondary, #aaa)',
+    cursor: loggingIn ? 'default' : 'pointer',
+    userSelect: 'none' as const
+  }
+
+  const checkboxStyle = {
+    width: 14,
+    height: 14,
+    accentColor: 'var(--accent-primary, #7c3aed)'
   }
 
   return (
@@ -94,6 +149,39 @@ export default function LoginPage() {
               outline: 'none'
             }}
           />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: -4 }}>
+          <label style={optionStyle}>
+            <input
+              type="checkbox"
+              checked={loginOptions.rememberLogin}
+              onChange={(e) => setLoginOptions({ rememberLogin: e.target.checked })}
+              disabled={loggingIn}
+              style={checkboxStyle}
+            />
+            <span>Ghi nhớ đăng nhập</span>
+          </label>
+          <label style={optionStyle}>
+            <input
+              type="checkbox"
+              checked={loginOptions.autoLogin}
+              onChange={(e) => setLoginOptions({ autoLogin: e.target.checked })}
+              disabled={loggingIn}
+              style={checkboxStyle}
+            />
+            <span>Tự động đăng nhập</span>
+          </label>
+          <label style={optionStyle}>
+            <input
+              type="checkbox"
+              checked={startupEnabled}
+              onChange={(e) => handleStartupChange(e.target.checked)}
+              disabled={loggingIn}
+              style={checkboxStyle}
+            />
+            <span>Khởi động cùng máy tính</span>
+          </label>
         </div>
 
         {errorMessage && (

@@ -269,6 +269,18 @@ export interface AuthUser {
   username: string
   organizationName: string
   isAdminAkabiz: boolean
+  deviceLabel?: string | null
+  devicePlatform?: string | null
+  deviceBoundAt?: string | null
+  deviceLastSeenAt?: string | null
+}
+
+export interface DeviceLockResetResult {
+  success: boolean
+}
+
+export interface StartupSettingResult {
+  enabled: boolean
 }
 
 // ============================================
@@ -283,6 +295,11 @@ export const IPC_EVENTS = {
   AUTH_LOGIN: 'auth:login',
   AUTH_LOGOUT: 'auth:logout',
   AUTH_ME: 'auth:me',
+  AUTH_RESET_DEVICE_LOCK: 'auth:reset-device-lock',
+
+  // App
+  APP_GET_STARTUP_SETTING: 'app:get-startup-setting',
+  APP_SET_STARTUP_SETTING: 'app:set-startup-setting',
 
   // Database Auto Accounts
   DB_LIST_ACCOUNTS: 'db:list-accounts',

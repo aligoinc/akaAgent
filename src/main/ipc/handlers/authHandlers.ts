@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC_EVENTS } from '../../../shared/types'
-import { login as loginQuery } from '../../data/repositories/authRepository'
+import { login as loginQuery, resetDeviceLock } from '../../data/repositories/authRepository'
 import { setCurrentUser, getCurrentUser } from '../../data/currentUser'
 
 export function registerAuthHandlers(afterLogin?: () => Promise<void>): void {
@@ -24,5 +24,11 @@ export function registerAuthHandlers(afterLogin?: () => Promise<void>): void {
 
   ipcMain.handle(IPC_EVENTS.AUTH_ME, async () => {
     return getCurrentUser()
+  })
+
+  ipcMain.handle(IPC_EVENTS.AUTH_RESET_DEVICE_LOCK, async () => {
+    const user = getCurrentUser()
+    if (!user) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi đổi máy tính.')
+    return resetDeviceLock(user)
   })
 }
