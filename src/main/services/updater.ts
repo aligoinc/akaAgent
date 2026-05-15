@@ -7,9 +7,24 @@ import * as http from 'http'
 import { URL } from 'url'
 import { IPC_EVENTS } from '../../shared/types'
 
-const VERSION_URL = 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_win.txt'
-const INSTALLER_URL = 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.exe'
-const INSTALLER_FILENAME = 'akaAgent.exe'
+interface PlatformUpdateConfig {
+  versionUrl: string
+  installerUrl: string
+  installerFilename: string
+}
+
+const UPDATE_CONFIGS: Record<string, PlatformUpdateConfig> = {
+  win32: {
+    versionUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_win.txt',
+    installerUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.exe',
+    installerFilename: 'akaAgent.exe'
+  },
+  darwin: {
+    versionUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_mac.txt',
+    installerUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.dmg',
+    installerFilename: 'akaAgent.dmg'
+  }
+}
 
 export interface UpdateCheckResult {
   hasUpdate: boolean
@@ -39,6 +54,10 @@ function parseVersion(version: string): [number, number, number] | null {
   if (!normalized) return null
   const [major, minor, patch] = normalized.split('.').map((part) => Number.parseInt(part, 10))
   return [major, minor, patch]
+}
+
+function getUpdateConfig(): PlatformUpdateConfig | null {
+  return UPDATE_CONFIGS[process.platform] || null
 }
 
 export function getLocalVersion(): string {
@@ -111,8 +130,18 @@ async function fetchText(url: string): Promise<string> {
 
 export async function checkForUpdate(): Promise<UpdateCheckResult> {
   const localVersion = getLocalVersion()
+  const config = getUpdateConfig()
+  if (!config) {
+    return {
+      hasUpdate: false,
+      localVersion,
+      remoteVersion: '',
+      error: `Auto-update chưa hỗ trợ nền tảng ${process.platform}`
+    }
+  }
+
   try {
-    const remoteVersion = normalizeVersion(await fetchText(VERSION_URL))
+    const remoteVersion = normalizeVersion(await fetchText(config.versionUrl))
     if (!remoteVersion) {
       return { hasUpdate: false, localVersion, remoteVersion: '', error: 'Không đọc được phiên bản từ server' }
     }
@@ -133,9 +162,10 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 
 async function downloadInstaller(
   targetPath: string,
+  installerUrl: string,
   onProgress: (p: UpdateProgress) => void
 ): Promise<void> {
-  const res = await httpGet(INSTALLER_URL)
+  const res = await httpGet(installerUrl)
   const total = parseInt(res.headers['content-length'] || '0', 10) || 0
   let transferred = 0
 
@@ -171,7 +201,7 @@ async function downloadInstaller(
   })
 }
 
-function runInstaller(installerPath: string): void {
+function runWindowsInstaller(installerPath: string): void {
   // Detach and let the NSIS installer take over. When the user confirms,
   // the installer will overwrite the running app.
   const child = spawn(installerPath, [], {
@@ -185,8 +215,9 @@ function runInstaller(installerPath: string): void {
 export async function downloadAndInstall(
   mainWindow: BrowserWindow | null
 ): Promise<{ success: boolean; error?: string }> {
-  if (process.platform !== 'win32') {
-    return { success: false, error: 'Auto-update chỉ hỗ trợ Windows' }
+  const config = getUpdateConfig()
+  if (!config) {
+    return { success: false, error: `Auto-update chưa hỗ trợ nền tảng ${process.platform}` }
   }
 
   const emit = (payload: UpdateProgress): void => {
@@ -196,28 +227,41 @@ export async function downloadAndInstall(
   }
 
   const tempDir = app.getPath('temp')
-  const installerPath = join(tempDir, INSTALLER_FILENAME)
+  const installerPath = join(tempDir, config.installerFilename)
 
   try {
     emit({ phase: 'downloading', percent: 0, transferred: 0, total: 0 })
-    await downloadInstaller(installerPath, emit)
+    await downloadInstaller(installerPath, config.installerUrl, emit)
 
-    emit({ phase: 'installing', message: 'Đang khởi chạy bộ cài đặt…' })
+    emit({ phase: 'installing', message: process.platform === 'darwin' ? 'Đang mở file cập nhật…' : 'Đang khởi chạy bộ cài đặt…' })
 
-    try {
-      runInstaller(installerPath)
-    } catch (spawnErr) {
-      // Fallback: ask the shell to open it
-      await shell.openPath(installerPath)
-      if (spawnErr instanceof Error) console.warn('spawn installer failed, used shell.openPath:', spawnErr.message)
+    if (process.platform === 'win32') {
+      try {
+        runWindowsInstaller(installerPath)
+      } catch (spawnErr) {
+        // Fallback: ask the shell to open it
+        const openError = await shell.openPath(installerPath)
+        if (openError) throw new Error(openError)
+        if (spawnErr instanceof Error) console.warn('spawn installer failed, used shell.openPath:', spawnErr.message)
+      }
+
+      emit({ phase: 'done', message: 'Bộ cài đặt đã khởi chạy. Thoát ứng dụng để tiếp tục cài đặt.' })
+
+      // Give the installer ~1.5s to appear before we quit ourselves so it can replace the exe.
+      setTimeout(() => {
+        app.quit()
+      }, 1500)
+
+      return { success: true }
     }
 
-    emit({ phase: 'done', message: 'Bộ cài đặt đã khởi chạy. Thoát ứng dụng để tiếp tục cài đặt.' })
+    const openError = await shell.openPath(installerPath)
+    if (openError) throw new Error(openError)
 
-    // Give the installer ~1.5s to appear before we quit ourselves so it can replace the exe.
-    setTimeout(() => {
-      app.quit()
-    }, 1500)
+    emit({
+      phase: 'done',
+      message: 'File cập nhật đã mở. Thoát ứng dụng rồi kéo akaBizAuto vào Applications để hoàn tất cài đặt.'
+    })
 
     return { success: true }
   } catch (err) {
