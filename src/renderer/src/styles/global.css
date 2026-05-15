@@ -2924,6 +2924,12 @@ body {
   background: rgba(245, 158, 11, 0.12);
 }
 
+.find-data-chip-postLink,
+.find-data-kind-postLink {
+  color: var(--accent-info);
+  background: rgba(14, 165, 233, 0.1);
+}
+
 .find-data-value-cell,
 .find-data-group-cell {
   max-width: 280px;
@@ -3303,4 +3309,3 @@ body {
   margin-right: 4px;
   font-size: 10px;
 }
-

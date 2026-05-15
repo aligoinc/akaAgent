@@ -130,6 +130,7 @@ export interface CampaignExtraSettings {
   isFindPhone?: boolean
   isFindLinkGroupZalo?: boolean
   isFindUid?: boolean
+  isFindPostLink?: boolean
   isFindInPost?: boolean
   sortTypePost?: 'most_relevant' | 'recent_activity' | 'new_posts'
   countPostFindData?: number
@@ -141,6 +142,7 @@ export interface CampaignExtraSettings {
   isFindByContentAI?: boolean
   contentAI?: string
   findUidTargetCampaignIds?: number[]          // Khi tìm UID, tự thêm UID vào các campaign nhắn tin/kết bạn đã chọn
+  findPostLinkTargetCampaignIds?: number[]     // Khi tìm link bài post, tự thêm link vào campaign comment seeding bài post đã chọn
 }
 
 export interface Campaign {

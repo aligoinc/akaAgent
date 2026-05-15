@@ -14,12 +14,13 @@ interface CampaignPanelProps {
 }
 
 type DetailTab = 'data' | 'actions' | 'foundData'
-type FoundDataKind = 'phone' | 'zalo' | 'uid'
+type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink'
 
 interface FoundDataPayload {
   phones: string[]
   linkGroupZalos: string[]
   uids: string[]
+  postLinks: string[]
   groupUrl: string
   total: number
 }
@@ -43,13 +44,15 @@ const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
   const phones = toStringList(data.phones)
   const linkGroupZalos = toStringList(data.linkGroupZalos)
   const uids = toStringList(data.uids)
+  const postLinks = toStringList(data.postLinks)
   const groupUrl = typeof data.groupUrl === 'string' ? data.groupUrl : ''
   return {
     phones,
     linkGroupZalos,
     uids,
+    postLinks,
     groupUrl,
-    total: phones.length + linkGroupZalos.length + uids.length
+    total: phones.length + linkGroupZalos.length + uids.length + postLinks.length
   }
 }
 
@@ -58,6 +61,7 @@ const getFoundDataKindLabel = (kind: FoundDataKind) => {
     case 'phone': return 'Số điện thoại'
     case 'zalo': return 'Link group Zalo'
     case 'uid': return 'UID'
+    case 'postLink': return 'Link bài post'
   }
 }
 
@@ -286,6 +290,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
           value,
           groupUrl,
           createdAt
+        })),
+        ...payload.postLinks.map((value, index) => ({
+          key: `${detail.id}-post-link-${index}`,
+          kind: 'postLink' as const,
+          label: getFoundDataKindLabel('postLink'),
+          value,
+          groupUrl,
+          createdAt
         }))
       ]
     })
@@ -310,6 +322,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
           <span className="find-data-chip find-data-chip-phone">SĐT: {payload.phones.length}</span>
           <span className="find-data-chip find-data-chip-zalo">Zalo: {payload.linkGroupZalos.length}</span>
           <span className="find-data-chip find-data-chip-uid">UID: {payload.uids.length}</span>
+          <span className="find-data-chip find-data-chip-postLink">Post: {payload.postLinks.length}</span>
         </div>
       </div>
     )
