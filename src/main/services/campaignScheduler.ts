@@ -29,6 +29,10 @@ interface SuggestedFriendProfile {
   uid: string
 }
 
+interface PostBumpTarget {
+  campaignId: number
+}
+
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
@@ -165,6 +169,36 @@ export class CampaignScheduler {
     this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
 
+  private getFutureInputSchedule(detail: CampaignInputData, now: Date): Date | null {
+    if (!detail.schedule) return null
+    const scheduledAt = new Date(detail.schedule)
+    if (Number.isNaN(scheduledAt.getTime())) return null
+    return scheduledAt.getTime() > now.getTime() ? scheduledAt : null
+  }
+
+  private formatVietnamDateTime(date: Date): string {
+    return date.toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  private async deferCampaignUntilFutureInput(campaign: Campaign, scheduledAt: Date): Promise<void> {
+    await this.updateCampaignAndBroadcast(campaign.id, {
+      status: 'chờ xử lý',
+      schedule: scheduledAt.toISOString(),
+      note: null
+    })
+    const message = `Hẹn chạy tiếp chiến dịch lúc ${this.formatVietnamDateTime(scheduledAt)}`
+    await this.supabase.appendCampaignLog(campaign.id, message)
+    this.sendLog(`⏳ ${message}`)
+  }
+
   private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
     try {
       const startBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý')
@@ -278,6 +312,7 @@ export class CampaignScheduler {
 
     const limitConfig = extra.actionLimits
     let stoppedBeforeCompletion = false
+    let earliestFutureInputSchedule: Date | null = null
 
     for (let i = 0; i < targets.length; i++) {
       // Check pause
@@ -298,6 +333,15 @@ export class CampaignScheduler {
 
       const detail = targets[i]
       if (detail && detail.status !== 'chờ xử lý') continue
+      if (detail) {
+        const futureSchedule = this.getFutureInputSchedule(detail, new Date())
+        if (futureSchedule) {
+          if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
+            earliestFutureInputSchedule = futureSchedule
+          }
+          continue
+        }
+      }
 
       const groupPostApproval = await this.resolveGroupPostApprovalForTarget(account.id, campaign, detail)
       const targetActionDescriptors = groupPostApproval.skipPostByKnownApproval
@@ -452,7 +496,11 @@ export class CampaignScheduler {
     }
 
     if (!stoppedBeforeCompletion) {
-      await this.handleCampaignCompletion(campaign)
+      if (earliestFutureInputSchedule) {
+        await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
+      } else {
+        await this.handleCampaignCompletion(campaign)
+      }
     }
     await this.releaseRunningAccount(account.id)
   }
@@ -1160,6 +1208,7 @@ export class CampaignScheduler {
           this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
           if (isPending) this.sendLog(`⏳ Bài đang chờ duyệt`)
           if (postUrl) this.sendLog(`🔗 Link bài post: ${postUrl}`)
+          await this.enqueuePostBumpAfterGroupPost(campaign, postUrl)
         } else {
           this.sendLog(`❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
         }
@@ -1480,6 +1529,238 @@ export class CampaignScheduler {
         console.error('Failed to push found post links to target campaign:', err)
       }
     }
+  }
+
+  private normalizePostBumpCount(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    if (!Number.isFinite(parsed)) return 3
+    return Math.min(10, Math.max(1, parsed))
+  }
+
+  private normalizePostBumpMinutes(value: unknown, fallback: number, min: number): number {
+    const parsed = Math.floor(Number(value))
+    if (!Number.isFinite(parsed)) return fallback
+    return Math.max(min, parsed)
+  }
+
+  private normalizePostBumpRotationIndex(value: unknown, targetCount: number): number {
+    if (targetCount <= 0) return 0
+    const parsed = Math.floor(Number(value))
+    if (!Number.isFinite(parsed)) return 0
+    return ((parsed % targetCount) + targetCount) % targetCount
+  }
+
+  private async enqueuePostBumpAfterGroupPost(campaign: Campaign, rawPostUrl: string): Promise<void> {
+    const extra = campaign.extraSettings || {}
+    if (campaign.actionId !== 'facebook_group_post' || extra.enablePostBump !== true) return
+
+    const postUrl = this.cleanPostLinkForStorage(rawPostUrl)
+    if (!postUrl || postUrl.includes('/pending_posts/')) return
+
+    const targets = await this.resolvePostBumpTargets(campaign)
+    if (targets.length === 0) {
+      const message = 'Chưa có chiến dịch up tin để nhận link bài post'
+      await this.supabase.appendCampaignLog(campaign.id, message).catch(err => {
+        console.error('Failed append post bump missing target log:', err)
+      })
+      this.sendLog(`⚠️ ${message}`)
+      return
+    }
+
+    const count = this.normalizePostBumpCount(extra.postBumpCount)
+    const initialDelay = this.normalizePostBumpMinutes(extra.postBumpInitialDelayMinutes, 30, 0)
+    const interval = this.normalizePostBumpMinutes(extra.postBumpIntervalMinutes, 10, 1)
+    const startIndex = this.normalizePostBumpRotationIndex(extra.postBumpRotationIndex, targets.length)
+    const now = new Date()
+    const earliestByCampaign = new Map<number, Date>()
+
+    for (let i = 0; i < count; i++) {
+      const target = targets[(startIndex + i) % targets.length]
+      const schedule = new Date(now.getTime() + (initialDelay + i * interval) * 60 * 1000)
+      await this.supabase.createCampaignInputData({
+        campaignId: target.campaignId,
+        uid: postUrl,
+        status: 'chờ xử lý',
+        schedule: schedule.toISOString(),
+        note: `Tự động thêm từ chiến dịch "${campaign.name}"`
+      })
+      const currentEarliest = earliestByCampaign.get(target.campaignId)
+      if (!currentEarliest || schedule.getTime() < currentEarliest.getTime()) {
+        earliestByCampaign.set(target.campaignId, schedule)
+      }
+    }
+
+    const nextRotationIndex = (startIndex + count) % targets.length
+    const nextExtraSettings = {
+      ...campaign.extraSettings,
+      postBumpRotationIndex: nextRotationIndex
+    }
+    campaign.extraSettings = nextExtraSettings
+    await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+
+    for (const campaignId of earliestByCampaign.keys()) {
+      await this.refreshPostBumpTargetCampaignSchedule(campaignId)
+    }
+
+    const message = `Đã thêm ${count} lượt up tin cho bài post`
+    await this.supabase.appendCampaignLog(campaign.id, message).catch(err => {
+      console.error('Failed append post bump enqueue log:', err)
+    })
+    this.sendLog(`✅ ${message}`)
+  }
+
+  private async resolvePostBumpTargets(campaign: Campaign): Promise<PostBumpTarget[]> {
+    const extra = campaign.extraSettings || {}
+
+    if (extra.postBumpMode === 'create') {
+      return this.resolveCreatedPostBumpTargets(campaign)
+    }
+
+    const targetIds = Array.from(new Set(
+      (extra.postBumpTargetCampaignIds || [])
+        .map(id => Number(id))
+        .filter(id => Number.isFinite(id) && id > 0 && id !== campaign.id)
+    ))
+    const targets: PostBumpTarget[] = []
+    for (const targetId of targetIds) {
+      try {
+        const targetCampaign = await this.supabase.getCampaign(targetId)
+        if (targetCampaign && targetCampaign.actionId === COMMENT_SEEDING_POST_ACTION_ID) {
+          targets.push({ campaignId: targetCampaign.id })
+        }
+      } catch (err) {
+        console.error('Failed resolve selected post bump target campaign:', err)
+      }
+    }
+    return targets
+  }
+
+  private async resolveCreatedPostBumpTargets(campaign: Campaign): Promise<PostBumpTarget[]> {
+    const extra = campaign.extraSettings || {}
+    const accountIds = Array.from(new Set(
+      (extra.postBumpAccountIds || [])
+        .map(id => Number(id))
+        .filter(id => Number.isFinite(id) && id > 0)
+    ))
+    if (accountIds.length === 0) return []
+
+    const mapping: Record<string, number> = { ...(extra.postBumpCreatedCampaignIdsByAccount || {}) }
+    let mappingChanged = false
+    const targets: PostBumpTarget[] = []
+
+    for (const accountId of accountIds) {
+      const key = String(accountId)
+      let targetCampaignId = Number(mapping[key])
+      let targetCampaign = targetCampaignId ? await this.supabase.getCampaign(targetCampaignId).catch(() => null) : null
+
+      if (!targetCampaign || targetCampaign.actionId !== COMMENT_SEEDING_POST_ACTION_ID || targetCampaign.isDelete) {
+        targetCampaign = await this.createPostBumpTargetCampaign(campaign, accountId)
+        targetCampaignId = targetCampaign.id
+        mapping[key] = targetCampaignId
+        mappingChanged = true
+      }
+
+      targets.push({ campaignId: targetCampaignId })
+    }
+
+    if (mappingChanged) {
+      const nextExtraSettings = {
+        ...campaign.extraSettings,
+        postBumpCreatedCampaignIdsByAccount: mapping
+      }
+      campaign.extraSettings = nextExtraSettings
+      await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+    }
+
+    return targets
+  }
+
+  private async createPostBumpTargetCampaign(sourceCampaign: Campaign, accountId: number): Promise<Campaign> {
+    const account = await this.supabase.getAccount(accountId).catch(() => null)
+    const content = String(sourceCampaign.extraSettings?.postBumpContent || '').trim()
+    const actionLimits: CampaignActionLimitSettings = {
+      sleepBetweenActions: 0,
+      enabledActionCodes: ['fb_comment'],
+      dailyLimit: 1000,
+      rateLimitCount: 1000,
+      rateLimitMinutes: 60,
+      byActionCode: {
+        fb_comment: {
+          dailyLimit: 1000,
+          rateLimitCount: 1000,
+          rateLimitMinutes: 60
+        }
+      }
+    }
+
+    const created = await this.supabase.createCampaign({
+      name: `Up tin cho chiến dịch ${sourceCampaign.name}${account?.name ? ` - ${account.name}` : ''}`,
+      actionId: COMMENT_SEEDING_POST_ACTION_ID,
+      accountId,
+      status: 'chờ xử lý',
+      schedule: new Date().toISOString(),
+      scheduleType: 'daily',
+      scheduleEndDate: null,
+      dailyStopTime: null,
+      continueNextDay: true,
+      refreshData: true,
+      timeSleepBetween2: 0,
+      content,
+      extraSettings: {
+        enableComment: true,
+        commentContent: content,
+        commentCount: 1,
+        postsPerTarget: 1,
+        enablePostLike: false,
+        actionLimits
+      },
+      images: []
+    })
+
+    await this.supabase.appendCampaignLog(created.id, `Tạo chiến dịch up tin từ "${sourceCampaign.name}"`).catch(err => {
+      console.error('Failed append created post bump campaign log:', err)
+    })
+    this.sendLog(`✅ Đã tạo chiến dịch up tin "${created.name}"`)
+    return created
+  }
+
+  private async refreshPostBumpTargetCampaignSchedule(campaignId: number): Promise<void> {
+    const targetCampaign = await this.supabase.getCampaign(campaignId)
+    if (!targetCampaign) return
+
+    const nextSchedule = await this.getNextPendingInputSchedule(campaignId)
+    if (!nextSchedule) return
+
+    const updates: Partial<Campaign> = {
+      schedule: nextSchedule.toISOString()
+    }
+    if (targetCampaign.status === 'hoàn thành') {
+      updates.status = 'chờ xử lý'
+      updates.note = null
+    }
+
+    await this.updateCampaignAndBroadcast(campaignId, updates)
+  }
+
+  private async getNextPendingInputSchedule(campaignId: number): Promise<Date | null> {
+    const details = await this.supabase.listCampaignInputData(campaignId)
+    const now = new Date()
+    let earliestFuture: Date | null = null
+
+    for (const detail of details) {
+      if (detail.status !== 'chờ xử lý') continue
+      if (!detail.schedule) return now
+
+      const scheduledAt = new Date(detail.schedule)
+      if (Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() <= now.getTime()) {
+        return now
+      }
+      if (!earliestFuture || scheduledAt.getTime() < earliestFuture.getTime()) {
+        earliestFuture = scheduledAt
+      }
+    }
+
+    return earliestFuture
   }
 
   private normalizeUidForCompare(uid: string): string {

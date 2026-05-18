@@ -204,7 +204,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     schedule_week_days: campaign.scheduleWeekDays || null,
     continue_next_day: campaign.continueNextDay ?? false,
     refresh_data: campaign.refreshData ?? false,
-    time_sleep_between_2: campaign.timeSleepBetween2 || 30,
+    time_sleep_between_2: campaign.timeSleepBetween2 ?? 30,
     content: campaign.content || '',
     extra_settings: campaign.extraSettings || {},
     images: campaign.images || [],
