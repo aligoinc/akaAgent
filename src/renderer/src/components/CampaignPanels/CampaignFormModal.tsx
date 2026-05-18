@@ -23,6 +23,7 @@ type ImageOption = 'none' | 'all' | 'random'
 type CommentImageOption = 'none' | 'all'
 type CommentGroupMode = 'all' | 'pending_only' | 'published_only'
 type CommentType = 'own' | 'others' | 'all'
+type PostBumpMode = 'select' | 'create'
 type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
 type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 
@@ -122,6 +123,9 @@ const COMMENT_SORT_OPTIONS = [
 ] as const
 
 const DEFAULT_DAILY_STOP_TIME = '18:00'
+const DEFAULT_POST_BUMP_COUNT = 3
+const DEFAULT_POST_BUMP_INITIAL_DELAY_MINUTES = 30
+const DEFAULT_POST_BUMP_INTERVAL_MINUTES = 10
 
 const MESSAGE_FULL_NAME_TOKEN = '#{FULL_NAME}'
 const MESSAGE_DATE_OPTIONS: { value: MessageDateOption; label: string; token: string }[] = [
@@ -140,6 +144,18 @@ const normalizeTimeInput = (value?: string | null): string => {
   const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})/)
   if (!match) return ''
   return `${match[1].padStart(2, '0')}:${match[2]}`
+}
+
+const clampPostBumpCount = (value: unknown): number => {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed)) return DEFAULT_POST_BUMP_COUNT
+  return Math.min(10, Math.max(1, parsed))
+}
+
+const normalizeMinuteValue = (value: unknown, fallback: number, min = 0): number => {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(min, parsed)
 }
 
 const ALL_STEPS: StepDef[] = [
@@ -184,7 +200,8 @@ const ALL_STEPS: StepDef[] = [
     id: 'extra',
     title: 'Cài đặt thêm',
     fields: [
-      { key: 'enableComment', label: 'Kiêm comment' }
+      { key: 'enableComment', label: 'Kiêm comment' },
+      { key: 'enablePostBump', label: 'Kiêm up tin' }
     ]
   },
   {
@@ -287,6 +304,26 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
     skipPostIfGroupRequiresApproval: campaign?.extraSettings?.skipPostIfGroupRequiresApproval ?? false,
+    enablePostBump: campaign?.extraSettings?.enablePostBump ?? false,
+    postBumpCount: clampPostBumpCount(campaign?.extraSettings?.postBumpCount ?? DEFAULT_POST_BUMP_COUNT),
+    postBumpInitialDelayMinutes: normalizeMinuteValue(
+      campaign?.extraSettings?.postBumpInitialDelayMinutes,
+      DEFAULT_POST_BUMP_INITIAL_DELAY_MINUTES,
+      0
+    ),
+    postBumpIntervalMinutes: normalizeMinuteValue(
+      campaign?.extraSettings?.postBumpIntervalMinutes,
+      DEFAULT_POST_BUMP_INTERVAL_MINUTES,
+      1
+    ),
+    postBumpMode: (campaign?.extraSettings?.postBumpMode || 'select') as PostBumpMode,
+    postBumpTargetCampaignIds: [...(campaign?.extraSettings?.postBumpTargetCampaignIds || [])] as number[],
+    postBumpAccountIds: [...(campaign?.extraSettings?.postBumpAccountIds || [])] as number[],
+    postBumpContent: campaign?.extraSettings?.postBumpContent || '',
+    postBumpCreatedCampaignIdsByAccount: cloneFromId
+      ? {} as Record<string, number>
+      : { ...(campaign?.extraSettings?.postBumpCreatedCampaignIdsByAccount || {}) } as Record<string, number>,
+    postBumpRotationIndex: cloneFromId ? 0 : (campaign?.extraSettings?.postBumpRotationIndex ?? 0),
     // Nhắn tin bạn bè / UID
     enableMessage: campaign?.extraSettings?.enableMessage ?? true,
     enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false,
@@ -565,6 +602,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       case 'enablePostLike': return true
       case 'sharePost': return true  // optional, always "complete"
       case 'enableComment': return true  // optional
+      case 'enablePostBump': return true  // optional
       case 'images': return true  // optional
       case 'commentImages': return true  // optional
       case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink
@@ -686,6 +724,22 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       )
       return
     }
+    if (isFacebookGroupPostCampaign && formData.enablePostBump) {
+      if (formData.postBumpMode === 'select' && formData.postBumpTargetCampaignIds.length === 0) {
+        showAlert('Vui lòng chọn ít nhất một chiến dịch comment vào bài post để up tin.', 'error')
+        return
+      }
+      if (formData.postBumpMode === 'create') {
+        if (formData.postBumpAccountIds.length === 0) {
+          showAlert('Vui lòng chọn ít nhất một tài khoản để tạo chiến dịch up tin.', 'error')
+          return
+        }
+        if (!formData.postBumpContent.trim()) {
+          showAlert('Vui lòng nhập nội dung up tin.', 'error')
+          return
+        }
+      }
+    }
 
     try {
       const { deleteCampaignInputData, updateCampaignInputData, createCampaignInputData, createCampaign, updateCampaign } = useCampaignStore.getState()
@@ -788,6 +842,24 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
             skipPostIfGroupRequiresApproval: formData.skipPostIfGroupRequiresApproval,
+            enablePostBump: formData.enablePostBump,
+            postBumpCount: clampPostBumpCount(formData.postBumpCount),
+            postBumpInitialDelayMinutes: normalizeMinuteValue(
+              formData.postBumpInitialDelayMinutes,
+              DEFAULT_POST_BUMP_INITIAL_DELAY_MINUTES,
+              0
+            ),
+            postBumpIntervalMinutes: normalizeMinuteValue(
+              formData.postBumpIntervalMinutes,
+              DEFAULT_POST_BUMP_INTERVAL_MINUTES,
+              1
+            ),
+            postBumpMode: formData.postBumpMode,
+            postBumpTargetCampaignIds: formData.postBumpMode === 'select' ? formData.postBumpTargetCampaignIds : [],
+            postBumpAccountIds: formData.postBumpMode === 'create' ? formData.postBumpAccountIds : [],
+            postBumpContent: formData.postBumpContent,
+            postBumpCreatedCampaignIdsByAccount: formData.postBumpCreatedCampaignIdsByAccount,
+            postBumpRotationIndex: formData.postBumpRotationIndex,
             enableMessage: effectiveEnableMessage,
             enableAddFriend: effectiveEnableAddFriend,
             useSuggestedFriends: effectiveUseSuggestedFriends,
@@ -1059,6 +1131,32 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         findPostLinkTargetCampaignIds: exists
           ? current.filter(id => id !== campaignId)
           : [...current, campaignId]
+      }
+    })
+  }
+
+  const togglePostBumpTargetCampaign = (campaignId: number) => {
+    setFormData(prev => {
+      const current = prev.postBumpTargetCampaignIds || []
+      const exists = current.includes(campaignId)
+      return {
+        ...prev,
+        postBumpTargetCampaignIds: exists
+          ? current.filter(id => id !== campaignId)
+          : [...current, campaignId]
+      }
+    })
+  }
+
+  const togglePostBumpAccount = (accountId: number) => {
+    setFormData(prev => {
+      const current = prev.postBumpAccountIds || []
+      const exists = current.includes(accountId)
+      return {
+        ...prev,
+        postBumpAccountIds: exists
+          ? current.filter(id => id !== accountId)
+          : [...current, accountId]
       }
     })
   }
@@ -1535,6 +1633,135 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             </div>
           )}
         </div>
+      )}
+    </div>
+  )
+
+  const renderPostBumpSettings = () => (
+    <div className="extra-comment-options">
+      <div className="stepper-form-row">
+        <div className="stepper-form-group third">
+          <label>Số tin up tối đa 1 post</label>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={formData.postBumpCount}
+            onChange={e => setFormData(p => ({ ...p, postBumpCount: clampPostBumpCount(e.target.value) }))}
+            className="stepper-input"
+          />
+        </div>
+        <div className="stepper-form-group third">
+          <label>Up tin sau khi đăng thành công (phút)</label>
+          <input
+            type="number"
+            min={0}
+            value={formData.postBumpInitialDelayMinutes}
+            onChange={e => setFormData(p => ({
+              ...p,
+              postBumpInitialDelayMinutes: normalizeMinuteValue(e.target.value, DEFAULT_POST_BUMP_INITIAL_DELAY_MINUTES, 0)
+            }))}
+            className="stepper-input"
+          />
+        </div>
+        <div className="stepper-form-group third">
+          <label>Khoảng cách mỗi lần up (phút)</label>
+          <input
+            type="number"
+            min={1}
+            value={formData.postBumpIntervalMinutes}
+            onChange={e => setFormData(p => ({
+              ...p,
+              postBumpIntervalMinutes: normalizeMinuteValue(e.target.value, DEFAULT_POST_BUMP_INTERVAL_MINUTES, 1)
+            }))}
+            className="stepper-input"
+          />
+        </div>
+      </div>
+
+      <div className="stepper-form-group">
+        <label>Chiến dịch up tin</label>
+        <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+          <label className="schedule-radio-label">
+            <input
+              type="radio"
+              name="postBumpMode"
+              value="select"
+              checked={formData.postBumpMode === 'select'}
+              onChange={() => setFormData(p => ({ ...p, postBumpMode: 'select' }))}
+            />
+            <span>Chọn chiến dịch</span>
+          </label>
+          <label className="schedule-radio-label">
+            <input
+              type="radio"
+              name="postBumpMode"
+              value="create"
+              checked={formData.postBumpMode === 'create'}
+              onChange={() => setFormData(p => ({ ...p, postBumpMode: 'create' }))}
+            />
+            <span>Tạo mới</span>
+          </label>
+        </div>
+      </div>
+
+      {formData.postBumpMode === 'select' ? (
+        <div className="stepper-form-group">
+          <label>Chọn chiến dịch comment vào bài post</label>
+          {postLinkCommentCampaignOptions.length === 0 ? (
+            <div className="text-muted" style={{ fontSize: 13 }}>
+              Chưa có chiến dịch Comment seeding vào danh sách bài post.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
+              {postLinkCommentCampaignOptions.map(target => (
+                <label key={target.id} className="schedule-checkbox-label" title={target.name}>
+                  <input
+                    type="checkbox"
+                    checked={(formData.postBumpTargetCampaignIds || []).includes(target.id)}
+                    onChange={() => togglePostBumpTargetCampaign(target.id)}
+                  />
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {target.name} <span style={{ color: 'var(--text-tertiary)' }}>({target.status})</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="stepper-form-group">
+            <label>Chọn tài khoản tạo chiến dịch up tin</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
+              {accounts.map(account => (
+                <label key={account.id} className="schedule-checkbox-label" title={account.name}>
+                  <input
+                    type="checkbox"
+                    checked={(formData.postBumpAccountIds || []).includes(account.id)}
+                    onChange={() => togglePostBumpAccount(account.id)}
+                  />
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {account.name} <span style={{ color: 'var(--text-tertiary)' }}>({account.flatformType})</span>
+                  </span>
+                </label>
+              ))}
+              {accounts.length === 0 && (
+                <div className="text-muted" style={{ fontSize: 13 }}>Chưa có tài khoản nào.</div>
+              )}
+            </div>
+          </div>
+          <div className="stepper-form-group">
+            <label>Nội dung up tin</label>
+            <textarea
+              className="stepper-textarea"
+              value={formData.postBumpContent}
+              onChange={e => setFormData(p => ({ ...p, postBumpContent: e.target.value }))}
+              rows={4}
+              placeholder="Nhập nội dung comment up tin. Dùng dấu | để tách nhiều nội dung."
+            />
+          </div>
+        </>
       )}
     </div>
   )
@@ -2351,6 +2578,23 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
                           {renderImagePicker('comment', 'Ảnh comment')}
                         </div>
+                      )}
+
+                      {isFacebookGroupPostCampaign && (
+                        <>
+                          <div className="stepper-form-group">
+                            <label className="schedule-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={formData.enablePostBump}
+                                onChange={e => setFormData(p => ({ ...p, enablePostBump: e.target.checked }))}
+                              />
+                              <span>Kiêm up tin</span>
+                            </label>
+                          </div>
+
+                          {formData.enablePostBump && renderPostBumpSettings()}
+                        </>
                       )}
 
                       {/* Divider */}

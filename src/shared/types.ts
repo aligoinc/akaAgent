@@ -119,6 +119,16 @@ export interface CampaignExtraSettings {
   autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
   skipPostIfGroupRequiresApproval?: boolean // Không đăng bài vào group đã biết cần duyệt bài; vẫn có thể kiêm comment
+  enablePostBump?: boolean                 // Sau khi đăng group thành công, thêm link bài vào campaign comment-post để up tin
+  postBumpCount?: number                   // Tổng số lượt up tối đa cho mỗi bài post, max 10
+  postBumpInitialDelayMinutes?: number     // Số phút chờ sau khi đăng thành công trước lượt up đầu tiên
+  postBumpIntervalMinutes?: number         // Khoảng cách tối thiểu giữa các lượt up tin
+  postBumpMode?: 'select' | 'create'       // Chọn campaign comment-post có sẵn hoặc tạo mới theo account
+  postBumpTargetCampaignIds?: number[]     // Campaign facebook_comment_seeding_post nhận link bài post
+  postBumpAccountIds?: number[]            // Account dùng để tạo campaign comment-post khi postBumpMode=create
+  postBumpContent?: string                 // Nội dung comment cho campaign up tin tạo mới
+  postBumpCreatedCampaignIdsByAccount?: Record<string, number> // account_id -> campaign comment-post đã tạo
+  postBumpRotationIndex?: number           // Con trỏ chia đều target qua nhiều bài post
   // Nhắn tin bạn bè / nhắn tin UID & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
   enableAddFriend?: boolean                // Kết bạn (chỉ dùng cho facebook_message_uid)
