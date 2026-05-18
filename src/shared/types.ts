@@ -117,9 +117,9 @@ export interface CampaignExtraSettings {
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
   autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
-  // Nhắn tin & kết bạn
+  // Nhắn tin bạn bè / nhắn tin UID & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
-  enableAddFriend?: boolean                // Kết bạn
+  enableAddFriend?: boolean                // Kết bạn (chỉ dùng cho facebook_message_uid)
   // Đăng bài lên trang cá nhân — tuỳ chọn nguồn
   copyContentFromSource?: boolean          // Copy nội dung gần nhất từ link nguồn và nối thêm vào nội dung nhập
   includeSourceImages?: boolean            // Lấy kèm hình ảnh từ link nguồn (đi kèm copyContentFromSource)
@@ -141,7 +141,7 @@ export interface CampaignExtraSettings {
   keywords?: string
   isFindByContentAI?: boolean
   contentAI?: string
-  findUidTargetCampaignIds?: number[]          // Khi tìm UID, tự thêm UID vào các campaign nhắn tin/kết bạn đã chọn
+  findUidTargetCampaignIds?: number[]          // Khi tìm UID, tự thêm UID vào các campaign facebook_message_uid đã chọn
   findPostLinkTargetCampaignIds?: number[]     // Khi tìm link bài post, tự thêm link vào campaign comment seeding bài post đã chọn
 }
 
