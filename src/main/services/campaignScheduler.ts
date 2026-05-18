@@ -26,6 +26,8 @@ interface RuntimeErrorResult {
 
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
+const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
+const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 
 /**
  * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
@@ -442,8 +444,11 @@ export class CampaignScheduler {
         if (extra.enableComment) actions.push({ code: 'fb_comment', name: 'Comment' })
         if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
         break
-      case 'facebook_message_friend':
-        if (extra.enableMessage !== false) actions.push({ code: 'fb_message_friend', name: 'Nhắn tin bạn bè' })
+      case MESSAGE_FRIEND_ACTION_ID:
+        actions.push({ code: 'fb_message_friend', name: 'Nhắn tin bạn bè' })
+        break
+      case MESSAGE_UID_ACTION_ID:
+        if (extra.enableMessage !== false) actions.push({ code: 'fb_message_stranger', name: 'Nhắn tin người lạ' })
         if (extra.enableAddFriend) actions.push({ code: 'fb_add_friend', name: 'Kết bạn' })
         break
       case COMMENT_SEEDING_FEED_ACTION_ID:
@@ -472,9 +477,12 @@ export class CampaignScheduler {
     const extra = campaign.extraSettings || {}
     switch (actionCode) {
       case 'fb_message_friend':
-        return campaign.actionId !== 'facebook_message_friend' || extra.enableMessage !== false
+        return true
+      case 'fb_message_stranger':
+        return campaign.actionId !== MESSAGE_UID_ACTION_ID || extra.enableMessage !== false
       case 'fb_add_friend':
-        return campaign.actionId !== 'facebook_message_friend' || extra.enableAddFriend === true
+        if (campaign.actionId === MESSAGE_FRIEND_ACTION_ID) return false
+        return campaign.actionId !== MESSAGE_UID_ACTION_ID || extra.enableAddFriend === true
       case 'fb_comment':
         if (this.isCommentSeedingCampaign(campaign.actionId)) return true
         return extra.enableComment === true
@@ -521,7 +529,7 @@ export class CampaignScheduler {
   }
 
   private getMessageActionCode(campaign: Campaign): string {
-    void campaign
+    if (campaign.actionId === MESSAGE_UID_ACTION_ID) return 'fb_message_stranger'
     return 'fb_message_friend'
   }
 
@@ -811,9 +819,9 @@ export class CampaignScheduler {
       sourceLink: currentSourceLink,
       targetUrl: detail?.uid || currentSourceLink,
       videoPath: validImages[0] || '',
-      // Message friend extras
-      enableMessage: extra.enableMessage ?? false,
-      enableAddFriend: extra.enableAddFriend ?? false,
+      // Message extras
+      enableMessage: campaign.actionId === MESSAGE_FRIEND_ACTION_ID ? true : (extra.enableMessage ?? false),
+      enableAddFriend: campaign.actionId === MESSAGE_FRIEND_ACTION_ID ? false : (extra.enableAddFriend ?? false),
       // Find data in group extras
       isFindPhone: extra.isFindPhone ?? false,
       isFindLinkGroupZalo: extra.isFindLinkGroupZalo ?? false,
@@ -1126,7 +1134,7 @@ export class CampaignScheduler {
     for (const targetCampaignId of targetCampaignIds) {
       try {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
-        if (!targetCampaign || targetCampaign.actionId !== 'facebook_message_friend') continue
+        if (!targetCampaign || targetCampaign.actionId !== MESSAGE_UID_ACTION_ID) continue
 
         const existingRows = await this.supabase.listCampaignInputData(targetCampaign.id)
         const existingUids = new Set(

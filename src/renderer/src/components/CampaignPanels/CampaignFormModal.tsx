@@ -66,9 +66,11 @@ const SIMPLE_CAMPAIGN_ACTIONS = new Set([
   'facebook_timeline_post'
 ])
 
-// Campaign action IDs for "Nhắn tin & Kết bạn" type — hide extra (group), show details, show message/friend toggles
-const MESSAGE_FRIEND_ACTIONS = new Set([
-  'facebook_message_friend'
+const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
+const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
+const MESSAGE_CAMPAIGN_ACTIONS = new Set([
+  MESSAGE_FRIEND_ACTION_ID,
+  MESSAGE_UID_ACTION_ID
 ])
 
 // Campaign action IDs for "Đăng bài vào group" type — show "Chọn nhóm" picker in data list
@@ -275,7 +277,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
-    // Nhắn tin & Kết bạn
+    // Nhắn tin bạn bè / UID
     enableMessage: campaign?.extraSettings?.enableMessage ?? true,
     enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false,
     // Nguồn đăng bài (timeline post)
@@ -306,7 +308,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
-  const isMessageFriendCampaign = MESSAGE_FRIEND_ACTIONS.has(formData.actionId)
+  const isMessageCampaign = MESSAGE_CAMPAIGN_ACTIONS.has(formData.actionId)
+  const isMessageFriendCampaign = formData.actionId === MESSAGE_FRIEND_ACTION_ID
+  const isMessageUidCampaign = formData.actionId === MESSAGE_UID_ACTION_ID
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
@@ -314,6 +318,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
   const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign
+  const canPickFriends = isMessageFriendCampaign
+  const canUploadData = !isMessageFriendCampaign
+  const showExtraSection = !isSimpleCampaign && !isFindDataGroupCampaign && !isCommentSeedingCampaign && !isMessageFriendCampaign
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const detailsColumnCount = isCommentSeedingPostCampaign
     ? (isEditingSavedCampaign ? 1 : 2)
@@ -381,12 +388,43 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           return s
         })
     }
+    if (isMessageCampaign) {
+      return ALL_STEPS
+        .filter(s => isMessageFriendCampaign ? s.id !== 'extra' : true)
+        .map(s => {
+          if (s.id === 'content') {
+            return {
+              ...s,
+              title: 'Nội dung tin nhắn',
+              fields: [
+                { key: 'content', label: 'Nội dung tin nhắn' },
+                { key: 'images', label: 'Media' }
+              ]
+            }
+          }
+          if (s.id === 'extra') {
+            return {
+              ...s,
+              title: 'Chọn hành động',
+              fields: [{ key: 'messageActions', label: 'Hành động' }]
+            }
+          }
+          if (s.id === 'details') {
+            return {
+              ...s,
+              title: isMessageFriendCampaign ? 'Danh sách bạn bè' : 'Danh sách UID',
+              fields: [{ key: 'details', label: isMessageFriendCampaign ? 'Bạn bè' : 'UID' }]
+            }
+          }
+          return s
+        })
+    }
     return ALL_STEPS
   })()
   const getSectionNumber = (stepId: string) => Math.max(1, STEPS.findIndex(s => s.id === stepId) + 1)
 
-  const messageFriendCampaignOptions = campaigns.filter(c =>
-    c.actionId === 'facebook_message_friend' &&
+  const messageUidCampaignOptions = campaigns.filter(c =>
+    c.actionId === MESSAGE_UID_ACTION_ID &&
     c.id !== campaign?.id &&
     !c.isDelete
   )
@@ -513,6 +551,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink
       case 'findDataContent': return true
       case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink
+      case 'messageActions': return isMessageFriendCampaign || formData.enableMessage || formData.enableAddFriend
       case 'details': return details.length > 0
       default: return false
     }
@@ -588,8 +627,17 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isMessageFriendCampaign && details.length === 0) {
-      showAlert('Vui lòng thêm ít nhất một bạn bè hoặc UID vào danh sách data.', 'error')
+    if (isMessageUidCampaign && !formData.enableMessage && !formData.enableAddFriend) {
+      showAlert('Vui lòng chọn ít nhất một hành động nhắn tin hoặc kết bạn.', 'error')
+      return
+    }
+    if (!isEditingSavedCampaign && isMessageCampaign && details.length === 0) {
+      showAlert(
+        isMessageUidCampaign
+          ? 'Vui lòng thêm ít nhất một UID vào danh sách data.'
+          : 'Vui lòng thêm ít nhất một bạn bè vào danh sách data.',
+        'error'
+      )
       return
     }
     const hasCommentImages = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
@@ -606,7 +654,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       )
       return
     }
-    if (!isEditingSavedCampaign && (isGroupPostCampaign || isCommentSeedingCampaign || isMessageFriendCampaign) && details.some(d => !String(d.uid || '').trim())) {
+    if (!isEditingSavedCampaign && (isGroupPostCampaign || isCommentSeedingCampaign || isMessageCampaign) && details.some(d => !String(d.uid || '').trim())) {
       showAlert(
         isCommentSeedingPostCampaign
           ? 'Vui lòng nhập link bài post cho tất cả dòng trong danh sách data.'
@@ -662,6 +710,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
         const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
         const effectivePostKeywordFilter = isCommentSeedingPostCampaign ? '' : formData.postKeywordFilter
+        const effectiveEnableMessage = isMessageFriendCampaign ? true : formData.enableMessage
+        const effectiveEnableAddFriend = isMessageFriendCampaign ? false : formData.enableAddFriend
 
         const campaignPayload = {
           name: formData.name,
@@ -704,8 +754,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             leaveGroupOnPendingApproval: formData.leaveGroupOnPendingApproval,
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
-            enableMessage: formData.enableMessage,
-            enableAddFriend: formData.enableAddFriend,
+            enableMessage: effectiveEnableMessage,
+            enableAddFriend: effectiveEnableAddFriend,
             // Nguồn đăng bài (timeline post only)
             copyContentFromSource: formData.copyContentFromSource,
             includeSourceImages: formData.includeSourceImages,
@@ -1402,13 +1452,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       {formData.isFindUid && (
         <div className="extra-comment-options">
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Đẩy UID sang chiến dịch</div>
-          {messageFriendCampaignOptions.length === 0 ? (
+          {messageUidCampaignOptions.length === 0 ? (
             <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
-              Chưa có chiến dịch Nhắn tin & Kết bạn để nhận UID.
+              Chưa có chiến dịch Nhắn tin & Kết bạn đến UID để nhận UID.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
-              {messageFriendCampaignOptions.map(target => (
+              {messageUidCampaignOptions.map(target => (
                 <label key={target.id} className="schedule-checkbox-label" title={target.name}>
                   <input
                     type="checkbox"
@@ -2008,15 +2058,15 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     </div>
                   )}
 
-                  <div className={isMessageFriendCampaign ? 'campaign-content-template-layout' : undefined}>
+                  <div className={isMessageCampaign ? 'campaign-content-template-layout' : undefined}>
                     <div className="stepper-form-group">
-                      <label>{isMessageFriendCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
+                      <label>{isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
                       <textarea
                         ref={campaignContentTextareaRef}
                         className="stepper-textarea"
                         placeholder={isTimelinePostCampaign && formData.copyContentFromSource
                           ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
-                          : isMessageFriendCampaign
+                          : isMessageCampaign
                             ? "Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."
                             : "Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."}
                         value={formData.content}
@@ -2027,7 +2077,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
                       </div>
                     </div>
-                    {isMessageFriendCampaign && renderMessageInsertPanel()}
+                    {isMessageCampaign && renderMessageInsertPanel()}
                   </div>
 
                   {renderImagePicker('post', 'Media')}
@@ -2037,7 +2087,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               )}
             </div>
 
-            {!isSimpleCampaign && !isFindDataGroupCampaign && !isCommentSeedingCampaign && <div
+            {showExtraSection && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['extra'] = el }}
             >
@@ -2055,8 +2105,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               {!collapsedSections['extra'] && (
                 <div className="stepper-section-body">
 
-                  {/* === Nhắn tin & Kết bạn toggles (chỉ hiện cho message_friend campaigns) === */}
-                  {isMessageFriendCampaign && (
+                  {/* === Nhắn tin & Kết bạn toggles (chỉ hiện cho UID campaigns) === */}
+                  {isMessageUidCampaign && (
                     <>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Chọn hành động</div>
                       <div className="stepper-form-group">
@@ -2085,8 +2135,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     </>
                   )}
 
-                  {/* === Group campaign options (ẩn cho message_friend campaigns) === */}
-                  {!isMessageFriendCampaign && (
+                  {/* === Group campaign options (ẩn cho message campaigns) === */}
+                  {!isMessageCampaign && (
                     <>
                       {/* Share post - tạm ẩn, sẽ mở lại khi implement đầy đủ */}
 
@@ -2226,7 +2276,11 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                         ? 'Danh sách bài post'
                         : isCommentSeedingCampaign
                           ? 'Danh sách group/page/profile'
-                          : 'Danh sách data'}
+                          : isMessageFriendCampaign
+                            ? 'Danh sách bạn bè'
+                            : isMessageUidCampaign
+                              ? 'Danh sách UID'
+                              : 'Danh sách data'}
                   </span>
                   {details.length > 0 && (
                     <span className="stepper-section-badge">{details.length}</span>
@@ -2259,19 +2313,23 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       <button className="btn btn-secondary" onClick={addDetailRow}>
                         <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
                       </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Upload size={14} /> Upload Excel
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => txtFileInputRef.current?.click()}
-                      >
-                        <Upload size={14} /> Upload TXT
-                      </button>
-                      {isMessageFriendCampaign && (
+                      {canUploadData && (
+                        <>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <Upload size={14} /> Upload Excel
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => txtFileInputRef.current?.click()}
+                          >
+                            <Upload size={14} /> Upload TXT
+                          </button>
+                        </>
+                      )}
+                      {canPickFriends && (
                         <button
                           className="btn btn-secondary"
                           onClick={() => {
@@ -2310,22 +2368,26 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       >
                         <Trash2 size={14} /> Xoá hết
                       </button>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        style={{ display: 'none' }}
-                        accept=".xlsx, .xls, .csv"
-                        onChange={handleFileUpload}
-                        title="Upload Excel"
-                      />
-                      <input
-                        type="file"
-                        ref={txtFileInputRef}
-                        style={{ display: 'none' }}
-                        accept=".txt"
-                        onChange={handleTxtFileUpload}
-                        title="Upload TXT"
-                      />
+                      {canUploadData && (
+                        <>
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            style={{ display: 'none' }}
+                            accept=".xlsx, .xls, .csv"
+                            onChange={handleFileUpload}
+                            title="Upload Excel"
+                          />
+                          <input
+                            type="file"
+                            ref={txtFileInputRef}
+                            style={{ display: 'none' }}
+                            accept=".txt"
+                            onChange={handleTxtFileUpload}
+                            title="Upload TXT"
+                          />
+                        </>
+                      )}
                     </div>
                   )}
 
