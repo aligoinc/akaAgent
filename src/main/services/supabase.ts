@@ -87,6 +87,9 @@ export class SupabaseService {
 
   // =========== CONTACTS ===========
   listContacts(accountId: number, contactType?: ContactType) { return accountContactRepo.listContacts(accountId, contactType) }
+  getGroupContactByTarget(accountId: number, targetUrl: string | undefined | null) {
+    return accountContactRepo.getGroupContactByTarget(accountId, targetUrl)
+  }
   upsertContacts(
     contacts: Partial<AutoAccountContact>[],
     options?: Parameters<typeof accountContactRepo.upsertContacts>[1]

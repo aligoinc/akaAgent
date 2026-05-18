@@ -184,10 +184,14 @@ export class CampaignScheduler {
         return
       }
 
+      const actionDescriptors = this.getCampaignActionDescriptors(campaign, action)
+      const preflightActionDescriptors = campaign.actionId === 'facebook_group_post' && campaign.extraSettings?.skipPostIfGroupRequiresApproval === true
+        ? actionDescriptors.filter(action => action.code !== 'fb_post_group')
+        : actionDescriptors
       const preflightLimit = await this.checkActionLimits(
         account.id,
         campaign,
-        this.getCampaignActionDescriptors(campaign, action),
+        preflightActionDescriptors,
         campaign.extraSettings?.actionLimits
       )
       if (preflightLimit && !preflightLimit.ok) {
@@ -201,7 +205,7 @@ export class CampaignScheduler {
 
       await this.updateAccountAndBroadcast(account.id, { status: 'đang chạy' })
 
-      await this.executeCampaignV2(account, campaign, action.workflowId, this.getCampaignActionDescriptors(campaign, action))
+      await this.executeCampaignV2(account, campaign, action.workflowId, actionDescriptors)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.recoverStuckCampaignInputData(campaign.id, errMsg)
@@ -295,9 +299,14 @@ export class CampaignScheduler {
       const detail = targets[i]
       if (detail && detail.status !== 'chờ xử lý') continue
 
+      const groupPostApproval = await this.resolveGroupPostApprovalForTarget(account.id, campaign, detail)
+      const targetActionDescriptors = groupPostApproval.skipPostByKnownApproval
+        ? actionDescriptors.filter(action => action.code !== 'fb_post_group')
+        : actionDescriptors
+
       // Check action disable/rate limit immediately before each target.
       try {
-        const limitStatus = await this.checkActionLimits(account.id, campaign, actionDescriptors, limitConfig)
+        const limitStatus = await this.checkActionLimits(account.id, campaign, targetActionDescriptors, limitConfig)
         if (limitStatus && !limitStatus.ok) {
           stoppedBeforeCompletion = true
           await this.handleLimitStatus(account, campaign, limitStatus)
@@ -311,7 +320,7 @@ export class CampaignScheduler {
       const page = automationPage.page
 
       // Build variables
-      const variables = this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i)
+      const variables = this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval)
 
       // Update detail status running
       if (detail) {
@@ -321,6 +330,15 @@ export class CampaignScheduler {
         })
         const inputDataName = detail.name || detail.uid || 'N/A'
         this.sendLog(`▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
+        if (groupPostApproval.skipPostByKnownApproval) {
+          const message = `Bỏ qua đăng bài vào "${inputDataName}" vì group đã biết cần duyệt bài`
+          try {
+            await this.supabase.appendCampaignLog(campaign.id, message)
+            this.sendLog(`⚠️ ${message}`)
+          } catch (err) {
+            console.error('Failed append known approval skip log:', err)
+          }
+        }
       }
 
       // Run engine v2
@@ -441,6 +459,38 @@ export class CampaignScheduler {
 
   private shouldUseSuggestedFriends(campaign: Campaign): boolean {
     return campaign.actionId === MESSAGE_UID_ACTION_ID && campaign.extraSettings?.useSuggestedFriends === true
+  }
+
+  private async resolveGroupPostApprovalForTarget(
+    accountId: number,
+    campaign: Campaign,
+    detail: CampaignInputData | null
+  ): Promise<{
+    skipPostByKnownApproval: boolean
+    requiresPostApproval: boolean | null
+    source: string
+  }> {
+    const fallback = { skipPostByKnownApproval: false, requiresPostApproval: null, source: '' }
+    if (
+      campaign.actionId !== 'facebook_group_post' ||
+      campaign.extraSettings?.skipPostIfGroupRequiresApproval !== true ||
+      !detail?.uid
+    ) {
+      return fallback
+    }
+
+    try {
+      const contact = await this.supabase.getGroupContactByTarget(accountId, detail.uid)
+      const requiresPostApproval = contact?.requiresPostApproval ?? null
+      return {
+        skipPostByKnownApproval: requiresPostApproval === true,
+        requiresPostApproval,
+        source: contact ? 'account_contact' : ''
+      }
+    } catch (err) {
+      console.error('Failed to resolve group post approval status:', err)
+      return fallback
+    }
   }
 
   private normalizeSuggestedFriendsCount(value: unknown): number {
@@ -871,7 +921,12 @@ export class CampaignScheduler {
     detail: CampaignInputData | null,
     accountId: number,
     currentSourceLink: string,
-    detailIndex: number
+    detailIndex: number,
+    groupPostApproval?: {
+      skipPostByKnownApproval?: boolean
+      requiresPostApproval?: boolean | null
+      source?: string
+    }
   ): Record<string, unknown> {
     const extra = campaign.extraSettings || {}
     const validImages = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
@@ -879,11 +934,14 @@ export class CampaignScheduler {
 
     // Comment iterations
     const enableComment = extra.enableComment ?? false
+    const commentGroupMode = extra.commentGroupMode || 'all'
     const commentType = extra.commentType || 'own'
-    const commentCount = extra.commentCount ?? 3
+    const rawCommentCount = Math.floor(Number(extra.commentCount ?? 3))
+    const commentCount = Number.isFinite(rawCommentCount) ? Math.max(1, rawCommentCount) : 3
     let commentIndices: number[] = []
     if (enableComment) {
       if (commentType === 'own') commentIndices = [1]
+      else if (commentType === 'all') for (let i = 0; i < commentCount; i++) commentIndices.push(i + 1)
       else for (let i = 0; i < commentCount; i++) commentIndices.push(i + 2)
     }
     const postVariants = this.splitContentVariants(campaign.content)
@@ -910,6 +968,7 @@ export class CampaignScheduler {
       accountId,
       // Comment
       enableComment,
+      commentGroupMode,
       commentType,
       commentCount,
       commentIterations,
@@ -924,6 +983,10 @@ export class CampaignScheduler {
       leaveGroupOnPendingApproval: extra.leaveGroupOnPendingApproval ?? false,
       autoJoinGroupAfterPost: extra.autoJoinGroupAfterPost ?? false,
       shuffleGroupList: extra.shuffleGroupList ?? false,
+      skipPostIfGroupRequiresApproval: extra.skipPostIfGroupRequiresApproval ?? false,
+      skipGroupPostByKnownApproval: groupPostApproval?.skipPostByKnownApproval === true,
+      groupPostRequiresPostApproval: groupPostApproval?.requiresPostApproval ?? null,
+      groupPostApprovalSource: groupPostApproval?.source || '',
       // Timeline post extras
       sharePost: extra.sharePost ?? false,
       copyContentFromSource: extra.copyContentFromSource ?? false,
@@ -1126,6 +1189,26 @@ export class CampaignScheduler {
       void s
     }
 
+    const groupPostCommentAdjustStep = campaign.actionId === 'facebook_group_post'
+      ? [...steps].reverse().find(s => s.blockName === 'fb_adjust_group_post_comments_after_pending' && s.status === 'success')
+      : undefined
+    const groupPostCommentAdjustOutput = ((groupPostCommentAdjustStep?.output as any) || {}) as {
+      isPending?: boolean
+      skippedByGroupMode?: boolean
+      skipReason?: string
+    }
+    const groupPostIsPending = campaign.actionId === 'facebook_group_post'
+      ? (groupPostCommentAdjustOutput.isPending === true || steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true)
+      : false
+
+    if (groupPostCommentAdjustOutput.skippedByGroupMode === true) {
+      const reason = String(groupPostCommentAdjustOutput.skipReason || 'Bỏ qua comment vì group không khớp điều kiện comment')
+      try {
+        await this.supabase.appendCampaignLog(campaign.id, detail ? `${reason}: ${inputDataName}` : reason)
+        this.sendLog(`⚠️ ${reason}${detail ? ` tại "${inputDataName}"` : ''}`)
+      } catch (err) { console.error('Failed append group comment skip log:', err) }
+    }
+
     // Comment — đọc position/text từ s.output (block return) thay vì s.input
     const commentSteps = steps.filter(s =>
       (s.blockName === 'fb_comment_at_position' || s.blockName === 'fb_comment_current_post') &&
@@ -1149,6 +1232,10 @@ export class CampaignScheduler {
         target = this.formatOrdinalPost(loggedCommentCount)
       } else if (campaign.actionId === 'facebook_group_post' && commentType === 'others') {
         target = this.formatOrdinalPost(position)
+      } else if (campaign.actionId === 'facebook_group_post' && commentType === 'all') {
+        target = groupPostIsPending
+          ? this.formatOrdinalPost(position)
+          : (position === 1 ? 'bài của mình' : this.formatOrdinalPost(position))
       } else {
         target = position === 1 ? 'bài của mình' : this.formatOrdinalPost(position)
       }

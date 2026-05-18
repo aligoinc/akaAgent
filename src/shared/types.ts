@@ -102,8 +102,9 @@ export interface CampaignActionLimitSettings extends ActionLimitConfig {
 export interface CampaignExtraSettings {
   sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
   enableComment?: boolean        // kiếm comment
-  commentType?: 'own' | 'others' // comment vào bài mình / bài khác
-  commentCount?: number          // số lượng comment (khi commentType = 'others')
+  commentGroupMode?: 'all' | 'pending_only' | 'published_only' // group nào được comment sau khi đăng bài group
+  commentType?: 'own' | 'others' | 'all' // comment vào bài mình / bài khác / tất cả
+  commentCount?: number          // số lượng comment tối đa (khi commentType = 'others' hoặc 'all')
   commentContent?: string        // nội dung comment
   commentImageOption?: 'none' | 'all'
   commentImages?: string[]        // tối đa 1 ảnh cho mỗi comment
@@ -117,6 +118,7 @@ export interface CampaignExtraSettings {
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
   autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
+  skipPostIfGroupRequiresApproval?: boolean // Không đăng bài vào group đã biết cần duyệt bài; vẫn có thể kiêm comment
   // Nhắn tin bạn bè / nhắn tin UID & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
   enableAddFriend?: boolean                // Kết bạn (chỉ dùng cho facebook_message_uid)
