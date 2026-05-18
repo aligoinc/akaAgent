@@ -14,18 +14,26 @@ function todayInVietnam(): string {
   }).format(new Date())
 }
 
+async function selectAccountActionStatus(
+  accountId: number,
+  actionCode: string
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await client()
+    .from('auto_account_action_status')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('action_code', actionCode)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to get account action status: ${error.message}`)
+  return (data as Record<string, unknown> | null) ?? null
+}
+
 export async function getAccountActionStatus(accountId: number, actionCode: string): Promise<AutoAccountActionStatus> {
   const normalizedCode = actionCode.trim()
   const today = todayInVietnam()
 
-  const { data: existing, error: selectError } = await client()
-    .from('auto_account_action_status')
-    .select('*')
-    .eq('account_id', accountId)
-    .eq('action_code', normalizedCode)
-    .maybeSingle()
-
-  if (selectError) throw new Error(`Failed to get account action status: ${selectError.message}`)
+  let existing = await selectAccountActionStatus(accountId, normalizedCode)
 
   if (!existing) {
     const { data, error } = await client()
@@ -39,8 +47,19 @@ export async function getAccountActionStatus(accountId: number, actionCode: stri
       .select()
       .single()
 
-    if (error) throw new Error(`Failed to create account action status: ${error.message}`)
-    return mapAutoAccountActionStatusFromDB(data)
+    if (error) {
+      if (error.code !== '23505') {
+        throw new Error(`Failed to create account action status: ${error.message}`)
+      }
+      existing = await selectAccountActionStatus(accountId, normalizedCode)
+      if (!existing) throw new Error(`Failed to create account action status: ${error.message}`)
+    } else {
+      return mapAutoAccountActionStatusFromDB(data)
+    }
+  }
+
+  if (!existing) {
+    throw new Error('Không tìm thấy trạng thái hành động tài khoản')
   }
 
   if (existing.count_date !== today) {

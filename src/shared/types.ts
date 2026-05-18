@@ -266,6 +266,8 @@ export interface AutoAccountContact {
   uid?: string
   url?: string
   extraData?: Record<string, unknown>
+  requiresPostApproval?: boolean | null
+  isJoined?: boolean
   isDelete: boolean
   staffId?: number
   organizationId?: number
