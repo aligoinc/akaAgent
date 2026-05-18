@@ -487,7 +487,7 @@ export class CampaignScheduler {
 
       // Sleep between details
       if (i < targets.length - 1) {
-        const sleepTime = extra.actionLimits?.sleepBetweenActions || campaign.timeSleepBetween2 || 0
+        const sleepTime = extra.actionLimits?.sleepBetweenActions ?? campaign.timeSleepBetween2 ?? 0
         if (sleepTime > 0) {
           this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
           await new Promise(r => setTimeout(r, sleepTime * 1000))
