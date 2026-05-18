@@ -51,6 +51,12 @@ const toActionLimitForm = (
   rateLimitMinutes: config?.rateLimitMinutes ?? fallback.rateLimitMinutes
 })
 
+const normalizeSuggestedFriendsCount = (value: unknown): number => {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed)) return 10
+  return Math.max(1, parsed)
+}
+
 const WEEKDAYS = [
   { value: '2', label: 'Thứ 2' },
   { value: '3', label: 'Thứ 3' },
@@ -280,6 +286,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     // Nhắn tin bạn bè / UID
     enableMessage: campaign?.extraSettings?.enableMessage ?? true,
     enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false,
+    useSuggestedFriends: campaign?.extraSettings?.useSuggestedFriends ?? false,
+    suggestedFriendsCount: campaign?.extraSettings?.suggestedFriendsCount ?? 10,
     // Nguồn đăng bài (timeline post)
     copyContentFromSource: campaign?.extraSettings?.copyContentFromSource ?? false,
     includeSourceImages: campaign?.extraSettings?.includeSourceImages ?? false,
@@ -317,11 +325,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
+  const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
+  const isSuggestedFriendsUidCampaign = isMessageUidCampaign && formData.useSuggestedFriends
+  const hideDetailsSection = isSuggestedFriendsUidCampaign && !isEditingSavedCampaign
   const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign
   const canPickFriends = isMessageFriendCampaign
-  const canUploadData = !isMessageFriendCampaign
+  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign
   const showExtraSection = !isSimpleCampaign && !isFindDataGroupCampaign && !isCommentSeedingCampaign && !isMessageFriendCampaign
-  const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const detailsColumnCount = isCommentSeedingPostCampaign
     ? (isEditingSavedCampaign ? 1 : 2)
     : (isEditingSavedCampaign ? 4 : 5)
@@ -390,7 +400,11 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     }
     if (isMessageCampaign) {
       return ALL_STEPS
-        .filter(s => isMessageFriendCampaign ? s.id !== 'extra' : true)
+        .filter(s => {
+          if (isMessageFriendCampaign && s.id === 'extra') return false
+          if (hideDetailsSection && s.id === 'details') return false
+          return true
+        })
         .map(s => {
           if (s.id === 'content') {
             return {
@@ -552,7 +566,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       case 'findDataContent': return true
       case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink
       case 'messageActions': return isMessageFriendCampaign || formData.enableMessage || formData.enableAddFriend
-      case 'details': return details.length > 0
+      case 'details': return hideDetailsSection || details.length > 0
       default: return false
     }
   }
@@ -631,13 +645,17 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       showAlert('Vui lòng chọn ít nhất một hành động nhắn tin hoặc kết bạn.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isMessageCampaign && details.length === 0) {
+    if (!isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && details.length === 0) {
       showAlert(
         isMessageUidCampaign
           ? 'Vui lòng thêm ít nhất một UID vào danh sách data.'
           : 'Vui lòng thêm ít nhất một bạn bè vào danh sách data.',
         'error'
       )
+      return
+    }
+    if (!isEditingSavedCampaign && isSuggestedFriendsUidCampaign && normalizeSuggestedFriendsCount(formData.suggestedFriendsCount) < 1) {
+      showAlert('Vui lòng nhập số lượng đề xuất lớn hơn 0.', 'error')
       return
     }
     const hasCommentImages = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
@@ -654,7 +672,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       )
       return
     }
-    if (!isEditingSavedCampaign && (isGroupPostCampaign || isCommentSeedingCampaign || isMessageCampaign) && details.some(d => !String(d.uid || '').trim())) {
+    if (!isEditingSavedCampaign && (isGroupPostCampaign || isCommentSeedingCampaign || isMessageCampaign) && !hideDetailsSection && details.some(d => !String(d.uid || '').trim())) {
       showAlert(
         isCommentSeedingPostCampaign
           ? 'Vui lòng nhập link bài post cho tất cả dòng trong danh sách data.'
@@ -675,20 +693,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
       let accountChunks: Partial<CampaignInputData>[][] = [];
       const numAccounts = formData.accountIds.length;
+      const detailSource = hideDetailsSection ? [] : details
 
-      if (formData.splitDataAcrossAccounts && numAccounts > 1 && details.length > 0) {
+      if (formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
         // Khởi tạo mảng con cho mỗi tài khoản
         for (let i = 0; i < numAccounts; i++) {
           accountChunks.push([]);
         }
         // Chia data lần lượt (round-robin)
-        for (let i = 0; i < details.length; i++) {
+        for (let i = 0; i < detailSource.length; i++) {
           const accountIndex = i % numAccounts;
-          accountChunks[accountIndex].push(details[i]);
+          accountChunks[accountIndex].push(detailSource[i]);
         }
       } else {
         for (let i = 0; i < numAccounts; i++) {
-          accountChunks.push(details);
+          accountChunks.push(detailSource);
         }
       }
 
@@ -712,6 +731,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         const effectivePostKeywordFilter = isCommentSeedingPostCampaign ? '' : formData.postKeywordFilter
         const effectiveEnableMessage = isMessageFriendCampaign ? true : formData.enableMessage
         const effectiveEnableAddFriend = isMessageFriendCampaign ? false : formData.enableAddFriend
+        const effectiveUseSuggestedFriends = isMessageUidCampaign
+          ? (isEditingSavedCampaign ? campaign?.extraSettings?.useSuggestedFriends === true : formData.useSuggestedFriends)
+          : false
+        const effectiveSuggestedFriendsCount = isMessageUidCampaign
+          ? normalizeSuggestedFriendsCount(isEditingSavedCampaign
+            ? (campaign?.extraSettings?.suggestedFriendsCount ?? formData.suggestedFriendsCount)
+            : formData.suggestedFriendsCount)
+          : 10
 
         const campaignPayload = {
           name: formData.name,
@@ -756,6 +783,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             shuffleGroupList: formData.shuffleGroupList,
             enableMessage: effectiveEnableMessage,
             enableAddFriend: effectiveEnableAddFriend,
+            useSuggestedFriends: effectiveUseSuggestedFriends,
+            suggestedFriendsCount: effectiveSuggestedFriendsCount,
             // Nguồn đăng bài (timeline post only)
             copyContentFromSource: formData.copyContentFromSource,
             includeSourceImages: formData.includeSourceImages,
@@ -2132,6 +2161,35 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       {!formData.enableMessage && !formData.enableAddFriend && (
                         <div style={{ color: 'var(--text-error)', fontSize: 12, marginTop: 4 }}>⚠️ Vui lòng chọn ít nhất một hành động.</div>
                       )}
+                      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Nguồn UID</div>
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.useSuggestedFriends}
+                            disabled={isEditingSavedCampaign}
+                            onChange={e => setFormData(p => ({ ...p, useSuggestedFriends: e.target.checked }))}
+                          />
+                          <span>Gửi tin/Kết bạn theo đề xuất của Facebook</span>
+                        </label>
+                      </div>
+                      {formData.useSuggestedFriends && (
+                        <div className="stepper-form-group" style={{ maxWidth: 220 }}>
+                          <label>Số lượng</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={formData.suggestedFriendsCount}
+                            disabled={isEditingSavedCampaign}
+                            onChange={e => setFormData(p => ({
+                              ...p,
+                              suggestedFriendsCount: normalizeSuggestedFriendsCount(e.target.value)
+                            }))}
+                            className="stepper-input"
+                          />
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -2259,7 +2317,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
 
             {/* Section 6: Danh sách data (hidden for simple campaigns) */}
-            {!isSimpleCampaign && <div
+            {!isSimpleCampaign && !hideDetailsSection && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['details'] = el }}
             >

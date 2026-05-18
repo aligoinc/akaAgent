@@ -120,6 +120,8 @@ export interface CampaignExtraSettings {
   // Nhắn tin bạn bè / nhắn tin UID & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
   enableAddFriend?: boolean                // Kết bạn (chỉ dùng cho facebook_message_uid)
+  useSuggestedFriends?: boolean            // facebook_message_uid: lấy UID từ đề xuất bạn bè Facebook
+  suggestedFriendsCount?: number           // Số lượng đề xuất bạn bè cần lấy
   // Đăng bài lên trang cá nhân — tuỳ chọn nguồn
   copyContentFromSource?: boolean          // Copy nội dung gần nhất từ link nguồn và nối thêm vào nội dung nhập
   includeSourceImages?: boolean            // Lấy kèm hình ảnh từ link nguồn (đi kèm copyContentFromSource)

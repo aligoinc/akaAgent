@@ -24,6 +24,11 @@ interface RuntimeErrorResult {
   policy?: AutoErrorPolicy
 }
 
+interface SuggestedFriendProfile {
+  name: string
+  uid: string
+}
+
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
@@ -223,7 +228,20 @@ export class CampaignScheduler {
     actionDescriptors: CampaignActionDescriptor[]
   ): Promise<void> {
     // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
-    const details = await this.supabase.listCampaignInputData(campaign.id)
+    let details = await this.supabase.listCampaignInputData(campaign.id)
+    const extra = campaign.extraSettings || {}
+
+    if (this.shouldUseSuggestedFriends(campaign) && details.length === 0) {
+      details = await this.collectSuggestedFriendInputData(account, campaign, workflowId)
+      if (details.length === 0) {
+        const message = 'Không lấy được đề xuất bạn bè từ Facebook'
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+        await this.supabase.appendCampaignLog(campaign.id, message)
+        this.sendLog(`⚠️ ${message}`)
+        await this.releaseRunningAccount(account.id)
+        return
+      }
+    }
 
     // Shuffle group list nếu enabled
     if (campaign.extraSettings?.shuffleGroupList && details.length > 1 && campaign.actionId === 'facebook_group_post') {
@@ -235,7 +253,6 @@ export class CampaignScheduler {
     }
 
     // Resolve sourceLink rotation cho timeline_post
-    const extra = campaign.extraSettings || {}
     let currentSourceLink = ''
     if (campaign.actionId === 'facebook_timeline_post') {
       const links = (extra.sourceLinks || '').split(',').map(s => s.trim()).filter(Boolean)
@@ -420,6 +437,102 @@ export class CampaignScheduler {
       await this.handleCampaignCompletion(campaign)
     }
     await this.releaseRunningAccount(account.id)
+  }
+
+  private shouldUseSuggestedFriends(campaign: Campaign): boolean {
+    return campaign.actionId === MESSAGE_UID_ACTION_ID && campaign.extraSettings?.useSuggestedFriends === true
+  }
+
+  private normalizeSuggestedFriendsCount(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    if (!Number.isFinite(parsed)) return 10
+    return Math.max(1, parsed)
+  }
+
+  private async collectSuggestedFriendInputData(account: AutoAccount, campaign: Campaign, workflowId: number): Promise<CampaignInputData[]> {
+    const count = this.normalizeSuggestedFriendsCount(campaign.extraSettings?.suggestedFriendsCount)
+
+    await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
+    this.sendLog(`ℹ️ Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
+
+    const automationPage = this.getAutomationPage(account, campaign.id)
+    const page = automationPage.page
+    const abort = new AbortController()
+    this.activeV2Aborts.set(campaign.id, abort)
+    if (automationPage.source === 'background') {
+      this.startBackgroundPreview(account.id, campaign.id, page)
+    }
+
+    try {
+      const result = await this.engineV2.run(workflowId, {
+        accountId: account.id,
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        collectSuggestedFriendsOnly: true,
+        count,
+        suggestedFriendsCount: count
+      }, page, {
+        accountId: account.id,
+        campaignId: campaign.id,
+        signal: abort.signal,
+        persist: true,
+        onStepProgress: (step: RunStepV2) => {
+          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+        },
+        onLog: (entry) => {
+          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+        }
+      })
+
+      if (result.status !== 'completed') {
+        throw new Error(result.error || 'Không lấy được đề xuất bạn bè')
+      }
+
+      const profiles = this.normalizeSuggestedFriendProfiles(result.output.suggestedProfiles, count)
+      if (profiles.length === 0) return []
+
+      for (const profile of profiles) {
+        await this.supabase.createCampaignInputData({
+          campaignId: campaign.id,
+          name: profile.name,
+          uid: profile.uid,
+          status: 'chờ xử lý',
+          note: ''
+        })
+      }
+
+      await this.supabase.appendCampaignLog(campaign.id, `Đã thêm ${profiles.length} đề xuất bạn bè vào danh sách UID`)
+      this.sendLog(`✅ Đã thêm ${profiles.length} đề xuất bạn bè vào chiến dịch "${campaign.name}"`)
+      return await this.supabase.listCampaignInputData(campaign.id)
+    } finally {
+      if (automationPage.source === 'background') {
+        this.stopBackgroundPreview(account.id, campaign.id)
+      }
+      this.activeV2Aborts.delete(campaign.id)
+    }
+  }
+
+  private normalizeSuggestedFriendProfiles(value: unknown, limit: number): SuggestedFriendProfile[] {
+    const rawProfiles = Array.isArray(value) ? value : []
+    const profiles: SuggestedFriendProfile[] = []
+    const seen = new Set<string>()
+
+    for (const item of rawProfiles) {
+      if (!item || typeof item !== 'object') continue
+      const record = item as Record<string, unknown>
+      const uid = String(record.uid || '').trim()
+      if (!uid) continue
+      const key = this.normalizeUidForCompare(uid)
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      profiles.push({
+        name: String(record.name || '').trim(),
+        uid
+      })
+      if (profiles.length >= limit) break
+    }
+
+    return profiles
   }
 
   private getCampaignActionDescriptors(campaign: Campaign, campaignAction?: CampaignAction): CampaignActionDescriptor[] {
