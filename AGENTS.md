@@ -47,7 +47,8 @@ Convention quan trọng (xem memory `campaign_conventions.md`):
 - **FB timestamp link** lazy-load qua `FocusEvent('focusin')`, không phải hover.
 - Group post click popup optional `GroupPostDismissDialogOrUsePageButton` sau khi vào group và sau verify submit; sau `fb_click_post_button` phải chạy `fb_verify_group_post_form_closed`, link lấy qua `GroupPostRawPostLink` → `FocusEvent('focusin')` → `GroupPostPostLink`, pending tính từ `/pending_posts/` ([migration_v37_group_post_link_after_publish.sql](migrations/migration_v37_group_post_link_after_publish.sql)).
 - Sau group post verify thành công, scheduler upsert group contact theo account: link `/pending_posts/` → `requires_post_approval=true`, link thường → `false`, không lấy được link thì giữ `null`; group do campaign insert mặc định `is_joined=false` ([migration_v39_account_contact_group_status.sql](migrations/migration_v39_account_contact_group_status.sql)).
-- Group post pending: `commentType='own'` bỏ qua comment; `commentType='others'` shift `commentIterations` để bắt đầu từ bài đầu tiên ([migration_v38_group_post_pending_comment_iterations.sql](migrations/migration_v38_group_post_pending_comment_iterations.sql)).
+- Group post comment: `commentGroupMode` filter sau khi biết pending; pending `own` bỏ qua, pending `others` shift về bài đầu tiên, pending `all` giữ `[1..N]` bài đang thấy ([migration_v40_group_post_comment_options.sql](migrations/migration_v40_group_post_comment_options.sql)).
+- Group post skip known approval: `skipPostIfGroupRequiresApproval` tra `auto_account_contacts.requires_post_approval`; nếu `true` thì workflow bỏ composer/post nhưng vẫn đi nhánh comment với pending từ account contact ([migration_v41_skip_group_post_known_approval.sql](migrations/migration_v41_skip_group_post_known_approval.sql)).
 
 ### Workflow engine v2
 

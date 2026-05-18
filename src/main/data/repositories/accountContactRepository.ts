@@ -185,6 +185,28 @@ export async function listContacts(accountId: number, contactType?: ContactType)
   return (data || []).map(row => mapAccountContactFromDB(row))
 }
 
+export async function getGroupContactByTarget(
+  accountId: number,
+  targetUrl: string | undefined | null
+): Promise<AutoAccountContact | null> {
+  const u = requireCurrentUser()
+  const uid = extractGroupUidForStatus(targetUrl)
+  if (!uid) return null
+
+  const { data, error } = await client()
+    .from('auto_account_contacts')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('staff_id', u.staffId)
+    .eq('contact_type', 'group')
+    .eq('uid', uid)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to find group contact: ${error.message}`)
+  return data ? mapAccountContactFromDB(data) : null
+}
+
 export async function upsertContacts(
   contacts: Partial<AutoAccountContact>[],
   options: UpsertContactsOptions = {}

@@ -21,6 +21,8 @@ interface StepDef {
 type ActionLimitForm = Required<Pick<ActionLimitConfig, 'dailyLimit' | 'rateLimitCount' | 'rateLimitMinutes'>>
 type ImageOption = 'none' | 'all' | 'random'
 type CommentImageOption = 'none' | 'all'
+type CommentGroupMode = 'all' | 'pending_only' | 'published_only'
+type CommentType = 'own' | 'others' | 'all'
 type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
 type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 
@@ -253,7 +255,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     // Extra settings
     sharePost: campaign?.extraSettings?.sharePost ?? false,
     enableComment: campaign?.extraSettings?.enableComment ?? false,
-    commentType: (campaign?.extraSettings?.commentType || 'own') as 'own' | 'others',
+    commentGroupMode: (campaign?.extraSettings?.commentGroupMode || 'all') as CommentGroupMode,
+    commentType: (campaign?.extraSettings?.commentType || 'own') as CommentType,
     commentCount: campaign?.extraSettings?.commentCount ?? 3,
     commentContent: campaign?.extraSettings?.commentContent || '',
     enablePostLike: campaign?.extraSettings?.enablePostLike ?? false,
@@ -283,6 +286,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
+    skipPostIfGroupRequiresApproval: campaign?.extraSettings?.skipPostIfGroupRequiresApproval ?? false,
     // Nhắn tin bạn bè / UID
     enableMessage: campaign?.extraSettings?.enableMessage ?? true,
     enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false,
@@ -320,6 +324,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const isMessageFriendCampaign = formData.actionId === MESSAGE_FRIEND_ACTION_ID
   const isMessageUidCampaign = formData.actionId === MESSAGE_UID_ACTION_ID
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
+  const isFacebookGroupPostCampaign = formData.actionId === 'facebook_group_post'
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
@@ -759,6 +764,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           extraSettings: {
             sharePost: formData.sharePost,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
+            commentGroupMode: formData.commentGroupMode,
             commentType: formData.commentType,
             commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : formData.commentCount,
             commentContent: formData.commentContent,
@@ -781,6 +787,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             leaveGroupOnPendingApproval: formData.leaveGroupOnPendingApproval,
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
+            skipPostIfGroupRequiresApproval: formData.skipPostIfGroupRequiresApproval,
             enableMessage: effectiveEnableMessage,
             enableAddFriend: effectiveEnableAddFriend,
             useSuggestedFriends: effectiveUseSuggestedFriends,
@@ -2198,6 +2205,19 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                     <>
                       {/* Share post - tạm ẩn, sẽ mở lại khi implement đầy đủ */}
 
+                      {isFacebookGroupPostCampaign && (
+                        <div className="stepper-form-group">
+                          <label className="schedule-checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={formData.skipPostIfGroupRequiresApproval}
+                              onChange={e => setFormData(p => ({ ...p, skipPostIfGroupRequiresApproval: e.target.checked }))}
+                            />
+                            <span>Không đăng bài vào group bị duyệt bài</span>
+                          </label>
+                        </div>
+                      )}
+
                       {/* Enable comment */}
                       <div className="stepper-form-group">
                         <label className="schedule-checkbox-label">
@@ -2213,7 +2233,46 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       {/* Comment options - only when enableComment */}
                       {formData.enableComment && (
                         <div className="extra-comment-options">
+                          {isFacebookGroupPostCampaign && (
+                            <div className="stepper-form-group">
+                              <label>Comment vào group nào</label>
+                              <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+                                <label className="schedule-radio-label">
+                                  <input
+                                    type="radio"
+                                    name="commentGroupMode"
+                                    value="all"
+                                    checked={formData.commentGroupMode === 'all'}
+                                    onChange={() => setFormData(p => ({ ...p, commentGroupMode: 'all' }))}
+                                  />
+                                  <span>Comment vào mọi group</span>
+                                </label>
+                                <label className="schedule-radio-label">
+                                  <input
+                                    type="radio"
+                                    name="commentGroupMode"
+                                    value="pending_only"
+                                    checked={formData.commentGroupMode === 'pending_only'}
+                                    onChange={() => setFormData(p => ({ ...p, commentGroupMode: 'pending_only' }))}
+                                  />
+                                  <span>Chỉ comment vào group bị duyệt đăng bài</span>
+                                </label>
+                                <label className="schedule-radio-label">
+                                  <input
+                                    type="radio"
+                                    name="commentGroupMode"
+                                    value="published_only"
+                                    checked={formData.commentGroupMode === 'published_only'}
+                                    onChange={() => setFormData(p => ({ ...p, commentGroupMode: 'published_only' }))}
+                                  />
+                                  <span>Chỉ comment vào group đăng bài thành công ngay</span>
+                                </label>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="stepper-form-group">
+                            <label>Comment vào post nào</label>
                             <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
                               <label className="schedule-radio-label">
                                 <input
@@ -2223,9 +2282,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                                   checked={formData.commentType === 'own'}
                                   onChange={() => setFormData(p => ({ ...p, commentType: 'own' }))}
                                 />
-                                <span>Chỉ comment vào bài post của mình</span>
+                                <span>Comment vào post của mình</span>
                               </label>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
                                 <label className="schedule-radio-label">
                                   <input
                                     type="radio"
@@ -2234,17 +2293,44 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                                     checked={formData.commentType === 'others'}
                                     onChange={() => setFormData(p => ({ ...p, commentType: 'others' }))}
                                   />
-                                  <span>Comment vào các bài khác trừ bài post của mình với số lượng</span>
+                                  <span>Không comment vào post của mình</span>
                                 </label>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  value={formData.commentCount}
-                                  onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
-                                  className="stepper-input"
-                                  style={{ width: 60 }}
-                                  disabled={formData.commentType !== 'others'}
-                                />
+                                <div style={{ marginLeft: 22, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <label style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>Số comment tối đa</label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={formData.commentCount}
+                                    onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
+                                    className="stepper-input"
+                                    style={{ width: 120 }}
+                                    disabled={formData.commentType !== 'others'}
+                                  />
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+                                <label className="schedule-radio-label">
+                                  <input
+                                    type="radio"
+                                    name="commentType"
+                                    value="all"
+                                    checked={formData.commentType === 'all'}
+                                    onChange={() => setFormData(p => ({ ...p, commentType: 'all' }))}
+                                  />
+                                  <span>Comment tất cả</span>
+                                </label>
+                                <div style={{ marginLeft: 22, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <label style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>Số comment tối đa</label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={formData.commentCount}
+                                    onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
+                                    className="stepper-input"
+                                    style={{ width: 120 }}
+                                    disabled={formData.commentType !== 'all'}
+                                  />
+                                </div>
                               </div>
                             </div>
                           </div>
