@@ -14,7 +14,12 @@ interface FacebookGraphPage {
 interface FacebookGraphPageResponse {
   data?: FacebookGraphPage[]
   paging?: { next?: unknown }
-  error?: { message?: unknown }
+  error?: {
+    message?: unknown
+    type?: unknown
+    code?: unknown
+    error_subcode?: unknown
+  }
 }
 
 /**
@@ -916,26 +921,44 @@ export class ContactLoader {
     }
     if (this.isLoadCancelled(accountId)) return []
     this.sendProgress('Đang tải danh sách page qua Facebook API...')
-    return this.loadPagesFromGraph(token, accountId)
+    const cookieHeader = await this.getFacebookCookieHeader(wc)
+    return this.loadPagesFromGraph(token, accountId, cookieHeader)
   }
 
   private async extractFacebookAccessToken(wc: Electron.WebContents): Promise<string> {
     const token = await wc.executeJavaScript(`
       (function() {
-        var body = document.body ? document.body.innerHTML : '';
-        var match = body.match(/EAAG[A-Za-z0-9_-]{20,}/);
-        return match ? match[0] : '';
+        const body = document.body.innerHTML;
+        const match = body.match(/EAAG(.*?)"/);
+        return match && match[1] ? 'EAAG' + match[1] : '';
       })()
     `)
     const value = String(token || '').trim()
-    if (!value) throw new Error('Không tìm thấy user access token')
+    if (!value) {
+      throw new Error('Không tìm thấy user access token. Hãy mở lại tab Business/Facebook rồi thử tải page.')
+    }
     return value
   }
 
-  private async loadPagesFromGraph(token: string, accountId: number): Promise<Partial<AutoAccountContact>[]> {
+  private async getFacebookCookieHeader(wc: Electron.WebContents): Promise<string> {
+    const cookies = await wc.session.cookies.get({ url: 'https://graph.facebook.com/' })
+    const cookieMap = new Map<string, string>()
+    for (const cookie of cookies) {
+      if (!cookie.name || cookie.value === undefined) continue
+      cookieMap.set(cookie.name, `${cookie.name}=${cookie.value}`)
+    }
+
+    return Array.from(cookieMap.values()).join('; ')
+  }
+
+  private async loadPagesFromGraph(
+    token: string,
+    accountId: number,
+    cookieHeader: string
+  ): Promise<Partial<AutoAccountContact>[]> {
     const pages: Partial<AutoAccountContact>[] = []
     const seen = new Set<string>()
-    let nextPage = `https://graph.facebook.com/me/accounts?access_token=${encodeURIComponent(token)}`
+    let nextPage = this.buildFacebookPagesUrl(token)
     let pageIndex = 0
     const signal = this.activeLoadControllers.get(accountId)?.signal
 
@@ -944,14 +967,20 @@ export class ContactLoader {
       pageIndex++
       let response: Awaited<ReturnType<typeof fetch>>
       try {
-        response = await fetch(nextPage, signal ? { signal } : undefined)
+        response = await fetch(nextPage, {
+          ...(signal ? { signal } : {}),
+          headers: {
+            Accept: 'application/json',
+            ...(cookieHeader ? { Cookie: cookieHeader } : {})
+          }
+        })
       } catch (err) {
         if (signal?.aborted || this.isLoadCancelled(accountId)) break
         throw err
       }
       if (!response.ok) {
         if (signal?.aborted || this.isLoadCancelled(accountId)) break
-        throw new Error(`Facebook API HTTP ${response.status}`)
+        throw new Error(await this.readFacebookGraphError(response))
       }
 
       let json: FacebookGraphPageResponse
@@ -963,7 +992,7 @@ export class ContactLoader {
       }
       if (json.error) {
         if (signal?.aborted || this.isLoadCancelled(accountId)) break
-        throw new Error(String(json.error.message || 'Facebook API trả lỗi'))
+        throw new Error(this.formatFacebookGraphError(response.status, json.error))
       }
 
       for (const page of json.data || []) {
@@ -986,6 +1015,48 @@ export class ContactLoader {
     }
 
     return pages
+  }
+
+  private buildFacebookPagesUrl(token: string): string {
+    return `https://graph.facebook.com/me/accounts?access_token=${encodeURIComponent(token)}`
+  }
+
+  private async readFacebookGraphError(response: Awaited<ReturnType<typeof fetch>>): Promise<string> {
+    let text = ''
+    try {
+      text = await response.text()
+    } catch {}
+
+    if (text) {
+      try {
+        const json = JSON.parse(text) as FacebookGraphPageResponse
+        if (json.error) return this.formatFacebookGraphError(response.status, json.error)
+      } catch {}
+    }
+
+    const shortText = text.replace(/\s+/g, ' ').trim().slice(0, 300)
+    return shortText
+      ? `Facebook API lỗi ${response.status}: ${shortText}`
+      : `Facebook API lỗi ${response.status}`
+  }
+
+  private formatFacebookGraphError(
+    status: number,
+    error: NonNullable<FacebookGraphPageResponse['error']>
+  ): string {
+    const message = typeof error.message === 'string' ? error.message : ''
+    const type = typeof error.type === 'string' ? error.type : ''
+    const code = typeof error.code === 'number' || typeof error.code === 'string' ? String(error.code) : ''
+    const subcode = typeof error.error_subcode === 'number' || typeof error.error_subcode === 'string'
+      ? String(error.error_subcode)
+      : ''
+    const details = [
+      code ? `code ${code}` : '',
+      subcode ? `subcode ${subcode}` : '',
+      type
+    ].filter(Boolean).join(', ')
+    const prefix = `Facebook API lỗi ${status}${details ? ` (${details})` : ''}`
+    return message ? `${prefix}: ${message}` : prefix
   }
 
 }
