@@ -22,6 +22,16 @@ const getLastActivityText = (contact: AutoAccountContact) => {
   return typeof value === 'string' ? value : ''
 }
 
+const getGroupJoinStatus = (contact: AutoAccountContact) => {
+  return contact.isJoined === true ? 'Đã tham gia' : 'Chưa tham gia'
+}
+
+const getGroupApprovalStatus = (contact: AutoAccountContact) => {
+  if (contact.requiresPostApproval === true) return 'Chờ duyệt bài'
+  if (contact.requiresPostApproval === false) return 'Không cần duyệt'
+  return 'Chưa biết'
+}
+
 export default function AccountInfoModal({ account, onClose }: AccountInfoModalProps) {
   const [rows, setRows] = useState<AccountActionOverview[]>([])
   const [loading, setLoading] = useState(true)
@@ -96,11 +106,13 @@ export default function AccountInfoModal({ account, onClose }: AccountInfoModalP
         contact.name,
         contact.uid,
         contact.url,
-        getLastActivityText(contact)
+        getLastActivityText(contact),
+        contactView === 'group' ? getGroupJoinStatus(contact) : '',
+        contactView === 'group' ? getGroupApprovalStatus(contact) : ''
       ].filter(Boolean).join(' ').toLocaleLowerCase('vi-VN')
       return searchable.includes(query)
     })
-  }, [contactSearch, contacts])
+  }, [contactSearch, contactView, contacts])
   const contactViewTitle = contactView === 'friend' ? 'Danh sách bạn bè' : 'Danh sách group'
 
   return (
@@ -201,7 +213,9 @@ export default function AccountInfoModal({ account, onClose }: AccountInfoModalP
                 <div>
                   <div className="account-info-actions-title">{contactViewTitle}</div>
                   <div className="account-info-contact-count">
-                    {filteredContacts.length}/{contacts.length} contact đang hoạt động
+                    {contactView === 'group'
+                      ? `${filteredContacts.length}/${contacts.length} group đã lưu`
+                      : `${filteredContacts.length}/${contacts.length} contact đang hoạt động`}
                   </div>
                 </div>
                 <label className="account-info-contact-search">
@@ -230,7 +244,8 @@ export default function AccountInfoModal({ account, onClose }: AccountInfoModalP
                       <th>Tên</th>
                       <th>UID/Slug</th>
                       <th>Link</th>
-                      {contactView === 'group' && <th>Hoạt động</th>}
+                      {contactView === 'group' && <th>Tham gia</th>}
+                      {contactView === 'group' && <th>Duyệt bài</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -254,7 +269,24 @@ export default function AccountInfoModal({ account, onClose }: AccountInfoModalP
                           ) : '-'}
                         </td>
                         {contactView === 'group' && (
-                          <td className="account-info-contact-muted">{getLastActivityText(contact) || '-'}</td>
+                          <td>
+                            <span className={`account-info-status ${contact.isJoined === true ? 'account-info-status-ok' : 'account-info-status-muted'}`}>
+                              {getGroupJoinStatus(contact)}
+                            </span>
+                          </td>
+                        )}
+                        {contactView === 'group' && (
+                          <td>
+                            <span className={`account-info-status ${
+                              contact.requiresPostApproval === true
+                                ? 'account-info-status-limited'
+                                : contact.requiresPostApproval === false
+                                  ? 'account-info-status-ok'
+                                  : 'account-info-status-muted'
+                            }`}>
+                              {getGroupApprovalStatus(contact)}
+                            </span>
+                          </td>
                         )}
                       </tr>
                     ))}

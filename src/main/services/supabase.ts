@@ -91,5 +91,8 @@ export class SupabaseService {
     contacts: Partial<AutoAccountContact>[],
     options?: Parameters<typeof accountContactRepo.upsertContacts>[1]
   ) { return accountContactRepo.upsertContacts(contacts, options) }
+  upsertGroupPostContactStatus(
+    input: Parameters<typeof accountContactRepo.upsertGroupPostContactStatus>[0]
+  ) { return accountContactRepo.upsertGroupPostContactStatus(input) }
   deleteContacts(accountId: number, contactType: ContactType) { return accountContactRepo.deleteContacts(accountId, contactType) }
 }

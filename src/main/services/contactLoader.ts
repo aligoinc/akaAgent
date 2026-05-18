@@ -887,6 +887,7 @@ export class ContactLoader {
             name: name,
             uid: groupId,
             url: target.url,
+            isJoined: true,
             extraData: {
               source: 'facebook_groups_joined',
               lastActivityText: activityText || null

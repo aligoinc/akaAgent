@@ -395,19 +395,33 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
 
   const renderCampaignDetailLog = (detail: CampaignDetail) => {
     const payload = getFindDataPayload(detail)
-    if (payload.total === 0) {
+    const postUrl = typeof detail.postUrl === 'string' ? detail.postUrl.trim() : ''
+    if (payload.total === 0 && !postUrl) {
       return <span className="campaign-detail-log-text">{detail.log || '-'}</span>
     }
 
     return (
       <div className="find-data-history-cell">
         <div className="campaign-detail-log-text">{detail.log || '-'}</div>
-        <div className="find-data-result-chips">
-          <span className="find-data-chip find-data-chip-phone">SĐT: {payload.phones.length}</span>
-          <span className="find-data-chip find-data-chip-zalo">Zalo: {payload.linkGroupZalos.length}</span>
-          <span className="find-data-chip find-data-chip-uid">UID: {payload.uids.length}</span>
-          <span className="find-data-chip find-data-chip-postLink">Post: {payload.postLinks.length}</span>
-        </div>
+        {postUrl && (
+          <a
+            className="campaign-detail-post-link"
+            href={postUrl}
+            target="_blank"
+            rel="noreferrer"
+            title={postUrl}
+          >
+            {postUrl}
+          </a>
+        )}
+        {payload.total > 0 && (
+          <div className="find-data-result-chips">
+            <span className="find-data-chip find-data-chip-phone">SĐT: {payload.phones.length}</span>
+            <span className="find-data-chip find-data-chip-zalo">Zalo: {payload.linkGroupZalos.length}</span>
+            <span className="find-data-chip find-data-chip-uid">UID: {payload.uids.length}</span>
+            <span className="find-data-chip find-data-chip-postLink">Post: {payload.postLinks.length}</span>
+          </div>
+        )}
       </div>
     )
   }

@@ -1434,6 +1434,10 @@ button.btn-icon:not(.btn):disabled {
   color: var(--accent-warning);
 }
 
+.account-info-status-muted {
+  color: var(--text-tertiary);
+}
+
 @media (max-width: 720px) {
   .account-info-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3299,6 +3303,16 @@ button.btn-icon:not(.btn):disabled {
   white-space: nowrap;
 }
 
+.data-scan-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .data-scan-footer {
   justify-content: space-between;
 }
@@ -3498,6 +3512,17 @@ button.btn-icon:not(.btn):disabled {
 .campaign-detail-log-text {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.campaign-detail-post-link {
+  color: var(--accent-info);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.campaign-detail-post-link:hover {
+  text-decoration: underline;
 }
 
 .find-data-history-cell {

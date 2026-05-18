@@ -47,7 +47,7 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
   }
 ]
 
-const EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
+const EXPORT_HEADERS = ['Tên', 'Uid']
 
 const formatExportTimestamp = (date = new Date()) => {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -76,6 +76,12 @@ const getContactInfo = (contact: AutoAccountContact) => {
   const category = typeof extra.category === 'string' ? extra.category : ''
   const lastActivityText = typeof extra.lastActivityText === 'string' ? extra.lastActivityText : ''
   return category || lastActivityText || ''
+}
+
+const getGroupApprovalStatus = (contact: AutoAccountContact) => {
+  if (contact.requiresPostApproval === true) return 'Chờ duyệt bài'
+  if (contact.requiresPostApproval === false) return 'Không cần duyệt'
+  return 'Chưa biết'
 }
 
 const getDedupeKey = (contact: AutoAccountContact) => {
@@ -212,26 +218,38 @@ export default function DataScanModal({
     return unsubscribe
   }, [accountId, actionDef.contactType, loadCachedContacts, showAlert])
 
+  const visibleContacts = useMemo(() => {
+    if (actionDef.contactType !== 'group') return contacts
+    return contacts.filter(contact => contact.isJoined === true)
+  }, [actionDef.contactType, contacts])
+
   const filteredContacts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('vi-VN')
-    if (!query) return contacts
-    return contacts.filter(contact => [
+    if (!query) return visibleContacts
+    return visibleContacts.filter(contact => [
       contact.name,
       contact.uid,
       contact.url,
-      getContactInfo(contact)
+      getContactInfo(contact),
+      actionDef.contactType === 'group' ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [contacts, search])
+  }, [actionDef.contactType, search, visibleContacts])
 
   const allVisibleSelected = filteredContacts.length > 0 && filteredContacts.every(contact => selectedIds.has(contact.id))
   const selectedContacts = useMemo(
-    () => contacts.filter(contact => selectedIds.has(contact.id)),
-    [contacts, selectedIds]
+    () => visibleContacts.filter(contact => selectedIds.has(contact.id)),
+    [selectedIds, visibleContacts]
   )
   const outputContacts = useMemo(
     () => dedupeOnOutput ? dedupeContacts(selectedContacts) : selectedContacts,
     [dedupeOnOutput, selectedContacts]
   )
+  const tableColSpan = actionDef.contactType === 'group' ? 6 : 5
+  const emptyTableText = contacts.length === 0
+    ? actionDef.emptyText
+    : actionDef.contactType === 'group' && visibleContacts.length === 0 && search.trim().length === 0
+      ? 'Chưa có group đã tham gia.'
+      : 'Không tìm thấy data phù hợp.'
 
   const toggleContact = (id: number) => {
     setSelectedIds(prev => {
@@ -365,27 +383,13 @@ export default function DataScanModal({
         EXPORT_HEADERS,
         ...outputContacts.map(contact => [
           contact.name || '',
-          getContactValue(contact),
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          ''
+          contact.uid || contact.url || ''
         ])
       ]
       const sheet = utils.aoa_to_sheet(rows)
       sheet['!cols'] = [
         { wch: 24 },
-        { wch: 48 },
-        { wch: 18 },
-        { wch: 28 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 }
+        { wch: 48 }
       ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Sheet1')
@@ -574,14 +578,14 @@ export default function DataScanModal({
                   <th>Tên</th>
                   <th>UID</th>
                   <th>Link</th>
-                  <th>Thông tin</th>
+                  {actionDef.contactType === 'group' && <th>Duyệt bài</th>}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="text-center">{actionDef.loadingText}</td></tr>
+                  <tr><td colSpan={tableColSpan} className="text-center">{actionDef.loadingText}</td></tr>
                 ) : filteredContacts.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center text-muted">{contacts.length === 0 ? actionDef.emptyText : 'Không tìm thấy data phù hợp.'}</td></tr>
+                  <tr><td colSpan={tableColSpan} className="text-center text-muted">{emptyTableText}</td></tr>
                 ) : (
                   filteredContacts.map((contact, index) => (
                     <tr
@@ -601,7 +605,11 @@ export default function DataScanModal({
                       <td>{contact.name || '-'}</td>
                       <td>{contact.uid || '-'}</td>
                       <td className="data-scan-link-cell">{contact.url || '-'}</td>
-                      <td>{getContactInfo(contact) || '-'}</td>
+                      {actionDef.contactType === 'group' && (
+                        <td>
+                          <span className="data-scan-status-badge">{getGroupApprovalStatus(contact)}</span>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}

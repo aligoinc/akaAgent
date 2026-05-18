@@ -1056,8 +1056,57 @@ export class CampaignScheduler {
       return
     }
 
-    // Đăng bài
-    const postSteps = steps.filter(s => s.blockName === 'fb_click_post_button' && s.status === 'success')
+    // Đăng bài group — xác nhận submit bằng việc form đóng, rồi lưu link bài vừa đăng nếu lấy được.
+    const groupPostVerifySteps = campaign.actionId === 'facebook_group_post'
+      ? steps.filter(s => s.blockName === 'fb_verify_group_post_form_closed' && s.status === 'success')
+      : []
+    for (const s of groupPostVerifySteps) {
+      try {
+        const out = (s.output as any) || {}
+        const posted = out.posted === true || out.ok === true
+        const linkStep = [...steps].reverse().find(x => x.blockName === 'fb_get_first_group_post_link' && x.status === 'success')
+        const linkOut = ((linkStep?.output as any) || {}) as { postUrl?: unknown; link?: unknown; rawPostLink?: unknown }
+        const postUrl = posted
+          ? this.cleanPostLinkForStorage(String(linkOut.postUrl || linkOut.link || out.postUrl || ''))
+          : ''
+        const isPending = postUrl.includes('/pending_posts/')
+        const requiresPostApproval = postUrl ? isPending : undefined
+        const rawPostLink = String(linkOut.rawPostLink || '').trim()
+        const failureMessage = String(out.message || 'Form đăng bài chưa đóng sau 60 giây')
+        await this.supabase.createCampaignDetail({
+          inputDataId: detail?.id,
+          campaignId: campaign.id,
+          accountId,
+          actionCode: this.getPostActionCode(campaign),
+          actionName: 'Đăng bài',
+          status: posted ? 'thành công' : 'thất bại',
+          log: posted
+            ? (detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : `Đăng bài thành công${isPending ? ' (chờ duyệt)' : ''}`)
+            : (detail ? `Đăng bài thất bại vào ${inputDataName}: ${failureMessage}` : `Đăng bài thất bại: ${failureMessage}`),
+          postUrl: postUrl || undefined,
+          data: {
+            isPending,
+            rawPostLink: rawPostLink || undefined,
+            postUrl: postUrl || undefined,
+            submitClosed: posted,
+            error: posted ? undefined : failureMessage
+          }
+        })
+        if (posted) {
+          await this.syncGroupPostContactStatus(accountId, detail, requiresPostApproval)
+          this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
+          if (isPending) this.sendLog(`⏳ Bài đang chờ duyệt`)
+          if (postUrl) this.sendLog(`🔗 Link bài post: ${postUrl}`)
+        } else {
+          this.sendLog(`❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
+        }
+      } catch (err) { console.error('Failed log group post:', err) }
+    }
+
+    // Đăng bài timeline hoặc fallback khi workflow group post chưa có block verify submit.
+    const postSteps = groupPostVerifySteps.length > 0
+      ? []
+      : steps.filter(s => s.blockName === 'fb_click_post_button' && s.status === 'success')
     for (const s of postSteps) {
       try {
         const isPending = steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true
@@ -1092,11 +1141,17 @@ export class CampaignScheduler {
       if (out.commented === false || (text.trim().length === 0 && imageCount <= 0)) continue
       loggedCommentCount++
       const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
-      const target = this.isCommentSeedingPostCampaign(campaign.actionId)
-        ? 'bài post'
-        : (campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID
-          ? this.formatOrdinalPost(loggedCommentCount)
-          : (position === 1 ? 'bài của mình' : this.formatOrdinalPost(position)))
+      const commentType = String(campaign.extraSettings?.commentType || '')
+      let target: string
+      if (this.isCommentSeedingPostCampaign(campaign.actionId)) {
+        target = 'bài post'
+      } else if (campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID) {
+        target = this.formatOrdinalPost(loggedCommentCount)
+      } else if (campaign.actionId === 'facebook_group_post' && commentType === 'others') {
+        target = this.formatOrdinalPost(position)
+      } else {
+        target = position === 1 ? 'bài của mình' : this.formatOrdinalPost(position)
+      }
       const logText = text.trim().length > 0
         ? `Đã comment vào ${target}: "${preview}"`
         : `Đã comment vào ${target}`
@@ -1109,7 +1164,7 @@ export class CampaignScheduler {
           actionName: 'Comment',
           status: 'thành công',
           log: logText,
-          data: { commentPosition: position, iteration: loggedCommentCount, commentContent: text, commentImageCount: imageCount }
+          data: { commentPosition: position, iteration: loggedCommentCount, commentType: commentType || undefined, commentContent: text, commentImageCount: imageCount }
         })
         this.sendLog(`💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
       } catch (err) { console.error('Failed log comment:', err) }
@@ -1393,6 +1448,24 @@ export class CampaignScheduler {
 
   private formatOrdinalPost(position: number): string {
     return position === 1 ? 'bài đầu tiên' : `bài thứ ${position}`
+  }
+
+  private async syncGroupPostContactStatus(
+    accountId: number,
+    detail: CampaignInputData | null,
+    requiresPostApproval: boolean | undefined
+  ): Promise<void> {
+    if (!detail?.uid) return
+    try {
+      await this.supabase.upsertGroupPostContactStatus({
+        accountId,
+        targetUrl: detail.uid,
+        targetName: detail.name,
+        requiresPostApproval
+      })
+    } catch (err) {
+      console.error('Failed to sync group contact status:', err)
+    }
   }
 
   private async recoverStuckCampaignInputData(campaignId: number, errMsg: string): Promise<void> {

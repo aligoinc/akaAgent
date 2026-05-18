@@ -153,6 +153,8 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     uid: row.uid as string | undefined,
     url: row.url as string | undefined,
     extraData: row.extra_data as Record<string, unknown> | undefined,
+    requiresPostApproval: (row.requires_post_approval as boolean | null) ?? null,
+    isJoined: (row.is_joined as boolean | null) ?? false,
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,
