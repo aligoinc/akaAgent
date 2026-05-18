@@ -88,7 +88,7 @@ For `facebook_comment_seeding`, `buildVariablesV2()` must provide `targetUrl`, `
 - `mapXxxFromDB(row)` trong [mappers.ts](src/main/data/mappers.ts) chuyển snake_case → camelCase
 - Built-in records live in Supabase DB (`auto_blocks`, `auto_workflows`, `auto_elements`) and DB is the source of truth. There is no `seedV2` runtime/source fallback; update built-ins via admin UI/IPC or explicit SQL migration.
 
-Migration pattern: write SQL files at repo root (`migration.sql` for base schema, `migration_v2_workflow.sql` for v2, `migration_v3_campaign_data.sql` for data refactor, `migration_v4_drop_engine_v1.sql` for v1 cleanup, `migration_v5_*` for account schema rename, `migration_v6_rename_campaign_workflow_tables.sql` for final table/key names, `migration_v7_*` for package account-limit names). Apply via `mcp__supabase__apply_migration`. Use idempotent UPSERT by UNIQUE name for engine v2 or explicit IDs where appropriate.
+Migration pattern: write SQL files under `migrations/` (`migrations/migration.sql` for base schema, keep versioned files as `migrations/migration_vN_*.sql`, e.g. `migrations/migration_v2_workflow.sql`, `migrations/migration_v3_campaign_data.sql`, `migrations/migration_v6_rename_campaign_workflow_tables.sql`). Apply via `mcp__supabase__apply_migration`. Use idempotent UPSERT by UNIQUE name for engine v2 or explicit IDs where appropriate.
 
 ### Vietnamese UI conventions
 
