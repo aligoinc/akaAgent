@@ -14,6 +14,7 @@ import { registerAccountContactHandlers } from './handlers/accountContactHandler
 import { registerAuthHandlers } from './handlers/authHandlers'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
+import { registerAiHandlers } from './handlers/aiHandlers'
 import { getCurrentUser } from '../data/currentUser'
 
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
@@ -146,6 +147,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   })
   registerUpdateHandlers(mainWindow)
+  registerAiHandlers()
   registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase)
   registerAccountHandlers(supabase, webviewRegistry)

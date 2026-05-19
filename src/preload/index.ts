@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContactLoadResult, ContactLoadCompleted, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContactLoadResult, ContactLoadCompleted, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -29,6 +29,13 @@ const electronAPI = {
 
   setStartupSetting: (enabled: boolean): Promise<StartupSettingResult> =>
     ipcRenderer.invoke(IPC_EVENTS.APP_SET_STARTUP_SETTING, enabled),
+
+  // AI content tools
+  rewriteContentWithAI: (data: AiRewriteContentRequest): Promise<string> =>
+    ipcRenderer.invoke(IPC_EVENTS.AI_REWRITE_CONTENT, data),
+
+  writeMultiOtherContentWithAI: (data: AiWriteMultiOtherContentRequest): Promise<string> =>
+    ipcRenderer.invoke(IPC_EVENTS.AI_WRITE_MULTI_OTHER_CONTENT, data),
 
   // Webview registration (embedded browser tabs)
   registerWebview: (accountId: number, webContentsId: number): Promise<{ success: boolean }> =>
