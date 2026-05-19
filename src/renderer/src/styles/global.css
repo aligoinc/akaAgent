@@ -993,14 +993,17 @@ button.btn-icon:not(.btn):disabled {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(340px, 0.95fr) minmax(460px, 1.25fr);
+  overflow: hidden;
 }
 
 .action-manager-list-pane {
   min-width: 0;
+  min-height: 0;
   border-right: 1px solid var(--border-default);
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .action-manager-list-toolbar {
@@ -1088,9 +1091,11 @@ button.btn-icon:not(.btn):disabled {
 
 .action-manager-editor-pane {
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
+  overflow: hidden;
 }
 
 .action-manager-editor-empty {
@@ -1245,6 +1250,7 @@ button.btn-icon:not(.btn):disabled {
 @media (max-width: 920px) {
   .action-manager-body {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .action-manager-list-pane {
@@ -2730,6 +2736,100 @@ button.btn-icon:not(.btn):disabled {
   color: var(--text-tertiary);
 }
 
+.account-select-menu {
+  margin-top: 4px;
+  max-height: min(280px, 38vh);
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.account-checkbox-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-height: inherit;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  scrollbar-gutter: stable;
+}
+
+.account-checkbox-option {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 28px;
+  cursor: pointer;
+  color: var(--text-primary) !important;
+  font-size: 13px !important;
+  margin-bottom: 0 !important;
+}
+
+.account-checkbox-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaign-target-scroll-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.campaign-target-label {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.campaign-target-option {
+  min-width: 0;
+}
+
+.campaign-target-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.find-data-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.find-data-config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.find-data-config-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.find-data-config-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 24px;
+}
+
 .stepper-form-row {
   display: flex;
   gap: 16px;
@@ -2787,6 +2887,13 @@ button.btn-icon:not(.btn):disabled {
   color: var(--text-tertiary);
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
   font-size: 11px;
+}
+
+.action-limit-card-header .action-limit-check-text {
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .stepper-textarea {
@@ -2968,6 +3075,11 @@ button.btn-icon:not(.btn):disabled {
 .schedule-checkbox-label input[type="checkbox"]:disabled + span {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.stepper-form-group > .schedule-checkbox-label:has(+ .stepper-input),
+.stepper-form-group > .schedule-checkbox-label:has(+ .stepper-textarea) {
+  margin-bottom: 8px !important;
 }
 
 .schedule-option-label {

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { existsSync } from 'fs'
 import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContactLoadResult, ContactLoadCompleted, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
@@ -224,6 +225,14 @@ const electronAPI = {
   // Resolve absolute disk path for a File object selected via <input type="file">.
   // Electron 32+ removed File.path; webUtils.getPathForFile is the replacement.
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+
+  fileExists: (filePath: string): boolean => {
+    try {
+      return existsSync(filePath)
+    } catch {
+      return false
+    }
+  },
 
   // Auto-update
   checkForUpdate: (): Promise<{
