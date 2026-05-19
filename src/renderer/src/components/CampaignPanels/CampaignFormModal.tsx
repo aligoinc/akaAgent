@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { ActionLimitConfig, AutoAccountContact, Campaign, CampaignInputData, CampaignExtraSettings } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
@@ -26,6 +26,8 @@ type CommentType = 'own' | 'others' | 'all'
 type PostBumpMode = 'select' | 'create'
 type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
 type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
+type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
+type AiContentAction = 'multi' | 'rewrite'
 
 const DEFAULT_ACTION_LIMIT: ActionLimitForm = {
   dailyLimit: 30,
@@ -318,11 +320,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     content: campaign?.content || '',
     // Extra settings
     sharePost: campaign?.extraSettings?.sharePost ?? false,
+    rewriteContentEachRun: campaign?.extraSettings?.rewriteContentEachRun ?? false,
     enableComment: campaign?.extraSettings?.enableComment ?? false,
     commentGroupMode: (campaign?.extraSettings?.commentGroupMode || 'all') as CommentGroupMode,
     commentType: (campaign?.extraSettings?.commentType || 'own') as CommentType,
     commentCount: campaign?.extraSettings?.commentCount ?? 3,
     commentContent: campaign?.extraSettings?.commentContent || '',
+    rewriteCommentContentEachRun: campaign?.extraSettings?.rewriteCommentContentEachRun ?? false,
     enablePostLike: campaign?.extraSettings?.enablePostLike ?? false,
     postsPerTarget: campaign?.extraSettings?.postsPerTarget ?? campaign?.extraSettings?.commentCount ?? 3,
     postKeywordFilter: campaign?.extraSettings?.postKeywordFilter ?? campaign?.extraSettings?.keywordFilter ?? '',
@@ -621,6 +625,16 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
   const [messageDateOption, setMessageDateOption] = useState<MessageDateOption>('today')
   const [messageDateFormat, setMessageDateFormat] = useState<MessageDateFormat>('DD/MM/YYYY')
+  const [aiContentCounts, setAiContentCounts] = useState<Record<AiContentTarget, number>>({
+    content: 3,
+    commentContent: 3,
+    postBumpContent: 3
+  })
+  const [aiContentLoading, setAiContentLoading] = useState<Record<AiContentTarget, AiContentAction | null>>({
+    content: null,
+    commentContent: null,
+    postBumpContent: null
+  })
   const accountDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -812,6 +826,104 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
   const toggleSection = (stepId: string) => {
     setCollapsedSections(prev => ({ ...prev, [stepId]: !prev[stepId] }))
+  }
+
+  const getAiContentValue = (target: AiContentTarget): string => formData[target]
+
+  const setAiContentValue = (target: AiContentTarget, value: string) => {
+    setFormData(prev => ({ ...prev, [target]: value }))
+  }
+
+  const splitAiContentVariants = (content: string): string[] =>
+    content.trim().split('|').map(item => item.trim()).filter(Boolean)
+
+  const formatAiMultiContent = (content: string): string =>
+    splitAiContentVariants(content).join(' |\n')
+
+  const getAiErrorMessage = (err: unknown): string => {
+    if (err instanceof Error && err.message) return err.message
+    if (typeof err === 'string' && err.trim()) return err.trim()
+    return 'Không thể gọi AI lúc này.'
+  }
+
+  const handleAiContentAction = async (target: AiContentTarget, action: AiContentAction) => {
+    if (aiContentLoading[target]) return
+
+    const currentContent = getAiContentValue(target)
+    if (!currentContent.trim()) {
+      showAlert('Vui lòng soạn 1 nội dung trong form nội dung.', 'error')
+      return
+    }
+
+    if (splitAiContentVariants(currentContent).length > 1) {
+      showAlert('Tính năng này chỉ phù hợp khi chỉ có 1 nội dung duy nhất trong form nội dung.', 'error')
+      return
+    }
+
+    const countContent = Math.floor(Number(aiContentCounts[target]))
+    if (action === 'multi' && (!Number.isFinite(countContent) || countContent < 2)) {
+      showAlert('Số lượng nội dung khác nhau phải từ 2 nội dung trở lên.', 'error')
+      return
+    }
+
+    setAiContentLoading(prev => ({ ...prev, [target]: action }))
+    try {
+      const nextContent = action === 'multi'
+        ? await window.electronAPI.writeMultiOtherContentWithAI({ content: currentContent, countContent })
+        : await window.electronAPI.rewriteContentWithAI({ content: currentContent })
+      setAiContentValue(target, action === 'multi' ? formatAiMultiContent(nextContent) : nextContent)
+    } catch (err) {
+      showAlert(`Có lỗi xảy ra: ${getAiErrorMessage(err)}`, 'error')
+    } finally {
+      setAiContentLoading(prev => ({ ...prev, [target]: null }))
+    }
+  }
+
+  const renderAiContentToolbar = (target: AiContentTarget) => {
+    const loadingAction = aiContentLoading[target]
+    const isMultiLoading = loadingAction === 'multi'
+    const isRewriteLoading = loadingAction === 'rewrite'
+
+    return (
+      <div className="ai-content-toolbar">
+        <label className="ai-content-count-label" htmlFor={`ai-content-count-${target}`}>
+          Số nội dung khác nhau
+        </label>
+        <input
+          id={`ai-content-count-${target}`}
+          className="stepper-input ai-content-count-input"
+          type="number"
+          min={2}
+          value={aiContentCounts[target]}
+          disabled={!!loadingAction}
+          onChange={e => {
+            const nextValue = Math.floor(Number(e.target.value))
+            setAiContentCounts(prev => ({
+              ...prev,
+              [target]: Number.isFinite(nextValue) ? nextValue : 0
+            }))
+          }}
+        />
+        <button
+          type="button"
+          className="btn btn-primary ai-content-action-button"
+          onClick={() => handleAiContentAction(target, 'multi')}
+          disabled={!!loadingAction}
+        >
+          {isMultiLoading ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
+          <span>Tạo ra các nội dung khác nhau</span>
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary ai-content-action-button"
+          onClick={() => handleAiContentAction(target, 'rewrite')}
+          disabled={!!loadingAction}
+        >
+          {isRewriteLoading ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />}
+          <span>Viết lại nội dung</span>
+        </button>
+      </div>
+    )
   }
 
   const isUsableImagePath = (path: string): boolean => {
@@ -1017,11 +1129,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           content: formData.content,
           extraSettings: {
             sharePost: formData.sharePost,
+            rewriteContentEachRun: formData.rewriteContentEachRun,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
             commentType: formData.commentType,
             commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : formData.commentCount,
             commentContent: formData.commentContent,
+            rewriteCommentContentEachRun: formData.rewriteCommentContentEachRun,
             enablePostLike: formData.enablePostLike,
             postsPerTarget: effectivePostsPerTarget,
             postKeywordFilter: effectivePostKeywordFilter,
@@ -2118,6 +2232,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           </div>
           <div className="stepper-form-group">
             <label>Nội dung up tin</label>
+            {renderAiContentToolbar('postBumpContent')}
             <textarea
               className="stepper-textarea"
               value={formData.postBumpContent}
@@ -2248,6 +2363,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
           <div className="stepper-form-group">
             <label>Nội dung comment</label>
+            {renderAiContentToolbar('commentContent')}
             <textarea
               className="stepper-textarea"
               placeholder="Nhập nội dung comment. Dùng dấu | để tách nhiều nội dung — comment 1 dùng nội dung 1, comment 2 dùng nội dung 2..."
@@ -2283,10 +2399,58 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     </div>
   )
 
+  const renderCampaignContentHint = () => (
+    <div className="campaign-content-hint">
+      Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
+    </div>
+  )
+
+  const renderRewriteContentEachRunOption = () => (
+    <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
+      <input
+        type="checkbox"
+        checked={formData.rewriteContentEachRun}
+        onChange={e => setFormData(p => ({ ...p, rewriteContentEachRun: e.target.checked }))}
+      />
+      <span>Viết nội dung cho mỗi lượt chạy</span>
+    </label>
+  )
+
+  const renderRewriteCommentContentEachRunOption = () => (
+    <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
+      <input
+        type="checkbox"
+        checked={formData.rewriteCommentContentEachRun}
+        onChange={e => setFormData(p => ({ ...p, rewriteCommentContentEachRun: e.target.checked }))}
+      />
+      <span>Viết nội dung comment cho mỗi lượt chạy</span>
+    </label>
+  )
+
+  const renderCampaignContentTextarea = (showHint = true) => (
+    <>
+      <textarea
+        ref={campaignContentTextareaRef}
+        className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
+        placeholder={isTimelinePostCampaign && formData.copyContentFromSource
+          ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
+          : isMessageCampaign
+            ? "Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."
+            : "Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."}
+        value={formData.content}
+        onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
+        rows={8}
+      />
+      {showHint && renderCampaignContentHint()}
+      {showHint && renderRewriteContentEachRunOption()}
+    </>
+  )
+
   const renderCommentSeedingSettings = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="stepper-form-group">
         <label>Nội dung comment <span className="required">*</span></label>
+        {renderAiContentToolbar('commentContent')}
         <textarea
           className="stepper-textarea"
           placeholder="Nhập nội dung comment. Dùng dấu | để tách nhiều nội dung, hệ thống sẽ xoay vòng theo từng lần comment."
@@ -2297,6 +2461,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
           Mẹo: tách nhiều nội dung bằng dấu <code>|</code> để tránh lặp cùng một comment.
         </div>
+        {renderRewriteCommentContentEachRunOption()}
       </div>
 
       {renderImagePicker('comment', 'Ảnh comment')}
@@ -2871,32 +3036,33 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
               {!collapsedSections['content'] && (
                 <div className="stepper-section-body">
-                  {isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
-                    <>
-                  <div className={isMessageCampaign ? 'campaign-content-template-layout' : undefined}>
-                    <div className="stepper-form-group">
-                      <label>{isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
-                      <textarea
-                        ref={campaignContentTextareaRef}
-                        className="stepper-textarea"
-                        placeholder={isTimelinePostCampaign && formData.copyContentFromSource
-                          ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
-                          : isMessageCampaign
-                            ? "Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."
-                            : "Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."}
-                        value={formData.content}
-                        onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
-                        rows={8}
-                      />
-                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                        Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
+	                  {isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
+	                    <>
+	                  {isMessageCampaign ? (
+	                    <div className="campaign-message-content-layout">
+	                      <div className="stepper-form-group campaign-message-content-tools">
+	                        <label>Nội dung tin nhắn</label>
+	                        {renderAiContentToolbar('content')}
                       </div>
+                      <div className="campaign-content-template-layout">
+                        <div className="stepper-form-group">
+                          {renderCampaignContentTextarea(false)}
+                        </div>
+                        {renderMessageInsertPanel()}
+                      </div>
+                      {renderCampaignContentHint()}
+                      {renderRewriteContentEachRunOption()}
                     </div>
-                    {isMessageCampaign && renderMessageInsertPanel()}
-                  </div>
+                  ) : (
+	                    <div className="stepper-form-group">
+	                      <label>Nội dung chiến dịch</label>
+	                      {renderAiContentToolbar('content')}
+	                      {renderCampaignContentTextarea()}
+	                    </div>
+	                  )}
 
-                  {renderImagePicker('post', 'Media')}
-                    </>
+	                  {renderImagePicker('post', 'Media')}
+	                    </>
                   )}
                 </div>
               )}

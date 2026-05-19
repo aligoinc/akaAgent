@@ -101,11 +101,13 @@ export interface CampaignActionLimitSettings extends ActionLimitConfig {
 
 export interface CampaignExtraSettings {
   sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
+  rewriteContentEachRun?: boolean // DB block viết lại nội dung chính bằng AI trước mỗi lượt chạy
   enableComment?: boolean        // kiếm comment
   commentGroupMode?: 'all' | 'pending_only' | 'published_only' // group nào được comment sau khi đăng bài group
   commentType?: 'own' | 'others' | 'all' // comment vào bài mình / bài khác / tất cả
   commentCount?: number          // số lượng comment tối đa (khi commentType = 'others' hoặc 'all')
   commentContent?: string        // nội dung comment
+  rewriteCommentContentEachRun?: boolean // DB block viết lại nội dung comment bằng AI trước mỗi lượt comment seeding
   commentImageOption?: 'none' | 'all'
   commentImages?: string[]        // tối đa 1 ảnh cho mỗi comment
   enablePostLike?: boolean
@@ -312,6 +314,15 @@ export interface StartupSettingResult {
   enabled: boolean
 }
 
+export interface AiRewriteContentRequest {
+  content: string
+}
+
+export interface AiWriteMultiOtherContentRequest {
+  content: string
+  countContent: number
+}
+
 // ============================================
 // IPC Event Types
 // ============================================
@@ -329,6 +340,10 @@ export const IPC_EVENTS = {
   // App
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',
   APP_SET_STARTUP_SETTING: 'app:set-startup-setting',
+
+  // AI content tools
+  AI_REWRITE_CONTENT: 'ai:rewrite-content',
+  AI_WRITE_MULTI_OTHER_CONTENT: 'ai:write-multi-other-content',
 
   // Database Auto Accounts
   DB_LIST_ACCOUNTS: 'db:list-accounts',
