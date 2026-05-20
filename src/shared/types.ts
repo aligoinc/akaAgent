@@ -9,6 +9,7 @@ export interface AutoAccount {
   loginStatus: string
   status: string
   isActive: boolean
+  rateLimitMinutes?: number | null
   isDelete: boolean
   staffId?: number
   organizationId?: number

@@ -29,10 +29,12 @@ type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
 type AiContentAction = 'multi' | 'rewrite'
 
+const DEFAULT_RATE_LIMIT_MINUTES = 65
+
 const DEFAULT_ACTION_LIMIT: ActionLimitForm = {
   dailyLimit: 30,
   rateLimitCount: 9,
-  rateLimitMinutes: 60
+  rateLimitMinutes: DEFAULT_RATE_LIMIT_MINUTES
 }
 
 const ACTION_CODE_LABELS: Record<string, string> = {
@@ -55,6 +57,11 @@ const toActionLimitForm = (
   rateLimitCount: config?.rateLimitCount ?? fallback.rateLimitCount,
   rateLimitMinutes: config?.rateLimitMinutes ?? fallback.rateLimitMinutes
 })
+
+const normalizeRateLimitMinutes = (value: unknown): number => {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
+}
 
 const normalizeSuggestedFriendsCount = (value: unknown): number => {
   const parsed = Math.floor(Number(value))
@@ -192,9 +199,8 @@ const ALL_STEPS: StepDef[] = [
     title: 'Giới hạn hành động',
     fields: [
       { key: 'timeSleepBetween2', label: 'Nghỉ giữa 2 lần' },
-      { key: 'dailyLimit', label: 'Giới hạn ngày' },
-      { key: 'rateLimitCount', label: 'Số lần chờ' },
-      { key: 'rateLimitMinutes', label: 'Khung thời gian' }
+      { key: 'dailyLimit', label: 'Giới hạn trong ngày (đến 24h)' },
+      { key: 'rateLimitCount', label: 'Giới hạn trong giờ' }
     ]
   },
   {
@@ -332,19 +338,17 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     postKeywordFilter: campaign?.extraSettings?.postKeywordFilter ?? campaign?.extraSettings?.keywordFilter ?? '',
     dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
     rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
-    rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? 60,
+    rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES,
     actionLimitsByCode: Object.fromEntries(
       Object.entries(campaign?.extraSettings?.actionLimits?.byActionCode || {}).map(([code, limit]) => [
         code,
         toActionLimitForm(limit, {
           dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
           rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
-          rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? 60
+          rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES
         })
       ])
     ) as Record<string, ActionLimitForm>,
-    limitCheckActionCodes: [...(campaign?.extraSettings?.actionLimits?.enabledActionCodes || [])] as string[],
-    hasCustomLimitCheckActionCodes: Array.isArray(campaign?.extraSettings?.actionLimits?.enabledActionCodes),
     imageOption: (campaign?.extraSettings?.imageOption || 'none') as 'none' | 'all' | 'random',
     randomImageCount: campaign?.extraSettings?.randomImageCount || 3,
     images: campaign?.images || [] as string[],
@@ -405,7 +409,6 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
   const commentImageInputRef = useRef<HTMLInputElement>(null)
-  const previousVisibleLimitActionCodesRef = useRef<string[] | null>(null)
   const [handleFoundUidData, setHandleFoundUidData] = useState(() =>
     (campaign?.extraSettings?.findUidTargetCampaignIds || []).length > 0
   )
@@ -467,6 +470,11 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   }
   const visibleLimitActionCodes = limitActionCodes.filter(isLimitActionVisible)
   const visibleLimitActionCodesKey = visibleLimitActionCodes.join(',')
+  const generalLimitActionCodes = isFacebookGroupPostCampaign
+    ? visibleLimitActionCodes.filter(code => code !== 'fb_comment')
+    : visibleLimitActionCodes
+  const showGroupPostCommentLimit = isFacebookGroupPostCampaign && visibleLimitActionCodes.includes('fb_comment')
+  const showContentSection = !isFindDataGroupCampaign && (!isMessageUidCampaign || formData.enableMessage)
   const STEPS = (() => {
     if (!hasSelectedCampaignAction) return ALL_STEPS.filter(s => s.id === 'general')
     if (isSimpleCampaign) {
@@ -551,6 +559,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         .filter(s => {
           if (s.id === 'extra') return false
           if (hideDetailsSection && s.id === 'details') return false
+          if (isMessageUidCampaign && !formData.enableMessage && s.id === 'content') return false
           return true
         })
         .map(s => {
@@ -616,6 +625,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     c.id !== campaign?.id &&
     !c.isDelete
   )
+  const getAccountRateLimitMinutes = (accountId: number) =>
+    normalizeRateLimitMinutes(accounts.find(account => account.id === accountId)?.rateLimitMinutes)
+  const selectedRateLimitMinuteValues = Array.from(new Set(
+    formData.accountIds.length > 0
+      ? formData.accountIds.map(getAccountRateLimitMinutes)
+      : [normalizeRateLimitMinutes(formData.rateLimitMinutes)]
+  )).sort((a, b) => a - b)
+  const rateLimitMinutesLabel = selectedRateLimitMinuteValues.join('/')
 
   const [details, setDetails] = useState<Partial<CampaignInputData>[]>([])
   const [deletedIds, setDeletedIds] = useState<number[]>([])
@@ -661,12 +678,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
 
   useEffect(() => {
     if (!formData.actionId || !selectedCampaignAction) {
-      previousVisibleLimitActionCodesRef.current = null
       return
     }
-    const previousVisibleCodes = previousVisibleLimitActionCodesRef.current
-    const isInitialVisibleSync = previousVisibleCodes === null
-    previousVisibleLimitActionCodesRef.current = visibleLimitActionCodes
     setFormData(prev => {
       const fallback = {
         dailyLimit: prev.dailyLimit,
@@ -677,29 +690,15 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       for (const code of limitActionCodes) {
         next[code] = prev.actionLimitsByCode[code] || toActionLimitForm(undefined, fallback)
       }
-      const visibleLimitCodeSet = new Set(visibleLimitActionCodes)
-      const previousVisibleCodeSet = new Set(previousVisibleCodes || [])
-      const enabledCodeSet = new Set(
-        prev.hasCustomLimitCheckActionCodes
-          ? prev.limitCheckActionCodes.filter(code => visibleLimitCodeSet.has(code))
-          : visibleLimitActionCodes
-      )
-      if (!isInitialVisibleSync) {
-        for (const code of visibleLimitActionCodes) {
-          if (!previousVisibleCodeSet.has(code)) enabledCodeSet.add(code)
-        }
-      }
-      const enabledCodes = visibleLimitActionCodes.filter(code => enabledCodeSet.has(code))
       const prevKeys = Object.keys(prev.actionLimitsByCode).sort().join(',')
       const nextKeys = Object.keys(next).sort().join(',')
       if (
         prevKeys === nextKeys &&
-        Object.keys(next).every(code => prev.actionLimitsByCode[code] === next[code]) &&
-        prev.limitCheckActionCodes.join(',') === enabledCodes.join(',')
+        Object.keys(next).every(code => prev.actionLimitsByCode[code] === next[code])
       ) {
         return prev
       }
-      return { ...prev, actionLimitsByCode: next, limitCheckActionCodes: enabledCodes }
+      return { ...prev, actionLimitsByCode: next }
     })
   }, [formData.actionId, selectedCampaignAction?.id, limitActionCodesKey, visibleLimitActionCodesKey])
 
@@ -801,19 +800,6 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         }
       }
     }))
-  }
-
-  const toggleLimitCheckActionCode = (actionCode: string) => {
-    setFormData(prev => {
-      const exists = prev.limitCheckActionCodes.includes(actionCode)
-      return {
-        ...prev,
-        hasCustomLimitCheckActionCodes: true,
-        limitCheckActionCodes: exists
-          ? prev.limitCheckActionCodes.filter(code => code !== actionCode)
-          : [...prev.limitCheckActionCodes, actionCode]
-      }
-    })
   }
 
   const scrollToSection = (stepId: string) => {
@@ -949,7 +935,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
     }
-    if (!validateSelectedImages('Media', formData.imageOption, formData.images)) {
+    if (showContentSection && !validateSelectedImages('Media', formData.imageOption, formData.images)) {
       return
     }
     if (!validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
@@ -1084,18 +1070,24 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         const accountId = formData.accountIds[i]
         const isFirst = (i === 0)
         const currentDetails = accountChunks[i] || [];
+        const accountRateLimitMinutes = getAccountRateLimitMinutes(accountId)
         const defaultLimit = {
           dailyLimit: formData.dailyLimit,
           rateLimitCount: formData.rateLimitCount,
-          rateLimitMinutes: formData.rateLimitMinutes
+          rateLimitMinutes: accountRateLimitMinutes
         }
-        const visibleLimitCodeSet = new Set(visibleLimitActionCodes)
-        const enabledActionCodes = formData.limitCheckActionCodes.filter(code => visibleLimitCodeSet.has(code))
+        const enabledActionCodes = visibleLimitActionCodes
         const byActionCode = Object.fromEntries(
-          visibleLimitActionCodes.map(code => [
-            code,
-            formData.actionLimitsByCode[code] || toActionLimitForm(undefined, defaultLimit)
-          ])
+          visibleLimitActionCodes.map(code => {
+            const limit = formData.actionLimitsByCode[code] || toActionLimitForm(undefined, defaultLimit)
+            return [
+              code,
+              {
+                ...limit,
+                rateLimitMinutes: accountRateLimitMinutes
+              }
+            ]
+          })
         )
 
         const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
@@ -1145,7 +1137,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
               enabledActionCodes,
               dailyLimit: formData.dailyLimit,
               rateLimitCount: formData.rateLimitCount,
-              rateLimitMinutes: formData.rateLimitMinutes,
+              rateLimitMinutes: accountRateLimitMinutes,
               byActionCode
             },
             imageOption: formData.imageOption,
@@ -2246,6 +2238,43 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     </div>
   )
 
+  const renderActionLimitCard = (actionCode: string) => {
+    const limit = formData.actionLimitsByCode[actionCode] || toActionLimitForm(undefined, {
+      dailyLimit: formData.dailyLimit,
+      rateLimitCount: formData.rateLimitCount,
+      rateLimitMinutes: formData.rateLimitMinutes
+    })
+
+    return (
+      <div className="action-limit-card" key={actionCode}>
+        <div className="action-limit-card-header">
+          <strong>Giới hạn {getActionCodeLabel(actionCode)}</strong>
+          <span>{actionCode}</span>
+        </div>
+        <div className="stepper-form-row">
+          <div className="stepper-form-group third">
+            <label>Giới hạn trong ngày (đến 24h)</label>
+            <input
+              type="number"
+              value={limit.dailyLimit}
+              onChange={e => updateActionLimit(actionCode, 'dailyLimit', parseInt(e.target.value) || 0)}
+              className="stepper-input"
+            />
+          </div>
+          <div className="stepper-form-group third">
+            <label>Giới hạn trong giờ ({rateLimitMinutesLabel} phút)</label>
+            <input
+              type="number"
+              value={limit.rateLimitCount}
+              onChange={e => updateActionLimit(actionCode, 'rateLimitCount', parseInt(e.target.value) || 0)}
+              className="stepper-input"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const renderGroupPostCommentSettings = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="stepper-form-group">
@@ -2258,6 +2287,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
           <span>Kiêm comment</span>
         </label>
       </div>
+
+      {showGroupPostCommentLimit && renderActionLimitCard('fb_comment')}
 
       {formData.enableComment && (
         <div className="extra-comment-options">
@@ -2913,67 +2944,15 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                       />
                     </div>
                   </div>
-                  {visibleLimitActionCodes.length === 0 ? (
+                  {generalLimitActionCodes.length === 0 ? (
                     <div className="text-muted" style={{ fontSize: 12, marginTop: 12 }}>
-                      Loại chiến dịch này không check giới hạn hành động trước khi chạy.
+                      {visibleLimitActionCodes.length === 0
+                        ? 'Loại chiến dịch này không check giới hạn hành động trước khi chạy.'
+                        : 'Giới hạn hành động phụ nằm trong section tương ứng.'}
                     </div>
                   ) : (
                     <div className="action-limit-card-list">
-                      {visibleLimitActionCodes.map(actionCode => {
-                        const limit = formData.actionLimitsByCode[actionCode] || toActionLimitForm(undefined, {
-                          dailyLimit: formData.dailyLimit,
-                          rateLimitCount: formData.rateLimitCount,
-                          rateLimitMinutes: formData.rateLimitMinutes
-                        })
-                        const isLimitCheckEnabled = formData.limitCheckActionCodes.includes(actionCode)
-                        return (
-                          <div className={`action-limit-card ${!isLimitCheckEnabled ? 'disabled' : ''}`} key={actionCode}>
-                            <div className="action-limit-card-header">
-                              <label className="action-limit-check-toggle">
-                                <input
-                                  type="checkbox"
-                                  checked={isLimitCheckEnabled}
-                                  onChange={() => toggleLimitCheckActionCode(actionCode)}
-                                />
-                                <strong>Check giới hạn {getActionCodeLabel(actionCode)}</strong>
-                              </label>
-                              <span>{actionCode}</span>
-                            </div>
-                            <div className="stepper-form-row">
-                              <div className="stepper-form-group third">
-                                <label>Giới hạn trong ngày</label>
-                                <input
-                                  type="number"
-                                  value={limit.dailyLimit}
-                                  onChange={e => updateActionLimit(actionCode, 'dailyLimit', parseInt(e.target.value) || 0)}
-                                  className="stepper-input"
-                                  disabled={!isLimitCheckEnabled}
-                                />
-                              </div>
-                              <div className="stepper-form-group third">
-                                <label>Giới hạn số hành động</label>
-                                <input
-                                  type="number"
-                                  value={limit.rateLimitCount}
-                                  onChange={e => updateActionLimit(actionCode, 'rateLimitCount', parseInt(e.target.value) || 0)}
-                                  className="stepper-input"
-                                  disabled={!isLimitCheckEnabled}
-                                />
-                              </div>
-                              <div className="stepper-form-group third">
-                                <label>Trong khoảng (phút)</label>
-                                <input
-                                  type="number"
-                                  value={limit.rateLimitMinutes}
-                                  onChange={e => updateActionLimit(actionCode, 'rateLimitMinutes', parseInt(e.target.value) || 0)}
-                                  className="stepper-input"
-                                  disabled={!isLimitCheckEnabled}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
+                      {generalLimitActionCodes.map(actionCode => renderActionLimitCard(actionCode))}
                     </div>
                   )}
                   {isCommentSeedingFeedCampaign && (
@@ -3017,7 +2996,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
             )}
 
             {/* Section 4: Nội dung */}
-            {!isFindDataGroupCampaign && <div
+            {showContentSection && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['content'] = el }}
             >

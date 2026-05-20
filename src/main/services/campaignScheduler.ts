@@ -37,6 +37,7 @@ const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
+const DEFAULT_RATE_LIMIT_MINUTES = 65
 
 /**
  * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
@@ -1547,6 +1548,11 @@ export class CampaignScheduler {
     return Math.max(min, parsed)
   }
 
+  private normalizeRateLimitMinutes(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
+  }
+
   private normalizePostBumpRotationIndex(value: unknown, targetCount: number): number {
     if (targetCount <= 0) return 0
     const parsed = Math.floor(Number(value))
@@ -1682,17 +1688,18 @@ export class CampaignScheduler {
   private async createPostBumpTargetCampaign(sourceCampaign: Campaign, accountId: number): Promise<Campaign> {
     const account = await this.supabase.getAccount(accountId).catch(() => null)
     const content = String(sourceCampaign.extraSettings?.postBumpContent || '').trim()
+    const rateLimitMinutes = this.normalizeRateLimitMinutes(account?.rateLimitMinutes)
     const actionLimits: CampaignActionLimitSettings = {
       sleepBetweenActions: 0,
       enabledActionCodes: ['fb_comment'],
       dailyLimit: 1000,
       rateLimitCount: 1000,
-      rateLimitMinutes: 60,
+      rateLimitMinutes,
       byActionCode: {
         fb_comment: {
           dailyLimit: 1000,
           rateLimitCount: 1000,
-          rateLimitMinutes: 60
+          rateLimitMinutes
         }
       }
     }

@@ -66,7 +66,7 @@ Convention quan trọng (xem memory `campaign_conventions.md`):
 ### Campaign system
 
 Domain (sau migration_v4 drop engine v1):
-- `auto_accounts` — tài khoản/social profile để login và chạy automation (trước đây là `org_accounts`)
+- `auto_accounts` — tài khoản/social profile để login và chạy automation (trước đây là `org_accounts`); `rate_limit_minutes` là số phút khung check giới hạn giờ copy vào campaign khi lưu, default/fallback `65`, hiện không chỉnh ở UI account.
 - `auto_account_contacts` — danh bạ friend/group/page theo account (trước đây là `org_account_contacts`); group có `is_joined` và `requires_post_approval` nullable để lưu trạng thái tham gia/duyệt bài.
 - `auto_campaigns` — campaign config (action_id, account_id, schedule, daily_stop_time, content, extra_settings). `daily_stop_time` là giờ dừng trong ngày (`time`, Asia/Ho_Chi_Minh); `getPendingCampaigns()` bỏ qua campaign sau giờ này.
 - `auto_campaign_actions` — template loại campaign (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`/`facebook_message_uid`/`facebook_find_data_group`/`facebook_comment_seeding`/`facebook_comment_seeding_post`); column `workflow_id` (BIGINT, FK auto_workflows.id) là pointer duy nhất tới workflow.
@@ -109,7 +109,8 @@ For `facebook_find_data_group`, workflow/blocks/elements/action are seeded by [m
 **Rate limit** ([campaignRepository.ts:getAccountRateLimitStatus](src/main/data/repositories/campaignRepository.ts)) dùng `action_code`:
 - Daily limit so với `auto_account_action_status.count_action_in_day` (reset 00:00 Asia/Saigon).
 - Hourly limit query `auto_campaign_details` theo `(account_id, action_code, created_at)` với `status IN ('thành công','thất bại')`.
-- Campaign form stores enabled per-campaign limit checks in `extra_settings.actionLimits.enabledActionCodes` and thresholds in `extra_settings.actionLimits.byActionCode[action_code]`; scheduler also filters out checks for campaign actions disabled by toggles such as `enableAddFriend=false`.
+- ActionManagerModal stores candidate checks in `auto_campaign_actions.limit_check_action_codes`; Campaign form does not expose per-campaign "Check giới hạn" toggles, but auto-saves visible checks to `extra_settings.actionLimits.enabledActionCodes` for scheduler compatibility.
+- Campaign form stores thresholds in `extra_settings.actionLimits.byActionCode[action_code]`; `rateLimitMinutes` is copied from `auto_accounts.rate_limit_minutes` per account when saving, fallback `65`; scheduler also filters out checks for campaign actions disabled by toggles such as `enableAddFriend=false`.
 - Limit notes/logs must include the exact action name; `auto_error` messages may use `[a]`/`[action]` and `[action_code]` placeholders.
 - Khi hit limit/disable action: campaign về `'chờ xử lý'`, ghi `note`; KHÔNG đổi schedule.
 
