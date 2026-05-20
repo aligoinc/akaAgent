@@ -13,8 +13,14 @@ interface CampaignPanelProps {
   onClearFilter?: () => void
 }
 
-type DetailTab = 'data' | 'actions' | 'foundData'
+type DetailTab = 'data' | 'actions' | 'runLog' | 'foundData'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink'
+
+interface RunLogEntry {
+  key: string
+  timestamp: string | undefined
+  message: string
+}
 
 interface FoundDataPayload {
   phones: string[]
@@ -99,6 +105,22 @@ const sanitizeFileSegment = (value: string) => {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 60) || 'campaign'
+}
+
+const parseCampaignRunLog = (log: string): RunLogEntry[] => {
+  return (log || '')
+    .split('\n')
+    .map((line, index) => {
+      const text = line.trim()
+      if (!text) return null
+      const match = text.match(/^\[([^\]]+)\]\s*(.*)$/)
+      return {
+        key: `${index}-${text}`,
+        timestamp: match?.[1],
+        message: match ? match[2] : text
+      }
+    })
+    .filter((entry): entry is RunLogEntry => Boolean(entry))
 }
 
 export default function CampaignPanel({ filterAccountId, onClearFilter }: CampaignPanelProps) {
@@ -290,6 +312,10 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
   const isSelectedFindDataCampaign = selectedCampaign?.actionId === 'facebook_find_data_group'
+  const runLogEntries = useMemo(
+    () => parseCampaignRunLog(selectedCampaign?.log || ''),
+    [selectedCampaign?.log]
+  )
 
   const foundDataItems = useMemo<FoundDataItem[]>(() => {
     return campaignDetails.flatMap(detail => {
@@ -769,7 +795,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                   className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
                   onClick={() => setDetailTab('data')}
                 >
-                  Dữ liệu ({campaignInputData.length})
+                  Data ban đầu ({campaignInputData.length})
                 </button>
                 <button
                   className={`detail-dock-tab ${detailTab === 'actions' ? 'active' : ''}`}
@@ -778,7 +804,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                     if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
                   }}
                 >
-                  Lịch sử hành động ({campaignDetails.length})
+                  Kết quả chạy ({campaignDetails.length})
+                </button>
+                <button
+                  className={`detail-dock-tab ${detailTab === 'runLog' ? 'active' : ''}`}
+                  onClick={() => setDetailTab('runLog')}
+                >
+                  Lịch sử chạy ({runLogEntries.length})
                 </button>
                 {isSelectedFindDataCampaign && (
                   <button
@@ -891,6 +923,30 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                     </table>
                   )}
                 </>
+              )}
+
+              {/* Tab: Campaign run log from auto_campaigns.log */}
+              {detailTab === 'runLog' && (
+                runLogEntries.length === 0 ? (
+                  <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có lịch sử chạy</div>
+                ) : (
+                  <table className="campaign-grid" style={{ fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th>Thời gian</th>
+                        <th>Nội dung</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {runLogEntries.map(entry => (
+                        <tr key={entry.key}>
+                          <td style={{ whiteSpace: 'nowrap' }}>{entry.timestamp || '-'}</td>
+                          <td className="campaign-detail-log-cell">{entry.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
               )}
 
               {/* Tab: Found data extracted by facebook_find_data_group */}

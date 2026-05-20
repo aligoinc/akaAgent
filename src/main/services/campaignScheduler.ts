@@ -159,15 +159,13 @@ export class CampaignScheduler {
       const endDate = new Date(campaign.scheduleEndDate)
       if (now >= endDate) {
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-        await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch (đã hết ngày kết thúc)`)
-        this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
+        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
         return
       }
     }
 
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-    await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành chiến dịch`)
-    this.sendLog(`✅ Hoàn thành chiến dịch "${campaign.name}"`)
+    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
 
   private getFutureInputSchedule(detail: CampaignInputData, now: Date): Date | null {
@@ -196,8 +194,7 @@ export class CampaignScheduler {
       note: null
     })
     const message = `Hẹn chạy tiếp chiến dịch lúc ${this.formatVietnamDateTime(scheduledAt)}`
-    await this.supabase.appendCampaignLog(campaign.id, message)
-    this.sendLog(`⏳ ${message}`)
+    await this.logCampaignProgress(campaign.id, `⏳ ${message}`)
   }
 
   private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
@@ -235,8 +232,7 @@ export class CampaignScheduler {
       }
 
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy', note: null })
-      await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu chạy chiến dịch`)
-      this.sendLog(`🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
+      await this.logCampaignProgress(campaign.id, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
       await this.updateAccountAndBroadcast(account.id, { status: 'đang chạy' })
 
@@ -244,10 +240,9 @@ export class CampaignScheduler {
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.recoverStuckCampaignInputData(campaign.id, errMsg)
-      await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
       await this.handleRuntimeError(account, campaign, 'err_undefined', undefined, { message: errMsg })
       await this.releaseRunningAccount(account.id)
-      this.sendLog(`❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
+      await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     }
   }
 
@@ -275,8 +270,7 @@ export class CampaignScheduler {
       if (details.length === 0) {
         const message = 'Không lấy được đề xuất bạn bè từ Facebook'
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-        await this.supabase.appendCampaignLog(campaign.id, message)
-        this.sendLog(`⚠️ ${message}`)
+        await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
         await this.releaseRunningAccount(account.id)
         return
       }
@@ -288,7 +282,7 @@ export class CampaignScheduler {
         const j = Math.floor(Math.random() * (i + 1))
         ;[details[i], details[j]] = [details[j], details[i]]
       }
-      this.sendLog(`🔀 Đã xáo trộn danh sách ${details.length} group`)
+      await this.logCampaignProgress(campaign.id, `🔀 Đã xáo trộn danh sách ${details.length} group`)
     }
 
     // Resolve sourceLink rotation cho timeline_post
@@ -304,7 +298,7 @@ export class CampaignScheduler {
             extraSettings: { ...extra, sourceLinkIndex: nextIdx }
           })
         } catch {}
-        this.sendLog(`🔗 Link nguồn #${idx + 1}/${links.length}: ${currentSourceLink}`)
+        await this.logCampaignProgress(campaign.id, `🔗 Link nguồn #${idx + 1}/${links.length}: ${currentSourceLink}`)
       }
     }
 
@@ -319,7 +313,7 @@ export class CampaignScheduler {
       // Check pause
       const cur = await this.supabase.getCampaign(campaign.id)
       if (cur && cur.status === 'tạm dừng') {
-        this.sendLog(`⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+        await this.logCampaignProgress(campaign.id, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
         await this.releaseRunningAccount(account.id)
         return
       }
@@ -374,15 +368,10 @@ export class CampaignScheduler {
           dateAction: new Date().toISOString()
         })
         const inputDataName = detail.name || detail.uid || 'N/A'
-        this.sendLog(`▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
+        await this.logCampaignProgress(campaign.id, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
         if (groupPostApproval.skipPostByKnownApproval) {
           const message = `Bỏ qua đăng bài vào "${inputDataName}" vì group đã biết cần duyệt bài`
-          try {
-            await this.supabase.appendCampaignLog(campaign.id, message)
-            this.sendLog(`⚠️ ${message}`)
-          } catch (err) {
-            console.error('Failed append known approval skip log:', err)
-          }
+          await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
         }
       }
 
@@ -435,14 +424,12 @@ export class CampaignScheduler {
         if (detail && !accountStopReason) {
           if (result.status === 'completed') {
             await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
-            await this.supabase.appendCampaignLog(campaign.id, `Hoàn thành: ${detail.name || detail.uid || 'N/A'}`)
-            this.sendLog(`✅ Hoàn thành "${detail.name || detail.uid || 'N/A'}"`)
+            await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${detail.name || detail.uid || 'N/A'}"`)
           } else {
             // campaign_input_data enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở campaign_details)
             const errMsg = result.error || 'Lỗi không xác định'
             await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
-            await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${detail.name || detail.uid || 'N/A'} - ${errMsg}`)
-            this.sendLog(`❌ Lỗi "${detail.name || detail.uid || 'N/A'}": ${errMsg}`)
+            await this.logCampaignProgress(campaign.id, `❌ Lỗi "${detail.name || detail.uid || 'N/A'}": ${errMsg}`)
           }
         }
 
@@ -471,8 +458,7 @@ export class CampaignScheduler {
           })
           shouldStopAfterTarget = handled.triggered
         }
-        await this.supabase.appendCampaignLog(campaign.id, `Lỗi: ${errMsg}`)
-        this.sendLog(`❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
+        await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
       } finally {
         clearInterval(accountGuard)
         if (automationPage.source === 'background') {
@@ -490,7 +476,7 @@ export class CampaignScheduler {
       if (i < targets.length - 1) {
         const sleepTime = extra.actionLimits?.sleepBetweenActions ?? campaign.timeSleepBetween2 ?? 0
         if (sleepTime > 0) {
-          this.sendLog(`⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
+          await this.logCampaignProgress(campaign.id, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
           await new Promise(r => setTimeout(r, sleepTime * 1000))
         }
       }
@@ -551,8 +537,7 @@ export class CampaignScheduler {
   private async collectSuggestedFriendInputData(account: AutoAccount, campaign: Campaign, workflowId: number): Promise<CampaignInputData[]> {
     const count = this.normalizeSuggestedFriendsCount(campaign.extraSettings?.suggestedFriendsCount)
 
-    await this.supabase.appendCampaignLog(campaign.id, `Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
-    this.sendLog(`ℹ️ Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
+    await this.logCampaignProgress(campaign.id, `ℹ️ Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
 
     const automationPage = this.getAutomationPage(account, campaign.id)
     const page = automationPage.page
@@ -600,8 +585,7 @@ export class CampaignScheduler {
         })
       }
 
-      await this.supabase.appendCampaignLog(campaign.id, `Đã thêm ${profiles.length} đề xuất bạn bè vào danh sách UID`)
-      this.sendLog(`✅ Đã thêm ${profiles.length} đề xuất bạn bè vào chiến dịch "${campaign.name}"`)
+      await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${profiles.length} đề xuất bạn bè vào chiến dịch "${campaign.name}"`)
       return await this.supabase.listCampaignInputData(campaign.id)
     } finally {
       if (automationPage.source === 'background') {
@@ -798,8 +782,7 @@ export class CampaignScheduler {
       await this.handleRuntimeError(account, campaign, 'err_logout', undefined, { message: reason })
     } else {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: reason })
-      await this.supabase.appendCampaignLog(campaign.id, reason)
-      this.sendLog(`⚠️ Dừng chiến dịch "${campaign.name}": ${reason}`)
+      await this.logCampaignProgress(campaign.id, `⚠️ Dừng chiến dịch "${campaign.name}": ${reason}`)
     }
   }
 
@@ -819,8 +802,7 @@ export class CampaignScheduler {
       await this.handleRuntimeError(account, campaign, limitStatus.errorCode, limitStatus.actionCode, replacements)
     } else {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-      await this.supabase.appendCampaignLog(campaign.id, message)
-      this.sendLog(`⚠️ Tạm dừng "${campaign.name}": ${message}`)
+      await this.logCampaignProgress(campaign.id, `⚠️ Tạm dừng "${campaign.name}": ${message}`)
     }
   }
 
@@ -947,8 +929,7 @@ export class CampaignScheduler {
     }
 
     await this.updateCampaignAndBroadcast(campaign.id, { status: campaignStatus, note: message })
-    await this.supabase.appendCampaignLog(campaign.id, message)
-    this.sendLog(`⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
+    await this.logCampaignProgress(campaign.id, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
 
     return { triggered: true, message, policy }
   }
@@ -1161,8 +1142,8 @@ export class CampaignScheduler {
             errorBlock: errorStep?.blockName
           }
         })
-        if (isSuccess) this.sendLog(`✅ ${total > 0 ? `Đã tìm data trong "${targetName}": ${notes.join(' - ')}` : `Không tìm thấy data phù hợp trong "${targetName}"`}`)
-        else this.sendLog(`❌ Lỗi tìm data trong "${targetName}": ${errMsg}`)
+        if (isSuccess) await this.logCampaignProgress(campaign.id, `✅ ${total > 0 ? `Đã tìm data trong "${targetName}": ${notes.join(' - ')}` : `Không tìm thấy data phù hợp trong "${targetName}"`}`)
+        else await this.logCampaignProgress(campaign.id, `❌ Lỗi tìm data trong "${targetName}": ${errMsg}`)
       } catch (err) { console.error('Failed log find data:', err) }
 
       if (isSuccess) {
@@ -1210,12 +1191,12 @@ export class CampaignScheduler {
         })
         if (posted) {
           await this.syncGroupPostContactStatus(accountId, detail, requiresPostApproval)
-          this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
-          if (isPending) this.sendLog(`⏳ Bài đang chờ duyệt`)
-          if (postUrl) this.sendLog(`🔗 Link bài post: ${postUrl}`)
+          await this.logCampaignProgress(campaign.id, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
+          if (isPending) await this.logCampaignProgress(campaign.id, `⏳ Bài đang chờ duyệt`)
+          if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)
           await this.enqueuePostBumpAfterGroupPost(campaign, postUrl)
         } else {
-          this.sendLog(`❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
+          await this.logCampaignProgress(campaign.id, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
         }
       } catch (err) { console.error('Failed log group post:', err) }
     }
@@ -1237,8 +1218,8 @@ export class CampaignScheduler {
           log: detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
           data: isPending ? { isPending: true } : undefined
         })
-        this.sendLog(`📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
-        if (isPending) this.sendLog(`⏳ Bài đang chờ duyệt`)
+        await this.logCampaignProgress(campaign.id, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
+        if (isPending) await this.logCampaignProgress(campaign.id, `⏳ Bài đang chờ duyệt`)
       } catch (err) { console.error('Failed log post:', err) }
       void s
     }
@@ -1258,8 +1239,7 @@ export class CampaignScheduler {
     if (groupPostCommentAdjustOutput.skippedByGroupMode === true) {
       const reason = String(groupPostCommentAdjustOutput.skipReason || 'Bỏ qua comment vì group không khớp điều kiện comment')
       try {
-        await this.supabase.appendCampaignLog(campaign.id, detail ? `${reason}: ${inputDataName}` : reason)
-        this.sendLog(`⚠️ ${reason}${detail ? ` tại "${inputDataName}"` : ''}`)
+        await this.logCampaignProgress(campaign.id, `⚠️ ${reason}${detail ? ` tại "${inputDataName}"` : ''}`)
       } catch (err) { console.error('Failed append group comment skip log:', err) }
     }
 
@@ -1307,7 +1287,7 @@ export class CampaignScheduler {
           log: logText,
           data: { commentPosition: position, iteration: loggedCommentCount, commentType: commentType || undefined, commentContent: text, commentImageCount: imageCount }
         })
-        this.sendLog(`💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
+        await this.logCampaignProgress(campaign.id, `💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
       } catch (err) { console.error('Failed log comment:', err) }
     }
 
@@ -1325,12 +1305,7 @@ export class CampaignScheduler {
             ? `Không tìm thấy bài phù hợp với từ khoá "${keyword}" trong ${targetName}`
             : `Không tìm thấy bài nào để lọc từ khoá "${keyword}" trong ${targetName}`)
           : `Không tìm thấy bài phù hợp để comment trong ${targetName}`
-        try {
-          await this.supabase.appendCampaignLog(campaign.id, reason)
-        } catch (err) {
-          console.error('Failed append no-match comment seeding log:', err)
-        }
-        this.sendLog(`ℹ️ ${reason}`)
+        await this.logCampaignProgress(campaign.id, `ℹ️ ${reason}`)
       }
     }
 
@@ -1358,8 +1333,8 @@ export class CampaignScheduler {
           errorCode,
           log: status === 'thành công' ? `Nhắn tin thành công đến ${inputDataName}` : `Lỗi nhắn tin đến ${inputDataName}: ${errMsg}`
         })
-        if (status === 'thành công') this.sendLog(`💬 Nhắn tin thành công đến "${inputDataName}"`)
-        else this.sendLog(`❌ Lỗi nhắn tin "${inputDataName}": ${errMsg}`)
+        if (status === 'thành công') await this.logCampaignProgress(campaign.id, `💬 Nhắn tin thành công đến "${inputDataName}"`)
+        else await this.logCampaignProgress(campaign.id, `❌ Lỗi nhắn tin "${inputDataName}": ${errMsg}`)
       } catch (err) { console.error('Failed log message:', err) }
     }
 
@@ -1387,7 +1362,7 @@ export class CampaignScheduler {
             log: `Bỏ qua kết bạn với ${inputDataName} (đã là bạn bè hoặc nút bị ẩn)`,
             data: { alreadyFriend: true }
           })
-          this.sendLog(`ℹ️ Bỏ qua kết bạn với "${inputDataName}" (đã là bạn hoặc nút bị ẩn)`)
+          await this.logCampaignProgress(campaign.id, `ℹ️ Bỏ qua kết bạn với "${inputDataName}" (đã là bạn hoặc nút bị ẩn)`)
         } else if (clicked) {
           await this.supabase.createCampaignDetail({
             inputDataId: detail?.id,
@@ -1398,7 +1373,7 @@ export class CampaignScheduler {
             status: 'thành công',
             log: `Kết bạn thành công với ${inputDataName}`
           })
-          this.sendLog(`🤝 Kết bạn thành công với "${inputDataName}"`)
+          await this.logCampaignProgress(campaign.id, `🤝 Kết bạn thành công với "${inputDataName}"`)
         } else {
           // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
           const status: 'thất bại' | 'lỗi' = s.status === 'error' ? 'lỗi' : 'thất bại'
@@ -1413,7 +1388,7 @@ export class CampaignScheduler {
             errorCode,
             log: `Lỗi kết bạn với ${inputDataName}: ${errMsg}`
           })
-          this.sendLog(`❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
+          await this.logCampaignProgress(campaign.id, `❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
         }
       } catch (err) { console.error('Failed log friend:', err) }
     }
@@ -1463,14 +1438,10 @@ export class CampaignScheduler {
           })
         }
 
-        await this.supabase.appendCampaignLog(
-          targetCampaign.id,
-          `Đã thêm ${newUids.length} UID từ chiến dịch "${sourceCampaign.name}"`
-        )
+        await this.logCampaignProgress(targetCampaign.id, `✅ Đã thêm ${newUids.length} UID vào chiến dịch "${targetCampaign.name}"`)
         if (targetCampaign.status === 'hoàn thành') {
           await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
         }
-        this.sendLog(`✅ Đã thêm ${newUids.length} UID vào chiến dịch "${targetCampaign.name}"`)
       } catch (err) {
         console.error('Failed to push found UIDs to target campaign:', err)
       }
@@ -1522,14 +1493,10 @@ export class CampaignScheduler {
           })
         }
 
-        await this.supabase.appendCampaignLog(
-          targetCampaign.id,
-          `Đã thêm ${newPostLinks.length} link bài post từ chiến dịch "${sourceCampaign.name}"${skippedExistingCount > 0 ? `, bỏ qua ${skippedExistingCount} link đã có` : ''}`
-        )
+        await this.logCampaignProgress(targetCampaign.id, `✅ Đã thêm ${newPostLinks.length} link bài post vào chiến dịch "${targetCampaign.name}"${skippedExistingCount > 0 ? `, bỏ qua ${skippedExistingCount} link đã có` : ''}`)
         if (targetCampaign.status === 'hoàn thành') {
           await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
         }
-        this.sendLog(`✅ Đã thêm ${newPostLinks.length} link bài post vào chiến dịch "${targetCampaign.name}"${skippedExistingCount > 0 ? `, bỏ qua ${skippedExistingCount} link đã có` : ''}`)
       } catch (err) {
         console.error('Failed to push found post links to target campaign:', err)
       }
@@ -1570,10 +1537,7 @@ export class CampaignScheduler {
     const targets = await this.resolvePostBumpTargets(campaign)
     if (targets.length === 0) {
       const message = 'Chưa có chiến dịch up tin để nhận link bài post'
-      await this.supabase.appendCampaignLog(campaign.id, message).catch(err => {
-        console.error('Failed append post bump missing target log:', err)
-      })
-      this.sendLog(`⚠️ ${message}`)
+      await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
       return
     }
 
@@ -1613,10 +1577,7 @@ export class CampaignScheduler {
     }
 
     const message = `Đã thêm ${count} lượt up tin cho bài post`
-    await this.supabase.appendCampaignLog(campaign.id, message).catch(err => {
-      console.error('Failed append post bump enqueue log:', err)
-    })
-    this.sendLog(`✅ ${message}`)
+    await this.logCampaignProgress(campaign.id, `✅ ${message}`)
   }
 
   private async resolvePostBumpTargets(campaign: Campaign): Promise<PostBumpTarget[]> {
@@ -1728,10 +1689,7 @@ export class CampaignScheduler {
       images: []
     })
 
-    await this.supabase.appendCampaignLog(created.id, `Tạo chiến dịch up tin từ "${sourceCampaign.name}"`).catch(err => {
-      console.error('Failed append created post bump campaign log:', err)
-    })
-    this.sendLog(`✅ Đã tạo chiến dịch up tin "${created.name}"`)
+    await this.logCampaignProgress(created.id, `✅ Đã tạo chiến dịch up tin "${created.name}"`)
     return created
   }
 
@@ -1875,6 +1833,16 @@ export class CampaignScheduler {
     }
   }
 
+  private async logCampaignProgress(campaignId: number, message: string): Promise<void> {
+    try {
+      const updated = await this.supabase.appendCampaignLog(campaignId, message)
+      this.broadcastCampaignUpdate(updated)
+    } catch (err) {
+      console.error('Failed append campaign progress log:', err)
+    }
+    this.sendLog(message)
+  }
+
   private getAutomationPage(account: AutoAccount, campaignId?: number): AutomationPageRef {
     this.selectAutomationBrowser(account.id, campaignId)
     return {
@@ -1950,12 +1918,16 @@ export class CampaignScheduler {
    */
   private async updateCampaignAndBroadcast(id: number, updates: Partial<Campaign>): Promise<Campaign> {
     const updated = await this.supabase.updateCampaign(id, updates)
+    this.broadcastCampaignUpdate(updated)
+    return updated
+  }
+
+  private broadcastCampaignUpdate(campaign: Campaign): void {
     try {
-      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, updated)
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
     } catch {
       // Window may be closed
     }
-    return updated
   }
 
   /**
