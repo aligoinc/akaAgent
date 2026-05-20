@@ -377,7 +377,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
   return mapCampaignFromDB(newCamp)
 }
 
-export async function appendCampaignLog(campaignId: number, logText: string): Promise<void> {
+export async function appendCampaignLog(campaignId: number, logText: string): Promise<Campaign> {
   const { data: current } = await client()
     .from('auto_campaigns')
     .select('log')
@@ -388,12 +388,15 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
   const newLog = `[${timestamp}] ${logText}`
   const fullLog = current?.log ? `${current.log}\n${newLog}` : newLog
 
-  const { error } = await client()
+  const { data, error } = await client()
     .from('auto_campaigns')
     .update({ log: fullLog, updated_at: new Date().toISOString() })
     .eq('id', campaignId)
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .single()
 
   if (error) throw new Error(`Failed to append campaign log: ${error.message}`)
+  return mapCampaignFromDB(data)
 }
 
 export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {

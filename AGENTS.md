@@ -137,6 +137,7 @@ Status values trong DB lưu **tiếng Việt có dấu**:
 - Viết tiếng Việt tự nhiên: `"Đã comment vào bài thứ 3: ..."`, `"Đăng bài thành công vào ..."`, `"Bài đang chờ duyệt"`
 - TRÁNH: `"Đã log X"`, `"lần X/Y"`, `"vị trí #N"`, ID strings, stacktraces, `"position"`, `"iteration"`, `"campaign_detail"` lộ ra UI
 - Technical metadata (`commentPosition`, `iteration`, `commentType`) → JSONB `data` column, KHÔNG vào `log` string
+- Progress log theo campaign dùng `CampaignScheduler.logCampaignProgress()` để vừa append vào `auto_campaigns.log`, vừa bắn panel phải "Tiến trình", vừa broadcast campaign updated; UI đọc `auto_campaigns.log` ở tab "Lịch sử chạy".
 - **Log order**: action milestone trước (📝 Đăng bài), rồi metadata (⏳ Chờ duyệt), rồi link/artifact (🔗), milestones tiếp theo (💬), cuối cùng summary (✅/❌)
 - Emoji vocab thống nhất: 📝 Đăng bài • 💬 Comment/Nhắn tin • 🔗 Link • ⏳ Chờ duyệt • ✅ Hoàn thành • ❌ Lỗi • 👋 Rời nhóm • 🤝 Kết bạn/Tham gia • 🔀 Shuffle/Share • ⚠️ Cảnh báo • ℹ️ Info • 🎬 Reels
 
