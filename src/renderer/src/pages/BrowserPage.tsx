@@ -22,6 +22,8 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   const [backgroundPreviews, setBackgroundPreviews] = useState<Map<number, {
     active: boolean
     image?: string
+    context?: 'campaign' | 'contact-scan'
+    title?: string
     timestamp: string
   }>>(new Map())
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
@@ -61,7 +63,9 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
         const existing = next.get(preview.accountId)
         next.set(preview.accountId, {
           active: preview.active,
+          context: preview.context || existing?.context || 'campaign',
           image: preview.image || existing?.image,
+          title: preview.title || existing?.title,
           timestamp: preview.timestamp
         })
         return next
@@ -95,6 +99,10 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   }
 
   const activeBackgroundPreview = activeAccountId ? backgroundPreviews.get(activeAccountId) : null
+  const previewTitle = activeBackgroundPreview?.title || (activeBackgroundPreview?.context === 'contact-scan' ? 'Đang quét data nền' : 'Đang chạy nền')
+  const previewDescription = activeBackgroundPreview?.context === 'contact-scan'
+    ? 'Quét data đang chạy trong trình duyệt nền.'
+    : 'Automation đang chạy trong trình duyệt nền.'
 
   // Register webview with main process when it's ready
   const handleWebviewRef = useCallback((account: AutoAccount, el: any) => {
@@ -180,12 +188,12 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
             <div className="browser-background-preview-toolbar">
               <div className="browser-background-preview-status">
                 <span className="browser-background-preview-pulse" />
-                <span>Đang chạy nền</span>
+                <span>{previewTitle}</span>
               </div>
               <div className="browser-background-preview-meta">Live preview</div>
             </div>
             <div className="browser-background-preview-footer">
-              <span>Automation đang chạy trong trình duyệt nền.</span>
+              <span>{previewDescription}</span>
               <span>{new Date(activeBackgroundPreview.timestamp).toLocaleTimeString('vi-VN')}</span>
             </div>
           </div>

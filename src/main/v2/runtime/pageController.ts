@@ -543,6 +543,18 @@ export class PageController {
     }
   }
 
+  async getCookieHeader(url: string): Promise<string> {
+    try {
+      const cookies = await this.wc.session.cookies.get({ url })
+      return cookies
+        .filter(cookie => cookie.name && cookie.value !== undefined)
+        .map(cookie => `${cookie.name}=${cookie.value}`)
+        .join('; ')
+    } catch {
+      return ''
+    }
+  }
+
   /** Tải URL về file local. Lấy cookie từ webview session để bypass FB block. */
   async downloadUrl(url: string, opts: { timeout?: number } = {}): Promise<{ filePath: string; byteLength: number; contentType: string }> {
     if (!url) throw new Error('downloadUrl: thiếu url')
