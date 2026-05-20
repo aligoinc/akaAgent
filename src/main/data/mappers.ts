@@ -8,6 +8,7 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
     loginStatus: row.login_status as string,
     status: row.status as string,
     isActive: row.is_active as boolean,
+    rateLimitMinutes: (row.rate_limit_minutes as number | null) ?? null,
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,

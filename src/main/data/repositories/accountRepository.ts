@@ -4,6 +4,12 @@ import { mapAccountFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
+const DEFAULT_RATE_LIMIT_MINUTES = 65
+
+function normalizeRateLimitMinutes(value: unknown): number {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
+}
 
 export async function getAccount(id: number): Promise<AutoAccount | null> {
   const u = requireCurrentUser()
@@ -40,6 +46,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
     login_status: account.loginStatus || 'ch\u01b0a \u0111\u0103ng nh\u1eadp',
     status: account.status || 'ch\u1edd x\u1eed l\u00fd',
     is_active: account.isActive ?? true,
+    rate_limit_minutes: normalizeRateLimitMinutes(account.rateLimitMinutes),
     staff_id: u.staffId,
     organization_id: u.organizationId
   }
@@ -62,6 +69,7 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
   if (updates.loginStatus !== undefined) payload.login_status = updates.loginStatus
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.isActive !== undefined) payload.is_active = updates.isActive
+  if (updates.rateLimitMinutes !== undefined) payload.rate_limit_minutes = normalizeRateLimitMinutes(updates.rateLimitMinutes)
 
   const { data, error } = await client()
     .from('auto_accounts')
