@@ -98,4 +98,25 @@ export class SupabaseService {
     input: Parameters<typeof accountContactRepo.upsertGroupPostContactStatus>[0]
   ) { return accountContactRepo.upsertGroupPostContactStatus(input) }
   deleteContacts(accountId: number, contactType: ContactType) { return accountContactRepo.deleteContacts(accountId, contactType) }
+  listContactGroups(accountId: number, contactType?: ContactType) {
+    return accountContactRepo.listContactGroups(accountId, contactType)
+  }
+  createContactGroup(accountId: number, contactType: ContactType, name: string) {
+    return accountContactRepo.createContactGroup(accountId, contactType, name)
+  }
+  updateContactGroup(groupId: number, name: string) {
+    return accountContactRepo.updateContactGroup(groupId, name)
+  }
+  deleteContactGroup(groupId: number) {
+    return accountContactRepo.deleteContactGroup(groupId)
+  }
+  listContactGroupContacts(groupId: number) {
+    return accountContactRepo.listContactGroupContacts(groupId)
+  }
+  addContactsToGroup(groupId: number, contactIds: number[]) {
+    return accountContactRepo.addContactsToGroup(groupId, contactIds)
+  }
+  removeContactsFromGroup(groupId: number, contactIds: number[]) {
+    return accountContactRepo.removeContactsFromGroup(groupId, contactIds)
+  }
 }

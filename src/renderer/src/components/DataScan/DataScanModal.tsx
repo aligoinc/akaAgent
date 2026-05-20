@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Download, Maximize2, Minimize2, RefreshCw, Search, Square, X } from 'lucide-react'
+import { Check, Download, Folder, Maximize2, Minimize2, Plus, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
-import { AutoAccount, AutoAccountContact, ContactType } from '../../../../shared/types'
+import { AutoAccountContact, AutoAccountContactGroup, ContactType } from '../../../../shared/types'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
+import DataScanGroupManagementModal from './DataScanGroupManagementModal'
+import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 
 export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages'
+type ContactStatusFilter = 'active' | 'inactive' | 'all'
 
 interface DataScanActionDef {
   id: DataScanAction
@@ -18,6 +21,8 @@ interface DataScanActionDef {
 interface DataScanModalProps {
   initialAction?: DataScanAction
   initialAccountId?: number
+  initialShowGroupPanel?: boolean
+  initialStatusFilter?: ContactStatusFilter
   lockAction?: boolean
   onClose: () => void
   onSelect?: (contacts: AutoAccountContact[]) => void
@@ -27,7 +32,7 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
   {
     id: 'facebook_friends',
     label: 'Facebook - Lấy danh sách bạn bè',
-    contactType: 'friend',
+    contactType: 'person',
     emptyText: 'Chưa có dữ liệu bạn bè',
     loadingText: 'Đang tải danh sách bạn bè...'
   },
@@ -84,6 +89,36 @@ const getGroupApprovalStatus = (contact: AutoAccountContact) => {
   return 'Chưa biết'
 }
 
+const getContactStatusLabel = (contact: AutoAccountContact) => {
+  if (contact.contactType === 'person') return contact.isFriend ? 'Bạn bè' : 'Không còn bạn bè'
+  if (contact.contactType === 'group') return contact.isJoined ? 'Đã tham gia' : 'Chưa tham gia'
+  return ''
+}
+
+const getContactTypeLabel = (contactType: ContactType) => {
+  if (contactType === 'person') return 'User Facebook'
+  if (contactType === 'group') return 'Group Facebook'
+  return 'Page Facebook'
+}
+
+const getStatusFilterOptions = (contactType: ContactType): Array<{ value: ContactStatusFilter; label: string }> => {
+  if (contactType === 'person') {
+    return [
+      { value: 'active', label: 'Bạn bè' },
+      { value: 'inactive', label: 'Không còn bạn bè' },
+      { value: 'all', label: 'Tất cả' }
+    ]
+  }
+  if (contactType === 'group') {
+    return [
+      { value: 'active', label: 'Đã tham gia' },
+      { value: 'inactive', label: 'Chưa tham gia' },
+      { value: 'all', label: 'Tất cả' }
+    ]
+  }
+  return [{ value: 'all', label: 'Tất cả' }]
+}
+
 const getDedupeKey = (contact: AutoAccountContact) => {
   const value = getContactValue(contact) || contact.name || String(contact.id)
   try {
@@ -113,6 +148,8 @@ const dedupeContacts = (contacts: AutoAccountContact[]) => {
 export default function DataScanModal({
   initialAction = 'facebook_friends',
   initialAccountId,
+  initialShowGroupPanel = false,
+  initialStatusFilter,
   lockAction = false,
   onClose,
   onSelect
@@ -131,11 +168,27 @@ export default function DataScanModal({
   const [scanLoading, setScanLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<number>>(new Set())
+  const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>(initialStatusFilter || 'active')
   const [dedupeOnOutput, setDedupeOnOutput] = useState(true)
   const [rangeStart, setRangeStart] = useState(1)
   const [rangeEnd, setRangeEnd] = useState(100)
   const [progressMessages, setProgressMessages] = useState<string[]>([])
   const [minimized, setMinimized] = useState(false)
+  const [contactGroups, setContactGroups] = useState<AutoAccountContactGroup[]>([])
+  const [allContactGroups, setAllContactGroups] = useState<AutoAccountContactGroup[]>([])
+  const [groupsLoading, setGroupsLoading] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [showAddGroupModal, setShowAddGroupModal] = useState(false)
+  const [showNewGroupInput, setShowNewGroupInput] = useState(false)
+  const [modalSelectedGroupIds, setModalSelectedGroupIds] = useState<Set<number>>(new Set())
+  const [savingGroupMembers, setSavingGroupMembers] = useState(false)
+  const [showGroupPanel, setShowGroupPanel] = useState(initialShowGroupPanel)
+  const [showGroupSelectionModal, setShowGroupSelectionModal] = useState(false)
+  const [activeGroupId, setActiveGroupId] = useState<number | null>(null)
+  const [groupContacts, setGroupContacts] = useState<AutoAccountContact[]>([])
+  const [groupContactsLoading, setGroupContactsLoading] = useState(false)
+  const [groupContactCache, setGroupContactCache] = useState<Record<number, AutoAccountContact[]>>({})
 
   const actionDef = useMemo(
     () => DATA_SCAN_ACTIONS.find(item => item.id === action) || DATA_SCAN_ACTIONS[0],
@@ -145,6 +198,11 @@ export default function DataScanModal({
     () => accounts.find(account => account.id === accountId),
     [accounts, accountId]
   )
+  const statusFilterOptions = useMemo(
+    () => getStatusFilterOptions(actionDef.contactType),
+    [actionDef.contactType]
+  )
+  const hasStatusFilter = actionDef.contactType === 'person' || actionDef.contactType === 'group'
 
   useEffect(() => {
     loadAccounts()
@@ -173,6 +231,7 @@ export default function DataScanModal({
     try {
       const data = await window.electronAPI.listContacts(accountId, actionDef.contactType)
       setContacts(data)
+      setGroupContactCache({})
     } catch (err: any) {
       console.error('Failed to load scan contacts:', err)
       showAlert(err?.message || 'Không thể tải danh sách data.', 'error')
@@ -181,10 +240,81 @@ export default function DataScanModal({
     }
   }, [accountId, actionDef.contactType, showAlert])
 
+  const loadContactGroups = useCallback(async () => {
+    if (!window.electronAPI || !accountId) {
+      setContactGroups([])
+      setAllContactGroups([])
+      setActiveGroupId(null)
+      return
+    }
+    setGroupsLoading(true)
+    try {
+      const [groups, allGroups] = await Promise.all([
+        window.electronAPI.listContactGroups(accountId, actionDef.contactType),
+        window.electronAPI.listContactGroups(accountId)
+      ])
+      setContactGroups(groups)
+      setAllContactGroups(allGroups)
+      setActiveGroupId(prev => prev && allGroups.some(group => group.id === prev) ? prev : allGroups[0]?.id || null)
+    } catch (err: any) {
+      console.error('Failed to load contact groups:', err)
+      showAlert(err?.message || 'Không thể tải danh sách nhóm data.', 'error')
+    } finally {
+      setGroupsLoading(false)
+    }
+  }, [accountId, actionDef.contactType, showAlert])
+
+  const loadContactsForGroup = useCallback(async (groupId: number, force = false): Promise<AutoAccountContact[]> => {
+    if (!window.electronAPI) return []
+    if (!force && groupContactCache[groupId]) return groupContactCache[groupId]
+    const data = await window.electronAPI.listContactGroupContacts(groupId)
+    setGroupContactCache(prev => ({ ...prev, [groupId]: data }))
+    return data
+  }, [groupContactCache])
+
   useEffect(() => {
     setSelectedIds(new Set())
+    setSelectedGroupIds(new Set())
+    setModalSelectedGroupIds(new Set())
+    setStatusFilter(hasStatusFilter ? (initialStatusFilter || 'active') : 'all')
+    setNewGroupName('')
+    setShowNewGroupInput(false)
+    setShowAddGroupModal(false)
+    setShowGroupPanel(initialShowGroupPanel)
+    setShowGroupSelectionModal(false)
+    setActiveGroupId(null)
+    setGroupContacts([])
+    setGroupContactCache({})
+    setAllContactGroups([])
     loadCachedContacts()
-  }, [loadCachedContacts])
+    loadContactGroups()
+  }, [hasStatusFilter, initialShowGroupPanel, initialStatusFilter, loadCachedContacts, loadContactGroups])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadActiveGroupContacts() {
+      if (!activeGroupId) {
+        setGroupContacts([])
+        return
+      }
+      setGroupContactsLoading(true)
+      try {
+        const data = await loadContactsForGroup(activeGroupId)
+        if (!cancelled) setGroupContacts(data)
+      } catch (err: any) {
+        if (!cancelled) {
+          console.error('Failed to load contacts in group:', err)
+          showAlert(err?.message || 'Không thể tải data trong nhóm.', 'error')
+        }
+      } finally {
+        if (!cancelled) setGroupContactsLoading(false)
+      }
+    }
+    loadActiveGroupContacts()
+    return () => {
+      cancelled = true
+    }
+  }, [activeGroupId, loadContactsForGroup, showAlert])
 
   useEffect(() => {
     if (!window.electronAPI?.onContactsProgress) return
@@ -208,6 +338,7 @@ export default function DataScanModal({
       setScanLoading(false)
       setMinimized(false)
       loadCachedContacts()
+      loadContactGroups()
 
       if (!result.success) {
         if (!wasStopped) showAlert(result.error || 'Tải data thất bại.', 'error')
@@ -216,12 +347,22 @@ export default function DataScanModal({
       if (!wasStopped) showAlert(`Đã tải ${result.count} data.`, 'success')
     })
     return unsubscribe
-  }, [accountId, actionDef.contactType, loadCachedContacts, showAlert])
+  }, [accountId, actionDef.contactType, loadCachedContacts, loadContactGroups, showAlert])
+
+  const matchesStatusFilter = useCallback((contact: AutoAccountContact) => {
+    if (statusFilter === 'all') return true
+    if (actionDef.contactType === 'person') {
+      return statusFilter === 'active' ? contact.isFriend === true : contact.isFriend !== true
+    }
+    if (actionDef.contactType === 'group') {
+      return statusFilter === 'active' ? contact.isJoined === true : contact.isJoined !== true
+    }
+    return true
+  }, [actionDef.contactType, statusFilter])
 
   const visibleContacts = useMemo(() => {
-    if (actionDef.contactType !== 'group') return contacts
-    return contacts.filter(contact => contact.isJoined === true)
-  }, [actionDef.contactType, contacts])
+    return contacts.filter(matchesStatusFilter)
+  }, [contacts, matchesStatusFilter])
 
   const filteredContacts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('vi-VN')
@@ -231,6 +372,7 @@ export default function DataScanModal({
       contact.uid,
       contact.url,
       getContactInfo(contact),
+      getContactStatusLabel(contact),
       actionDef.contactType === 'group' ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
   }, [actionDef.contactType, search, visibleContacts])
@@ -240,16 +382,50 @@ export default function DataScanModal({
     () => visibleContacts.filter(contact => selectedIds.has(contact.id)),
     [selectedIds, visibleContacts]
   )
-  const outputContacts = useMemo(
-    () => dedupeOnOutput ? dedupeContacts(selectedContacts) : selectedContacts,
-    [dedupeOnOutput, selectedContacts]
+  const selectedGroupContacts = useMemo(() => {
+    const rows: AutoAccountContact[] = []
+    selectedGroupIds.forEach(groupId => {
+      rows.push(...(groupContactCache[groupId] || []).filter(matchesStatusFilter))
+    })
+    return rows
+  }, [groupContactCache, matchesStatusFilter, selectedGroupIds])
+  const rawOutputContacts = useMemo(
+    () => [...selectedContacts, ...selectedGroupContacts],
+    [selectedContacts, selectedGroupContacts]
   )
-  const tableColSpan = actionDef.contactType === 'group' ? 6 : 5
+  const outputContacts = useMemo(
+    () => dedupeOnOutput ? dedupeContacts(rawOutputContacts) : rawOutputContacts,
+    [dedupeOnOutput, rawOutputContacts]
+  )
+  const activeContactGroup = useMemo(
+    () => allContactGroups.find(group => group.id === activeGroupId) || null,
+    [activeGroupId, allContactGroups]
+  )
+  const activeGroupContactType = activeContactGroup?.contactType || actionDef.contactType
+  const groupContactsByStatus = useMemo(
+    () => activeGroupContactType === actionDef.contactType ? groupContacts.filter(matchesStatusFilter) : groupContacts,
+    [activeGroupContactType, actionDef.contactType, groupContacts, matchesStatusFilter]
+  )
+  const filteredGroupContacts = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('vi-VN')
+    if (!query) return groupContactsByStatus
+    return groupContactsByStatus.filter(contact => [
+      contact.name,
+      contact.uid,
+      contact.url,
+      getContactInfo(contact),
+      getContactStatusLabel(contact),
+      contact.contactType === 'group' ? getGroupApprovalStatus(contact) : ''
+    ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
+  }, [groupContactsByStatus, search])
+  const tableColSpan = actionDef.contactType === 'group' ? 7 : actionDef.contactType === 'person' ? 6 : 5
+  const groupTableColSpan = activeGroupContactType === 'group' ? 7 : activeGroupContactType === 'person' ? 6 : 5
   const emptyTableText = contacts.length === 0
     ? actionDef.emptyText
-    : actionDef.contactType === 'group' && visibleContacts.length === 0 && search.trim().length === 0
-      ? 'Chưa có group đã tham gia.'
+    : visibleContacts.length === 0 && search.trim().length === 0
+      ? 'Không có data phù hợp với bộ lọc.'
       : 'Không tìm thấy data phù hợp.'
+  const canSaveGroupModal = modalSelectedGroupIds.size > 0 || (showNewGroupInput && newGroupName.trim().length > 0)
 
   const toggleContact = (id: number) => {
     setSelectedIds(prev => {
@@ -284,6 +460,213 @@ export default function DataScanModal({
     })
   }
 
+  const handleRenameContactGroup = async (group: AutoAccountContactGroup, name: string) => {
+    if (!window.electronAPI) return
+    const normalizedName = name.trim()
+    if (!normalizedName || normalizedName === group.name) return
+    try {
+      const updated = await window.electronAPI.updateContactGroup(group.id, normalizedName)
+      setContactGroups(prev => prev.map(item => item.id === group.id ? { ...item, ...updated } : item))
+      setAllContactGroups(prev => prev.map(item => item.id === group.id ? { ...item, ...updated } : item))
+      showAlert('Đã đổi tên nhóm data.', 'success')
+    } catch (err: any) {
+      console.error('Failed to rename contact group:', err)
+      showAlert(err?.message || 'Không thể đổi tên nhóm data.', 'error')
+      throw err
+    }
+  }
+
+  const handleDeleteContactGroup = (group: AutoAccountContactGroup) => {
+    if (!window.electronAPI) return
+    showConfirm(
+      `Xoá nhóm "${group.name}"? Data gốc sẽ không bị xoá.`,
+      async () => {
+        try {
+          await window.electronAPI.deleteContactGroup(group.id)
+          setContactGroups(prev => prev.filter(item => item.id !== group.id))
+          setAllContactGroups(prev => prev.filter(item => item.id !== group.id))
+          setSelectedGroupIds(prev => {
+            const next = new Set(prev)
+            next.delete(group.id)
+            return next
+          })
+          setGroupContactCache(prev => {
+            const next = { ...prev }
+            delete next[group.id]
+            return next
+          })
+          setActiveGroupId(prev => prev === group.id ? null : prev)
+          setModalSelectedGroupIds(prev => {
+            const next = new Set(prev)
+            next.delete(group.id)
+            return next
+          })
+          showAlert('Đã xoá nhóm data.', 'success')
+        } catch (err: any) {
+          console.error('Failed to delete contact group:', err)
+          showAlert(err?.message || 'Không thể xoá nhóm data.', 'error')
+        }
+      },
+      { title: 'Xoá nhóm data', confirmText: 'Xoá', variant: 'danger' }
+    )
+  }
+
+  const handleToggleGroupOutput = async (groupId: number) => {
+    if (selectedGroupIds.has(groupId)) {
+      setSelectedGroupIds(prev => {
+        const next = new Set(prev)
+        next.delete(groupId)
+        return next
+      })
+      return
+    }
+
+    const group = allContactGroups.find(item => item.id === groupId)
+    if (!group || group.contactType !== actionDef.contactType) {
+      showAlert('Nhóm này không đúng loại data hiện tại nên không thể đưa vào danh sách chọn.', 'error')
+      return
+    }
+
+    try {
+      await loadContactsForGroup(groupId)
+      setSelectedGroupIds(prev => {
+        const next = new Set(prev)
+        next.add(groupId)
+        return next
+      })
+    } catch (err: any) {
+      console.error('Failed to select contact group:', err)
+      showAlert(err?.message || 'Không thể chọn nhóm data.', 'error')
+    }
+  }
+
+  const handleActivateGroup = (groupId: number) => {
+    setActiveGroupId(groupId)
+  }
+
+  const handleOpenAddGroupModal = () => {
+    if (selectedContacts.length === 0) {
+      showAlert('Vui lòng tích chọn data trước khi thêm vào nhóm.', 'error')
+      return
+    }
+    setModalSelectedGroupIds(new Set())
+    setNewGroupName('')
+    setShowNewGroupInput(false)
+    setShowAddGroupModal(true)
+  }
+
+  const handleToggleModalGroup = (group: AutoAccountContactGroup) => {
+    if (group.contactType !== actionDef.contactType) return
+    setModalSelectedGroupIds(prev => {
+      const next = new Set(prev)
+      if (next.has(group.id)) next.delete(group.id)
+      else next.add(group.id)
+      return next
+    })
+  }
+
+  const closeAddGroupModal = () => {
+    setShowAddGroupModal(false)
+    setNewGroupName('')
+    setShowNewGroupInput(false)
+    setModalSelectedGroupIds(new Set())
+  }
+
+  const handleSaveSelectedToGroups = async () => {
+    if (!window.electronAPI || !accountId) return
+    const contactIds = selectedContacts.map(contact => contact.id)
+    if (contactIds.length === 0) {
+      showAlert('Vui lòng tích chọn data trước khi thêm vào nhóm.', 'error')
+      return
+    }
+
+    const newName = newGroupName.trim()
+    const shouldCreateGroup = showNewGroupInput && newName.length > 0
+    if (modalSelectedGroupIds.size === 0 && !shouldCreateGroup) {
+      showAlert('Vui lòng chọn nhóm hoặc nhập tên nhóm mới.', 'error')
+      return
+    }
+
+    setSavingGroupMembers(true)
+    try {
+      const groupIds = Array.from(modalSelectedGroupIds).filter(groupId => {
+        const group = allContactGroups.find(item => item.id === groupId)
+        return group?.contactType === actionDef.contactType
+      })
+      let createdGroup: AutoAccountContactGroup | null = null
+      if (shouldCreateGroup) {
+        createdGroup = await window.electronAPI.createContactGroup(accountId, actionDef.contactType, newName)
+        groupIds.push(createdGroup.id)
+      }
+
+      let addedCount = 0
+      for (const groupId of groupIds) {
+        const result = await window.electronAPI.addContactsToGroup(groupId, contactIds)
+        addedCount += result.count
+      }
+
+      setGroupContactCache(prev => {
+        const next = { ...prev }
+        for (const groupId of groupIds) delete next[groupId]
+        return next
+      })
+      await loadContactGroups()
+      if (createdGroup) {
+        setActiveGroupId(createdGroup.id)
+        setShowGroupPanel(true)
+        const data = await loadContactsForGroup(createdGroup.id, true)
+        setGroupContacts(data)
+      }
+      if (!createdGroup && activeGroupId && groupIds.includes(activeGroupId)) {
+        const data = await loadContactsForGroup(activeGroupId, true)
+        setGroupContacts(data)
+      }
+      showAlert(
+        addedCount > 0
+          ? `Đã thêm ${addedCount} data mới vào nhóm.`
+          : 'Các data đã chọn đã có trong nhóm.',
+        'success'
+      )
+      closeAddGroupModal()
+    } catch (err: any) {
+      console.error('Failed to add contacts to group:', err)
+      showAlert(err?.message || 'Không thể thêm data vào nhóm.', 'error')
+    } finally {
+      setSavingGroupMembers(false)
+    }
+  }
+
+  const handleRemoveFromActiveGroup = (contactsToRemove: AutoAccountContact | AutoAccountContact[], onSuccess?: () => void) => {
+    if (!window.electronAPI || !activeGroupId) return
+    const contacts = Array.isArray(contactsToRemove) ? contactsToRemove : [contactsToRemove]
+    const contactIds = Array.from(new Set(contacts.map(contact => contact.id)))
+    if (contactIds.length === 0) return
+    const label = contactIds.length === 1
+      ? `"${contacts[0]?.name || contacts[0]?.uid || 'data'}"`
+      : `${contactIds.length} data đã chọn`
+    showConfirm(
+      `Xoá ${label} khỏi nhóm? Data gốc sẽ không bị xoá.`,
+      async () => {
+        try {
+          await window.electronAPI.removeContactsFromGroup(activeGroupId, contactIds)
+          const contactIdSet = new Set(contactIds)
+          setGroupContacts(prev => prev.filter(item => !contactIdSet.has(item.id)))
+          setGroupContactCache(prev => ({
+            ...prev,
+            [activeGroupId]: (prev[activeGroupId] || []).filter(item => !contactIdSet.has(item.id))
+          }))
+          await loadContactGroups()
+          onSuccess?.()
+          showAlert('Đã xoá data khỏi nhóm.', 'success')
+        } catch (err: any) {
+          console.error('Failed to remove contact from group:', err)
+          showAlert(err?.message || 'Không thể xoá data khỏi nhóm.', 'error')
+        }
+      },
+      { title: 'Xoá data khỏi nhóm', confirmText: 'Xoá', variant: 'danger' }
+    )
+  }
+
   const handleLoadData = async () => {
     if (!window.electronAPI || !accountId) {
       showAlert('Vui lòng chọn tài khoản trước.', 'error')
@@ -301,7 +684,7 @@ export default function DataScanModal({
     stoppedScanIdsRef.current.delete(scanId)
     completedScanIdsRef.current.delete(scanId)
     try {
-      const loader = actionDef.contactType === 'friend'
+      const loader = actionDef.contactType === 'person'
         ? window.electronAPI.loadFriends
         : actionDef.contactType === 'group'
           ? window.electronAPI.loadGroups
@@ -321,6 +704,7 @@ export default function DataScanModal({
         return
       }
       await loadCachedContacts()
+      await loadContactGroups()
       if (wasStopped) return
 
       showAlert(`Đã tải ${result.count} data.`, 'success')
@@ -419,7 +803,7 @@ export default function DataScanModal({
         <div className="modal-header data-scan-header">
           <div>
             <div className="modal-title">Quét data</div>
-            <div className="data-scan-subtitle">{outputContacts.length}/{selectedContacts.length || 0} data sẵn sàng</div>
+            <div className="data-scan-subtitle">{outputContacts.length}/{rawOutputContacts.length || 0} data sẵn sàng</div>
           </div>
           <div className="data-scan-header-actions">
             {scanLoading && (
@@ -493,6 +877,21 @@ export default function DataScanModal({
               <label>Loại tài khoản</label>
               <input className="stepper-input" value={selectedAccount?.flatformType || ''} disabled />
             </div>
+
+            {hasStatusFilter && (
+              <div className="stepper-form-group">
+                <label>Hiển thị</label>
+                <select
+                  className="stepper-input"
+                  value={statusFilter}
+                  onChange={event => setStatusFilter(event.target.value as ContactStatusFilter)}
+                >
+                  {statusFilterOptions.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="data-scan-toolbar">
@@ -552,6 +951,7 @@ export default function DataScanModal({
               <span>Lọc trùng dữ liệu khi chọn, xuất excel</span>
             </label>
             <span>{selectedIds.size} đã tích chọn</span>
+            {selectedGroupIds.size > 0 && <span>{selectedGroupIds.size} nhóm đã chọn</span>}
           </div>
 
           {progressMessages.length > 0 && (
@@ -578,6 +978,8 @@ export default function DataScanModal({
                   <th>Tên</th>
                   <th>UID</th>
                   <th>Link</th>
+                  {actionDef.contactType === 'person' && <th>Bạn bè</th>}
+                  {actionDef.contactType === 'group' && <th>Tham gia</th>}
                   {actionDef.contactType === 'group' && <th>Duyệt bài</th>}
                 </tr>
               </thead>
@@ -602,9 +1004,29 @@ export default function DataScanModal({
                         />
                       </td>
                       <td>{index + 1}</td>
-                      <td>{contact.name || '-'}</td>
-                      <td>{contact.uid || '-'}</td>
-                      <td className="data-scan-link-cell">{contact.url || '-'}</td>
+                      <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
+                        {contact.name || '-'}
+                      </td>
+                      <td className="data-scan-text-cell data-scan-uid-cell" title={contact.uid || undefined}>
+                        {contact.uid || '-'}
+                      </td>
+                      <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
+                        {contact.url || '-'}
+                      </td>
+                      {actionDef.contactType === 'person' && (
+                        <td>
+                          <span className={`data-scan-status-badge ${contact.isFriend ? 'is-active' : 'is-muted'}`}>
+                            {getContactStatusLabel(contact)}
+                          </span>
+                        </td>
+                      )}
+                      {actionDef.contactType === 'group' && (
+                        <td>
+                          <span className={`data-scan-status-badge ${contact.isJoined ? 'is-active' : 'is-muted'}`}>
+                            {getContactStatusLabel(contact)}
+                          </span>
+                        </td>
+                      )}
                       {actionDef.contactType === 'group' && (
                         <td>
                           <span className="data-scan-status-badge">{getGroupApprovalStatus(contact)}</span>
@@ -616,7 +1038,163 @@ export default function DataScanModal({
               </tbody>
             </table>
           </div>
+
+          <div className="data-scan-below-actions">
+            <button
+              className="btn btn-secondary data-scan-group-action-button"
+              onClick={() => setShowGroupPanel(true)}
+            >
+              <Folder size={14} />
+              Xem nhóm data
+            </button>
+            <button
+              className="btn btn-secondary data-scan-group-action-button"
+              onClick={handleOpenAddGroupModal}
+              disabled={scanLoading}
+            >
+              <Folder size={14} />
+              Thêm vào nhóm
+            </button>
+          </div>
+
         </div>
+
+        {showGroupPanel && (
+          <DataScanGroupManagementModal
+            activeContactType={activeGroupContactType}
+            groupsLoading={groupsLoading}
+            contactGroups={allContactGroups}
+            activeGroupId={activeGroupId}
+            groupContactsLoading={groupContactsLoading}
+            filteredGroupContacts={filteredGroupContacts}
+            groupContactsByStatusCount={groupContactsByStatus.length}
+            groupTableColSpan={groupTableColSpan}
+            onClose={() => setShowGroupPanel(false)}
+            onActivateGroup={handleActivateGroup}
+            onRenameGroup={handleRenameContactGroup}
+            onDeleteGroup={handleDeleteContactGroup}
+            onRemoveContacts={handleRemoveFromActiveGroup}
+          />
+        )}
+
+        {showGroupSelectionModal && (
+          <DataScanGroupSelectionModal
+            contactType={actionDef.contactType}
+            groupsLoading={groupsLoading}
+            contactGroups={allContactGroups}
+            selectedGroupIds={selectedGroupIds}
+            onClose={() => setShowGroupSelectionModal(false)}
+            onToggleGroup={handleToggleGroupOutput}
+            onConfirm={handleSelect}
+          />
+        )}
+
+        {showAddGroupModal && (
+          <div
+            className="data-scan-group-modal-backdrop"
+            onClick={() => {
+              if (!savingGroupMembers) closeAddGroupModal()
+            }}
+          >
+            <div className="data-scan-group-modal" onClick={event => event.stopPropagation()}>
+              <div className="data-scan-group-modal-header">
+                <div>
+                  <div className="data-scan-group-modal-title">Chọn nhóm</div>
+                  <div className="data-scan-group-modal-subtitle">{selectedContacts.length} data đã chọn</div>
+                </div>
+                <button
+                  className="btn-icon"
+                  onClick={closeAddGroupModal}
+                  disabled={savingGroupMembers}
+                  title="Đóng"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="data-scan-group-modal-body">
+                <div className="data-scan-group-modal-label">Chọn nhóm</div>
+                <div className="data-scan-group-modal-list">
+                  {groupsLoading ? (
+                    <div className="data-scan-group-empty">Đang tải nhóm data...</div>
+                  ) : allContactGroups.length === 0 ? (
+                    <div className="data-scan-group-empty">Chưa có nhóm data.</div>
+                  ) : (
+                    allContactGroups.map(group => {
+                      const isCompatible = group.contactType === actionDef.contactType
+                      return (
+                      <label
+                        key={group.id}
+                        className={`data-scan-group-modal-option ${isCompatible ? '' : 'is-disabled'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={modalSelectedGroupIds.has(group.id)}
+                          onChange={() => handleToggleModalGroup(group)}
+                          disabled={savingGroupMembers || !isCompatible}
+                        />
+                        <span className="data-scan-group-modal-option-main">
+                          <span className="data-scan-group-modal-option-name">{group.name}</span>
+                          <span className="data-scan-contact-type-badge">{getContactTypeLabel(group.contactType)}</span>
+                        </span>
+                        <span className="data-scan-group-count">
+                          {isCompatible ? `${group.contactCount || 0} data` : 'Không đúng loại'}
+                        </span>
+                      </label>
+                      )
+                    })
+                  )}
+                </div>
+
+                {!showNewGroupInput ? (
+                  <button
+                    className="btn btn-secondary data-scan-new-group-toggle"
+                    onClick={() => setShowNewGroupInput(true)}
+                    disabled={savingGroupMembers}
+                  >
+                    <Plus size={14} />
+                    Hoặc thêm mới nhóm
+                  </button>
+                ) : (
+                  <div className="data-scan-new-group-row">
+                    <input
+                      className="stepper-input"
+                      value={newGroupName}
+                      onChange={event => setNewGroupName(event.target.value)}
+                      placeholder="Tên nhóm mới..."
+                      disabled={savingGroupMembers}
+                      autoFocus
+                    />
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => {
+                        setShowNewGroupInput(false)
+                        setNewGroupName('')
+                      }}
+                      disabled={savingGroupMembers}
+                    >
+                      Chọn nhóm có sẵn
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="data-scan-group-modal-footer">
+                <button className="btn btn-ghost" onClick={closeAddGroupModal} disabled={savingGroupMembers}>
+                  Huỷ
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSaveSelectedToGroups}
+                  disabled={!canSaveGroupModal || savingGroupMembers}
+                >
+                  <Folder size={14} />
+                  {savingGroupMembers ? 'Đang lưu...' : 'Thêm vào nhóm và lưu'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="modal-footer data-scan-footer">
           <button className="btn btn-secondary" onClick={handleExport}>
@@ -625,6 +1203,15 @@ export default function DataScanModal({
           </button>
           <div className="data-scan-footer-right">
             <button className="btn btn-ghost" onClick={handleClose}>{onSelect ? 'Huỷ' : 'Đóng'}</button>
+            {onSelect && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowGroupSelectionModal(true)}
+              >
+                <Folder size={14} />
+                Chọn nhóm data
+              </button>
+            )}
             {onSelect && (
               <button className="btn btn-primary" onClick={handleSelect}>
                 <Check size={14} />

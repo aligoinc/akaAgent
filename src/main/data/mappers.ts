@@ -1,4 +1,4 @@
-import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy } from '../../shared/types'
+import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   return {
@@ -154,8 +154,24 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     uid: row.uid as string | undefined,
     url: row.url as string | undefined,
     extraData: row.extra_data as Record<string, unknown> | undefined,
+    isFriend: (row.is_friend as boolean | null) ?? false,
     requiresPostApproval: (row.requires_post_approval as boolean | null) ?? null,
     isJoined: (row.is_joined as boolean | null) ?? false,
+    isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: row.organization_id as number | undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapAccountContactGroupFromDB(row: Record<string, unknown>): AutoAccountContactGroup {
+  return {
+    id: row.id as number,
+    accountId: row.account_id as number,
+    contactType: row.contact_type as ContactType,
+    name: row.name as string,
+    contactCount: row.contact_count as number | undefined,
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,

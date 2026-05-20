@@ -127,7 +127,7 @@ export class ContactLoader {
    * Load friends list for a Facebook account.
    */
   async loadFriends(accountId: number): Promise<ContactLoadResult> {
-    return this.loadContacts(accountId, 'friend', 'https://www.facebook.com/friends/list', this.scrapeFriends.bind(this))
+    return this.loadContacts(accountId, 'person', 'https://www.facebook.com/friends/list', this.scrapeFriends.bind(this))
   }
 
   /**
@@ -146,7 +146,7 @@ export class ContactLoader {
 
   private getContactTypeName(contactType: ContactType): string {
     switch (contactType) {
-      case 'friend': return 'bạn bè'
+      case 'person': return 'người trên Facebook'
       case 'group': return 'group'
       case 'page': return 'page'
     }
@@ -231,7 +231,7 @@ export class ContactLoader {
 
     const loadController = this.startLoad(accountId)
     const signal = loadController.signal
-    const typeName = this.getContactTypeName(contactType)
+    const typeName = contactType === 'person' ? 'bạn bè' : this.getContactTypeName(contactType)
     this.sendProgress(`🔄 Đang load danh sách ${typeName}...`)
 
     try {
@@ -312,7 +312,7 @@ export class ContactLoader {
     let noChangeCount = 0
     let scrollCount = 0
     const signal = this.activeLoadControllers.get(accountId)?.signal
-    const typeName = this.getContactTypeName(contactType)
+    const typeName = contactType === 'friend' ? 'bạn bè' : this.getContactTypeName(contactType)
 
     while (true) {
       if (this.isLoadCancelled(accountId)) {
@@ -762,6 +762,7 @@ export class ContactLoader {
             name: name,
             uid: uid,
             url: target.url,
+            isFriend: true,
             extraData: { source: 'facebook_friends_list' }
           });
           continue;
