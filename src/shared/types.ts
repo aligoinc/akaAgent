@@ -86,6 +86,8 @@ export interface AccountActionLimitStatus {
 export interface AccountActionOverview {
   action: AutoAccountAction
   status: AutoAccountActionStatus
+  windowActionCount: number
+  windowMinutes: number
 }
 
 export interface ActionLimitConfig {

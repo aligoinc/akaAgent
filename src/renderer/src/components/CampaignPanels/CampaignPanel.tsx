@@ -7,13 +7,14 @@ import { Campaign, CampaignDetail } from '../../../../shared/types'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
+import AccountInfoView from './AccountInfoView'
 
 interface CampaignPanelProps {
   filterAccountId?: number | null
   onClearFilter?: () => void
 }
 
-type DetailTab = 'data' | 'actions' | 'runLog' | 'foundData'
+type DetailTab = 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink'
 
 interface RunLogEntry {
@@ -156,13 +157,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
     loadAccounts()
   }, [loadCampaigns, loadCampaignActions, loadAccounts])
 
-  // Load data + results when a campaign is selected
+  // Load only the data needed by the active campaign detail tab.
   useEffect(() => {
-    if (selectedCampaignId) {
+    if (!selectedCampaignId) return
+    if (detailTab === 'data') {
       loadCampaignInputData(selectedCampaignId)
+      return
+    }
+    if (detailTab === 'actions' || detailTab === 'foundData') {
       loadCampaignDetails(selectedCampaignId)
     }
-  }, [selectedCampaignId, loadCampaignInputData, loadCampaignDetails])
+  }, [selectedCampaignId, detailTab, loadCampaignInputData, loadCampaignDetails])
 
   // Clear bulk selection when account filter changes
   useEffect(() => {
@@ -311,6 +316,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
   }
 
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
+  const selectedCampaignAccount = selectedCampaign?.accountId
+    ? accounts.find(account => account.id === selectedCampaign.accountId) || null
+    : null
   const isSelectedFindDataCampaign = selectedCampaign?.actionId === 'facebook_find_data_group'
   const runLogEntries = useMemo(
     () => parseCampaignRunLog(selectedCampaign?.log || ''),
@@ -812,6 +820,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                 >
                   Lịch sử chạy ({runLogEntries.length})
                 </button>
+                <button
+                  className={`detail-dock-tab ${detailTab === 'accountInfo' ? 'active' : ''}`}
+                  onClick={() => setDetailTab('accountInfo')}
+                >
+                  Thông tin tài khoản
+                </button>
                 {isSelectedFindDataCampaign && (
                   <button
                     className={`detail-dock-tab ${detailTab === 'foundData' ? 'active' : ''}`}
@@ -946,6 +960,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
                       ))}
                     </tbody>
                   </table>
+                )
+              )}
+
+              {/* Tab: Account info for the selected campaign */}
+              {detailTab === 'accountInfo' && (
+                selectedCampaignAccount ? (
+                  <AccountInfoView account={selectedCampaignAccount} mode="dock" />
+                ) : (
+                  <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>
+                    Không tìm thấy tài khoản của chiến dịch này
+                  </div>
                 )
               )}
 

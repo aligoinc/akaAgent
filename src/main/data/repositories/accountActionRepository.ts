@@ -4,6 +4,54 @@ import { mapAutoAccountActionFromDB, mapAutoAccountActionStatusFromDB } from '..
 import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
+const DEFAULT_RATE_LIMIT_MINUTES = 65
+const RATED_ACTION_STATUSES = ['thành công', 'thất bại']
+const TRANSIENT_RETRY_DELAY_MS = 300
+
+function normalizeRateLimitMinutes(value: unknown): number {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+function getErrorMessage(error: unknown): string {
+  if (!error) return ''
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message || '')
+  }
+  return String(error)
+}
+
+function isTransientFetchFailure(error: unknown): boolean {
+  return getErrorMessage(error).toLowerCase().includes('fetch failed')
+}
+
+async function withTransientRetry<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (err) {
+    if (!isTransientFetchFailure(err)) throw err
+    await sleep(TRANSIENT_RETRY_DELAY_MS)
+    return operation()
+  }
+}
+
+async function runOverviewQuery<T>(
+  label: string,
+  query: () => PromiseLike<T>
+): Promise<T> {
+  let result = await query()
+  let error = (result as { error?: unknown }).error
+  if (error && isTransientFetchFailure(error)) {
+    await sleep(TRANSIENT_RETRY_DELAY_MS)
+    result = await query()
+    error = (result as { error?: unknown }).error
+  }
+  if (error) throw new Error(`${label}: ${getErrorMessage(error)}`)
+  return result
+}
 
 function todayInVietnam(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -98,26 +146,135 @@ export async function listAccountActions(flatformType?: string): Promise<AutoAcc
   return (data || []).map(row => mapAutoAccountActionFromDB(row))
 }
 
+async function loadOverviewActionStatuses(
+  accountId: number,
+  actionCodes: string[]
+): Promise<Map<string, AutoAccountActionStatus>> {
+  if (actionCodes.length === 0) return new Map()
+
+  const today = todayInVietnam()
+  const readStatusRows = async (): Promise<Record<string, unknown>[]> => {
+    const { data } = await runOverviewQuery(
+      'Failed to list account action statuses',
+      () => client()
+        .from('auto_account_action_status')
+        .select('*')
+        .eq('account_id', accountId)
+        .in('action_code', actionCodes)
+    )
+    return (data || []) as Record<string, unknown>[]
+  }
+
+  let rows = await readStatusRows()
+  const rowCodes = new Set(rows.map(row => String(row.action_code || '').trim()).filter(Boolean))
+  const missingCodes = actionCodes.filter(code => !rowCodes.has(code))
+  const staleIds = rows
+    .filter(row => row.count_date !== today)
+    .map(row => row.id as number)
+    .filter(id => typeof id === 'number')
+
+  if (missingCodes.length > 0) {
+    await runOverviewQuery(
+      'Failed to create account action statuses',
+      () => client()
+        .from('auto_account_action_status')
+        .upsert(
+          missingCodes.map(actionCode => ({
+            account_id: accountId,
+            action_code: actionCode,
+            count_action_in_day: 0,
+            count_date: today
+          })),
+          { onConflict: 'account_id,action_code', ignoreDuplicates: true }
+        )
+    )
+  }
+
+  if (staleIds.length > 0) {
+    await runOverviewQuery(
+      'Failed to reset stale account action statuses',
+      () => client()
+        .from('auto_account_action_status')
+        .update({
+          count_action_in_day: 0,
+          count_date: today,
+          updated_at: new Date().toISOString()
+        })
+        .in('id', staleIds)
+    )
+  }
+
+  if (missingCodes.length > 0 || staleIds.length > 0) {
+    rows = await readStatusRows()
+  }
+
+  return new Map(rows.map(row => [
+    String(row.action_code || ''),
+    mapAutoAccountActionStatusFromDB(row)
+  ]))
+}
+
+async function loadWindowActionCounts(
+  accountId: number,
+  actionCodes: string[],
+  timeFrameStart: string
+): Promise<Map<string, number>> {
+  if (actionCodes.length === 0) return new Map()
+
+  const { data } = await runOverviewQuery(
+    'Failed to count account action window',
+    () => client()
+      .from('auto_campaign_details')
+      .select('action_code')
+      .eq('account_id', accountId)
+      .in('action_code', actionCodes)
+      .in('status', RATED_ACTION_STATUSES)
+      .gte('created_at', timeFrameStart)
+  )
+  const counts = new Map<string, number>()
+
+  for (const row of (data || []) as Record<string, unknown>[]) {
+    const actionCode = String(row.action_code || '').trim()
+    if (!actionCode) continue
+    counts.set(actionCode, (counts.get(actionCode) || 0) + 1)
+  }
+
+  return counts
+}
+
 export async function listAccountActionOverview(accountId: number): Promise<AccountActionOverview[]> {
   const u = requireCurrentUser()
-  const { data: account, error: accountError } = await client()
-    .from('auto_accounts')
-    .select('id, flatform_type')
-    .eq('id', accountId)
-    .eq('staff_id', u.staffId)
-    .eq('is_delete', false)
-    .maybeSingle()
-
-  if (accountError) throw new Error(`Failed to get account for action overview: ${accountError.message}`)
+  const { data: account } = await runOverviewQuery(
+    'Failed to get account for action overview',
+    () => client()
+      .from('auto_accounts')
+      .select('id, flatform_type, rate_limit_minutes')
+      .eq('id', accountId)
+      .eq('staff_id', u.staffId)
+      .eq('is_delete', false)
+      .maybeSingle()
+  )
   if (!account) throw new Error('Không tìm thấy tài khoản')
 
-  await enableDueAccountActions()
+  await withTransientRetry(() => enableDueAccountActions())
 
-  const actions = await listAccountActions(account.flatform_type as string)
-  return Promise.all(actions.map(async action => ({
-    action,
-    status: await getAccountActionStatus(accountId, action.code)
-  })))
+  const actions = await withTransientRetry(() => listAccountActions(account.flatform_type as string))
+  const actionCodes = actions.map(action => action.code).filter(Boolean)
+  const windowMinutes = normalizeRateLimitMinutes(account.rate_limit_minutes)
+  const timeFrameStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
+  const statusByActionCode = await loadOverviewActionStatuses(accountId, actionCodes)
+  const windowCountByActionCode = await loadWindowActionCounts(accountId, actionCodes, timeFrameStart)
+
+  return actions.map(action => {
+    const status = statusByActionCode.get(action.code)
+    if (!status) throw new Error(`Không tìm thấy trạng thái hành động "${action.name}"`)
+    return {
+      action,
+      status,
+      windowActionCount: windowCountByActionCode.get(action.code) || 0,
+      windowMinutes
+    }
+  })
 }
 
 export async function incrementAccountActionCount(
