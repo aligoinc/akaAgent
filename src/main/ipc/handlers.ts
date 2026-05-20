@@ -100,6 +100,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     quitCleanupStarted = true
     void (async () => {
       try {
+        contactLoader.stopAll()
         campaignScheduler.stop()
         await supabase.resetRunningStatuses(user.staffId)
       } catch (err) {
@@ -142,6 +143,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       }
     },
     beforeLogout: async () => {
+      contactLoader.stopAll()
       campaignScheduler.stop()
       await runScopedRecovery('logout')
     }

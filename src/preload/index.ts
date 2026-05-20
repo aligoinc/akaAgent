@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -149,11 +149,11 @@ const electronAPI = {
   },
 
   onCampaignBrowserSelect: (
-    callback: (payload: { accountId: number; campaignId: number }) => void
+    callback: (payload: { accountId: number; campaignId?: number; context?: 'campaign' | 'contact-scan' }) => void
   ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
-      payload: { accountId: number; campaignId: number }
+      payload: { accountId: number; campaignId?: number; context?: 'campaign' | 'contact-scan' }
     ): void => callback(payload)
     ipcRenderer.on(IPC_EVENTS.CAMPAIGN_BROWSER_SELECT, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_BROWSER_SELECT, handler)
@@ -162,9 +162,11 @@ const electronAPI = {
   onCampaignBrowserPreview: (
     callback: (payload: {
       accountId: number
-      campaignId: number
+      campaignId?: number
+      context?: 'campaign' | 'contact-scan'
       active: boolean
       image?: string
+      title?: string
       timestamp: string
     }) => void
   ): (() => void) => {
@@ -172,9 +174,11 @@ const electronAPI = {
       _event: Electron.IpcRendererEvent,
       payload: {
         accountId: number
-        campaignId: number
+        campaignId?: number
+        context?: 'campaign' | 'contact-scan'
         active: boolean
         image?: string
+        title?: string
         timestamp: string
       }
     ): void => callback(payload)
@@ -238,8 +242,8 @@ const electronAPI = {
   removeContactsFromGroup: (groupId: number, contactIds: number[]): Promise<ContactGroupMutationResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_REMOVE_CONTACTS, groupId, contactIds),
 
-  onContactsProgress: (callback: (data: { message: string }) => void): () => void => {
-    const handler = (_event: Electron.IpcRendererEvent, data: { message: string }) => callback(data)
+  onContactsProgress: (callback: (data: ContactLoadProgress) => void): () => void => {
+    const handler = (_event: Electron.IpcRendererEvent, data: ContactLoadProgress) => callback(data)
     ipcRenderer.on(IPC_EVENTS.CONTACTS_PROGRESS, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.CONTACTS_PROGRESS, handler)
   },

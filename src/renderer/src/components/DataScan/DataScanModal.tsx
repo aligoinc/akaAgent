@@ -318,11 +318,13 @@ export default function DataScanModal({
 
   useEffect(() => {
     if (!window.electronAPI?.onContactsProgress) return
-    const unsubscribe = window.electronAPI.onContactsProgress(({ message }) => {
+    const unsubscribe = window.electronAPI.onContactsProgress(({ accountId: progressAccountId, contactType, message }) => {
+      if (progressAccountId !== undefined && accountId !== '' && progressAccountId !== accountId) return
+      if (contactType !== undefined && contactType !== actionDef.contactType) return
       setProgressMessages(prev => [...prev.slice(-4), message])
     })
     return unsubscribe
-  }, [])
+  }, [accountId, actionDef.contactType])
 
   useEffect(() => {
     if (!window.electronAPI?.onContactsCompleted || accountId === '') return

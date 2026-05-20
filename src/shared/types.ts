@@ -267,12 +267,21 @@ export interface ContactLoadResult {
   count: number
   error?: string
   stopped?: boolean
+  runKey?: string
 }
 
 export interface ContactLoadCompleted {
   accountId: number
   contactType: ContactType
   result: ContactLoadResult
+  runKey?: string
+}
+
+export interface ContactLoadProgress {
+  accountId?: number
+  contactType?: ContactType
+  runKey?: string
+  message: string
 }
 
 export interface AutoAccountContact {

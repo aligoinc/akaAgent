@@ -48,6 +48,7 @@ interface PageController {
   // Generic
   evaluate<T = unknown>(code: string, ...args: unknown[]): Promise<T>;
   apiCall(opts: { url: string; method?: string; headers?: Record<string, string>; body?: unknown; timeout?: number }): Promise<{ status: number; data: unknown; headers: Record<string, string> }>;
+  getCookieHeader(url: string): Promise<string>;
   downloadUrl(url: string, opts?: { timeout?: number }): Promise<{ filePath: string; byteLength: number; contentType: string }>;
 }
 
