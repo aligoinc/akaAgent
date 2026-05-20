@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContactLoadResult, ContactLoadCompleted, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -216,6 +216,27 @@ const electronAPI = {
 
   deleteContacts: (accountId: number, contactType: ContactType): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_DELETE, accountId, contactType),
+
+  listContactGroups: (accountId: number, contactType?: ContactType): Promise<AutoAccountContactGroup[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_LIST, accountId, contactType),
+
+  createContactGroup: (accountId: number, contactType: ContactType, name: string): Promise<AutoAccountContactGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_CREATE, accountId, contactType, name),
+
+  updateContactGroup: (groupId: number, name: string): Promise<AutoAccountContactGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_UPDATE, groupId, name),
+
+  deleteContactGroup: (groupId: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_DELETE, groupId),
+
+  listContactGroupContacts: (groupId: number): Promise<AutoAccountContact[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_LIST_CONTACTS, groupId),
+
+  addContactsToGroup: (groupId: number, contactIds: number[]): Promise<ContactGroupMutationResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_ADD_CONTACTS, groupId, contactIds),
+
+  removeContactsFromGroup: (groupId: number, contactIds: number[]): Promise<ContactGroupMutationResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_REMOVE_CONTACTS, groupId, contactIds),
 
   onContactsProgress: (callback: (data: { message: string }) => void): () => void => {
     const handler = (_event: Electron.IpcRendererEvent, data: { message: string }) => callback(data)

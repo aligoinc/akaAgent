@@ -1,6 +1,6 @@
-import { AutoAccountContact, ContactType } from '../../../shared/types'
+import { AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
-import { mapAccountContactFromDB } from '../mappers'
+import { mapAccountContactFromDB, mapAccountContactGroupFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 
 interface UpsertContactsOptions {
@@ -119,7 +119,17 @@ function dedupeValidContacts(contacts: Partial<AutoAccountContact>[]): Partial<A
   return Array.from(byKey.values())
 }
 
-async function markMissingContactsDeleted(
+function getMissingSnapshotUpdates(contactType: ContactType) {
+  if (contactType === 'group') {
+    return { is_joined: false, is_delete: false, updated_at: new Date().toISOString() }
+  }
+  if (contactType === 'person') {
+    return { is_friend: false, is_delete: false, updated_at: new Date().toISOString() }
+  }
+  return { is_delete: true, updated_at: new Date().toISOString() }
+}
+
+async function updateMissingContactsFromSnapshot(
   contacts: Partial<AutoAccountContact>[],
   staffId: number
 ): Promise<void> {
@@ -153,12 +163,9 @@ async function markMissingContactsDeleted(
     const chunkSize = 100
     for (let i = 0; i < idsToUpdate.length; i += chunkSize) {
       const chunk = idsToUpdate.slice(i, i + chunkSize)
-      const updates = snapshot.contactType === 'group'
-        ? { is_joined: false, is_delete: false, updated_at: new Date().toISOString() }
-        : { is_delete: true, updated_at: new Date().toISOString() }
       const { error: updateError } = await client()
         .from('auto_account_contacts')
-        .update(updates)
+        .update(getMissingSnapshotUpdates(snapshot.contactType))
         .in('id', chunk)
 
       if (updateError) throw new Error(`Failed to update missing contacts: ${updateError.message}`)
@@ -237,8 +244,13 @@ export async function upsertContacts(
       }
       if (c.contactType === 'group') {
         payload.is_joined = c.isJoined ?? true
+      } else if (c.contactType === 'person') {
+        payload.is_friend = c.isFriend ?? true
       } else if (c.isJoined !== undefined) {
         payload.is_joined = c.isJoined
+      }
+      if (c.isFriend !== undefined) {
+        payload.is_friend = c.isFriend
       }
       if (c.requiresPostApproval !== undefined) {
         payload.requires_post_approval = c.requiresPostApproval
@@ -256,7 +268,7 @@ export async function upsertContacts(
   }
 
   if (options.markMissingDeleted !== false) {
-    await markMissingContactsDeleted(validContacts, u.staffId)
+    await updateMissingContactsFromSnapshot(validContacts, u.staffId)
   }
 
   return totalSaved
@@ -264,18 +276,268 @@ export async function upsertContacts(
 
 export async function deleteContacts(accountId: number, contactType: ContactType): Promise<void> {
   const u = requireCurrentUser()
-  const updates = contactType === 'group'
-    ? { is_joined: false, is_delete: false, updated_at: new Date().toISOString() }
-    : { is_delete: true, updated_at: new Date().toISOString() }
 
   const { error } = await client()
     .from('auto_account_contacts')
-    .update(updates)
+    .update(getMissingSnapshotUpdates(contactType))
     .eq('account_id', accountId)
     .eq('staff_id', u.staffId)
     .eq('contact_type', contactType)
 
   if (error) throw new Error(`Failed to delete contacts: ${error.message}`)
+}
+
+function normalizeGroupName(name: string): string {
+  return String(name || '').replace(/\s+/g, ' ').trim()
+}
+
+function uniqueIds(ids: number[]): number[] {
+  return Array.from(new Set(
+    ids
+      .map(id => Number(id))
+      .filter(id => Number.isFinite(id) && id > 0)
+  ))
+}
+
+async function getContactGroup(groupId: number): Promise<AutoAccountContactGroup> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_account_contact_groups')
+    .select('*')
+    .eq('id', groupId)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .single()
+
+  if (error) throw new Error(`Failed to get contact group: ${error.message}`)
+  return mapAccountContactGroupFromDB(data)
+}
+
+async function getActiveContactIds(contactIds: number[], staffId: number): Promise<Set<number>> {
+  const ids = uniqueIds(contactIds)
+  if (ids.length === 0) return new Set()
+
+  const { data, error } = await client()
+    .from('auto_account_contacts')
+    .select('id')
+    .in('id', ids)
+    .eq('staff_id', staffId)
+    .eq('is_delete', false)
+
+  if (error) throw new Error(`Failed to list active contacts: ${error.message}`)
+  return new Set((data || []).map(row => row.id as number))
+}
+
+export async function listContactGroups(
+  accountId: number,
+  contactType?: ContactType
+): Promise<AutoAccountContactGroup[]> {
+  const u = requireCurrentUser()
+  let query = client()
+    .from('auto_account_contact_groups')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+
+  if (contactType) query = query.eq('contact_type', contactType)
+
+  const { data, error } = await query
+    .order('name', { ascending: true })
+
+  if (error) throw new Error(`Failed to list contact groups: ${error.message}`)
+
+  const groups = (data || []).map(row => mapAccountContactGroupFromDB(row))
+  if (groups.length === 0) return groups
+
+  const groupIds = groups.map(group => group.id)
+  const { data: members, error: memberError } = await client()
+    .from('auto_account_contact_group_members')
+    .select('group_id, contact_id')
+    .in('group_id', groupIds)
+
+  if (memberError) throw new Error(`Failed to list contact group members: ${memberError.message}`)
+
+  const activeContactIds = await getActiveContactIds(
+    (members || []).map(row => row.contact_id as number),
+    u.staffId
+  )
+  const counts = new Map<number, number>()
+  for (const member of members || []) {
+    const contactId = member.contact_id as number
+    if (!activeContactIds.has(contactId)) continue
+    const groupId = member.group_id as number
+    counts.set(groupId, (counts.get(groupId) || 0) + 1)
+  }
+
+  return groups.map(group => ({
+    ...group,
+    contactCount: counts.get(group.id) || 0
+  }))
+}
+
+export async function createContactGroup(
+  accountId: number,
+  contactType: ContactType,
+  name: string
+): Promise<AutoAccountContactGroup> {
+  const u = requireCurrentUser()
+  const normalizedName = normalizeGroupName(name)
+  if (!normalizedName) throw new Error('Vui lòng nhập tên nhóm.')
+
+  const { data, error } = await client()
+    .from('auto_account_contact_groups')
+    .insert({
+      account_id: accountId,
+      contact_type: contactType,
+      name: normalizedName,
+      is_delete: false,
+      staff_id: u.staffId,
+      organization_id: u.organizationId,
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single()
+
+  if (error) {
+    if (error.code === '23505') throw new Error('Tên nhóm đã tồn tại.')
+    throw new Error(`Failed to create contact group: ${error.message}`)
+  }
+  return { ...mapAccountContactGroupFromDB(data), contactCount: 0 }
+}
+
+export async function updateContactGroup(
+  groupId: number,
+  name: string
+): Promise<AutoAccountContactGroup> {
+  const u = requireCurrentUser()
+  const normalizedName = normalizeGroupName(name)
+  if (!normalizedName) throw new Error('Vui lòng nhập tên nhóm.')
+
+  const { data, error } = await client()
+    .from('auto_account_contact_groups')
+    .update({
+      name: normalizedName,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', groupId)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .select()
+    .single()
+
+  if (error) {
+    if (error.code === '23505') throw new Error('Tên nhóm đã tồn tại.')
+    throw new Error(`Failed to update contact group: ${error.message}`)
+  }
+  return mapAccountContactGroupFromDB(data)
+}
+
+export async function deleteContactGroup(groupId: number): Promise<void> {
+  const u = requireCurrentUser()
+  const { error } = await client()
+    .from('auto_account_contact_groups')
+    .update({
+      is_delete: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', groupId)
+    .eq('staff_id', u.staffId)
+
+  if (error) throw new Error(`Failed to delete contact group: ${error.message}`)
+}
+
+export async function listContactGroupContacts(groupId: number): Promise<AutoAccountContact[]> {
+  const u = requireCurrentUser()
+  const group = await getContactGroup(groupId)
+
+  const { data: members, error: memberError } = await client()
+    .from('auto_account_contact_group_members')
+    .select('contact_id')
+    .eq('group_id', groupId)
+
+  if (memberError) throw new Error(`Failed to list contact group members: ${memberError.message}`)
+
+  const contactIds = uniqueIds((members || []).map(row => row.contact_id as number))
+  if (contactIds.length === 0) return []
+
+  const { data, error } = await client()
+    .from('auto_account_contacts')
+    .select('*')
+    .in('id', contactIds)
+    .eq('account_id', group.accountId)
+    .eq('contact_type', group.contactType)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .order('name', { ascending: true })
+
+  if (error) throw new Error(`Failed to list contacts in group: ${error.message}`)
+  return (data || []).map(row => mapAccountContactFromDB(row))
+}
+
+export async function addContactsToGroup(
+  groupId: number,
+  contactIds: number[]
+): Promise<ContactGroupMutationResult> {
+  const u = requireCurrentUser()
+  const group = await getContactGroup(groupId)
+  const ids = uniqueIds(contactIds)
+  if (ids.length === 0) return { success: true, count: 0 }
+
+  const { data: contacts, error: contactError } = await client()
+    .from('auto_account_contacts')
+    .select('id')
+    .in('id', ids)
+    .eq('account_id', group.accountId)
+    .eq('contact_type', group.contactType)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+
+  if (contactError) throw new Error(`Failed to validate contacts: ${contactError.message}`)
+
+  const validIds = uniqueIds((contacts || []).map(row => row.id as number))
+  if (validIds.length === 0) return { success: true, count: 0 }
+
+  const { data: existing, error: existingError } = await client()
+    .from('auto_account_contact_group_members')
+    .select('contact_id')
+    .eq('group_id', groupId)
+    .in('contact_id', validIds)
+
+  if (existingError) throw new Error(`Failed to list existing group members: ${existingError.message}`)
+
+  const existingIds = new Set((existing || []).map(row => row.contact_id as number))
+  const idsToInsert = validIds.filter(id => !existingIds.has(id))
+  if (idsToInsert.length === 0) return { success: true, count: 0 }
+
+  const { error } = await client()
+    .from('auto_account_contact_group_members')
+    .upsert(idsToInsert.map(contactId => ({
+      group_id: groupId,
+      contact_id: contactId
+    })), { onConflict: 'group_id,contact_id', ignoreDuplicates: true })
+
+  if (error) throw new Error(`Failed to add contacts to group: ${error.message}`)
+  return { success: true, count: idsToInsert.length }
+}
+
+export async function removeContactsFromGroup(
+  groupId: number,
+  contactIds: number[]
+): Promise<ContactGroupMutationResult> {
+  await getContactGroup(groupId)
+  const ids = uniqueIds(contactIds)
+  if (ids.length === 0) return { success: true, count: 0 }
+
+  const { data, error } = await client()
+    .from('auto_account_contact_group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .in('contact_id', ids)
+    .select('id')
+
+  if (error) throw new Error(`Failed to remove contacts from group: ${error.message}`)
+  return { success: true, count: data?.length || 0 }
 }
 
 export async function upsertGroupPostContactStatus(

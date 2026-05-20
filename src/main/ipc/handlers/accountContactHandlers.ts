@@ -28,4 +28,32 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
   ipcMain.handle(IPC_EVENTS.CONTACTS_DELETE, async (_, accountId: number, contactType: string) => {
     return supabase.deleteContacts(accountId, contactType as any)
   })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_LIST, async (_, accountId: number, contactType?: string) => {
+    return supabase.listContactGroups(accountId, contactType as any)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_CREATE, async (_, accountId: number, contactType: string, name: string) => {
+    return supabase.createContactGroup(accountId, contactType as any, name)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_UPDATE, async (_, groupId: number, name: string) => {
+    return supabase.updateContactGroup(groupId, name)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_DELETE, async (_, groupId: number) => {
+    return supabase.deleteContactGroup(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_LIST_CONTACTS, async (_, groupId: number) => {
+    return supabase.listContactGroupContacts(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_ADD_CONTACTS, async (_, groupId: number, contactIds: number[]) => {
+    return supabase.addContactsToGroup(groupId, contactIds)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_REMOVE_CONTACTS, async (_, groupId: number, contactIds: number[]) => {
+    return supabase.removeContactsFromGroup(groupId, contactIds)
+  })
 }

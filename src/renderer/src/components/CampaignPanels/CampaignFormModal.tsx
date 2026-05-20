@@ -434,6 +434,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
   const hasSelectedCampaignAction = !!formData.actionId
   const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign
   const canPickFriends = isMessageFriendCampaign
+  const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
   const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign
   const showActionOptionsSection = isMessageUidCampaign
   const showFoundDataHandlingSection = isFindDataGroupCampaign && (formData.isFindUid || formData.isFindPostLink)
@@ -1387,10 +1388,37 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
     if (txtFileInputRef.current) txtFileInputRef.current.value = ''
   }
 
-  const [dataScanPicker, setDataScanPicker] = useState<{ action: DataScanAction } | null>(null)
+  const [dataScanPicker, setDataScanPicker] = useState<{
+    action: DataScanAction
+    mode: 'friends' | 'users' | 'groups'
+    initialStatusFilter?: 'active' | 'inactive' | 'all'
+  } | null>(null)
+
+  const getDetailDedupeKey = (row: Partial<CampaignInputData>): string => {
+    return String(row.uid || row.email || row.phone || row.name || '')
+      .trim()
+      .replace(/\/+$/g, '')
+      .toLowerCase()
+  }
+
+  const appendUniqueDetails = (rows: Partial<CampaignInputData>[]): number => {
+    const seen = new Set(details.map(getDetailDedupeKey).filter(Boolean))
+    const uniqueRows: Partial<CampaignInputData>[] = []
+    for (const row of rows) {
+      const key = getDetailDedupeKey(row)
+      if (key && seen.has(key)) continue
+      if (key) seen.add(key)
+      uniqueRows.push(row)
+    }
+    if (uniqueRows.length > 0) {
+      setDetails(prev => [...prev, ...uniqueRows])
+    }
+    return uniqueRows.length
+  }
 
   const onFriendsSelected = (contacts: AutoAccountContact[]) => {
-    const newRows: Partial<CampaignInputData>[] = contacts.map(c => ({
+    const personContacts = contacts.filter(c => c.contactType === 'person')
+    const newRows: Partial<CampaignInputData>[] = personContacts.map(c => ({
       name: c.name,
       uid: c.url || c.uid || '',
       phone: '',
@@ -1398,8 +1426,38 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       note: '',
       status: 'chờ xử lý'
     }))
-    setDetails(prev => [...prev, ...newRows])
-    showAlert(`Đã thêm ${newRows.length} bạn bè.`, 'success')
+    if (newRows.length === 0) {
+      showAlert('Không có data hợp lệ để thêm vào chiến dịch.', 'error')
+      return
+    }
+    const addedCount = appendUniqueDetails(newRows)
+    if (addedCount === 0) {
+      showAlert('Các data đã chọn đã có trong danh sách.', 'error')
+      return
+    }
+    showAlert(`Đã thêm ${addedCount} data.`, 'success')
+  }
+
+  const onUsersSelected = (contacts: AutoAccountContact[]) => {
+    const userContacts = contacts.filter(c => c.contactType === 'person')
+    const newRows: Partial<CampaignInputData>[] = userContacts.map(c => ({
+      name: c.name,
+      uid: c.url || c.uid || '',
+      phone: '',
+      email: '',
+      note: '',
+      status: 'chờ xử lý'
+    }))
+    if (newRows.length === 0) {
+      showAlert('Không có data hợp lệ để thêm vào chiến dịch.', 'error')
+      return
+    }
+    const addedCount = appendUniqueDetails(newRows)
+    if (addedCount === 0) {
+      showAlert('Các data đã chọn đã có trong danh sách.', 'error')
+      return
+    }
+    showAlert(`Đã thêm ${addedCount} data.`, 'success')
   }
 
   const onGroupsSelected = (contacts: AutoAccountContact[]) => {
@@ -1411,8 +1469,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
       note: '',
       status: 'chờ xử lý'
     }))
-    setDetails(prev => [...prev, ...newRows])
-    showAlert(`Đã thêm ${newRows.length} nhóm.`, 'success')
+    const addedCount = appendUniqueDetails(newRows)
+    if (addedCount === 0) {
+      showAlert('Các nhóm đã chọn đã có trong danh sách.', 'error')
+      return
+    }
+    showAlert(`Đã thêm ${addedCount} nhóm.`, 'success')
   }
 
   const toggleFindUidTargetCampaign = (campaignId: number) => {
@@ -3264,11 +3326,30 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                               showAlert('Vui lòng chọn tài khoản trước.', 'error')
                               return
                             }
-                            setDataScanPicker({ action: 'facebook_friends' })
+                            setDataScanPicker({ action: 'facebook_friends', mode: 'friends' })
                           }}
                           title="Chọn bạn bè từ danh sách liên hệ"
                         >
                           <Users size={14} /> Chọn bạn bè
+                        </button>
+                      )}
+                      {canPickUidData && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            if (formData.accountIds.length === 0) {
+                              showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                              return
+                            }
+                            setDataScanPicker({
+                              action: 'facebook_friends',
+                              mode: 'users',
+                              initialStatusFilter: 'all'
+                            })
+                          }}
+                          title="Chọn data từ danh sách user Facebook"
+                        >
+                          <Users size={14} /> Chọn data
                         </button>
                       )}
                       {canPickGroups && (
@@ -3279,9 +3360,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
                               showAlert('Vui lòng chọn tài khoản trước.', 'error')
                               return
                             }
-                            setDataScanPicker({ action: 'facebook_groups' })
+                            setDataScanPicker({
+                              action: 'facebook_groups',
+                              mode: 'groups',
+                              initialStatusFilter: 'all'
+                            })
                           }}
-                          title={isCommentSeedingFeedCampaign ? 'Chọn group để comment seeding' : 'Chọn nhóm từ danh sách đã tham gia'}
+                          title={isCommentSeedingFeedCampaign ? 'Chọn group để comment seeding' : 'Chọn group từ danh sách data'}
                         >
                           <Users size={14} /> Chọn nhóm
                         </button>
@@ -3399,9 +3484,16 @@ export default function CampaignFormModal({ campaign, cloneFromId, onClose }: Ca
         <DataScanModal
           initialAction={dataScanPicker.action}
           initialAccountId={formData.accountIds[0]}
+          initialStatusFilter={dataScanPicker.initialStatusFilter}
           lockAction
           onClose={() => setDataScanPicker(null)}
-          onSelect={dataScanPicker.action === 'facebook_friends' ? onFriendsSelected : onGroupsSelected}
+          onSelect={
+            dataScanPicker.mode === 'friends'
+              ? onFriendsSelected
+              : dataScanPicker.mode === 'users'
+                ? onUsersSelected
+                : onGroupsSelected
+          }
         />
       )}
     </div>

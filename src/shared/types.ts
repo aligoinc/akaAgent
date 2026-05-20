@@ -260,7 +260,7 @@ export interface CampaignDetail {
 // Account Contact Types
 // ============================================
 
-export type ContactType = 'friend' | 'group' | 'page'
+export type ContactType = 'person' | 'group' | 'page'
 
 export interface ContactLoadResult {
   success: boolean
@@ -283,6 +283,7 @@ export interface AutoAccountContact {
   uid?: string
   url?: string
   extraData?: Record<string, unknown>
+  isFriend?: boolean
   requiresPostApproval?: boolean | null
   isJoined?: boolean
   isDelete: boolean
@@ -290,6 +291,24 @@ export interface AutoAccountContact {
   organizationId?: number
   createdAt?: string
   updatedAt?: string
+}
+
+export interface AutoAccountContactGroup {
+  id: number
+  accountId: number
+  contactType: ContactType
+  name: string
+  contactCount?: number
+  isDelete: boolean
+  staffId?: number
+  organizationId?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ContactGroupMutationResult {
+  success: boolean
+  count: number
 }
 
 // ============================================
@@ -415,6 +434,13 @@ export const IPC_EVENTS = {
   CONTACTS_CANCEL_LOAD: 'contacts:cancel-load',
   CONTACTS_LIST: 'contacts:list',
   CONTACTS_DELETE: 'contacts:delete',
+  CONTACT_GROUPS_LIST: 'contacts:groups:list',
+  CONTACT_GROUPS_CREATE: 'contacts:groups:create',
+  CONTACT_GROUPS_UPDATE: 'contacts:groups:update',
+  CONTACT_GROUPS_DELETE: 'contacts:groups:delete',
+  CONTACT_GROUPS_LIST_CONTACTS: 'contacts:groups:list-contacts',
+  CONTACT_GROUPS_ADD_CONTACTS: 'contacts:groups:add-contacts',
+  CONTACT_GROUPS_REMOVE_CONTACTS: 'contacts:groups:remove-contacts',
   CONTACTS_PROGRESS: 'contacts:progress',
   CONTACTS_COMPLETED: 'contacts:completed',
 

@@ -7,6 +7,7 @@ interface Contact {
   uid?: string
   url?: string
   type?: string
+  isJoined?: boolean
 }
 
 interface GroupPickerModalProps {
@@ -27,7 +28,7 @@ export default function GroupPickerModal({ accountId, onClose, onSelect }: Group
       try {
         if (window.electronAPI) {
           const data = await window.electronAPI.listContacts(accountId, 'group')
-          setContacts(data)
+          setContacts(data.filter(contact => contact.isJoined === true))
         }
       } catch (err) {
         console.error('Failed to load groups:', err)

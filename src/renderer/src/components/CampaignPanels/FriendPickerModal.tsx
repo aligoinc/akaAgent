@@ -7,6 +7,7 @@ interface Contact {
   uid?: string
   url?: string
   type?: string
+  isFriend?: boolean
 }
 
 interface FriendPickerModalProps {
@@ -26,8 +27,8 @@ export default function FriendPickerModal({ accountId, onClose, onSelect }: Frie
       setLoading(true)
       try {
         if (window.electronAPI) {
-          const data = await window.electronAPI.listContacts(accountId, 'friend')
-          setContacts(data)
+          const data = await window.electronAPI.listContacts(accountId, 'person')
+          setContacts(data.filter(contact => contact.isFriend === true))
         }
       } catch (err) {
         console.error('Failed to load contacts:', err)
