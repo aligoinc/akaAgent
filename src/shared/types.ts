@@ -162,6 +162,9 @@ export interface CampaignExtraSettings {
   contentAI?: string
   findUidTargetCampaignIds?: number[]          // Khi tìm UID, tự thêm UID vào các campaign facebook_message_uid đã chọn
   findPostLinkTargetCampaignIds?: number[]     // Khi tìm link bài post, tự thêm link vào campaign comment seeding bài post đã chọn
+  findPhoneSmsTargetCampaignIds?: number[]       // Khi tìm SĐT, đẩy sang campaign akaBiz Sms đã chọn
+  findPhoneZaloWebTargetCampaignIds?: number[]   // Khi tìm SĐT, đẩy sang campaign akaBiz Zalo Web đã chọn
+  findZaloGroupLinkWebTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Zalo Web đã chọn
 }
 
 export interface Campaign {
@@ -354,6 +357,36 @@ export interface AiWriteMultiOtherContentRequest {
   countContent: number
 }
 
+export type AkaBizIntegrationKind = 'sms' | 'zaloWeb'
+export type AkaBizCampaignListKind = 'sms' | 'zaloPhone' | 'zaloGroupLink'
+
+export interface AkaBizStaffBasic {
+  id: number
+  staffId?: number
+  name: string | null
+  username: string
+}
+
+export interface AkaBizIntegrationInfo extends AkaBizStaffBasic {
+  staffId: number
+  integratedAt: string
+}
+
+export interface AkaBizIntegrations {
+  sms?: AkaBizIntegrationInfo | null
+  zaloWeb?: AkaBizIntegrationInfo | null
+}
+
+export interface AkaBizCampaignListItem {
+  id: number
+  name: string | null
+  shopId: number
+  shopName: string | null
+  campaignActionId: string | null
+  schedule?: string | null
+  status?: string | null
+}
+
 // ============================================
 // IPC Event Types
 // ============================================
@@ -375,6 +408,12 @@ export const IPC_EVENTS = {
   // AI content tools
   AI_REWRITE_CONTENT: 'ai:rewrite-content',
   AI_WRITE_MULTI_OTHER_CONTENT: 'ai:write-multi-other-content',
+
+  // akaBiz external integrations
+  AKABIZ_INTEGRATIONS_GET: 'akabiz:integrations:get',
+  AKABIZ_INTEGRATION_LOOKUP: 'akabiz:integration:lookup',
+  AKABIZ_INTEGRATION_SAVE: 'akabiz:integration:save',
+  AKABIZ_EXTERNAL_CAMPAIGNS_LIST: 'akabiz:external-campaigns:list',
 
   // Database Auto Accounts
   DB_LIST_ACCOUNTS: 'db:list-accounts',

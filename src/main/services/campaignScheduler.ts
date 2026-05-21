@@ -7,6 +7,16 @@ import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
+import {
+  addSmsCampaignDetail,
+  addZaloCampaignDetails,
+  getSmsCampaign,
+  getZaloCampaign,
+  type AkaBizCampaignSummary,
+  updateZaloCampaignStatus
+} from './akaBizApiClient'
+import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
+import { getCurrentUser } from '../data/currentUser'
 
 interface AutomationPageRef {
   page: PageController
@@ -1108,6 +1118,15 @@ export class CampaignScheduler {
       const findPostLinkTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPostLinkTargetCampaignIds)
         ? campaign.extraSettings.findPostLinkTargetCampaignIds
         : []
+      const findPhoneSmsTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPhoneSmsTargetCampaignIds)
+        ? campaign.extraSettings.findPhoneSmsTargetCampaignIds
+        : []
+      const findPhoneZaloWebTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPhoneZaloWebTargetCampaignIds)
+        ? campaign.extraSettings.findPhoneZaloWebTargetCampaignIds
+        : []
+      const findZaloGroupLinkWebTargetCampaignIds = Array.isArray(campaign.extraSettings?.findZaloGroupLinkWebTargetCampaignIds)
+        ? campaign.extraSettings.findZaloGroupLinkWebTargetCampaignIds
+        : []
       const total = Number(out.total ?? (phones.length + linkGroupZalos.length + uids.length + postLinks.length))
       const targetName = inputDataName || out.groupUrl || 'group'
       const isSuccess = summaryStep?.status === 'success'
@@ -1117,6 +1136,20 @@ export class CampaignScheduler {
       if (campaign.extraSettings?.isFindUid) notes.push(`${uids.length} UID`)
       if (campaign.extraSettings?.isFindPostLink) notes.push(`${postLinks.length} link bài post`)
       const errMsg = out.error || summaryStep?.error || errorStep?.error || 'Lỗi không xác định'
+      let previousFoundValues: {
+        phones: Set<string>
+        linkGroupZalos: Set<string>
+        uids: Set<string>
+        postLinks: Set<string>
+      } = {
+        phones: new Set(),
+        linkGroupZalos: new Set(),
+        uids: new Set(),
+        postLinks: new Set()
+      }
+      if (isSuccess) {
+        previousFoundValues = await this.getPreviouslyFoundValues(campaign.id)
+      }
 
       try {
         await this.supabase.createCampaignDetail({
@@ -1139,6 +1172,9 @@ export class CampaignScheduler {
             counts: { phones: phones.length, linkGroupZalos: linkGroupZalos.length, uids: uids.length, postLinks: postLinks.length, total },
             findUidTargetCampaignIds,
             findPostLinkTargetCampaignIds,
+            findPhoneSmsTargetCampaignIds,
+            findPhoneZaloWebTargetCampaignIds,
+            findZaloGroupLinkWebTargetCampaignIds,
             errorBlock: errorStep?.blockName
           }
         })
@@ -1147,8 +1183,15 @@ export class CampaignScheduler {
       } catch (err) { console.error('Failed log find data:', err) }
 
       if (isSuccess) {
-        await this.pushFoundUidsToTargetCampaigns(campaign, uids)
-        await this.pushFoundPostLinksToTargetCampaigns(campaign, postLinks)
+        const newUidsForInternal = this.filterNewUidValues(uids, previousFoundValues.uids)
+        const newPostLinksForInternal = this.filterNewPostLinkValues(postLinks, previousFoundValues.postLinks)
+        const newPhonesForExternal = this.filterNewExternalValues(phones, previousFoundValues.phones)
+        const newZaloGroupLinksForExternal = this.filterNewExternalValues(linkGroupZalos, previousFoundValues.linkGroupZalos)
+        await this.pushFoundUidsToTargetCampaigns(campaign, newUidsForInternal)
+        await this.pushFoundPostLinksToTargetCampaigns(campaign, newPostLinksForInternal)
+        await this.pushFoundPhonesToSmsCampaigns(campaign, newPhonesForExternal)
+        await this.pushFoundPhonesToZaloWebCampaigns(campaign, newPhonesForExternal)
+        await this.pushFoundZaloGroupLinksToZaloWebCampaigns(campaign, newZaloGroupLinksForExternal)
       }
       return
     }
@@ -1420,16 +1463,7 @@ export class CampaignScheduler {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
         if (!targetCampaign || targetCampaign.actionId !== MESSAGE_UID_ACTION_ID) continue
 
-        const existingRows = await this.supabase.listCampaignInputData(targetCampaign.id)
-        const existingUids = new Set(
-          existingRows
-            .map(row => this.normalizeUidForCompare(row.uid || ''))
-            .filter(Boolean)
-        )
-        const newUids = uids.filter(uid => !existingUids.has(this.normalizeUidForCompare(uid)))
-        if (newUids.length === 0) continue
-
-        for (const uid of newUids) {
+        for (const uid of uids) {
           await this.supabase.createCampaignInputData({
             campaignId: targetCampaign.id,
             uid,
@@ -1438,7 +1472,7 @@ export class CampaignScheduler {
           })
         }
 
-        await this.logCampaignProgress(targetCampaign.id, `✅ Đã thêm ${newUids.length} UID vào chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign.id, `✅ Đã đẩy ${uids.length} UID sang chiến dịch "${targetCampaign.name}"`)
         if (targetCampaign.status === 'hoàn thành') {
           await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
         }
@@ -1474,17 +1508,7 @@ export class CampaignScheduler {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
         if (!targetCampaign || targetCampaign.actionId !== COMMENT_SEEDING_POST_ACTION_ID) continue
 
-        const existingRows = await this.supabase.listCampaignInputData(targetCampaign.id)
-        const existingLinks = new Set(
-          existingRows
-            .map(row => this.normalizePostLinkForCompare(row.uid || ''))
-            .filter(Boolean)
-        )
-        const newPostLinks = postLinks.filter(link => !existingLinks.has(this.normalizePostLinkForCompare(link)))
-        if (newPostLinks.length === 0) continue
-        const skippedExistingCount = postLinks.length - newPostLinks.length
-
-        for (const postLink of newPostLinks) {
+        for (const postLink of postLinks) {
           await this.supabase.createCampaignInputData({
             campaignId: targetCampaign.id,
             uid: postLink,
@@ -1493,12 +1517,281 @@ export class CampaignScheduler {
           })
         }
 
-        await this.logCampaignProgress(targetCampaign.id, `✅ Đã thêm ${newPostLinks.length} link bài post vào chiến dịch "${targetCampaign.name}"${skippedExistingCount > 0 ? `, bỏ qua ${skippedExistingCount} link đã có` : ''}`)
+        await this.logCampaignProgress(targetCampaign.id, `✅ Đã đẩy ${postLinks.length} link bài post sang chiến dịch "${targetCampaign.name}"`)
         if (targetCampaign.status === 'hoàn thành') {
           await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
         }
       } catch (err) {
         console.error('Failed to push found post links to target campaign:', err)
+      }
+    }
+  }
+
+  private getExternalTargetCampaignIds(rawIds: unknown[] | undefined, sourceCampaignId: number): number[] {
+    return Array.from(new Set(
+      (Array.isArray(rawIds) ? rawIds : [])
+        .map(id => Number(id))
+        .filter(id => Number.isFinite(id) && id > 0 && id !== sourceCampaignId)
+    ))
+  }
+
+  private uniqueExternalValues(rawValues: string[]): string[] {
+    const map = new Map<string, string>()
+    for (const rawValue of rawValues) {
+      const value = String(rawValue || '').trim()
+      const key = this.normalizeExternalValueForCompare(value)
+      if (value && !map.has(key)) {
+        map.set(key, value)
+      }
+    }
+    return Array.from(map.values())
+  }
+
+  private normalizeExternalValueForCompare(value: unknown): string {
+    return String(value || '').trim().toLowerCase()
+  }
+
+  private filterNewExternalValues(rawValues: string[], existingValues: Set<string>): string[] {
+    const result: string[] = []
+    const seen = new Set<string>()
+    for (const rawValue of rawValues) {
+      const value = String(rawValue || '').trim()
+      const key = this.normalizeExternalValueForCompare(value)
+      if (!value || !key || existingValues.has(key) || seen.has(key)) continue
+      seen.add(key)
+      result.push(value)
+    }
+    return result
+  }
+
+  private filterNewUidValues(rawUids: string[], existingValues: Set<string>): string[] {
+    const result: string[] = []
+    const seen = new Set<string>()
+    for (const rawUid of rawUids) {
+      const uid = String(rawUid || '').trim()
+      const key = this.normalizeUidForCompare(uid)
+      if (!uid || !key || existingValues.has(key) || seen.has(key)) continue
+      seen.add(key)
+      result.push(uid)
+    }
+    return result
+  }
+
+  private filterNewPostLinkValues(rawPostLinks: string[], existingValues: Set<string>): string[] {
+    const result: string[] = []
+    const seen = new Set<string>()
+    for (const rawLink of rawPostLinks) {
+      const link = this.cleanPostLinkForStorage(rawLink)
+      const key = this.normalizePostLinkForCompare(link)
+      if (!link || !key || existingValues.has(key) || seen.has(key)) continue
+      seen.add(key)
+      result.push(link)
+    }
+    return result
+  }
+
+  private async getPreviouslyFoundValues(campaignId: number): Promise<{
+    phones: Set<string>
+    linkGroupZalos: Set<string>
+    uids: Set<string>
+    postLinks: Set<string>
+  }> {
+    const phones = new Set<string>()
+    const linkGroupZalos = new Set<string>()
+    const uids = new Set<string>()
+    const postLinks = new Set<string>()
+
+    try {
+      const details = await this.supabase.listCampaignDetailsByCampaign(campaignId)
+      for (const detail of details) {
+        if (detail.actionName !== 'Tìm data' || detail.status !== 'thành công') continue
+        const data = detail.data || {}
+        const addValues = (values: unknown, target: Set<string>, normalize: (value: unknown) => string) => {
+          if (!Array.isArray(values)) return
+          for (const value of values) {
+            const key = normalize(value)
+            if (key) target.add(key)
+          }
+        }
+        addValues(data.phones, phones, value => this.normalizeExternalValueForCompare(value))
+        addValues(data.linkGroupZalos, linkGroupZalos, value => this.normalizeExternalValueForCompare(value))
+        addValues(data.uids, uids, value => this.normalizeUidForCompare(String(value || '').trim()))
+        addValues(data.postLinks, postLinks, value => this.normalizePostLinkForCompare(this.cleanPostLinkForStorage(String(value || ''))))
+      }
+    } catch (err) {
+      console.error('Failed to load previous find-data values:', err)
+    }
+
+    return { phones, linkGroupZalos, uids, postLinks }
+  }
+
+  private splitSmsContent(contentMessage: string | null | undefined): string[] {
+    const contents = String(contentMessage || '')
+      .split('|')
+      .map(item => item.trim())
+      .filter(Boolean)
+    return contents.length > 0 ? contents : ['']
+  }
+
+  private getAkaBizStaffIdForCampaign(sourceCampaign: Campaign): number | null {
+    const campaignStaffId = Number(sourceCampaign.staffId)
+    if (Number.isFinite(campaignStaffId) && campaignStaffId > 0) return campaignStaffId
+    const currentStaffId = Number(getCurrentUser()?.staffId)
+    return Number.isFinite(currentStaffId) && currentStaffId > 0 ? currentStaffId : null
+  }
+
+  private async loadAkaBizIntegrationsForCampaign(sourceCampaign: Campaign) {
+    const staffId = this.getAkaBizStaffIdForCampaign(sourceCampaign)
+    if (!staffId) {
+      await this.logCampaignProgress(sourceCampaign.id, '⚠️ Chưa xác định được nhân viên để tải tích hợp akaBiz.')
+      return null
+    }
+    try {
+      return await getAkaBizIntegrationsForStaff(staffId)
+    } catch (err: any) {
+      console.error('Failed to load akaBiz integrations:', err)
+      await this.logCampaignProgress(sourceCampaign.id, `⚠️ Không thể tải tích hợp akaBiz: ${err?.message || err}`)
+      return null
+    }
+  }
+
+  private async logExternalPushWarning(sourceCampaign: Campaign, message: string, err?: unknown): Promise<void> {
+    const errMsg = err instanceof Error ? err.message : (err ? String(err) : '')
+    await this.logCampaignProgress(sourceCampaign.id, `⚠️ ${message}${errMsg ? `: ${errMsg}` : ''}`)
+  }
+
+  private formatAkaBizCampaignName(name: string | null | undefined): string {
+    const trimmed = String(name || '').trim()
+    return trimmed ? `chiến dịch "${trimmed}"` : 'chiến dịch đã chọn'
+  }
+
+  private async ensureZaloWebCampaignPending(targetCampaignId: number, sourceCampaign: Campaign): Promise<AkaBizCampaignSummary> {
+    void sourceCampaign
+    const targetCampaign = await getZaloCampaign(targetCampaignId)
+    const status = String(targetCampaign.status || '').trim().toLowerCase()
+    if (status === 'hoàn thành') {
+      await updateZaloCampaignStatus(targetCampaignId, 'Chờ xử lý')
+    }
+    return targetCampaign
+  }
+
+  private async pushFoundPhonesToSmsCampaigns(sourceCampaign: Campaign, rawPhones: string[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindPhone) return
+
+    const targetCampaignIds = this.getExternalTargetCampaignIds(
+      sourceCampaign.extraSettings.findPhoneSmsTargetCampaignIds,
+      sourceCampaign.id
+    )
+    if (targetCampaignIds.length === 0) return
+
+    const phones = this.uniqueExternalValues(rawPhones)
+    if (phones.length === 0) return
+
+    const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
+    if (!integrations?.sms?.staffId) {
+      await this.logExternalPushWarning(sourceCampaign, 'Chưa tích hợp akaBiz Sms nên không thể đẩy SĐT ra campaign ngoài hệ thống.')
+      return
+    }
+
+    for (const targetCampaignId of targetCampaignIds) {
+      let targetCampaignName = 'chiến dịch đã chọn'
+      try {
+        const campSms = await getSmsCampaign(targetCampaignId)
+        targetCampaignName = this.formatAkaBizCampaignName(campSms.name)
+        const shopId = Number(campSms.shopId)
+        if (!Number.isFinite(shopId) || shopId <= 0) {
+          throw new Error('Campaign akaBiz Sms thiếu shopId.')
+        }
+        const contentSms = this.splitSmsContent(campSms.contentMessage)
+        let iContentSms = 0
+
+        for (const phone of phones) {
+          await addSmsCampaignDetail({
+            shopId,
+            campaignId: targetCampaignId,
+            phone,
+            content: contentSms[iContentSms++]
+          })
+          if (iContentSms === contentSms.length) iContentSms = 0
+        }
+
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
+      } catch (err) {
+        console.error('Failed to push found phones to akaBiz Sms campaign:', err)
+        await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy SĐT sang ${targetCampaignName}`, err)
+      }
+    }
+  }
+  private async pushFoundPhonesToZaloWebCampaigns(sourceCampaign: Campaign, rawPhones: string[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindPhone) return
+
+    const targetCampaignIds = this.getExternalTargetCampaignIds(
+      sourceCampaign.extraSettings.findPhoneZaloWebTargetCampaignIds,
+      sourceCampaign.id
+    )
+    if (targetCampaignIds.length === 0) return
+
+    const phones = this.uniqueExternalValues(rawPhones)
+    if (phones.length === 0) return
+
+    const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
+    if (!integrations?.zaloWeb?.staffId) {
+      await this.logExternalPushWarning(sourceCampaign, 'Chưa tích hợp akaBiz Zalo Web nên không thể đẩy SĐT ra campaign ngoài hệ thống.')
+      return
+    }
+
+    for (const targetCampaignId of targetCampaignIds) {
+      let targetCampaignName = 'chiến dịch đã chọn'
+      try {
+        const targetCampaign = await this.ensureZaloWebCampaignPending(targetCampaignId, sourceCampaign)
+        targetCampaignName = this.formatAkaBizCampaignName(targetCampaign.name)
+        await addZaloCampaignDetails(phones.map(phone => ({
+          campaignId: targetCampaignId,
+          status: 1,
+          phone,
+          isAutomate: true
+        })))
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
+      } catch (err) {
+        console.error('Failed to push found phones to akaBiz Zalo Web campaign:', err)
+        await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy SĐT sang ${targetCampaignName}`, err)
+      }
+    }
+  }
+
+  private async pushFoundZaloGroupLinksToZaloWebCampaigns(sourceCampaign: Campaign, rawLinks: string[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindLinkGroupZalo) return
+
+    const targetCampaignIds = this.getExternalTargetCampaignIds(
+      sourceCampaign.extraSettings.findZaloGroupLinkWebTargetCampaignIds,
+      sourceCampaign.id
+    )
+    if (targetCampaignIds.length === 0) return
+
+    const links = this.uniqueExternalValues(rawLinks)
+    if (links.length === 0) return
+
+    const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
+    if (!integrations?.zaloWeb?.staffId) {
+      await this.logExternalPushWarning(sourceCampaign, 'Chưa tích hợp akaBiz Zalo Web nên không thể đẩy link group Zalo ra campaign ngoài hệ thống.')
+      return
+    }
+
+    for (const targetCampaignId of targetCampaignIds) {
+      let targetCampaignName = 'chiến dịch đã chọn'
+      try {
+        const targetCampaign = await this.ensureZaloWebCampaignPending(targetCampaignId, sourceCampaign)
+        targetCampaignName = this.formatAkaBizCampaignName(targetCampaign.name)
+        await addZaloCampaignDetails(links.map(link => ({
+          campaignId: targetCampaignId,
+          status: 1,
+          uid: link,
+          isAutomate: true
+        })))
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${links.length} link group Zalo sang ${targetCampaignName}`)
+      } catch (err) {
+        console.error('Failed to push found Zalo group links to akaBiz Zalo Web campaign:', err)
+        await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy link group Zalo sang ${targetCampaignName}`, err)
       }
     }
   }

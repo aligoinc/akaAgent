@@ -11,6 +11,7 @@ import AlertModal from './components/CampaignPanels/AlertModal'
 import ConfirmModal from './components/CampaignPanels/ConfirmModal'
 import UpdateModal from './components/UpdateModal/UpdateModal'
 import DataScanModal from './components/DataScan/DataScanModal'
+import GeneralSettingsModal from './components/Settings/GeneralSettingsModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
@@ -19,6 +20,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
   const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
   const [showDataScan, setShowDataScan] = useState(false)
+  const [showGeneralSettings, setShowGeneralSettings] = useState(false)
 
   // Bootstrap auth: re-login from stored creds (or land on LoginPage).
   useEffect(() => {
@@ -131,13 +133,21 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      <TopBar activePage={activePage} onPageChange={setActivePage} onOpenDataScan={() => setShowDataScan(true)} />
+      <TopBar
+        activePage={activePage}
+        onPageChange={setActivePage}
+        onOpenDataScan={() => setShowDataScan(true)}
+        onOpenGeneralSettings={() => setShowGeneralSettings(true)}
+      />
 
       <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <CampaignPage onNavigateToBrowser={(accountId) => {
-          setFocusAccountId(accountId)
-          setActivePage('browsers')
-        }} />
+        <CampaignPage
+          onNavigateToBrowser={(accountId) => {
+            setFocusAccountId(accountId)
+            setActivePage('browsers')
+          }}
+          onOpenGeneralSettings={() => setShowGeneralSettings(true)}
+        />
       </div>
 
       <div style={activePage === 'browsers'
@@ -158,6 +168,9 @@ export default function App() {
       <ConfirmModal />
       {showDataScan && (
         <DataScanModal onClose={() => setShowDataScan(false)} />
+      )}
+      {showGeneralSettings && (
+        <GeneralSettingsModal onClose={() => setShowGeneralSettings(false)} />
       )}
       {updateInfo && (
         <UpdateModal

@@ -12,6 +12,7 @@ import AccountInfoView from './AccountInfoView'
 interface CampaignPanelProps {
   filterAccountId?: number | null
   onClearFilter?: () => void
+  onOpenGeneralSettings?: () => void
 }
 
 type DetailTab = 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData'
@@ -124,7 +125,7 @@ const parseCampaignRunLog = (log: string): RunLogEntry[] => {
     .filter((entry): entry is RunLogEntry => Boolean(entry))
 }
 
-export default function CampaignPanel({ filterAccountId, onClearFilter }: CampaignPanelProps) {
+export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGeneralSettings }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
@@ -666,6 +667,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter }: Campai
         <CampaignFormModal
           campaign={editingCampaign}
           cloneFromId={cloneFromId}
+          onOpenGeneralSettings={onOpenGeneralSettings}
           onClose={() => {
             setShowForm(false)
             setEditingCampaign(null)
