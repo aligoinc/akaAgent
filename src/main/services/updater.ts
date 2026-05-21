@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { spawn } from 'child_process'
-import { createWriteStream, existsSync, readFileSync, unlinkSync } from 'fs'
+import { createWriteStream, existsSync, readFileSync, renameSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import * as https from 'https'
 import * as http from 'http'
@@ -168,14 +168,27 @@ async function downloadInstaller(
   const res = await httpGet(installerUrl)
   const total = parseInt(res.headers['content-length'] || '0', 10) || 0
   let transferred = 0
+  const tempPath = `${targetPath}.download`
 
-  // Remove stale file if exists
-  try { if (existsSync(targetPath)) unlinkSync(targetPath) } catch { /* ignore */ }
+  try {
+    if (existsSync(targetPath)) unlinkSync(targetPath)
+    if (existsSync(tempPath)) unlinkSync(tempPath)
+  } catch {
+    // ignore stale file cleanup failures; write errors below will surface if the path is still locked
+  }
 
-  const out = createWriteStream(targetPath)
+  const out = createWriteStream(tempPath)
 
   await new Promise<void>((resolve, reject) => {
     let lastEmitted = 0
+    let settled = false
+    const fail = (err: Error): void => {
+      if (settled) return
+      settled = true
+      out.destroy()
+      reject(err)
+    }
+
     res.on('data', (chunk: Buffer) => {
       transferred += chunk.length
       const now = Date.now()
@@ -187,17 +200,32 @@ async function downloadInstaller(
       }
     })
     res.pipe(out)
-    out.on('finish', () => {
-      onProgress({
-        phase: 'downloading',
-        percent: 100,
-        transferred,
-        total: total || transferred
-      })
-      out.close(() => resolve())
+    out.on('close', () => {
+      if (settled) return
+      settled = true
+      resolve()
     })
-    out.on('error', reject)
-    res.on('error', reject)
+    out.on('error', fail)
+    res.on('aborted', () => fail(new Error('Kết nối tải cập nhật bị ngắt giữa chừng')))
+    res.on('error', fail)
+  })
+
+  const downloadedSize = statSync(tempPath).size
+  if (downloadedSize <= 0) {
+    try { unlinkSync(tempPath) } catch { /* ignore */ }
+    throw new Error('File cập nhật tải về bị rỗng')
+  }
+  if (total > 0 && (transferred !== total || downloadedSize !== total)) {
+    try { unlinkSync(tempPath) } catch { /* ignore */ }
+    throw new Error(`File cập nhật tải chưa đủ dung lượng (${downloadedSize}/${total} bytes)`)
+  }
+
+  renameSync(tempPath, targetPath)
+  onProgress({
+    phase: 'downloading',
+    percent: 100,
+    transferred: downloadedSize,
+    total: total || downloadedSize
   })
 }
 
@@ -237,21 +265,23 @@ export async function downloadAndInstall(
 
   const tempDir = app.getPath('temp')
   const installerPath = join(tempDir, config.installerFilename)
+  const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
   try {
     emit({ phase: 'downloading', percent: 0, transferred: 0, total: 0 })
     await downloadInstaller(installerPath, config.installerUrl, emit)
 
-    emit({ phase: 'installing', message: process.platform === 'darwin' ? 'Đang mở file cập nhật…' : 'Đang khởi chạy bộ cài đặt…' })
+    emit({ phase: 'installing', message: process.platform === 'darwin' ? 'Đang mở file cập nhật…' : 'Đã tải xong. Ứng dụng sẽ đóng để cài đặt…' })
 
     if (process.platform === 'win32') {
       runWindowsInstallerAfterAppExit(installerPath)
 
       emit({ phase: 'done', message: 'Ứng dụng sẽ tự thoát và mở bộ cài đặt sau khi đã đóng hoàn toàn.' })
+      await sleep(1500)
 
       setTimeout(() => {
         app.quit()
-      }, 100)
+      }, 0)
 
       return { success: true }
     }
