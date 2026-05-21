@@ -162,6 +162,11 @@ export interface CampaignExtraSettings {
   contentAI?: string
   findUidTargetCampaignIds?: number[]          // Khi tìm UID, tự thêm UID vào các campaign facebook_message_uid đã chọn
   findPostLinkTargetCampaignIds?: number[]     // Khi tìm link bài post, tự thêm link vào campaign comment seeding bài post đã chọn
+  findPhoneSmsTargetCampaignIds?: number[]       // Khi tìm SĐT, đẩy sang campaign akaBiz Sms đã chọn
+  findPhoneZaloWebTargetCampaignIds?: number[]   // Khi tìm SĐT, đẩy sang campaign akaBiz Zalo Web đã chọn
+  findZaloGroupLinkWebTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Zalo Web đã chọn
+  findPhoneAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm SĐT, đẩy sang campaign akaBiz Desktop đã chọn
+  findZaloGroupLinkAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Desktop đã chọn
 }
 
 export interface Campaign {
@@ -354,6 +359,44 @@ export interface AiWriteMultiOtherContentRequest {
   countContent: number
 }
 
+export type AkaBizIntegrationKind = 'sms' | 'zaloWeb' | 'akaBizDesktop'
+export type AkaBizCampaignListKind = 'sms' | 'zaloPhone' | 'zaloGroupLink' | 'desktopZaloPhone' | 'desktopZaloGroupLink'
+
+export interface AkaBizStaffBasic {
+  id: number
+  staffId?: number
+  name: string | null
+  username: string
+  installPath?: string | null
+  dbPath?: string | null
+}
+
+export interface AkaBizIntegrationInfo extends AkaBizStaffBasic {
+  staffId: number
+  integratedAt: string
+}
+
+export interface AkaBizIntegrations {
+  sms?: AkaBizIntegrationInfo | null
+  zaloWeb?: AkaBizIntegrationInfo | null
+  akaBizDesktop?: AkaBizIntegrationInfo | null
+}
+
+export interface AkaBizCampaignListItem {
+  id: number
+  name: string | null
+  shopId: number
+  shopName: string | null
+  campaignActionId: string | null
+  schedule?: string | null
+  status?: string | null
+}
+
+export interface AkaBizDesktopPathValidationResult {
+  installPath: string
+  dbPath: string
+}
+
 // ============================================
 // IPC Event Types
 // ============================================
@@ -375,6 +418,14 @@ export const IPC_EVENTS = {
   // AI content tools
   AI_REWRITE_CONTENT: 'ai:rewrite-content',
   AI_WRITE_MULTI_OTHER_CONTENT: 'ai:write-multi-other-content',
+
+  // akaBiz external integrations
+  AKABIZ_INTEGRATIONS_GET: 'akabiz:integrations:get',
+  AKABIZ_INTEGRATION_LOOKUP: 'akabiz:integration:lookup',
+  AKABIZ_INTEGRATION_SAVE: 'akabiz:integration:save',
+  AKABIZ_EXTERNAL_CAMPAIGNS_LIST: 'akabiz:external-campaigns:list',
+  AKABIZ_DESKTOP_INSTALL_PATH_SELECT: 'akabiz:desktop-install-path:select',
+  AKABIZ_DESKTOP_INSTALL_PATH_VALIDATE: 'akabiz:desktop-install-path:validate',
 
   // Database Auto Accounts
   DB_LIST_ACCOUNTS: 'db:list-accounts',

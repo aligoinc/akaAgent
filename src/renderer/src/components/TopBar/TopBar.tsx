@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database } from 'lucide-react'
+import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -8,9 +8,10 @@ interface TopBarProps {
   activePage: 'campaigns' | 'workflow-editor' | 'browsers'
   onPageChange: (page: 'campaigns' | 'workflow-editor' | 'browsers') => void
   onOpenDataScan: () => void
+  onOpenGeneralSettings: () => void
 }
 
-export default function TopBar({ activePage, onPageChange, onOpenDataScan }: TopBarProps) {
+export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpenGeneralSettings }: TopBarProps) {
   const { theme, toggleTheme } = useThemeStore()
   const { user, logout, resetDeviceLock } = useAuthStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -66,6 +67,11 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan }: Top
       },
       { title: 'Đổi máy tính', confirmText: 'Đổi máy tính', variant: 'primary' }
     )
+  }
+
+  const handleOpenGeneralSettings = () => {
+    setSettingsOpen(false)
+    onOpenGeneralSettings()
   }
 
   return (
@@ -144,6 +150,10 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan }: Top
           </button>
           {settingsOpen && (
             <div className="topbar-settings-menu" role="menu">
+              <button className="topbar-settings-item" role="menuitem" onClick={handleOpenGeneralSettings}>
+                <SlidersHorizontal size={14} />
+                <span>Cài đặt chung</span>
+              </button>
               <button className="topbar-settings-item" role="menuitem" onClick={handleResetDeviceLock}>
                 <Monitor size={14} />
                 <span>Đổi máy tính</span>

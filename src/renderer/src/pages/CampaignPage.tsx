@@ -5,9 +5,10 @@ import LogPanel from '../components/CampaignPanels/LogPanel'
 
 interface CampaignPageProps {
   onNavigateToBrowser?: (accountId: number) => void
+  onOpenGeneralSettings?: () => void
 }
 
-export default function CampaignPage({ onNavigateToBrowser }: CampaignPageProps) {
+export default function CampaignPage({ onNavigateToBrowser, onOpenGeneralSettings }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -73,6 +74,7 @@ export default function CampaignPage({ onNavigateToBrowser }: CampaignPageProps)
         <CampaignPanel
           filterAccountId={filterAccountId}
           onClearFilter={() => setFilterAccountId(null)}
+          onOpenGeneralSettings={onOpenGeneralSettings}
         />
       </div>
 
