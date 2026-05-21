@@ -57,6 +57,22 @@ const DETAIL_DOCK_MAX_HEIGHT = 900
 const DETAIL_DOCK_TOP_RESERVED_HEIGHT = 96
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
+const canPauseCampaign = (status: string) => status === 'chờ xử lý' || status === 'đang chạy'
+const canResumeCampaign = (status: string) => status === 'tạm dừng'
+
+const formatIpcErrorMessage = (err: unknown, fallback: string): string => {
+  const message = err instanceof Error
+    ? err.message
+    : typeof err === 'string'
+      ? err
+      : ''
+
+  return message
+    .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim() || fallback
+}
 
 const toStringList = (value: unknown): string[] => {
   if (!Array.isArray(value)) return []
@@ -176,6 +192,10 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }, [filterAccountId])
 
   const handleEdit = (campaign: Campaign) => {
+    if (!canEditCampaign(campaign.status)) {
+      showAlert('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
+      return
+    }
     setEditingCampaign(campaign)
     setShowForm(true)
   }
@@ -198,7 +218,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       ...campaign,
       id: 0,
       name: campaign.name + ' (Copy)',
-      status: 'chờ xử lý',
+      status: 'tạm dừng',
       log: ''
     }
     setCloneFromId(campaign.id)
@@ -212,11 +232,27 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }
 
   const handlePause = async (campaign: Campaign) => {
-    await updateCampaign(campaign.id, { status: 'tạm dừng' })
+    if (!canPauseCampaign(campaign.status)) {
+      showAlert('Chỉ có thể tạm dừng chiến dịch khi trạng thái là "chờ xử lý" hoặc "đang chạy".', 'info')
+      return
+    }
+    try {
+      await updateCampaign(campaign.id, { status: 'tạm dừng' })
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể tạm dừng chiến dịch.'), 'error')
+    }
   }
 
   const handleResume = async (campaign: Campaign) => {
-    await updateCampaign(campaign.id, { status: 'chờ xử lý' })
+    if (!canResumeCampaign(campaign.status)) {
+      showAlert('Chỉ có thể tiếp tục chiến dịch khi trạng thái là "tạm dừng".', 'info')
+      return
+    }
+    try {
+      await updateCampaign(campaign.id, { status: 'chờ xử lý' })
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể tiếp tục chiến dịch.'), 'error')
+    }
   }
 
   const toggleSelectOne = (id: number) => {
@@ -238,15 +274,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const handleBulkPause = async () => {
     const eligible = filteredCampaigns
       .filter(c => selectedIds.has(c.id))
-      .filter(c => c.status === 'đang chạy' || c.status === 'chờ xử lý')
+      .filter(c => canPauseCampaign(c.status))
       .map(c => c.id)
     if (eligible.length === 0) {
-      setSelectedIds(new Set())
+      showAlert('Không có chiến dịch nào có thể tạm dừng. Chỉ có thể tạm dừng chiến dịch "chờ xử lý" hoặc "đang chạy".', 'info')
       return
     }
     setBulkActionLoading(true)
     try {
       await bulkUpdateCampaignStatus(eligible, 'tạm dừng')
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể tạm dừng các chiến dịch đã chọn.'), 'error')
     } finally {
       setBulkActionLoading(false)
       setSelectedIds(new Set())
@@ -255,15 +293,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
   const handleBulkResume = async () => {
     const eligible = filteredCampaigns
-      .filter(c => selectedIds.has(c.id) && c.status === 'tạm dừng')
+      .filter(c => selectedIds.has(c.id) && canResumeCampaign(c.status))
       .map(c => c.id)
     if (eligible.length === 0) {
-      setSelectedIds(new Set())
+      showAlert('Không có chiến dịch nào có thể tiếp tục. Chỉ có thể tiếp tục chiến dịch "tạm dừng".', 'info')
       return
     }
     setBulkActionLoading(true)
     try {
       await bulkUpdateCampaignStatus(eligible, 'chờ xử lý')
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể tiếp tục các chiến dịch đã chọn.'), 'error')
     } finally {
       setBulkActionLoading(false)
       setSelectedIds(new Set())
@@ -311,7 +351,6 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       case 'đang chạy': return 'status-running'
       case 'hoàn thành': return 'status-completed'
       case 'tạm dừng': return 'status-paused'
-      case 'lỗi': return 'status-error'
       default: return 'status-unknown'
     }
   }
@@ -746,12 +785,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     ) : '-'}
                   </div>
                   <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
-                    {(campaign.status === 'đang chạy' || campaign.status === 'chờ xử lý') && (
+                    {canPauseCampaign(campaign.status) && (
                       <button className="btn-icon" onClick={() => handlePause(campaign)} title="Tạm dừng">
                         <Pause size={12} />
                       </button>
                     )}
-                    {campaign.status === 'tạm dừng' && (
+                    {canResumeCampaign(campaign.status) && (
                       <button className="btn-icon" onClick={() => handleResume(campaign)} title="Tiếp tục">
                         <Play size={12} />
                       </button>

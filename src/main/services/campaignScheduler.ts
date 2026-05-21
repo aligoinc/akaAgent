@@ -54,6 +54,7 @@ const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
+const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 
 /**
  * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
@@ -75,6 +76,7 @@ export class CampaignScheduler {
   private running = false
   private processing = false
   private activeV2Aborts = new Map<number, AbortController>()
+  private pauseRequests = new Set<number>()
   private backgroundPages = new BackgroundPageManager()
   private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<string>()
@@ -119,6 +121,44 @@ export class CampaignScheduler {
 
   isRunning(): boolean {
     return this.running
+  }
+
+  async requestPauseCampaign(campaignId: number): Promise<Campaign> {
+    const campaign = await this.supabase.getCampaign(campaignId)
+    if (!campaign) {
+      throw new Error('Không tìm thấy chiến dịch.')
+    }
+
+    if (campaign.status === 'chờ xử lý') {
+      this.pauseRequests.delete(campaignId)
+      return await this.updateCampaignAndBroadcast(campaignId, { status: 'tạm dừng', note: null })
+    }
+
+    if (campaign.status === 'đang chạy') {
+      this.pauseRequests.add(campaignId)
+      return await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
+    }
+
+    throw new Error('Chỉ có thể tạm dừng chiến dịch khi trạng thái là "chờ xử lý" hoặc "đang chạy".')
+  }
+
+  private isCampaignPauseRequested(campaignId: number): boolean {
+    return this.pauseRequests.has(campaignId)
+  }
+
+  private async completeCampaignPause(campaign: Campaign): Promise<void> {
+    await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: null })
+    this.pauseRequests.delete(campaign.id)
+    await this.logCampaignProgress(campaign.id, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+  }
+
+  private async sleepBetweenTargets(campaign: Campaign, seconds: number): Promise<'paused' | 'completed'> {
+    const endAt = Date.now() + seconds * 1000
+    while (Date.now() < endAt) {
+      if (this.isCampaignPauseRequested(campaign.id)) return 'paused'
+      await new Promise(resolve => setTimeout(resolve, Math.min(500, Math.max(0, endAt - Date.now()))))
+    }
+    return this.isCampaignPauseRequested(campaign.id) ? 'paused' : 'completed'
   }
 
   private async tick(): Promise<void> {
@@ -215,6 +255,12 @@ export class CampaignScheduler {
 
   private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
     try {
+      const currentCampaign = await this.supabase.getCampaign(campaign.id)
+      if (!currentCampaign || currentCampaign.status !== 'chờ xử lý') {
+        return
+      }
+      campaign = currentCampaign
+
       const startBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý')
       if (startBlockReason) {
         await this.updateCampaignPreflightNote(campaign, startBlockReason)
@@ -281,8 +327,19 @@ export class CampaignScheduler {
     let details = await this.supabase.listCampaignInputData(campaign.id)
     const extra = campaign.extraSettings || {}
 
+    if (this.isCampaignPauseRequested(campaign.id)) {
+      await this.releaseRunningAccount(account.id)
+      await this.completeCampaignPause(campaign)
+      return
+    }
+
     if (this.shouldUseSuggestedFriends(campaign) && details.length === 0) {
       details = await this.collectSuggestedFriendInputData(account, campaign, workflowId)
+      if (this.isCampaignPauseRequested(campaign.id)) {
+        await this.releaseRunningAccount(account.id)
+        await this.completeCampaignPause(campaign)
+        return
+      }
       if (details.length === 0) {
         const message = 'Không lấy được đề xuất bạn bè từ Facebook'
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
@@ -328,9 +385,9 @@ export class CampaignScheduler {
     for (let i = 0; i < targets.length; i++) {
       // Check pause
       const cur = await this.supabase.getCampaign(campaign.id)
-      if (cur && cur.status === 'tạm dừng') {
-        await this.logCampaignProgress(campaign.id, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+      if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
         await this.releaseRunningAccount(account.id)
+        await this.completeCampaignPause(campaign)
         return
       }
 
@@ -395,6 +452,7 @@ export class CampaignScheduler {
       const abort = new AbortController()
       let accountStopReason: string | null = null
       let shouldStopAfterTarget = false
+      let shouldCompletePauseAfterTarget = false
       const accountGuard = setInterval(() => {
         void (async () => {
           if (accountStopReason || abort.signal.aborted) return
@@ -429,6 +487,9 @@ export class CampaignScheduler {
         // Per-milestone logging — scan steps theo block_name
         await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed')
 
+        const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
+        let runtimeStopTriggered = false
+
         if (accountStopReason) {
           if (detail) {
             await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: accountStopReason })
@@ -454,10 +515,22 @@ export class CampaignScheduler {
           const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
             message: runtimeError.message
           })
+          runtimeStopTriggered = handled.triggered
           shouldStopAfterTarget = handled.triggered
+        }
+
+        if (campaignPauseRequested) {
+          if (!accountStopReason && !runtimeStopTriggered) {
+            shouldCompletePauseAfterTarget = true
+            shouldStopAfterTarget = true
+          } else {
+            this.pauseRequests.delete(campaign.id)
+          }
         }
       } catch (err: any) {
         const errMsg = err?.message || String(err)
+        const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
+        let runtimeStopTriggered = false
         if (detail) {
           await this.supabase.updateCampaignInputData(detail.id, {
             status: accountStopReason ? 'chờ xử lý' : 'hoàn thành',
@@ -472,15 +545,30 @@ export class CampaignScheduler {
           const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
             message: runtimeError.message
           })
+          runtimeStopTriggered = handled.triggered
           shouldStopAfterTarget = handled.triggered
         }
         await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
+        if (campaignPauseRequested) {
+          if (!accountStopReason && !runtimeStopTriggered) {
+            shouldCompletePauseAfterTarget = true
+            shouldStopAfterTarget = true
+          } else {
+            this.pauseRequests.delete(campaign.id)
+          }
+        }
       } finally {
         clearInterval(accountGuard)
         if (automationPage.source === 'background') {
           this.stopBackgroundPreview(account.id, campaign.id)
         }
         this.activeV2Aborts.delete(campaign.id)
+      }
+
+      if (shouldCompletePauseAfterTarget) {
+        await this.releaseRunningAccount(account.id)
+        await this.completeCampaignPause(campaign)
+        return
       }
 
       if (shouldStopAfterTarget) {
@@ -493,7 +581,12 @@ export class CampaignScheduler {
         const sleepTime = extra.actionLimits?.sleepBetweenActions ?? campaign.timeSleepBetween2 ?? 0
         if (sleepTime > 0) {
           await this.logCampaignProgress(campaign.id, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
-          await new Promise(r => setTimeout(r, sleepTime * 1000))
+          const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime)
+          if (sleepResult === 'paused') {
+            await this.releaseRunningAccount(account.id)
+            await this.completeCampaignPause(campaign)
+            return
+          }
         }
       }
     }

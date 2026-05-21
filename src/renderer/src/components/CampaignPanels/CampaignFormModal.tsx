@@ -1322,6 +1322,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
           name: formData.name,
           actionId: formData.actionId,
           accountId: accountId,
+          ...(cloneFromId ? { status: 'tạm dừng' } : {}),
           schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
           scheduleType: formData.scheduleType,
           scheduleEndDate: formData.scheduleType === 'daily'
@@ -1460,7 +1461,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       setTimeout(() => onClose(), 1200)
     } catch (err) {
       console.error('Failed to save campaign:', err)
-      showAlert('Có lỗi xảy ra khi lưu chiến dịch.', 'error')
+      showAlert(formatIpcErrorMessage(err, 'Có lỗi xảy ra khi lưu chiến dịch.'), 'error')
     }
   }
 

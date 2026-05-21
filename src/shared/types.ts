@@ -199,6 +199,9 @@ export interface Campaign {
   accountName?: string
 }
 
+export const CAMPAIGN_STATUSES = ['chờ xử lý', 'đang chạy', 'tạm dừng', 'hoàn thành'] as const
+export type CampaignStatus = typeof CAMPAIGN_STATUSES[number]
+
 // Status enum cho data layer (campaign_inputs / campaign_input_data):
 //   - campaign_inputs: 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'
 //     ('lỗi' để flag input không scrape được — admin re-trigger)

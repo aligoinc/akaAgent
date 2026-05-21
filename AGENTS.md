@@ -69,7 +69,7 @@ Domain (sau migration_v4 drop engine v1):
 - `auto_accounts` — tài khoản/social profile để login và chạy automation (trước đây là `org_accounts`); `rate_limit_minutes` là số phút khung check giới hạn giờ copy vào campaign khi lưu, default/fallback `65`, hiện không chỉnh ở UI account.
 - `auto_account_contacts` — danh bạ person/group/page theo account (trước đây là `org_account_contacts`); person dùng `is_friend` để lưu trạng thái bạn bè, group dùng `is_joined` và `requires_post_approval` nullable để lưu trạng thái tham gia/duyệt bài. Dữ liệu legacy `contact_type='friend'` chỉ đổi sang `person` qua script manual `migrations/manual_update_friend_contacts_to_person.sql`, không chạy tự động trong migration feature.
 - `auto_account_contact_groups` / `auto_account_contact_group_members` — nhóm data theo `account_id + contact_type`; một contact có thể nằm nhiều nhóm. Membership unique `(group_id, contact_id)` nên thêm trùng phải dùng upsert/ignore duplicate, không nhân đôi. `DataScanModal` có modal xem/quản lý nhóm data và modal chọn nhóm data; khi chọn nhiều nhóm vào campaign phải union contacts rồi lọc trùng trước khi insert snapshot vào `auto_campaign_input_data`.
-- `auto_campaigns` — campaign config (action_id, account_id, schedule, daily_stop_time, content, extra_settings). `daily_stop_time` là giờ dừng trong ngày (`time`, Asia/Ho_Chi_Minh); `getPendingCampaigns()` bỏ qua campaign sau giờ này.
+- `auto_campaigns` — campaign config (action_id, account_id, schedule, daily_stop_time, content, extra_settings). Status runtime hợp lệ: `'chờ xử lý' | 'đang chạy' | 'tạm dừng' | 'hoàn thành'` (`'lỗi'` không còn là campaign status hợp lệ; lỗi action-level nằm ở `auto_campaign_details`). `daily_stop_time` là giờ dừng trong ngày (`time`, Asia/Ho_Chi_Minh); `getPendingCampaigns()` bỏ qua campaign sau giờ này.
 - `auto_campaign_actions` — template loại campaign (`facebook_group_post`/`facebook_timeline_post`/`facebook_message_friend`/`facebook_message_uid`/`facebook_find_data_group`/`facebook_comment_seeding`/`facebook_comment_seeding_post`); column `workflow_id` (BIGINT, FK auto_workflows.id) là pointer duy nhất tới workflow.
   - `limit_check_action_codes text[]` controls which `auto_account_actions.code` values scheduler checks for rate limit/disable before running this campaign action.
 - `auto_account_actions` — định nghĩa action theo account (`fb_post_group`/`fb_comment`/`fb_message_friend`/`fb_message_stranger`/...). Limit/error policy dùng `code`, KHÔNG dùng `auto_campaign_actions.id`.
@@ -87,7 +87,7 @@ Domain (sau migration_v4 drop engine v1):
 1. Lấy accounts + campaigns đến giờ
 2. Lookup action.workflow_id → `executeCampaignV2`
 3. Mỗi input_data row lấy hidden/offscreen `PageController` từ `BackgroundPageManager`, run workflow, rồi log per-milestone vào `auto_campaign_details` qua `logMilestonesV2` (scan `result.steps` theo `block_name`: `fb_click_post_button` → "Đăng bài", `fb_comment_at_position`/`fb_comment_current_post` → "Comment", `fb_send_message` → "Nhắn tin", `fb_add_friend` → "Kết bạn"). Status mapping: `step.status==='error'` → `'lỗi'`; `output.ok===false` không exception → `'thất bại'`; còn lại → `'thành công'`.
-4. Sleep `extra.actionLimits.sleepBetweenActions` giây giữa input_data rows
+4. Sleep `extra.actionLimits.sleepBetweenActions` giây giữa input_data rows; nếu user yêu cầu tạm dừng khi campaign đang chạy, scheduler giữ status `'đang chạy'` + note `"Đang chờ tạm dừng"`, cho target hiện tại chạy xong rồi mới chuyển campaign sang `'tạm dừng'` tại điểm nghỉ/trước target kế tiếp (không abort workflow chỉ vì pause).
 Scheduler tự start sau `AUTH_LOGIN` và stop nội bộ khi `AUTH_LOGOUT`; UI không có nút bật/tắt scheduler, muốn dừng thì pause campaign/account.
 Các cập nhật `auto_accounts.status` do scheduler thực hiện phải đi qua `updateAccountAndBroadcast()`/`releaseRunningAccount()` để UI tài khoản refresh realtime và không ghi đè trạng thái do user/policy đổi.
 
@@ -130,7 +130,8 @@ Migration pattern: write SQL files under `migrations/` (`migrations/migration.sq
 ### Vietnamese UI conventions
 
 Status values trong DB lưu **tiếng Việt có dấu**:
-- Campaign / campaign_inputs: `'chờ xử lý'`, `'đang chạy'`, `'hoàn thành'`, `'lỗi'`, `'tạm dừng'`
+- Campaign: `'chờ xử lý'`, `'đang chạy'`, `'hoàn thành'`, `'tạm dừng'` (KHÔNG có `'lỗi'` trong runtime hiện tại)
+- campaign_inputs: `'chờ xử lý'`, `'đang chạy'`, `'hoàn thành'`, `'lỗi'`, `'tạm dừng'`
 - campaign_input_data: `'chờ xử lý'`, `'đang chạy'`, `'hoàn thành'`, `'tạm dừng'` (KHÔNG có `'lỗi'`)
 - campaign_details: `'thành công'`, `'thất bại'`, `'lỗi'`
 - Login status: `'đã đăng nhập'`, `'chưa đăng nhập'`, `'checkpoint'`
