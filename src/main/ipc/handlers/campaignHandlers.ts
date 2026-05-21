@@ -1,8 +1,60 @@
 import { ipcMain } from 'electron'
-import { IPC_EVENTS } from '../../../shared/types'
+import { CAMPAIGN_STATUSES, IPC_EVENTS, type Campaign, type CampaignStatus } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
-export function registerCampaignHandlers(supabase: SupabaseService): void {
+interface CampaignPauseController {
+  requestPauseCampaign(campaignId: number): Promise<Campaign>
+}
+
+const isKnownCampaignStatus = (status: string): status is CampaignStatus =>
+  (CAMPAIGN_STATUSES as readonly string[]).includes(status)
+
+const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
+const canPauseCampaign = (status: string) => status === 'chờ xử lý' || status === 'đang chạy'
+const canResumeCampaign = (status: string) => status === 'tạm dừng'
+
+const isStatusOnlyCampaignUpdate = (updates: Partial<Campaign>) => {
+  const keys = Object.keys(updates)
+  return keys.length === 1 && keys[0] === 'status' && updates.status !== undefined
+}
+
+async function assertCanUpdateCampaignFromRenderer(
+  supabase: SupabaseService,
+  id: number,
+  updates: Partial<Campaign>
+): Promise<void> {
+  const campaign = await supabase.getCampaign(id)
+  if (!campaign) {
+    throw new Error('Không tìm thấy chiến dịch.')
+  }
+
+  if (isStatusOnlyCampaignUpdate(updates)) {
+    if (updates.status === 'tạm dừng' && canPauseCampaign(campaign.status)) return
+    if (updates.status === 'chờ xử lý' && canResumeCampaign(campaign.status)) return
+
+    if (updates.status === 'tạm dừng') {
+      throw new Error('Chỉ có thể tạm dừng chiến dịch khi trạng thái là "chờ xử lý" hoặc "đang chạy".')
+    }
+    if (updates.status === 'chờ xử lý') {
+      throw new Error('Chỉ có thể tiếp tục chiến dịch khi trạng thái là "tạm dừng".')
+    }
+
+    const nextStatus = updates.status && isKnownCampaignStatus(updates.status)
+      ? updates.status
+      : String(updates.status || '')
+    throw new Error(`Không hỗ trợ chuyển trạng thái chiến dịch sang "${nextStatus}".`)
+  }
+
+  if (updates.status !== undefined) {
+    throw new Error('Không thể cập nhật trạng thái kèm cấu hình chiến dịch.')
+  }
+
+  if (!canEditCampaign(campaign.status)) {
+    throw new Error('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".')
+  }
+}
+
+export function registerCampaignHandlers(supabase: SupabaseService, campaignPauseController: CampaignPauseController): void {
   // Campaign Actions
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_ACTIONS, async () => {
     return supabase.listCampaignActions()
@@ -33,8 +85,13 @@ export function registerCampaignHandlers(supabase: SupabaseService): void {
     return supabase.createCampaign(campaignData)
   })
 
-  ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates) => {
-    return supabase.updateCampaign(id, updates)
+  ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: Partial<Campaign> | null | undefined) => {
+    const payload = updates || {}
+    if (isStatusOnlyCampaignUpdate(payload) && payload.status === 'tạm dừng') {
+      return campaignPauseController.requestPauseCampaign(id)
+    }
+    await assertCanUpdateCampaignFromRenderer(supabase, id, payload)
+    return supabase.updateCampaign(id, payload)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_CAMPAIGN, async (_, id: number) => {

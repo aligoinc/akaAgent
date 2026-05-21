@@ -286,7 +286,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       name: origCamp.name + ' (Copy)',
       action_id: origCamp.action_id,
       account_id: origCamp.account_id,
-      status: 'chờ xử lý',
+      status: 'tạm dừng',
       schedule: origCamp.schedule,
       schedule_type: origCamp.schedule_type,
       schedule_end_date: origCamp.schedule_end_date,

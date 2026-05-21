@@ -2394,7 +2394,7 @@ button.btn-icon:not(.btn):disabled {
 /* =========== CAMPAIGN TABLE (multi-column) =========== */
 .campaign-table {
   width: 100%;
-  min-width: 780px;
+  min-width: 750px;
   font-size: 12px;
 }
 
@@ -2501,7 +2501,7 @@ button.btn-icon:not(.btn):disabled {
   min-width: 0;
 }
 .col-note {
-  flex: 2;
+  flex: 1.5;
   min-width: 0;
   color: var(--text-tertiary);
 }

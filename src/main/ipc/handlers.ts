@@ -153,7 +153,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAiHandlers()
   registerAkaBizIntegrationHandlers()
   registerBrowserHandlers(webviewRegistry, pageRegistry)
-  registerCampaignHandlers(supabase)
+  registerCampaignHandlers(supabase, campaignScheduler)
   registerAccountHandlers(supabase, webviewRegistry)
   registerAccountContactHandlers(supabase, contactLoader)
   registerV2Handlers(mainWindow, pageRegistry)
