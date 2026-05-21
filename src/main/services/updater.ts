@@ -201,13 +201,22 @@ async function downloadInstaller(
   })
 }
 
-function runWindowsInstaller(installerPath: string): void {
-  // Detach and let the NSIS installer take over. When the user confirms,
-  // the installer will overwrite the running app.
-  const child = spawn(installerPath, [], {
+function quotePowerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+function runWindowsInstallerAfterAppExit(installerPath: string): void {
+  const command = [
+    `$installer = ${quotePowerShellString(installerPath)}`,
+    `$targetPid = ${process.pid}`,
+    'try { Wait-Process -Id $targetPid -ErrorAction SilentlyContinue } catch {}',
+    'Start-Process -FilePath $installer'
+  ].join('; ')
+
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command', command], {
     detached: true,
     stdio: 'ignore',
-    windowsHide: false
+    windowsHide: true
   })
   child.unref()
 }
@@ -236,21 +245,13 @@ export async function downloadAndInstall(
     emit({ phase: 'installing', message: process.platform === 'darwin' ? 'Đang mở file cập nhật…' : 'Đang khởi chạy bộ cài đặt…' })
 
     if (process.platform === 'win32') {
-      try {
-        runWindowsInstaller(installerPath)
-      } catch (spawnErr) {
-        // Fallback: ask the shell to open it
-        const openError = await shell.openPath(installerPath)
-        if (openError) throw new Error(openError)
-        if (spawnErr instanceof Error) console.warn('spawn installer failed, used shell.openPath:', spawnErr.message)
-      }
+      runWindowsInstallerAfterAppExit(installerPath)
 
-      emit({ phase: 'done', message: 'Bộ cài đặt đã khởi chạy. Thoát ứng dụng để tiếp tục cài đặt.' })
+      emit({ phase: 'done', message: 'Ứng dụng sẽ tự thoát và mở bộ cài đặt sau khi đã đóng hoàn toàn.' })
 
-      // Give the installer ~1.5s to appear before we quit ourselves so it can replace the exe.
       setTimeout(() => {
         app.quit()
-      }, 1500)
+      }, 100)
 
       return { success: true }
     }
