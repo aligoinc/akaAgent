@@ -17,6 +17,8 @@ function normalizeIntegration(value: any): AkaBizIntegrationInfo | null {
     id: staffId,
     username,
     name: value.name === null || value.name === undefined ? null : String(value.name),
+    installPath: value.installPath === null || value.installPath === undefined ? null : String(value.installPath),
+    dbPath: value.dbPath === null || value.dbPath === undefined ? null : String(value.dbPath),
     integratedAt: typeof value.integratedAt === 'string' ? value.integratedAt : new Date().toISOString()
   }
 }
@@ -25,7 +27,8 @@ function normalizeIntegrations(value: unknown): AkaBizIntegrations {
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   return {
     sms: normalizeIntegration(raw.sms),
-    zaloWeb: normalizeIntegration(raw.zaloWeb)
+    zaloWeb: normalizeIntegration(raw.zaloWeb),
+    akaBizDesktop: normalizeIntegration(raw.akaBizDesktop)
   }
 }
 
@@ -57,6 +60,8 @@ export async function saveAkaBizIntegration(
     staffId: staff.staffId,
     username: staff.username.trim(),
     name: staff.name ?? null,
+    installPath: staff.installPath ?? null,
+    dbPath: staff.dbPath ?? null,
     integratedAt: now
   }
   const next: AkaBizIntegrations = {
@@ -82,4 +87,6 @@ export interface AkaBizStaffInput {
   staffId: number
   username: string
   name?: string | null
+  installPath?: string | null
+  dbPath?: string | null
 }

@@ -816,6 +816,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                 >
                   Kết quả chạy ({campaignDetails.length})
                 </button>
+                {isSelectedFindDataCampaign && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'foundData' ? 'active' : ''}`}
+                    onClick={() => {
+                      setDetailTab('foundData')
+                      if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
+                    }}
+                  >
+                    Data tìm được ({foundDataItems.length})
+                  </button>
+                )}
                 <button
                   className={`detail-dock-tab ${detailTab === 'runLog' ? 'active' : ''}`}
                   onClick={() => setDetailTab('runLog')}
@@ -828,17 +839,6 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                 >
                   Thông tin tài khoản
                 </button>
-                {isSelectedFindDataCampaign && (
-                  <button
-                    className={`detail-dock-tab ${detailTab === 'foundData' ? 'active' : ''}`}
-                    onClick={() => {
-                      setDetailTab('foundData')
-                      if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
-                    }}
-                  >
-                    Data tìm được ({foundDataItems.length})
-                  </button>
-                )}
               </div>
 
               {/* Tab: Campaign Input Data */}

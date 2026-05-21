@@ -1085,6 +1085,13 @@ button.btn-icon:not(.btn):disabled {
   min-width: 0;
 }
 
+.akabiz-edit-fields {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .akabiz-username-field label {
   display: block;
   color: var(--text-secondary);
@@ -1114,6 +1121,10 @@ button.btn-icon:not(.btn):disabled {
   grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
+}
+
+.akabiz-integration-summary.desktop {
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.5fr);
 }
 
 .akabiz-integration-info {
@@ -1170,6 +1181,18 @@ button.btn-icon:not(.btn):disabled {
 .akabiz-cancel-button {
   width: 100%;
   justify-content: center;
+}
+
+.akabiz-path-input-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  gap: 8px;
+}
+
+.akabiz-path-button {
+  width: 36px;
+  height: 36px;
 }
 
 .external-campaign-empty {

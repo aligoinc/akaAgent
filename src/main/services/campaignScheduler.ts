@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignInputData } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignInputData } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -15,6 +15,12 @@ import {
   type AkaBizCampaignSummary,
   updateZaloCampaignStatus
 } from './akaBizApiClient'
+import {
+  addAkaBizDesktopCampaignDetails,
+  getAkaBizDesktopCampaign,
+  updateAkaBizDesktopCampaignStatus,
+  type AkaBizDesktopCampaignSummary
+} from './akaBizDesktopSqliteClient'
 import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
 import { getCurrentUser } from '../data/currentUser'
 
@@ -1127,6 +1133,12 @@ export class CampaignScheduler {
       const findZaloGroupLinkWebTargetCampaignIds = Array.isArray(campaign.extraSettings?.findZaloGroupLinkWebTargetCampaignIds)
         ? campaign.extraSettings.findZaloGroupLinkWebTargetCampaignIds
         : []
+      const findPhoneAkaBizDesktopTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPhoneAkaBizDesktopTargetCampaignIds)
+        ? campaign.extraSettings.findPhoneAkaBizDesktopTargetCampaignIds
+        : []
+      const findZaloGroupLinkAkaBizDesktopTargetCampaignIds = Array.isArray(campaign.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds)
+        ? campaign.extraSettings.findZaloGroupLinkAkaBizDesktopTargetCampaignIds
+        : []
       const total = Number(out.total ?? (phones.length + linkGroupZalos.length + uids.length + postLinks.length))
       const targetName = inputDataName || out.groupUrl || 'group'
       const isSuccess = summaryStep?.status === 'success'
@@ -1175,6 +1187,8 @@ export class CampaignScheduler {
             findPhoneSmsTargetCampaignIds,
             findPhoneZaloWebTargetCampaignIds,
             findZaloGroupLinkWebTargetCampaignIds,
+            findPhoneAkaBizDesktopTargetCampaignIds,
+            findZaloGroupLinkAkaBizDesktopTargetCampaignIds,
             errorBlock: errorStep?.blockName
           }
         })
@@ -1192,6 +1206,8 @@ export class CampaignScheduler {
         await this.pushFoundPhonesToSmsCampaigns(campaign, newPhonesForExternal)
         await this.pushFoundPhonesToZaloWebCampaigns(campaign, newPhonesForExternal)
         await this.pushFoundZaloGroupLinksToZaloWebCampaigns(campaign, newZaloGroupLinksForExternal)
+        await this.pushFoundPhonesToAkaBizDesktopCampaigns(campaign, newPhonesForExternal)
+        await this.pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(campaign, newZaloGroupLinksForExternal)
       }
       return
     }
@@ -1675,6 +1691,18 @@ export class CampaignScheduler {
     return targetCampaign
   }
 
+  private ensureAkaBizDesktopCampaignPending(
+    integration: AkaBizIntegrationInfo,
+    targetCampaignId: number
+  ): AkaBizDesktopCampaignSummary {
+    const targetCampaign = getAkaBizDesktopCampaign(integration, targetCampaignId)
+    const status = String(targetCampaign.status || '').trim().toLowerCase()
+    if (status === 'hoàn thành') {
+      updateAkaBizDesktopCampaignStatus(integration, targetCampaignId, 'Chờ xử lý')
+    }
+    return targetCampaign
+  }
+
   private async pushFoundPhonesToSmsCampaigns(sourceCampaign: Campaign, rawPhones: string[]): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindPhone) return
 
@@ -1791,6 +1819,82 @@ export class CampaignScheduler {
         await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${links.length} link group Zalo sang ${targetCampaignName}`)
       } catch (err) {
         console.error('Failed to push found Zalo group links to akaBiz Zalo Web campaign:', err)
+        await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy link group Zalo sang ${targetCampaignName}`, err)
+      }
+    }
+  }
+
+  private async pushFoundPhonesToAkaBizDesktopCampaigns(sourceCampaign: Campaign, rawPhones: string[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindPhone) return
+
+    const targetCampaignIds = this.getExternalTargetCampaignIds(
+      sourceCampaign.extraSettings.findPhoneAkaBizDesktopTargetCampaignIds,
+      sourceCampaign.id
+    )
+    if (targetCampaignIds.length === 0) return
+
+    const phones = this.uniqueExternalValues(rawPhones)
+    if (phones.length === 0) return
+
+    const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
+    const integration = integrations?.akaBizDesktop
+    if (!integration?.staffId || !integration.dbPath) {
+      await this.logExternalPushWarning(sourceCampaign, 'Chưa tích hợp akaBiz Desktop nên không thể đẩy SĐT ra campaign ngoài hệ thống.')
+      return
+    }
+
+    for (const targetCampaignId of targetCampaignIds) {
+      let targetCampaignName = 'chiến dịch đã chọn'
+      try {
+        const targetCampaign = this.ensureAkaBizDesktopCampaignPending(integration, targetCampaignId)
+        targetCampaignName = this.formatAkaBizCampaignName(targetCampaign.name)
+        addAkaBizDesktopCampaignDetails(integration, phones.map(phone => ({
+          campaignId: targetCampaignId,
+          status: 1,
+          phone,
+          isAutomate: true
+        })))
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
+      } catch (err) {
+        console.error('Failed to push found phones to akaBiz Desktop campaign:', err)
+        await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy SĐT sang ${targetCampaignName}`, err)
+      }
+    }
+  }
+
+  private async pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(sourceCampaign: Campaign, rawLinks: string[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindLinkGroupZalo) return
+
+    const targetCampaignIds = this.getExternalTargetCampaignIds(
+      sourceCampaign.extraSettings.findZaloGroupLinkAkaBizDesktopTargetCampaignIds,
+      sourceCampaign.id
+    )
+    if (targetCampaignIds.length === 0) return
+
+    const links = this.uniqueExternalValues(rawLinks)
+    if (links.length === 0) return
+
+    const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
+    const integration = integrations?.akaBizDesktop
+    if (!integration?.staffId || !integration.dbPath) {
+      await this.logExternalPushWarning(sourceCampaign, 'Chưa tích hợp akaBiz Desktop nên không thể đẩy link group Zalo ra campaign ngoài hệ thống.')
+      return
+    }
+
+    for (const targetCampaignId of targetCampaignIds) {
+      let targetCampaignName = 'chiến dịch đã chọn'
+      try {
+        const targetCampaign = this.ensureAkaBizDesktopCampaignPending(integration, targetCampaignId)
+        targetCampaignName = this.formatAkaBizCampaignName(targetCampaign.name)
+        addAkaBizDesktopCampaignDetails(integration, links.map(link => ({
+          campaignId: targetCampaignId,
+          status: 1,
+          uid: link,
+          isAutomate: true
+        })))
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${links.length} link group Zalo sang ${targetCampaignName}`)
+      } catch (err) {
+        console.error('Failed to push found Zalo group links to akaBiz Desktop campaign:', err)
         await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy link group Zalo sang ${targetCampaignName}`, err)
       }
     }

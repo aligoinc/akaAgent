@@ -165,6 +165,8 @@ export interface CampaignExtraSettings {
   findPhoneSmsTargetCampaignIds?: number[]       // Khi tìm SĐT, đẩy sang campaign akaBiz Sms đã chọn
   findPhoneZaloWebTargetCampaignIds?: number[]   // Khi tìm SĐT, đẩy sang campaign akaBiz Zalo Web đã chọn
   findZaloGroupLinkWebTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Zalo Web đã chọn
+  findPhoneAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm SĐT, đẩy sang campaign akaBiz Desktop đã chọn
+  findZaloGroupLinkAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Desktop đã chọn
 }
 
 export interface Campaign {
@@ -357,14 +359,16 @@ export interface AiWriteMultiOtherContentRequest {
   countContent: number
 }
 
-export type AkaBizIntegrationKind = 'sms' | 'zaloWeb'
-export type AkaBizCampaignListKind = 'sms' | 'zaloPhone' | 'zaloGroupLink'
+export type AkaBizIntegrationKind = 'sms' | 'zaloWeb' | 'akaBizDesktop'
+export type AkaBizCampaignListKind = 'sms' | 'zaloPhone' | 'zaloGroupLink' | 'desktopZaloPhone' | 'desktopZaloGroupLink'
 
 export interface AkaBizStaffBasic {
   id: number
   staffId?: number
   name: string | null
   username: string
+  installPath?: string | null
+  dbPath?: string | null
 }
 
 export interface AkaBizIntegrationInfo extends AkaBizStaffBasic {
@@ -375,6 +379,7 @@ export interface AkaBizIntegrationInfo extends AkaBizStaffBasic {
 export interface AkaBizIntegrations {
   sms?: AkaBizIntegrationInfo | null
   zaloWeb?: AkaBizIntegrationInfo | null
+  akaBizDesktop?: AkaBizIntegrationInfo | null
 }
 
 export interface AkaBizCampaignListItem {
@@ -385,6 +390,11 @@ export interface AkaBizCampaignListItem {
   campaignActionId: string | null
   schedule?: string | null
   status?: string | null
+}
+
+export interface AkaBizDesktopPathValidationResult {
+  installPath: string
+  dbPath: string
 }
 
 // ============================================
@@ -414,6 +424,8 @@ export const IPC_EVENTS = {
   AKABIZ_INTEGRATION_LOOKUP: 'akabiz:integration:lookup',
   AKABIZ_INTEGRATION_SAVE: 'akabiz:integration:save',
   AKABIZ_EXTERNAL_CAMPAIGNS_LIST: 'akabiz:external-campaigns:list',
+  AKABIZ_DESKTOP_INSTALL_PATH_SELECT: 'akabiz:desktop-install-path:select',
+  AKABIZ_DESKTOP_INSTALL_PATH_VALIDATE: 'akabiz:desktop-install-path:validate',
 
   // Database Auto Accounts
   DB_LIST_ACCOUNTS: 'db:list-accounts',

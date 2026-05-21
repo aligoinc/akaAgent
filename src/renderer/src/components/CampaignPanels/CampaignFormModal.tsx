@@ -431,7 +431,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     findPostLinkTargetCampaignIds: campaign?.extraSettings?.findPostLinkTargetCampaignIds || [] as number[],
     findPhoneSmsTargetCampaignIds: campaign?.extraSettings?.findPhoneSmsTargetCampaignIds || [] as number[],
     findPhoneZaloWebTargetCampaignIds: campaign?.extraSettings?.findPhoneZaloWebTargetCampaignIds || [] as number[],
-    findZaloGroupLinkWebTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkWebTargetCampaignIds || [] as number[]
+    findZaloGroupLinkWebTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkWebTargetCampaignIds || [] as number[],
+    findPhoneAkaBizDesktopTargetCampaignIds: campaign?.extraSettings?.findPhoneAkaBizDesktopTargetCampaignIds || [] as number[],
+    findZaloGroupLinkAkaBizDesktopTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || [] as number[]
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
   const commentImageInputRef = useRef<HTMLInputElement>(null)
@@ -449,6 +451,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
   )
   const [handleFoundZaloGroupLinkWebData, setHandleFoundZaloGroupLinkWebData] = useState(() =>
     (campaign?.extraSettings?.findZaloGroupLinkWebTargetCampaignIds || []).length > 0
+  )
+  const [handleFoundPhoneAkaBizDesktopData, setHandleFoundPhoneAkaBizDesktopData] = useState(() =>
+    (campaign?.extraSettings?.findPhoneAkaBizDesktopTargetCampaignIds || []).length > 0
+  )
+  const [handleFoundZaloGroupLinkAkaBizDesktopData, setHandleFoundZaloGroupLinkAkaBizDesktopData] = useState(() =>
+    (campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || []).length > 0
   )
 
   // Determine if this is a "simple" campaign (no details/extra sections)
@@ -683,10 +691,13 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
   const [externalCampaigns, setExternalCampaigns] = useState<Record<AkaBizCampaignListKind, AkaBizCampaignListItem[]>>({
     sms: [],
     zaloPhone: [],
-    zaloGroupLink: []
+    zaloGroupLink: [],
+    desktopZaloPhone: [],
+    desktopZaloGroupLink: []
   })
   const [externalCampaignLoading, setExternalCampaignLoading] = useState<Partial<Record<AkaBizCampaignListKind, boolean>>>({})
   const [externalCampaignLoaded, setExternalCampaignLoaded] = useState<Partial<Record<AkaBizCampaignListKind, boolean>>>({})
+  const [desktopIntegrationInvalid, setDesktopIntegrationInvalid] = useState(false)
   const [activeStep, setActiveStep] = useState('general')
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
@@ -755,6 +766,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
   const { showAlert, showConfirm } = useUiStore()
   const hasSmsIntegration = !!akabizIntegrations?.sms?.staffId
   const hasZaloWebIntegration = !!akabizIntegrations?.zaloWeb?.staffId
+  const hasAkaBizDesktopIntegration = !!akabizIntegrations?.akaBizDesktop?.staffId && !!akabizIntegrations?.akaBizDesktop?.dbPath && !desktopIntegrationInvalid
 
   const loadAkaBizIntegrations = async () => {
     if (!window.electronAPI?.getAkaBizIntegrations) return
@@ -762,7 +774,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     try {
       const data = await window.electronAPI.getAkaBizIntegrations()
       setAkaBizIntegrations(data)
-      setExternalCampaigns({ sms: [], zaloPhone: [], zaloGroupLink: [] })
+      setDesktopIntegrationInvalid(false)
+      setExternalCampaigns({ sms: [], zaloPhone: [], zaloGroupLink: [], desktopZaloPhone: [], desktopZaloGroupLink: [] })
       setExternalCampaignLoaded({})
     } catch (err) {
       showAlert(formatIpcErrorMessage(err, 'Không thể tải tích hợp akaBiz.'), 'error')
@@ -780,6 +793,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       setExternalCampaignLoaded(prev => ({ ...prev, [kind]: true }))
     } catch (err) {
       showAlert(formatIpcErrorMessage(err, 'Không thể tải danh sách campaign akaBiz.'), 'error')
+      if (kind === 'desktopZaloPhone' || kind === 'desktopZaloGroupLink') {
+        setDesktopIntegrationInvalid(true)
+      }
       setExternalCampaignLoaded(prev => ({ ...prev, [kind]: true }))
     } finally {
       setExternalCampaignLoading(prev => ({ ...prev, [kind]: false }))
@@ -828,6 +844,30 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       void loadExternalCampaigns('zaloGroupLink')
     }
   }, [formData.isFindLinkGroupZalo, handleFoundZaloGroupLinkWebData, hasZaloWebIntegration, externalCampaignLoaded.zaloGroupLink, externalCampaignLoading.zaloGroupLink])
+
+  useEffect(() => {
+    if (
+      formData.isFindPhone &&
+      handleFoundPhoneAkaBizDesktopData &&
+      hasAkaBizDesktopIntegration &&
+      !externalCampaignLoaded.desktopZaloPhone &&
+      !externalCampaignLoading.desktopZaloPhone
+    ) {
+      void loadExternalCampaigns('desktopZaloPhone')
+    }
+  }, [formData.isFindPhone, handleFoundPhoneAkaBizDesktopData, hasAkaBizDesktopIntegration, externalCampaignLoaded.desktopZaloPhone, externalCampaignLoading.desktopZaloPhone])
+
+  useEffect(() => {
+    if (
+      formData.isFindLinkGroupZalo &&
+      handleFoundZaloGroupLinkAkaBizDesktopData &&
+      hasAkaBizDesktopIntegration &&
+      !externalCampaignLoaded.desktopZaloGroupLink &&
+      !externalCampaignLoading.desktopZaloGroupLink
+    ) {
+      void loadExternalCampaigns('desktopZaloGroupLink')
+    }
+  }, [formData.isFindLinkGroupZalo, handleFoundZaloGroupLinkAkaBizDesktopData, hasAkaBizDesktopIntegration, externalCampaignLoaded.desktopZaloGroupLink, externalCampaignLoading.desktopZaloGroupLink])
 
   useEffect(() => {
     async function fetchDetails() {
@@ -1126,6 +1166,26 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
           return
         }
       }
+      if (formData.isFindPhone && handleFoundPhoneAkaBizDesktopData) {
+        if (!hasAkaBizDesktopIntegration) {
+          showAlert('Vui lòng tích hợp akaBiz Desktop trước khi đẩy SĐT.', 'error')
+          return
+        }
+        if (formData.findPhoneAkaBizDesktopTargetCampaignIds.length === 0) {
+          showAlert('Vui lòng chọn ít nhất một chiến dịch akaBiz Desktop nhận SĐT.', 'error')
+          return
+        }
+      }
+      if (formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData) {
+        if (!hasAkaBizDesktopIntegration) {
+          showAlert('Vui lòng tích hợp akaBiz Desktop trước khi đẩy link group Zalo.', 'error')
+          return
+        }
+        if (formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds.length === 0) {
+          showAlert('Vui lòng chọn ít nhất một chiến dịch akaBiz Desktop nhận link group Zalo.', 'error')
+          return
+        }
+      }
       if (!isEditingSavedCampaign && details.length === 0) {
         showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
         return
@@ -1351,7 +1411,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
             findPostLinkTargetCampaignIds: formData.isFindPostLink && handleFoundPostLinkData ? formData.findPostLinkTargetCampaignIds : [],
             findPhoneSmsTargetCampaignIds: formData.isFindPhone && handleFoundPhoneSmsData ? formData.findPhoneSmsTargetCampaignIds : [],
             findPhoneZaloWebTargetCampaignIds: formData.isFindPhone && handleFoundPhoneZaloWebData ? formData.findPhoneZaloWebTargetCampaignIds : [],
-            findZaloGroupLinkWebTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData ? formData.findZaloGroupLinkWebTargetCampaignIds : []
+            findZaloGroupLinkWebTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData ? formData.findZaloGroupLinkWebTargetCampaignIds : [],
+            findPhoneAkaBizDesktopTargetCampaignIds: formData.isFindPhone && handleFoundPhoneAkaBizDesktopData ? formData.findPhoneAkaBizDesktopTargetCampaignIds : [],
+            findZaloGroupLinkAkaBizDesktopTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData ? formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds : []
           } as CampaignExtraSettings,
           images: formData.images
         }
@@ -1693,6 +1755,32 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       return {
         ...prev,
         findZaloGroupLinkWebTargetCampaignIds: exists
+          ? current.filter(id => id !== campaignId)
+          : [...current, campaignId]
+      }
+    })
+  }
+
+  const toggleFindPhoneAkaBizDesktopTargetCampaign = (campaignId: number) => {
+    setFormData(prev => {
+      const current = prev.findPhoneAkaBizDesktopTargetCampaignIds || []
+      const exists = current.includes(campaignId)
+      return {
+        ...prev,
+        findPhoneAkaBizDesktopTargetCampaignIds: exists
+          ? current.filter(id => id !== campaignId)
+          : [...current, campaignId]
+      }
+    })
+  }
+
+  const toggleFindZaloGroupLinkAkaBizDesktopTargetCampaign = (campaignId: number) => {
+    setFormData(prev => {
+      const current = prev.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || []
+      const exists = current.includes(campaignId)
+      return {
+        ...prev,
+        findZaloGroupLinkAkaBizDesktopTargetCampaignIds: exists
           ? current.filter(id => id !== campaignId)
           : [...current, campaignId]
       }
@@ -2325,6 +2413,35 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
         </div>
       )}
 
+      {formData.isFindPhone && (
+        <div className="extra-comment-options">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={handleFoundPhoneAkaBizDesktopData}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundPhoneAkaBizDesktopData(checked)
+                if (!checked) setFormData(p => ({ ...p, findPhoneAkaBizDesktopTargetCampaignIds: [] }))
+              }}
+            />
+            <span>Đẩy SĐT sang akaBiz Desktop</span>
+          </label>
+          {handleFoundPhoneAkaBizDesktopData && (
+            <div className="stepper-form-group" style={{ marginTop: 12 }}>
+              <label>Chọn chiến dịch</label>
+              {renderExternalCampaignPicker(
+                'desktopZaloPhone',
+                hasAkaBizDesktopIntegration,
+                formData.findPhoneAkaBizDesktopTargetCampaignIds || [],
+                toggleFindPhoneAkaBizDesktopTargetCampaign,
+                'Không có chiến dịch akaBiz Desktop phù hợp để nhận SĐT.'
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {formData.isFindLinkGroupZalo && (
         <div className="extra-comment-options">
           <label className="schedule-checkbox-label">
@@ -2348,6 +2465,35 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                 formData.findZaloGroupLinkWebTargetCampaignIds || [],
                 toggleFindZaloGroupLinkWebTargetCampaign,
                 'Không có chiến dịch akaBiz Zalo Web phù hợp để nhận link group Zalo.'
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {formData.isFindLinkGroupZalo && (
+        <div className="extra-comment-options">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={handleFoundZaloGroupLinkAkaBizDesktopData}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundZaloGroupLinkAkaBizDesktopData(checked)
+                if (!checked) setFormData(p => ({ ...p, findZaloGroupLinkAkaBizDesktopTargetCampaignIds: [] }))
+              }}
+            />
+            <span>Đẩy link group Zalo sang akaBiz Desktop</span>
+          </label>
+          {handleFoundZaloGroupLinkAkaBizDesktopData && (
+            <div className="stepper-form-group" style={{ marginTop: 12 }}>
+              <label>Chọn chiến dịch</label>
+              {renderExternalCampaignPicker(
+                'desktopZaloGroupLink',
+                hasAkaBizDesktopIntegration,
+                formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || [],
+                toggleFindZaloGroupLinkAkaBizDesktopTargetCampaign,
+                'Không có chiến dịch akaBiz Desktop phù hợp để nhận link group Zalo.'
               )}
             </div>
           )}

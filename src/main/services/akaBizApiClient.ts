@@ -69,7 +69,13 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 function normalizeStaff(kind: AkaBizIntegrationKind, username: string, staff: any): AkaBizStaffBasic {
   const id = Number(staff?.id)
   if (!Number.isFinite(id) || id <= 0) {
-    throw new Error(kind === 'sms' ? 'Không tìm thấy tài khoản akaBiz Sms' : 'Không tìm thấy tài khoản akaBiz Zalo Web')
+    throw new Error(
+      kind === 'sms'
+        ? 'Không tìm thấy tài khoản akaBiz Sms'
+        : kind === 'akaBizDesktop'
+          ? 'Không tìm thấy tài khoản akaBiz Desktop'
+          : 'Không tìm thấy tài khoản akaBiz Zalo Web'
+    )
   }
   return {
     id,
