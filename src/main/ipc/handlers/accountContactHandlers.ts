@@ -16,6 +16,10 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
     return contactLoader.loadPages(accountId)
   })
 
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_POST_COMMENTERS, async (_, accountId: number, postUrl: string, maxCommenters: number) => {
+    return contactLoader.loadPostCommenters(accountId, postUrl, maxCommenters)
+  })
+
   ipcMain.handle(IPC_EVENTS.CONTACTS_CANCEL_LOAD, async (_, accountId: number) => {
     contactLoader.cancelLoad(accountId)
     return { success: true }

@@ -15,11 +15,25 @@ interface ActiveContactLoad {
   contactType: ContactType
 }
 
+interface ContactLoadOptions {
+  workflowName?: string
+  targetUrl?: string
+  runKeyLabel?: string
+  typeName?: string
+  previewTitle?: string
+  variables?: Record<string, unknown>
+  markMissingDeleted?: boolean
+  preserveExistingFriendStatus?: boolean
+  resultMeta?: Partial<ContactLoadResult>
+}
+
 const CONTACT_SCAN_WORKFLOWS: Record<ContactType, string> = {
   person: '[Built-in] Facebook - Quét danh sách bạn bè',
   group: '[Built-in] Facebook - Quét group đã tham gia',
   page: '[Built-in] Facebook - Quét page quản lý'
 }
+
+const POST_COMMENTERS_WORKFLOW = '[Built-in] Facebook - Quét người comment bài post'
 
 const CONTACT_SCAN_TARGET_URLS: Record<ContactType, string> = {
   person: 'https://www.facebook.com/friends/list',
@@ -61,6 +75,38 @@ export class ContactLoader {
     return this.loadContacts(accountId, 'page')
   }
 
+  async loadPostCommenters(accountId: number, postUrl: string, maxCommenters: number): Promise<ContactLoadResult> {
+    const normalizedPostUrl = this.normalizeFacebookPostUrl(postUrl)
+    const commenterLimit = this.normalizeCommenterLimit(maxCommenters)
+
+    if (!normalizedPostUrl) {
+      return this.completeLoad(accountId, 'person', {
+        success: false,
+        count: 0,
+        error: 'Vui lòng nhập link bài post Facebook hợp lệ',
+        maxCommenters: commenterLimit
+      })
+    }
+
+    return this.loadContacts(accountId, 'person', {
+      workflowName: POST_COMMENTERS_WORKFLOW,
+      targetUrl: normalizedPostUrl,
+      runKeyLabel: 'post-commenters',
+      typeName: 'người comment',
+      previewTitle: 'Đang quét người comment bài post',
+      markMissingDeleted: false,
+      preserveExistingFriendStatus: true,
+      variables: {
+        sourcePostUrl: normalizedPostUrl,
+        maxCommenters: commenterLimit
+      },
+      resultMeta: {
+        sourcePostUrl: normalizedPostUrl,
+        maxCommenters: commenterLimit
+      }
+    })
+  }
+
   cancelLoad(accountId: number): void {
     this.cancelledLoads.add(accountId)
     const active = this.activeLoads.get(accountId)
@@ -86,13 +132,15 @@ export class ContactLoader {
     this.backgroundPages.destroyAll()
   }
 
-  private async loadContacts(accountId: number, contactType: ContactType): Promise<ContactLoadResult> {
-    const typeName = contactType === 'person' ? 'bạn bè' : this.getContactTypeName(contactType)
+  private async loadContacts(accountId: number, contactType: ContactType, options: ContactLoadOptions = {}): Promise<ContactLoadResult> {
+    const typeName = options.typeName || (contactType === 'person' ? 'bạn bè' : this.getContactTypeName(contactType))
+    const resultMeta = options.resultMeta || {}
     let account: AutoAccount | null
     try {
       account = await this.supabase.getAccount(accountId)
     } catch (err: any) {
       return this.completeLoad(accountId, contactType, {
+        ...resultMeta,
         success: false,
         count: 0,
         error: `Không thể kiểm tra trạng thái tài khoản: ${err.message || String(err)}`
@@ -102,16 +150,18 @@ export class ContactLoader {
     const preflightError = this.getPreflightError(account)
     if (preflightError) {
       return this.completeLoad(accountId, contactType, {
+        ...resultMeta,
         success: false,
         count: 0,
         error: preflightError
       })
     }
 
-    const workflowName = CONTACT_SCAN_WORKFLOWS[contactType]
+    const workflowName = options.workflowName || CONTACT_SCAN_WORKFLOWS[contactType]
     const workflow = await workflowV2Repo.getWorkflowByName(workflowName)
     if (!workflow) {
       return this.completeLoad(accountId, contactType, {
+        ...resultMeta,
         success: false,
         count: 0,
         error: `Chưa có workflow quét data: ${workflowName}`
@@ -122,13 +172,14 @@ export class ContactLoader {
     const latestPreflightError = this.getPreflightError(latestAccount)
     if (latestPreflightError) {
       return this.completeLoad(accountId, contactType, {
+        ...resultMeta,
         success: false,
         count: 0,
         error: latestPreflightError
       })
     }
 
-    const loadState = this.startLoad(accountId, contactType)
+    const loadState = this.startLoad(accountId, contactType, workflow.defaultVariables, options)
     const runnableAccount = latestAccount!
     const previousStatus = runnableAccount.status as 'chờ xử lý' | 'tạm dừng'
     const variables = loadState.variables
@@ -146,7 +197,7 @@ export class ContactLoader {
 
       const page = this.backgroundPages.getOrCreate(accountId, runnableAccount.flatformType)
       this.selectAutomationBrowser(accountId)
-      this.startBackgroundPreview(accountId, page, this.getPreviewTitle(contactType))
+      this.startBackgroundPreview(accountId, page, options.previewTitle || this.getPreviewTitle(contactType))
 
       const result = await this.engineV2.run(workflow.id, variables, page, {
         accountId,
@@ -183,13 +234,16 @@ export class ContactLoader {
       const contacts = this.extractContacts(result, contactType)
       if (contacts.length === 0) {
         if (stopped) {
-          await this.supabase.deleteContacts(accountId, contactType)
+          if (options.markMissingDeleted !== false) {
+            await this.supabase.deleteContacts(accountId, contactType)
+          }
           this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu 0 data cho lần quét này.`, {
             accountId,
             contactType,
             runKey: loadState.runKey
           })
           return this.completeLoad(accountId, contactType, {
+            ...resultMeta,
             success: true,
             count: 0,
             stopped: true
@@ -213,13 +267,18 @@ export class ContactLoader {
         accountId,
         contactType
       }))
+      const contactsToSave = options.preserveExistingFriendStatus && contactType === 'person'
+        ? await this.mergeExistingPersonContactState(accountId, contactsWithMeta)
+        : contactsWithMeta
 
-      this.sendProgress(`💾 Đang lưu ${contactsWithMeta.length} ${typeName}...`, {
+      this.sendProgress(`💾 Đang lưu ${contactsToSave.length} ${typeName}...`, {
         accountId,
         contactType,
         runKey: loadState.runKey
       })
-      const saved = await this.supabase.upsertContacts(contactsWithMeta)
+      const saved = await this.supabase.upsertContacts(contactsToSave, {
+        markMissingDeleted: options.markMissingDeleted
+      })
 
       if (stopped) {
         this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu ${saved} data cho lần quét này.`, {
@@ -228,6 +287,7 @@ export class ContactLoader {
           runKey: loadState.runKey
         })
         return this.completeLoad(accountId, contactType, {
+          ...resultMeta,
           success: true,
           count: saved,
           stopped: true
@@ -239,7 +299,7 @@ export class ContactLoader {
         contactType,
         runKey: loadState.runKey
       })
-      return this.completeLoad(accountId, contactType, { success: true, count: saved }, loadState.runKey)
+      return this.completeLoad(accountId, contactType, { ...resultMeta, success: true, count: saved }, loadState.runKey)
     } catch (err: any) {
       const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
       const errMsg = err?.message || String(err)
@@ -250,6 +310,7 @@ export class ContactLoader {
           runKey: loadState.runKey
         })
         return this.completeLoad(accountId, contactType, {
+          ...resultMeta,
           success: true,
           count: 0,
           stopped: true
@@ -262,6 +323,7 @@ export class ContactLoader {
         runKey: loadState.runKey
       })
       return this.completeLoad(accountId, contactType, {
+        ...resultMeta,
         success: false,
         count: 0,
         error: errMsg
@@ -293,7 +355,12 @@ export class ContactLoader {
     return null
   }
 
-  private startLoad(accountId: number, contactType: ContactType): ActiveContactLoad {
+  private startLoad(
+    accountId: number,
+    contactType: ContactType,
+    workflowDefaultVariables: Record<string, unknown> = {},
+    options: ContactLoadOptions = {}
+  ): ActiveContactLoad {
     const existing = this.activeLoads.get(accountId)
     if (existing) {
       existing.variables.contactScanCancelled = true
@@ -302,14 +369,17 @@ export class ContactLoader {
 
     this.cancelledLoads.delete(accountId)
     const controller = new AbortController()
-    const runKey = `contacts-${accountId}-${contactType}-${Date.now()}`
+    const runKey = `contacts-${accountId}-${options.runKeyLabel || contactType}-${Date.now()}`
+    const defaultTargetUrl = typeof workflowDefaultVariables.targetUrl === 'string' && workflowDefaultVariables.targetUrl
+      ? workflowDefaultVariables.targetUrl
+      : CONTACT_SCAN_TARGET_URLS[contactType]
     const variables: Record<string, unknown> = {
+      ...workflowDefaultVariables,
       accountId,
       contactType,
-      targetUrl: CONTACT_SCAN_TARGET_URLS[contactType],
-      scrollDelayMs: 1500,
-      maxNoChangeCycles: 3,
-      contactScanCancelled: false
+      targetUrl: options.targetUrl || defaultTargetUrl,
+      contactScanCancelled: false,
+      ...(options.variables || {})
     }
     const loadState = { controller, variables, runKey, contactType }
     this.activeLoads.set(accountId, loadState)
@@ -373,6 +443,94 @@ export class ContactLoader {
         return contact
       })
       .filter(contact => !!contact.name && (!!contact.uid || !!contact.url))
+  }
+
+  private async mergeExistingPersonContactState(
+    accountId: number,
+    contacts: Partial<AutoAccountContact>[]
+  ): Promise<Partial<AutoAccountContact>[]> {
+    if (contacts.length === 0) return contacts
+
+    const existingContacts = await this.supabase.listContacts(accountId, 'person')
+    const existingByUid = new Map<string, AutoAccountContact>()
+    for (const contact of existingContacts) {
+      const key = this.normalizeContactUid(contact.uid || contact.url || '')
+      if (key) existingByUid.set(key, contact)
+    }
+
+    return contacts.map(contact => {
+      const key = this.normalizeContactUid(contact.uid || contact.url || '')
+      const existing = key ? existingByUid.get(key) : undefined
+      const extraData = this.mergePostCommenterExtraData(existing?.extraData, contact.extraData)
+      return {
+        ...contact,
+        isFriend: existing?.isFriend === true ? true : contact.isFriend === true,
+        extraData
+      }
+    })
+  }
+
+  private mergePostCommenterExtraData(
+    existingExtraData: Record<string, unknown> | undefined,
+    nextExtraData: Record<string, unknown> | undefined
+  ): Record<string, unknown> {
+    const existing = existingExtraData || {}
+    const next = nextExtraData || {}
+    const merged: Record<string, unknown> = { ...existing, ...next }
+    const sourcePostUrls = [
+      ...this.toStringArray(existing.sourcePostUrls),
+      existing.sourcePostUrl,
+      ...this.toStringArray(next.sourcePostUrls),
+      next.sourcePostUrl
+    ]
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+
+    if (sourcePostUrls.length > 0) {
+      merged.sourcePostUrls = Array.from(new Set(sourcePostUrls))
+    }
+
+    return merged
+  }
+
+  private toStringArray(value: unknown): string[] {
+    return Array.isArray(value) ? value.map(item => String(item || '').trim()).filter(Boolean) : []
+  }
+
+  private normalizeContactUid(value: unknown): string {
+    return String(value || '').trim().replace(/\/+$/g, '').toLowerCase()
+  }
+
+  private normalizeCommenterLimit(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 100
+  }
+
+  private normalizeFacebookPostUrl(value: unknown): string {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+      const host = url.hostname.replace(/^www\./i, '').replace(/^web\./i, '').replace(/^m\./i, '').toLowerCase()
+      if (host !== 'facebook.com' && host !== 'fb.com') return ''
+      url.hostname = 'www.facebook.com'
+      url.hash = ''
+      for (const key of Array.from(url.searchParams.keys())) {
+        if (
+          key.startsWith('__') ||
+          key === 'mibextid' ||
+          key === 'ref' ||
+          key === 'locale' ||
+          key === 'comment_id' ||
+          key === 'reply_comment_id'
+        ) {
+          url.searchParams.delete(key)
+        }
+      }
+      return url.toString()
+    } catch {
+      return ''
+    }
   }
 
   private getContactTypeName(contactType: ContactType): string {

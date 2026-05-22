@@ -7,8 +7,11 @@ import { useUiStore } from '../../stores/uiStore'
 import DataScanGroupManagementModal from './DataScanGroupManagementModal'
 import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 
-export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages'
+export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters'
 type ContactStatusFilter = 'active' | 'inactive' | 'all'
+
+const POST_COMMENTERS_ACTION_ID: DataScanAction = 'facebook_post_commenters'
+const DEFAULT_POST_COMMENTER_LIMIT = 100
 
 interface DataScanActionDef {
   id: DataScanAction
@@ -49,6 +52,13 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
     contactType: 'page',
     emptyText: 'Chưa có dữ liệu page',
     loadingText: 'Đang tải danh sách page...'
+  },
+  {
+    id: POST_COMMENTERS_ACTION_ID,
+    label: 'Facebook - Lấy người comment bài post',
+    contactType: 'person',
+    emptyText: 'Nhập link bài post rồi tải data',
+    loadingText: 'Đang tải người comment bài post...'
   }
 ]
 
@@ -76,6 +86,38 @@ const sanitizeFileSegment = (value: string) => {
 
 const getContactValue = (contact: AutoAccountContact) => contact.url || contact.uid || ''
 
+const normalizeFacebookPostUrlForCompare = (value: unknown) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+    const host = url.hostname.replace(/^www\./i, '').replace(/^web\./i, '').replace(/^m\./i, '').toLowerCase()
+    if (host !== 'facebook.com' && host !== 'fb.com') return ''
+    url.hostname = 'www.facebook.com'
+    url.hash = ''
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (
+        key.startsWith('__') ||
+        key === 'mibextid' ||
+        key === 'ref' ||
+        key === 'locale' ||
+        key === 'comment_id' ||
+        key === 'reply_comment_id'
+      ) {
+        url.searchParams.delete(key)
+      }
+    }
+    return url.toString().replace(/\/+$/g, '').toLowerCase()
+  } catch {
+    return raw.replace(/\/+$/g, '').toLowerCase()
+  }
+}
+
+const normalizePositiveNumber = (value: unknown, fallback = DEFAULT_POST_COMMENTER_LIMIT) => {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 const getContactInfo = (contact: AutoAccountContact) => {
   const extra = contact.extraData || {}
   const category = typeof extra.category === 'string' ? extra.category : ''
@@ -89,7 +131,17 @@ const getGroupApprovalStatus = (contact: AutoAccountContact) => {
   return 'Chưa biết'
 }
 
+const contactHasSourcePostUrl = (contact: AutoAccountContact, normalizedPostUrl: string) => {
+  const extra = contact.extraData || {}
+  if (normalizeFacebookPostUrlForCompare(extra.sourcePostUrl) === normalizedPostUrl) return true
+  if (!Array.isArray(extra.sourcePostUrls)) return false
+  return extra.sourcePostUrls.some(value => normalizeFacebookPostUrlForCompare(value) === normalizedPostUrl)
+}
+
 const getContactStatusLabel = (contact: AutoAccountContact) => {
+  if (contact.contactType === 'person' && contact.extraData?.source === 'facebook_post_commenters') {
+    return contact.isFriend ? 'Bạn bè' : 'Chưa xác định'
+  }
   if (contact.contactType === 'person') return contact.isFriend ? 'Bạn bè' : 'Không còn bạn bè'
   if (contact.contactType === 'group') return contact.isJoined ? 'Đã tham gia' : 'Chưa tham gia'
   return ''
@@ -173,6 +225,8 @@ export default function DataScanModal({
   const [dedupeOnOutput, setDedupeOnOutput] = useState(true)
   const [rangeStart, setRangeStart] = useState(1)
   const [rangeEnd, setRangeEnd] = useState(100)
+  const [postCommentersUrl, setPostCommentersUrl] = useState('')
+  const [postCommentersLimit, setPostCommentersLimit] = useState(DEFAULT_POST_COMMENTER_LIMIT)
   const [progressMessages, setProgressMessages] = useState<string[]>([])
   const [minimized, setMinimized] = useState(false)
   const [contactGroups, setContactGroups] = useState<AutoAccountContactGroup[]>([])
@@ -193,6 +247,11 @@ export default function DataScanModal({
   const actionDef = useMemo(
     () => DATA_SCAN_ACTIONS.find(item => item.id === action) || DATA_SCAN_ACTIONS[0],
     [action]
+  )
+  const isPostCommentersAction = action === POST_COMMENTERS_ACTION_ID
+  const normalizedPostCommentersUrl = useMemo(
+    () => normalizeFacebookPostUrlForCompare(postCommentersUrl),
+    [postCommentersUrl]
   )
   const selectedAccount = useMemo(
     () => accounts.find(account => account.id === accountId),
@@ -276,7 +335,7 @@ export default function DataScanModal({
     setSelectedIds(new Set())
     setSelectedGroupIds(new Set())
     setModalSelectedGroupIds(new Set())
-    setStatusFilter(hasStatusFilter ? (initialStatusFilter || 'active') : 'all')
+    setStatusFilter(isPostCommentersAction ? 'all' : (hasStatusFilter ? (initialStatusFilter || 'active') : 'all'))
     setNewGroupName('')
     setShowNewGroupInput(false)
     setShowAddGroupModal(false)
@@ -288,7 +347,7 @@ export default function DataScanModal({
     setAllContactGroups([])
     loadCachedContacts()
     loadContactGroups()
-  }, [hasStatusFilter, initialShowGroupPanel, initialStatusFilter, loadCachedContacts, loadContactGroups])
+  }, [action, hasStatusFilter, initialShowGroupPanel, initialStatusFilter, isPostCommentersAction, loadCachedContacts, loadContactGroups])
 
   useEffect(() => {
     let cancelled = false
@@ -339,6 +398,9 @@ export default function DataScanModal({
       const wasStopped = stoppedScanIdsRef.current.has(scanId) || result.stopped
       setScanLoading(false)
       setMinimized(false)
+      if (isPostCommentersAction && result.sourcePostUrl) {
+        setPostCommentersUrl(String(result.sourcePostUrl))
+      }
       loadCachedContacts()
       loadContactGroups()
 
@@ -349,7 +411,7 @@ export default function DataScanModal({
       if (!wasStopped) showAlert(`Đã tải ${result.count} data.`, 'success')
     })
     return unsubscribe
-  }, [accountId, actionDef.contactType, loadCachedContacts, loadContactGroups, showAlert])
+  }, [accountId, actionDef.contactType, isPostCommentersAction, loadCachedContacts, loadContactGroups, showAlert])
 
   const matchesStatusFilter = useCallback((contact: AutoAccountContact) => {
     if (statusFilter === 'all') return true
@@ -362,9 +424,15 @@ export default function DataScanModal({
     return true
   }, [actionDef.contactType, statusFilter])
 
+  const actionContacts = useMemo(() => {
+    if (!isPostCommentersAction) return contacts
+    if (!normalizedPostCommentersUrl) return []
+    return contacts.filter(contact => contactHasSourcePostUrl(contact, normalizedPostCommentersUrl))
+  }, [contacts, isPostCommentersAction, normalizedPostCommentersUrl])
+
   const visibleContacts = useMemo(() => {
-    return contacts.filter(matchesStatusFilter)
-  }, [contacts, matchesStatusFilter])
+    return actionContacts.filter(matchesStatusFilter)
+  }, [actionContacts, matchesStatusFilter])
 
   const filteredContacts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('vi-VN')
@@ -422,7 +490,7 @@ export default function DataScanModal({
   }, [groupContactsByStatus, search])
   const tableColSpan = actionDef.contactType === 'group' ? 7 : actionDef.contactType === 'person' ? 6 : 5
   const groupTableColSpan = activeGroupContactType === 'group' ? 7 : activeGroupContactType === 'person' ? 6 : 5
-  const emptyTableText = contacts.length === 0
+  const emptyTableText = actionContacts.length === 0
     ? actionDef.emptyText
     : visibleContacts.length === 0 && search.trim().length === 0
       ? 'Không có data phù hợp với bộ lọc.'
@@ -678,6 +746,20 @@ export default function DataScanModal({
       showAlert('Hành động này chỉ hỗ trợ tài khoản Facebook.', 'error')
       return
     }
+    if (isPostCommentersAction) {
+      if (!postCommentersUrl.trim()) {
+        showAlert('Vui lòng nhập link bài post.', 'error')
+        return
+      }
+      if (!normalizeFacebookPostUrlForCompare(postCommentersUrl)) {
+        showAlert('Link bài post Facebook không hợp lệ.', 'error')
+        return
+      }
+      if (postCommentersLimit < 1) {
+        showAlert('Số lượng phải lớn hơn 0.', 'error')
+        return
+      }
+    }
 
     setScanLoading(true)
     setProgressMessages([])
@@ -686,12 +768,13 @@ export default function DataScanModal({
     stoppedScanIdsRef.current.delete(scanId)
     completedScanIdsRef.current.delete(scanId)
     try {
-      const loader = actionDef.contactType === 'person'
+      const result = isPostCommentersAction
+        ? await window.electronAPI.loadPostCommenters(accountId, postCommentersUrl, postCommentersLimit)
+        : await (actionDef.contactType === 'person'
         ? window.electronAPI.loadFriends
         : actionDef.contactType === 'group'
           ? window.electronAPI.loadGroups
-          : window.electronAPI.loadPages
-      const result = await loader(accountId)
+          : window.electronAPI.loadPages)(accountId)
       if (!mountedRef.current) return
       if (scanRunIdRef.current !== scanId) return
       if (completedScanIdsRef.current.has(scanId)) return
@@ -699,6 +782,9 @@ export default function DataScanModal({
       const wasStopped = stoppedScanIdsRef.current.has(scanId) || result.stopped
       setScanLoading(false)
       setMinimized(false)
+      if (isPostCommentersAction && result.sourcePostUrl) {
+        setPostCommentersUrl(String(result.sourcePostUrl))
+      }
 
       if (!result.success) {
         if (wasStopped) return
@@ -875,6 +961,33 @@ export default function DataScanModal({
               </select>
             </div>
 
+            {isPostCommentersAction && (
+              <>
+                <div className="stepper-form-group" style={{ gridColumn: 'span 2' }}>
+                  <label>Link bài post</label>
+                  <input
+                    className="stepper-input"
+                    value={postCommentersUrl}
+                    onChange={event => setPostCommentersUrl(event.target.value)}
+                    placeholder="Dán link bài post Facebook..."
+                    disabled={scanLoading}
+                  />
+                </div>
+
+                <div className="stepper-form-group">
+                  <label>Số lượng</label>
+                  <input
+                    type="number"
+                    min={1}
+                    className="stepper-input"
+                    value={postCommentersLimit}
+                    onChange={event => setPostCommentersLimit(normalizePositiveNumber(event.target.value))}
+                    disabled={scanLoading}
+                  />
+                </div>
+              </>
+            )}
+
             <div className="stepper-form-group">
               <label>Loại tài khoản</label>
               <input className="stepper-input" value={selectedAccount?.flatformType || ''} disabled />
@@ -935,7 +1048,11 @@ export default function DataScanModal({
                   Dừng
                 </button>
               ) : (
-                <button className="btn btn-primary data-scan-load-button" onClick={handleLoadData} disabled={!accountId}>
+                <button
+                  className="btn btn-primary data-scan-load-button"
+                  onClick={handleLoadData}
+                  disabled={!accountId || (isPostCommentersAction && !postCommentersUrl.trim())}
+                >
                   <RefreshCw size={14} />
                   Tải data
                 </button>
