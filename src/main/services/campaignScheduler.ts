@@ -76,12 +76,16 @@ interface FindDataUniqueCounts {
   postLinks: number
 }
 
+type FindDataTargetCampaignField = 'findUidTargetCampaignIds' | 'findPostLinkTargetCampaignIds'
+
+const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
+const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
 
 /**
  * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
@@ -124,6 +128,18 @@ export class CampaignScheduler {
 
   private isCommentSeedingPostCampaign(actionId: string): boolean {
     return actionId === COMMENT_SEEDING_POST_ACTION_ID
+  }
+
+  private getFindDataTargetCampaignField(campaign: Campaign): FindDataTargetCampaignField | null {
+    if (campaign.actionId === MESSAGE_UID_ACTION_ID) return 'findUidTargetCampaignIds'
+    if (campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID) return 'findPostLinkTargetCampaignIds'
+    return null
+  }
+
+  private isMatchingFindDataSource(sourceCampaign: Campaign, targetField: FindDataTargetCampaignField): boolean {
+    if (sourceCampaign.actionId !== FIND_DATA_GROUP_ACTION_ID || sourceCampaign.isDelete) return false
+    if (targetField === 'findUidTargetCampaignIds') return sourceCampaign.extraSettings?.isFindUid === true
+    return sourceCampaign.extraSettings?.isFindPostLink === true
   }
 
   start(): void {
@@ -280,6 +296,25 @@ export class CampaignScheduler {
     await this.logCampaignProgress(campaign.id, `⏳ ${message}`)
   }
 
+  private async getFindDataSourceWaitNote(campaign: Campaign): Promise<string | null> {
+    const targetField = this.getFindDataTargetCampaignField(campaign)
+    if (!targetField) return null
+
+    const details = await this.supabase.listCampaignInputData(campaign.id)
+    if (details.length > 0) return null
+
+    const campaigns = await this.supabase.listCampaigns()
+    const hasSource = campaigns.some(sourceCampaign => {
+      if (!this.isMatchingFindDataSource(sourceCampaign, targetField)) return false
+      return this.getFindDataConfiguredTargetCampaignIds(
+        sourceCampaign.extraSettings?.[targetField],
+        sourceCampaign.id
+      ).includes(campaign.id)
+    })
+
+    return hasSource ? FIND_DATA_SOURCE_WAIT_NOTE : null
+  }
+
   private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
     try {
       const currentCampaign = await this.supabase.getCampaign(campaign.id)
@@ -291,6 +326,12 @@ export class CampaignScheduler {
       const startBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý')
       if (startBlockReason) {
         await this.updateCampaignPreflightNote(campaign, startBlockReason)
+        return
+      }
+
+      const findDataWaitNote = await this.getFindDataSourceWaitNote(campaign)
+      if (findDataWaitNote) {
+        await this.updateCampaignPreflightNote(campaign, findDataWaitNote)
         return
       }
 
@@ -2539,7 +2580,11 @@ export class CampaignScheduler {
     }
   }
 
-  private async logCampaignProgress(campaignId: number, message: string, options: { emitRealtime?: boolean } = {}): Promise<void> {
+  private async logCampaignProgress(
+    campaignId: number,
+    message: string,
+    options: { emitRealtime?: boolean } = {}
+  ): Promise<void> {
     try {
       const updated = await this.supabase.appendCampaignLog(campaignId, message)
       this.broadcastCampaignUpdate(updated)
