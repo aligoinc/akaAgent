@@ -267,7 +267,7 @@ export class ContactLoader {
         accountId,
         contactType
       }))
-      const contactsToSave = options.preserveExistingFriendStatus && contactType === 'person'
+      const contactsToSave = contactType === 'person'
         ? await this.mergeExistingPersonContactState(accountId, contactsWithMeta)
         : contactsWithMeta
 
@@ -461,7 +461,7 @@ export class ContactLoader {
     return contacts.map(contact => {
       const key = this.normalizeContactUid(contact.uid || contact.url || '')
       const existing = key ? existingByUid.get(key) : undefined
-      const extraData = this.mergePostCommenterExtraData(existing?.extraData, contact.extraData)
+      const extraData = this.mergePersonExtraData(existing?.extraData, contact.extraData)
       return {
         ...contact,
         isFriend: existing?.isFriend === true ? true : contact.isFriend === true,
@@ -470,7 +470,7 @@ export class ContactLoader {
     })
   }
 
-  private mergePostCommenterExtraData(
+  private mergePersonExtraData(
     existingExtraData: Record<string, unknown> | undefined,
     nextExtraData: Record<string, unknown> | undefined
   ): Record<string, unknown> {

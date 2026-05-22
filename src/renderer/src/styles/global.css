@@ -3540,6 +3540,13 @@ button.btn-icon:not(.btn):disabled {
   align-items: end;
 }
 
+.data-scan-post-commenters-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 160px);
+  gap: 12px;
+  align-items: end;
+}
+
 .data-scan-toolbar {
   display: flex;
   align-items: center;
@@ -4032,6 +4039,10 @@ button.btn-icon:not(.btn):disabled {
 
 @media (max-width: 900px) {
   .data-scan-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .data-scan-post-commenters-controls {
     grid-template-columns: 1fr;
   }
 
