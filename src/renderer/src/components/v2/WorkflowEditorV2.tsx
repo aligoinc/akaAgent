@@ -18,6 +18,18 @@ export default function WorkflowEditorV2() {
   const [showElementModal, setShowElementModal] = useState(false)
   const [editingMeta, setEditingMeta] = useState(false)
 
+  const handleSaveMeta = async (meta: { variablesSchema?: WorkflowDef['variablesSchema']; defaultVariables?: Record<string, unknown> }) => {
+    if (meta.variablesSchema !== undefined) setVariables(meta.variablesSchema)
+    if (meta.defaultVariables !== undefined) setDefaultVariables(meta.defaultVariables)
+    try {
+      await saveCurrent()
+      setEditingMeta(false)
+      alert('Lưu meta workflow thành công')
+    } catch (err: any) {
+      alert('Lỗi lưu meta: ' + (err?.message || String(err)))
+    }
+  }
+
   useEffect(() => {
     loadBlocks()
     loadWorkflows()
@@ -103,11 +115,7 @@ export default function WorkflowEditorV2() {
       )}
 
       {editingMeta && workflow && (
-        <WorkflowMetaModal workflow={workflow} onClose={() => setEditingMeta(false)} onSave={(meta) => {
-          if (meta.variablesSchema) setVariables(meta.variablesSchema)
-          if (meta.defaultVariables) setDefaultVariables(meta.defaultVariables)
-          setEditingMeta(false)
-        }} />
+        <WorkflowMetaModal workflow={workflow} onClose={() => setEditingMeta(false)} onSave={handleSaveMeta} />
       )}
     </div>
   )
@@ -116,10 +124,11 @@ export default function WorkflowEditorV2() {
 function WorkflowMetaModal({ workflow, onClose, onSave }: {
   workflow: WorkflowDef
   onClose: () => void
-  onSave: (m: { variablesSchema?: WorkflowDef['variablesSchema']; defaultVariables?: Record<string, unknown> }) => void
+  onSave: (m: { variablesSchema?: WorkflowDef['variablesSchema']; defaultVariables?: Record<string, unknown> }) => void | Promise<void>
 }) {
   const [varsSchemaJson, setVarsSchemaJson] = useState(JSON.stringify(workflow.variablesSchema, null, 2))
   const [defaultVarsJson, setDefaultVarsJson] = useState(JSON.stringify(workflow.defaultVariables, null, 2))
+  const [saving, setSaving] = useState(false)
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 600 }}>
@@ -133,18 +142,23 @@ function WorkflowMetaModal({ workflow, onClose, onSave }: {
             <textarea value={varsSchemaJson} onChange={e => setVarsSchemaJson(e.target.value)} rows={8} style={{ width: '100%', fontFamily: 'monospace', fontSize: 11, background: 'var(--bg-primary, #0e0e15)', border: '1px solid var(--border, #2a2a35)', borderRadius: 4, color: 'var(--text, #e0e0e0)', padding: 6 }} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#aaa', marginBottom: 4 }}>default_variables (JSON, dùng cho test)</label>
+            <label style={{ display: 'block', fontSize: 11, color: '#aaa', marginBottom: 4 }}>default_variables (JSON)</label>
             <textarea value={defaultVarsJson} onChange={e => setDefaultVarsJson(e.target.value)} rows={6} style={{ width: '100%', fontFamily: 'monospace', fontSize: 11, background: 'var(--bg-primary, #0e0e15)', border: '1px solid var(--border, #2a2a35)', borderRadius: 4, color: 'var(--text, #e0e0e0)', padding: 6 }} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--border, #2a2a35)', justifyContent: 'flex-end' }}>
-          <button className="btn btn-sm btn-ghost" onClick={onClose}>Hủy</button>
-          <button className="btn btn-sm" onClick={() => {
+          <button className="btn btn-sm btn-ghost" onClick={onClose} disabled={saving}>Hủy</button>
+          <button className="btn btn-sm" disabled={saving} onClick={async () => {
             let varsSchema, defaultVars
             try { varsSchema = JSON.parse(varsSchemaJson) } catch { alert('variables_schema không hợp lệ'); return }
             try { defaultVars = JSON.parse(defaultVarsJson) } catch { alert('default_variables không hợp lệ'); return }
-            onSave({ variablesSchema: varsSchema, defaultVariables: defaultVars })
-          }}>Lưu</button>
+            setSaving(true)
+            try {
+              await onSave({ variablesSchema: varsSchema, defaultVariables: defaultVars })
+            } finally {
+              setSaving(false)
+            }
+          }}>{saving ? 'Đang lưu...' : 'Lưu'}</button>
         </div>
       </div>
     </div>

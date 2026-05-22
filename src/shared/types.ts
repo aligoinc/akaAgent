@@ -278,6 +278,8 @@ export interface ContactLoadResult {
   error?: string
   stopped?: boolean
   runKey?: string
+  sourcePostUrl?: string
+  maxCommenters?: number
 }
 
 export interface ContactLoadCompleted {
@@ -496,6 +498,7 @@ export const IPC_EVENTS = {
   CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',
   CONTACTS_LOAD_GROUPS: 'contacts:load-groups',
   CONTACTS_LOAD_PAGES: 'contacts:load-pages',
+  CONTACTS_LOAD_POST_COMMENTERS: 'contacts:load-post-commenters',
   CONTACTS_CANCEL_LOAD: 'contacts:cancel-load',
   CONTACTS_LIST: 'contacts:list',
   CONTACTS_DELETE: 'contacts:delete',

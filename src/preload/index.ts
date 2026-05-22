@@ -231,6 +231,9 @@ const electronAPI = {
   loadPages: (accountId: number): Promise<ContactLoadResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_PAGES, accountId),
 
+  loadPostCommenters: (accountId: number, postUrl: string, maxCommenters: number): Promise<ContactLoadResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_POST_COMMENTERS, accountId, postUrl, maxCommenters),
+
   cancelContactLoad: (accountId: number): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_CANCEL_LOAD, accountId),
 

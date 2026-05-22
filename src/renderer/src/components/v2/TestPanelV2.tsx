@@ -1,14 +1,52 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useWorkflowV2Store } from '../../stores/workflowV2Store'
 import { useCampaignStore } from '../../stores/campaignStore'
-import { ChevronDown, ChevronUp, Play, Square } from 'lucide-react'
+import { ChevronDown, ChevronUp, GripHorizontal, Play, Square } from 'lucide-react'
+
+const TEST_PANEL_HEIGHT_KEY = 'workflow-test-panel-height'
+const MIN_TEST_PANEL_HEIGHT = 180
+const DEFAULT_TEST_PANEL_HEIGHT = 320
+
+const getMaxTestPanelHeight = () => {
+  if (typeof window === 'undefined') return 640
+  return Math.max(260, Math.floor(window.innerHeight * 0.72))
+}
+
+const clampTestPanelHeight = (height: number) => {
+  const maxHeight = getMaxTestPanelHeight()
+  return Math.min(maxHeight, Math.max(MIN_TEST_PANEL_HEIGHT, Math.floor(height)))
+}
 
 export default function TestPanelV2() {
-  const { current: workflow, isTesting, testRunKey, testStatusByNode, testLogs, startTest, recordStep, appendLog, endTest, clearTest } = useWorkflowV2Store()
+  const {
+    current: workflow,
+    isTesting,
+    testRunKey,
+    testStatusByNode,
+    testLogs,
+    startTest,
+    recordStep,
+    appendLog,
+    endTest,
+    clearTest
+  } = useWorkflowV2Store()
   const accounts = useCampaignStore(s => s.accounts)
   const [accountId, setAccountId] = useState<number | null>(null)
   const [variablesJson, setVariablesJson] = useState('{}')
   const [collapsed, setCollapsed] = useState(false)
+  const [panelHeight, setPanelHeight] = useState(() => {
+    try {
+      if (typeof window === 'undefined') return DEFAULT_TEST_PANEL_HEIGHT
+      const saved = Number(window.localStorage.getItem(TEST_PANEL_HEIGHT_KEY))
+      if (Number.isFinite(saved) && saved > 0) return clampTestPanelHeight(saved)
+    } catch {}
+    return DEFAULT_TEST_PANEL_HEIGHT
+  })
+  const resizeHeightRef = useRef(panelHeight)
+
+  useEffect(() => {
+    resizeHeightRef.current = panelHeight
+  }, [panelHeight])
 
   // Tự fill variables theo defaultVariables khi load workflow
   useEffect(() => {
@@ -60,14 +98,69 @@ export default function TestPanelV2() {
     }
   }
 
+  const onResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (collapsed) return
+    event.preventDefault()
+
+    const startY = event.clientY
+    const startHeight = panelHeight
+    let latestHeight = startHeight
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      latestHeight = clampTestPanelHeight(startHeight + startY - moveEvent.clientY)
+      resizeHeightRef.current = latestHeight
+      setPanelHeight(latestHeight)
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+      try {
+        window.localStorage.setItem(TEST_PANEL_HEIGHT_KEY, String(resizeHeightRef.current))
+      } catch {}
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp, { once: true })
+  }, [collapsed, panelHeight])
+
   return (
     <div style={{
       borderTop: '1px solid var(--border, #2a2a35)',
       background: 'var(--bg-secondary, #16161e)',
-      maxHeight: collapsed ? 32 : 280,
-      transition: 'max-height 0.2s',
+      height: collapsed ? 32 : panelHeight,
+      minHeight: collapsed ? 32 : MIN_TEST_PANEL_HEIGHT,
+      flexShrink: 0,
       display: 'flex', flexDirection: 'column'
     }}>
+      {!collapsed && (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          title="Kéo để đổi chiều cao Test panel"
+          onPointerDown={onResizeStart}
+          style={{
+            height: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            color: 'var(--text-tertiary, #6b6b82)',
+            cursor: 'ns-resize',
+            touchAction: 'none',
+            background: 'var(--bg-secondary, #16161e)'
+          }}
+        >
+          <GripHorizontal size={18} />
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderBottom: '1px solid var(--border, #2a2a35)' }}>
         <button className="btn btn-sm btn-ghost" onClick={() => setCollapsed(!collapsed)} style={{ minWidth: 28 }}>
           {collapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
