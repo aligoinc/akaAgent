@@ -64,6 +64,9 @@ interface FindDataSourceCounts {
   groupMembers: {
     uids: number
   }
+  newInteractors: {
+    uids: number
+  }
 }
 
 interface FindDataUniqueCounts {
@@ -1092,6 +1095,7 @@ export class CampaignScheduler {
     }
   ): Record<string, unknown> {
     const extra = campaign.extraSettings || {}
+    const canUseFindDataContentConditions = extra.isFindInPost === true || extra.isFindInComment === true
     const validImages = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
     const validCommentImages = (extra.commentImages || []).filter(fp => this.isUsableImagePath(fp)).slice(0, 1)
 
@@ -1176,12 +1180,13 @@ export class CampaignScheduler {
       isFindInComment: extra.isFindInComment ?? false,
       sortTypeComment: extra.sortTypeComment ?? 'most_relevant',
       countCommentFindData: extra.countCommentFindData ?? 30,
+      isFindNewInteractors: extra.isFindNewInteractors ?? false,
       isFindInGroupMembers: extra.isFindInGroupMembers ?? false,
       countGroupMemberFindData: extra.countGroupMemberFindData ?? 100,
-      isFindByKeywords: extra.isFindByKeywords ?? false,
-      keywords: extra.keywords ?? '',
-      isFindByContentAI: extra.isFindByContentAI ?? false,
-      contentAI: extra.contentAI ?? '',
+      isFindByKeywords: canUseFindDataContentConditions ? (extra.isFindByKeywords ?? false) : false,
+      keywords: canUseFindDataContentConditions ? (extra.keywords ?? '') : '',
+      isFindByContentAI: canUseFindDataContentConditions ? (extra.isFindByContentAI ?? false) : false,
+      contentAI: canUseFindDataContentConditions ? (extra.contentAI ?? '') : '',
       // Detail-specific.
       // inputDataUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
       // `fb_resolve_url` sẽ verify/normalize tuỳ theo urlType (group/profile/messenger).
@@ -1794,6 +1799,9 @@ export class CampaignScheduler {
     const rawGroupMembers = raw.groupMembers && typeof raw.groupMembers === 'object'
       ? raw.groupMembers as Record<string, unknown>
       : {}
+    const rawNewInteractors = raw.newInteractors && typeof raw.newInteractors === 'object'
+      ? raw.newInteractors as Record<string, unknown>
+      : {}
 
     const count = (value: unknown) => {
       const numericValue = Number(value)
@@ -1814,6 +1822,9 @@ export class CampaignScheduler {
       },
       groupMembers: {
         uids: count(rawGroupMembers.uids)
+      },
+      newInteractors: {
+        uids: count(rawNewInteractors.uids)
       }
     }
   }
@@ -1828,6 +1839,7 @@ export class CampaignScheduler {
     const uidParts: string[] = []
     if (extra?.isFindUid && extra?.isFindInPost) uidParts.push(`${sourceCounts.post.uids} UID từ bài post`)
     if (extra?.isFindUid && extra?.isFindInComment) uidParts.push(`${sourceCounts.comment.uids} UID từ comment`)
+    if (extra?.isFindUid && extra?.isFindNewInteractors) uidParts.push(`${sourceCounts.newInteractors.uids} UID từ người tương tác mới`)
     if (extra?.isFindUid && extra?.isFindInGroupMembers) uidParts.push(`${sourceCounts.groupMembers.uids} UID từ thành viên group`)
     if (uidParts.length > 0) sourceLines.push(uidParts.join(' - '))
 

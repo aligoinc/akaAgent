@@ -423,6 +423,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     isFindInComment: campaign?.extraSettings?.isFindInComment ?? false,
     sortTypeComment: (campaign?.extraSettings?.sortTypeComment || 'most_relevant') as CampaignExtraSettings['sortTypeComment'],
     countCommentFindData: campaign?.extraSettings?.countCommentFindData ?? 30,
+    isFindNewInteractors: campaign?.extraSettings?.isFindNewInteractors ?? false,
     isFindInGroupMembers: campaign?.extraSettings?.isFindInGroupMembers ?? false,
     countGroupMemberFindData: campaign?.extraSettings?.countGroupMemberFindData ?? 100,
     isFindByKeywords: campaign?.extraSettings?.isFindByKeywords ?? false,
@@ -488,7 +489,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     formData.isFindUid ||
     formData.isFindPostLink
   )
-  const usesFindDataFeed = formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink
+  const usesFindDataPostFeed = formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink || formData.isFindNewInteractors
+  const usesFindDataCommentFeed = formData.isFindInComment || formData.isFindNewInteractors
+  const usesFindDataFeed = usesFindDataPostFeed || usesFindDataCommentFeed
+  const usesFindDataContentConditions = formData.isFindInPost || formData.isFindInComment
+  const effectiveFindDataPostSort = formData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
+  const effectiveFindDataCommentSort = formData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
   const showFindDataConditionsSection = isFindDataGroupCampaign && (usesFindDataFeed || formData.isFindInGroupMembers)
   const showExtraSection = isFacebookGroupPostCampaign || isCommentSeedingCampaign
   const requiresTimelineSourceLinks = isTimelinePostCampaign && (formData.copyContentFromSource || formData.sharePost)
@@ -936,7 +942,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       case 'sourceContent': return !requiresTimelineSourceLinks || hasTimelineSourceLinks
       case 'images': return true  // optional
       case 'commentImages': return true  // optional
-      case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindInGroupMembers
+      case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindNewInteractors || formData.isFindInGroupMembers
       case 'findDataPostConditions': return true
       case 'findDataCommentConditions': return true
       case 'findDataContent': return true
@@ -1123,12 +1129,16 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       return
     }
     if (isFindDataGroupCampaign) {
-      if (!formData.isFindInPost && !formData.isFindInComment && !formData.isFindInGroupMembers) {
-        showAlert('Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment hoặc Thành viên group.', 'error')
+      if (!formData.isFindInPost && !formData.isFindInComment && !formData.isFindNewInteractors && !formData.isFindInGroupMembers) {
+        showAlert('Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment, Những người tương tác mới hoặc Thành viên group.', 'error')
         return
       }
       if (formData.isFindInGroupMembers && !formData.isFindUid) {
         showAlert('Thành viên group chỉ hỗ trợ tìm Uid user facebook. Vui lòng bật Uid user facebook hoặc bỏ chọn Thành viên group.', 'error')
+        return
+      }
+      if (formData.isFindNewInteractors && !formData.isFindUid) {
+        showAlert('Những người tương tác mới chỉ hỗ trợ tìm Uid user facebook. Vui lòng bật Uid user facebook hoặc bỏ chọn Những người tương tác mới.', 'error')
         return
       }
       if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink) {
@@ -1406,17 +1416,18 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
             isFindUid: formData.isFindUid,
             isFindPostLink: formData.isFindPostLink,
             isFindInPost: formData.isFindInPost,
-            sortTypePost: formData.sortTypePost,
+            sortTypePost: effectiveFindDataPostSort,
             countPostFindData: formData.countPostFindData,
             isFindInComment: formData.isFindInComment,
-            sortTypeComment: formData.sortTypeComment,
+            sortTypeComment: effectiveFindDataCommentSort,
             countCommentFindData: formData.countCommentFindData,
+            isFindNewInteractors: formData.isFindNewInteractors,
             isFindInGroupMembers: formData.isFindInGroupMembers,
             countGroupMemberFindData: formData.countGroupMemberFindData,
-            isFindByKeywords: formData.isFindByKeywords,
-            keywords: formData.keywords,
-            isFindByContentAI: formData.isFindByContentAI,
-            contentAI: formData.contentAI,
+            isFindByKeywords: usesFindDataContentConditions ? formData.isFindByKeywords : false,
+            keywords: usesFindDataContentConditions ? formData.keywords : '',
+            isFindByContentAI: usesFindDataContentConditions ? formData.isFindByContentAI : false,
+            contentAI: usesFindDataContentConditions ? formData.contentAI : '',
             findUidTargetCampaignIds: formData.isFindUid && handleFoundUidData ? formData.findUidTargetCampaignIds : [],
             findPostLinkTargetCampaignIds: formData.isFindPostLink && handleFoundPostLinkData ? formData.findPostLinkTargetCampaignIds : [],
             findPhoneSmsTargetCampaignIds: formData.isFindPhone && handleFoundPhoneSmsData ? formData.findPhoneSmsTargetCampaignIds : [],
@@ -2224,6 +2235,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
           <label className="schedule-checkbox-label">
             <input
               type="checkbox"
+              checked={formData.isFindNewInteractors}
+              onChange={e => {
+                const checked = e.target.checked
+                setFormData(p => ({
+                  ...p,
+                  isFindNewInteractors: checked,
+                  isFindUid: checked ? true : p.isFindUid
+                }))
+              }}
+            />
+            <span>Những người tương tác mới</span>
+          </label>
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
               checked={formData.isFindInGroupMembers}
               onChange={e => {
                 const checked = e.target.checked
@@ -2614,15 +2640,16 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
 
   const renderFindDataConditions = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {usesFindDataFeed && (
+      {usesFindDataPostFeed && (
         <div className="extra-comment-options">
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Bài post</div>
           <div className="stepper-form-row">
             <div className="stepper-form-group half">
               <label>Cách hiển thị bài post trong group</label>
               <select
-                value={formData.sortTypePost}
+                value={effectiveFindDataPostSort}
                 onChange={e => setFormData(p => ({ ...p, sortTypePost: e.target.value as CampaignExtraSettings['sortTypePost'] }))}
+                disabled={formData.isFindNewInteractors}
                 className="stepper-input"
               >
                 {POST_SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
@@ -2642,15 +2669,16 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
         </div>
       )}
 
-      {formData.isFindInComment && (
+      {usesFindDataCommentFeed && (
         <div className="extra-comment-options">
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Comment</div>
           <div className="stepper-form-row">
             <div className="stepper-form-group half">
               <label>Cách hiển thị comment trong post</label>
               <select
-                value={formData.sortTypeComment}
+                value={effectiveFindDataCommentSort}
                 onChange={e => setFormData(p => ({ ...p, sortTypeComment: e.target.value as CampaignExtraSettings['sortTypeComment'] }))}
+                disabled={formData.isFindNewInteractors}
                 className="stepper-input"
               >
                 {COMMENT_SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
@@ -2686,7 +2714,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
         </div>
       )}
 
-      {usesFindDataFeed && (
+      {usesFindDataContentConditions && (
         <div className="extra-comment-options">
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Điều kiện nội dung</div>
           <div className="stepper-form-group">

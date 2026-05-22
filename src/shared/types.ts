@@ -156,6 +156,7 @@ export interface CampaignExtraSettings {
   isFindInComment?: boolean
   sortTypeComment?: 'most_relevant' | 'all_comments' | 'newest'
   countCommentFindData?: number
+  isFindNewInteractors?: boolean
   isFindInGroupMembers?: boolean
   countGroupMemberFindData?: number
   isFindByKeywords?: boolean
