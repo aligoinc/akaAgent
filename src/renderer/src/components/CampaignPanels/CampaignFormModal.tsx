@@ -417,12 +417,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
     isFindUid: campaign?.extraSettings?.isFindUid ?? false,
     isFindPostLink: campaign?.extraSettings?.isFindPostLink ?? false,
-    isFindInPost: campaign?.extraSettings?.isFindInPost ?? true,
+    isFindInPost: campaign?.extraSettings?.isFindInPost ?? false,
     sortTypePost: (campaign?.extraSettings?.sortTypePost || 'most_relevant') as CampaignExtraSettings['sortTypePost'],
     countPostFindData: campaign?.extraSettings?.countPostFindData ?? 10,
     isFindInComment: campaign?.extraSettings?.isFindInComment ?? false,
     sortTypeComment: (campaign?.extraSettings?.sortTypeComment || 'most_relevant') as CampaignExtraSettings['sortTypeComment'],
     countCommentFindData: campaign?.extraSettings?.countCommentFindData ?? 30,
+    isFindInGroupMembers: campaign?.extraSettings?.isFindInGroupMembers ?? false,
+    countGroupMemberFindData: campaign?.extraSettings?.countGroupMemberFindData ?? 100,
     isFindByKeywords: campaign?.extraSettings?.isFindByKeywords ?? false,
     keywords: campaign?.extraSettings?.keywords || '',
     isFindByContentAI: campaign?.extraSettings?.isFindByContentAI ?? false,
@@ -486,7 +488,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     formData.isFindUid ||
     formData.isFindPostLink
   )
-  const showFindDataConditionsSection = isFindDataGroupCampaign
+  const usesFindDataFeed = formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink
+  const showFindDataConditionsSection = isFindDataGroupCampaign && (usesFindDataFeed || formData.isFindInGroupMembers)
   const showExtraSection = isFacebookGroupPostCampaign || isCommentSeedingCampaign
   const requiresTimelineSourceLinks = isTimelinePostCampaign && (formData.copyContentFromSource || formData.sharePost)
   const hasTimelineSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
@@ -933,7 +936,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       case 'sourceContent': return !requiresTimelineSourceLinks || hasTimelineSourceLinks
       case 'images': return true  // optional
       case 'commentImages': return true  // optional
-      case 'findDataScope': return formData.isFindInPost || formData.isFindInComment
+      case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindInGroupMembers
       case 'findDataPostConditions': return true
       case 'findDataCommentConditions': return true
       case 'findDataContent': return true
@@ -1120,8 +1123,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       return
     }
     if (isFindDataGroupCampaign) {
-      if (!formData.isFindInPost && !formData.isFindInComment) {
-        showAlert('Vui lòng chọn ít nhất một nơi tìm: Bài post hoặc Comment.', 'error')
+      if (!formData.isFindInPost && !formData.isFindInComment && !formData.isFindInGroupMembers) {
+        showAlert('Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment hoặc Thành viên group.', 'error')
+        return
+      }
+      if (formData.isFindInGroupMembers && !formData.isFindUid) {
+        showAlert('Thành viên group chỉ hỗ trợ tìm Uid user facebook. Vui lòng bật Uid user facebook hoặc bỏ chọn Thành viên group.', 'error')
         return
       }
       if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink) {
@@ -1404,6 +1411,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
             isFindInComment: formData.isFindInComment,
             sortTypeComment: formData.sortTypeComment,
             countCommentFindData: formData.countCommentFindData,
+            isFindInGroupMembers: formData.isFindInGroupMembers,
+            countGroupMemberFindData: formData.countGroupMemberFindData,
             isFindByKeywords: formData.isFindByKeywords,
             keywords: formData.keywords,
             isFindByContentAI: formData.isFindByContentAI,
@@ -2211,6 +2220,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
             />
             <span>Comment</span>
           </label>
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={formData.isFindInGroupMembers}
+              onChange={e => {
+                const checked = e.target.checked
+                setFormData(p => ({
+                  ...p,
+                  isFindInGroupMembers: checked,
+                  isFindUid: checked ? true : p.isFindUid
+                }))
+              }}
+            />
+            <span>Thành viên group</span>
+          </label>
         </div>
       </div>
 
@@ -2589,31 +2613,33 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
 
   const renderFindDataConditions = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="extra-comment-options">
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Bài post</div>
-        <div className="stepper-form-row">
-          <div className="stepper-form-group half">
-            <label>Cách hiển thị bài post trong group</label>
-            <select
-              value={formData.sortTypePost}
-              onChange={e => setFormData(p => ({ ...p, sortTypePost: e.target.value as CampaignExtraSettings['sortTypePost'] }))}
-              className="stepper-input"
-            >
-              {POST_SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-            </select>
-          </div>
-          <div className="stepper-form-group half">
-            <label>Số post tối đa trong 1 group</label>
-            <input
-              type="number"
-              min={1}
-              value={formData.countPostFindData}
-              onChange={e => setFormData(p => ({ ...p, countPostFindData: Math.max(1, Number(e.target.value) || 1) }))}
-              className="stepper-input"
-            />
+      {usesFindDataFeed && (
+        <div className="extra-comment-options">
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Bài post</div>
+          <div className="stepper-form-row">
+            <div className="stepper-form-group half">
+              <label>Cách hiển thị bài post trong group</label>
+              <select
+                value={formData.sortTypePost}
+                onChange={e => setFormData(p => ({ ...p, sortTypePost: e.target.value as CampaignExtraSettings['sortTypePost'] }))}
+                className="stepper-input"
+              >
+                {POST_SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+            </div>
+            <div className="stepper-form-group half">
+              <label>Số post tối đa trong 1 group</label>
+              <input
+                type="number"
+                min={1}
+                value={formData.countPostFindData}
+                onChange={e => setFormData(p => ({ ...p, countPostFindData: Math.max(1, Number(e.target.value) || 1) }))}
+                className="stepper-input"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {formData.isFindInComment && (
         <div className="extra-comment-options">
@@ -2643,44 +2669,62 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
         </div>
       )}
 
-      <div className="extra-comment-options">
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Điều kiện nội dung</div>
-        <div className="stepper-form-group">
-          <label className="schedule-checkbox-label">
+      {formData.isFindInGroupMembers && (
+        <div className="extra-comment-options">
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Thành viên group</div>
+          <div className="stepper-form-group">
+            <label>Lấy danh sách thành viên tối đa</label>
             <input
-              type="checkbox"
-              checked={formData.isFindByKeywords}
-              onChange={e => setFormData(p => ({ ...p, isFindByKeywords: e.target.checked }))}
+              type="number"
+              min={1}
+              value={formData.countGroupMemberFindData}
+              onChange={e => setFormData(p => ({ ...p, countGroupMemberFindData: Math.max(1, Number(e.target.value) || 1) }))}
+              className="stepper-input"
             />
-            <span>Nội dung phải chứa 1 trong các từ khoá (cách nhau dấu phẩy)</span>
-          </label>
-          <input
-            type="text"
-            value={formData.keywords}
-            onChange={e => setFormData(p => ({ ...p, keywords: e.target.value }))}
-            className="stepper-input"
-            disabled={!formData.isFindByKeywords}
-          />
+          </div>
         </div>
+      )}
 
-        <div className="stepper-form-group">
-          <label className="schedule-checkbox-label">
+      {usesFindDataFeed && (
+        <div className="extra-comment-options">
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Điều kiện nội dung</div>
+          <div className="stepper-form-group">
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.isFindByKeywords}
+                onChange={e => setFormData(p => ({ ...p, isFindByKeywords: e.target.checked }))}
+              />
+              <span>Nội dung phải chứa 1 trong các từ khoá (cách nhau dấu phẩy)</span>
+            </label>
             <input
-              type="checkbox"
-              checked={formData.isFindByContentAI}
-              onChange={e => setFormData(p => ({ ...p, isFindByContentAI: e.target.checked }))}
+              type="text"
+              value={formData.keywords}
+              onChange={e => setFormData(p => ({ ...p, keywords: e.target.value }))}
+              className="stepper-input"
+              disabled={!formData.isFindByKeywords}
             />
-            <span>Ý nghĩa của nội dung là (dùng AI)</span>
-          </label>
-          <textarea
-            className="stepper-textarea"
-            value={formData.contentAI}
-            onChange={e => setFormData(p => ({ ...p, contentAI: e.target.value }))}
-            rows={4}
-            disabled={!formData.isFindByContentAI}
-          />
+          </div>
+
+          <div className="stepper-form-group">
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.isFindByContentAI}
+                onChange={e => setFormData(p => ({ ...p, isFindByContentAI: e.target.checked }))}
+              />
+              <span>Ý nghĩa của nội dung là (dùng AI)</span>
+            </label>
+            <textarea
+              className="stepper-textarea"
+              value={formData.contentAI}
+              onChange={e => setFormData(p => ({ ...p, contentAI: e.target.value }))}
+              rows={4}
+              disabled={!formData.isFindByContentAI}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 

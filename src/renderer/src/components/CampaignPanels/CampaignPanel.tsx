@@ -29,8 +29,15 @@ interface FoundDataPayload {
   linkGroupZalos: string[]
   uids: string[]
   postLinks: string[]
+  groupMembers: FoundGroupMember[]
   groupUrl: string
   total: number
+}
+
+interface FoundGroupMember {
+  uid: string
+  name: string
+  url: string
 }
 
 interface FoundDataItem {
@@ -38,6 +45,7 @@ interface FoundDataItem {
   kind: FoundDataKind
   label: string
   value: string
+  name?: string
   groupUrl: string
   createdAt?: string
 }
@@ -79,18 +87,39 @@ const toStringList = (value: unknown): string[] => {
   return value.map(item => String(item || '').trim()).filter(Boolean)
 }
 
+const toGroupMemberList = (value: unknown): FoundGroupMember[] => {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const members: FoundGroupMember[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const member = item as { uid?: unknown; name?: unknown; url?: unknown }
+    const uid = String(member.uid || '').trim()
+    if (!uid || seen.has(uid)) continue
+    seen.add(uid)
+    members.push({
+      uid,
+      name: String(member.name || '').trim(),
+      url: String(member.url || '').trim()
+    })
+  }
+  return members
+}
+
 const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
   const data = detail.data || {}
   const phones = toStringList(data.phones)
   const linkGroupZalos = toStringList(data.linkGroupZalos)
   const uids = toStringList(data.uids)
   const postLinks = toStringList(data.postLinks)
+  const groupMembers = toGroupMemberList(data.groupMembers)
   const groupUrl = typeof data.groupUrl === 'string' ? data.groupUrl : ''
   return {
     phones,
     linkGroupZalos,
     uids,
     postLinks,
+    groupMembers,
     groupUrl,
     total: phones.length + linkGroupZalos.length + uids.length + postLinks.length
   }
@@ -104,6 +133,29 @@ const getFoundDataKindLabel = (kind: FoundDataKind) => {
     case 'postLink': return 'Link bài post'
   }
 }
+
+const normalizeFoundDataExportValue = (item: FoundDataItem) => {
+  const value = String(item.value || '').trim()
+  if (item.kind === 'phone') return value.replace(/[\s.\-()+]/g, '')
+  if (item.kind === 'postLink') return value.replace(/\/+$/g, '').toLowerCase()
+  return value.toLowerCase()
+}
+
+const getUniqueFoundDataItems = (items: FoundDataItem[]) => {
+  const map = new Map<string, FoundDataItem>()
+  for (const item of items) {
+    const normalizedValue = normalizeFoundDataExportValue(item)
+    if (!normalizedValue) continue
+    const key = `${item.kind}:${normalizedValue}`
+    const existing = map.get(key)
+    if (!existing || (!existing.name && item.name)) {
+      map.set(key, item)
+    }
+  }
+  return Array.from(map.values())
+}
+
+const formatDisplayDateTime = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
 
 const formatExportTimestamp = (date = new Date()) => {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -126,19 +178,38 @@ const sanitizeFileSegment = (value: string) => {
 }
 
 const parseCampaignRunLog = (log: string): RunLogEntry[] => {
-  return (log || '')
-    .split('\n')
-    .map((line, index) => {
-      const text = line.trim()
-      if (!text) return null
-      const match = text.match(/^\[([^\]]+)\]\s*(.*)$/)
-      return {
+  const entries: RunLogEntry[] = []
+  const lines = (log || '').split('\n')
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]
+    const text = line.trimEnd()
+    if (!text.trim()) {
+      const lastEntry = entries[entries.length - 1]
+      if (lastEntry) lastEntry.message = `${lastEntry.message}\n`
+      continue
+    }
+    const match = text.match(/^\[([^\]]+)\]\s*(.*)$/)
+    if (match) {
+      entries.push({
         key: `${index}-${text}`,
-        timestamp: match?.[1],
-        message: match ? match[2] : text
-      }
-    })
-    .filter((entry): entry is RunLogEntry => Boolean(entry))
+        timestamp: match[1],
+        message: match[2]
+      })
+      continue
+    }
+
+    const lastEntry = entries[entries.length - 1]
+    if (lastEntry) {
+      lastEntry.message = `${lastEntry.message}\n${text.trimEnd()}`
+    } else {
+      entries.push({
+        key: `${index}-${text}`,
+        timestamp: undefined,
+        message: text.trim()
+      })
+    }
+  }
+  return entries
 }
 
 export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGeneralSettings }: CampaignPanelProps) {
@@ -345,6 +416,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
   }
 
+  const getDetailStatusLabel = (status: string) => (
+    status === 'thành công' ? '✅ Thành công'
+      : status === 'thất bại' ? '⚠️ Thất bại'
+        : status === 'lỗi' ? '❌ Lỗi'
+          : status
+  )
+
   const getCampaignStatusClass = (status: string) => {
     switch (status) {
       case 'chờ xử lý': return 'status-pending'
@@ -371,6 +449,32 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       if (payload.total === 0) return []
       const groupUrl = payload.groupUrl || '-'
       const createdAt = detail.createdAt
+      const memberNameByUid = new Map(payload.groupMembers.map(member => [member.uid, member.name]))
+      const memberUidSet = new Set(payload.groupMembers.map(member => member.uid))
+      const uidItems = [
+        ...[...payload.groupMembers]
+          .sort((a, b) => Number(!a.name) - Number(!b.name))
+          .map((member, index) => ({
+            key: `${detail.id}-uid-member-${index}`,
+            kind: 'uid' as const,
+            label: getFoundDataKindLabel('uid'),
+            value: member.uid,
+            name: member.name,
+            groupUrl,
+            createdAt
+          })),
+        ...payload.uids
+          .filter(value => !memberUidSet.has(value))
+          .map((value, index) => ({
+            key: `${detail.id}-uid-${index}`,
+            kind: 'uid' as const,
+            label: getFoundDataKindLabel('uid'),
+            value,
+            name: memberNameByUid.get(value) || '',
+            groupUrl,
+            createdAt
+          }))
+      ]
       return [
         ...payload.phones.map((value, index) => ({
           key: `${detail.id}-phone-${index}`,
@@ -388,14 +492,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           groupUrl,
           createdAt
         })),
-        ...payload.uids.map((value, index) => ({
-          key: `${detail.id}-uid-${index}`,
-          kind: 'uid' as const,
-          label: getFoundDataKindLabel('uid'),
-          value,
-          groupUrl,
-          createdAt
-        })),
+        ...uidItems,
         ...payload.postLinks.map((value, index) => ({
           key: `${detail.id}-post-link-${index}`,
           kind: 'postLink' as const,
@@ -470,7 +567,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const renderCampaignDetailLog = (detail: CampaignDetail) => {
     const payload = getFindDataPayload(detail)
     const postUrl = typeof detail.postUrl === 'string' ? detail.postUrl.trim() : ''
-    if (payload.total === 0 && !postUrl) {
+    const isFindDataDetail = isSelectedFindDataCampaign && detail.actionName === 'Tìm data'
+    if (!isFindDataDetail && payload.total === 0 && !postUrl) {
       return <span className="campaign-detail-log-text">{detail.log || '-'}</span>
     }
 
@@ -488,16 +586,21 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
             {postUrl}
           </a>
         )}
-        {payload.total > 0 && (
+        {(isFindDataDetail || payload.total > 0) && (
           <div className="find-data-result-chips">
             <span className="find-data-chip find-data-chip-phone">SĐT: {payload.phones.length}</span>
-            <span className="find-data-chip find-data-chip-zalo">Zalo: {payload.linkGroupZalos.length}</span>
+            <span className="find-data-chip find-data-chip-zalo">Link group Zalo: {payload.linkGroupZalos.length}</span>
             <span className="find-data-chip find-data-chip-uid">UID: {payload.uids.length}</span>
-            <span className="find-data-chip find-data-chip-postLink">Post: {payload.postLinks.length}</span>
+            <span className="find-data-chip find-data-chip-postLink">Link Post: {payload.postLinks.length}</span>
           </div>
         )}
       </div>
     )
+  }
+
+  const getCampaignDetailLogTitle = (detail: CampaignDetail) => {
+    const postUrl = typeof detail.postUrl === 'string' ? detail.postUrl.trim() : ''
+    return [detail.log || '', postUrl].filter(Boolean).join('\n') || '-'
   }
 
   const handleExportCampaignDetails = () => {
@@ -554,12 +657,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
 
     try {
+      const uniqueItems = getUniqueFoundDataItems(selectedFoundDataItems)
       const rows = [
         FOUND_DATA_TEMPLATE_HEADERS,
-        ...selectedFoundDataItems.map(item => {
+        ...uniqueItems.map(item => {
           const isPhone = item.kind === 'phone'
           return [
-            '',
+            item.name || '',
             isPhone ? '' : item.value,
             isPhone ? item.value : '',
             '',
@@ -883,7 +987,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               {/* Tab: Campaign Input Data */}
               {detailTab === 'data' && (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 0 8px' }}>
+                  <div className="detail-export-bar">
                     <button
                       className="btn btn-secondary"
                       onClick={handleExportCampaignInputData}
@@ -912,14 +1016,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                       <tbody>
                         {campaignInputData.map(d => (
                           <tr key={d.id}>
-                            <td>{d.name || '-'}</td>
-                            <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
-                            <td>{d.phone || '-'}</td>
-                            <td>{d.email || '-'}</td>
-                            <td>
+                            <td title={d.name || '-'}>{d.name || '-'}</td>
+                            <td title={d.uid || '-'} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
+                            <td title={d.phone || '-'}>{d.phone || '-'}</td>
+                            <td title={d.email || '-'}>{d.email || '-'}</td>
+                            <td title={d.status}>
                               <span style={{ color: getStatusColor(d.status) }}>{d.status}</span>
                             </td>
-                            <td style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '-'}</td>
+                            <td title={d.note || '-'} style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -931,7 +1035,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               {/* Tab: Campaign Details (per-milestone log) */}
               {detailTab === 'actions' && (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 0 8px' }}>
+                  <div className="detail-export-bar">
                     <button
                       className="btn btn-secondary"
                       onClick={handleExportCampaignDetails}
@@ -956,24 +1060,29 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                         </tr>
                       </thead>
                       <tbody>
-                        {campaignDetails.map(a => (
-                          <tr key={a.id}>
-                            <td style={{ whiteSpace: 'nowrap' }}>
-                              {a.createdAt ? new Date(a.createdAt).toLocaleString('vi-VN') : '-'}
-                            </td>
-                            <td>
-                              <strong>{a.actionName}</strong>
-                            </td>
-                            <td>
-                              <span style={{ color: getStatusColor(a.status) }}>
-                                {a.status === 'thành công' ? '✅ Thành công' : a.status === 'thất bại' ? '⚠️ Thất bại' : a.status === 'lỗi' ? '❌ Lỗi' : a.status}
-                              </span>
-                            </td>
-                            <td className="campaign-detail-log-cell">
-                              {renderCampaignDetailLog(a)}
-                            </td>
-                          </tr>
-                        ))}
+                        {campaignDetails.map(a => {
+                          const createdAtLabel = formatDisplayDateTime(a.createdAt)
+                          const statusLabel = getDetailStatusLabel(a.status)
+                          const detailLogTitle = getCampaignDetailLogTitle(a)
+                          return (
+                            <tr key={a.id}>
+                              <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
+                                {createdAtLabel}
+                              </td>
+                              <td title={a.actionName || '-'}>
+                                <strong>{a.actionName}</strong>
+                              </td>
+                              <td title={statusLabel}>
+                                <span style={{ color: getStatusColor(a.status) }}>
+                                  {statusLabel}
+                                </span>
+                              </td>
+                              <td className="campaign-detail-log-cell" title={detailLogTitle}>
+                                {renderCampaignDetailLog(a)}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   )}
@@ -995,8 +1104,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     <tbody>
                       {runLogEntries.map(entry => (
                         <tr key={entry.key}>
-                          <td style={{ whiteSpace: 'nowrap' }}>{entry.timestamp || '-'}</td>
-                          <td className="campaign-detail-log-cell">{entry.message}</td>
+                          <td title={entry.timestamp || '-'} style={{ whiteSpace: 'nowrap' }}>{entry.timestamp || '-'}</td>
+                          <td className="campaign-detail-log-cell" title={entry.message || '-'}>{entry.message}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1051,25 +1160,30 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                         <tr>
                           <th>Loại data</th>
                           <th>Giá trị</th>
+                          <th>Tên</th>
                           <th>Group</th>
                           <th>Thời gian</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {foundDataItems.map(item => (
-                          <tr key={item.key}>
-                            <td>
-                              <span className={`find-data-kind find-data-kind-${item.kind}`}>
-                                {item.label}
-                              </span>
-                            </td>
-                            <td className="find-data-value-cell">{item.value}</td>
-                            <td className="find-data-group-cell">{item.groupUrl}</td>
-                            <td style={{ whiteSpace: 'nowrap' }}>
-                              {item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : '-'}
-                            </td>
-                          </tr>
-                        ))}
+                        {foundDataItems.map(item => {
+                          const createdAtLabel = formatDisplayDateTime(item.createdAt)
+                          return (
+                            <tr key={item.key}>
+                              <td title={item.label}>
+                                <span className={`find-data-kind find-data-kind-${item.kind}`}>
+                                  {item.label}
+                                </span>
+                              </td>
+                              <td className="find-data-value-cell" title={item.value}>{item.value}</td>
+                              <td title={item.name || '-'}>{item.name || '-'}</td>
+                              <td className="find-data-group-cell" title={item.groupUrl}>{item.groupUrl}</td>
+                              <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
+                                {createdAtLabel}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   )}

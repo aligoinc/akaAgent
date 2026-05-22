@@ -49,6 +49,30 @@ interface PostBumpTarget {
   campaignId: number
 }
 
+interface FindDataSourceCounts {
+  post: {
+    phones: number
+    linkGroupZalos: number
+    uids: number
+    postLinks: number
+  }
+  comment: {
+    phones: number
+    linkGroupZalos: number
+    uids: number
+  }
+  groupMembers: {
+    uids: number
+  }
+}
+
+interface FindDataUniqueCounts {
+  phones: number
+  linkGroupZalos: number
+  uids: number
+  postLinks: number
+}
+
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
@@ -1152,6 +1176,8 @@ export class CampaignScheduler {
       isFindInComment: extra.isFindInComment ?? false,
       sortTypeComment: extra.sortTypeComment ?? 'most_relevant',
       countCommentFindData: extra.countCommentFindData ?? 30,
+      isFindInGroupMembers: extra.isFindInGroupMembers ?? false,
+      countGroupMemberFindData: extra.countGroupMemberFindData ?? 100,
       isFindByKeywords: extra.isFindByKeywords ?? false,
       keywords: extra.keywords ?? '',
       isFindByContentAI: extra.isFindByContentAI ?? false,
@@ -1200,6 +1226,8 @@ export class CampaignScheduler {
         linkGroupZalos?: unknown[]
         uids?: unknown[]
         postLinks?: unknown[]
+        groupMembers?: unknown[]
+        sourceCounts?: unknown
         message?: string
         groupUrl?: string
         total?: number
@@ -1211,6 +1239,13 @@ export class CampaignScheduler {
       const postLinks = Array.isArray(out.postLinks)
         ? out.postLinks.map(link => this.cleanPostLinkForStorage(String(link))).filter(Boolean)
         : []
+      const groupMembers = this.normalizeFoundGroupMembers(out.groupMembers)
+      const groupMemberNameByUid = new Map<string, string>()
+      for (const member of groupMembers) {
+        const key = this.normalizeUidForCompare(member.uid)
+        if (key && member.name && !groupMemberNameByUid.has(key)) groupMemberNameByUid.set(key, member.name)
+      }
+      const sourceCounts = this.normalizeFindDataSourceCounts(out.sourceCounts)
       const findUidTargetCampaignIds = Array.isArray(campaign.extraSettings?.findUidTargetCampaignIds)
         ? campaign.extraSettings.findUidTargetCampaignIds
         : []
@@ -1235,11 +1270,17 @@ export class CampaignScheduler {
       const total = Number(out.total ?? (phones.length + linkGroupZalos.length + uids.length + postLinks.length))
       const targetName = inputDataName || out.groupUrl || 'group'
       const isSuccess = summaryStep?.status === 'success'
-      const notes: string[] = []
-      if (campaign.extraSettings?.isFindPhone) notes.push(`${phones.length} số điện thoại`)
-      if (campaign.extraSettings?.isFindLinkGroupZalo) notes.push(`${linkGroupZalos.length} link group Zalo`)
-      if (campaign.extraSettings?.isFindUid) notes.push(`${uids.length} UID`)
-      if (campaign.extraSettings?.isFindPostLink) notes.push(`${postLinks.length} link bài post`)
+      const successLog = this.formatFindDataLogMessage(
+        targetName,
+        {
+          phones: phones.length,
+          linkGroupZalos: linkGroupZalos.length,
+          uids: uids.length,
+          postLinks: postLinks.length
+        },
+        sourceCounts,
+        campaign.extraSettings || {}
+      )
       const errMsg = out.error || summaryStep?.error || errorStep?.error || 'Lỗi không xác định'
       let previousFoundValues: {
         phones: Set<string>
@@ -1264,9 +1305,7 @@ export class CampaignScheduler {
           actionName: 'Tìm data',
           status: isSuccess ? 'thành công' : 'lỗi',
           log: isSuccess
-            ? (total > 0
-              ? `Đã tìm data trong ${targetName}: ${notes.join(' - ')}`
-              : `Không tìm thấy data phù hợp trong ${targetName}`)
+            ? successLog
             : `Lỗi tìm data trong ${targetName}: ${errMsg}`,
           data: {
             groupUrl: out.groupUrl || detail?.uid,
@@ -1274,7 +1313,9 @@ export class CampaignScheduler {
             linkGroupZalos,
             uids,
             postLinks,
-            counts: { phones: phones.length, linkGroupZalos: linkGroupZalos.length, uids: uids.length, postLinks: postLinks.length, total },
+            groupMembers,
+            counts: { phones: phones.length, linkGroupZalos: linkGroupZalos.length, uids: uids.length, postLinks: postLinks.length, groupMembers: groupMembers.length, total },
+            sourceCounts,
             findUidTargetCampaignIds,
             findPostLinkTargetCampaignIds,
             findPhoneSmsTargetCampaignIds,
@@ -1285,7 +1326,7 @@ export class CampaignScheduler {
             errorBlock: errorStep?.blockName
           }
         })
-        if (isSuccess) await this.logCampaignProgress(campaign.id, `✅ ${total > 0 ? `Đã tìm data trong "${targetName}": ${notes.join(' - ')}` : `Không tìm thấy data phù hợp trong "${targetName}"`}`)
+        if (isSuccess) await this.logCampaignProgress(campaign.id, `✅ ${successLog}`)
         else await this.logCampaignProgress(campaign.id, `❌ Lỗi tìm data trong "${targetName}": ${errMsg}`)
       } catch (err) { console.error('Failed log find data:', err) }
 
@@ -1294,7 +1335,38 @@ export class CampaignScheduler {
         const newPostLinksForInternal = this.filterNewPostLinkValues(postLinks, previousFoundValues.postLinks)
         const newPhonesForExternal = this.filterNewExternalValues(phones, previousFoundValues.phones)
         const newZaloGroupLinksForExternal = this.filterNewExternalValues(linkGroupZalos, previousFoundValues.linkGroupZalos)
-        await this.pushFoundUidsToTargetCampaigns(campaign, newUidsForInternal)
+        await this.logFindDataDuplicatePushSummary(campaign, {
+          label: 'UID',
+          foundCount: uids.length,
+          pushedCount: newUidsForInternal.length,
+          hasTarget: this.getFindDataConfiguredTargetCampaignIds(findUidTargetCampaignIds, campaign.id).length > 0
+        })
+        await this.logFindDataDuplicatePushSummary(campaign, {
+          label: 'link bài post',
+          foundCount: postLinks.length,
+          pushedCount: newPostLinksForInternal.length,
+          hasTarget: this.getFindDataConfiguredTargetCampaignIds(findPostLinkTargetCampaignIds, campaign.id).length > 0
+        })
+        await this.logFindDataDuplicatePushSummary(campaign, {
+          label: 'SĐT',
+          foundCount: phones.length,
+          pushedCount: newPhonesForExternal.length,
+          hasTarget: [
+            ...this.getFindDataConfiguredTargetCampaignIds(findPhoneSmsTargetCampaignIds, campaign.id),
+            ...this.getFindDataConfiguredTargetCampaignIds(findPhoneZaloWebTargetCampaignIds, campaign.id),
+            ...this.getFindDataConfiguredTargetCampaignIds(findPhoneAkaBizDesktopTargetCampaignIds, campaign.id)
+          ].length > 0
+        })
+        await this.logFindDataDuplicatePushSummary(campaign, {
+          label: 'link group Zalo',
+          foundCount: linkGroupZalos.length,
+          pushedCount: newZaloGroupLinksForExternal.length,
+          hasTarget: [
+            ...this.getFindDataConfiguredTargetCampaignIds(findZaloGroupLinkWebTargetCampaignIds, campaign.id),
+            ...this.getFindDataConfiguredTargetCampaignIds(findZaloGroupLinkAkaBizDesktopTargetCampaignIds, campaign.id)
+          ].length > 0
+        })
+        await this.pushFoundUidsToTargetCampaigns(campaign, newUidsForInternal, groupMemberNameByUid)
         await this.pushFoundPostLinksToTargetCampaigns(campaign, newPostLinksForInternal)
         await this.pushFoundPhonesToSmsCampaigns(campaign, newPhonesForExternal)
         await this.pushFoundPhonesToZaloWebCampaigns(campaign, newPhonesForExternal)
@@ -1546,14 +1618,13 @@ export class CampaignScheduler {
     }
   }
 
-  private async pushFoundUidsToTargetCampaigns(sourceCampaign: Campaign, rawUids: string[]): Promise<void> {
+  private async pushFoundUidsToTargetCampaigns(sourceCampaign: Campaign, rawUids: string[], uidNameByNormalizedUid: Map<string, string> = new Map()): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindUid) return
 
-    const targetCampaignIds = Array.from(new Set(
-      (sourceCampaign.extraSettings.findUidTargetCampaignIds || [])
-        .map(id => Number(id))
-        .filter(id => Number.isFinite(id) && id > 0 && id !== sourceCampaign.id)
-    ))
+    const targetCampaignIds = this.getFindDataConfiguredTargetCampaignIds(
+      sourceCampaign.extraSettings.findUidTargetCampaignIds,
+      sourceCampaign.id
+    )
     if (targetCampaignIds.length === 0) return
 
     const uidMap = new Map<string, string>()
@@ -1573,15 +1644,18 @@ export class CampaignScheduler {
         if (!targetCampaign || targetCampaign.actionId !== MESSAGE_UID_ACTION_ID) continue
 
         for (const uid of uids) {
+          const name = uidNameByNormalizedUid.get(this.normalizeUidForCompare(uid)) || undefined
           await this.supabase.createCampaignInputData({
             campaignId: targetCampaign.id,
+            name,
             uid,
             status: 'chờ xử lý',
-            note: `Tự động thêm từ chiến dịch "${sourceCampaign.name}"`
+            note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
           })
         }
 
-        await this.logCampaignProgress(targetCampaign.id, `✅ Đã đẩy ${uids.length} UID sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${uids.length} UID sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${uids.length} UID từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
         if (targetCampaign.status === 'hoàn thành') {
           await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
         }
@@ -1594,11 +1668,10 @@ export class CampaignScheduler {
   private async pushFoundPostLinksToTargetCampaigns(sourceCampaign: Campaign, rawPostLinks: string[]): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindPostLink) return
 
-    const targetCampaignIds = Array.from(new Set(
-      (sourceCampaign.extraSettings.findPostLinkTargetCampaignIds || [])
-        .map(id => Number(id))
-        .filter(id => Number.isFinite(id) && id > 0 && id !== sourceCampaign.id)
-    ))
+    const targetCampaignIds = this.getFindDataConfiguredTargetCampaignIds(
+      sourceCampaign.extraSettings.findPostLinkTargetCampaignIds,
+      sourceCampaign.id
+    )
     if (targetCampaignIds.length === 0) return
 
     const linkMap = new Map<string, string>()
@@ -1622,11 +1695,12 @@ export class CampaignScheduler {
             campaignId: targetCampaign.id,
             uid: postLink,
             status: 'chờ xử lý',
-            note: `Tự động thêm từ chiến dịch "${sourceCampaign.name}"`
+            note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
           })
         }
 
-        await this.logCampaignProgress(targetCampaign.id, `✅ Đã đẩy ${postLinks.length} link bài post sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${postLinks.length} link bài post sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${postLinks.length} link bài post từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
         if (targetCampaign.status === 'hoàn thành') {
           await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
         }
@@ -1636,12 +1710,43 @@ export class CampaignScheduler {
     }
   }
 
-  private getExternalTargetCampaignIds(rawIds: unknown[] | undefined, sourceCampaignId: number): number[] {
+  private getFindDataConfiguredTargetCampaignIds(rawIds: unknown, sourceCampaignId: number): number[] {
     return Array.from(new Set(
       (Array.isArray(rawIds) ? rawIds : [])
         .map(id => Number(id))
         .filter(id => Number.isFinite(id) && id > 0 && id !== sourceCampaignId)
     ))
+  }
+
+  private getExternalTargetCampaignIds(rawIds: unknown[] | undefined, sourceCampaignId: number): number[] {
+    return this.getFindDataConfiguredTargetCampaignIds(rawIds, sourceCampaignId)
+  }
+
+  private async logFindDataDuplicatePushSummary(
+    sourceCampaign: Campaign,
+    options: {
+      label: string
+      foundCount: number
+      pushedCount: number
+      hasTarget: boolean
+    }
+  ): Promise<void> {
+    const foundCount = Math.max(0, options.foundCount)
+    const pushedCount = Math.max(0, options.pushedCount)
+    if (!options.hasTarget || foundCount <= 0 || pushedCount >= foundCount) return
+
+    if (pushedCount <= 0) {
+      await this.logCampaignProgress(
+        sourceCampaign.id,
+        `ℹ️ ${options.label}: tìm được ${foundCount} nhưng tất cả đã từng tìm được trong chiến dịch này nên không đẩy sang chiến dịch khác.`
+      )
+      return
+    }
+
+    await this.logCampaignProgress(
+      sourceCampaign.id,
+      `ℹ️ ${options.label}: tìm được ${foundCount}, bỏ qua ${foundCount - pushedCount} ${options.label} đã từng tìm được trong chiến dịch này, sẽ đẩy ${pushedCount} ${options.label} mới.`
+    )
   }
 
   private uniqueExternalValues(rawValues: string[]): string[] {
@@ -1654,6 +1759,105 @@ export class CampaignScheduler {
       }
     }
     return Array.from(map.values())
+  }
+
+  private normalizeFoundGroupMembers(rawMembers: unknown): { uid: string; name: string; url: string }[] {
+    if (!Array.isArray(rawMembers)) return []
+    const result: { uid: string; name: string; url: string }[] = []
+    const seen = new Set<string>()
+    for (const rawMember of rawMembers) {
+      if (!rawMember || typeof rawMember !== 'object') continue
+      const member = rawMember as { uid?: unknown; name?: unknown; url?: unknown }
+      const uid = String(member.uid || '').trim()
+      const key = this.normalizeUidForCompare(uid)
+      if (!uid || !key || seen.has(key)) continue
+      seen.add(key)
+      result.push({
+        uid,
+        name: String(member.name || '').trim(),
+        url: String(member.url || '').trim()
+      })
+    }
+    return result
+  }
+
+  private normalizeFindDataSourceCounts(rawCounts: unknown): FindDataSourceCounts {
+    const raw = rawCounts && typeof rawCounts === 'object'
+      ? rawCounts as Record<string, unknown>
+      : {}
+    const rawPost = raw.post && typeof raw.post === 'object'
+      ? raw.post as Record<string, unknown>
+      : {}
+    const rawComment = raw.comment && typeof raw.comment === 'object'
+      ? raw.comment as Record<string, unknown>
+      : {}
+    const rawGroupMembers = raw.groupMembers && typeof raw.groupMembers === 'object'
+      ? raw.groupMembers as Record<string, unknown>
+      : {}
+
+    const count = (value: unknown) => {
+      const numericValue = Number(value)
+      return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0
+    }
+
+    return {
+      post: {
+        phones: count(rawPost.phones),
+        linkGroupZalos: count(rawPost.linkGroupZalos),
+        uids: count(rawPost.uids),
+        postLinks: count(rawPost.postLinks)
+      },
+      comment: {
+        phones: count(rawComment.phones),
+        linkGroupZalos: count(rawComment.linkGroupZalos),
+        uids: count(rawComment.uids)
+      },
+      groupMembers: {
+        uids: count(rawGroupMembers.uids)
+      }
+    }
+  }
+
+  private formatFindDataLogMessage(
+    targetName: string,
+    counts: FindDataUniqueCounts,
+    sourceCounts: FindDataSourceCounts,
+    extra: Campaign['extraSettings']
+  ): string {
+    const sourceLines: string[] = []
+    const uidParts: string[] = []
+    if (extra?.isFindUid && extra?.isFindInPost) uidParts.push(`${sourceCounts.post.uids} UID từ bài post`)
+    if (extra?.isFindUid && extra?.isFindInComment) uidParts.push(`${sourceCounts.comment.uids} UID từ comment`)
+    if (extra?.isFindUid && extra?.isFindInGroupMembers) uidParts.push(`${sourceCounts.groupMembers.uids} UID từ thành viên group`)
+    if (uidParts.length > 0) sourceLines.push(uidParts.join(' - '))
+
+    if (extra?.isFindPostLink) sourceLines.push(`${sourceCounts.post.postLinks} link bài post trong group`)
+
+    const phoneParts: string[] = []
+    if (extra?.isFindPhone && extra?.isFindInPost) phoneParts.push(`${sourceCounts.post.phones} SĐT trong bài post`)
+    if (extra?.isFindPhone && extra?.isFindInComment) phoneParts.push(`${sourceCounts.comment.phones} SĐT trong comment`)
+    if (phoneParts.length > 0) sourceLines.push(phoneParts.join(' - '))
+
+    const zaloParts: string[] = []
+    if (extra?.isFindLinkGroupZalo && extra?.isFindInPost) zaloParts.push(`${sourceCounts.post.linkGroupZalos} link group Zalo trong bài post`)
+    if (extra?.isFindLinkGroupZalo && extra?.isFindInComment) zaloParts.push(`${sourceCounts.comment.linkGroupZalos} link group Zalo trong comment`)
+    if (zaloParts.length > 0) sourceLines.push(zaloParts.join(' - '))
+
+    const uniqueParts: string[] = []
+    if (extra?.isFindUid) uniqueParts.push(`${counts.uids} UID`)
+    if (extra?.isFindPostLink) uniqueParts.push(`${counts.postLinks} link bài post`)
+    if (extra?.isFindPhone) uniqueParts.push(`${counts.phones} số điện thoại`)
+    if (extra?.isFindLinkGroupZalo) uniqueParts.push(`${counts.linkGroupZalos} link group Zalo`)
+
+    return [
+      'Tìm data trong group:',
+      targetName,
+      '',
+      ...sourceLines,
+      '',
+      'Sau khi lọc trùng:',
+      uniqueParts.join(' - ') || '0 data'
+    ].join('\n')
   }
 
   private normalizeExternalValueForCompare(value: unknown): string {
@@ -2046,7 +2250,7 @@ export class CampaignScheduler {
         uid: postUrl,
         status: 'chờ xử lý',
         schedule: schedule.toISOString(),
-        note: `Tự động thêm từ chiến dịch "${campaign.name}"`
+        note: `Đã thêm từ chiến dịch "${campaign.name}"`
       })
       const currentEarliest = earliestByCampaign.get(target.campaignId)
       if (!currentEarliest || schedule.getTime() < currentEarliest.getTime()) {
@@ -2323,14 +2527,16 @@ export class CampaignScheduler {
     }
   }
 
-  private async logCampaignProgress(campaignId: number, message: string): Promise<void> {
+  private async logCampaignProgress(campaignId: number, message: string, options: { emitRealtime?: boolean } = {}): Promise<void> {
     try {
       const updated = await this.supabase.appendCampaignLog(campaignId, message)
       this.broadcastCampaignUpdate(updated)
     } catch (err) {
       console.error('Failed append campaign progress log:', err)
     }
-    this.sendLog(message)
+    if (options.emitRealtime !== false) {
+      this.sendLog(message)
+    }
   }
 
   private getAutomationPage(account: AutoAccount, campaignId?: number): AutomationPageRef {
