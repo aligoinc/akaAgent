@@ -15,10 +15,62 @@ import { read, utils } from 'xlsx'
 import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import { useUiStore } from '../../stores/uiStore'
 
+type FindDataTargetCampaignField = 'findUidTargetCampaignIds' | 'findPostLinkTargetCampaignIds'
+type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'dataTypes' | 'sourceTypes'
+type CampaignPickerSource =
+  | { type: 'findDataSource' }
+  | { type: 'messageUidTarget' }
+  | { type: 'postLinkTarget' }
+  | { type: 'external'; kind: AkaBizCampaignListKind }
+type InternalCampaignPickerSourceType = Exclude<CampaignPickerSource['type'], 'external'>
+
+interface CampaignPickerRow {
+  id: number
+  name: string
+  accountName?: string
+  status?: string
+  scheduleLabel?: string
+  dataTypes?: string[]
+  sourceTypes?: string[]
+  searchText: string
+}
+
+interface CampaignPickerModalState {
+  title: string
+  source: CampaignPickerSource
+  columns: CampaignPickerColumn[]
+  emptyText: string
+  selectedIds: number[]
+  draftIds: number[]
+  draftTempIdsAtOpen: number[]
+  searchQuery: string
+  onConfirm: (ids: number[]) => void
+}
+
+interface CampaignSaveBundleItem {
+  campaignPayload: Partial<Campaign>
+  details: Partial<CampaignInputData>[]
+}
+
+interface InternalCampaignDraft {
+  tempId: number
+  sourceType: InternalCampaignPickerSourceType
+  actionId: string
+  requiredTargetField?: FindDataTargetCampaignField | null
+  items: CampaignSaveBundleItem[]
+}
+
 interface CampaignFormModalProps {
   campaign: Campaign | null
   cloneFromId?: number
   onOpenGeneralSettings?: () => void
+  draftMode?: boolean
+  draftTempId?: number
+  lockedActionId?: string
+  draftPickerSourceType?: InternalCampaignPickerSourceType
+  draftRequiredTargetField?: FindDataTargetCampaignField | null
+  onSaveDraft?: (draft: InternalCampaignDraft) => void
+  modalZIndex?: number
   onClose: () => void
 }
 
@@ -109,6 +161,8 @@ const SIMPLE_CAMPAIGN_ACTIONS = new Set([
 
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
+const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
+const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   MESSAGE_FRIEND_ACTION_ID,
   MESSAGE_UID_ACTION_ID
@@ -117,7 +171,7 @@ const MESSAGE_CAMPAIGN_ACTIONS = new Set([
 // Campaign action IDs for "Đăng bài vào group" type — show "Chọn nhóm" picker in data list
 const GROUP_POST_ACTIONS = new Set([
   'facebook_group_post',
-  'facebook_find_data_group'
+  FIND_DATA_GROUP_ACTION_ID
 ])
 
 // Campaign action IDs that show the "Nguồn đăng bài" section (source links, copy content, share, reels)
@@ -126,7 +180,7 @@ const TIMELINE_POST_ACTIONS = new Set([
 ])
 
 const FIND_DATA_GROUP_ACTIONS = new Set([
-  'facebook_find_data_group'
+  FIND_DATA_GROUP_ACTION_ID
 ])
 
 const COMMENT_SEEDING_FEED_ACTIONS = new Set([
@@ -134,7 +188,7 @@ const COMMENT_SEEDING_FEED_ACTIONS = new Set([
 ])
 
 const COMMENT_SEEDING_POST_ACTIONS = new Set([
-  'facebook_comment_seeding_post'
+  COMMENT_SEEDING_POST_ACTION_ID
 ])
 
 const COMMENT_SEEDING_ACTIONS = new Set([
@@ -196,6 +250,104 @@ const getSourceLinkEntries = (value: string): string[] =>
 const isDataImagePath = (path: string): boolean => path.trim().startsWith('data:')
 
 const getImageDisplayName = (path: string): string => path.split(/[\\/]/).pop() || path
+
+const formatPickerDateTime = (value?: string | null): string => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('vi-VN')
+}
+
+const getCampaignScheduleLabel = (campaign: Pick<Campaign, 'schedule' | 'scheduleType' | 'scheduleDays' | 'scheduleWeekDays'>): string => {
+  const startLabel = formatPickerDateTime(campaign.schedule)
+  if (!startLabel) return ''
+
+  if (campaign.scheduleType === 'weekly') {
+    const dayLabels = (campaign.scheduleWeekDays || '')
+      .split(',')
+      .map(value => WEEKDAYS.find(day => day.value === value.trim())?.label)
+      .filter((label): label is string => !!label)
+    return dayLabels.length > 0
+      ? `Theo tuần - ${startLabel} - ${dayLabels.join(', ')}`
+      : `Theo tuần - ${startLabel}`
+  }
+
+  if (campaign.scheduleType === 'monthly') {
+    const dayNumbers = (campaign.scheduleDays || '')
+      .split(',')
+      .map(day => day.trim())
+      .filter(Boolean)
+    return dayNumbers.length > 0
+      ? `Theo tháng - ${startLabel} - Ngày ${dayNumbers.join(', ')}`
+      : `Theo tháng - ${startLabel}`
+  }
+
+  return `Hàng ngày - ${startLabel}`
+}
+
+const isEditableFindDataSourceCampaign = (campaign: Campaign): boolean =>
+  campaign.status === 'chờ xử lý' || campaign.status === 'tạm dừng'
+
+const getFindDataTargetCampaignField = (actionId: string): FindDataTargetCampaignField | null => {
+  if (actionId === MESSAGE_UID_ACTION_ID) return 'findUidTargetCampaignIds'
+  if (actionId === COMMENT_SEEDING_POST_ACTION_ID) return 'findPostLinkTargetCampaignIds'
+  return null
+}
+
+const getCampaignIdList = (rawIds: unknown): number[] => Array.from(new Set(
+  (Array.isArray(rawIds) ? rawIds : [])
+    .map(id => Number(id))
+    .filter(id => Number.isFinite(id) && id > 0)
+))
+
+const getPickerCampaignIdList = (rawIds: unknown): number[] => Array.from(new Set(
+  (Array.isArray(rawIds) ? rawIds : [])
+    .map(id => Number(id))
+    .filter(id => Number.isFinite(id) && id !== 0)
+))
+
+const sameNumberList = (a: number[], b: number[]): boolean => {
+  if (a.length !== b.length) return false
+  return a.every((value, index) => value === b[index])
+}
+
+const getIncomingFindDataSourceCampaignIds = (
+  targetCampaignId: number | null,
+  targetActionId: string,
+  sourceCampaigns: Campaign[]
+): number[] => {
+  const field = getFindDataTargetCampaignField(targetActionId)
+  if (!targetCampaignId || !field) return []
+
+  return sourceCampaigns
+    .filter(source => getCampaignIdList(source.extraSettings?.[field]).includes(targetCampaignId))
+    .map(source => source.id)
+}
+
+const getFindDataTypeLabels = (extra: CampaignExtraSettings | undefined): string[] => {
+  const labels: string[] = []
+  if (extra?.isFindUid) labels.push('UID')
+  if (extra?.isFindPhone) labels.push('SĐT')
+  if (extra?.isFindLinkGroupZalo) labels.push('Link group Zalo')
+  if (extra?.isFindPostLink) labels.push('Link bài post')
+  return labels
+}
+
+const getFindDataSourceLabels = (extra: CampaignExtraSettings | undefined): string[] => {
+  const labels: string[] = []
+  if (extra?.isFindInPost) labels.push('Bài post')
+  if (extra?.isFindInComment) labels.push('Comment')
+  if (extra?.isFindNewInteractors) labels.push('Tương tác mới')
+  if (extra?.isFindInGroupMembers) labels.push('Thành viên group')
+  return labels
+}
+
+const buildCampaignPickerSearchText = (parts: Array<string | string[] | undefined>): string =>
+  parts
+    .flatMap(part => Array.isArray(part) ? part : [part])
+    .filter((part): part is string => !!part)
+    .join(' ')
+    .toLowerCase()
 
 const ALL_STEPS: StepDef[] = [
   {
@@ -279,6 +431,12 @@ const FOUND_DATA_HANDLING_STEP: StepDef = {
   fields: [{ key: 'foundDataHandling', label: 'Xử lý data' }]
 }
 
+const FIND_DATA_SOURCE_STEP: StepDef = {
+  id: 'findDataSources',
+  title: 'Nguồn chiến dịch tìm kiếm data',
+  fields: [{ key: 'findDataSources', label: 'Nguồn chiến dịch tìm kiếm data' }]
+}
+
 const GROUP_POST_COMMENT_STEP: StepDef = {
   id: 'groupComment',
   title: 'Kiêm comment',
@@ -291,7 +449,19 @@ const GROUP_POST_BUMP_STEP: StepDef = {
   fields: [{ key: 'enablePostBump', label: 'Kiêm up tin' }]
 }
 
-export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneralSettings, onClose }: CampaignFormModalProps) {
+export default function CampaignFormModal({
+  campaign,
+  cloneFromId,
+  onOpenGeneralSettings,
+  draftMode = false,
+  draftTempId,
+  lockedActionId,
+  draftPickerSourceType,
+  draftRequiredTargetField,
+  onSaveDraft,
+  modalZIndex,
+  onClose
+}: CampaignFormModalProps) {
   const {
     accounts, campaignActions, campaigns, loadCampaigns,
     createCampaign, updateCampaign,
@@ -334,7 +504,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
 
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
-    actionId: campaign?.actionId || '',
+    actionId: lockedActionId || campaign?.actionId || '',
     accountIds: campaign?.accountId ? [campaign.accountId] : [] as number[],
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
@@ -415,8 +585,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     // Tìm kiếm data trong group
     isFindPhone: campaign?.extraSettings?.isFindPhone ?? false,
     isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
-    isFindUid: campaign?.extraSettings?.isFindUid ?? false,
-    isFindPostLink: campaign?.extraSettings?.isFindPostLink ?? false,
+    isFindUid: draftRequiredTargetField === 'findUidTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindUid ?? false),
+    isFindPostLink: draftRequiredTargetField === 'findPostLinkTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindPostLink ?? false),
     isFindInPost: campaign?.extraSettings?.isFindInPost ?? false,
     sortTypePost: (campaign?.extraSettings?.sortTypePost || 'most_relevant') as CampaignExtraSettings['sortTypePost'],
     countPostFindData: campaign?.extraSettings?.countPostFindData ?? 10,
@@ -441,10 +611,10 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
   const imageInputRef = useRef<HTMLInputElement>(null)
   const commentImageInputRef = useRef<HTMLInputElement>(null)
   const [handleFoundUidData, setHandleFoundUidData] = useState(() =>
-    (campaign?.extraSettings?.findUidTargetCampaignIds || []).length > 0
+    draftRequiredTargetField === 'findUidTargetCampaignIds' || (campaign?.extraSettings?.findUidTargetCampaignIds || []).length > 0
   )
   const [handleFoundPostLinkData, setHandleFoundPostLinkData] = useState(() =>
-    (campaign?.extraSettings?.findPostLinkTargetCampaignIds || []).length > 0
+    draftRequiredTargetField === 'findPostLinkTargetCampaignIds' || (campaign?.extraSettings?.findPostLinkTargetCampaignIds || []).length > 0
   )
   const [handleFoundPhoneSmsData, setHandleFoundPhoneSmsData] = useState(() =>
     (campaign?.extraSettings?.findPhoneSmsTargetCampaignIds || []).length > 0
@@ -461,6 +631,19 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
   const [handleFoundZaloGroupLinkAkaBizDesktopData, setHandleFoundZaloGroupLinkAkaBizDesktopData] = useState(() =>
     (campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || []).length > 0
   )
+  const [selectedFindDataSourceCampaignIds, setSelectedFindDataSourceCampaignIds] = useState<number[]>([])
+  const findDataSourceSelectionTouchedRef = useRef(false)
+  const findDataSourceSelectionScopeRef = useRef('')
+  const [campaignPickerModal, setCampaignPickerModal] = useState<CampaignPickerModalState | null>(null)
+  const [campaignPickerRefreshing, setCampaignPickerRefreshing] = useState(false)
+  const [internalCampaignDrafts, setInternalCampaignDrafts] = useState<InternalCampaignDraft[]>([])
+  const [draftFormConfig, setDraftFormConfig] = useState<{
+    tempId: number
+    sourceType: InternalCampaignPickerSourceType
+    actionId: string
+    requiredTargetField?: FindDataTargetCampaignField | null
+  } | null>(null)
+  const nextDraftCampaignTempIdRef = useRef(-1)
 
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
@@ -477,6 +660,11 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const isSuggestedFriendsUidCampaign = isMessageUidCampaign && formData.useSuggestedFriends
   const hideDetailsSection = isSuggestedFriendsUidCampaign && !isEditingSavedCampaign
+  const targetFindDataField = getFindDataTargetCampaignField(formData.actionId)
+  const isDraftTargetFromFindData = draftMode && (draftPickerSourceType === 'messageUidTarget' || draftPickerSourceType === 'postLinkTarget')
+  const isDraftSourceForTarget = draftMode && draftPickerSourceType === 'findDataSource'
+  const isDraftAutoLinkedFindUid = isDraftSourceForTarget && draftRequiredTargetField === 'findUidTargetCampaignIds'
+  const isDraftAutoLinkedPostLink = isDraftSourceForTarget && draftRequiredTargetField === 'findPostLinkTargetCampaignIds'
   const hasSelectedCampaignAction = !!formData.actionId
   const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign
   const canPickFriends = isMessageFriendCampaign
@@ -497,6 +685,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
   const effectiveFindDataCommentSort = formData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
   const showFindDataConditionsSection = isFindDataGroupCampaign && (usesFindDataFeed || formData.isFindInGroupMembers)
   const showExtraSection = isFacebookGroupPostCampaign || isCommentSeedingCampaign
+  const showFindDataSourceSection = !!targetFindDataField && !hideDetailsSection
+  const hasSelectedFindDataSourceCampaign = showFindDataSourceSection && (selectedFindDataSourceCampaignIds.length > 0 || isDraftTargetFromFindData)
   const requiresTimelineSourceLinks = isTimelinePostCampaign && (formData.copyContentFromSource || formData.sharePost)
   const hasTimelineSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
   const isUsingTimelineSourceContent = isTimelinePostCampaign && formData.copyContentFromSource
@@ -542,7 +732,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
         : simpleSteps
     }
     if (isCommentSeedingCampaign) {
-      return ALL_STEPS
+      const steps = ALL_STEPS
         .filter(s => s.id !== 'extra' || isCommentSeedingFeedCampaign || isCommentSeedingPostCampaign)
         .map(s => {
           if (s.id === 'limits' && isCommentSeedingFeedCampaign) {
@@ -584,6 +774,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
           }
           return s
         })
+      return showFindDataSourceSection
+        ? steps.flatMap(s => s.id === 'details' ? [FIND_DATA_SOURCE_STEP, s] : [s])
+        : steps
     }
     if (isFindDataGroupCampaign) {
       const generalStep = ALL_STEPS.find(s => s.id === 'general')!
@@ -647,9 +840,12 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
           }
           return s
         })
-      return isMessageUidCampaign
+      const orderedSteps = isMessageUidCampaign
         ? steps.flatMap(s => s.id === 'general' ? [s, ACTION_OPTIONS_STEP] : [s])
         : steps
+      return showFindDataSourceSection
+        ? orderedSteps.flatMap(s => s.id === 'details' ? [FIND_DATA_SOURCE_STEP, s] : [s])
+        : orderedSteps
     }
     if (isFacebookGroupPostCampaign) {
       return ALL_STEPS.flatMap(step => {
@@ -679,10 +875,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     !c.isDelete
   )
   const postLinkCommentCampaignOptions = campaigns.filter(c =>
-    c.actionId === 'facebook_comment_seeding_post' &&
+    c.actionId === COMMENT_SEEDING_POST_ACTION_ID &&
     c.id !== campaign?.id &&
     !c.isDelete
   )
+  const findDataSourceCampaignOptions = campaigns.filter(c => {
+    if (c.actionId !== FIND_DATA_GROUP_ACTION_ID || c.isDelete || !isEditableFindDataSourceCampaign(c)) return false
+    if (targetFindDataField === 'findUidTargetCampaignIds') return c.extraSettings?.isFindUid === true
+    if (targetFindDataField === 'findPostLinkTargetCampaignIds') return c.extraSettings?.isFindPostLink === true
+    return false
+  })
+  const findDataSourceCampaignOptionsKey = findDataSourceCampaignOptions
+    .map(c => `${c.id}:${(c.extraSettings?.findUidTargetCampaignIds || []).join(',')}:${(c.extraSettings?.findPostLinkTargetCampaignIds || []).join(',')}`)
+    .join('|')
+  const sourceSelectionTargetCampaignId = cloneFromId || (isEditingSavedCampaign && campaign?.id ? campaign.id : null)
+  const sourceSelectionScopeKey = `${sourceSelectionTargetCampaignId || 'new'}:${formData.actionId}`
   const getAccountRateLimitMinutes = (accountId: number) =>
     normalizeRateLimitMinutes(accounts.find(account => account.id === accountId)?.rateLimitMinutes)
   const selectedRateLimitMinuteValues = Array.from(new Set(
@@ -745,6 +952,34 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       void loadCampaigns()
     }
   }, [campaigns.length, loadCampaigns])
+
+  useEffect(() => {
+    if (findDataSourceSelectionScopeRef.current !== sourceSelectionScopeKey) {
+      findDataSourceSelectionScopeRef.current = sourceSelectionScopeKey
+      findDataSourceSelectionTouchedRef.current = false
+    }
+  }, [sourceSelectionScopeKey])
+
+  useEffect(() => {
+    if (!showFindDataSourceSection) {
+      setSelectedFindDataSourceCampaignIds(prev => prev.length === 0 ? prev : [])
+      return
+    }
+
+    if (findDataSourceSelectionTouchedRef.current) return
+
+    const nextIds = getIncomingFindDataSourceCampaignIds(
+      sourceSelectionTargetCampaignId,
+      formData.actionId,
+      findDataSourceCampaignOptions
+    )
+    setSelectedFindDataSourceCampaignIds(prev => sameNumberList(prev, nextIds) ? prev : nextIds)
+  }, [
+    formData.actionId,
+    findDataSourceCampaignOptionsKey,
+    showFindDataSourceSection,
+    sourceSelectionTargetCampaignId
+  ])
 
   useEffect(() => {
     if (!formData.actionId || !selectedCampaignAction) {
@@ -948,8 +1183,9 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       case 'findDataContent': return true
       case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink
       case 'foundDataHandling': return true
+      case 'findDataSources': return true
       case 'messageActions': return isMessageFriendCampaign || formData.enableMessage || formData.enableAddFriend
-      case 'details': return hideDetailsSection || details.length > 0
+      case 'details': return hideDetailsSection || details.length > 0 || hasSelectedFindDataSourceCampaign
       default: return false
     }
   }
@@ -1104,6 +1340,165 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     return false
   }
 
+  const buildCampaignSaveBundleItems = (): CampaignSaveBundleItem[] => {
+    const accountChunks: Partial<CampaignInputData>[][] = []
+    const numAccounts = formData.accountIds.length
+    const detailSource = hideDetailsSection ? [] : details
+
+    if (formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
+      for (let i = 0; i < numAccounts; i++) {
+        accountChunks.push([])
+      }
+      for (let i = 0; i < detailSource.length; i++) {
+        const accountIndex = i % numAccounts
+        accountChunks[accountIndex].push(detailSource[i])
+      }
+    } else {
+      for (let i = 0; i < numAccounts; i++) {
+        accountChunks.push(detailSource)
+      }
+    }
+
+    return formData.accountIds.map((accountId, index) => {
+      const accountRateLimitMinutes = getAccountRateLimitMinutes(accountId)
+      const defaultLimit = {
+        dailyLimit: formData.dailyLimit,
+        rateLimitCount: formData.rateLimitCount,
+        rateLimitMinutes: accountRateLimitMinutes
+      }
+      const enabledActionCodes = visibleLimitActionCodes
+      const byActionCode = Object.fromEntries(
+        visibleLimitActionCodes.map(code => {
+          const limit = formData.actionLimitsByCode[code] || toActionLimitForm(undefined, defaultLimit)
+          return [
+            code,
+            {
+              ...limit,
+              rateLimitMinutes: accountRateLimitMinutes
+            }
+          ]
+        })
+      )
+
+      const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
+      const effectivePostKeywordFilter = isCommentSeedingCampaign ? '' : formData.postKeywordFilter
+      const effectiveEnableMessage = isMessageFriendCampaign ? true : formData.enableMessage
+      const effectiveEnableAddFriend = isMessageFriendCampaign ? false : formData.enableAddFriend
+      const effectiveUseSuggestedFriends = isMessageUidCampaign
+        ? (isEditingSavedCampaign ? campaign?.extraSettings?.useSuggestedFriends === true : formData.useSuggestedFriends)
+        : false
+      const effectiveSuggestedFriendsCount = isMessageUidCampaign
+        ? normalizeSuggestedFriendsCount(isEditingSavedCampaign
+          ? (campaign?.extraSettings?.suggestedFriendsCount ?? formData.suggestedFriendsCount)
+          : formData.suggestedFriendsCount)
+        : 10
+
+      return {
+        campaignPayload: {
+          name: formData.name,
+          actionId: formData.actionId,
+          accountId,
+          ...(cloneFromId ? { status: 'tạm dừng' } : {}),
+          schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
+          scheduleType: formData.scheduleType,
+          scheduleEndDate: formData.scheduleType === 'daily'
+            ? null
+            : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null),
+          dailyStopTime: formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null,
+          scheduleDays: formData.scheduleDays || undefined,
+          scheduleWeekDays: formData.scheduleWeekDays || undefined,
+          continueNextDay: formData.continueNextDay,
+          refreshData: formData.refreshData,
+          timeSleepBetween2: formData.timeSleepBetween2,
+          content: formData.content,
+          extraSettings: {
+            sharePost: formData.sharePost,
+            rewriteContentEachRun: formData.rewriteContentEachRun,
+            enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
+            commentGroupMode: formData.commentGroupMode,
+            commentType: formData.commentType,
+            commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : formData.commentCount,
+            commentContent: formData.commentContent,
+            rewriteCommentContentEachRun: formData.rewriteCommentContentEachRun,
+            enablePostLike: formData.enablePostLike,
+            postsPerTarget: effectivePostsPerTarget,
+            postKeywordFilter: effectivePostKeywordFilter,
+            keywordFilter: effectivePostKeywordFilter,
+            actionLimits: {
+              sleepBetweenActions: formData.timeSleepBetween2,
+              enabledActionCodes,
+              dailyLimit: formData.dailyLimit,
+              rateLimitCount: formData.rateLimitCount,
+              rateLimitMinutes: accountRateLimitMinutes,
+              byActionCode
+            },
+            imageOption: formData.imageOption,
+            randomImageCount: formData.randomImageCount,
+            commentImageOption: formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none',
+            commentImages: formData.commentImages.slice(0, 1),
+            leaveGroupOnPendingApproval: formData.leaveGroupOnPendingApproval,
+            autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
+            shuffleGroupList: formData.shuffleGroupList,
+            skipPostIfGroupRequiresApproval: formData.skipPostIfGroupRequiresApproval,
+            enablePostBump: formData.enablePostBump,
+            postBumpCount: clampPostBumpCount(formData.postBumpCount),
+            postBumpInitialDelayMinutes: normalizeMinuteValue(
+              formData.postBumpInitialDelayMinutes,
+              DEFAULT_POST_BUMP_INITIAL_DELAY_MINUTES,
+              0
+            ),
+            postBumpIntervalMinutes: normalizeMinuteValue(
+              formData.postBumpIntervalMinutes,
+              DEFAULT_POST_BUMP_INTERVAL_MINUTES,
+              1
+            ),
+            postBumpMode: formData.postBumpMode,
+            postBumpTargetCampaignIds: formData.postBumpMode === 'select' ? getCampaignIdList(formData.postBumpTargetCampaignIds) : [],
+            postBumpAccountIds: formData.postBumpMode === 'create' ? formData.postBumpAccountIds : [],
+            postBumpContent: formData.postBumpContent,
+            postBumpCreatedCampaignIdsByAccount: formData.postBumpCreatedCampaignIdsByAccount,
+            postBumpRotationIndex: formData.postBumpRotationIndex,
+            enableMessage: effectiveEnableMessage,
+            enableAddFriend: effectiveEnableAddFriend,
+            useSuggestedFriends: effectiveUseSuggestedFriends,
+            suggestedFriendsCount: effectiveSuggestedFriendsCount,
+            copyContentFromSource: formData.copyContentFromSource,
+            includeSourceImages: formData.includeSourceImages,
+            postAsReels: formData.postAsReels,
+            sourceLinks: formData.sourceLinks,
+            sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
+            isFindPhone: formData.isFindPhone,
+            isFindLinkGroupZalo: formData.isFindLinkGroupZalo,
+            isFindUid: formData.isFindUid,
+            isFindPostLink: formData.isFindPostLink,
+            isFindInPost: formData.isFindInPost,
+            sortTypePost: effectiveFindDataPostSort,
+            countPostFindData: formData.countPostFindData,
+            isFindInComment: formData.isFindInComment,
+            sortTypeComment: effectiveFindDataCommentSort,
+            countCommentFindData: formData.countCommentFindData,
+            isFindNewInteractors: formData.isFindNewInteractors,
+            isFindInGroupMembers: formData.isFindInGroupMembers,
+            countGroupMemberFindData: formData.countGroupMemberFindData,
+            isFindByKeywords: usesFindDataContentConditions ? formData.isFindByKeywords : false,
+            keywords: usesFindDataContentConditions ? formData.keywords : '',
+            isFindByContentAI: usesFindDataContentConditions ? formData.isFindByContentAI : false,
+            contentAI: usesFindDataContentConditions ? formData.contentAI : '',
+            findUidTargetCampaignIds: formData.isFindUid && handleFoundUidData ? getCampaignIdList(formData.findUidTargetCampaignIds) : [],
+            findPostLinkTargetCampaignIds: formData.isFindPostLink && handleFoundPostLinkData ? getCampaignIdList(formData.findPostLinkTargetCampaignIds) : [],
+            findPhoneSmsTargetCampaignIds: formData.isFindPhone && handleFoundPhoneSmsData ? getCampaignIdList(formData.findPhoneSmsTargetCampaignIds) : [],
+            findPhoneZaloWebTargetCampaignIds: formData.isFindPhone && handleFoundPhoneZaloWebData ? getCampaignIdList(formData.findPhoneZaloWebTargetCampaignIds) : [],
+            findZaloGroupLinkWebTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData ? getCampaignIdList(formData.findZaloGroupLinkWebTargetCampaignIds) : [],
+            findPhoneAkaBizDesktopTargetCampaignIds: formData.isFindPhone && handleFoundPhoneAkaBizDesktopData ? getCampaignIdList(formData.findPhoneAkaBizDesktopTargetCampaignIds) : [],
+            findZaloGroupLinkAkaBizDesktopTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData ? getCampaignIdList(formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds) : []
+          } as CampaignExtraSettings,
+          images: formData.images
+        },
+        details: (accountChunks[index] || []).map(detail => ({ ...detail }))
+      }
+    })
+  }
+
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
@@ -1145,11 +1540,11 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
         showAlert('Vui lòng chọn ít nhất một loại data cần tìm.', 'error')
         return
       }
-      if (formData.isFindUid && handleFoundUidData && formData.findUidTargetCampaignIds.length === 0) {
+      if (formData.isFindUid && handleFoundUidData && formData.findUidTargetCampaignIds.length === 0 && !isDraftAutoLinkedFindUid) {
         showAlert('Vui lòng chọn ít nhất một chiến dịch nhận UID.', 'error')
         return
       }
-      if (formData.isFindPostLink && handleFoundPostLinkData && formData.findPostLinkTargetCampaignIds.length === 0) {
+      if (formData.isFindPostLink && handleFoundPostLinkData && formData.findPostLinkTargetCampaignIds.length === 0 && !isDraftAutoLinkedPostLink) {
         showAlert('Vui lòng chọn ít nhất một chiến dịch nhận link bài post.', 'error')
         return
       }
@@ -1216,7 +1611,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       showAlert('Vui lòng chọn ít nhất một hành động nhắn tin hoặc kết bạn.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && details.length === 0) {
+    if (!isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && details.length === 0 && !hasSelectedFindDataSourceCampaign) {
       showAlert(
         isMessageUidCampaign
           ? 'Vui lòng thêm ít nhất một UID vào danh sách data.'
@@ -1234,7 +1629,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       showAlert('Vui lòng nhập nội dung comment hoặc chọn ảnh comment.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isCommentSeedingCampaign && details.length === 0) {
+    if (!isEditingSavedCampaign && isCommentSeedingCampaign && details.length === 0 && !hasSelectedFindDataSourceCampaign) {
       showAlert(
         isCommentSeedingPostCampaign
           ? 'Vui lòng thêm ít nhất một link bài post vào danh sách mục tiêu.'
@@ -1269,6 +1664,21 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       }
     }
 
+    if (draftMode) {
+      if (!onSaveDraft || !draftPickerSourceType) {
+        showAlert('Không thể tạo chiến dịch tạm trong ngữ cảnh hiện tại.', 'error')
+        return
+      }
+      onSaveDraft({
+        tempId: draftTempId ?? 0,
+        sourceType: draftPickerSourceType,
+        actionId: formData.actionId,
+        requiredTargetField: draftRequiredTargetField,
+        items: buildCampaignSaveBundleItems()
+      })
+      return
+    }
+
     try {
       const { deleteCampaignInputData, updateCampaignInputData, createCampaignInputData, createCampaign, updateCampaign } = useCampaignStore.getState()
 
@@ -1278,166 +1688,95 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
         }
       }
 
-      let accountChunks: Partial<CampaignInputData>[][] = [];
-      const numAccounts = formData.accountIds.length;
-      const detailSource = hideDetailsSection ? [] : details
+      const saveBundleItems = buildCampaignSaveBundleItems()
+      const savedCampaignIds: number[] = []
+      const savedCampaignPayloadById = new Map<number, Partial<Campaign>>()
 
-      if (formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
-        // Khởi tạo mảng con cho mỗi tài khoản
-        for (let i = 0; i < numAccounts; i++) {
-          accountChunks.push([]);
+      const persistDraftCampaign = async (
+        draft: InternalCampaignDraft,
+        linkTargetIds: number[] = [],
+        linkTargetField?: FindDataTargetCampaignField | null
+      ): Promise<number[]> => {
+        const createdIds: number[] = []
+
+        for (const draftItem of draft.items) {
+          const payloadExtraSettings = {
+            ...(draftItem.campaignPayload.extraSettings || {})
+          } as CampaignExtraSettings
+          if (linkTargetField && linkTargetIds.length > 0) {
+            payloadExtraSettings[linkTargetField] = Array.from(new Set([
+              ...getCampaignIdList(payloadExtraSettings[linkTargetField]),
+              ...linkTargetIds
+            ]))
+          }
+
+          const savedDraftCampaign = await createCampaign({
+            ...draftItem.campaignPayload,
+            extraSettings: payloadExtraSettings
+          })
+          createdIds.push(savedDraftCampaign.id)
+
+          for (const draftDetail of draftItem.details) {
+            await createCampaignInputData({
+              ...draftDetail,
+              id: undefined,
+              campaignId: savedDraftCampaign.id
+            })
+          }
         }
-        // Chia data lần lượt (round-robin)
-        for (let i = 0; i < detailSource.length; i++) {
-          const accountIndex = i % numAccounts;
-          accountChunks[accountIndex].push(detailSource[i]);
-        }
-      } else {
-        for (let i = 0; i < numAccounts; i++) {
-          accountChunks.push(detailSource);
+
+        return createdIds
+      }
+
+      const createdDraftIdsByTempId = new Map<number, number[]>()
+      const persistDraftByTempId = async (
+        tempId: number,
+        linkTargetIds: number[] = [],
+        linkTargetField?: FindDataTargetCampaignField | null
+      ): Promise<number[]> => {
+        const existingIds = createdDraftIdsByTempId.get(tempId)
+        if (existingIds) return existingIds
+
+        const draft = internalCampaignDrafts.find(item => item.tempId === tempId)
+        if (!draft) return []
+
+        const createdIds = await persistDraftCampaign(draft, linkTargetIds, linkTargetField)
+        createdDraftIdsByTempId.set(tempId, createdIds)
+        return createdIds
+      }
+
+      const patchSavedSourceCampaignTargets = async (field: FindDataTargetCampaignField, targetIds: number[]) => {
+        if (targetIds.length === 0) return
+
+        for (const savedCampaignId of savedCampaignIds) {
+          const savedPayload = savedCampaignPayloadById.get(savedCampaignId)
+          const baseExtraSettings = {
+            ...(savedPayload?.extraSettings || {})
+          } as CampaignExtraSettings
+          const nextTargetIds = Array.from(new Set([
+            ...getCampaignIdList(baseExtraSettings[field]),
+            ...targetIds
+          ]))
+
+          await updateCampaign(savedCampaignId, {
+            extraSettings: {
+              ...baseExtraSettings,
+              [field]: nextTargetIds
+            }
+          })
+          savedCampaignPayloadById.set(savedCampaignId, {
+            ...savedPayload,
+            extraSettings: {
+              ...baseExtraSettings,
+              [field]: nextTargetIds
+            } as CampaignExtraSettings
+          })
         }
       }
 
-      for (let i = 0; i < numAccounts; i++) {
-        const accountId = formData.accountIds[i]
+      for (let i = 0; i < saveBundleItems.length; i++) {
+        const { campaignPayload, details: currentDetails } = saveBundleItems[i]
         const isFirst = (i === 0)
-        const currentDetails = accountChunks[i] || [];
-        const accountRateLimitMinutes = getAccountRateLimitMinutes(accountId)
-        const defaultLimit = {
-          dailyLimit: formData.dailyLimit,
-          rateLimitCount: formData.rateLimitCount,
-          rateLimitMinutes: accountRateLimitMinutes
-        }
-        const enabledActionCodes = visibleLimitActionCodes
-        const byActionCode = Object.fromEntries(
-          visibleLimitActionCodes.map(code => {
-            const limit = formData.actionLimitsByCode[code] || toActionLimitForm(undefined, defaultLimit)
-            return [
-              code,
-              {
-                ...limit,
-                rateLimitMinutes: accountRateLimitMinutes
-              }
-            ]
-          })
-        )
-
-        const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
-        const effectivePostKeywordFilter = isCommentSeedingCampaign ? '' : formData.postKeywordFilter
-        const effectiveEnableMessage = isMessageFriendCampaign ? true : formData.enableMessage
-        const effectiveEnableAddFriend = isMessageFriendCampaign ? false : formData.enableAddFriend
-        const effectiveUseSuggestedFriends = isMessageUidCampaign
-          ? (isEditingSavedCampaign ? campaign?.extraSettings?.useSuggestedFriends === true : formData.useSuggestedFriends)
-          : false
-        const effectiveSuggestedFriendsCount = isMessageUidCampaign
-          ? normalizeSuggestedFriendsCount(isEditingSavedCampaign
-            ? (campaign?.extraSettings?.suggestedFriendsCount ?? formData.suggestedFriendsCount)
-            : formData.suggestedFriendsCount)
-          : 10
-
-        const campaignPayload = {
-          name: formData.name,
-          actionId: formData.actionId,
-          accountId: accountId,
-          ...(cloneFromId ? { status: 'tạm dừng' } : {}),
-          schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
-          scheduleType: formData.scheduleType,
-          scheduleEndDate: formData.scheduleType === 'daily'
-            ? null
-            : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null),
-          dailyStopTime: formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null,
-          scheduleDays: formData.scheduleDays || undefined,
-          scheduleWeekDays: formData.scheduleWeekDays || undefined,
-          continueNextDay: formData.continueNextDay,
-          refreshData: formData.refreshData,
-          timeSleepBetween2: formData.timeSleepBetween2,
-          content: formData.content,
-          extraSettings: {
-            sharePost: formData.sharePost,
-            rewriteContentEachRun: formData.rewriteContentEachRun,
-            enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
-            commentGroupMode: formData.commentGroupMode,
-            commentType: formData.commentType,
-            commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : formData.commentCount,
-            commentContent: formData.commentContent,
-            rewriteCommentContentEachRun: formData.rewriteCommentContentEachRun,
-            enablePostLike: formData.enablePostLike,
-            postsPerTarget: effectivePostsPerTarget,
-            postKeywordFilter: effectivePostKeywordFilter,
-            keywordFilter: effectivePostKeywordFilter,
-            actionLimits: {
-              sleepBetweenActions: formData.timeSleepBetween2,
-              enabledActionCodes,
-              dailyLimit: formData.dailyLimit,
-              rateLimitCount: formData.rateLimitCount,
-              rateLimitMinutes: accountRateLimitMinutes,
-              byActionCode
-            },
-            imageOption: formData.imageOption,
-            randomImageCount: formData.randomImageCount,
-            commentImageOption: formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none',
-            commentImages: formData.commentImages.slice(0, 1),
-            leaveGroupOnPendingApproval: formData.leaveGroupOnPendingApproval,
-            autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
-            shuffleGroupList: formData.shuffleGroupList,
-            skipPostIfGroupRequiresApproval: formData.skipPostIfGroupRequiresApproval,
-            enablePostBump: formData.enablePostBump,
-            postBumpCount: clampPostBumpCount(formData.postBumpCount),
-            postBumpInitialDelayMinutes: normalizeMinuteValue(
-              formData.postBumpInitialDelayMinutes,
-              DEFAULT_POST_BUMP_INITIAL_DELAY_MINUTES,
-              0
-            ),
-            postBumpIntervalMinutes: normalizeMinuteValue(
-              formData.postBumpIntervalMinutes,
-              DEFAULT_POST_BUMP_INTERVAL_MINUTES,
-              1
-            ),
-            postBumpMode: formData.postBumpMode,
-            postBumpTargetCampaignIds: formData.postBumpMode === 'select' ? formData.postBumpTargetCampaignIds : [],
-            postBumpAccountIds: formData.postBumpMode === 'create' ? formData.postBumpAccountIds : [],
-            postBumpContent: formData.postBumpContent,
-            postBumpCreatedCampaignIdsByAccount: formData.postBumpCreatedCampaignIdsByAccount,
-            postBumpRotationIndex: formData.postBumpRotationIndex,
-            enableMessage: effectiveEnableMessage,
-            enableAddFriend: effectiveEnableAddFriend,
-            useSuggestedFriends: effectiveUseSuggestedFriends,
-            suggestedFriendsCount: effectiveSuggestedFriendsCount,
-            // Nguồn đăng bài (timeline post only)
-            copyContentFromSource: formData.copyContentFromSource,
-            includeSourceImages: formData.includeSourceImages,
-            postAsReels: formData.postAsReels,
-            sourceLinks: formData.sourceLinks,
-            // Scheduler cập nhật cursor này sau mỗi lần chạy; clone campaign bắt đầu lại từ nguồn đầu tiên.
-            sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
-            // Tìm kiếm data trong group
-            isFindPhone: formData.isFindPhone,
-            isFindLinkGroupZalo: formData.isFindLinkGroupZalo,
-            isFindUid: formData.isFindUid,
-            isFindPostLink: formData.isFindPostLink,
-            isFindInPost: formData.isFindInPost,
-            sortTypePost: effectiveFindDataPostSort,
-            countPostFindData: formData.countPostFindData,
-            isFindInComment: formData.isFindInComment,
-            sortTypeComment: effectiveFindDataCommentSort,
-            countCommentFindData: formData.countCommentFindData,
-            isFindNewInteractors: formData.isFindNewInteractors,
-            isFindInGroupMembers: formData.isFindInGroupMembers,
-            countGroupMemberFindData: formData.countGroupMemberFindData,
-            isFindByKeywords: usesFindDataContentConditions ? formData.isFindByKeywords : false,
-            keywords: usesFindDataContentConditions ? formData.keywords : '',
-            isFindByContentAI: usesFindDataContentConditions ? formData.isFindByContentAI : false,
-            contentAI: usesFindDataContentConditions ? formData.contentAI : '',
-            findUidTargetCampaignIds: formData.isFindUid && handleFoundUidData ? formData.findUidTargetCampaignIds : [],
-            findPostLinkTargetCampaignIds: formData.isFindPostLink && handleFoundPostLinkData ? formData.findPostLinkTargetCampaignIds : [],
-            findPhoneSmsTargetCampaignIds: formData.isFindPhone && handleFoundPhoneSmsData ? formData.findPhoneSmsTargetCampaignIds : [],
-            findPhoneZaloWebTargetCampaignIds: formData.isFindPhone && handleFoundPhoneZaloWebData ? formData.findPhoneZaloWebTargetCampaignIds : [],
-            findZaloGroupLinkWebTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData ? formData.findZaloGroupLinkWebTargetCampaignIds : [],
-            findPhoneAkaBizDesktopTargetCampaignIds: formData.isFindPhone && handleFoundPhoneAkaBizDesktopData ? formData.findPhoneAkaBizDesktopTargetCampaignIds : [],
-            findZaloGroupLinkAkaBizDesktopTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData ? formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds : []
-          } as CampaignExtraSettings,
-          images: formData.images
-        }
 
         let savedCampaign: Campaign
 
@@ -1473,6 +1812,32 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
               campaignId: savedCampaign.id
             })
           }
+        }
+
+        savedCampaignIds.push(savedCampaign.id)
+        savedCampaignPayloadById.set(savedCampaign.id, campaignPayload)
+      }
+
+      const tempUidTargetIds = formData.isFindUid && handleFoundUidData
+        ? formData.findUidTargetCampaignIds.filter(id => id < 0)
+        : []
+      const tempPostLinkTargetIds = formData.isFindPostLink && handleFoundPostLinkData
+        ? formData.findPostLinkTargetCampaignIds.filter(id => id < 0)
+        : []
+      const createdUidTargetIds = (await Promise.all(tempUidTargetIds.map(tempId => persistDraftByTempId(tempId)))).flat()
+      const createdPostLinkTargetIds = (await Promise.all(tempPostLinkTargetIds.map(tempId => persistDraftByTempId(tempId)))).flat()
+
+      if (isFindDataGroupCampaign) {
+        await patchSavedSourceCampaignTargets('findUidTargetCampaignIds', createdUidTargetIds)
+        await patchSavedSourceCampaignTargets('findPostLinkTargetCampaignIds', createdPostLinkTargetIds)
+      }
+
+      await syncFindDataSourceCampaignLinks(savedCampaignIds)
+
+      if (targetFindDataField) {
+        const tempSourceDraftIds = selectedFindDataSourceCampaignIds.filter(id => id < 0)
+        for (const tempId of tempSourceDraftIds) {
+          await persistDraftByTempId(tempId, savedCampaignIds, targetFindDataField)
         }
       }
 
@@ -1718,95 +2083,45 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     showAlert(`Đã thêm ${addedCount} nhóm.`, 'success')
   }
 
-  const toggleFindUidTargetCampaign = (campaignId: number) => {
-    setFormData(prev => {
-      const current = prev.findUidTargetCampaignIds || []
-      const exists = current.includes(campaignId)
-      return {
-        ...prev,
-        findUidTargetCampaignIds: exists
-          ? current.filter(id => id !== campaignId)
-          : [...current, campaignId]
-      }
-    })
-  }
+  const syncFindDataSourceCampaignLinks = async (targetCampaignIds: number[]) => {
+    if (!showFindDataSourceSection || !targetFindDataField || targetCampaignIds.length === 0) return
+    if (!window.electronAPI?.updateCampaign) throw new Error('API not available')
 
-  const toggleFindPostLinkTargetCampaign = (campaignId: number) => {
-    setFormData(prev => {
-      const current = prev.findPostLinkTargetCampaignIds || []
-      const exists = current.includes(campaignId)
-      return {
-        ...prev,
-        findPostLinkTargetCampaignIds: exists
-          ? current.filter(id => id !== campaignId)
-          : [...current, campaignId]
-      }
-    })
-  }
+    const targetIds = getCampaignIdList(targetCampaignIds)
+    if (targetIds.length === 0) return
 
-  const toggleFindPhoneSmsTargetCampaign = (campaignId: number) => {
-    setFormData(prev => {
-      const current = prev.findPhoneSmsTargetCampaignIds || []
-      const exists = current.includes(campaignId)
-      return {
-        ...prev,
-        findPhoneSmsTargetCampaignIds: exists
-          ? current.filter(id => id !== campaignId)
-          : [...current, campaignId]
-      }
-    })
-  }
+    const selectedSourceIds = new Set(selectedFindDataSourceCampaignIds)
+    let hasUpdates = false
 
-  const toggleFindPhoneZaloWebTargetCampaign = (campaignId: number) => {
-    setFormData(prev => {
-      const current = prev.findPhoneZaloWebTargetCampaignIds || []
-      const exists = current.includes(campaignId)
-      return {
-        ...prev,
-        findPhoneZaloWebTargetCampaignIds: exists
-          ? current.filter(id => id !== campaignId)
-          : [...current, campaignId]
-      }
-    })
-  }
+    for (const sourceCampaign of findDataSourceCampaignOptions) {
+      const shouldReceiveTarget = selectedSourceIds.has(sourceCampaign.id)
+      const currentTargetIds = getCampaignIdList(sourceCampaign.extraSettings?.[targetFindDataField])
+      const nextTargetIds = new Set(currentTargetIds)
+      let changed = false
 
-  const toggleFindZaloGroupLinkWebTargetCampaign = (campaignId: number) => {
-    setFormData(prev => {
-      const current = prev.findZaloGroupLinkWebTargetCampaignIds || []
-      const exists = current.includes(campaignId)
-      return {
-        ...prev,
-        findZaloGroupLinkWebTargetCampaignIds: exists
-          ? current.filter(id => id !== campaignId)
-          : [...current, campaignId]
+      for (const targetId of targetIds) {
+        if (shouldReceiveTarget && !nextTargetIds.has(targetId)) {
+          nextTargetIds.add(targetId)
+          changed = true
+        } else if (!shouldReceiveTarget && nextTargetIds.has(targetId)) {
+          nextTargetIds.delete(targetId)
+          changed = true
+        }
       }
-    })
-  }
 
-  const toggleFindPhoneAkaBizDesktopTargetCampaign = (campaignId: number) => {
-    setFormData(prev => {
-      const current = prev.findPhoneAkaBizDesktopTargetCampaignIds || []
-      const exists = current.includes(campaignId)
-      return {
-        ...prev,
-        findPhoneAkaBizDesktopTargetCampaignIds: exists
-          ? current.filter(id => id !== campaignId)
-          : [...current, campaignId]
-      }
-    })
-  }
+      if (!changed) continue
 
-  const toggleFindZaloGroupLinkAkaBizDesktopTargetCampaign = (campaignId: number) => {
-    setFormData(prev => {
-      const current = prev.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || []
-      const exists = current.includes(campaignId)
-      return {
-        ...prev,
-        findZaloGroupLinkAkaBizDesktopTargetCampaignIds: exists
-          ? current.filter(id => id !== campaignId)
-          : [...current, campaignId]
+      const nextExtraSettings: CampaignExtraSettings = {
+        ...(sourceCampaign.extraSettings || {}),
+        [targetFindDataField]: Array.from(nextTargetIds)
       }
-    })
+      await window.electronAPI.updateCampaign(sourceCampaign.id, { extraSettings: nextExtraSettings })
+      hasUpdates = true
+    }
+
+    if (hasUpdates) {
+      await loadCampaigns()
+    }
   }
 
   const togglePostBumpTargetCampaign = (campaignId: number) => {
@@ -2308,6 +2623,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
             <input
               type="checkbox"
               checked={formData.isFindUid}
+              disabled={isDraftAutoLinkedFindUid}
               onChange={e => {
                 const checked = e.target.checked
                 setFormData(p => ({
@@ -2324,6 +2640,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
             <input
               type="checkbox"
               checked={formData.isFindPostLink}
+              disabled={isDraftAutoLinkedPostLink}
               onChange={e => {
                 const checked = e.target.checked
                 setFormData(p => ({
@@ -2341,18 +2658,271 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     </div>
   )
 
-  const getAkaBizCampaignLabel = (target: AkaBizCampaignListItem) => {
-    const name = target.name || `Campaign #${target.id}`
-    const accountName = target.shopName || `Tài khoản #${target.shopId}`
-    const status = target.status || 'Không rõ'
-    return `${name} - ${accountName} (${status})`
+  const toInternalCampaignPickerRow = (item: Campaign): CampaignPickerRow => {
+    const accountName = item.accountName || `Tài khoản #${item.accountId}`
+    const scheduleLabel = getCampaignScheduleLabel(item)
+    return {
+      id: item.id,
+      name: item.name || `Campaign #${item.id}`,
+      accountName,
+      status: item.status || 'Không rõ',
+      scheduleLabel,
+      searchText: buildCampaignPickerSearchText([item.name, accountName, item.status, scheduleLabel])
+    }
   }
+
+  const toFindDataSourcePickerRow = (item: Campaign): CampaignPickerRow => {
+    const accountName = item.accountName || `Tài khoản #${item.accountId}`
+    const scheduleLabel = getCampaignScheduleLabel(item)
+    const dataTypes = getFindDataTypeLabels(item.extraSettings)
+    const sourceTypes = getFindDataSourceLabels(item.extraSettings)
+    return {
+      id: item.id,
+      name: item.name || `Campaign #${item.id}`,
+      accountName,
+      status: item.status || 'Không rõ',
+      scheduleLabel,
+      dataTypes,
+      sourceTypes,
+      searchText: buildCampaignPickerSearchText([item.name, accountName, item.status, scheduleLabel, dataTypes, sourceTypes])
+    }
+  }
+
+  const toExternalCampaignPickerRow = (item: AkaBizCampaignListItem): CampaignPickerRow => {
+    const name = item.name || `Campaign #${item.id}`
+    const accountName = item.shopName || `Tài khoản #${item.shopId}`
+    const status = item.status || 'Không rõ'
+    const scheduleLabel = formatPickerDateTime(item.schedule)
+    return {
+      id: item.id,
+      name,
+      accountName,
+      status,
+      scheduleLabel,
+      searchText: buildCampaignPickerSearchText([name, accountName, status, scheduleLabel])
+    }
+  }
+
+  const draftMatchesCampaignPickerSource = (draft: InternalCampaignDraft, source: CampaignPickerSource): boolean => {
+    if (source.type === 'external') return false
+    if (draft.sourceType !== source.type) return false
+    if (source.type === 'findDataSource') {
+      return !draft.requiredTargetField || draft.requiredTargetField === targetFindDataField
+    }
+    return true
+  }
+
+  const toDraftCampaignPickerRow = (draft: InternalCampaignDraft): CampaignPickerRow => {
+    const firstItem = draft.items[0]
+    const payload = firstItem?.campaignPayload || {}
+    const accountNames = Array.from(new Set(
+      draft.items.map(item => {
+        const accountId = Number(item.campaignPayload.accountId)
+        return accounts.find(account => account.id === accountId)?.name || (accountId ? `Tài khoản #${accountId}` : '')
+      }).filter(Boolean)
+    ))
+    const name = String(payload.name || `Chiến dịch tạm #${Math.abs(draft.tempId)}`)
+    const displayName = draft.items.length > 1 ? `${name} (${draft.items.length} tài khoản)` : name
+    const extraSettings = payload.extraSettings as CampaignExtraSettings | undefined
+    const dataTypes = draft.sourceType === 'findDataSource' ? getFindDataTypeLabels(extraSettings) : undefined
+    const sourceTypes = draft.sourceType === 'findDataSource' ? getFindDataSourceLabels(extraSettings) : undefined
+    const scheduleLabel = getCampaignScheduleLabel(payload as Pick<Campaign, 'schedule' | 'scheduleType' | 'scheduleDays' | 'scheduleWeekDays'>)
+
+    return {
+      id: draft.tempId,
+      name: displayName,
+      accountName: accountNames.join(', '),
+      status: 'Tạm',
+      scheduleLabel,
+      dataTypes,
+      sourceTypes,
+      searchText: buildCampaignPickerSearchText([displayName, accountNames, 'Tạm', scheduleLabel, dataTypes, sourceTypes])
+    }
+  }
+
+  const getCampaignPickerRows = (source: CampaignPickerSource): CampaignPickerRow[] => {
+    const draftRows = internalCampaignDrafts
+      .filter(draft => draftMatchesCampaignPickerSource(draft, source))
+      .map(toDraftCampaignPickerRow)
+    if (source.type === 'findDataSource') return [...findDataSourceCampaignOptions.map(toFindDataSourcePickerRow), ...draftRows]
+    if (source.type === 'messageUidTarget') return [...messageUidCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
+    if (source.type === 'postLinkTarget') return [...postLinkCommentCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
+    return (externalCampaigns[source.kind] || []).map(toExternalCampaignPickerRow)
+  }
+
+  const isCampaignPickerLoading = (source: CampaignPickerSource): boolean =>
+    campaignPickerRefreshing || (source.type === 'external' && (!!externalCampaignLoading[source.kind] || !externalCampaignLoaded[source.kind]))
+
+  const getCampaignPickerRowLabel = (row: CampaignPickerRow): string => {
+    const parts = [row.name]
+    if (row.accountName) parts.push(row.accountName)
+    const base = parts.join(' - ')
+    return row.status ? `${base} (${row.status})` : base
+  }
+
+  const openCampaignPicker = (config: Omit<CampaignPickerModalState, 'draftIds' | 'draftTempIdsAtOpen' | 'searchQuery'>) => {
+    const draftTempIdsAtOpen = internalCampaignDrafts
+      .filter(draft => draftMatchesCampaignPickerSource(draft, config.source))
+      .map(draft => draft.tempId)
+    setCampaignPickerModal({
+      ...config,
+      draftIds: [...config.selectedIds],
+      draftTempIdsAtOpen,
+      searchQuery: ''
+    })
+  }
+
+  const toggleCampaignPickerDraftId = (id: number) => {
+    setCampaignPickerModal(prev => {
+      if (!prev) return prev
+      const exists = prev.draftIds.includes(id)
+      return {
+        ...prev,
+        draftIds: exists
+          ? prev.draftIds.filter(currentId => currentId !== id)
+          : [...prev.draftIds, id]
+      }
+    })
+  }
+
+  const confirmCampaignPicker = () => {
+    if (!campaignPickerModal) return
+    const confirmedIds = getPickerCampaignIdList(campaignPickerModal.draftIds)
+    campaignPickerModal.onConfirm(confirmedIds)
+    setInternalCampaignDrafts(prev => prev.filter(draft =>
+      !draftMatchesCampaignPickerSource(draft, campaignPickerModal.source) || confirmedIds.includes(draft.tempId)
+    ))
+    setCampaignPickerModal(null)
+  }
+
+  const cancelCampaignPicker = () => {
+    if (!campaignPickerModal) return
+    const keepDraftIds = new Set(campaignPickerModal.draftTempIdsAtOpen)
+    setInternalCampaignDrafts(prev => prev.filter(draft =>
+      !draftMatchesCampaignPickerSource(draft, campaignPickerModal.source) || keepDraftIds.has(draft.tempId)
+    ))
+    setCampaignPickerModal(null)
+  }
+
+  const refreshCampaignPicker = async () => {
+    if (!campaignPickerModal) return
+    setCampaignPickerRefreshing(true)
+    try {
+      if (campaignPickerModal.source.type === 'external') {
+        await loadExternalCampaigns(campaignPickerModal.source.kind)
+      } else {
+        await loadCampaigns()
+      }
+    } finally {
+      setCampaignPickerRefreshing(false)
+    }
+  }
+
+  const getDraftActionIdForPickerSource = (source: CampaignPickerSource): string | null => {
+    if (source.type === 'messageUidTarget') return MESSAGE_UID_ACTION_ID
+    if (source.type === 'postLinkTarget') return COMMENT_SEEDING_POST_ACTION_ID
+    if (source.type === 'findDataSource') return FIND_DATA_GROUP_ACTION_ID
+    return null
+  }
+
+  const openDraftCampaignForm = (source: CampaignPickerSource) => {
+    const actionId = getDraftActionIdForPickerSource(source)
+    if (!actionId || source.type === 'external') return
+    setDraftFormConfig({
+      tempId: nextDraftCampaignTempIdRef.current--,
+      sourceType: source.type,
+      actionId,
+      requiredTargetField: source.type === 'findDataSource' ? targetFindDataField : null
+    })
+  }
+
+  const handleDraftCampaignSaved = (draft: InternalCampaignDraft) => {
+    setInternalCampaignDrafts(prev => [...prev.filter(item => item.tempId !== draft.tempId), draft])
+    setCampaignPickerModal(prev => prev
+      ? { ...prev, draftIds: getPickerCampaignIdList([...prev.draftIds, draft.tempId]) }
+      : prev
+    )
+    setDraftFormConfig(null)
+  }
+
+  const renderTextList = (items: string[] | undefined, emptyText = 'Không có') => {
+    if (!items || items.length === 0) {
+      return <span className="campaign-picker-muted">{emptyText}</span>
+    }
+    return <span className="campaign-picker-text-list">{items.join(', ')}</span>
+  }
+
+  const renderSelectedCampaignSummary = (
+    source: CampaignPickerSource,
+    selectedIds: number[],
+    emptyText: string
+  ) => {
+    if (selectedIds.length === 0) {
+      return <div className="campaign-picker-empty-summary">{emptyText}</div>
+    }
+
+    const rows = getCampaignPickerRows(source)
+    const rowById = new Map(rows.map(row => [row.id, row]))
+    const selectedRows = selectedIds.map(id => rowById.get(id) || {
+      id,
+      name: `Campaign #${id}`,
+      searchText: String(id)
+    })
+    const columns: CampaignPickerColumn[] = source.type === 'findDataSource'
+      ? ['name', 'account', 'status', 'schedule', 'dataTypes', 'sourceTypes']
+      : ['name', 'account', 'status', 'schedule']
+    const columnLabels: Record<CampaignPickerColumn, string> = {
+      name: 'Tên chiến dịch',
+      account: source.type === 'external' ? 'Tài khoản/Shop' : 'Tài khoản',
+      status: 'Trạng thái',
+      schedule: 'Lịch chạy',
+      dataTypes: 'Data tìm',
+      sourceTypes: 'Nguồn tìm'
+    }
+    const renderSummaryCell = (row: CampaignPickerRow, column: CampaignPickerColumn) => {
+      if (column === 'name') return <span className="campaign-picker-table-name">{row.name}</span>
+      if (column === 'account') return row.accountName || <span className="campaign-picker-muted">Không rõ</span>
+      if (column === 'status') return row.status || <span className="campaign-picker-muted">Không rõ</span>
+      if (column === 'schedule') return row.scheduleLabel
+        ? <span className="campaign-picker-table-schedule">{row.scheduleLabel}</span>
+        : <span className="campaign-picker-muted">Chưa có</span>
+      if (column === 'dataTypes') return renderTextList(row.dataTypes)
+      return renderTextList(row.sourceTypes)
+    }
+
+    return (
+      <div className="campaign-picker-summary-table-wrap">
+        <table className="campaign-picker-summary-table">
+          <thead>
+            <tr>
+              {columns.map(column => (
+                <th key={column}>{columnLabels[column]}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {selectedRows.map(row => (
+              <tr key={row.id} title={getCampaignPickerRowLabel(row)}>
+                {columns.map(column => (
+                  <td key={column}>{renderSummaryCell(row, column)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  const renderDraftRelationNotice = (text: string) => (
+    <div className="campaign-picker-readonly-note">{text}</div>
+  )
 
   const renderExternalCampaignPicker = (
     kind: AkaBizCampaignListKind,
     isIntegrated: boolean,
     selectedIds: number[],
-    onToggle: (campaignId: number) => void,
+    onConfirm: (campaignIds: number[]) => void,
     emptyText: string
   ) => {
     if (akabizIntegrationsLoading || akabizIntegrations === null) {
@@ -2375,35 +2945,93 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
       )
     }
 
-    if (externalCampaignLoading[kind] || !externalCampaignLoaded[kind]) {
-      return <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>Đang tải chiến dịch...</div>
-    }
-
-    const options = externalCampaigns[kind] || []
-    if (options.length === 0) {
-      return <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>{emptyText}</div>
-    }
-
+    const source: CampaignPickerSource = { type: 'external', kind }
     return (
-      <div className="campaign-target-scroll-list">
-        {options.map(target => {
-          const label = getAkaBizCampaignLabel(target)
-          return (
-            <label key={`${kind}-${target.id}`} className="schedule-checkbox-label" title={label}>
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(target.id)}
-                onChange={() => onToggle(target.id)}
-              />
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {label}
-              </span>
-            </label>
-          )
-        })}
+      <div className="campaign-picker-field">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm campaign-picker-select-button"
+          onClick={() => openCampaignPicker({
+            title: 'Chọn chiến dịch',
+            source,
+            columns: ['name', 'account', 'status', 'schedule'],
+            emptyText,
+            selectedIds,
+            onConfirm
+          })}
+        >
+          Chọn chiến dịch
+        </button>
+        {renderSelectedCampaignSummary(source, selectedIds, 'Chưa chọn chiến dịch nào.')}
       </div>
     )
   }
+
+  const renderFindDataSourceCampaignPicker = () => {
+    const emptyMessage = targetFindDataField === 'findUidTargetCampaignIds'
+      ? 'Chưa có chiến dịch tìm data phù hợp để làm nguồn UID.'
+      : 'Chưa có chiến dịch tìm data phù hợp để làm nguồn link bài post.'
+
+    if (isDraftTargetFromFindData) {
+      return (
+        <div className="stepper-form-group">
+          <label>Chiến dịch nguồn</label>
+          {renderDraftRelationNotice('Sẽ liên kết với chiến dịch tìm data đang tạo/chỉnh sau khi lưu chiến dịch chính.')}
+        </div>
+      )
+    }
+
+    return (
+      <div className="stepper-form-group">
+        <label>Chiến dịch nguồn</label>
+        <div className="campaign-picker-field">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm campaign-picker-select-button"
+            onClick={() => openCampaignPicker({
+              title: 'Chọn nguồn chiến dịch tìm kiếm data',
+              source: { type: 'findDataSource' },
+              columns: ['name', 'account', 'status', 'schedule', 'dataTypes', 'sourceTypes'],
+              emptyText: emptyMessage,
+              selectedIds: selectedFindDataSourceCampaignIds,
+              onConfirm: ids => {
+                findDataSourceSelectionTouchedRef.current = true
+                setSelectedFindDataSourceCampaignIds(ids)
+              }
+            })}
+          >
+            Chọn chiến dịch
+          </button>
+          {renderSelectedCampaignSummary({ type: 'findDataSource' }, selectedFindDataSourceCampaignIds, 'Chưa chọn chiến dịch nguồn nào.')}
+        </div>
+      </div>
+    )
+  }
+
+  const renderInternalCampaignPicker = (
+    source: CampaignPickerSource,
+    selectedIds: number[],
+    onConfirm: (ids: number[]) => void,
+    emptyText: string
+  ) => (
+    <div className="campaign-picker-field">
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm campaign-picker-select-button"
+        onClick={() => openCampaignPicker({
+          title: 'Chọn chiến dịch',
+          source,
+          columns: ['name', 'account', 'status', 'schedule'],
+          emptyText,
+          selectedIds,
+          onConfirm
+        })}
+      >
+        Chọn chiến dịch
+      </button>
+      {renderSelectedCampaignSummary(source, selectedIds, 'Chưa chọn chiến dịch nào.')}
+    </div>
+  )
 
   const renderFoundDataHandling = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -2428,7 +3056,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                 'sms',
                 hasSmsIntegration,
                 formData.findPhoneSmsTargetCampaignIds || [],
-                toggleFindPhoneSmsTargetCampaign,
+                ids => setFormData(p => ({ ...p, findPhoneSmsTargetCampaignIds: ids })),
                 'Không có chiến dịch akaBiz Sms phù hợp để nhận SĐT.'
               )}
             </div>
@@ -2457,7 +3085,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                 'zaloPhone',
                 hasZaloWebIntegration,
                 formData.findPhoneZaloWebTargetCampaignIds || [],
-                toggleFindPhoneZaloWebTargetCampaign,
+                ids => setFormData(p => ({ ...p, findPhoneZaloWebTargetCampaignIds: ids })),
                 'Không có chiến dịch akaBiz Zalo Web phù hợp để nhận SĐT.'
               )}
             </div>
@@ -2486,7 +3114,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                 'desktopZaloPhone',
                 hasAkaBizDesktopIntegration,
                 formData.findPhoneAkaBizDesktopTargetCampaignIds || [],
-                toggleFindPhoneAkaBizDesktopTargetCampaign,
+                ids => setFormData(p => ({ ...p, findPhoneAkaBizDesktopTargetCampaignIds: ids })),
                 'Không có chiến dịch akaBiz Desktop phù hợp để nhận SĐT.'
               )}
             </div>
@@ -2515,7 +3143,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                 'zaloGroupLink',
                 hasZaloWebIntegration,
                 formData.findZaloGroupLinkWebTargetCampaignIds || [],
-                toggleFindZaloGroupLinkWebTargetCampaign,
+                ids => setFormData(p => ({ ...p, findZaloGroupLinkWebTargetCampaignIds: ids })),
                 'Không có chiến dịch akaBiz Zalo Web phù hợp để nhận link group Zalo.'
               )}
             </div>
@@ -2544,7 +3172,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                 'desktopZaloGroupLink',
                 hasAkaBizDesktopIntegration,
                 formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || [],
-                toggleFindZaloGroupLinkAkaBizDesktopTargetCampaign,
+                ids => setFormData(p => ({ ...p, findZaloGroupLinkAkaBizDesktopTargetCampaignIds: ids })),
                 'Không có chiến dịch akaBiz Desktop phù hợp để nhận link group Zalo.'
               )}
             </div>
@@ -2569,26 +3197,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
           {handleFoundUidData && (
             <div className="stepper-form-group" style={{ marginTop: 12 }}>
               <label>Chọn chiến dịch</label>
-              {messageUidCampaignOptions.length === 0 ? (
-                <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
-                  Chưa có chiến dịch Nhắn tin & Kết bạn đến UID để nhận UID.
-                </div>
-              ) : (
-                <div className="campaign-target-scroll-list">
-                  {messageUidCampaignOptions.map(target => (
-                    <label key={target.id} className="schedule-checkbox-label" title={target.name}>
-                      <input
-                        type="checkbox"
-                        checked={(formData.findUidTargetCampaignIds || []).includes(target.id)}
-                        onChange={() => toggleFindUidTargetCampaign(target.id)}
-                      />
-                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {target.name} <span style={{ color: 'var(--text-tertiary)' }}>({target.status})</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
+              {isDraftAutoLinkedFindUid
+                ? renderDraftRelationNotice('Sẽ liên kết với chiến dịch đích đang tạo/chỉnh sau khi lưu chiến dịch chính.')
+                : renderInternalCampaignPicker(
+                  { type: 'messageUidTarget' },
+                  formData.findUidTargetCampaignIds || [],
+                  ids => setFormData(p => ({ ...p, findUidTargetCampaignIds: ids })),
+                  'Chưa có chiến dịch Nhắn tin & Kết bạn đến UID để nhận UID.'
+                )}
             </div>
           )}
         </div>
@@ -2611,26 +3227,14 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
           {handleFoundPostLinkData && (
             <div className="stepper-form-group" style={{ marginTop: 12 }}>
               <label>Chọn chiến dịch</label>
-              {postLinkCommentCampaignOptions.length === 0 ? (
-                <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
-                  Chưa có chiến dịch Comment seeding vào danh sách bài post để nhận link.
-                </div>
-              ) : (
-                <div className="campaign-target-scroll-list">
-                  {postLinkCommentCampaignOptions.map(target => (
-                    <label key={target.id} className="schedule-checkbox-label" title={target.name}>
-                      <input
-                        type="checkbox"
-                        checked={(formData.findPostLinkTargetCampaignIds || []).includes(target.id)}
-                        onChange={() => toggleFindPostLinkTargetCampaign(target.id)}
-                      />
-                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {target.name} <span style={{ color: 'var(--text-tertiary)' }}>({target.status})</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
+              {isDraftAutoLinkedPostLink
+                ? renderDraftRelationNotice('Sẽ liên kết với chiến dịch đích đang tạo/chỉnh sau khi lưu chiến dịch chính.')
+                : renderInternalCampaignPicker(
+                  { type: 'postLinkTarget' },
+                  formData.findPostLinkTargetCampaignIds || [],
+                  ids => setFormData(p => ({ ...p, findPostLinkTargetCampaignIds: ids })),
+                  'Chưa có chiến dịch Comment seeding vào danh sách bài post để nhận link.'
+                )}
             </div>
           )}
         </div>
@@ -3149,13 +3753,129 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     </div>
   )
 
+  const renderCampaignPickerModal = () => {
+    if (!campaignPickerModal) return null
+
+    const rows = getCampaignPickerRows(campaignPickerModal.source)
+    const searchQuery = campaignPickerModal.searchQuery.trim().toLowerCase()
+    const filteredRows = searchQuery
+      ? rows.filter(row => row.searchText.includes(searchQuery))
+      : rows
+    const loading = isCampaignPickerLoading(campaignPickerModal.source)
+    const colSpan = campaignPickerModal.columns.length + 1
+    const canAddInternalCampaign = !draftMode && campaignPickerModal.source.type !== 'external'
+
+    const renderCell = (row: CampaignPickerRow, column: CampaignPickerColumn) => {
+      if (column === 'name') return <span className="campaign-picker-table-name">{row.name}</span>
+      if (column === 'account') return row.accountName || <span className="campaign-picker-muted">Không rõ</span>
+      if (column === 'status') return row.status || <span className="campaign-picker-muted">Không rõ</span>
+      if (column === 'schedule') return row.scheduleLabel
+        ? <span className="campaign-picker-table-schedule">{row.scheduleLabel}</span>
+        : <span className="campaign-picker-muted">Chưa có</span>
+      if (column === 'dataTypes') return renderTextList(row.dataTypes)
+      return renderTextList(row.sourceTypes)
+    }
+
+    const columnLabels: Record<CampaignPickerColumn, string> = {
+      name: 'Tên chiến dịch',
+      account: campaignPickerModal.source.type === 'external' ? 'Tài khoản/Shop' : 'Tài khoản',
+      status: 'Trạng thái',
+      schedule: 'Lịch chạy',
+      dataTypes: 'Data tìm',
+      sourceTypes: 'Nguồn tìm'
+    }
+
+    return (
+      <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: 3000 }}>
+        <div className="campaign-picker-modal">
+          <div className="modal-header">
+            <span className="modal-title">{campaignPickerModal.title}</span>
+            <button type="button" className="btn-icon" onClick={cancelCampaignPicker}>
+              <X size={18} />
+            </button>
+          </div>
+          <div className="campaign-picker-modal-body">
+            <div className="campaign-picker-toolbar">
+              <input
+                type="text"
+                className="stepper-input campaign-picker-search-input"
+                placeholder="Tìm theo tên chiến dịch, tài khoản, trạng thái hoặc lịch chạy..."
+                value={campaignPickerModal.searchQuery}
+                onChange={e => setCampaignPickerModal(prev => prev ? { ...prev, searchQuery: e.target.value } : prev)}
+              />
+              <div className="campaign-picker-toolbar-actions">
+                {canAddInternalCampaign && (
+                  <button type="button" className="btn btn-secondary campaign-picker-add-button" onClick={() => openDraftCampaignForm(campaignPickerModal.source)}>
+                    <Plus size={16} /> Thêm chiến dịch
+                  </button>
+                )}
+                <button type="button" className="btn-icon" onClick={() => void refreshCampaignPicker()} disabled={campaignPickerRefreshing} title="Load lại danh sách">
+                  <RefreshCw size={15} className={campaignPickerRefreshing ? 'spin' : ''} />
+                </button>
+              </div>
+            </div>
+            <div className="campaign-picker-table-wrap">
+              <table className="campaign-picker-table">
+                <thead>
+                  <tr>
+                    <th className="campaign-picker-check-col">Chọn</th>
+                    {campaignPickerModal.columns.map(column => (
+                      <th key={column}>{columnLabels[column]}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={colSpan} className="campaign-picker-empty-cell">Đang tải chiến dịch...</td>
+                    </tr>
+                  ) : filteredRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={colSpan} className="campaign-picker-empty-cell">{campaignPickerModal.emptyText}</td>
+                    </tr>
+                  ) : (
+                    filteredRows.map(row => (
+                      <tr
+                        key={row.id}
+                        className={campaignPickerModal.draftIds.includes(row.id) ? 'selected' : ''}
+                        onClick={() => toggleCampaignPickerDraftId(row.id)}
+                      >
+                        <td className="campaign-picker-check-col">
+                          <input
+                            type="checkbox"
+                            checked={campaignPickerModal.draftIds.includes(row.id)}
+                            onChange={() => toggleCampaignPickerDraftId(row.id)}
+                            onClick={event => event.stopPropagation()}
+                          />
+                        </td>
+                        {campaignPickerModal.columns.map(column => (
+                          <td key={column}>{renderCell(row, column)}</td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={cancelCampaignPicker}>Huỷ</button>
+            <button type="button" className="btn btn-primary btn-sm campaign-picker-confirm-button" onClick={confirmCampaignPicker}>
+              Chọn {campaignPickerModal.draftIds.length > 0 ? `(${campaignPickerModal.draftIds.length})` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" style={modalZIndex ? { zIndex: modalZIndex } : undefined}>
       <div className="campaign-full-modal stepper-modal">
         {/* Header */}
         <div className="modal-header">
           <span className="modal-title">
-            {campaign && campaign.id ? 'Sửa chiến dịch' : campaign ? 'Nhân bản chiến dịch' : 'Thêm chiến dịch'}
+            {draftMode ? 'Thêm chiến dịch' : campaign && campaign.id ? 'Sửa chiến dịch' : campaign ? 'Nhân bản chiến dịch' : 'Thêm chiến dịch'}
           </span>
           <button className="btn-icon" onClick={onClose}><X size={18} /></button>
         </div>
@@ -3221,6 +3941,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                       value={formData.actionId}
                       onChange={e => setFormData(p => ({ ...p, actionId: e.target.value }))}
                       className="stepper-input"
+                      disabled={draftMode && !!lockedActionId}
                     >
                       <option value="">-- Chọn hành động --</option>
                       {campaignActions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -3834,6 +4555,33 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
             </div>}
 
 
+            {showFindDataSourceSection && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['findDataSources'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('findDataSources')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('findDataSources')}</span>
+                    <span className="stepper-section-title">Nguồn chiến dịch tìm kiếm data</span>
+                    {selectedFindDataSourceCampaignIds.length > 0 && (
+                      <span className="stepper-section-badge">{selectedFindDataSourceCampaignIds.length}</span>
+                    )}
+                  </div>
+                  {collapsedSections['findDataSources'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['findDataSources'] && (
+                  <div className="stepper-section-body">
+                    {renderFindDataSourceCampaignPicker()}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Section 6: Danh sách data (hidden for simple campaigns) */}
             {!isSimpleCampaign && !hideDetailsSection && <div
               className="stepper-section"
@@ -4065,7 +4813,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
         {/* Footer */}
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Huỷ</button>
-          <button className="btn btn-primary" onClick={handleSave}>Lưu chiến dịch</button>
+          <button className="btn btn-primary" onClick={handleSave}>{draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch'}</button>
         </div>
       </div>
       {dataScanPicker && formData.accountIds.length > 0 && (
@@ -4083,6 +4831,20 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                 ? onUsersSelected
                 : onGroupsSelected
           }
+        />
+      )}
+      {!draftFormConfig && renderCampaignPickerModal()}
+      {draftFormConfig && (
+        <CampaignFormModal
+          campaign={null}
+          draftMode
+          draftTempId={draftFormConfig.tempId}
+          lockedActionId={draftFormConfig.actionId}
+          draftPickerSourceType={draftFormConfig.sourceType}
+          draftRequiredTargetField={draftFormConfig.requiredTargetField}
+          onOpenGeneralSettings={onOpenGeneralSettings}
+          onSaveDraft={handleDraftCampaignSaved}
+          onClose={() => setDraftFormConfig(null)}
         />
       )}
     </div>

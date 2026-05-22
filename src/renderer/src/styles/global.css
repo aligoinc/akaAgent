@@ -3004,6 +3004,206 @@ button.btn-icon:not(.btn):disabled {
   white-space: nowrap;
 }
 
+.campaign-picker-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.campaign-picker-select-button {
+  width: auto;
+  min-height: 30px;
+  padding-inline: 12px;
+}
+
+.campaign-picker-confirm-button {
+  min-width: 92px;
+}
+
+.campaign-picker-empty-summary,
+.campaign-picker-muted {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.campaign-picker-summary-table-wrap {
+  width: 100%;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.campaign-picker-summary-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.campaign-picker-summary-table th,
+.campaign-picker-summary-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-default);
+  text-align: left;
+  vertical-align: top;
+}
+
+.campaign-picker-summary-table th {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.campaign-picker-summary-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.campaign-picker-modal-overlay {
+  padding: 24px;
+}
+
+.campaign-picker-modal {
+  width: min(1120px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 48px));
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.campaign-picker-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px 20px;
+}
+
+.campaign-picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.campaign-picker-search-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.campaign-picker-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.campaign-picker-add-button {
+  min-height: 42px;
+  padding-inline: 18px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.campaign-picker-table-wrap {
+  min-height: 260px;
+  max-height: min(440px, 58vh);
+  overflow: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.campaign-picker-table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.campaign-picker-table th,
+.campaign-picker-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-default);
+  text-align: left;
+  vertical-align: top;
+}
+
+.campaign-picker-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.campaign-picker-table tr {
+  cursor: pointer;
+}
+
+.campaign-picker-table tbody tr:hover,
+.campaign-picker-table tbody tr.selected {
+  background: var(--bg-tertiary);
+}
+
+.campaign-picker-check-col {
+  width: 72px;
+  text-align: center !important;
+}
+
+.campaign-picker-table-name {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.campaign-picker-table-schedule {
+  display: block;
+  max-width: 190px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.campaign-picker-text-list {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.campaign-picker-empty-cell {
+  height: 180px;
+  text-align: center !important;
+  vertical-align: middle !important;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.campaign-picker-readonly-note {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .find-data-config-list {
   display: flex;
   flex-direction: column;
