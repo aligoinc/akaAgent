@@ -119,6 +119,90 @@ function dedupeValidContacts(contacts: Partial<AutoAccountContact>[]): Partial<A
   return Array.from(byKey.values())
 }
 
+function contactUpsertKey(accountId: unknown, contactType: unknown, uid: unknown): string {
+  return `${String(accountId)}:${String(contactType)}:${String(uid || '').trim()}`
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map(item => String(item || '').trim()).filter(Boolean)
+    : []
+}
+
+function mergeContactExtraData(
+  existingExtraData: unknown,
+  nextExtraData: unknown
+): Record<string, unknown> {
+  const existing = toRecord(existingExtraData)
+  const next = toRecord(nextExtraData)
+  const merged: Record<string, unknown> = { ...existing, ...next }
+  const sourcePostUrls = [
+    ...toStringArray(existing.sourcePostUrls),
+    existing.sourcePostUrl,
+    ...toStringArray(next.sourcePostUrls),
+    next.sourcePostUrl
+  ]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+
+  if (sourcePostUrls.length > 0) {
+    merged.sourcePostUrls = Array.from(new Set(sourcePostUrls))
+  }
+
+  return merged
+}
+
+async function loadExistingContactExtraData(
+  contacts: Partial<AutoAccountContact>[],
+  staffId: number
+): Promise<Map<string, Record<string, unknown>>> {
+  const groups = new Map<string, { accountId: number; contactType: ContactType; uids: Set<string> }>()
+
+  for (const contact of contacts) {
+    const accountId = contact.accountId as number
+    const contactType = contact.contactType as ContactType
+    const uid = String(contact.uid || '').trim()
+    const groupKey = `${accountId}:${contactType}`
+    const group = groups.get(groupKey) || { accountId, contactType, uids: new Set<string>() }
+    group.uids.add(uid)
+    groups.set(groupKey, group)
+  }
+
+  const existingByKey = new Map<string, Record<string, unknown>>()
+  const chunkSize = 100
+
+  for (const group of groups.values()) {
+    const uids = Array.from(group.uids)
+    for (let i = 0; i < uids.length; i += chunkSize) {
+      const chunk = uids.slice(i, i + chunkSize)
+      const { data, error } = await client()
+        .from('auto_account_contacts')
+        .select('account_id, contact_type, uid, extra_data')
+        .eq('account_id', group.accountId)
+        .eq('staff_id', staffId)
+        .eq('contact_type', group.contactType)
+        .in('uid', chunk)
+
+      if (error) throw new Error(`Failed to list existing contact metadata: ${error.message}`)
+
+      for (const row of data || []) {
+        existingByKey.set(
+          contactUpsertKey(row.account_id, row.contact_type, row.uid),
+          toRecord(row.extra_data)
+        )
+      }
+    }
+  }
+
+  return existingByKey
+}
+
 function getMissingSnapshotUpdates(contactType: ContactType) {
   if (contactType === 'group') {
     return { is_joined: false, is_delete: false, updated_at: new Date().toISOString() }
@@ -223,6 +307,7 @@ export async function upsertContacts(
   const u = requireCurrentUser()
   const validContacts = dedupeValidContacts(contacts)
   if (validContacts.length === 0) return 0
+  const existingExtraDataByKey = await loadExistingContactExtraData(validContacts, u.staffId)
 
   let totalSaved = 0
   const chunkSize = 100
@@ -230,13 +315,14 @@ export async function upsertContacts(
   for (let i = 0; i < validContacts.length; i += chunkSize) {
     const chunk = validContacts.slice(i, i + chunkSize)
     const payloads = chunk.map(c => {
+      const existingExtraData = existingExtraDataByKey.get(contactUpsertKey(c.accountId, c.contactType, c.uid))
       const payload: any = {
         account_id: c.accountId,
         contact_type: c.contactType,
         name: c.name,
         uid: c.uid,
         url: c.url || null,
-        extra_data: c.extraData || {},
+        extra_data: mergeContactExtraData(existingExtraData, c.extraData),
         is_delete: false,
         staff_id: u.staffId,
         organization_id: u.organizationId,

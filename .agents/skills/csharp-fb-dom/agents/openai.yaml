@@ -1,0 +1,7 @@
+interface:
+  display_name: "C# FB DOM"
+  short_description: "Trust C# for Facebook DOM workflow"
+  default_prompt: "Use $csharp-fb-dom to compare this C# Facebook automation with the current workflow and only change DOM interactions."
+
+policy:
+  allow_implicit_invocation: true

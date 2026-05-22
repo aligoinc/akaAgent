@@ -1621,6 +1621,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
     action: DataScanAction
     mode: 'friends' | 'users' | 'groups'
     initialStatusFilter?: 'active' | 'inactive' | 'all'
+    allowedActions?: DataScanAction[]
   } | null>(null)
 
   const getDetailDedupeKey = (row: Partial<CampaignInputData>): string => {
@@ -3902,7 +3903,8 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
                             setDataScanPicker({
                               action: 'facebook_friends',
                               mode: 'users',
-                              initialStatusFilter: 'all'
+                              initialStatusFilter: 'all',
+                              allowedActions: ['facebook_friends', 'facebook_post_commenters']
                             })
                           }}
                           title="Chọn data từ danh sách user Facebook"
@@ -4043,6 +4045,7 @@ export default function CampaignFormModal({ campaign, cloneFromId, onOpenGeneral
           initialAction={dataScanPicker.action}
           initialAccountId={formData.accountIds[0]}
           initialStatusFilter={dataScanPicker.initialStatusFilter}
+          allowedActions={dataScanPicker.allowedActions}
           lockAction
           onClose={() => setDataScanPicker(null)}
           onSelect={

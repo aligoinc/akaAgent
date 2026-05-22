@@ -26,6 +26,7 @@ interface DataScanModalProps {
   initialAccountId?: number
   initialShowGroupPanel?: boolean
   initialStatusFilter?: ContactStatusFilter
+  allowedActions?: DataScanAction[]
   lockAction?: boolean
   onClose: () => void
   onSelect?: (contacts: AutoAccountContact[]) => void
@@ -61,6 +62,18 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
     loadingText: 'Đang tải người comment bài post...'
   }
 ]
+
+const getAvailableDataScanActions = (allowedActions?: DataScanAction[]) => {
+  if (!allowedActions || allowedActions.length === 0) return DATA_SCAN_ACTIONS
+  const allowed = new Set(allowedActions)
+  const available = DATA_SCAN_ACTIONS.filter(item => allowed.has(item.id))
+  return available.length > 0 ? available : DATA_SCAN_ACTIONS
+}
+
+const getInitialDataScanAction = (initialAction: DataScanAction, allowedActions?: DataScanAction[]) => {
+  const available = getAvailableDataScanActions(allowedActions)
+  return available.some(item => item.id === initialAction) ? initialAction : available[0].id
+}
 
 const EXPORT_HEADERS = ['Tên', 'Uid']
 
@@ -202,6 +215,7 @@ export default function DataScanModal({
   initialAccountId,
   initialShowGroupPanel = false,
   initialStatusFilter,
+  allowedActions,
   lockAction = false,
   onClose,
   onSelect
@@ -213,7 +227,7 @@ export default function DataScanModal({
   const scanRunIdRef = useRef(0)
   const stoppedScanIdsRef = useRef<Set<number>>(new Set())
   const completedScanIdsRef = useRef<Set<number>>(new Set())
-  const [action, setAction] = useState<DataScanAction>(initialAction)
+  const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions))
   const [accountId, setAccountId] = useState<number | ''>(initialAccountId || '')
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
   const [loading, setLoading] = useState(false)
@@ -244,10 +258,15 @@ export default function DataScanModal({
   const [groupContactsLoading, setGroupContactsLoading] = useState(false)
   const [groupContactCache, setGroupContactCache] = useState<Record<number, AutoAccountContact[]>>({})
 
+  const availableActions = useMemo(
+    () => getAvailableDataScanActions(allowedActions),
+    [allowedActions]
+  )
   const actionDef = useMemo(
     () => DATA_SCAN_ACTIONS.find(item => item.id === action) || DATA_SCAN_ACTIONS[0],
     [action]
   )
+  const canSwitchLockedAction = !!allowedActions?.length && availableActions.length > 1
   const isPostCommentersAction = action === POST_COMMENTERS_ACTION_ID
   const normalizedPostCommentersUrl = useMemo(
     () => normalizeFacebookPostUrlForCompare(postCommentersUrl),
@@ -280,6 +299,12 @@ export default function DataScanModal({
       : accounts.find(account => account.flatformType === 'facebook') || accounts[0]
     if (preferred) setAccountId(preferred.id)
   }, [accountId, accounts, initialAccountId])
+
+  useEffect(() => {
+    if (!availableActions.some(item => item.id === action)) {
+      setAction(availableActions[0].id)
+    }
+  }, [action, availableActions])
 
   const loadCachedContacts = useCallback(async () => {
     if (!window.electronAPI || !accountId) {
@@ -938,9 +963,9 @@ export default function DataScanModal({
                 className="stepper-input"
                 value={action}
                 onChange={event => setAction(event.target.value as DataScanAction)}
-                disabled={scanLoading || lockAction}
+                disabled={scanLoading || (lockAction && !canSwitchLockedAction)}
               >
-                {DATA_SCAN_ACTIONS.map(item => (
+                {availableActions.map(item => (
                   <option key={item.id} value={item.id}>{item.label}</option>
                 ))}
               </select>
@@ -960,33 +985,6 @@ export default function DataScanModal({
                 ))}
               </select>
             </div>
-
-            {isPostCommentersAction && (
-              <>
-                <div className="stepper-form-group" style={{ gridColumn: 'span 2' }}>
-                  <label>Link bài post</label>
-                  <input
-                    className="stepper-input"
-                    value={postCommentersUrl}
-                    onChange={event => setPostCommentersUrl(event.target.value)}
-                    placeholder="Dán link bài post Facebook..."
-                    disabled={scanLoading}
-                  />
-                </div>
-
-                <div className="stepper-form-group">
-                  <label>Số lượng</label>
-                  <input
-                    type="number"
-                    min={1}
-                    className="stepper-input"
-                    value={postCommentersLimit}
-                    onChange={event => setPostCommentersLimit(normalizePositiveNumber(event.target.value))}
-                    disabled={scanLoading}
-                  />
-                </div>
-              </>
-            )}
 
             <div className="stepper-form-group">
               <label>Loại tài khoản</label>
@@ -1008,6 +1006,33 @@ export default function DataScanModal({
               </div>
             )}
           </div>
+
+          {isPostCommentersAction && (
+            <div className="data-scan-post-commenters-controls">
+              <div className="stepper-form-group">
+                <label>Link bài post</label>
+                <input
+                  className="stepper-input"
+                  value={postCommentersUrl}
+                  onChange={event => setPostCommentersUrl(event.target.value)}
+                  placeholder="Dán link bài post Facebook..."
+                  disabled={scanLoading}
+                />
+              </div>
+
+              <div className="stepper-form-group">
+                <label>Số lượng</label>
+                <input
+                  type="number"
+                  min={1}
+                  className="stepper-input"
+                  value={postCommentersLimit}
+                  onChange={event => setPostCommentersLimit(normalizePositiveNumber(event.target.value))}
+                  disabled={scanLoading}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="data-scan-toolbar">
             <div className="data-scan-range">
