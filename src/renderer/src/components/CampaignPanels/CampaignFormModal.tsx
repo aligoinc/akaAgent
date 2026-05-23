@@ -102,6 +102,7 @@ const DEFAULT_ACTION_LIMIT: ActionLimitForm = {
 const ACTION_CODE_LABELS: Record<string, string> = {
   fb_post_group: 'Đăng bài group',
   fb_post_my_profile: 'Đăng bài trang cá nhân',
+  fb_post_page: 'Đăng bài fanpage',
   fb_comment: 'Comment',
   fb_message_stranger: 'Nhắn tin người lạ',
   fb_message_friend: 'Nhắn tin bạn bè',
@@ -163,6 +164,7 @@ const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
+const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   MESSAGE_FRIEND_ACTION_ID,
   MESSAGE_UID_ACTION_ID
@@ -176,7 +178,8 @@ const GROUP_POST_ACTIONS = new Set([
 
 // Campaign action IDs that show the "Nguồn đăng bài" section (source links, copy content, share, reels)
 const TIMELINE_POST_ACTIONS = new Set([
-  'facebook_timeline_post'
+  'facebook_timeline_post',
+  PAGE_POST_ACTION_ID
 ])
 
 const FIND_DATA_GROUP_ACTIONS = new Set([
@@ -245,7 +248,7 @@ const normalizeMinuteValue = (value: unknown, fallback: number, min = 0): number
 }
 
 const getSourceLinkEntries = (value: string): string[] =>
-  value.split(',').map(item => item.trim()).filter(Boolean)
+  value.split(/[,\r\n]+/).map(item => item.trim()).filter(Boolean)
 
 const isDataImagePath = (path: string): boolean => path.trim().startsWith('data:')
 
@@ -415,6 +418,12 @@ const SOURCE_CONTENT_STEP: StepDef = {
   fields: [{ key: 'sourceContent', label: 'Nguồn nội dung' }]
 }
 
+const PAGE_POST_METHOD_STEP: StepDef = {
+  id: 'pagePostMethod',
+  title: 'Phương thức đăng',
+  fields: [{ key: 'pagePostMode', label: 'Phương thức đăng' }]
+}
+
 const FIND_DATA_CONDITIONS_STEP: StepDef = {
   id: 'findDataConditions',
   title: 'Điều kiện chạy',
@@ -582,6 +591,7 @@ export default function CampaignFormModal({
     includeSourceImages: campaign?.extraSettings?.includeSourceImages ?? false,
     postAsReels: campaign?.extraSettings?.postAsReels ?? false,
     sourceLinks: campaign?.extraSettings?.sourceLinks || '',
+    pagePostMode: (campaign?.extraSettings?.pagePostMode || 'api') as 'api' | 'ui',
     // Tìm kiếm data trong group
     isFindPhone: campaign?.extraSettings?.isFindPhone ?? false,
     isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
@@ -653,6 +663,7 @@ export default function CampaignFormModal({
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
   const isFacebookGroupPostCampaign = formData.actionId === 'facebook_group_post'
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
+  const isPagePostCampaign = formData.actionId === PAGE_POST_ACTION_ID
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
@@ -667,9 +678,10 @@ export default function CampaignFormModal({
   const isDraftAutoLinkedPostLink = isDraftSourceForTarget && draftRequiredTargetField === 'findPostLinkTargetCampaignIds'
   const hasSelectedCampaignAction = !!formData.actionId
   const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign
+  const canPickPages = isPagePostCampaign
   const canPickFriends = isMessageFriendCampaign
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
-  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign
+  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign
   const showActionOptionsSection = isMessageUidCampaign
   const showFoundDataHandlingSection = isFindDataGroupCampaign && (
     formData.isFindPhone ||
@@ -687,7 +699,7 @@ export default function CampaignFormModal({
   const showExtraSection = isFacebookGroupPostCampaign || isCommentSeedingCampaign
   const showFindDataSourceSection = !!targetFindDataField && !hideDetailsSection
   const hasSelectedFindDataSourceCampaign = showFindDataSourceSection && (selectedFindDataSourceCampaignIds.length > 0 || isDraftTargetFromFindData)
-  const requiresTimelineSourceLinks = isTimelinePostCampaign && (formData.copyContentFromSource || formData.sharePost)
+  const requiresTimelineSourceLinks = isTimelinePostCampaign && (formData.copyContentFromSource || (!isPagePostCampaign && formData.sharePost))
   const hasTimelineSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
   const isUsingTimelineSourceContent = isTimelinePostCampaign && formData.copyContentFromSource
   const requiresMainContentOrMedia =
@@ -700,7 +712,9 @@ export default function CampaignFormModal({
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
   const detailsColumnCount = isCommentSeedingPostCampaign
     ? (isEditingSavedCampaign ? 1 : 2)
-    : (isEditingSavedCampaign ? 4 : 5)
+    : isPagePostCampaign
+      ? (isEditingSavedCampaign ? 3 : 4)
+      : (isEditingSavedCampaign ? 4 : 5)
   const selectedCampaignAction = campaignActions.find(action => action.id === formData.actionId)
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
@@ -730,6 +744,21 @@ export default function CampaignFormModal({
       return isTimelinePostCampaign
         ? simpleSteps.flatMap(step => step.id === 'content' ? [SOURCE_CONTENT_STEP, step] : [step])
         : simpleSteps
+    }
+    if (isPagePostCampaign) {
+      return ALL_STEPS
+        .filter(s => s.id !== 'extra')
+        .flatMap(step => {
+          if (step.id === 'content') return [PAGE_POST_METHOD_STEP, SOURCE_CONTENT_STEP, step]
+          if (step.id === 'details') {
+            return [{
+              ...step,
+              title: 'Danh sách fanpage',
+              fields: [{ key: 'details', label: 'Fanpage' }]
+            }]
+          }
+          return [step]
+        })
     }
     if (isCommentSeedingCampaign) {
       const steps = ALL_STEPS
@@ -1168,6 +1197,7 @@ export default function CampaignFormModal({
       case 'postKeywordFilter': return true
       case 'enablePostLike': return true
       case 'sharePost': return true  // optional, always "complete"
+      case 'pagePostMode': return true
       case 'enableComment': return true  // optional
       case 'enablePostBump': return true  // optional
       case 'skipPostIfGroupRequiresApproval': return true
@@ -1412,7 +1442,7 @@ export default function CampaignFormModal({
           timeSleepBetween2: formData.timeSleepBetween2,
           content: formData.content,
           extraSettings: {
-            sharePost: formData.sharePost,
+            sharePost: isPagePostCampaign ? false : formData.sharePost,
             rewriteContentEachRun: formData.rewriteContentEachRun,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
@@ -1464,9 +1494,10 @@ export default function CampaignFormModal({
             suggestedFriendsCount: effectiveSuggestedFriendsCount,
             copyContentFromSource: formData.copyContentFromSource,
             includeSourceImages: formData.includeSourceImages,
-            postAsReels: formData.postAsReels,
+            postAsReels: isPagePostCampaign ? false : formData.postAsReels,
             sourceLinks: formData.sourceLinks,
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
+            pagePostMode: isPagePostCampaign ? 'api' : formData.pagePostMode,
             isFindPhone: formData.isFindPhone,
             isFindLinkGroupZalo: formData.isFindLinkGroupZalo,
             isFindUid: formData.isFindUid,
@@ -1607,6 +1638,10 @@ export default function CampaignFormModal({
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
+    if (!isEditingSavedCampaign && isPagePostCampaign && details.length === 0) {
+      showAlert('Vui lòng chọn ít nhất một fanpage.', 'error')
+      return
+    }
     if (isMessageUidCampaign && !formData.enableMessage && !formData.enableAddFriend) {
       showAlert('Vui lòng chọn ít nhất một hành động nhắn tin hoặc kết bạn.', 'error')
       return
@@ -1638,11 +1673,13 @@ export default function CampaignFormModal({
       )
       return
     }
-    if (!isEditingSavedCampaign && (isGroupPostCampaign || isCommentSeedingCampaign || isMessageCampaign) && !hideDetailsSection && details.some(d => !String(d.uid || '').trim())) {
+    if (!isEditingSavedCampaign && (isGroupPostCampaign || isCommentSeedingCampaign || isMessageCampaign || isPagePostCampaign) && !hideDetailsSection && details.some(d => !String(d.uid || '').trim())) {
       showAlert(
         isCommentSeedingPostCampaign
           ? 'Vui lòng nhập link bài post cho tất cả dòng trong danh sách data.'
-          : 'Vui lòng nhập UID hoặc link cho tất cả dòng trong danh sách data.',
+          : isPagePostCampaign
+            ? 'Danh sách fanpage có page thiếu Page ID. Vui lòng chọn lại page từ data scan.'
+            : 'Vui lòng nhập UID hoặc link cho tất cả dòng trong danh sách data.',
         'error'
       )
       return
@@ -1995,7 +2032,7 @@ export default function CampaignFormModal({
 
   const [dataScanPicker, setDataScanPicker] = useState<{
     action: DataScanAction
-    mode: 'friends' | 'users' | 'groups'
+    mode: 'friends' | 'users' | 'groups' | 'pages'
     initialStatusFilter?: 'active' | 'inactive' | 'all'
     allowedActions?: DataScanAction[]
   } | null>(null)
@@ -2081,6 +2118,28 @@ export default function CampaignFormModal({
       return
     }
     showAlert(`Đã thêm ${addedCount} nhóm.`, 'success')
+  }
+
+  const onPagesSelected = (contacts: AutoAccountContact[]) => {
+    const pageContacts = contacts.filter(c => c.contactType === 'page')
+    const newRows: Partial<CampaignInputData>[] = pageContacts.map(c => ({
+      name: c.name,
+      uid: c.uid || '',
+      phone: '',
+      email: c.url || '',
+      note: '',
+      status: 'chờ xử lý'
+    }))
+    if (newRows.length === 0) {
+      showAlert('Không có page hợp lệ để thêm vào chiến dịch.', 'error')
+      return
+    }
+    const addedCount = appendUniqueDetails(newRows)
+    if (addedCount === 0) {
+      showAlert('Các page đã chọn đã có trong danh sách.', 'error')
+      return
+    }
+    showAlert(`Đã thêm ${addedCount} page.`, 'success')
   }
 
   const syncFindDataSourceCampaignLinks = async (targetCampaignIds: number[]) => {
@@ -2463,6 +2522,30 @@ export default function CampaignFormModal({
     </>
   )
 
+  const renderPagePostMethodSettings = () => (
+    <div>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.pagePostMode === 'api'}
+            onChange={() => setFormData(p => ({ ...p, pagePostMode: 'api' }))}
+          />
+          <span>Đăng bài bằng API</span>
+        </label>
+        <label className="schedule-checkbox-label" style={{ opacity: 0.5 }}>
+          <input
+            type="checkbox"
+            checked={formData.pagePostMode === 'ui'}
+            disabled
+            onChange={() => setFormData(p => ({ ...p, pagePostMode: 'ui' }))}
+          />
+          <span>Đăng bài trên giao diện</span>
+        </label>
+      </div>
+    </div>
+  )
+
   const renderTimelineSourceContentSettings = () => (
     <div>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -2484,25 +2567,27 @@ export default function CampaignFormModal({
           <span>Lấy kèm hình ảnh</span>
         </label>
       </div>
-      <div style={{ marginBottom: 12 }}>
-        <label className="schedule-checkbox-label">
-          <input
-            type="checkbox"
-            checked={formData.sharePost}
-            onChange={e => setFormData(p => ({ ...p, sharePost: e.target.checked }))}
-          />
-          <span>Đăng bài bằng cách chia sẻ</span>
-        </label>
-      </div>
+      {!isPagePostCampaign && (
+        <div style={{ marginBottom: 12 }}>
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={formData.sharePost}
+              onChange={e => setFormData(p => ({ ...p, sharePost: e.target.checked }))}
+            />
+            <span>Đăng bài bằng cách chia sẻ</span>
+          </label>
+        </div>
+      )}
 
       <div className="stepper-form-group">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
           <label style={{ margin: 0 }}>Danh sách uid/link (page, profile, group, post)</label>
-          <span style={{ color: 'var(--text-error)', fontSize: 12 }}>(Mỗi link/uid cách nhau bằng dấu phẩy)</span>
+          <span style={{ color: 'var(--text-error)', fontSize: 12 }}>(Mỗi link/uid cách nhau bằng dấu phẩy hoặc xuống dòng)</span>
         </div>
         <textarea
           className="stepper-textarea"
-          placeholder="Ví dụ: https://facebook.com/abc, https://facebook.com/xyz/posts/12345, 100012345"
+          placeholder={'Ví dụ:\nhttps://facebook.com/abc\nhttps://facebook.com/xyz/posts/12345, 100012345'}
           value={formData.sourceLinks}
           onChange={e => setFormData(p => ({ ...p, sourceLinks: e.target.value }))}
           rows={6}
@@ -2513,16 +2598,18 @@ export default function CampaignFormModal({
         </div>
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        <label className="schedule-checkbox-label">
-          <input
-            type="checkbox"
-            checked={formData.postAsReels}
-            onChange={e => setFormData(p => ({ ...p, postAsReels: e.target.checked }))}
-          />
-          <span>Đăng Reels <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Đăng video trên Reels)</em></span>
-        </label>
-      </div>
+      {!isPagePostCampaign && (
+        <div style={{ marginTop: 12 }}>
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={formData.postAsReels}
+              onChange={e => setFormData(p => ({ ...p, postAsReels: e.target.checked }))}
+            />
+            <span>Đăng Reels <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Đăng video trên Reels)</em></span>
+          </label>
+        </div>
+      )}
     </div>
   )
 
@@ -4341,6 +4428,30 @@ export default function CampaignFormModal({
               )}
             </div>
 
+            {isPagePostCampaign && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['pagePostMethod'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('pagePostMethod')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('pagePostMethod')}</span>
+                    <span className="stepper-section-title">Phương thức đăng</span>
+                  </div>
+                  {collapsedSections['pagePostMethod'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['pagePostMethod'] && (
+                  <div className="stepper-section-body">
+                    {renderPagePostMethodSettings()}
+                  </div>
+                )}
+              </div>
+            )}
+
             {isTimelinePostCampaign && (
               <div
                 className="stepper-section"
@@ -4598,13 +4709,15 @@ export default function CampaignFormModal({
                       ? 'Danh sách group'
                       : isCommentSeedingPostCampaign
                         ? 'Danh sách bài post'
-                        : isCommentSeedingCampaign
-                          ? 'Danh sách group/page/profile'
-                          : isMessageFriendCampaign
-                            ? 'Danh sách bạn bè'
-                            : isMessageUidCampaign
-                              ? 'Danh sách UID'
-                              : 'Danh sách data'}
+                        : isPagePostCampaign
+                          ? 'Danh sách fanpage'
+                          : isCommentSeedingCampaign
+                            ? 'Danh sách group/page/profile'
+                            : isMessageFriendCampaign
+                              ? 'Danh sách bạn bè'
+                              : isMessageUidCampaign
+                                ? 'Danh sách UID'
+                                : 'Danh sách data'}
                   </span>
                   {details.length > 0 && (
                     <span className="stepper-section-badge">{details.length}</span>
@@ -4634,9 +4747,11 @@ export default function CampaignFormModal({
                   )}
                   {!isEditingSavedCampaign && (
                     <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-secondary" onClick={addDetailRow}>
-                        <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
-                      </button>
+                      {!isPagePostCampaign && (
+                        <button className="btn btn-secondary" onClick={addDetailRow}>
+                          <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
+                        </button>
+                      )}
                       {canUploadData && (
                         <>
                           <button
@@ -4707,6 +4822,26 @@ export default function CampaignFormModal({
                           <Users size={14} /> Chọn nhóm
                         </button>
                       )}
+                      {canPickPages && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            if (formData.accountIds.length === 0) {
+                              showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                              return
+                            }
+                            setDataScanPicker({
+                              action: 'facebook_pages',
+                              mode: 'pages',
+                              initialStatusFilter: 'all',
+                              allowedActions: ['facebook_pages']
+                            })
+                          }}
+                          title="Chọn page từ danh sách data"
+                        >
+                          <Users size={14} /> Chọn page
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn btn-danger"
@@ -4747,6 +4882,13 @@ export default function CampaignFormModal({
                             <th>Link bài post</th>
                             {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                           </tr>
+                        ) : isPagePostCampaign ? (
+                          <tr>
+                            <th>Tên fanpage</th>
+                            <th>Page ID</th>
+                            <th>Link</th>
+                            {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
+                          </tr>
                         ) : (
                           <tr>
                             <th>Tên</th>
@@ -4775,6 +4917,18 @@ export default function CampaignFormModal({
                                     disabled={isEditingSavedCampaign}
                                   />
                                 </td>
+                              ) : isPagePostCampaign ? (
+                                <>
+                                  <td title={d.name || '-'}>
+                                    <span>{d.name || '-'}</span>
+                                  </td>
+                                  <td title={d.uid || '-'}>
+                                    <span>{d.uid || '-'}</span>
+                                  </td>
+                                  <td title={d.email || '-'}>
+                                    <span>{d.email || '-'}</span>
+                                  </td>
+                                </>
                               ) : (
                                 <>
                                   <td>
@@ -4829,7 +4983,9 @@ export default function CampaignFormModal({
               ? onFriendsSelected
               : dataScanPicker.mode === 'users'
                 ? onUsersSelected
-                : onGroupsSelected
+                : dataScanPicker.mode === 'pages'
+                  ? onPagesSelected
+                  : onGroupsSelected
           }
         />
       )}

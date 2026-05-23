@@ -145,6 +145,8 @@ export interface CampaignExtraSettings {
   postAsReels?: boolean                    // Đăng video dưới dạng Reels thay vì post thường
   sourceLinks?: string                     // Danh sách uid/link nguồn, phẩy ngăn cách (page, profile, group, post)
   sourceLinkIndex?: number                 // Con trỏ rotation qua danh sách sourceLinks (tăng mỗi lần chạy)
+  // Đăng bài fanpage
+  pagePostMode?: 'api' | 'ui'              // V1 chạy Graph API; UI mode để dành phase sau
   // Tìm kiếm data trong group
   isFindPhone?: boolean
   isFindLinkGroupZalo?: boolean
