@@ -314,14 +314,42 @@ export class PageController {
   async type(selector: string, text: string, opts: { clearFirst?: boolean } = {}): Promise<void> {
     const clearFirst = !!opts.clearFirst
     await this.waitForSelector(selector, { timeout: 15000 })
-    await this.exec(`
+    const targetKind = await this.exec<'textInput' | 'contentEditable'>(`
       var el = resolveSelector(${safeJS(selector)});
       if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
       el.scrollIntoView({ block: "center", inline: "center" });
       el.focus();
-      if (!el.isContentEditable && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') el.click();
+      var tag = String(el.tagName || '').toUpperCase();
+      if (tag === 'INPUT' || tag === 'TEXTAREA') {
+        if (${clearFirst}) {
+          if (typeof el.select === 'function') el.select();
+          else if (typeof el.setSelectionRange === 'function') el.setSelectionRange(0, String(el.value || '').length);
+        } else if (typeof el.setSelectionRange === 'function') {
+          var len = String(el.value || '').length;
+          el.setSelectionRange(len, len);
+        }
+        return 'textInput';
+      }
+      if (!el.isContentEditable) el.click();
+      return 'contentEditable';
     `)
     await new Promise(r => setTimeout(r, 500))
+    if (targetKind === 'textInput') {
+      if (text.length > 0) {
+        await this.wc.insertText(text)
+      } else if (clearFirst) {
+        await this.exec(`
+          var el = resolveSelector(${safeJS(selector)});
+          if (el) {
+            el.value = '';
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          return true;
+        `)
+      }
+      return
+    }
     await this.exec(`
       var el = resolveSelector(${safeJS(selector)});
       var target = null;

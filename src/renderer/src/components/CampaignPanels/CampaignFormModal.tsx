@@ -1497,7 +1497,7 @@ export default function CampaignFormModal({
             postAsReels: isPagePostCampaign ? false : formData.postAsReels,
             sourceLinks: formData.sourceLinks,
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
-            pagePostMode: isPagePostCampaign ? 'api' : formData.pagePostMode,
+            pagePostMode: formData.pagePostMode,
             isFindPhone: formData.isFindPhone,
             isFindLinkGroupZalo: formData.isFindLinkGroupZalo,
             isFindUid: formData.isFindUid,
@@ -2533,11 +2533,10 @@ export default function CampaignFormModal({
           />
           <span>Đăng bài bằng API</span>
         </label>
-        <label className="schedule-checkbox-label" style={{ opacity: 0.5 }}>
+        <label className="schedule-checkbox-label">
           <input
             type="checkbox"
             checked={formData.pagePostMode === 'ui'}
-            disabled
             onChange={() => setFormData(p => ({ ...p, pagePostMode: 'ui' }))}
           />
           <span>Đăng bài trên giao diện</span>
