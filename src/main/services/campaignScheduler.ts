@@ -1061,7 +1061,12 @@ export class CampaignScheduler {
     else if (errorStep?.blockName === 'fb_comment_at_position' || errorStep?.blockName === 'fb_comment_current_post') actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_click_like_current_post') actionCode = 'fb_like_post'
     else if (errorStep?.blockName === 'fb_click_post_button') actionCode = this.getPostActionCode(campaign) || undefined
-    else if (errorStep?.blockName === 'fb_page_post_api') actionCode = 'fb_post_page'
+    else if (
+      errorStep?.blockName === 'fb_page_post_api' ||
+      errorStep?.blockName === 'fb_post_current_identity_ui' ||
+      errorStep?.blockName === 'fb_switch_identity_by_name' ||
+      errorStep?.blockName === 'fb_get_current_identity_name'
+    ) actionCode = 'fb_post_page'
     else actionCode = this.getCampaignActionDescriptors(campaign)[0]?.code
 
     if (lowerMessage.includes('bạn đã đạt giới hạn về số tin nhắn đang chờ')) {
@@ -1442,19 +1447,32 @@ export class CampaignScheduler {
       return
     }
 
-    // Đăng bài fanpage bằng Graph API — block trả ok=false cho lỗi API Facebook để user thấy rõ.
+    // Đăng bài fanpage — API block trả ok=false cho lỗi Graph; UI workflow mới dùng các block nhỏ.
     const pagePostSteps = campaign.actionId === PAGE_POST_ACTION_ID
-      ? steps.filter(s => s.blockName === 'fb_page_post_api' && (s.status === 'success' || s.status === 'error'))
+      ? steps.filter(s => (
+          s.blockName === 'fb_page_post_api' ||
+          s.blockName === 'fb_post_current_identity_ui'
+        ) && (s.status === 'success' || s.status === 'error'))
       : []
+    const switchToPageStep = campaign.actionId === PAGE_POST_ACTION_ID
+      ? steps.find(s => s.nodeId === 'switch_to_page' && s.blockName === 'fb_switch_identity_by_name')
+      : undefined
+    const restoreStep = campaign.actionId === PAGE_POST_ACTION_ID
+      ? [...steps].reverse().find(s => s.nodeId === 'restore_original_identity' && s.blockName === 'fb_switch_identity_by_name')
+      : undefined
     for (const s of pagePostSteps) {
       try {
         const out = (s.output as any) || {}
         const graphError = (out.graphError && typeof out.graphError === 'object') ? out.graphError : {}
+        const mode = String(out.mode || (s.blockName === 'fb_page_post_api' ? 'api' : 'ui')).trim()
+        const isUiMode = mode === 'ui' || s.blockName === 'fb_post_current_identity_ui'
         const pageUid = String(out.pageUid || detail?.uid || '').trim()
         const pageName = String(out.pageName || inputDataName || pageUid || 'fanpage').trim()
         const postId = String(out.postId || '').trim()
         const postUrl = String(out.postUrl || '').trim()
         const imageCount = Number(out.imageCount || 0)
+        const restoreOut = (restoreStep?.output as any) || {}
+        const restoreOk = out.restoreOk === true || restoreOut.ok === true
         const failureMessage = String(
           out.error ||
           out.message ||
@@ -1464,7 +1482,7 @@ export class CampaignScheduler {
         ).trim()
         const status: 'thành công' | 'thất bại' | 'lỗi' =
           s.status === 'error' ? 'lỗi'
-          : out.ok === true ? 'thành công'
+          : (out.ok === true || out.posted === true) ? 'thành công'
           : 'thất bại'
 
         await this.supabase.createCampaignDetail({
@@ -1476,16 +1494,20 @@ export class CampaignScheduler {
           status,
           log: status === 'thành công'
             ? `Đăng bài fanpage thành công vào ${pageName}${postId ? ` (${postId})` : ''}`
-            : status === 'thất bại'
+            : status === 'thất bại' && !isUiMode
               ? `Facebook API từ chối đăng fanpage ${pageName}: ${failureMessage}`
+              : status === 'thất bại'
+                ? `Đăng fanpage trên giao diện thất bại ${pageName}: ${failureMessage}`
               : `Lỗi đăng fanpage ${pageName}: ${failureMessage}`,
           postUrl: postUrl || undefined,
           data: {
+            mode,
             pageUid,
             pageName,
             postId: postId || undefined,
             postUrl: postUrl || undefined,
             imageCount,
+            restoreOk,
             graphResponse: out.graphResponse,
             graphError: Object.keys(graphError).length > 0 ? graphError : undefined,
             error: status === 'thành công' ? undefined : failureMessage
@@ -1495,12 +1517,52 @@ export class CampaignScheduler {
         if (status === 'thành công') {
           await this.logCampaignProgress(campaign.id, `📝 Đăng bài fanpage thành công vào "${pageName}"`)
           if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)
-        } else if (status === 'thất bại') {
+        } else if (status === 'thất bại' && !isUiMode) {
           await this.logCampaignProgress(campaign.id, `❌ Facebook API từ chối đăng fanpage "${pageName}": ${failureMessage}`)
+        } else if (status === 'thất bại') {
+          await this.logCampaignProgress(campaign.id, `❌ Đăng fanpage trên giao diện thất bại "${pageName}": ${failureMessage}`)
         } else {
           await this.logCampaignProgress(campaign.id, `❌ Lỗi đăng fanpage "${pageName}": ${failureMessage}`)
         }
       } catch (err) { console.error('Failed log page post:', err) }
+    }
+
+    if (campaign.actionId === PAGE_POST_ACTION_ID && pagePostSteps.length === 0 && switchToPageStep) {
+      try {
+        const out = (switchToPageStep.output as any) || {}
+        if (switchToPageStep.status === 'error' || out.ok !== true) {
+          const pageUid = String(detail?.uid || '').trim()
+          const pageName = String(inputDataName || pageUid || 'fanpage').trim()
+          const restoreOut = (restoreStep?.output as any) || {}
+          const restoreOk = restoreOut.ok === true
+          const failureMessage = String(
+            out.message ||
+            out.error ||
+            switchToPageStep.error ||
+            'Không chuyển được sang fanpage'
+          ).trim()
+          const status: 'thành công' | 'thất bại' | 'lỗi' = switchToPageStep.status === 'error' ? 'lỗi' : 'thất bại'
+          await this.supabase.createCampaignDetail({
+            inputDataId: detail?.id,
+            campaignId: campaign.id,
+            accountId,
+            actionCode: 'fb_post_page',
+            actionName: 'Đăng bài fanpage',
+            status,
+            log: status === 'lỗi'
+              ? `Lỗi chuyển sang fanpage ${pageName}: ${failureMessage}`
+              : `Không chuyển được sang fanpage ${pageName}: ${failureMessage}`,
+            data: {
+              mode: 'ui',
+              pageUid,
+              pageName,
+              restoreOk,
+              error: failureMessage
+            }
+          })
+          await this.logCampaignProgress(campaign.id, `❌ Không chuyển được sang fanpage "${pageName}": ${failureMessage}`)
+        }
+      } catch (err) { console.error('Failed log page switch:', err) }
     }
 
     // Đăng bài group — xác nhận submit bằng việc form đóng, rồi lưu link bài vừa đăng nếu lấy được.
