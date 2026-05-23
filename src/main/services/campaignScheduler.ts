@@ -83,6 +83,7 @@ const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
+const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
@@ -426,22 +427,15 @@ export class CampaignScheduler {
       await this.logCampaignProgress(campaign.id, `🔀 Đã xáo trộn danh sách ${details.length} group`)
     }
 
-    // Resolve sourceLink rotation cho timeline_post
-    let currentSourceLink = ''
-    if (campaign.actionId === 'facebook_timeline_post') {
-      const links = (extra.sourceLinks || '').split(',').map(s => s.trim()).filter(Boolean)
-      if (links.length > 0) {
-        const idx = (extra.sourceLinkIndex || 0) % links.length
-        currentSourceLink = links[idx]
-        const nextIdx = (idx + 1) % links.length
-        try {
-          await this.updateCampaignAndBroadcast(campaign.id, {
-            extraSettings: { ...extra, sourceLinkIndex: nextIdx }
-          })
-        } catch {}
-        await this.logCampaignProgress(campaign.id, `🔗 Link nguồn #${idx + 1}/${links.length}: ${currentSourceLink}`)
-      }
-    }
+    const shouldRotateSourceLink =
+      (campaign.actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
+      (campaign.actionId === PAGE_POST_ACTION_ID && extra.copyContentFromSource === true)
+    const sourceLinks = shouldRotateSourceLink
+      ? (extra.sourceLinks || '').split(/[,\r\n]+/).map(s => s.trim()).filter(Boolean)
+      : []
+    let sourceLinkRotationIndex = sourceLinks.length > 0
+      ? (((Number(extra.sourceLinkIndex || 0) % sourceLinks.length) + sourceLinks.length) % sourceLinks.length)
+      : 0
 
     const runOnce = details.length === 0
     const targets = runOnce ? [null] : details
@@ -498,6 +492,20 @@ export class CampaignScheduler {
 
       const automationPage = this.getAutomationPage(account, campaign.id)
       const page = automationPage.page
+
+      let currentSourceLink = ''
+      if (sourceLinks.length > 0) {
+        const sourceIdx = sourceLinkRotationIndex % sourceLinks.length
+        currentSourceLink = sourceLinks[sourceIdx]
+        sourceLinkRotationIndex = (sourceIdx + 1) % sourceLinks.length
+        try {
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            extraSettings: { ...extra, sourceLinkIndex: sourceLinkRotationIndex }
+          })
+        } catch {}
+        const targetLabel = detail ? ` cho "${detail.name || detail.uid || 'N/A'}"` : ''
+        await this.logCampaignProgress(campaign.id, `🔗 Link nguồn #${sourceIdx + 1}/${sourceLinks.length}${targetLabel}: ${currentSourceLink}`)
+      }
 
       // Build variables
       const variables = this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval)
@@ -817,6 +825,9 @@ export class CampaignScheduler {
         if (extra.enableComment) actions.push({ code: 'fb_comment', name: 'Comment' })
         if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
         break
+      case PAGE_POST_ACTION_ID:
+        actions.push({ code: 'fb_post_page', name: 'Đăng bài fanpage' })
+        break
       case MESSAGE_FRIEND_ACTION_ID:
         actions.push({ code: 'fb_message_friend', name: 'Nhắn tin bạn bè' })
         break
@@ -886,6 +897,7 @@ export class CampaignScheduler {
     switch (actionCode) {
       case 'fb_post_group': return 'Đăng bài group'
       case 'fb_post_my_profile': return 'Đăng bài trang cá nhân'
+      case 'fb_post_page': return 'Đăng bài fanpage'
       case 'fb_comment': return 'Comment'
       case 'fb_message_stranger': return 'Nhắn tin người lạ'
       case 'fb_message_friend': return 'Nhắn tin bạn bè'
@@ -898,6 +910,7 @@ export class CampaignScheduler {
   private getPostActionCode(campaign: Campaign): string | null {
     if (campaign.actionId === 'facebook_group_post') return 'fb_post_group'
     if (campaign.actionId === 'facebook_timeline_post') return 'fb_post_my_profile'
+    if (campaign.actionId === PAGE_POST_ACTION_ID) return 'fb_post_page'
     return null
   }
 
@@ -1048,6 +1061,7 @@ export class CampaignScheduler {
     else if (errorStep?.blockName === 'fb_comment_at_position' || errorStep?.blockName === 'fb_comment_current_post') actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_click_like_current_post') actionCode = 'fb_like_post'
     else if (errorStep?.blockName === 'fb_click_post_button') actionCode = this.getPostActionCode(campaign) || undefined
+    else if (errorStep?.blockName === 'fb_page_post_api') actionCode = 'fb_post_page'
     else actionCode = this.getCampaignActionDescriptors(campaign)[0]?.code
 
     if (lowerMessage.includes('bạn đã đạt giới hạn về số tin nhắn đang chờ')) {
@@ -1207,6 +1221,11 @@ export class CampaignScheduler {
       sourceLink: currentSourceLink,
       targetUrl: detail?.uid || currentSourceLink,
       videoPath: validImages[0] || '',
+      // Page post extras
+      pagePostMode: extra.pagePostMode || 'api',
+      pageUid: detail?.uid || '',
+      pageName: detail?.name || '',
+      businessUrl: 'https://business.facebook.com/content_management',
       // Message extras
       enableMessage: campaign.actionId === MESSAGE_FRIEND_ACTION_ID ? true : (extra.enableMessage ?? false),
       enableAddFriend: campaign.actionId === MESSAGE_FRIEND_ACTION_ID ? false : (extra.enableAddFriend ?? false),
@@ -1421,6 +1440,67 @@ export class CampaignScheduler {
         await this.pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(campaign, newZaloGroupLinksForExternal)
       }
       return
+    }
+
+    // Đăng bài fanpage bằng Graph API — block trả ok=false cho lỗi API Facebook để user thấy rõ.
+    const pagePostSteps = campaign.actionId === PAGE_POST_ACTION_ID
+      ? steps.filter(s => s.blockName === 'fb_page_post_api' && (s.status === 'success' || s.status === 'error'))
+      : []
+    for (const s of pagePostSteps) {
+      try {
+        const out = (s.output as any) || {}
+        const graphError = (out.graphError && typeof out.graphError === 'object') ? out.graphError : {}
+        const pageUid = String(out.pageUid || detail?.uid || '').trim()
+        const pageName = String(out.pageName || inputDataName || pageUid || 'fanpage').trim()
+        const postId = String(out.postId || '').trim()
+        const postUrl = String(out.postUrl || '').trim()
+        const imageCount = Number(out.imageCount || 0)
+        const failureMessage = String(
+          out.error ||
+          out.message ||
+          graphError.message ||
+          s.error ||
+          'Lỗi không xác định'
+        ).trim()
+        const status: 'thành công' | 'thất bại' | 'lỗi' =
+          s.status === 'error' ? 'lỗi'
+          : out.ok === true ? 'thành công'
+          : 'thất bại'
+
+        await this.supabase.createCampaignDetail({
+          inputDataId: detail?.id,
+          campaignId: campaign.id,
+          accountId,
+          actionCode: 'fb_post_page',
+          actionName: 'Đăng bài fanpage',
+          status,
+          log: status === 'thành công'
+            ? `Đăng bài fanpage thành công vào ${pageName}${postId ? ` (${postId})` : ''}`
+            : status === 'thất bại'
+              ? `Facebook API từ chối đăng fanpage ${pageName}: ${failureMessage}`
+              : `Lỗi đăng fanpage ${pageName}: ${failureMessage}`,
+          postUrl: postUrl || undefined,
+          data: {
+            pageUid,
+            pageName,
+            postId: postId || undefined,
+            postUrl: postUrl || undefined,
+            imageCount,
+            graphResponse: out.graphResponse,
+            graphError: Object.keys(graphError).length > 0 ? graphError : undefined,
+            error: status === 'thành công' ? undefined : failureMessage
+          }
+        })
+
+        if (status === 'thành công') {
+          await this.logCampaignProgress(campaign.id, `📝 Đăng bài fanpage thành công vào "${pageName}"`)
+          if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)
+        } else if (status === 'thất bại') {
+          await this.logCampaignProgress(campaign.id, `❌ Facebook API từ chối đăng fanpage "${pageName}": ${failureMessage}`)
+        } else {
+          await this.logCampaignProgress(campaign.id, `❌ Lỗi đăng fanpage "${pageName}": ${failureMessage}`)
+        }
+      } catch (err) { console.error('Failed log page post:', err) }
     }
 
     // Đăng bài group — xác nhận submit bằng việc form đóng, rồi lưu link bài vừa đăng nếu lấy được.

@@ -82,11 +82,22 @@ export interface WaitForSelectorOpts {
   state?: 'visible' | 'hidden' | 'attached'
 }
 
+export type ApiCallBodyType = 'json' | 'form' | 'multipart'
+
+export interface ApiCallFilePart {
+  field: string
+  path: string
+  filename?: string
+  contentType?: string
+}
+
 export interface ApiCallOpts {
   url: string
   method?: string
   headers?: Record<string, string>
   body?: unknown
+  bodyType?: ApiCallBodyType
+  files?: ApiCallFilePart[]
   timeout?: number
 }
 
@@ -517,11 +528,27 @@ export class PageController {
 
   // =========== NETWORK ===========
   async apiCall(opts: ApiCallOpts): Promise<ApiCallResult> {
-    const method = opts.method ?? 'GET'
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(opts.headers ?? {}) }
+    const method = (opts.method ?? 'GET').toUpperCase()
+    const bodyType = opts.bodyType ?? 'json'
+    const headers: Record<string, string> = { ...(opts.headers ?? {}) }
     const fetchOptions: RequestInit = { method, headers }
-    if (['POST', 'PUT', 'PATCH'].includes(method) && opts.body !== undefined) {
-      fetchOptions.body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)
+    if (!['GET', 'HEAD'].includes(method)) {
+      if (bodyType === 'multipart') {
+        fetchOptions.body = await this.buildMultipartFormData(opts.body, opts.files ?? []) as any
+        this.removeHeader(headers, 'Content-Type')
+      } else if (opts.body !== undefined) {
+        if (bodyType === 'form') {
+          if (!this.hasHeader(headers, 'Content-Type')) {
+            headers['Content-Type'] = 'application/x-www-form-urlencoded'
+          }
+          fetchOptions.body = this.buildUrlEncodedBody(opts.body)
+        } else {
+          if (!this.hasHeader(headers, 'Content-Type')) {
+            headers['Content-Type'] = 'application/json'
+          }
+          fetchOptions.body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)
+        }
+      }
     }
     const timeout = opts.timeout ?? 30000
     const controller = new AbortController()
@@ -540,6 +567,83 @@ export class PageController {
     } catch (err: any) {
       clearTimeout(timer)
       throw new Error(`apiCall failed: ${err.message}`)
+    }
+  }
+
+  private hasHeader(headers: Record<string, string>, name: string): boolean {
+    const needle = name.toLowerCase()
+    return Object.keys(headers).some(key => key.toLowerCase() === needle)
+  }
+
+  private removeHeader(headers: Record<string, string>, name: string): void {
+    const needle = name.toLowerCase()
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === needle) delete headers[key]
+    }
+  }
+
+  private buildUrlEncodedBody(body: unknown): string {
+    if (typeof body === 'string') return body
+    if (body instanceof URLSearchParams) return body.toString()
+    const form = new URLSearchParams()
+    if (body && typeof body === 'object') {
+      for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+        this.appendFormValue(form, key, value)
+      }
+    }
+    return form.toString()
+  }
+
+  private async buildMultipartFormData(body: unknown, files: ApiCallFilePart[]): Promise<FormData> {
+    const form = new FormData()
+    if (typeof body === 'string') {
+      const params = new URLSearchParams(body)
+      params.forEach((value, key) => form.append(key, value))
+    } else if (body instanceof URLSearchParams) {
+      body.forEach((value, key) => form.append(key, value))
+    } else if (body && typeof body === 'object') {
+      for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+        this.appendFormValue(form, key, value)
+      }
+    }
+
+    const { readFileSync, existsSync } = await import('fs')
+    const { basename, extname } = await import('path')
+    for (const file of files) {
+      if (!file?.field || !file.path) continue
+      if (!existsSync(file.path)) throw new Error(`apiCall multipart: file not found: ${file.path}`)
+      const buffer = readFileSync(file.path)
+      const bytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+      const contentType = file.contentType || this.guessContentType(extname(file.path))
+      const blob = new Blob([bytes], { type: contentType })
+      form.append(file.field, blob, file.filename || basename(file.path))
+    }
+    return form
+  }
+
+  private appendFormValue(form: FormData | URLSearchParams, key: string, value: unknown): void {
+    if (value === undefined || value === null) return
+    if (Array.isArray(value)) {
+      for (const item of value) this.appendFormValue(form, key, item)
+      return
+    }
+    const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
+    form.append(key, text)
+  }
+
+  private guessContentType(ext: string): string {
+    switch (ext.toLowerCase().replace(/^\./, '')) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg'
+      case 'png':
+        return 'image/png'
+      case 'gif':
+        return 'image/gif'
+      case 'webp':
+        return 'image/webp'
+      default:
+        return 'application/octet-stream'
     }
   }
 
