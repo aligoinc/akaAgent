@@ -3545,6 +3545,35 @@ button.btn-icon:not(.btn):disabled {
   cursor: not-allowed;
 }
 
+.find-data-source-option {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.find-data-source-option input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.find-data-source-option-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.find-data-source-option-title {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.find-data-source-option-description {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .stepper-form-group > .schedule-checkbox-label:has(+ .stepper-input),
 .stepper-form-group > .schedule-checkbox-label:has(+ .stepper-textarea) {
   margin-bottom: 8px !important;

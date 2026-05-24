@@ -161,6 +161,8 @@ export interface CampaignExtraSettings {
   isFindNewInteractors?: boolean
   isFindInGroupMembers?: boolean
   countGroupMemberFindData?: number
+  findDataRerunEnabled?: boolean
+  findDataRerunAfterHours?: number
   isFindByKeywords?: boolean
   keywords?: string
   isFindByContentAI?: boolean
@@ -181,6 +183,7 @@ export interface Campaign {
   accountId: number
   status: string
   schedule?: string
+  originalSchedule?: string | null
   scheduleType?: 'daily' | 'weekly' | 'monthly'
   scheduleEndDate?: string | null
   dailyStopTime?: string | null     // HH:mm / HH:mm:ss, Asia/Ho_Chi_Minh; null = no daily cutoff

@@ -121,7 +121,7 @@ const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
     postLinks,
     groupMembers,
     groupUrl,
-    total: phones.length + linkGroupZalos.length + uids.length + postLinks.length
+    total: phones.length + linkGroupZalos.length + uids.length + postLinks.length + groupMembers.length
   }
 }
 
@@ -590,7 +590,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           <div className="find-data-result-chips">
             <span className="find-data-chip find-data-chip-phone">SĐT: {payload.phones.length}</span>
             <span className="find-data-chip find-data-chip-zalo">Link group Zalo: {payload.linkGroupZalos.length}</span>
-            <span className="find-data-chip find-data-chip-uid">UID: {payload.uids.length}</span>
+            <span className="find-data-chip find-data-chip-uid">UID: {payload.uids.length + payload.groupMembers.length}</span>
             <span className="find-data-chip find-data-chip-postLink">Link Post: {payload.postLinks.length}</span>
           </div>
         )}
