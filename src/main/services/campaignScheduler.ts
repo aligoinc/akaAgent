@@ -121,7 +121,8 @@ export class CampaignScheduler {
   private mainWindow: BrowserWindow
   private intervalId: ReturnType<typeof setInterval> | null = null
   private running = false
-  private processing = false
+  private dispatching = false
+  private activeAccountRuns = new Set<number>()
   private activeV2Aborts = new Map<number, AbortController>()
   private pauseRequests = new Set<number>()
   private backgroundPages = new BackgroundPageManager()
@@ -173,6 +174,11 @@ export class CampaignScheduler {
       clearInterval(this.intervalId)
       this.intervalId = null
     }
+    for (const abort of this.activeV2Aborts.values()) {
+      try {
+        abort.abort()
+      } catch {}
+    }
     this.stopAllBackgroundPreviews()
     this.backgroundPages.destroyAll()
     this.sendLog('⏹ Scheduler đã dừng.')
@@ -221,8 +227,8 @@ export class CampaignScheduler {
   }
 
   private async tick(): Promise<void> {
-    if (this.processing) return
-    this.processing = true
+    if (!this.running || this.dispatching) return
+    this.dispatching = true
 
     try {
       await this.supabase.enableDueAccountActions().catch(err => {
@@ -232,11 +238,14 @@ export class CampaignScheduler {
       // 1. Get eligible accounts
       const accounts = await this.supabase.getEligibleAccounts()
       if (accounts.length === 0) {
-        this.processing = false
         return
       }
 
       for (const account of accounts) {
+        if (this.activeAccountRuns.has(account.id)) {
+          continue
+        }
+
         if (account.status !== 'chờ xử lý' || account.loginStatus !== 'đã đăng nhập') {
           continue
         }
@@ -251,15 +260,34 @@ export class CampaignScheduler {
           continue
         }
 
-        for (const campaign of campaigns) {
-          await this.executeCampaign(account, campaign)
-        }
+        this.startAccountCampaignQueue(account, campaigns)
       }
     } catch (err) {
       console.error('Scheduler tick error:', err)
       this.sendLog(`❌ Lỗi scheduler: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
-      this.processing = false
+      this.dispatching = false
+    }
+  }
+
+  private startAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): void {
+    if (this.activeAccountRuns.has(account.id)) return
+    this.activeAccountRuns.add(account.id)
+
+    void this.runAccountCampaignQueue(account, campaigns)
+      .catch(err => {
+        console.error(`Scheduler account queue error for account ${account.id}:`, err)
+        this.sendLog(`❌ Lỗi hàng đợi tài khoản "${account.name}": ${err instanceof Error ? err.message : String(err)}`)
+      })
+      .finally(() => {
+        this.activeAccountRuns.delete(account.id)
+      })
+  }
+
+  private async runAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): Promise<void> {
+    for (const campaign of campaigns) {
+      if (!this.running) break
+      await this.executeCampaign(account, campaign)
     }
   }
 

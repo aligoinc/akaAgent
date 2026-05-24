@@ -90,6 +90,7 @@ Domain (sau migration_v4 drop engine v1):
 2. Lookup action.workflow_id → `executeCampaignV2`
 3. Mỗi input_data row lấy hidden/offscreen `PageController` từ `BackgroundPageManager`, run workflow, rồi log per-milestone vào `auto_campaign_details` qua `logMilestonesV2` (scan `result.steps` theo `block_name`: `fb_click_post_button` → "Đăng bài", `fb_comment_at_position`/`fb_comment_current_post` → "Comment", `fb_send_message` → "Nhắn tin", `fb_add_friend` → "Kết bạn"). Status mapping: `step.status==='error'` → `'lỗi'`; `output.ok===false` không exception → `'thất bại'`; còn lại → `'thành công'`.
 4. Sleep `extra.actionLimits.sleepBetweenActions` giây giữa input_data rows; nếu user yêu cầu tạm dừng khi campaign đang chạy, scheduler giữ status `'đang chạy'` + note `"Đang chờ tạm dừng"`, cho target hiện tại chạy xong rồi mới chuyển campaign sang `'tạm dừng'` tại điểm nghỉ/trước target kế tiếp (không abort workflow chỉ vì pause).
+Scheduler dispatch nhiều account song song bằng hàng đợi theo `account_id`; mỗi account chỉ có 1 queue chạy tại một thời điểm, nhưng các account khác nhau có thể chạy đồng thời. Không đưa lại global await loop khiến account sau phải đợi account trước hoàn tất.
 Scheduler tự start sau `AUTH_LOGIN` và stop nội bộ khi `AUTH_LOGOUT`; UI không có nút bật/tắt scheduler, muốn dừng thì pause campaign/account.
 Các cập nhật `auto_accounts.status` do scheduler thực hiện phải đi qua `updateAccountAndBroadcast()`/`releaseRunningAccount()` để UI tài khoản refresh realtime và không ghi đè trạng thái do user/policy đổi.
 
