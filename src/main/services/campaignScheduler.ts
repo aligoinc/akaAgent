@@ -74,6 +74,21 @@ interface FindDataUniqueCounts {
   linkGroupZalos: number
   uids: number
   postLinks: number
+  groupMembers: number
+}
+
+interface FindDataGroupMember {
+  uid: string
+  name: string
+  url: string
+}
+
+interface FindDataPreviousValues {
+  phones: Set<string>
+  linkGroupZalos: Set<string>
+  uids: Set<string>
+  postLinks: Set<string>
+  detailCount: number
 }
 
 type FindDataTargetCampaignField = 'findUidTargetCampaignIds' | 'findPostLinkTargetCampaignIds'
@@ -264,8 +279,58 @@ export class CampaignScheduler {
       }
     }
 
+    if (await this.handleFindDataRerunAfterCompletion(campaign, now)) {
+      return
+    }
+
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
     await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+  }
+
+  private async handleFindDataRerunAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+    if (campaign.actionId !== FIND_DATA_GROUP_ACTION_ID || campaign.extraSettings?.findDataRerunEnabled !== true) {
+      return false
+    }
+
+    const hours = this.normalizeFindDataRerunAfterHours(campaign.extraSettings.findDataRerunAfterHours)
+    if (hours <= 0) return false
+
+    const nextSchedule = new Date(now.getTime() + hours * 60 * 60 * 1000)
+
+    if (!this.isSameVietnamDay(nextSchedule, now)) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+      return true
+    }
+
+    if (this.isAfterDailyStopTime(nextSchedule, campaign.dailyStopTime)) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.logCampaignProgress(
+        campaign.id,
+        `✅ Hoàn thành chiến dịch "${campaign.name}" (lượt chạy lại sau ${hours} giờ vượt quá giờ dừng trong ngày)`
+      )
+      return true
+    }
+
+    const details = await this.supabase.listCampaignInputData(campaign.id)
+    const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length
+    if (resettableCount === 0) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại)`)
+      return true
+    }
+
+    await this.supabase.resetCampaignInputDataForRerun(campaign.id)
+    await this.updateCampaignAndBroadcast(campaign.id, {
+      status: 'chờ xử lý',
+      schedule: nextSchedule.toISOString(),
+      note: null
+    })
+    await this.logCampaignProgress(
+      campaign.id,
+      `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch "${campaign.name}" lúc ${this.formatVietnamDateTime(nextSchedule)}`
+    )
+    return true
   }
 
   private getFutureInputSchedule(detail: CampaignInputData, now: Date): Date | null {
@@ -285,6 +350,75 @@ export class CampaignScheduler {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  private normalizeFindDataRerunAfterHours(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 0
+  }
+
+  private getVietnamDateTimeParts(date: Date): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+      })
+        .formatToParts(date)
+        .filter(part => part.type !== 'literal')
+        .map(part => [part.type, part.value])
+    ) as Record<string, string>
+
+    return {
+      year: Number(parts.year),
+      month: Number(parts.month),
+      day: Number(parts.day),
+      hour: Number(parts.hour),
+      minute: Number(parts.minute),
+      second: Number(parts.second)
+    }
+  }
+
+  private isSameVietnamDay(left: Date, right: Date): boolean {
+    const leftParts = this.getVietnamDateTimeParts(left)
+    const rightParts = this.getVietnamDateTimeParts(right)
+    return (
+      leftParts.year === rightParts.year &&
+      leftParts.month === rightParts.month &&
+      leftParts.day === rightParts.day
+    )
+  }
+
+  private isAfterDailyStopTime(date: Date, dailyStopTime?: string | null): boolean {
+    const match = String(dailyStopTime || '').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+    if (!match) return false
+
+    const stopHour = Number(match[1])
+    const stopMinute = Number(match[2])
+    const stopSecond = Number(match[3] || 0)
+    if (
+      !Number.isInteger(stopHour) ||
+      !Number.isInteger(stopMinute) ||
+      !Number.isInteger(stopSecond) ||
+      stopHour < 0 ||
+      stopHour > 23 ||
+      stopMinute < 0 ||
+      stopMinute > 59 ||
+      stopSecond < 0 ||
+      stopSecond > 59
+    ) {
+      return false
+    }
+
+    const parts = this.getVietnamDateTimeParts(date)
+    if (parts.hour !== stopHour) return parts.hour > stopHour
+    if (parts.minute !== stopMinute) return parts.minute > stopMinute
+    return parts.second > stopSecond
   }
 
   private async deferCampaignUntilFutureInput(campaign: Campaign, scheduledAt: Date): Promise<void> {
@@ -1303,19 +1437,63 @@ export class CampaignScheduler {
         total?: number
         error?: string
       }
-      const phones = Array.isArray(out.phones) ? out.phones.map(String) : []
-      const linkGroupZalos = Array.isArray(out.linkGroupZalos) ? out.linkGroupZalos.map(String) : []
-      const uids = Array.isArray(out.uids) ? out.uids.map(String) : []
-      const postLinks = Array.isArray(out.postLinks)
+      const rawPhones = Array.isArray(out.phones) ? out.phones.map(String) : []
+      const rawLinkGroupZalos = Array.isArray(out.linkGroupZalos) ? out.linkGroupZalos.map(String) : []
+      const rawUids = Array.isArray(out.uids) ? out.uids.map(String) : []
+      const rawPostLinks = Array.isArray(out.postLinks)
         ? out.postLinks.map(link => this.cleanPostLinkForStorage(String(link))).filter(Boolean)
         : []
-      const groupMembers = this.normalizeFoundGroupMembers(out.groupMembers)
+      const rawGroupMembers = this.normalizeFoundGroupMembers(out.groupMembers)
+      const sourceCounts = this.normalizeFindDataSourceCounts(out.sourceCounts)
+      const targetName = inputDataName || out.groupUrl || 'group'
+      const isSuccess = summaryStep?.status === 'success'
+      const previousInputValues = isSuccess
+        ? await this.getPreviouslyFoundValuesForInputData(campaign.id, detail?.id)
+        : this.createEmptyFindDataPreviousValues()
+      const isFollowUpInputRun = previousInputValues.detailCount > 0
+      const scanGroupMembers = this.filterNewGroupMembers(rawGroupMembers, new Set<string>())
+      const scanGroupMemberUidKeys = this.getGroupMemberUidKeys(scanGroupMembers)
+      const scanUids = this.filterNewUidValues(rawUids, new Set<string>())
+        .filter(uid => !scanGroupMemberUidKeys.has(this.normalizeUidForCompare(uid)))
+      const scanPhones = this.filterNewExternalValues(rawPhones, new Set<string>())
+      const scanLinkGroupZalos = this.filterNewExternalValues(rawLinkGroupZalos, new Set<string>())
+      const scanPostLinks = this.filterNewPostLinkValues(rawPostLinks, new Set<string>())
+      const groupMembers = this.filterNewGroupMembers(rawGroupMembers, previousInputValues.uids)
+      const groupMemberUidKeys = this.getGroupMemberUidKeys(groupMembers)
+      const uids = this.filterNewUidValues(rawUids, previousInputValues.uids)
+        .filter(uid => !groupMemberUidKeys.has(this.normalizeUidForCompare(uid)))
+      const phones = this.filterNewExternalValues(rawPhones, previousInputValues.phones)
+      const linkGroupZalos = this.filterNewExternalValues(rawLinkGroupZalos, previousInputValues.linkGroupZalos)
+      const postLinks = this.filterNewPostLinkValues(rawPostLinks, previousInputValues.postLinks)
       const groupMemberNameByUid = new Map<string, string>()
       for (const member of groupMembers) {
         const key = this.normalizeUidForCompare(member.uid)
         if (key && member.name && !groupMemberNameByUid.has(key)) groupMemberNameByUid.set(key, member.name)
       }
-      const sourceCounts = this.normalizeFindDataSourceCounts(out.sourceCounts)
+      const rawCounts = {
+        phones: scanPhones.length,
+        linkGroupZalos: scanLinkGroupZalos.length,
+        uids: scanUids.length,
+        postLinks: scanPostLinks.length,
+        groupMembers: scanGroupMembers.length,
+        total: scanPhones.length + scanLinkGroupZalos.length + scanUids.length + scanPostLinks.length + scanGroupMembers.length
+      }
+      const filteredCounts = {
+        phones: phones.length,
+        linkGroupZalos: linkGroupZalos.length,
+        uids: uids.length,
+        postLinks: postLinks.length,
+        groupMembers: groupMembers.length,
+        total: phones.length + linkGroupZalos.length + uids.length + postLinks.length + groupMembers.length
+      }
+      const duplicateCounts = {
+        phones: Math.max(0, rawCounts.phones - filteredCounts.phones),
+        linkGroupZalos: Math.max(0, rawCounts.linkGroupZalos - filteredCounts.linkGroupZalos),
+        uids: Math.max(0, rawCounts.uids - filteredCounts.uids),
+        postLinks: Math.max(0, rawCounts.postLinks - filteredCounts.postLinks),
+        groupMembers: Math.max(0, rawCounts.groupMembers - filteredCounts.groupMembers),
+        total: Math.max(0, rawCounts.total - filteredCounts.total)
+      }
       const findUidTargetCampaignIds = Array.isArray(campaign.extraSettings?.findUidTargetCampaignIds)
         ? campaign.extraSettings.findUidTargetCampaignIds
         : []
@@ -1337,35 +1515,23 @@ export class CampaignScheduler {
       const findZaloGroupLinkAkaBizDesktopTargetCampaignIds = Array.isArray(campaign.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds)
         ? campaign.extraSettings.findZaloGroupLinkAkaBizDesktopTargetCampaignIds
         : []
-      const total = Number(out.total ?? (phones.length + linkGroupZalos.length + uids.length + postLinks.length))
-      const targetName = inputDataName || out.groupUrl || 'group'
-      const isSuccess = summaryStep?.status === 'success'
       const successLog = this.formatFindDataLogMessage(
         targetName,
         {
           phones: phones.length,
           linkGroupZalos: linkGroupZalos.length,
           uids: uids.length,
-          postLinks: postLinks.length
+          postLinks: postLinks.length,
+          groupMembers: groupMembers.length
         },
         sourceCounts,
-        campaign.extraSettings || {}
+        campaign.extraSettings || {},
+        { isFollowUpInputRun }
       )
       const errMsg = out.error || summaryStep?.error || errorStep?.error || 'Lỗi không xác định'
-      let previousFoundValues: {
-        phones: Set<string>
-        linkGroupZalos: Set<string>
-        uids: Set<string>
-        postLinks: Set<string>
-      } = {
-        phones: new Set(),
-        linkGroupZalos: new Set(),
-        uids: new Set(),
-        postLinks: new Set()
-      }
-      if (isSuccess) {
-        previousFoundValues = await this.getPreviouslyFoundValues(campaign.id)
-      }
+      const previousCampaignValues = isSuccess
+        ? await this.getPreviouslyFoundValues(campaign.id)
+        : this.createEmptyFindDataPreviousValues()
 
       try {
         await this.supabase.createCampaignDetail({
@@ -1384,7 +1550,10 @@ export class CampaignScheduler {
             uids,
             postLinks,
             groupMembers,
-            counts: { phones: phones.length, linkGroupZalos: linkGroupZalos.length, uids: uids.length, postLinks: postLinks.length, groupMembers: groupMembers.length, total },
+            counts: filteredCounts,
+            rawCounts,
+            duplicateCounts,
+            isFollowUpInputRun,
             sourceCounts,
             findUidTargetCampaignIds,
             findPostLinkTargetCampaignIds,
@@ -1401,13 +1570,17 @@ export class CampaignScheduler {
       } catch (err) { console.error('Failed log find data:', err) }
 
       if (isSuccess) {
-        const newUidsForInternal = this.filterNewUidValues(uids, previousFoundValues.uids)
-        const newPostLinksForInternal = this.filterNewPostLinkValues(postLinks, previousFoundValues.postLinks)
-        const newPhonesForExternal = this.filterNewExternalValues(phones, previousFoundValues.phones)
-        const newZaloGroupLinksForExternal = this.filterNewExternalValues(linkGroupZalos, previousFoundValues.linkGroupZalos)
+        const foundUidsForPush = [
+          ...groupMembers.map(member => member.uid),
+          ...uids
+        ]
+        const newUidsForInternal = this.filterNewUidValues(foundUidsForPush, previousCampaignValues.uids)
+        const newPostLinksForInternal = this.filterNewPostLinkValues(postLinks, previousCampaignValues.postLinks)
+        const newPhonesForExternal = this.filterNewExternalValues(phones, previousCampaignValues.phones)
+        const newZaloGroupLinksForExternal = this.filterNewExternalValues(linkGroupZalos, previousCampaignValues.linkGroupZalos)
         await this.logFindDataDuplicatePushSummary(campaign, {
           label: 'UID',
-          foundCount: uids.length,
+          foundCount: foundUidsForPush.length,
           pushedCount: newUidsForInternal.length,
           hasTarget: this.getFindDataConfiguredTargetCampaignIds(findUidTargetCampaignIds, campaign.id).length > 0
         })
@@ -1949,9 +2122,9 @@ export class CampaignScheduler {
     return Array.from(map.values())
   }
 
-  private normalizeFoundGroupMembers(rawMembers: unknown): { uid: string; name: string; url: string }[] {
+  private normalizeFoundGroupMembers(rawMembers: unknown): FindDataGroupMember[] {
     if (!Array.isArray(rawMembers)) return []
-    const result: { uid: string; name: string; url: string }[] = []
+    const result: FindDataGroupMember[] = []
     const seen = new Set<string>()
     for (const rawMember of rawMembers) {
       if (!rawMember || typeof rawMember !== 'object') continue
@@ -2016,8 +2189,30 @@ export class CampaignScheduler {
     targetName: string,
     counts: FindDataUniqueCounts,
     sourceCounts: FindDataSourceCounts,
-    extra: Campaign['extraSettings']
+    extra: Campaign['extraSettings'],
+    options: { isFollowUpInputRun?: boolean } = {}
   ): string {
+    const isFollowUpInputRun = options.isFollowUpInputRun === true
+    const uidCount = counts.uids + counts.groupMembers
+    const uniqueParts: string[] = []
+    if (extra?.isFindUid) uniqueParts.push(`${uidCount} UID${isFollowUpInputRun ? ' mới' : ''}`)
+    if (extra?.isFindPostLink) uniqueParts.push(`${counts.postLinks} link bài post${isFollowUpInputRun ? ' mới' : ''}`)
+    if (extra?.isFindPhone) uniqueParts.push(`${counts.phones} số điện thoại${isFollowUpInputRun ? ' mới' : ''}`)
+    if (extra?.isFindLinkGroupZalo) uniqueParts.push(`${counts.linkGroupZalos} link group Zalo${isFollowUpInputRun ? ' mới' : ''}`)
+
+    if (isFollowUpInputRun) {
+      const summary = uniqueParts.join(' - ')
+      return [
+        'Tìm data mới trong group:',
+        targetName,
+        '',
+        summary
+          ? 'Sau khi lọc trùng với các lần chạy trước:'
+          : 'Không có data mới sau khi lọc trùng với các lần chạy trước.',
+        ...(summary ? [summary] : [])
+      ].join('\n')
+    }
+
     const sourceLines: string[] = []
     const uidParts: string[] = []
     if (extra?.isFindUid && extra?.isFindInPost) uidParts.push(`${sourceCounts.post.uids} UID từ bài post`)
@@ -2037,12 +2232,6 @@ export class CampaignScheduler {
     if (extra?.isFindLinkGroupZalo && extra?.isFindInPost) zaloParts.push(`${sourceCounts.post.linkGroupZalos} link group Zalo trong bài post`)
     if (extra?.isFindLinkGroupZalo && extra?.isFindInComment) zaloParts.push(`${sourceCounts.comment.linkGroupZalos} link group Zalo trong comment`)
     if (zaloParts.length > 0) sourceLines.push(zaloParts.join(' - '))
-
-    const uniqueParts: string[] = []
-    if (extra?.isFindUid) uniqueParts.push(`${counts.uids} UID`)
-    if (extra?.isFindPostLink) uniqueParts.push(`${counts.postLinks} link bài post`)
-    if (extra?.isFindPhone) uniqueParts.push(`${counts.phones} số điện thoại`)
-    if (extra?.isFindLinkGroupZalo) uniqueParts.push(`${counts.linkGroupZalos} link group Zalo`)
 
     return [
       'Tìm data trong group:',
@@ -2098,39 +2287,92 @@ export class CampaignScheduler {
     return result
   }
 
-  private async getPreviouslyFoundValues(campaignId: number): Promise<{
-    phones: Set<string>
-    linkGroupZalos: Set<string>
-    uids: Set<string>
-    postLinks: Set<string>
-  }> {
-    const phones = new Set<string>()
-    const linkGroupZalos = new Set<string>()
-    const uids = new Set<string>()
-    const postLinks = new Set<string>()
+  private filterNewGroupMembers(rawMembers: FindDataGroupMember[], existingUidValues: Set<string>): FindDataGroupMember[] {
+    const result: FindDataGroupMember[] = []
+    const seen = new Set<string>()
+    for (const member of rawMembers) {
+      const key = this.normalizeUidForCompare(member.uid)
+      if (!member.uid || !key || existingUidValues.has(key) || seen.has(key)) continue
+      seen.add(key)
+      result.push(member)
+    }
+    return result
+  }
 
+  private getGroupMemberUidKeys(members: FindDataGroupMember[]): Set<string> {
+    return new Set(
+      members
+        .map(member => this.normalizeUidForCompare(member.uid))
+        .filter(Boolean)
+    )
+  }
+
+  private createEmptyFindDataPreviousValues(): FindDataPreviousValues {
+    return {
+      phones: new Set(),
+      linkGroupZalos: new Set(),
+      uids: new Set(),
+      postLinks: new Set(),
+      detailCount: 0
+    }
+  }
+
+  private addFindDataDetailValues(detail: { data?: Record<string, unknown> }, target: FindDataPreviousValues): void {
+    const data = detail.data || {}
+    const addValues = (values: unknown, destination: Set<string>, normalize: (value: unknown) => string) => {
+      if (!Array.isArray(values)) return
+      for (const value of values) {
+        const key = normalize(value)
+        if (key) destination.add(key)
+      }
+    }
+    addValues(data.phones, target.phones, value => this.normalizeExternalValueForCompare(value))
+    addValues(data.linkGroupZalos, target.linkGroupZalos, value => this.normalizeExternalValueForCompare(value))
+    addValues(data.uids, target.uids, value => this.normalizeUidForCompare(String(value || '').trim()))
+    addValues(data.postLinks, target.postLinks, value => this.normalizePostLinkForCompare(this.cleanPostLinkForStorage(String(value || ''))))
+
+    if (Array.isArray(data.groupMembers)) {
+      for (const member of data.groupMembers) {
+        if (!member || typeof member !== 'object') continue
+        const uid = String((member as { uid?: unknown }).uid || '').trim()
+        const key = this.normalizeUidForCompare(uid)
+        if (key) target.uids.add(key)
+      }
+    }
+  }
+
+  private async getPreviouslyFoundValues(campaignId: number): Promise<FindDataPreviousValues> {
+    const values = this.createEmptyFindDataPreviousValues()
     try {
       const details = await this.supabase.listCampaignDetailsByCampaign(campaignId)
       for (const detail of details) {
         if (detail.actionName !== 'Tìm data' || detail.status !== 'thành công') continue
-        const data = detail.data || {}
-        const addValues = (values: unknown, target: Set<string>, normalize: (value: unknown) => string) => {
-          if (!Array.isArray(values)) return
-          for (const value of values) {
-            const key = normalize(value)
-            if (key) target.add(key)
-          }
-        }
-        addValues(data.phones, phones, value => this.normalizeExternalValueForCompare(value))
-        addValues(data.linkGroupZalos, linkGroupZalos, value => this.normalizeExternalValueForCompare(value))
-        addValues(data.uids, uids, value => this.normalizeUidForCompare(String(value || '').trim()))
-        addValues(data.postLinks, postLinks, value => this.normalizePostLinkForCompare(this.cleanPostLinkForStorage(String(value || ''))))
+        values.detailCount += 1
+        this.addFindDataDetailValues(detail, values)
       }
     } catch (err) {
       console.error('Failed to load previous find-data values:', err)
     }
 
-    return { phones, linkGroupZalos, uids, postLinks }
+    return values
+  }
+
+  private async getPreviouslyFoundValuesForInputData(campaignId: number, inputDataId?: number | null): Promise<FindDataPreviousValues> {
+    const values = this.createEmptyFindDataPreviousValues()
+    if (!inputDataId) return values
+
+    try {
+      const details = await this.supabase.listCampaignDetailsByInputData(inputDataId)
+      for (const detail of details) {
+        if (detail.campaignId !== campaignId || detail.actionName !== 'Tìm data' || detail.status !== 'thành công') continue
+        values.detailCount += 1
+        this.addFindDataDetailValues(detail, values)
+      }
+    } catch (err) {
+      console.error('Failed to load previous find-data values by input data:', err)
+    }
+
+    return values
   }
 
   private splitSmsContent(contentMessage: string | null | undefined): string[] {

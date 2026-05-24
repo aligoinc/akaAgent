@@ -212,6 +212,7 @@ const COMMENT_SORT_OPTIONS = [
 ] as const
 
 const DEFAULT_DAILY_STOP_TIME = '18:00'
+const DEFAULT_FIND_DATA_RERUN_AFTER_HOURS = 1
 const DEFAULT_POST_BUMP_COUNT = 3
 const DEFAULT_POST_BUMP_INITIAL_DELAY_MINUTES = 30
 const DEFAULT_POST_BUMP_INTERVAL_MINUTES = 10
@@ -229,6 +230,18 @@ const formatDateTimeLocal = (date: Date): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+const formatDateTimeLocalValue = (value?: string | null): string | null => {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : formatDateTimeLocal(date)
+}
+
+const toIsoDateTimeValue = (value?: string | null): string | undefined => {
+  if (!value) return undefined
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+}
+
 const normalizeTimeInput = (value?: string | null): string => {
   const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})/)
   if (!match) return ''
@@ -242,6 +255,12 @@ const clampPostBumpCount = (value: unknown): number => {
 }
 
 const normalizeMinuteValue = (value: unknown, fallback: number, min = 0): number => {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(min, parsed)
+}
+
+const normalizeHourValue = (value: unknown, fallback = DEFAULT_FIND_DATA_RERUN_AFTER_HOURS, min = 1): number => {
   const parsed = Math.floor(Number(value))
   if (!Number.isFinite(parsed)) return fallback
   return Math.max(min, parsed)
@@ -484,9 +503,9 @@ export default function CampaignFormModal({
   const txtFileInputRef = useRef<HTMLInputElement>(null)
 
   const initSchedule = () => {
-    if (cloneFromId) return formatDateTimeLocal(new Date())
-    if (campaign?.schedule) {
-      return formatDateTimeLocal(new Date(campaign.schedule))
+    const savedSchedule = formatDateTimeLocalValue(campaign?.schedule)
+    if (savedSchedule) {
+      return savedSchedule
     }
     return formatDateTimeLocal(new Date())
   }
@@ -606,6 +625,8 @@ export default function CampaignFormModal({
     isFindNewInteractors: campaign?.extraSettings?.isFindNewInteractors ?? false,
     isFindInGroupMembers: campaign?.extraSettings?.isFindInGroupMembers ?? false,
     countGroupMemberFindData: campaign?.extraSettings?.countGroupMemberFindData ?? 100,
+    findDataRerunEnabled: campaign?.extraSettings?.findDataRerunEnabled ?? false,
+    findDataRerunAfterHours: normalizeHourValue(campaign?.extraSettings?.findDataRerunAfterHours),
     isFindByKeywords: campaign?.extraSettings?.isFindByKeywords ?? false,
     keywords: campaign?.extraSettings?.keywords || '',
     isFindByContentAI: campaign?.extraSettings?.isFindByContentAI ?? false,
@@ -809,7 +830,14 @@ export default function CampaignFormModal({
     }
     if (isFindDataGroupCampaign) {
       const generalStep = ALL_STEPS.find(s => s.id === 'general')!
-      const scheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
+      const baseScheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
+      const scheduleStep: StepDef = {
+        ...baseScheduleStep,
+        fields: [
+          ...baseScheduleStep.fields,
+          { key: 'findDataRerun', label: 'Chạy lại sau mỗi' }
+        ]
+      }
       const limitStep = ALL_STEPS.find(s => s.id === 'limits')!
       const contentStep: StepDef = {
         ...ALL_STEPS.find(s => s.id === 'content')!,
@@ -1187,6 +1215,7 @@ export default function CampaignFormModal({
       case 'scheduleType': return !!formData.scheduleType
       case 'scheduleEndDate': return !!formData.scheduleEndDate
       case 'dailyStopTime': return true
+      case 'findDataRerun': return !formData.findDataRerunEnabled || formData.findDataRerunAfterHours >= 1
       case 'timeSleepBetween2': return formData.timeSleepBetween2 >= 0
       case 'dailyLimit': return formData.dailyLimit >= 0
       case 'rateLimitCount': return formData.rateLimitCount >= 0
@@ -1422,6 +1451,7 @@ export default function CampaignFormModal({
           ? (campaign?.extraSettings?.suggestedFriendsCount ?? formData.suggestedFriendsCount)
           : formData.suggestedFriendsCount)
         : 10
+      const formSchedule = toIsoDateTimeValue(formData.schedule)
 
       return {
         campaignPayload: {
@@ -1429,7 +1459,8 @@ export default function CampaignFormModal({
           actionId: formData.actionId,
           accountId,
           ...(cloneFromId ? { status: 'tạm dừng' } : {}),
-          schedule: formData.schedule ? new Date(formData.schedule).toISOString() : undefined,
+          schedule: formSchedule,
+          originalSchedule: formSchedule,
           scheduleType: formData.scheduleType,
           scheduleEndDate: formData.scheduleType === 'daily'
             ? null
@@ -1511,6 +1542,10 @@ export default function CampaignFormModal({
             isFindNewInteractors: formData.isFindNewInteractors,
             isFindInGroupMembers: formData.isFindInGroupMembers,
             countGroupMemberFindData: formData.countGroupMemberFindData,
+            findDataRerunEnabled: isFindDataGroupCampaign ? formData.findDataRerunEnabled : false,
+            findDataRerunAfterHours: isFindDataGroupCampaign
+              ? normalizeHourValue(formData.findDataRerunAfterHours)
+              : DEFAULT_FIND_DATA_RERUN_AFTER_HOURS,
             isFindByKeywords: usesFindDataContentConditions ? formData.isFindByKeywords : false,
             keywords: usesFindDataContentConditions ? formData.keywords : '',
             isFindByContentAI: usesFindDataContentConditions ? formData.isFindByContentAI : false,
@@ -1556,15 +1591,20 @@ export default function CampaignFormModal({
     }
     if (isFindDataGroupCampaign) {
       if (!formData.isFindInPost && !formData.isFindInComment && !formData.isFindNewInteractors && !formData.isFindInGroupMembers) {
-        showAlert('Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment, Những người tương tác mới hoặc Thành viên group.', 'error')
+        showAlert('Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment, Những người tương tác mới hoặc Thành viên group mới.', 'error')
         return
       }
       if (formData.isFindInGroupMembers && !formData.isFindUid) {
-        showAlert('Thành viên group chỉ hỗ trợ tìm Uid user facebook. Vui lòng bật Uid user facebook hoặc bỏ chọn Thành viên group.', 'error')
+        showAlert('Thành viên group mới chỉ hỗ trợ tìm Uid user facebook. Vui lòng bật Uid user facebook hoặc bỏ chọn Thành viên group mới.', 'error')
         return
       }
       if (formData.isFindNewInteractors && !formData.isFindUid) {
         showAlert('Những người tương tác mới chỉ hỗ trợ tìm Uid user facebook. Vui lòng bật Uid user facebook hoặc bỏ chọn Những người tương tác mới.', 'error')
+        return
+      }
+      const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
+      if (formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
+        showAlert('Vui lòng nhập số giờ chạy lại lớn hơn hoặc bằng 1.', 'error')
         return
       }
       if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink) {
@@ -2633,7 +2673,7 @@ export default function CampaignFormModal({
             />
             <span>Comment</span>
           </label>
-          <label className="schedule-checkbox-label">
+          <label className="schedule-checkbox-label find-data-source-option">
             <input
               type="checkbox"
               checked={formData.isFindNewInteractors}
@@ -2646,9 +2686,12 @@ export default function CampaignFormModal({
                 }))
               }}
             />
-            <span>Những người tương tác mới</span>
+            <span className="find-data-source-option-text">
+              <span className="find-data-source-option-title">Những người tương tác mới</span>
+              <span className="find-data-source-option-description">Là những người đăng bài hoặc comment trong 1 phiên chạy mới hoặc trong 1 ngày</span>
+            </span>
           </label>
-          <label className="schedule-checkbox-label">
+          <label className="schedule-checkbox-label find-data-source-option">
             <input
               type="checkbox"
               checked={formData.isFindInGroupMembers}
@@ -2661,7 +2704,10 @@ export default function CampaignFormModal({
                 }))
               }}
             />
-            <span>Thành viên group</span>
+            <span className="find-data-source-option-text">
+              <span className="find-data-source-option-title">Thành viên group mới</span>
+              <span className="find-data-source-option-description">Là thành viên tham gia vào group mới nhất theo số lượng cài đặt hoặc theo phiên chạy mới nhất</span>
+            </span>
           </label>
         </div>
       </div>
@@ -3390,7 +3436,7 @@ export default function CampaignFormModal({
 
       {formData.isFindInGroupMembers && (
         <div className="extra-comment-options">
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Thành viên group</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Thành viên group mới</div>
           <div className="stepper-form-group">
             <label>Lấy danh sách thành viên tối đa</label>
             <input
@@ -4305,6 +4351,38 @@ export default function CampaignFormModal({
                       title="Để trống nếu không giới hạn"
                     />
                   </div>
+
+                  {isFindDataGroupCampaign && (
+                    <div className="stepper-form-group" style={{ maxWidth: 360 }}>
+                      <label className="schedule-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.findDataRerunEnabled}
+                          onChange={e => setFormData(p => ({
+                            ...p,
+                            findDataRerunEnabled: e.target.checked,
+                            findDataRerunAfterHours: normalizeHourValue(p.findDataRerunAfterHours)
+                          }))}
+                        />
+                        <span>Chạy lại sau mỗi (giờ)</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={formData.findDataRerunAfterHours}
+                        onChange={e => setFormData(p => ({
+                          ...p,
+                          findDataRerunAfterHours: normalizeHourValue(e.target.value)
+                        }))}
+                        className="stepper-input"
+                        disabled={!formData.findDataRerunEnabled}
+                      />
+                      <span className="schedule-hint">
+                        Khi chạy hết data, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.
+                      </span>
+                    </div>
+                  )}
 
                   {/* Monthly days */}
                   <div className="stepper-form-group">

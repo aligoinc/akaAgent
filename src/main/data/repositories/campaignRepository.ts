@@ -120,7 +120,10 @@ function resolveNextSchedule(campaign: Campaign, todayStart: Date): Date | null 
   if (!campaign.schedule) return null
 
   const scheduleType: CampaignScheduleType = campaign.scheduleType || 'daily'
-  const scheduleTime = parseVietnamParts(new Date(campaign.schedule))
+  const timeSource = scheduleType === 'daily' ? campaign.schedule : (campaign.originalSchedule || campaign.schedule)
+  const timeDate = new Date(timeSource)
+  if (Number.isNaN(timeDate.getTime())) return null
+  const scheduleTime = parseVietnamParts(timeDate)
 
   if (scheduleType === 'daily') {
     return withVietnamTime(todayStart, scheduleTime)
@@ -197,6 +200,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     account_id: campaign.accountId,
     status: campaign.status || 'chờ xử lý',
     schedule: campaign.schedule || null,
+    original_schedule: campaign.originalSchedule ?? campaign.schedule ?? null,
     schedule_type: campaign.scheduleType || 'daily',
     schedule_end_date: campaign.scheduleEndDate || null,
     daily_stop_time: campaign.dailyStopTime || null,
@@ -232,6 +236,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   if (updates.accountId !== undefined) payload.account_id = updates.accountId
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.schedule !== undefined) payload.schedule = updates.schedule
+  if (updates.originalSchedule !== undefined) payload.original_schedule = updates.originalSchedule
   if (updates.scheduleType !== undefined) payload.schedule_type = updates.scheduleType
   if (updates.scheduleEndDate !== undefined) payload.schedule_end_date = updates.scheduleEndDate
   if (updates.dailyStopTime !== undefined) payload.daily_stop_time = updates.dailyStopTime || null
@@ -288,6 +293,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       account_id: origCamp.account_id,
       status: 'tạm dừng',
       schedule: origCamp.schedule,
+      original_schedule: origCamp.schedule,
       schedule_type: origCamp.schedule_type,
       schedule_end_date: origCamp.schedule_end_date,
       daily_stop_time: origCamp.daily_stop_time,
@@ -692,6 +698,21 @@ export async function updateCampaignInputData(id: number, updates: Partial<Campa
 
   if (error) throw new Error(`Failed to update campaign input data: ${error.message}`)
   return mapCampaignInputDataFromDB(data)
+}
+
+export async function resetCampaignInputDataForRerun(campaignId: number): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_input_data')
+    .update({
+      status: 'chờ xử lý',
+      note: '',
+      date_action: null
+    })
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .neq('status', 'tạm dừng')
+
+  if (error) throw new Error(`Failed to reset campaign input data for rerun: ${error.message}`)
 }
 
 export async function deleteCampaignInputData(id: number): Promise<void> {
