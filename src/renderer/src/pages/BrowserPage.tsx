@@ -57,7 +57,6 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   useEffect(() => {
     if (!window.electronAPI?.onCampaignBrowserPreview) return
     return window.electronAPI.onCampaignBrowserPreview((preview) => {
-      setActiveAccountId(preview.accountId)
       setBackgroundPreviews(prev => {
         const next = new Map(prev)
         const existing = next.get(preview.accountId)
