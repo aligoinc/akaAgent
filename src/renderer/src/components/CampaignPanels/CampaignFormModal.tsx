@@ -503,6 +503,7 @@ export default function CampaignFormModal({
   const txtFileInputRef = useRef<HTMLInputElement>(null)
 
   const initSchedule = () => {
+    if (cloneFromId) return formatDateTimeLocal(new Date())
     const savedSchedule = formatDateTimeLocalValue(campaign?.schedule)
     if (savedSchedule) {
       return savedSchedule
