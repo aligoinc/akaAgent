@@ -142,6 +142,8 @@ export interface CampaignExtraSettings {
   // Đăng bài lên trang cá nhân — tuỳ chọn nguồn
   copyContentFromSource?: boolean          // Copy nội dung gần nhất từ link nguồn và nối thêm vào nội dung nhập
   includeSourceImages?: boolean            // Lấy kèm hình ảnh từ link nguồn (đi kèm copyContentFromSource)
+  rewriteSourceContentWithAI?: boolean     // Dùng prompt AI để edit riêng phần nội dung copy từ nguồn
+  sourceContentAiPrompt?: string           // Prompt AI, dùng [content] để thay bằng nội dung copy được
   postAsReels?: boolean                    // Đăng video dưới dạng Reels thay vì post thường
   sourceLinks?: string                     // Danh sách uid/link nguồn, phẩy ngăn cách (page, profile, group, post)
   sourceLinkIndex?: number                 // Con trỏ rotation qua danh sách sourceLinks (tăng mỗi lần chạy)
