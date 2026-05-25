@@ -139,6 +139,8 @@ export interface CampaignExtraSettings {
   enableAddFriend?: boolean                // Kết bạn (chỉ dùng cho facebook_message_uid)
   useSuggestedFriends?: boolean            // facebook_message_uid: lấy UID từ đề xuất bạn bè Facebook
   suggestedFriendsCount?: number           // Số lượng đề xuất bạn bè cần lấy
+  pageInboxPageUid?: string                // facebook_page_to_message: Page ID dùng để mở Business Inbox
+  pageInboxPageName?: string               // facebook_page_to_message: tên page hiển thị/log
   // Đăng bài lên trang cá nhân — tuỳ chọn nguồn
   copyContentFromSource?: boolean          // Copy nội dung gần nhất từ link nguồn và nối thêm vào nội dung nhập
   includeSourceImages?: boolean            // Lấy kèm hình ảnh từ link nguồn (đi kèm copyContentFromSource)

@@ -44,6 +44,7 @@ interface PageController {
   // Files (CDP-based)
   uploadFile(selector: string, paths: string[]): Promise<{ fileCount: number }>;
   dropFile(selector: string, paths: string[]): Promise<{ fileCount: number }>;
+  dropFileDeep(selector: string, paths: string[]): Promise<{ fileCount: number }>;
 
   // Generic
   evaluate<T = unknown>(code: string, ...args: unknown[]): Promise<T>;
