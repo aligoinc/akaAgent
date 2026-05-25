@@ -2592,6 +2592,17 @@ button.btn-icon:not(.btn):disabled {
   background: var(--campaign-row-hover-bg);
 }
 
+.campaign-table-loading-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 76px;
+  padding: 18px 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-default);
+}
+
 .campaign-table-row.status-pending {
   --campaign-row-accent: var(--accent-info);
   --campaign-row-bg: rgba(56, 189, 248, 0.025);
