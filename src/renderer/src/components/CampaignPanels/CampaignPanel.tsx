@@ -8,6 +8,7 @@ import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
+import CampaignInfoView from './CampaignInfoView'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 
 interface CampaignPanelProps {
@@ -16,7 +17,7 @@ interface CampaignPanelProps {
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
 }
 
-type DetailTab = 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData'
+type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 type CampaignFilterDropdown = 'status' | 'platform' | 'action'
@@ -384,7 +385,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
-  const [detailTab, setDetailTab] = useState<DetailTab>('data')
+  const [detailTab, setDetailTab] = useState<DetailTab>('info')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
   const [detailDockHeight, setDetailDockHeight] = useState(DETAIL_DOCK_DEFAULT_HEIGHT)
@@ -474,7 +475,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }
 
   const handleRowClick = (campaign: Campaign) => {
-    setSelectedCampaignId(prev => prev === campaign.id ? null : campaign.id)
+    const nextSelectedId = selectedCampaignId === campaign.id ? null : campaign.id
+    setSelectedCampaignId(nextSelectedId)
+    if (nextSelectedId) setDetailTab('info')
     if (!detailDockOpen) setDetailDockOpen(true)
   }
 
@@ -624,6 +627,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const selectedCampaignAccount = selectedCampaign?.accountId
     ? accounts.find(account => account.id === selectedCampaign.accountId) || null
     : null
+  const selectedCampaignAction = selectedCampaign
+    ? campaignActions.find(action => action.id === selectedCampaign.actionId)
+    : undefined
   const isSelectedFindDataCampaign = selectedCampaign?.actionId === 'facebook_find_data_group'
   const runLogEntries = useMemo(
     () => parseCampaignRunLog(selectedCampaign?.log || ''),
@@ -1352,6 +1358,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               {/* Tabs */}
               <div className="detail-dock-tabs">
                 <button
+                  className={`detail-dock-tab ${detailTab === 'info' ? 'active' : ''}`}
+                  onClick={() => setDetailTab('info')}
+                >
+                  Thông tin
+                </button>
+                <button
                   className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
                   onClick={() => setDetailTab('data')}
                 >
@@ -1390,6 +1402,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                   Thông tin tài khoản
                 </button>
               </div>
+
+              {/* Tab: Campaign info */}
+              {detailTab === 'info' && selectedCampaign && (
+                <CampaignInfoView
+                  campaign={selectedCampaign}
+                  account={selectedCampaignAccount}
+                  action={selectedCampaignAction}
+                  campaigns={campaigns}
+                  accounts={accounts}
+                />
+              )}
 
               {/* Tab: Campaign Input Data */}
               {detailTab === 'data' && (
