@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Download, Folder, Maximize2, Minimize2, Plus, RefreshCw, Search, Square, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Download, Folder, Info, Maximize2, Minimize2, Plus, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
 import { AutoAccountContact, AutoAccountContactGroup, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter } from '../../../../shared/types'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -180,6 +180,16 @@ const getDefaultPageInboxAppliedFilters = (): PageInboxAppliedFilters => {
   }
 }
 
+const arePageInboxFiltersEqual = (a: PageInboxAppliedFilters, b: PageInboxAppliedFilters) => (
+  a.pageUid === b.pageUid &&
+  a.search === b.search &&
+  a.phoneFilter === b.phoneFilter &&
+  a.dateFrom === b.dateFrom &&
+  a.dateTo === b.dateTo &&
+  a.messageFilterMode === b.messageFilterMode &&
+  a.messageKeywords === b.messageKeywords
+)
+
 const sanitizeFileSegment = (value: string) => {
   return value
     .normalize('NFD')
@@ -353,6 +363,7 @@ export default function DataScanModal({
   const scanRunIdRef = useRef(0)
   const stoppedScanIdsRef = useRef<Set<number>>(new Set())
   const completedScanIdsRef = useRef<Set<number>>(new Set())
+  const contactsLoadIdRef = useRef(0)
   const pageInboxOptionsAccountRef = useRef<number | ''>('')
   const pageInboxPageUidRef = useRef('')
   const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions))
@@ -436,6 +447,7 @@ export default function DataScanModal({
   }, [loadAccounts])
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
     }
@@ -457,14 +469,19 @@ export default function DataScanModal({
 
   const loadCachedContacts = useCallback(async () => {
     if (!window.electronAPI || !accountId) {
+      contactsLoadIdRef.current += 1
       setContacts([])
       setPageInboxTotal(0)
+      setLoading(false)
       return
     }
+    const loadId = contactsLoadIdRef.current + 1
+    contactsLoadIdRef.current = loadId
     setLoading(true)
     try {
       if (isPageInboxAction) {
         if (!pageInboxAppliedFilters.pageUid) {
+          if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
           setContacts([])
           setPageInboxTotal(0)
           return
@@ -480,19 +497,25 @@ export default function DataScanModal({
           limit: PAGE_INBOX_PAGE_SIZE,
           offset: (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE
         })
+        if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
       } else {
         const data = await window.electronAPI.listContacts(accountId, actionDef.contactType)
+        if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(data)
         setPageInboxTotal(0)
       }
       setGroupContactCache({})
     } catch (err: any) {
       console.error('Failed to load scan contacts:', err)
-      showAlert(err?.message || 'Không thể tải danh sách data.', 'error')
+      if (mountedRef.current && contactsLoadIdRef.current === loadId) {
+        showAlert(err?.message || 'Không thể tải danh sách data.', 'error')
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current && contactsLoadIdRef.current === loadId) {
+        setLoading(false)
+      }
     }
   }, [
     accountId,
@@ -565,13 +588,38 @@ export default function DataScanModal({
   ])
 
   const applyPageInboxDraftFilters = useCallback((overrides: Partial<PageInboxAppliedFilters> = {}) => {
+    const nextFilters = getPageInboxDraftFilters(overrides)
     setSelectedIds(new Set())
     setPageInboxSelectAllMatching(false)
     setPageInboxSelectedRange(null)
     setPageInboxExcludedIds(new Set())
     setPageInboxPage(1)
-    setPageInboxAppliedFilters(getPageInboxDraftFilters(overrides))
+    setPageInboxAppliedFilters(prev => arePageInboxFiltersEqual(prev, nextFilters) ? prev : nextFilters)
   }, [getPageInboxDraftFilters])
+
+  useEffect(() => {
+    if (!isPageInboxAction) return
+    const nextFilters = getPageInboxDraftFilters()
+    const timer = window.setTimeout(() => {
+      setSelectedIds(new Set())
+      setPageInboxSelectAllMatching(false)
+      setPageInboxSelectedRange(null)
+      setPageInboxExcludedIds(new Set())
+      setPageInboxPage(1)
+      setPageInboxAppliedFilters(prev => arePageInboxFiltersEqual(prev, nextFilters) ? prev : nextFilters)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [
+    getPageInboxDraftFilters,
+    isPageInboxAction,
+    pageInboxDateFrom,
+    pageInboxDateTo,
+    pageInboxMessageFilterMode,
+    pageInboxMessageKeywords,
+    pageInboxPageUid,
+    pageInboxPhoneFilter,
+    search
+  ])
 
   useEffect(() => {
     setSelectedIds(new Set())
@@ -952,11 +1000,6 @@ export default function DataScanModal({
 
   const handlePageInboxPageChange = (value: string) => {
     setPageInboxPageUid(value)
-    applyPageInboxDraftFilters({ pageUid: value })
-  }
-
-  const handleFilterPageInbox = () => {
-    applyPageInboxDraftFilters()
   }
 
   const handleSelectAllPageInboxMatching = () => {
@@ -1510,110 +1553,119 @@ export default function DataScanModal({
           )}
 
           {isPageInboxAction && (
-            <div className="data-scan-page-inbox-controls">
-              <div className="stepper-form-group">
-                <label>Page</label>
-                <select
-                  className="stepper-input"
-                  value={pageInboxPageUid}
-                  onChange={event => handlePageInboxPageChange(event.target.value)}
-                  disabled={scanLoading || pageInboxPages.length === 0}
-                >
-                  {pageInboxPages.length === 0 ? (
-                    <option value="">Chưa có page đã quét</option>
-                  ) : (
-                    pageInboxPages.map(page => (
-                      <option key={page.id} value={page.uid || ''}>
-                        {page.name || page.uid}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              <div className="stepper-form-group">
-                <label>Số điện thoại</label>
-                <select
-                  className="stepper-input"
-                  value={pageInboxPhoneFilter}
-                  onChange={event => setPageInboxPhoneFilter(event.target.value as PageInboxPhoneFilter)}
-                >
-                  <option value="all">Tất cả</option>
-                  <option value="has_phone">Có SĐT</option>
-                  <option value="no_phone">Không có SĐT</option>
-                </select>
-              </div>
-
-              <div className="stepper-form-group">
-                <label>Thời gian nhắn tin gần nhất</label>
-                <select
-                  className="stepper-input"
-                  value={pageInboxTimePreset}
-                  onChange={event => handlePageInboxTimePresetChange(event.target.value as PageInboxTimePreset)}
-                >
-                  {PAGE_INBOX_TIME_PRESETS.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {pageInboxTimePreset === 'all' ? (
-                <div className="stepper-form-group data-scan-page-inbox-time-status">
-                  <label>Khoảng thời gian</label>
-                  <div className="stepper-input data-scan-readonly-field" aria-readonly="true">
-                    Không giới hạn thời gian
-                  </div>
+            <>
+              <div className="data-scan-page-inbox-controls">
+                <div className="stepper-form-group">
+                  <label>Page</label>
+                  <select
+                    className="stepper-input"
+                    value={pageInboxPageUid}
+                    onChange={event => handlePageInboxPageChange(event.target.value)}
+                    disabled={scanLoading || pageInboxPages.length === 0}
+                  >
+                    {pageInboxPages.length === 0 ? (
+                      <option value="">Chưa có page đã quét</option>
+                    ) : (
+                      pageInboxPages.map(page => (
+                        <option key={page.id} value={page.uid || ''}>
+                          {page.name || page.uid}
+                        </option>
+                      ))
+                    )}
+                  </select>
                 </div>
-              ) : (
-                <>
-                  <div className="stepper-form-group">
-                    <label>Từ ngày</label>
-                    <input
-                      type="date"
-                      className="stepper-input"
-                      value={pageInboxDateFrom}
-                      onChange={event => setPageInboxDateFrom(event.target.value)}
-                    />
-                  </div>
 
-                  <div className="stepper-form-group">
-                    <label>Đến ngày</label>
-                    <input
-                      type="date"
-                      className="stepper-input"
-                      value={pageInboxDateTo}
-                      onChange={event => setPageInboxDateTo(event.target.value)}
-                    />
-                  </div>
-                </>
-              )}
+                <div className="stepper-form-group">
+                  <label>Số điện thoại</label>
+                  <select
+                    className="stepper-input"
+                    value={pageInboxPhoneFilter}
+                    onChange={event => setPageInboxPhoneFilter(event.target.value as PageInboxPhoneFilter)}
+                  >
+                    <option value="all">Tất cả</option>
+                    <option value="has_phone">Có SĐT</option>
+                    <option value="no_phone">Không có SĐT</option>
+                  </select>
+                </div>
 
-              <div className="stepper-form-group">
-                <label>Nội dung</label>
-                <select
-                  className="stepper-input"
-                  value={pageInboxMessageFilterMode}
-                  onChange={event => setPageInboxMessageFilterMode(event.target.value as PageInboxMessageFilterMode)}
-                >
-                  <option value="all">Tất cả</option>
-                  <option value="contain_all">Chứa tất cả từ khoá</option>
-                  <option value="contain_any">Chứa một trong các từ khoá</option>
-                  <option value="not_contain_all">Không chứa tất cả từ khoá</option>
-                  <option value="not_contain_any">Không chứa một trong các từ khoá</option>
-                </select>
+                <div className="stepper-form-group">
+                  <label>Thời gian nhắn tin gần nhất</label>
+                  <select
+                    className="stepper-input"
+                    value={pageInboxTimePreset}
+                    onChange={event => handlePageInboxTimePresetChange(event.target.value as PageInboxTimePreset)}
+                  >
+                    {PAGE_INBOX_TIME_PRESETS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {pageInboxTimePreset === 'all' ? (
+                  <div className="stepper-form-group data-scan-page-inbox-time-status">
+                    <label>Khoảng thời gian</label>
+                    <div className="stepper-input data-scan-readonly-field" aria-readonly="true">
+                      Không giới hạn thời gian
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="stepper-form-group">
+                      <label>Từ ngày</label>
+                      <input
+                        type="date"
+                        className="stepper-input"
+                        value={pageInboxDateFrom}
+                        onChange={event => setPageInboxDateFrom(event.target.value)}
+                      />
+                    </div>
+
+                    <div className="stepper-form-group">
+                      <label>Đến ngày</label>
+                      <input
+                        type="date"
+                        className="stepper-input"
+                        value={pageInboxDateTo}
+                        onChange={event => setPageInboxDateTo(event.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="stepper-form-group">
+                  <label>Nội dung</label>
+                  <select
+                    className="stepper-input"
+                    value={pageInboxMessageFilterMode}
+                    onChange={event => setPageInboxMessageFilterMode(event.target.value as PageInboxMessageFilterMode)}
+                  >
+                    <option value="all">Tất cả</option>
+                    <option value="contain_all">Chứa tất cả từ khoá</option>
+                    <option value="contain_any">Chứa một trong các từ khoá</option>
+                    <option value="not_contain_all">Không chứa tất cả từ khoá</option>
+                    <option value="not_contain_any">Không chứa một trong các từ khoá</option>
+                  </select>
+                </div>
+
+                <div className="stepper-form-group data-scan-page-inbox-keywords">
+                  <label>Từ khoá</label>
+                  <input
+                    className="stepper-input"
+                    value={pageInboxMessageKeywords}
+                    onChange={event => setPageInboxMessageKeywords(event.target.value)}
+                    placeholder="Mỗi từ khoá cách nhau bằng dấu phẩy"
+                    disabled={pageInboxMessageFilterMode === 'all'}
+                  />
+                </div>
               </div>
 
-              <div className="stepper-form-group data-scan-page-inbox-keywords">
-                <label>Từ khoá</label>
-                <input
-                  className="stepper-input"
-                  value={pageInboxMessageKeywords}
-                  onChange={event => setPageInboxMessageKeywords(event.target.value)}
-                  placeholder="Mỗi từ khoá cách nhau bằng dấu phẩy"
-                  disabled={pageInboxMessageFilterMode === 'all'}
-                />
+              <div className="data-scan-page-inbox-note">
+                <Info size={15} />
+                <span>
+                  Facebook chỉ cho phép quét dữ liệu từ hôm nay trở về trước và không hỗ trợ bộ lọc khi quét. akaBiz sẽ quét tối đa là 100.000 data.
+                </span>
               </div>
-            </div>
+            </>
           )}
 
           <div className="data-scan-toolbar">
@@ -1648,16 +1700,6 @@ export default function DataScanModal({
                   placeholder={isPageInboxAction ? 'Tìm theo tên, PSID hoặc SĐT...' : 'Tìm theo tên, UID hoặc link...'}
                 />
               </label>
-              {isPageInboxAction && (
-                <button
-                  className="btn btn-secondary data-scan-load-button"
-                  onClick={handleFilterPageInbox}
-                  disabled={!pageInboxPageUid || loading}
-                >
-                  <Search size={14} />
-                  Lọc danh sách
-                </button>
-              )}
               {scanLoading ? (
                 <button
                   className="btn btn-danger data-scan-load-button"
@@ -1762,7 +1804,14 @@ export default function DataScanModal({
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={tableColSpan} className="text-center">{actionDef.loadingText}</td></tr>
+                  <tr>
+                    <td colSpan={tableColSpan} className="text-center">
+                      <span className="data-scan-loading-cell">
+                        <RefreshCw size={14} className="spin" />
+                        {actionDef.loadingText}
+                      </span>
+                    </td>
+                  </tr>
                 ) : filteredContacts.length === 0 ? (
                   <tr><td colSpan={tableColSpan} className="text-center text-muted">{emptyTableText}</td></tr>
                 ) : (

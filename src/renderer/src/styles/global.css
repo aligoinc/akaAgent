@@ -4101,6 +4101,25 @@ button.btn-icon:not(.btn):disabled {
   grid-column: span 2;
 }
 
+.data-scan-page-inbox-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.data-scan-page-inbox-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent-primary);
+}
+
 .data-scan-readonly-field {
   display: flex;
   align-items: center;
@@ -4192,6 +4211,14 @@ button.btn-icon:not(.btn):disabled {
 
 .data-scan-pagination-summary {
   margin-right: auto;
+}
+
+.data-scan-loading-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
 }
 
 .data-scan-progress {
