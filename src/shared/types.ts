@@ -278,7 +278,29 @@ export interface CampaignDetail {
 // Account Contact Types
 // ============================================
 
-export type ContactType = 'person' | 'group' | 'page'
+export type ContactType = 'person' | 'group' | 'page' | 'page_inbox_customer'
+
+export type PageInboxPhoneFilter = 'all' | 'has_phone' | 'no_phone'
+export type PageInboxMessageFilterMode = 'all' | 'contain_all' | 'contain_any' | 'not_contain_all' | 'not_contain_any'
+
+export interface PageInboxContactListQuery {
+  pageUid?: string
+  search?: string
+  phoneFilter?: PageInboxPhoneFilter
+  dateFrom?: string
+  dateTo?: string
+  messageFilterMode?: PageInboxMessageFilterMode
+  messageKeywords?: string
+  ids?: number[]
+  excludeIds?: number[]
+  offset?: number
+  limit?: number
+}
+
+export interface ContactListResult {
+  contacts: AutoAccountContact[]
+  total: number
+}
 
 export interface ContactLoadResult {
   success: boolean
@@ -524,6 +546,9 @@ export const IPC_EVENTS = {
   CONTACTS_LOAD_GROUPS: 'contacts:load-groups',
   CONTACTS_LOAD_PAGES: 'contacts:load-pages',
   CONTACTS_LOAD_POST_COMMENTERS: 'contacts:load-post-commenters',
+  CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS: 'contacts:load-page-inbox-customers',
+  CONTACTS_LIST_PAGE_INBOX: 'contacts:list-page-inbox',
+  CONTACTS_EXPORT_PAGE_INBOX: 'contacts:export-page-inbox',
   CONTACTS_CANCEL_LOAD: 'contacts:cancel-load',
   CONTACTS_LIST: 'contacts:list',
   CONTACTS_DELETE: 'contacts:delete',
