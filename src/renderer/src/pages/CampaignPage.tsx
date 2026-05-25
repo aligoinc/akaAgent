@@ -2,10 +2,11 @@ import { useState, useCallback, useRef } from 'react'
 import AccountPanel from '../components/CampaignPanels/AccountPanel'
 import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
+import type { GeneralSettingsMenu } from '../components/Settings/GeneralSettingsModal'
 
 interface CampaignPageProps {
   onNavigateToBrowser?: (accountId: number) => void
-  onOpenGeneralSettings?: () => void
+  onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
 }
 
 export default function CampaignPage({ onNavigateToBrowser, onOpenGeneralSettings }: CampaignPageProps) {

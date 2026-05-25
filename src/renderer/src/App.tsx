@@ -11,7 +11,7 @@ import AlertModal from './components/CampaignPanels/AlertModal'
 import ConfirmModal from './components/CampaignPanels/ConfirmModal'
 import UpdateModal from './components/UpdateModal/UpdateModal'
 import DataScanModal from './components/DataScan/DataScanModal'
-import GeneralSettingsModal from './components/Settings/GeneralSettingsModal'
+import GeneralSettingsModal, { type GeneralSettingsMenu } from './components/Settings/GeneralSettingsModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
@@ -21,6 +21,7 @@ export default function App() {
   const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
   const [showDataScan, setShowDataScan] = useState(false)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
+  const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
 
   // Bootstrap auth: re-login from stored creds (or land on LoginPage).
   useEffect(() => {
@@ -38,6 +39,11 @@ export default function App() {
   const { loadAccounts, upsertCampaign } = useCampaignStore()
 
   const [updateInfo, setUpdateInfo] = useState<{ localVersion: string; remoteVersion: string } | null>(null)
+
+  const openGeneralSettings = (menu: GeneralSettingsMenu = 'akabiz') => {
+    setGeneralSettingsInitialMenu(menu)
+    setShowGeneralSettings(true)
+  }
 
   // Auto-check for updates once on app start (non-blocking).
   useEffect(() => {
@@ -128,7 +134,7 @@ export default function App() {
         activePage={activePage}
         onPageChange={setActivePage}
         onOpenDataScan={() => setShowDataScan(true)}
-        onOpenGeneralSettings={() => setShowGeneralSettings(true)}
+        onOpenGeneralSettings={() => openGeneralSettings()}
       />
 
       <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -137,7 +143,7 @@ export default function App() {
             setFocusAccountId(accountId)
             setActivePage('browsers')
           }}
-          onOpenGeneralSettings={() => setShowGeneralSettings(true)}
+          onOpenGeneralSettings={openGeneralSettings}
         />
       </div>
 
@@ -161,7 +167,10 @@ export default function App() {
         <DataScanModal onClose={() => setShowDataScan(false)} />
       )}
       {showGeneralSettings && (
-        <GeneralSettingsModal onClose={() => setShowGeneralSettings(false)} />
+        <GeneralSettingsModal
+          initialMenu={generalSettingsInitialMenu}
+          onClose={() => setShowGeneralSettings(false)}
+        />
       )}
       {updateInfo && (
         <UpdateModal

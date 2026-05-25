@@ -338,6 +338,17 @@ export interface ContactGroupMutationResult {
   count: number
 }
 
+export interface ContentTemplate {
+  id: number
+  name: string
+  content: string
+  isDelete: boolean
+  staffId?: number
+  organizationId?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
 // ============================================
 // Auth Types
 // ============================================
@@ -478,6 +489,12 @@ export const IPC_EVENTS = {
   DB_LIST_CAMPAIGN_DETAILS_BY_CAMPAIGN: 'db:list-campaign-details-by-campaign',
   DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
   DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
+
+  // Database Content Templates
+  DB_LIST_CONTENT_TEMPLATES: 'db:list-content-templates',
+  DB_CREATE_CONTENT_TEMPLATE: 'db:create-content-template',
+  DB_UPDATE_CONTENT_TEMPLATE: 'db:update-content-template',
+  DB_DELETE_CONTENT_TEMPLATE: 'db:delete-content-template',
 
   // Webview registration (embedded browser tabs)
   WEBVIEW_REGISTER: 'webview:register',
