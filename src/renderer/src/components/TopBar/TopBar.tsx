@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal } from 'lucide-react'
+import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal, KeyRound } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -9,9 +9,10 @@ interface TopBarProps {
   onPageChange: (page: 'campaigns' | 'workflow-editor' | 'browsers') => void
   onOpenDataScan: () => void
   onOpenGeneralSettings: () => void
+  onOpenChangePassword: () => void
 }
 
-export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpenGeneralSettings }: TopBarProps) {
+export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpenGeneralSettings, onOpenChangePassword }: TopBarProps) {
   const { theme, toggleTheme } = useThemeStore()
   const { user, logout, resetDeviceLock } = useAuthStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -72,6 +73,11 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpe
   const handleOpenGeneralSettings = () => {
     setSettingsOpen(false)
     onOpenGeneralSettings()
+  }
+
+  const handleOpenChangePassword = () => {
+    setSettingsOpen(false)
+    onOpenChangePassword()
   }
 
   return (
@@ -153,6 +159,10 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpe
               <button className="topbar-settings-item" role="menuitem" onClick={handleOpenGeneralSettings}>
                 <SlidersHorizontal size={14} />
                 <span>Cài đặt chung</span>
+              </button>
+              <button className="topbar-settings-item" role="menuitem" onClick={handleOpenChangePassword}>
+                <KeyRound size={14} />
+                <span>Đổi mật khẩu</span>
               </button>
               <button className="topbar-settings-item" role="menuitem" onClick={handleResetDeviceLock}>
                 <Monitor size={14} />

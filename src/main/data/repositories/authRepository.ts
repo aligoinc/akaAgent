@@ -189,3 +189,33 @@ export async function resetDeviceLock(user: AuthUser): Promise<DeviceLockResetRe
   if (error) throw new Error(`Đổi máy tính thất bại: ${error.message}`)
   return { success: true }
 }
+
+export async function changePassword(user: AuthUser, oldPassword: string, newPassword: string): Promise<{ success: boolean }> {
+  const currentPassword = oldPassword || ''
+  const nextPassword = newPassword || ''
+  if (!nextPassword) throw new Error('Vui lòng nhập mật khẩu mới.')
+  if (!currentPassword) throw new Error('Vui lòng nhập mật khẩu cũ.')
+
+  const { data: staff, error } = await client()
+    .from('org_staff')
+    .select('id, password, is_active')
+    .eq('id', user.staffId)
+    .maybeSingle()
+
+  if (error) throw new Error(`Đổi mật khẩu thất bại: ${error.message}`)
+  const staffRow = staff as unknown as Pick<StaffRow, 'id' | 'password' | 'is_active'> | null
+  if (!staffRow) throw new Error('Không tìm thấy tài khoản để đổi mật khẩu.')
+  if (!staffRow.is_active) throw new Error('Tài khoản đã bị khoá.')
+  if (staffRow.password !== currentPassword) throw new Error('Mật khẩu cũ không đúng.')
+
+  const { error: updateError } = await client()
+    .from('org_staff')
+    .update({
+      password: nextPassword,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', user.staffId)
+
+  if (updateError) throw new Error(`Đổi mật khẩu thất bại: ${updateError.message}`)
+  return { success: true }
+}

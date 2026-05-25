@@ -12,6 +12,7 @@ import ConfirmModal from './components/CampaignPanels/ConfirmModal'
 import UpdateModal from './components/UpdateModal/UpdateModal'
 import DataScanModal from './components/DataScan/DataScanModal'
 import GeneralSettingsModal, { type GeneralSettingsMenu } from './components/Settings/GeneralSettingsModal'
+import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
@@ -22,6 +23,7 @@ export default function App() {
   const [showDataScan, setShowDataScan] = useState(false)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
+  const [showChangePassword, setShowChangePassword] = useState(false)
 
   // Bootstrap auth: re-login from stored creds (or land on LoginPage).
   useEffect(() => {
@@ -135,6 +137,7 @@ export default function App() {
         onPageChange={setActivePage}
         onOpenDataScan={() => setShowDataScan(true)}
         onOpenGeneralSettings={() => openGeneralSettings()}
+        onOpenChangePassword={() => setShowChangePassword(true)}
       />
 
       <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -171,6 +174,9 @@ export default function App() {
           initialMenu={generalSettingsInitialMenu}
           onClose={() => setShowGeneralSettings(false)}
         />
+      )}
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
       )}
       {updateInfo && (
         <UpdateModal

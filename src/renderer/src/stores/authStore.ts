@@ -14,6 +14,7 @@ interface AuthState {
   login: (username: string, password: string, options?: LoginOptions) => Promise<void>
   logout: () => Promise<void>
   resetDeviceLock: () => Promise<void>
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>
   rehydrateFromStorage: () => Promise<void>
   clearError: () => void
 }
@@ -156,6 +157,17 @@ export const useAuthStore = create<AuthState>()(
         writeStoredCreds(null)
         clearStoredUserState()
         set({ savedCredentials: null })
+      },
+
+      changePassword: async (oldPassword, newPassword) => {
+        if (!window.electronAPI) throw new Error('API not available')
+        await window.electronAPI.changePassword(oldPassword, newPassword)
+        const { savedCredentials, user } = useAuthStore.getState()
+        if (!savedCredentials || !user || savedCredentials.username !== user.username) return
+
+        const nextCredentials = { ...savedCredentials, password: newPassword }
+        writeStoredCreds(nextCredentials)
+        set({ savedCredentials: nextCredentials })
       },
 
       rehydrateFromStorage: async () => {

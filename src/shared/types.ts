@@ -458,6 +458,7 @@ export const IPC_EVENTS = {
   AUTH_LOGOUT: 'auth:logout',
   AUTH_ME: 'auth:me',
   AUTH_RESET_DEVICE_LOCK: 'auth:reset-device-lock',
+  AUTH_CHANGE_PASSWORD: 'auth:change-password',
 
   // App
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',
