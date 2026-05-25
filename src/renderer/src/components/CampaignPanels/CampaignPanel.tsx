@@ -291,8 +291,7 @@ const getCampaignTimeSortValue = (value: string | undefined | null) => {
 }
 
 const getCampaignListSortTime = (campaign: Campaign) => {
-  const useLastRunAt = campaign.status === 'tạm dừng' || campaign.status === 'hoàn thành'
-  return getCampaignTimeSortValue(useLastRunAt ? (campaign.lastRunAt || campaign.schedule) : campaign.schedule)
+  return getCampaignTimeSortValue(campaign.schedule)
 }
 
 const compareCampaignListOrder = (a: Campaign, b: Campaign) => {
@@ -368,7 +367,7 @@ const parseCampaignRunLog = (log: string): RunLogEntry[] => {
 
 export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGeneralSettings }: CampaignPanelProps) {
   const {
-    accounts, campaigns, campaignActions, loadingCampaigns,
+    accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
     loadCampaigns, loadCampaignActions, loadAccounts,
@@ -401,12 +400,21 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [platformFilters, setPlatformFilters] = useState<string[]>([])
   const [actionFilters, setActionFilters] = useState<string[]>([])
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
+  const [showInitialCampaignLoading, setShowInitialCampaignLoading] = useState(true)
+  const [showManualCampaignLoading, setShowManualCampaignLoading] = useState(false)
   const filterPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    loadCampaigns()
+    let isMounted = true
+    loadCampaigns().finally(() => {
+      if (isMounted) setShowInitialCampaignLoading(false)
+    })
     loadCampaignActions()
     loadAccounts()
+
+    return () => {
+      isMounted = false
+    }
   }, [loadCampaigns, loadCampaignActions, loadAccounts])
 
   // Load only the data needed by the active campaign detail tab.
@@ -1024,6 +1032,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     ? 'Chưa có chiến dịch'
     : 'Không có chiến dịch phù hợp bộ lọc'
 
+  const showCampaignTableLoading = showInitialCampaignLoading || showManualCampaignLoading
+
+  const handleReloadCampaigns = () => {
+    setShowManualCampaignLoading(true)
+    loadCampaigns().finally(() => setShowManualCampaignLoading(false))
+  }
+
   const renderMultiSelectFilter = (
     key: CampaignFilterDropdown,
     label: string,
@@ -1100,7 +1115,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               <Settings2 size={14} />
             </button>
           )}
-          <button className="btn btn-ghost btn-icon" onClick={() => loadCampaigns()} title="Làm mới">
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={handleReloadCampaigns}
+            disabled={showCampaignTableLoading}
+            title="Làm mới"
+          >
             <RefreshCw size={14} />
           </button>
           <button className="btn btn-primary btn-icon" onClick={() => { setEditingCampaign(null); setShowForm(true); }} title="Thêm chiến dịch">
@@ -1243,7 +1263,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
       {/* Campaign Table */}
       <div className="campaign-panel-content" style={{ flex: 1, minHeight: 0 }}>
-        {!loadingCampaigns && filteredCampaigns.length === 0 ? (
+        {!showCampaignTableLoading && filteredCampaigns.length === 0 ? (
           <div className="empty-state"><div className="empty-state-text">{emptyCampaignText}</div></div>
         ) : (
           <div className="campaign-table">
@@ -1251,9 +1271,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               <div className="campaign-col col-checkbox">
                 <input
                   type="checkbox"
-                  checked={!loadingCampaigns && filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
-                  disabled={loadingCampaigns}
-                  ref={el => { if (el) el.indeterminate = !loadingCampaigns && selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
+                  checked={!showCampaignTableLoading && filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
+                  disabled={showCampaignTableLoading}
+                  ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
                   onChange={toggleSelectAll}
                 />
               </div>
@@ -1265,7 +1285,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               <div className="campaign-col col-note">Ghi chú</div>
               <div className="campaign-col col-ops"></div>
             </div>
-            {loadingCampaigns ? (
+            {showCampaignTableLoading ? (
               <div className="campaign-table-loading-row">
                 <RefreshCw size={15} className="spin" />
                 <span>Đang tải danh sách chiến dịch...</span>
