@@ -629,6 +629,8 @@ export default function CampaignFormModal({
     // Nguồn đăng bài (timeline post)
     copyContentFromSource: campaign?.extraSettings?.copyContentFromSource ?? false,
     includeSourceImages: campaign?.extraSettings?.includeSourceImages ?? false,
+    rewriteSourceContentWithAI: campaign?.extraSettings?.rewriteSourceContentWithAI ?? false,
+    sourceContentAiPrompt: campaign?.extraSettings?.sourceContentAiPrompt || '',
     postAsReels: campaign?.extraSettings?.postAsReels ?? false,
     sourceLinks: campaign?.extraSettings?.sourceLinks || '',
     pagePostMode: (campaign?.extraSettings?.pagePostMode || 'api') as 'api' | 'ui',
@@ -749,6 +751,8 @@ export default function CampaignFormModal({
   const requiresTimelineSourceLinks = isTimelinePostCampaign && (formData.copyContentFromSource || (!isPagePostCampaign && formData.sharePost))
   const hasTimelineSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
   const isUsingTimelineSourceContent = isTimelinePostCampaign && formData.copyContentFromSource
+  const usesSourceContentAiPrompt = isUsingTimelineSourceContent && formData.rewriteSourceContentWithAI
+  const hasSourceContentAiPrompt = formData.sourceContentAiPrompt.trim().length > 0
   const requiresMainContentOrMedia =
     !isFindDataGroupCampaign &&
     !isCommentSeedingCampaign &&
@@ -1279,7 +1283,7 @@ export default function CampaignFormModal({
       case 'leaveGroupOnPendingApproval': return true
       case 'autoJoinGroupAfterPost': return true
       case 'shuffleGroupList': return true
-      case 'sourceContent': return !requiresTimelineSourceLinks || hasTimelineSourceLinks
+      case 'sourceContent': return (!requiresTimelineSourceLinks || hasTimelineSourceLinks) && (!usesSourceContentAiPrompt || hasSourceContentAiPrompt)
       case 'images': return true  // optional
       case 'commentImages': return true  // optional
       case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindNewInteractors || formData.isFindInGroupMembers
@@ -1684,6 +1688,10 @@ export default function CampaignFormModal({
             suggestedFriendsCount: effectiveSuggestedFriendsCount,
             copyContentFromSource: formData.copyContentFromSource,
             includeSourceImages: formData.includeSourceImages,
+            rewriteSourceContentWithAI: formData.copyContentFromSource ? formData.rewriteSourceContentWithAI : false,
+            sourceContentAiPrompt: formData.copyContentFromSource && formData.rewriteSourceContentWithAI
+              ? formData.sourceContentAiPrompt
+              : '',
             postAsReels: isPagePostCampaign ? false : formData.postAsReels,
             sourceLinks: formData.sourceLinks,
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
@@ -1737,6 +1745,10 @@ export default function CampaignFormModal({
     }
     if (requiresTimelineSourceLinks && !hasTimelineSourceLinks) {
       showAlert('Vui lòng nhập ít nhất một uid/link nguồn để copy hoặc chia sẻ nội dung.', 'error')
+      return
+    }
+    if (usesSourceContentAiPrompt && !hasSourceContentAiPrompt) {
+      showAlert('Vui lòng nhập lời nhắc AI để edit nội dung nguồn.', 'error')
       return
     }
     if (requiresMainContentOrMedia && !hasMainContentText && !hasSelectedMainMedia) {
@@ -2751,7 +2763,14 @@ export default function CampaignFormModal({
           <input
             type="checkbox"
             checked={formData.copyContentFromSource}
-            onChange={e => setFormData(p => ({ ...p, copyContentFromSource: e.target.checked }))}
+            onChange={e => {
+              const checked = e.target.checked
+              setFormData(p => ({
+                ...p,
+                copyContentFromSource: checked,
+                rewriteSourceContentWithAI: checked ? p.rewriteSourceContentWithAI : false
+              }))
+            }}
           />
           <span>Copy nội dung từ nguồn</span>
         </label>
@@ -2795,6 +2814,29 @@ export default function CampaignFormModal({
           Nếu có nhiều link, hệ thống sẽ lấy nội dung từ 1 link lần lượt trong danh sách, đảm bảo nội dung không bị trùng lặp.
         </div>
       </div>
+      <div style={{ marginTop: 12 }}>
+        <label className="schedule-checkbox-label" style={{ opacity: formData.copyContentFromSource ? 1 : 0.5 }}>
+          <input
+            type="checkbox"
+            checked={formData.copyContentFromSource && formData.rewriteSourceContentWithAI}
+            onChange={e => setFormData(p => ({ ...p, rewriteSourceContentWithAI: e.target.checked }))}
+            disabled={!formData.copyContentFromSource}
+          />
+          <span>Lời nhắc AI - Edit lại nội dung</span>
+        </label>
+      </div>
+      {formData.copyContentFromSource && formData.rewriteSourceContentWithAI && (
+        <div className="stepper-form-group" style={{ marginTop: 12 }}>
+          <label>Lời nhắc AI</label>
+          <textarea
+            className="stepper-textarea"
+            placeholder="Viết lại nội dung sau: [content]"
+            value={formData.sourceContentAiPrompt}
+            onChange={e => setFormData(p => ({ ...p, sourceContentAiPrompt: e.target.value }))}
+            rows={4}
+          />
+        </div>
+      )}
 
       {!isPagePostCampaign && (
         <div style={{ marginTop: 12 }}>
