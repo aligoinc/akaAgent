@@ -368,7 +368,7 @@ const parseCampaignRunLog = (log: string): RunLogEntry[] => {
 
 export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGeneralSettings }: CampaignPanelProps) {
   const {
-    accounts, campaigns, campaignActions,
+    accounts, campaigns, campaignActions, loadingCampaigns,
     campaignInputData, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
     loadCampaigns, loadCampaignActions, loadAccounts,
@@ -1243,7 +1243,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
       {/* Campaign Table */}
       <div className="campaign-panel-content" style={{ flex: 1, minHeight: 0 }}>
-        {filteredCampaigns.length === 0 ? (
+        {!loadingCampaigns && filteredCampaigns.length === 0 ? (
           <div className="empty-state"><div className="empty-state-text">{emptyCampaignText}</div></div>
         ) : (
           <div className="campaign-table">
@@ -1251,8 +1251,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               <div className="campaign-col col-checkbox">
                 <input
                   type="checkbox"
-                  checked={filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
-                  ref={el => { if (el) el.indeterminate = selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
+                  checked={!loadingCampaigns && filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
+                  disabled={loadingCampaigns}
+                  ref={el => { if (el) el.indeterminate = !loadingCampaigns && selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
                   onChange={toggleSelectAll}
                 />
               </div>
@@ -1264,7 +1265,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               <div className="campaign-col col-note">Ghi chú</div>
               <div className="campaign-col col-ops"></div>
             </div>
-            {filteredCampaigns.map(campaign => {
+            {loadingCampaigns ? (
+              <div className="campaign-table-loading-row">
+                <RefreshCw size={15} className="spin" />
+                <span>Đang tải danh sách chiến dịch...</span>
+              </div>
+            ) : filteredCampaigns.map(campaign => {
               const actionLabel = campaign.actionName || campaign.actionId
               const accountLabel = campaign.accountName || '-'
               const scheduleLabel = campaign.schedule ? new Date(campaign.schedule).toLocaleString('vi-VN') : '-'
