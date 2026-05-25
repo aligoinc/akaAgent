@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2 } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -9,11 +9,13 @@ import {
   AutoAccountContact,
   Campaign,
   CampaignInputData,
-  CampaignExtraSettings
+  CampaignExtraSettings,
+  ContentTemplate
 } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
 import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import { useUiStore } from '../../stores/uiStore'
+import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 
 type FindDataTargetCampaignField = 'findUidTargetCampaignIds' | 'findPostLinkTargetCampaignIds'
 type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'dataTypes' | 'sourceTypes'
@@ -47,6 +49,18 @@ interface CampaignPickerModalState {
   onConfirm: (ids: number[]) => void
 }
 
+interface ContentTemplatePickerModalState {
+  target: AiContentTarget
+  title: string
+  searchQuery: string
+}
+
+interface ContentTemplateSaveModalState {
+  target: AiContentTarget
+  name: string
+  content: string
+}
+
 interface CampaignSaveBundleItem {
   campaignPayload: Partial<Campaign>
   details: Partial<CampaignInputData>[]
@@ -63,7 +77,7 @@ interface InternalCampaignDraft {
 interface CampaignFormModalProps {
   campaign: Campaign | null
   cloneFromId?: number
-  onOpenGeneralSettings?: () => void
+  onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
   draftMode?: boolean
   draftTempId?: number
   lockedActionId?: string
@@ -90,6 +104,12 @@ type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
 type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
 type AiContentAction = 'multi' | 'rewrite'
+
+const CONTENT_TEMPLATE_TARGET_LABELS: Record<AiContentTarget, string> = {
+  content: 'nội dung chiến dịch',
+  commentContent: 'nội dung comment',
+  postBumpContent: 'nội dung up tin'
+}
 
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 
@@ -668,6 +688,11 @@ export default function CampaignFormModal({
   const findDataSourceSelectionScopeRef = useRef('')
   const [campaignPickerModal, setCampaignPickerModal] = useState<CampaignPickerModalState | null>(null)
   const [campaignPickerRefreshing, setCampaignPickerRefreshing] = useState(false)
+  const [contentTemplates, setContentTemplates] = useState<ContentTemplate[]>([])
+  const [contentTemplatesLoading, setContentTemplatesLoading] = useState(false)
+  const [contentTemplatePicker, setContentTemplatePicker] = useState<ContentTemplatePickerModalState | null>(null)
+  const [contentTemplateSaveModal, setContentTemplateSaveModal] = useState<ContentTemplateSaveModalState | null>(null)
+  const [contentTemplateSaving, setContentTemplateSaving] = useState(false)
   const [internalCampaignDrafts, setInternalCampaignDrafts] = useState<InternalCampaignDraft[]>([])
   const [draftFormConfig, setDraftFormConfig] = useState<{
     tempId: number
@@ -1070,6 +1095,19 @@ export default function CampaignFormModal({
   const hasZaloWebIntegration = !!akabizIntegrations?.zaloWeb?.staffId
   const hasAkaBizDesktopIntegration = !!akabizIntegrations?.akaBizDesktop?.staffId && !!akabizIntegrations?.akaBizDesktop?.dbPath && !desktopIntegrationInvalid
 
+  const loadContentTemplates = async () => {
+    if (!window.electronAPI?.listContentTemplates) return
+    setContentTemplatesLoading(true)
+    try {
+      const rows = await window.electronAPI.listContentTemplates()
+      setContentTemplates(rows)
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể tải mẫu nội dung.'), 'error')
+    } finally {
+      setContentTemplatesLoading(false)
+    }
+  }
+
   const loadAkaBizIntegrations = async () => {
     if (!window.electronAPI?.getAkaBizIntegrations) return
     setAkaBizIntegrationsLoading(true)
@@ -1109,6 +1147,13 @@ export default function CampaignFormModal({
     const handleUpdated = () => void loadAkaBizIntegrations()
     window.addEventListener('akabiz-integrations-updated', handleUpdated)
     return () => window.removeEventListener('akabiz-integrations-updated', handleUpdated)
+  }, [])
+
+  useEffect(() => {
+    void loadContentTemplates()
+    const handleContentTemplatesUpdated = () => void loadContentTemplates()
+    window.addEventListener('content-templates-updated', handleContentTemplatesUpdated)
+    return () => window.removeEventListener('content-templates-updated', handleContentTemplatesUpdated)
   }, [])
 
   useEffect(() => {
@@ -1289,6 +1334,119 @@ export default function CampaignFormModal({
   const setAiContentValue = (target: AiContentTarget, value: string) => {
     setFormData(prev => ({ ...prev, [target]: value }))
   }
+
+  const openContentTemplatePicker = (target: AiContentTarget) => {
+    setContentTemplatePicker({
+      target,
+      title: `Chọn mẫu cho ${CONTENT_TEMPLATE_TARGET_LABELS[target]}`,
+      searchQuery: ''
+    })
+    if (contentTemplates.length === 0) void loadContentTemplates()
+  }
+
+  const openSaveContentTemplateModal = (target: AiContentTarget) => {
+    const content = getAiContentValue(target).trim()
+    if (!content) {
+      showAlert('Vui lòng nhập nội dung trước khi lưu mẫu.', 'error')
+      return
+    }
+    setContentTemplateSaveModal({ target, name: '', content })
+  }
+
+  const openContentTemplateManager = () => {
+    onOpenGeneralSettings?.('templates')
+  }
+
+  const applyContentTemplate = (template: ContentTemplate) => {
+    if (!contentTemplatePicker) return
+    const target = contentTemplatePicker.target
+    const currentContent = getAiContentValue(target).trim()
+    const nextContent = template.content
+    const doApply = () => {
+      setAiContentValue(target, nextContent)
+      setContentTemplatePicker(null)
+      showAlert('Đã áp dụng mẫu nội dung.', 'success')
+    }
+
+    if (currentContent && currentContent !== nextContent.trim()) {
+      showConfirm(
+        'Nội dung hiện tại sẽ được thay bằng mẫu đã chọn.',
+        doApply,
+        { title: 'Áp dụng mẫu nội dung', confirmText: 'Thay nội dung', variant: 'primary' }
+      )
+      return
+    }
+
+    doApply()
+  }
+
+  const saveCurrentContentTemplate = async () => {
+    if (!contentTemplateSaveModal) return
+    const name = contentTemplateSaveModal.name.trim()
+    const content = contentTemplateSaveModal.content.trim()
+    if (!name) {
+      showAlert('Vui lòng nhập tên mẫu nội dung.', 'error')
+      return
+    }
+    if (!content) {
+      showAlert('Vui lòng nhập nội dung mẫu.', 'error')
+      return
+    }
+    if (!window.electronAPI?.createContentTemplate) {
+      showAlert('Tính năng mẫu nội dung chưa sẵn sàng.', 'error')
+      return
+    }
+
+    setContentTemplateSaving(true)
+    try {
+      await window.electronAPI.createContentTemplate({ name, content })
+      setContentTemplateSaveModal(null)
+      await loadContentTemplates()
+      showAlert('Đã lưu mẫu nội dung.', 'success')
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể lưu mẫu nội dung.'), 'error')
+    } finally {
+      setContentTemplateSaving(false)
+    }
+  }
+
+  const renderContentTemplateToolbar = (target: AiContentTarget) => (
+    <div className="content-template-inline-toolbar">
+      <button
+        type="button"
+        className="btn btn-ghost content-template-inline-button"
+        onClick={() => openContentTemplatePicker(target)}
+      >
+        <FileText size={15} />
+        <span>Chọn mẫu</span>
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost content-template-inline-button"
+        onClick={() => openSaveContentTemplateModal(target)}
+      >
+        <Save size={15} />
+        <span>Lưu mẫu</span>
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost content-template-inline-button"
+        onClick={openContentTemplateManager}
+        disabled={!onOpenGeneralSettings}
+        title={onOpenGeneralSettings ? 'Quản lý mẫu nội dung' : 'Không thể mở quản lý mẫu trong form này'}
+      >
+        <Settings2 size={15} />
+        <span>Quản lý mẫu</span>
+      </button>
+    </div>
+  )
+
+  const renderContentToolsRow = (target: AiContentTarget) => (
+    <div className="content-editor-toolbar-row">
+      {renderAiContentToolbar(target)}
+      {renderContentTemplateToolbar(target)}
+    </div>
+  )
 
   const splitAiContentVariants = (content: string): string[] =>
     content.trim().split('|').map(item => item.trim()).filter(Boolean)
@@ -3610,7 +3768,7 @@ export default function CampaignFormModal({
           </div>
           <div className="stepper-form-group">
             <label>Nội dung up tin</label>
-            {renderAiContentToolbar('postBumpContent')}
+            {renderContentToolsRow('postBumpContent')}
             <textarea
               className="stepper-textarea"
               value={formData.postBumpContent}
@@ -3780,7 +3938,7 @@ export default function CampaignFormModal({
 
           <div className="stepper-form-group">
             <label>Nội dung comment</label>
-            {renderAiContentToolbar('commentContent')}
+            {renderContentToolsRow('commentContent')}
             <textarea
               className="stepper-textarea"
               placeholder="Nhập nội dung comment. Dùng dấu | để tách nhiều nội dung — comment 1 dùng nội dung 1, comment 2 dùng nội dung 2..."
@@ -3867,7 +4025,7 @@ export default function CampaignFormModal({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="stepper-form-group">
         <label>Nội dung comment <span className="required">*</span></label>
-        {renderAiContentToolbar('commentContent')}
+        {renderContentToolsRow('commentContent')}
         <textarea
           className="stepper-textarea"
           placeholder="Nhập nội dung comment. Dùng dấu | để tách nhiều nội dung, hệ thống sẽ xoay vòng theo từng lần comment."
@@ -3995,6 +4153,104 @@ export default function CampaignFormModal({
             <button type="button" className="btn btn-ghost btn-sm" onClick={cancelCampaignPicker}>Huỷ</button>
             <button type="button" className="btn btn-primary btn-sm campaign-picker-confirm-button" onClick={confirmCampaignPicker}>
               Chọn {campaignPickerModal.draftIds.length > 0 ? `(${campaignPickerModal.draftIds.length})` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderContentTemplatePickerModal = () => {
+    if (!contentTemplatePicker) return null
+    const query = contentTemplatePicker.searchQuery.trim().toLowerCase()
+    const filteredTemplates = query
+      ? contentTemplates.filter(template => `${template.name}\n${template.content}`.toLowerCase().includes(query))
+      : contentTemplates
+
+    return (
+      <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: 3100 }}>
+        <div className="content-template-picker-modal">
+          <div className="modal-header">
+            <span className="modal-title">{contentTemplatePicker.title}</span>
+            <button type="button" className="btn-icon" onClick={() => setContentTemplatePicker(null)}>
+              <X size={18} />
+            </button>
+          </div>
+          <div className="content-template-picker-body">
+            <div className="content-template-picker-search">
+              <Search size={15} />
+              <input
+                value={contentTemplatePicker.searchQuery}
+                onChange={event => setContentTemplatePicker(prev => prev ? { ...prev, searchQuery: event.target.value } : prev)}
+                placeholder="Tìm mẫu nội dung"
+              />
+              <button type="button" className="btn-icon" onClick={() => void loadContentTemplates()} disabled={contentTemplatesLoading} title="Load lại danh sách">
+                <RefreshCw size={15} className={contentTemplatesLoading ? 'spin' : ''} />
+              </button>
+            </div>
+            <div className="content-template-picker-list">
+              {contentTemplatesLoading ? (
+                <div className="content-template-picker-empty">Đang tải mẫu nội dung...</div>
+              ) : filteredTemplates.length === 0 ? (
+                <div className="content-template-picker-empty">Chưa có mẫu nội dung.</div>
+              ) : filteredTemplates.map(template => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className="content-template-picker-item"
+                  onClick={() => applyContentTemplate(template)}
+                >
+                  <span>{template.name}</span>
+                  <p>{template.content}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setContentTemplatePicker(null)}>Huỷ</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderContentTemplateSaveModal = () => {
+    if (!contentTemplateSaveModal) return null
+    return (
+      <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: 3100 }}>
+        <div className="content-template-save-modal">
+          <div className="modal-header">
+            <span className="modal-title">Lưu mẫu cho {CONTENT_TEMPLATE_TARGET_LABELS[contentTemplateSaveModal.target]}</span>
+            <button type="button" className="btn-icon" onClick={() => setContentTemplateSaveModal(null)} disabled={contentTemplateSaving}>
+              <X size={18} />
+            </button>
+          </div>
+          <div className="content-template-save-body">
+            <div className="stepper-form-group">
+              <label>Tên mẫu</label>
+              <input
+                className="stepper-input"
+                value={contentTemplateSaveModal.name}
+                onChange={event => setContentTemplateSaveModal(prev => prev ? { ...prev, name: event.target.value } : prev)}
+                placeholder="Nhập tên mẫu nội dung"
+                disabled={contentTemplateSaving}
+              />
+            </div>
+            <div className="stepper-form-group">
+              <label>Nội dung mẫu</label>
+              <textarea
+                className="stepper-textarea content-template-save-textarea"
+                value={contentTemplateSaveModal.content}
+                onChange={event => setContentTemplateSaveModal(prev => prev ? { ...prev, content: event.target.value } : prev)}
+                rows={6}
+                disabled={contentTemplateSaving}
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setContentTemplateSaveModal(null)} disabled={contentTemplateSaving}>Huỷ</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={saveCurrentContentTemplate} disabled={contentTemplateSaving}>
+              {contentTemplateSaving ? 'Đang lưu...' : 'Lưu mẫu'}
             </button>
           </div>
         </div>
@@ -4578,9 +4834,9 @@ export default function CampaignFormModal({
 	                    <>
 	                  {isMessageCampaign ? (
 	                    <div className="campaign-message-content-layout">
-	                      <div className="stepper-form-group campaign-message-content-tools">
-	                        <label>Nội dung tin nhắn</label>
-	                        {renderAiContentToolbar('content')}
+                      <div className="stepper-form-group campaign-message-content-tools">
+                        <label>Nội dung tin nhắn</label>
+                        {renderContentToolsRow('content')}
                       </div>
                       <div className="campaign-content-template-layout">
                         <div className="stepper-form-group">
@@ -4594,7 +4850,7 @@ export default function CampaignFormModal({
                   ) : (
 	                    <div className="stepper-form-group">
 	                      <label>Nội dung chiến dịch</label>
-	                      {renderAiContentToolbar('content')}
+	                      {renderContentToolsRow('content')}
 	                      {renderCampaignContentTextarea()}
 	                    </div>
 	                  )}
@@ -5068,6 +5324,8 @@ export default function CampaignFormModal({
         />
       )}
       {!draftFormConfig && renderCampaignPickerModal()}
+      {renderContentTemplatePickerModal()}
+      {renderContentTemplateSaveModal()}
       {draftFormConfig && (
         <CampaignFormModal
           campaign={null}

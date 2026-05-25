@@ -1,4 +1,4 @@
-import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy } from '../../shared/types'
+import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   return {
@@ -173,6 +173,19 @@ export function mapAccountContactGroupFromDB(row: Record<string, unknown>): Auto
     contactType: row.contact_type as ContactType,
     name: row.name as string,
     contactCount: row.contact_count as number | undefined,
+    isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: row.organization_id as number | undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapContentTemplateFromDB(row: Record<string, unknown>): ContentTemplate {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    content: (row.content as string) || '',
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,

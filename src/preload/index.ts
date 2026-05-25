@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -152,6 +152,19 @@ const electronAPI = {
 
   deleteCampaignDetail: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CAMPAIGN_DETAIL, id),
+
+  // Content Templates
+  listContentTemplates: (): Promise<ContentTemplate[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CONTENT_TEMPLATES),
+
+  createContentTemplate: (data: Partial<ContentTemplate>): Promise<ContentTemplate> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_CREATE_CONTENT_TEMPLATE, data),
+
+  updateContentTemplate: (id: number, updates: Partial<ContentTemplate>): Promise<ContentTemplate> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_CONTENT_TEMPLATE, id, updates),
+
+  deleteContentTemplate: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CONTENT_TEMPLATE, id),
 
   // Campaign Log (real-time)
   onCampaignLog: (callback: (log: { timestamp: string; message: string }) => void): () => void => {

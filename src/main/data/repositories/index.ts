@@ -2,6 +2,7 @@ export * as accountRepo from './accountRepository'
 export * as campaignRepo from './campaignRepository'
 export * as campaignActionRepo from './campaignActionRepository'
 export * as accountContactRepo from './accountContactRepository'
+export * as contentTemplateRepo from './contentTemplateRepository'
 
 // v2 — workflow redesign
 export * as blockRepo from './blockRepository'

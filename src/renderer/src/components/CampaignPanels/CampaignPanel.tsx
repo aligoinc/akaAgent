@@ -8,11 +8,12 @@ import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
+import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 
 interface CampaignPanelProps {
   filterAccountId?: number | null
   onClearFilter?: () => void
-  onOpenGeneralSettings?: () => void
+  onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
 }
 
 type DetailTab = 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData'

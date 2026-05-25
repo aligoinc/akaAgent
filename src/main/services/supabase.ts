@@ -1,10 +1,11 @@
-import { ActionLimitConfig, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
 import * as accountContactRepo from '../data/repositories/accountContactRepository'
 import * as accountActionRepo from '../data/repositories/accountActionRepository'
 import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
+import * as contentTemplateRepo from '../data/repositories/contentTemplateRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -70,6 +71,12 @@ export class SupabaseService {
   getAccountRateLimitStatus(accountId: number, actionCode: string, actionName: string, limitConfig?: ActionLimitConfig) {
     return campaignRepo.getAccountRateLimitStatus(accountId, actionCode, actionName, limitConfig)
   }
+
+  // =========== CONTENT TEMPLATES ===========
+  listContentTemplates() { return contentTemplateRepo.listContentTemplates() }
+  createContentTemplate(template: Partial<ContentTemplate>) { return contentTemplateRepo.createContentTemplate(template) }
+  updateContentTemplate(id: number, updates: Partial<ContentTemplate>) { return contentTemplateRepo.updateContentTemplate(id, updates) }
+  deleteContentTemplate(id: number) { return contentTemplateRepo.deleteContentTemplate(id) }
 
   // =========== ACCOUNT ACTION LIMITS / ERRORS ===========
   listAccountActions(flatformType?: string) { return accountActionRepo.listAccountActions(flatformType) }
