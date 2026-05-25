@@ -80,7 +80,7 @@ export function mapAutoErrorPolicyFromDB(row: Record<string, unknown>): AutoErro
 }
 
 export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
-  return {
+  const campaign: Campaign = {
     id: row.id as number,
     name: row.name as string,
     actionId: row.action_id as string,
@@ -109,6 +109,12 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     actionName: (row as any).auto_campaign_actions?.name as string | undefined,
     accountName: (row as any).auto_accounts?.name as string | undefined
   }
+
+  if ('last_run_at' in row) {
+    campaign.lastRunAt = (row.last_run_at as string | null) ?? null
+  }
+
+  return campaign
 }
 
 export function mapCampaignInputFromDB(row: Record<string, unknown>): CampaignInput {

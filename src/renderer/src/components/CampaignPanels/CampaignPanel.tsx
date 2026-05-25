@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
-import { Campaign, CampaignDetail } from '../../../../shared/types'
+import { CAMPAIGN_STATUSES, type Campaign, type CampaignDetail } from '../../../../shared/types'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -18,6 +18,13 @@ interface CampaignPanelProps {
 
 type DetailTab = 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink'
+type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
+type CampaignFilterDropdown = 'status' | 'platform' | 'action'
+
+interface CampaignFilterOption {
+  value: string
+  label: string
+}
 
 interface RunLogEntry {
   key: string
@@ -58,6 +65,36 @@ const FOUND_DATA_EXPORT_OPTIONS: { kind: FoundDataKind; label: string }[] = [
   { kind: 'uid', label: 'UID' },
   { kind: 'zalo', label: 'Link group Zalo' },
   { kind: 'postLink', label: 'Link bài post' }
+]
+
+const CAMPAIGN_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }> = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'yesterday', label: 'Hôm qua' },
+  { value: '7_days', label: '7 ngày' },
+  { value: '30_days', label: '30 ngày' },
+  { value: 'this_month', label: 'Tháng này' },
+  { value: 'last_month', label: 'Tháng trước' },
+  { value: '60_days', label: '60 ngày' },
+  { value: '90_days', label: '90 ngày' }
+]
+
+const DEFAULT_CAMPAIGN_TIME_PRESET: CampaignTimePreset = '7_days'
+
+const CAMPAIGN_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUSES.map(status => ({
+  value: status,
+  label: status
+}))
+
+const CAMPAIGN_STATUS_SORT_ORDER = new Map<string, number>([
+  ['đang chạy', 0],
+  ['chờ xử lý', 1],
+  ['tạm dừng', 2],
+  ['hoàn thành', 3]
+])
+
+const CAMPAIGN_PLATFORM_OPTIONS: CampaignFilterOption[] = [
+  { value: 'facebook', label: 'Facebook' }
 ]
 
 const DETAIL_DOCK_DEFAULT_HEIGHT = 220
@@ -158,6 +195,121 @@ const getUniqueFoundDataItems = (items: FoundDataItem[]) => {
 
 const formatDisplayDateTime = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
 
+const formatDateInput = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+const getCampaignDateRange = (preset: CampaignTimePreset, now = new Date()) => {
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const toDate = new Date(day)
+  const fromDate = new Date(day)
+
+  switch (preset) {
+    case 'all':
+      return { fromDate: '', toDate: '' }
+    case 'today':
+      return { fromDate: formatDateInput(day), toDate: formatDateInput(day) }
+    case 'yesterday':
+      fromDate.setDate(day.getDate() - 1)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(fromDate) }
+    case '7_days':
+      fromDate.setDate(day.getDate() - 7)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case '30_days':
+      fromDate.setDate(day.getDate() - 30)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case 'this_month':
+      fromDate.setDate(1)
+      toDate.setMonth(day.getMonth() + 1)
+      toDate.setDate(0)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case 'last_month':
+      toDate.setDate(0)
+      fromDate.setFullYear(toDate.getFullYear(), toDate.getMonth(), 1)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case '60_days':
+      fromDate.setDate(day.getDate() - 60)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case '90_days':
+      fromDate.setDate(day.getDate() - 90)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+  }
+}
+
+const parseDateInputBoundary = (value: string, boundary: 'start' | 'end') => {
+  if (!value) return null
+  const date = new Date(`${value}T${boundary === 'start' ? '00:00:00.000' : '23:59:59.999'}`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+const toggleStringValue = (values: string[], value: string) => (
+  values.includes(value)
+    ? values.filter(item => item !== value)
+    : [...values, value]
+)
+
+const getMultiSelectLabel = (options: CampaignFilterOption[], values: string[]) => {
+  if (values.length === 0) return 'Tất cả'
+  if (values.length === 1) {
+    return options.find(option => option.value === values[0])?.label || values[0]
+  }
+  return `${values.length} đã chọn`
+}
+
+const normalizeCampaignPlatform = (value: string | undefined | null) => {
+  const raw = String(value || '').trim().toLowerCase()
+  if (!raw) return ''
+  if (raw.includes('facebook') || raw === 'fb') return 'facebook'
+  if (raw.includes('zalo')) return 'zalo'
+  if (raw.includes('sms')) return 'sms'
+  return raw
+}
+
+const inferCampaignPlatformFromActionId = (actionId: string) => {
+  const normalized = actionId.toLowerCase()
+  if (normalized.startsWith('facebook_')) return 'facebook'
+  if (normalized.startsWith('zalo_')) return 'zalo'
+  if (normalized.startsWith('sms_')) return 'sms'
+  return ''
+}
+
+const normalizeFilterText = (value: string | undefined | null) => (
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .trim()
+)
+
+const getCampaignTimeSortValue = (value: string | undefined | null) => {
+  if (!value) return Number.POSITIVE_INFINITY
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time
+}
+
+const getCampaignListSortTime = (campaign: Campaign) => {
+  const useLastRunAt = campaign.status === 'tạm dừng' || campaign.status === 'hoàn thành'
+  return getCampaignTimeSortValue(useLastRunAt ? (campaign.lastRunAt || campaign.schedule) : campaign.schedule)
+}
+
+const compareCampaignListOrder = (a: Campaign, b: Campaign) => {
+  const statusA = CAMPAIGN_STATUS_SORT_ORDER.get(a.status) ?? CAMPAIGN_STATUS_SORT_ORDER.size
+  const statusB = CAMPAIGN_STATUS_SORT_ORDER.get(b.status) ?? CAMPAIGN_STATUS_SORT_ORDER.size
+  if (statusA !== statusB) return statusA - statusB
+
+  const timeA = getCampaignListSortTime(a)
+  const timeB = getCampaignListSortTime(b)
+  if (timeA !== timeB) {
+    if (!Number.isFinite(timeA)) return 1
+    if (!Number.isFinite(timeB)) return -1
+    return timeB - timeA
+  }
+
+  return b.id - a.id
+}
+
 const formatExportTimestamp = (date = new Date()) => {
   const pad = (value: number) => String(value).padStart(2, '0')
   return [
@@ -239,6 +391,16 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [foundDataExportKinds, setFoundDataExportKinds] = useState<Set<FoundDataKind>>(
     () => new Set(FOUND_DATA_EXPORT_OPTIONS.map(option => option.kind))
   )
+  const defaultTimeRange = useMemo(() => getCampaignDateRange(DEFAULT_CAMPAIGN_TIME_PRESET), [])
+  const [timePreset, setTimePreset] = useState<CampaignTimePreset>(DEFAULT_CAMPAIGN_TIME_PRESET)
+  const [dateFrom, setDateFrom] = useState(defaultTimeRange.fromDate)
+  const [dateTo, setDateTo] = useState(defaultTimeRange.toDate)
+  const [campaignNameSearch, setCampaignNameSearch] = useState('')
+  const [statusFilters, setStatusFilters] = useState<string[]>([])
+  const [platformFilters, setPlatformFilters] = useState<string[]>([])
+  const [actionFilters, setActionFilters] = useState<string[]>([])
+  const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
+  const filterPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadCampaigns()
@@ -258,10 +420,23 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
   }, [selectedCampaignId, detailTab, loadCampaignInputData, loadCampaignDetails])
 
-  // Clear bulk selection when account filter changes
+  useEffect(() => {
+    if (!openFilterDropdown) return
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (!filterPanelRef.current?.contains(event.target as Node)) {
+        setOpenFilterDropdown(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentMouseDown)
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
+  }, [openFilterDropdown])
+
+  // Clear bulk selection when any list filter changes.
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [filterAccountId])
+  }, [filterAccountId, timePreset, dateFrom, dateTo, campaignNameSearch, statusFilters, platformFilters, actionFilters])
 
   const handleEdit = (campaign: Campaign) => {
     if (!canEditCampaign(campaign.status)) {
@@ -336,11 +511,22 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredCampaigns.length && filteredCampaigns.length > 0) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(filteredCampaigns.map(c => c.id)))
-    }
+    setSelectedIds(prev => {
+      const allFilteredSelected = filteredCampaigns.length > 0 && filteredCampaigns.every(c => prev.has(c.id))
+      const next = new Set(prev)
+      filteredCampaigns.forEach(c => {
+        if (allFilteredSelected) next.delete(c.id)
+        else next.add(c.id)
+      })
+      return next
+    })
+  }
+
+  const handleTimePresetChange = (value: CampaignTimePreset) => {
+    const range = getCampaignDateRange(value)
+    setTimePreset(value)
+    setDateFrom(range.fromDate)
+    setDateTo(range.toDate)
   }
 
   const handleBulkPause = async () => {
@@ -747,15 +933,156 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
   }
 
-  // Filter campaigns by account if filter is active
+  const actionById = useMemo(
+    () => new Map(campaignActions.map(action => [action.id, action])),
+    [campaignActions]
+  )
+
+  const accountById = useMemo(
+    () => new Map(accounts.map(account => [account.id, account])),
+    [accounts]
+  )
+
+  const actionFilterOptions = useMemo<CampaignFilterOption[]>(() => {
+    const optionMap = new Map<string, string>()
+    campaignActions.forEach(action => {
+      optionMap.set(action.id, action.name || action.id)
+    })
+    campaigns.forEach(campaign => {
+      if (!optionMap.has(campaign.actionId)) {
+        optionMap.set(campaign.actionId, campaign.actionName || campaign.actionId)
+      }
+    })
+    return Array.from(optionMap.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
+  }, [campaignActions, campaigns])
+
+  // Filter campaigns by account and the local list filters.
   const filteredCampaigns = useMemo(() => {
-    if (!filterAccountId) return campaigns
-    return campaigns.filter(c => c.accountId === filterAccountId)
-  }, [campaigns, filterAccountId])
+    const dateStart = parseDateInputBoundary(dateFrom, 'start')
+    const dateEnd = parseDateInputBoundary(dateTo, 'end')
+    const hasDateFilter = timePreset !== 'all' && (!!dateStart || !!dateEnd)
+    const searchQuery = normalizeFilterText(campaignNameSearch)
+
+    return campaigns.filter(campaign => {
+      if (filterAccountId && campaign.accountId !== filterAccountId) return false
+
+      if (searchQuery && !normalizeFilterText(campaign.name).includes(searchQuery)) return false
+
+      if (hasDateFilter) {
+        if (!campaign.schedule) return false
+        const scheduleDate = new Date(campaign.schedule)
+        if (Number.isNaN(scheduleDate.getTime())) return false
+        if (dateStart && scheduleDate < dateStart) return false
+        if (dateEnd && scheduleDate > dateEnd) return false
+      }
+
+      if (statusFilters.length > 0 && !statusFilters.includes(campaign.status)) return false
+
+      if (platformFilters.length > 0) {
+        const actionPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
+        const accountPlatform = normalizeCampaignPlatform(accountById.get(campaign.accountId)?.flatformType)
+        const campaignPlatform = actionPlatform || accountPlatform || inferCampaignPlatformFromActionId(campaign.actionId)
+        if (!platformFilters.includes(campaignPlatform)) return false
+      }
+
+      if (actionFilters.length > 0 && !actionFilters.includes(campaign.actionId)) return false
+
+      return true
+    }).sort(compareCampaignListOrder)
+  }, [
+    campaigns,
+    filterAccountId,
+    dateFrom,
+    dateTo,
+    timePreset,
+    campaignNameSearch,
+    statusFilters,
+    platformFilters,
+    actionFilters,
+    actionById,
+    accountById
+  ])
+
+  const selectedFilteredCount = useMemo(
+    () => filteredCampaigns.reduce((count, campaign) => count + (selectedIds.has(campaign.id) ? 1 : 0), 0),
+    [filteredCampaigns, selectedIds]
+  )
 
   const filterAccountName = filterAccountId
     ? accounts.find(a => a.id === filterAccountId)?.name || `ID: ${filterAccountId}`
     : null
+
+  const emptyCampaignText = campaigns.length === 0
+    ? 'Chưa có chiến dịch'
+    : 'Không có chiến dịch phù hợp bộ lọc'
+
+  const renderMultiSelectFilter = (
+    key: CampaignFilterDropdown,
+    label: string,
+    options: CampaignFilterOption[],
+    values: string[],
+    onToggle: (value: string) => void,
+    onClear: () => void,
+    wide = false
+  ) => {
+    const isOpen = openFilterDropdown === key
+    const triggerLabel = getMultiSelectLabel(options, values)
+
+    return (
+      <div className={`campaign-filter-field campaign-filter-multiselect ${wide ? 'is-wide' : ''}`}>
+        <label>{label}</label>
+        <div className="campaign-multi-select">
+          <button
+            type="button"
+            className={`campaign-multi-select-trigger ${isOpen ? 'is-open' : ''}`}
+            onClick={() => setOpenFilterDropdown(prev => prev === key ? null : key)}
+            aria-expanded={isOpen}
+            title={triggerLabel}
+          >
+            <span>{triggerLabel}</span>
+            <ChevronDown size={14} />
+          </button>
+
+          {isOpen && (
+            <div className="campaign-filter-menu">
+              <button
+                type="button"
+                className={`campaign-filter-option ${values.length === 0 ? 'selected' : ''}`}
+                onClick={onClear}
+              >
+                <span className="campaign-filter-option-check">
+                  {values.length === 0 && <Check size={12} />}
+                </span>
+                <span className="campaign-filter-option-label">Tất cả</span>
+              </button>
+
+              {options.length > 0 && <div className="campaign-filter-menu-divider" />}
+
+              {options.map(option => {
+                const selected = values.includes(option.value)
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`campaign-filter-option ${selected ? 'selected' : ''}`}
+                    onClick={() => onToggle(option.value)}
+                    title={option.label}
+                  >
+                    <span className="campaign-filter-option-check">
+                      {selected && <Check size={12} />}
+                    </span>
+                    <span className="campaign-filter-option-label">{option.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="campaign-panel" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -773,6 +1100,85 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           <button className="btn btn-primary btn-icon" onClick={() => { setEditingCampaign(null); setShowForm(true); }} title="Thêm chiến dịch">
             <Plus size={14} />
           </button>
+        </div>
+      </div>
+
+      <div className="campaign-list-filter-panel" ref={filterPanelRef}>
+        <div className="campaign-filter-row campaign-filter-time-row">
+          <div className="campaign-filter-field campaign-filter-time-preset">
+            <label>Thời gian</label>
+            <select
+              className="stepper-input campaign-filter-control"
+              value={timePreset}
+              onChange={event => handleTimePresetChange(event.target.value as CampaignTimePreset)}
+            >
+              {CAMPAIGN_TIME_PRESETS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="campaign-filter-field campaign-filter-date-field">
+            <label>Từ ngày</label>
+            <input
+              type="date"
+              className="stepper-input campaign-filter-date-input"
+              value={dateFrom}
+              onChange={event => setDateFrom(event.target.value)}
+              disabled={timePreset === 'all'}
+            />
+          </div>
+
+          <div className="campaign-filter-field campaign-filter-date-field">
+            <label>Đến ngày</label>
+            <input
+              type="date"
+              className="stepper-input campaign-filter-date-input"
+              value={dateTo}
+              onChange={event => setDateTo(event.target.value)}
+              disabled={timePreset === 'all'}
+            />
+          </div>
+
+          <div className="campaign-filter-field campaign-filter-search-field">
+            <label>Tìm kiếm</label>
+            <div className="campaign-filter-search-box">
+              <Search size={15} />
+              <input
+                value={campaignNameSearch}
+                onChange={event => setCampaignNameSearch(event.target.value)}
+                placeholder="Nhập tên chiến dịch..."
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="campaign-filter-row campaign-filter-select-row">
+          {renderMultiSelectFilter(
+            'status',
+            'Trạng thái chiến dịch',
+            CAMPAIGN_STATUS_FILTER_OPTIONS,
+            statusFilters,
+            value => setStatusFilters(prev => toggleStringValue(prev, value)),
+            () => setStatusFilters([])
+          )}
+          {renderMultiSelectFilter(
+            'platform',
+            'Nền tảng',
+            CAMPAIGN_PLATFORM_OPTIONS,
+            platformFilters,
+            value => setPlatformFilters(prev => toggleStringValue(prev, value)),
+            () => setPlatformFilters([])
+          )}
+          {renderMultiSelectFilter(
+            'action',
+            'Loại chiến dịch',
+            actionFilterOptions,
+            actionFilters,
+            value => setActionFilters(prev => toggleStringValue(prev, value)),
+            () => setActionFilters([]),
+            true
+          )}
         </div>
       </div>
 
@@ -832,15 +1238,15 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       {/* Campaign Table */}
       <div className="campaign-panel-content" style={{ flex: 1, minHeight: 0 }}>
         {filteredCampaigns.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-text">{filterAccountId ? 'Không có chiến dịch cho tài khoản này' : 'Chưa có chiến dịch'}</div></div>
+          <div className="empty-state"><div className="empty-state-text">{emptyCampaignText}</div></div>
         ) : (
           <div className="campaign-table">
             <div className="campaign-table-header">
               <div className="campaign-col col-checkbox">
                 <input
                   type="checkbox"
-                  checked={filteredCampaigns.length > 0 && selectedIds.size === filteredCampaigns.length}
-                  ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filteredCampaigns.length }}
+                  checked={filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
+                  ref={el => { if (el) el.indeterminate = selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
                   onChange={toggleSelectAll}
                 />
               </div>
