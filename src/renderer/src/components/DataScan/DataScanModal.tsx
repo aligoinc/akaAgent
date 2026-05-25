@@ -1,17 +1,47 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Download, Folder, Maximize2, Minimize2, Plus, RefreshCw, Search, Square, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Download, Folder, Maximize2, Minimize2, Plus, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
-import { AutoAccountContact, AutoAccountContactGroup, ContactType } from '../../../../shared/types'
+import { AutoAccountContact, AutoAccountContactGroup, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter } from '../../../../shared/types'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
 import DataScanGroupManagementModal from './DataScanGroupManagementModal'
 import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 
-export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters'
+export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers'
 type ContactStatusFilter = 'active' | 'inactive' | 'all'
+type PageInboxTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
+interface PageInboxAppliedFilters {
+  pageUid: string
+  search: string
+  phoneFilter: PageInboxPhoneFilter
+  dateFrom: string
+  dateTo: string
+  messageFilterMode: PageInboxMessageFilterMode
+  messageKeywords: string
+}
+
+interface PageInboxSelectedRange {
+  start: number
+  end: number
+}
 
 const POST_COMMENTERS_ACTION_ID: DataScanAction = 'facebook_post_commenters'
+const PAGE_INBOX_CUSTOMERS_ACTION_ID: DataScanAction = 'facebook_page_inbox_customers'
 const DEFAULT_POST_COMMENTER_LIMIT = 100
+const PAGE_INBOX_PAGE_SIZE = 100
+const DEFAULT_PAGE_INBOX_TIME_PRESET: PageInboxTimePreset = '30_days'
+
+const PAGE_INBOX_TIME_PRESETS: Array<{ value: PageInboxTimePreset; label: string }> = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'yesterday', label: 'Hôm qua' },
+  { value: '7_days', label: '7 ngày' },
+  { value: '30_days', label: '30 ngày' },
+  { value: 'this_month', label: 'Tháng này' },
+  { value: 'last_month', label: 'Tháng trước' },
+  { value: '60_days', label: '60 ngày' },
+  { value: '90_days', label: '90 ngày' }
+]
 
 interface DataScanActionDef {
   id: DataScanAction
@@ -60,6 +90,13 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
     contactType: 'person',
     emptyText: 'Nhập link bài post rồi tải data',
     loadingText: 'Đang tải người comment bài post...'
+  },
+  {
+    id: PAGE_INBOX_CUSTOMERS_ACTION_ID,
+    label: 'Facebook - Lấy người từng nhắn tin với page',
+    contactType: 'page_inbox_customer',
+    emptyText: 'Chọn page rồi tải data',
+    loadingText: 'Đang tải người nhắn tin với page...'
   }
 ]
 
@@ -84,6 +121,63 @@ const formatExportTimestamp = (date = new Date()) => {
     pad(date.getMonth() + 1),
     pad(date.getDate())
   ].join('') + '-' + [pad(date.getHours()), pad(date.getMinutes()), pad(date.getSeconds())].join('')
+}
+
+const formatCount = (value: number) => new Intl.NumberFormat('vi-VN').format(value)
+
+const formatDateInput = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+const getPageInboxDateRange = (preset: PageInboxTimePreset, now = new Date()) => {
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const toDate = new Date(day)
+  const fromDate = new Date(day)
+
+  switch (preset) {
+    case 'all':
+      return { fromDate: '', toDate: '' }
+    case 'today':
+      return { fromDate: formatDateInput(day), toDate: formatDateInput(day) }
+    case 'yesterday':
+      fromDate.setDate(day.getDate() - 1)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(fromDate) }
+    case '7_days':
+      fromDate.setDate(day.getDate() - 7)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case '30_days':
+      fromDate.setDate(day.getDate() - 30)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case 'this_month':
+      fromDate.setDate(1)
+      toDate.setMonth(day.getMonth() + 1)
+      toDate.setDate(0)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case 'last_month':
+      toDate.setDate(0)
+      fromDate.setFullYear(toDate.getFullYear(), toDate.getMonth(), 1)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case '60_days':
+      fromDate.setDate(day.getDate() - 60)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case '90_days':
+      fromDate.setDate(day.getDate() - 90)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+  }
+}
+
+const getDefaultPageInboxAppliedFilters = (): PageInboxAppliedFilters => {
+  const range = getPageInboxDateRange(DEFAULT_PAGE_INBOX_TIME_PRESET)
+  return {
+    pageUid: '',
+    search: '',
+    phoneFilter: 'all',
+    dateFrom: range.fromDate,
+    dateTo: range.toDate,
+    messageFilterMode: 'all',
+    messageKeywords: ''
+  }
 }
 
 const sanitizeFileSegment = (value: string) => {
@@ -133,9 +227,40 @@ const normalizePositiveNumber = (value: unknown, fallback = DEFAULT_POST_COMMENT
 
 const getContactInfo = (contact: AutoAccountContact) => {
   const extra = contact.extraData || {}
+  if (contact.contactType === 'page_inbox_customer') {
+    return [
+      typeof extra.phone === 'string' ? extra.phone : '',
+      typeof extra.lastMessageText === 'string' ? extra.lastMessageText : '',
+      typeof extra.messageHistory === 'string' ? extra.messageHistory : ''
+    ].filter(Boolean).join(' ')
+  }
   const category = typeof extra.category === 'string' ? extra.category : ''
   const lastActivityText = typeof extra.lastActivityText === 'string' ? extra.lastActivityText : ''
   return category || lastActivityText || ''
+}
+
+const getPageInboxPhone = (contact: AutoAccountContact) => {
+  const phone = contact.extraData?.phone
+  return typeof phone === 'string' && phone.trim() ? phone.trim() : ''
+}
+
+const getPageInboxLastMessage = (contact: AutoAccountContact) => {
+  const text = contact.extraData?.lastMessageText
+  return typeof text === 'string' && text.trim() ? text.trim() : ''
+}
+
+const getPageInboxLastMessageAt = (contact: AutoAccountContact) => {
+  const raw = contact.extraData?.lastMessageAt
+  if (typeof raw !== 'string' || !raw.trim()) return ''
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return raw
+  return new Intl.DateTimeFormat('vi-VN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date)
 }
 
 const getGroupApprovalStatus = (contact: AutoAccountContact) => {
@@ -163,6 +288,7 @@ const getContactStatusLabel = (contact: AutoAccountContact) => {
 const getContactTypeLabel = (contactType: ContactType) => {
   if (contactType === 'person') return 'User Facebook'
   if (contactType === 'group') return 'Group Facebook'
+  if (contactType === 'page_inbox_customer') return 'Khách inbox Page'
   return 'Page Facebook'
 }
 
@@ -227,6 +353,8 @@ export default function DataScanModal({
   const scanRunIdRef = useRef(0)
   const stoppedScanIdsRef = useRef<Set<number>>(new Set())
   const completedScanIdsRef = useRef<Set<number>>(new Set())
+  const pageInboxOptionsAccountRef = useRef<number | ''>('')
+  const pageInboxPageUidRef = useRef('')
   const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions))
   const [accountId, setAccountId] = useState<number | ''>(initialAccountId || '')
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
@@ -241,6 +369,20 @@ export default function DataScanModal({
   const [rangeEnd, setRangeEnd] = useState(100)
   const [postCommentersUrl, setPostCommentersUrl] = useState('')
   const [postCommentersLimit, setPostCommentersLimit] = useState(DEFAULT_POST_COMMENTER_LIMIT)
+  const [pageInboxPages, setPageInboxPages] = useState<AutoAccountContact[]>([])
+  const [pageInboxPageUid, setPageInboxPageUid] = useState('')
+  const [pageInboxTimePreset, setPageInboxTimePreset] = useState<PageInboxTimePreset>(DEFAULT_PAGE_INBOX_TIME_PRESET)
+  const [pageInboxPhoneFilter, setPageInboxPhoneFilter] = useState<PageInboxPhoneFilter>('all')
+  const [pageInboxDateFrom, setPageInboxDateFrom] = useState(() => getPageInboxDateRange(DEFAULT_PAGE_INBOX_TIME_PRESET).fromDate)
+  const [pageInboxDateTo, setPageInboxDateTo] = useState(() => getPageInboxDateRange(DEFAULT_PAGE_INBOX_TIME_PRESET).toDate)
+  const [pageInboxMessageFilterMode, setPageInboxMessageFilterMode] = useState<PageInboxMessageFilterMode>('all')
+  const [pageInboxMessageKeywords, setPageInboxMessageKeywords] = useState('')
+  const [pageInboxPage, setPageInboxPage] = useState(1)
+  const [pageInboxTotal, setPageInboxTotal] = useState(0)
+  const [pageInboxAppliedFilters, setPageInboxAppliedFilters] = useState<PageInboxAppliedFilters>(() => getDefaultPageInboxAppliedFilters())
+  const [pageInboxSelectAllMatching, setPageInboxSelectAllMatching] = useState(false)
+  const [pageInboxSelectedRange, setPageInboxSelectedRange] = useState<PageInboxSelectedRange | null>(null)
+  const [pageInboxExcludedIds, setPageInboxExcludedIds] = useState<Set<number>>(new Set())
   const [progressMessages, setProgressMessages] = useState<string[]>([])
   const [minimized, setMinimized] = useState(false)
   const [contactGroups, setContactGroups] = useState<AutoAccountContactGroup[]>([])
@@ -268,6 +410,8 @@ export default function DataScanModal({
   )
   const canSwitchLockedAction = !!allowedActions?.length && availableActions.length > 1
   const isPostCommentersAction = action === POST_COMMENTERS_ACTION_ID
+  const isPageInboxAction = action === PAGE_INBOX_CUSTOMERS_ACTION_ID
+  const supportsContactGroups = !isPageInboxAction
   const normalizedPostCommentersUrl = useMemo(
     () => normalizeFacebookPostUrlForCompare(postCommentersUrl),
     [postCommentersUrl]
@@ -281,6 +425,11 @@ export default function DataScanModal({
     [actionDef.contactType]
   )
   const hasStatusFilter = actionDef.contactType === 'person' || actionDef.contactType === 'group'
+  const selectedPageInboxPage = useMemo(
+    () => pageInboxPages.find(page => page.uid === pageInboxPageUid) || null,
+    [pageInboxPageUid, pageInboxPages]
+  )
+  const pageInboxPageCount = Math.max(1, Math.ceil(pageInboxTotal / PAGE_INBOX_PAGE_SIZE))
 
   useEffect(() => {
     loadAccounts()
@@ -309,12 +458,35 @@ export default function DataScanModal({
   const loadCachedContacts = useCallback(async () => {
     if (!window.electronAPI || !accountId) {
       setContacts([])
+      setPageInboxTotal(0)
       return
     }
     setLoading(true)
     try {
-      const data = await window.electronAPI.listContacts(accountId, actionDef.contactType)
-      setContacts(data)
+      if (isPageInboxAction) {
+        if (!pageInboxAppliedFilters.pageUid) {
+          setContacts([])
+          setPageInboxTotal(0)
+          return
+        }
+        const result = await window.electronAPI.listPageInboxContacts(accountId, {
+          pageUid: pageInboxAppliedFilters.pageUid,
+          search: pageInboxAppliedFilters.search,
+          phoneFilter: pageInboxAppliedFilters.phoneFilter,
+          dateFrom: pageInboxAppliedFilters.dateFrom,
+          dateTo: pageInboxAppliedFilters.dateTo,
+          messageFilterMode: pageInboxAppliedFilters.messageFilterMode,
+          messageKeywords: pageInboxAppliedFilters.messageKeywords,
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE
+        })
+        setContacts(result.contacts)
+        setPageInboxTotal(result.total)
+      } else {
+        const data = await window.electronAPI.listContacts(accountId, actionDef.contactType)
+        setContacts(data)
+        setPageInboxTotal(0)
+      }
       setGroupContactCache({})
     } catch (err: any) {
       console.error('Failed to load scan contacts:', err)
@@ -322,10 +494,23 @@ export default function DataScanModal({
     } finally {
       setLoading(false)
     }
-  }, [accountId, actionDef.contactType, showAlert])
+  }, [
+    accountId,
+    actionDef.contactType,
+    isPageInboxAction,
+    pageInboxAppliedFilters,
+    pageInboxPage,
+    showAlert
+  ])
 
   const loadContactGroups = useCallback(async () => {
     if (!window.electronAPI || !accountId) {
+      setContactGroups([])
+      setAllContactGroups([])
+      setActiveGroupId(null)
+      return
+    }
+    if (!supportsContactGroups) {
       setContactGroups([])
       setAllContactGroups([])
       setActiveGroupId(null)
@@ -346,7 +531,7 @@ export default function DataScanModal({
     } finally {
       setGroupsLoading(false)
     }
-  }, [accountId, actionDef.contactType, showAlert])
+  }, [accountId, actionDef.contactType, showAlert, supportsContactGroups])
 
   const loadContactsForGroup = useCallback(async (groupId: number, force = false): Promise<AutoAccountContact[]> => {
     if (!window.electronAPI) return []
@@ -355,6 +540,38 @@ export default function DataScanModal({
     setGroupContactCache(prev => ({ ...prev, [groupId]: data }))
     return data
   }, [groupContactCache])
+
+  useEffect(() => {
+    pageInboxPageUidRef.current = pageInboxPageUid
+  }, [pageInboxPageUid])
+
+  const getPageInboxDraftFilters = useCallback((overrides: Partial<PageInboxAppliedFilters> = {}): PageInboxAppliedFilters => ({
+    pageUid: pageInboxPageUid,
+    search: search.trim(),
+    phoneFilter: pageInboxPhoneFilter,
+    dateFrom: pageInboxDateFrom,
+    dateTo: pageInboxDateTo,
+    messageFilterMode: pageInboxMessageFilterMode,
+    messageKeywords: pageInboxMessageKeywords,
+    ...overrides
+  }), [
+    pageInboxDateFrom,
+    pageInboxDateTo,
+    pageInboxMessageFilterMode,
+    pageInboxMessageKeywords,
+    pageInboxPageUid,
+    pageInboxPhoneFilter,
+    search
+  ])
+
+  const applyPageInboxDraftFilters = useCallback((overrides: Partial<PageInboxAppliedFilters> = {}) => {
+    setSelectedIds(new Set())
+    setPageInboxSelectAllMatching(false)
+    setPageInboxSelectedRange(null)
+    setPageInboxExcludedIds(new Set())
+    setPageInboxPage(1)
+    setPageInboxAppliedFilters(getPageInboxDraftFilters(overrides))
+  }, [getPageInboxDraftFilters])
 
   useEffect(() => {
     setSelectedIds(new Set())
@@ -370,9 +587,73 @@ export default function DataScanModal({
     setGroupContacts([])
     setGroupContactCache({})
     setAllContactGroups([])
+    setPageInboxPage(1)
+    setPageInboxSelectAllMatching(false)
+    setPageInboxSelectedRange(null)
+    setPageInboxExcludedIds(new Set())
+    if (action === PAGE_INBOX_CUSTOMERS_ACTION_ID) {
+      const defaults = getDefaultPageInboxAppliedFilters()
+      setPageInboxTimePreset(DEFAULT_PAGE_INBOX_TIME_PRESET)
+      setPageInboxPhoneFilter(defaults.phoneFilter)
+      setPageInboxDateFrom(defaults.dateFrom)
+      setPageInboxDateTo(defaults.dateTo)
+      setPageInboxMessageFilterMode(defaults.messageFilterMode)
+      setPageInboxMessageKeywords(defaults.messageKeywords)
+      setPageInboxAppliedFilters(defaults)
+    }
+  }, [action, hasStatusFilter, initialShowGroupPanel, initialStatusFilter, isPostCommentersAction])
+
+  useEffect(() => {
     loadCachedContacts()
+  }, [loadCachedContacts])
+
+  useEffect(() => {
     loadContactGroups()
-  }, [action, hasStatusFilter, initialShowGroupPanel, initialStatusFilter, isPostCommentersAction, loadCachedContacts, loadContactGroups])
+  }, [loadContactGroups])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadPageOptions() {
+      if (!window.electronAPI || !accountId || !isPageInboxAction) {
+        setPageInboxPages([])
+        setPageInboxPageUid('')
+        pageInboxPageUidRef.current = ''
+        pageInboxOptionsAccountRef.current = ''
+        setPageInboxSelectAllMatching(false)
+        setPageInboxSelectedRange(null)
+        setPageInboxExcludedIds(new Set())
+        return
+      }
+      try {
+        const accountChanged = pageInboxOptionsAccountRef.current !== accountId
+        const pages = await window.electronAPI.listContacts(accountId, 'page')
+        if (cancelled) return
+        pageInboxOptionsAccountRef.current = accountId
+        setPageInboxPages(pages)
+        const firstPageUid = pages[0]?.uid || ''
+        const currentPageUid = pageInboxPageUidRef.current
+        const nextPageUid = !accountChanged && currentPageUid && pages.some(page => page.uid === currentPageUid)
+          ? currentPageUid
+          : firstPageUid
+        setPageInboxPageUid(nextPageUid)
+        setSelectedIds(new Set())
+        setPageInboxSelectAllMatching(false)
+        setPageInboxSelectedRange(null)
+        setPageInboxExcludedIds(new Set())
+        setPageInboxPage(1)
+        setPageInboxAppliedFilters(prev => ({ ...prev, pageUid: nextPageUid }))
+      } catch (err: any) {
+        if (!cancelled) {
+          console.error('Failed to load page options for inbox scan:', err)
+          showAlert(err?.message || 'Không thể tải danh sách page.', 'error')
+        }
+      }
+    }
+    loadPageOptions()
+    return () => {
+      cancelled = true
+    }
+  }, [accountId, isPageInboxAction, showAlert])
 
   useEffect(() => {
     let cancelled = false
@@ -426,7 +707,11 @@ export default function DataScanModal({
       if (isPostCommentersAction && result.sourcePostUrl) {
         setPostCommentersUrl(String(result.sourcePostUrl))
       }
-      loadCachedContacts()
+      if (isPageInboxAction) {
+        applyPageInboxDraftFilters()
+      } else {
+        loadCachedContacts()
+      }
       loadContactGroups()
 
       if (!result.success) {
@@ -436,7 +721,16 @@ export default function DataScanModal({
       if (!wasStopped) showAlert(`Đã tải ${result.count} data.`, 'success')
     })
     return unsubscribe
-  }, [accountId, actionDef.contactType, isPostCommentersAction, loadCachedContacts, loadContactGroups, showAlert])
+  }, [
+    accountId,
+    actionDef.contactType,
+    applyPageInboxDraftFilters,
+    isPageInboxAction,
+    isPostCommentersAction,
+    loadCachedContacts,
+    loadContactGroups,
+    showAlert
+  ])
 
   const matchesStatusFilter = useCallback((contact: AutoAccountContact) => {
     if (statusFilter === 'all') return true
@@ -460,6 +754,7 @@ export default function DataScanModal({
   }, [actionContacts, matchesStatusFilter])
 
   const filteredContacts = useMemo(() => {
+    if (isPageInboxAction) return visibleContacts
     const query = search.trim().toLocaleLowerCase('vi-VN')
     if (!query) return visibleContacts
     return visibleContacts.filter(contact => [
@@ -470,9 +765,36 @@ export default function DataScanModal({
       getContactStatusLabel(contact),
       actionDef.contactType === 'group' ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [actionDef.contactType, search, visibleContacts])
+  }, [actionDef.contactType, isPageInboxAction, search, visibleContacts])
 
-  const allVisibleSelected = filteredContacts.length > 0 && filteredContacts.every(contact => selectedIds.has(contact.id))
+  const getContactRowNumber = useCallback((index: number) => (
+    isPageInboxAction ? (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE + index + 1 : index + 1
+  ), [isPageInboxAction, pageInboxPage])
+  const isContactSelected = useCallback((contactId: number, rowNumber?: number) => {
+    if (!isPageInboxAction) return selectedIds.has(contactId)
+    if (pageInboxSelectAllMatching) return !pageInboxExcludedIds.has(contactId)
+    if (pageInboxSelectedRange && rowNumber !== undefined) {
+      const inRange = rowNumber >= pageInboxSelectedRange.start && rowNumber <= pageInboxSelectedRange.end
+      return inRange ? !pageInboxExcludedIds.has(contactId) : selectedIds.has(contactId)
+    }
+    return selectedIds.has(contactId)
+  }, [
+    isPageInboxAction,
+    pageInboxExcludedIds,
+    pageInboxSelectAllMatching,
+    pageInboxSelectedRange,
+    selectedIds
+  ])
+  const allPageInboxMatchingSelected = isPageInboxAction && pageInboxTotal > 0 && pageInboxSelectAllMatching && pageInboxExcludedIds.size === 0
+  const allVisibleSelected = filteredContacts.length > 0 && filteredContacts.every((contact, index) => (
+    isContactSelected(contact.id, getContactRowNumber(index))
+  ))
+  const pageInboxSelectedCount = pageInboxSelectAllMatching
+    ? Math.max(0, pageInboxTotal - pageInboxExcludedIds.size)
+    : pageInboxSelectedRange
+      ? Math.max(0, pageInboxSelectedRange.end - pageInboxSelectedRange.start + 1 - pageInboxExcludedIds.size) + selectedIds.size
+      : selectedIds.size
+  const currentTotalCount = isPageInboxAction ? pageInboxTotal : filteredContacts.length
   const selectedContacts = useMemo(
     () => visibleContacts.filter(contact => selectedIds.has(contact.id)),
     [selectedIds, visibleContacts]
@@ -513,16 +835,51 @@ export default function DataScanModal({
       contact.contactType === 'group' ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
   }, [groupContactsByStatus, search])
-  const tableColSpan = actionDef.contactType === 'group' ? 7 : actionDef.contactType === 'person' ? 6 : 5
+  const tableColSpan = isPageInboxAction ? 7 : actionDef.contactType === 'group' ? 7 : actionDef.contactType === 'person' ? 6 : 5
   const groupTableColSpan = activeGroupContactType === 'group' ? 7 : activeGroupContactType === 'person' ? 6 : 5
+  const currentRenderStart = currentTotalCount > 0 && filteredContacts.length > 0
+    ? getContactRowNumber(0)
+    : 0
+  const currentRenderEnd = currentRenderStart > 0
+    ? currentRenderStart + filteredContacts.length - 1
+    : 0
+  const currentRenderText = currentRenderStart > 0
+    ? `Hiển thị ${formatCount(currentRenderStart)}-${formatCount(currentRenderEnd)}/${formatCount(currentTotalCount)} data`
+    : `Hiển thị 0/${formatCount(currentTotalCount)} data`
+  const effectiveSearchText = isPageInboxAction ? pageInboxAppliedFilters.search : search
   const emptyTableText = actionContacts.length === 0
     ? actionDef.emptyText
-    : visibleContacts.length === 0 && search.trim().length === 0
+    : visibleContacts.length === 0 && effectiveSearchText.trim().length === 0
       ? 'Không có data phù hợp với bộ lọc.'
       : 'Không tìm thấy data phù hợp.'
   const canSaveGroupModal = modalSelectedGroupIds.size > 0 || (showNewGroupInput && newGroupName.trim().length > 0)
 
-  const toggleContact = (id: number) => {
+  const toggleContact = (id: number, rowNumber?: number) => {
+    if (isPageInboxAction) {
+      if (pageInboxSelectAllMatching) {
+        setPageInboxExcludedIds(prev => {
+          const next = new Set(prev)
+          if (next.has(id)) next.delete(id)
+          else next.add(id)
+          return next
+        })
+        return
+      }
+
+      if (pageInboxSelectedRange && rowNumber !== undefined) {
+        const inRange = rowNumber >= pageInboxSelectedRange.start && rowNumber <= pageInboxSelectedRange.end
+        if (inRange) {
+          setPageInboxExcludedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+          })
+          return
+        }
+      }
+    }
+
     setSelectedIds(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -532,6 +889,14 @@ export default function DataScanModal({
   }
 
   const toggleAllVisible = () => {
+    if (isPageInboxAction) {
+      if (pageInboxSelectAllMatching && pageInboxExcludedIds.size === 0) {
+        handleClearPageInboxSelection()
+      } else {
+        handleSelectAllPageInboxMatching()
+      }
+      return
+    }
     setSelectedIds(prev => {
       const next = new Set(prev)
       if (allVisibleSelected) {
@@ -543,16 +908,94 @@ export default function DataScanModal({
     })
   }
 
-  const selectRange = () => {
-    if (filteredContacts.length === 0) return
-    const start = Math.max(1, Math.min(rangeStart, rangeEnd))
-    const end = Math.min(filteredContacts.length, Math.max(rangeStart, rangeEnd))
+  const selectRange = async () => {
+    if (currentTotalCount === 0) return
+    const rawStart = Math.max(1, Math.floor(Number(rangeStart) || 1))
+    const rawEnd = Math.max(1, Math.floor(Number(rangeEnd) || 1))
+    const start = Math.min(rawStart, rawEnd)
+    let end = Math.max(rawStart, rawEnd)
+    if (start > currentTotalCount) {
+      showAlert(`STT chỉ có từ 1 đến ${formatCount(currentTotalCount)}.`, 'error')
+      setRangeStart(currentTotalCount)
+      setRangeEnd(currentTotalCount)
+      return
+    }
+    if (end > currentTotalCount) {
+      end = currentTotalCount
+    }
+    setRangeStart(start)
+    setRangeEnd(end)
+
+    if (isPageInboxAction) {
+      setPageInboxExcludedIds(new Set())
+      setSelectedIds(new Set())
+      if (start === 1 && end === pageInboxTotal) {
+        setPageInboxSelectedRange(null)
+        setPageInboxSelectAllMatching(true)
+      } else {
+        setPageInboxSelectAllMatching(false)
+        setPageInboxSelectedRange({ start, end })
+      }
+      return
+    }
+
     const contactsInRange = filteredContacts.slice(start - 1, end)
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      for (const contact of contactsInRange) next.add(contact.id)
-      return next
-    })
+    setSelectedIds(new Set(contactsInRange.map(contact => contact.id)))
+  }
+
+  const handlePageInboxTimePresetChange = (value: PageInboxTimePreset) => {
+    const range = getPageInboxDateRange(value)
+    setPageInboxTimePreset(value)
+    setPageInboxDateFrom(range.fromDate)
+    setPageInboxDateTo(range.toDate)
+  }
+
+  const handlePageInboxPageChange = (value: string) => {
+    setPageInboxPageUid(value)
+    applyPageInboxDraftFilters({ pageUid: value })
+  }
+
+  const handleFilterPageInbox = () => {
+    applyPageInboxDraftFilters()
+  }
+
+  const handleSelectAllPageInboxMatching = () => {
+    setSelectedIds(new Set())
+    setPageInboxExcludedIds(new Set())
+    setPageInboxSelectedRange(null)
+    setPageInboxSelectAllMatching(true)
+  }
+
+  const handleClearPageInboxSelection = () => {
+    setSelectedIds(new Set())
+    setPageInboxExcludedIds(new Set())
+    setPageInboxSelectedRange(null)
+    setPageInboxSelectAllMatching(false)
+  }
+
+  const loadPageInboxSelectedContacts = async () => {
+    if (!window.electronAPI || !accountId) return []
+    if (pageInboxSelectAllMatching) {
+      return window.electronAPI.exportPageInboxContacts(accountId, {
+        ...pageInboxAppliedFilters,
+        excludeIds: Array.from(pageInboxExcludedIds)
+      })
+    }
+    if (pageInboxSelectedRange) {
+      const rangeContacts = await window.electronAPI.exportPageInboxContacts(accountId, {
+        ...pageInboxAppliedFilters,
+        excludeIds: Array.from(pageInboxExcludedIds),
+        offset: pageInboxSelectedRange.start - 1,
+        limit: pageInboxSelectedRange.end - pageInboxSelectedRange.start + 1
+      })
+      const extraIds = Array.from(selectedIds)
+      if (extraIds.length === 0) return rangeContacts
+      const extraContacts = await window.electronAPI.exportPageInboxContacts(accountId, { ids: extraIds })
+      return dedupeContacts([...rangeContacts, ...extraContacts])
+    }
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return []
+    return window.electronAPI.exportPageInboxContacts(accountId, { ids })
   }
 
   const handleRenameContactGroup = async (group: AutoAccountContactGroup, name: string) => {
@@ -785,6 +1228,10 @@ export default function DataScanModal({
         return
       }
     }
+    if (isPageInboxAction && !pageInboxPageUid) {
+      showAlert('Vui lòng chọn page cần quét.', 'error')
+      return
+    }
 
     setScanLoading(true)
     setProgressMessages([])
@@ -795,11 +1242,13 @@ export default function DataScanModal({
     try {
       const result = isPostCommentersAction
         ? await window.electronAPI.loadPostCommenters(accountId, postCommentersUrl, postCommentersLimit)
-        : await (actionDef.contactType === 'person'
-        ? window.electronAPI.loadFriends
-        : actionDef.contactType === 'group'
-          ? window.electronAPI.loadGroups
-          : window.electronAPI.loadPages)(accountId)
+        : isPageInboxAction
+          ? await window.electronAPI.loadPageInboxCustomers(accountId, pageInboxPageUid, selectedPageInboxPage?.name)
+          : await (actionDef.contactType === 'person'
+          ? window.electronAPI.loadFriends
+          : actionDef.contactType === 'group'
+            ? window.electronAPI.loadGroups
+            : window.electronAPI.loadPages)(accountId)
       if (!mountedRef.current) return
       if (scanRunIdRef.current !== scanId) return
       if (completedScanIdsRef.current.has(scanId)) return
@@ -816,7 +1265,11 @@ export default function DataScanModal({
         showAlert(result.error || 'Tải data thất bại.', 'error')
         return
       }
-      await loadCachedContacts()
+      if (isPageInboxAction) {
+        applyPageInboxDraftFilters()
+      } else {
+        await loadCachedContacts()
+      }
       await loadContactGroups()
       if (wasStopped) return
 
@@ -838,7 +1291,6 @@ export default function DataScanModal({
 
   const cancelScan = async () => {
     if (!accountId || !window.electronAPI?.cancelContactLoad) return
-    setProgressMessages(prev => [...prev.slice(-4), 'Đã dừng quét data.'])
     try {
       await window.electronAPI.cancelContactLoad(accountId)
     } catch (err) {
@@ -869,24 +1321,39 @@ export default function DataScanModal({
     )
   }
 
-  const handleExport = () => {
-    if (outputContacts.length === 0) {
-      showAlert('Vui lòng tích chọn data trước khi xuất Excel.', 'error')
-      return
-    }
-
+  const handleExport = async () => {
     try {
+      const exportContacts = isPageInboxAction ? await loadPageInboxSelectedContacts() : outputContacts
+      if (exportContacts.length === 0) {
+        showAlert('Vui lòng tích chọn data trước khi xuất Excel.', 'error')
+        return
+      }
       const rows = [
-        EXPORT_HEADERS,
-        ...outputContacts.map(contact => [
-          contact.name || '',
-          contact.uid || contact.url || ''
-        ])
+        isPageInboxAction ? ['Tên', 'PSID', 'SĐT', 'Ngày nhắn cuối', 'Tin nhắn cuối'] : EXPORT_HEADERS,
+        ...exportContacts.map(contact => isPageInboxAction
+          ? [
+            contact.name || '',
+            contact.uid || '',
+            getPageInboxPhone(contact),
+            getPageInboxLastMessageAt(contact),
+            getPageInboxLastMessage(contact)
+          ]
+          : [
+            contact.name || '',
+            contact.uid || contact.url || ''
+          ])
       ]
       const sheet = utils.aoa_to_sheet(rows)
       sheet['!cols'] = [
         { wch: 24 },
-        { wch: 48 }
+        { wch: isPageInboxAction ? 28 : 48 },
+        ...(isPageInboxAction
+          ? [
+            { wch: 16 },
+            { wch: 20 },
+            { wch: 60 }
+          ]
+          : [])
       ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Sheet1')
@@ -900,14 +1367,20 @@ export default function DataScanModal({
     }
   }
 
-  const handleSelect = () => {
+  const handleSelect = async () => {
     if (!onSelect) return
-    if (outputContacts.length === 0) {
-      showAlert('Vui lòng tích chọn data trước khi chọn.', 'error')
-      return
+    try {
+      const selected = isPageInboxAction ? await loadPageInboxSelectedContacts() : outputContacts
+      if (selected.length === 0) {
+        showAlert('Vui lòng tích chọn data trước khi chọn.', 'error')
+        return
+      }
+      onSelect(selected)
+      onClose()
+    } catch (err) {
+      console.error('Failed to select scan data:', err)
+      showAlert('Không thể chọn data.', 'error')
     }
-    onSelect(outputContacts)
-    onClose()
   }
 
   return (
@@ -916,7 +1389,9 @@ export default function DataScanModal({
         <div className="modal-header data-scan-header">
           <div>
             <div className="modal-title">Quét data</div>
-            <div className="data-scan-subtitle">{outputContacts.length}/{rawOutputContacts.length || 0} data sẵn sàng</div>
+            <div className="data-scan-subtitle">
+              Tổng {formatCount(currentTotalCount)} data
+            </div>
           </div>
           <div className="data-scan-header-actions">
             {scanLoading && (
@@ -955,7 +1430,7 @@ export default function DataScanModal({
           </div>
         ) : (
         <>
-        <div className="data-scan-body">
+        <div className={`data-scan-body ${isPageInboxAction ? 'is-page-inbox' : ''}`}>
           <div className="data-scan-controls">
             <div className="stepper-form-group">
               <label>Hành động</label>
@@ -1034,12 +1509,120 @@ export default function DataScanModal({
             </div>
           )}
 
+          {isPageInboxAction && (
+            <div className="data-scan-page-inbox-controls">
+              <div className="stepper-form-group">
+                <label>Page</label>
+                <select
+                  className="stepper-input"
+                  value={pageInboxPageUid}
+                  onChange={event => handlePageInboxPageChange(event.target.value)}
+                  disabled={scanLoading || pageInboxPages.length === 0}
+                >
+                  {pageInboxPages.length === 0 ? (
+                    <option value="">Chưa có page đã quét</option>
+                  ) : (
+                    pageInboxPages.map(page => (
+                      <option key={page.id} value={page.uid || ''}>
+                        {page.name || page.uid}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div className="stepper-form-group">
+                <label>Số điện thoại</label>
+                <select
+                  className="stepper-input"
+                  value={pageInboxPhoneFilter}
+                  onChange={event => setPageInboxPhoneFilter(event.target.value as PageInboxPhoneFilter)}
+                >
+                  <option value="all">Tất cả</option>
+                  <option value="has_phone">Có SĐT</option>
+                  <option value="no_phone">Không có SĐT</option>
+                </select>
+              </div>
+
+              <div className="stepper-form-group">
+                <label>Thời gian nhắn tin gần nhất</label>
+                <select
+                  className="stepper-input"
+                  value={pageInboxTimePreset}
+                  onChange={event => handlePageInboxTimePresetChange(event.target.value as PageInboxTimePreset)}
+                >
+                  {PAGE_INBOX_TIME_PRESETS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {pageInboxTimePreset === 'all' ? (
+                <div className="stepper-form-group data-scan-page-inbox-time-status">
+                  <label>Khoảng thời gian</label>
+                  <div className="stepper-input data-scan-readonly-field" aria-readonly="true">
+                    Không giới hạn thời gian
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="stepper-form-group">
+                    <label>Từ ngày</label>
+                    <input
+                      type="date"
+                      className="stepper-input"
+                      value={pageInboxDateFrom}
+                      onChange={event => setPageInboxDateFrom(event.target.value)}
+                    />
+                  </div>
+
+                  <div className="stepper-form-group">
+                    <label>Đến ngày</label>
+                    <input
+                      type="date"
+                      className="stepper-input"
+                      value={pageInboxDateTo}
+                      onChange={event => setPageInboxDateTo(event.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="stepper-form-group">
+                <label>Nội dung</label>
+                <select
+                  className="stepper-input"
+                  value={pageInboxMessageFilterMode}
+                  onChange={event => setPageInboxMessageFilterMode(event.target.value as PageInboxMessageFilterMode)}
+                >
+                  <option value="all">Tất cả</option>
+                  <option value="contain_all">Chứa tất cả từ khoá</option>
+                  <option value="contain_any">Chứa một trong các từ khoá</option>
+                  <option value="not_contain_all">Không chứa tất cả từ khoá</option>
+                  <option value="not_contain_any">Không chứa một trong các từ khoá</option>
+                </select>
+              </div>
+
+              <div className="stepper-form-group data-scan-page-inbox-keywords">
+                <label>Từ khoá</label>
+                <input
+                  className="stepper-input"
+                  value={pageInboxMessageKeywords}
+                  onChange={event => setPageInboxMessageKeywords(event.target.value)}
+                  placeholder="Mỗi từ khoá cách nhau bằng dấu phẩy"
+                  disabled={pageInboxMessageFilterMode === 'all'}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="data-scan-toolbar">
             <div className="data-scan-range">
               <span>Chọn từ STT</span>
               <input
                 type="number"
                 min={1}
+                max={Math.max(1, currentTotalCount)}
                 value={rangeStart}
                 onChange={event => setRangeStart(Number(event.target.value) || 1)}
                 className="stepper-input"
@@ -1048,11 +1631,12 @@ export default function DataScanModal({
               <input
                 type="number"
                 min={1}
+                max={Math.max(1, currentTotalCount)}
                 value={rangeEnd}
                 onChange={event => setRangeEnd(Number(event.target.value) || 1)}
                 className="stepper-input"
               />
-              <button className="btn btn-secondary" onClick={selectRange}>Tích chọn</button>
+              <button className="btn btn-secondary" onClick={selectRange} disabled={currentTotalCount === 0}>Tích chọn</button>
             </div>
 
             <div className="data-scan-toolbar-right">
@@ -1061,9 +1645,19 @@ export default function DataScanModal({
                 <input
                   value={search}
                   onChange={event => setSearch(event.target.value)}
-                  placeholder="Tìm theo tên, UID hoặc link..."
+                  placeholder={isPageInboxAction ? 'Tìm theo tên, PSID hoặc SĐT...' : 'Tìm theo tên, UID hoặc link...'}
                 />
               </label>
+              {isPageInboxAction && (
+                <button
+                  className="btn btn-secondary data-scan-load-button"
+                  onClick={handleFilterPageInbox}
+                  disabled={!pageInboxPageUid || loading}
+                >
+                  <Search size={14} />
+                  Lọc danh sách
+                </button>
+              )}
               {scanLoading ? (
                 <button
                   className="btn btn-danger data-scan-load-button"
@@ -1076,7 +1670,7 @@ export default function DataScanModal({
                 <button
                   className="btn btn-primary data-scan-load-button"
                   onClick={handleLoadData}
-                  disabled={!accountId || (isPostCommentersAction && !postCommentersUrl.trim())}
+                  disabled={!accountId || (isPostCommentersAction && !postCommentersUrl.trim()) || (isPageInboxAction && !pageInboxPageUid)}
                 >
                   <RefreshCw size={14} />
                   Tải data
@@ -1094,8 +1688,37 @@ export default function DataScanModal({
               />
               <span>Lọc trùng dữ liệu khi chọn, xuất excel</span>
             </label>
-            <span>{selectedIds.size} đã tích chọn</span>
+            <span>
+              {isPageInboxAction
+                ? `${formatCount(pageInboxSelectedCount)} đã tích chọn`
+                : `${formatCount(selectedIds.size)} đã tích chọn`}
+            </span>
             {selectedGroupIds.size > 0 && <span>{selectedGroupIds.size} nhóm đã chọn</span>}
+          </div>
+
+          <div className="data-scan-pagination">
+            <span className="data-scan-pagination-summary">{currentRenderText}</span>
+            {isPageInboxAction && (
+              <>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setPageInboxPage(page => Math.max(1, page - 1))}
+                  disabled={pageInboxPage <= 1 || loading}
+                  title="Trang trước"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span>Trang {Math.min(pageInboxPage, pageInboxPageCount)}/{pageInboxPageCount}</span>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setPageInboxPage(page => Math.min(pageInboxPageCount, page + 1))}
+                  disabled={pageInboxPage >= pageInboxPageCount || loading}
+                  title="Trang sau"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </>
+            )}
           </div>
 
           {progressMessages.length > 0 && (
@@ -1113,15 +1736,25 @@ export default function DataScanModal({
                   <th style={{ width: 44 }}>
                     <input
                       type="checkbox"
-                      checked={allVisibleSelected}
+                      checked={isPageInboxAction ? allPageInboxMatchingSelected : allVisibleSelected}
                       onChange={toggleAllVisible}
                       disabled={filteredContacts.length === 0}
+                      title={isPageInboxAction ? 'Chọn hoặc bỏ chọn tất cả data' : 'Chọn tất cả data đang hiển thị'}
+                      aria-label={isPageInboxAction ? 'Chọn hoặc bỏ chọn tất cả data' : 'Chọn tất cả data đang hiển thị'}
                     />
                   </th>
                   <th style={{ width: 64 }}>STT</th>
                   <th>Tên</th>
-                  <th>UID</th>
-                  <th>Link</th>
+                  <th>{isPageInboxAction ? 'PSID' : 'UID'}</th>
+                  {isPageInboxAction ? (
+                    <>
+                      <th>SĐT</th>
+                      <th>Tin nhắn cuối</th>
+                      <th>Thời gian nhắn gần nhất</th>
+                    </>
+                  ) : (
+                    <th>Link</th>
+                  )}
                   {actionDef.contactType === 'person' && <th>Bạn bè</th>}
                   {actionDef.contactType === 'group' && <th>Tham gia</th>}
                   {actionDef.contactType === 'group' && <th>Duyệt bài</th>}
@@ -1133,30 +1766,47 @@ export default function DataScanModal({
                 ) : filteredContacts.length === 0 ? (
                   <tr><td colSpan={tableColSpan} className="text-center text-muted">{emptyTableText}</td></tr>
                 ) : (
-                  filteredContacts.map((contact, index) => (
+                  filteredContacts.map((contact, index) => {
+                    const rowNumber = getContactRowNumber(index)
+                    const selected = isContactSelected(contact.id, rowNumber)
+                    return (
                     <tr
                       key={contact.id}
-                      className={selectedIds.has(contact.id) ? 'data-scan-selected-row' : undefined}
-                      onClick={() => toggleContact(contact.id)}
+                      className={selected ? 'data-scan-selected-row' : undefined}
+                      onClick={() => toggleContact(contact.id, rowNumber)}
                     >
                       <td>
                         <input
                           type="checkbox"
-                          checked={selectedIds.has(contact.id)}
-                          onChange={() => toggleContact(contact.id)}
+                          checked={selected}
+                          onChange={() => toggleContact(contact.id, rowNumber)}
                           onClick={event => event.stopPropagation()}
                         />
                       </td>
-                      <td>{index + 1}</td>
+                      <td>{rowNumber}</td>
                       <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
                         {contact.name || '-'}
                       </td>
                       <td className="data-scan-text-cell data-scan-uid-cell" title={contact.uid || undefined}>
                         {contact.uid || '-'}
                       </td>
-                      <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
-                        {contact.url || '-'}
-                      </td>
+                      {isPageInboxAction ? (
+                        <>
+                          <td className="data-scan-text-cell data-scan-phone-cell" title={getPageInboxPhone(contact) || undefined}>
+                            {getPageInboxPhone(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-message-cell" title={getPageInboxLastMessage(contact) || undefined}>
+                            {getPageInboxLastMessage(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-date-cell" title={getPageInboxLastMessageAt(contact) || undefined}>
+                            {getPageInboxLastMessageAt(contact) || '-'}
+                          </td>
+                        </>
+                      ) : (
+                        <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
+                          {contact.url || '-'}
+                        </td>
+                      )}
                       {actionDef.contactType === 'person' && (
                         <td>
                           <span className={`data-scan-status-badge ${contact.isFriend ? 'is-active' : 'is-muted'}`}>
@@ -1177,33 +1827,36 @@ export default function DataScanModal({
                         </td>
                       )}
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
-          <div className="data-scan-below-actions">
-            <button
-              className="btn btn-secondary data-scan-group-action-button"
-              onClick={() => setShowGroupPanel(true)}
-            >
-              <Folder size={14} />
-              Xem nhóm data
-            </button>
-            <button
-              className="btn btn-secondary data-scan-group-action-button"
-              onClick={handleOpenAddGroupModal}
-              disabled={scanLoading}
-            >
-              <Folder size={14} />
-              Thêm vào nhóm
-            </button>
-          </div>
+          {supportsContactGroups && (
+            <div className="data-scan-below-actions">
+              <button
+                className="btn btn-secondary data-scan-group-action-button"
+                onClick={() => setShowGroupPanel(true)}
+              >
+                <Folder size={14} />
+                Xem nhóm data
+              </button>
+              <button
+                className="btn btn-secondary data-scan-group-action-button"
+                onClick={handleOpenAddGroupModal}
+                disabled={scanLoading}
+              >
+                <Folder size={14} />
+                Thêm vào nhóm
+              </button>
+            </div>
+          )}
 
         </div>
 
-        {showGroupPanel && (
+        {supportsContactGroups && showGroupPanel && (
           <DataScanGroupManagementModal
             activeContactType={activeGroupContactType}
             groupsLoading={groupsLoading}
@@ -1221,7 +1874,7 @@ export default function DataScanModal({
           />
         )}
 
-        {showGroupSelectionModal && (
+        {supportsContactGroups && showGroupSelectionModal && (
           <DataScanGroupSelectionModal
             contactType={actionDef.contactType}
             groupsLoading={groupsLoading}
@@ -1233,7 +1886,7 @@ export default function DataScanModal({
           />
         )}
 
-        {showAddGroupModal && (
+        {supportsContactGroups && showAddGroupModal && (
           <div
             className="data-scan-group-modal-backdrop"
             onClick={() => {
@@ -1347,7 +2000,7 @@ export default function DataScanModal({
           </button>
           <div className="data-scan-footer-right">
             <button className="btn btn-ghost" onClick={handleClose}>{onSelect ? 'Huỷ' : 'Đóng'}</button>
-            {onSelect && (
+            {onSelect && supportsContactGroups && (
               <button
                 className="btn btn-secondary"
                 onClick={() => setShowGroupSelectionModal(true)}

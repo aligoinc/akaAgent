@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -247,11 +247,20 @@ const electronAPI = {
   loadPostCommenters: (accountId: number, postUrl: string, maxCommenters: number): Promise<ContactLoadResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_POST_COMMENTERS, accountId, postUrl, maxCommenters),
 
+  loadPageInboxCustomers: (accountId: number, pageUid: string, pageName?: string): Promise<ContactLoadResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS, accountId, pageUid, pageName),
+
   cancelContactLoad: (accountId: number): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_CANCEL_LOAD, accountId),
 
   listContacts: (accountId: number, contactType?: ContactType): Promise<AutoAccountContact[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST, accountId, contactType),
+
+  listPageInboxContacts: (accountId: number, query?: PageInboxContactListQuery): Promise<ContactListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_PAGE_INBOX, accountId, query),
+
+  exportPageInboxContacts: (accountId: number, query?: PageInboxContactListQuery): Promise<AutoAccountContact[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_EXPORT_PAGE_INBOX, accountId, query),
 
   deleteContacts: (accountId: number, contactType: ContactType): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_DELETE, accountId, contactType),

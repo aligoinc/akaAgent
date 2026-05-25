@@ -7,6 +7,7 @@ import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 import { PageController } from '../v2/runtime/pageController'
 import { WorkflowEngineV2, RunResult } from '../v2/runtime/workflowEngine'
 import * as workflowV2Repo from '../data/repositories/workflowV2Repository'
+import * as localContactRepo from '../data/repositories/localAccountContactRepository'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -27,18 +28,62 @@ interface ContactLoadOptions {
   resultMeta?: Partial<ContactLoadResult>
 }
 
-const CONTACT_SCAN_WORKFLOWS: Record<ContactType, string> = {
+const CONTACT_SCAN_WORKFLOWS: Partial<Record<ContactType, string>> = {
   person: '[Built-in] Facebook - Quét danh sách bạn bè',
   group: '[Built-in] Facebook - Quét group đã tham gia',
   page: '[Built-in] Facebook - Quét page quản lý'
 }
 
 const POST_COMMENTERS_WORKFLOW = '[Built-in] Facebook - Quét người comment bài post'
+const PAGE_INBOX_CONTACT_TYPE: ContactType = 'page_inbox_customer'
+const FACEBOOK_GRAPH_API_BASE = 'https://graph.facebook.com/v25.0'
+const PAGE_INBOX_BATCH_SIZE = 500
+const PAGE_INBOX_MAX_FETCH_FAILURES = 3
+const PHONE_RE = /((\+?84|0)[\s.-]?)?(3[2-9]|5[689]|7[06-9]|8[1-689]|9[0-46-9])[0-9\s.-]{7,}/g
 
-const CONTACT_SCAN_TARGET_URLS: Record<ContactType, string> = {
+const CONTACT_SCAN_TARGET_URLS: Partial<Record<ContactType, string>> = {
   person: 'https://www.facebook.com/friends/list',
   group: 'https://www.facebook.com/groups/joins/',
   page: 'https://business.facebook.com/content_management'
+}
+
+interface GraphApiError {
+  message?: string
+  type?: string
+  code?: number
+  error_subcode?: number
+}
+
+interface GraphApiResponse<T> {
+  data?: T
+  paging?: {
+    next?: string
+  }
+  error?: GraphApiError
+  access_token?: string
+}
+
+interface PageInboxParticipant {
+  id?: string
+  name?: string
+  email?: string
+}
+
+interface PageInboxMessage {
+  id?: string
+  message?: string
+  created_time?: string
+  from?: PageInboxParticipant
+}
+
+interface PageInboxConversation {
+  id?: string
+  participants?: {
+    data?: PageInboxParticipant[]
+  }
+  messages?: {
+    data?: PageInboxMessage[]
+  }
 }
 
 /**
@@ -107,17 +152,237 @@ export class ContactLoader {
     })
   }
 
+  async loadPageInboxCustomers(accountId: number, pageUid: string, pageName?: string): Promise<ContactLoadResult> {
+    const normalizedPageUid = String(pageUid || '').trim()
+    const normalizedPageName = String(pageName || '').replace(/\s+/g, ' ').trim()
+    const typeName = 'người từng nhắn tin với page'
+
+    if (!normalizedPageUid) {
+      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        success: false,
+        count: 0,
+        error: 'Vui lòng chọn page cần quét.'
+      })
+    }
+
+    let account: AutoAccount | null
+    try {
+      account = await this.supabase.getAccount(accountId)
+    } catch (err: any) {
+      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        success: false,
+        count: 0,
+        error: `Không thể kiểm tra trạng thái tài khoản: ${err.message || String(err)}`
+      })
+    }
+
+    const preflightError = this.getPreflightError(account)
+    if (preflightError) {
+      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        success: false,
+        count: 0,
+        error: preflightError
+      })
+    }
+
+    const latestAccount = await this.supabase.getAccount(accountId)
+    const latestPreflightError = this.getPreflightError(latestAccount)
+    if (latestPreflightError) {
+      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        success: false,
+        count: 0,
+        error: latestPreflightError
+      })
+    }
+
+    const loadState = this.startLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {}, {
+      runKeyLabel: `page-inbox-${normalizedPageUid}`,
+      targetUrl: 'https://business.facebook.com/content_management'
+    })
+    const runnableAccount = latestAccount!
+    const previousStatus = runnableAccount.status as 'chờ xử lý' | 'tạm dừng'
+    const variables = loadState.variables
+    let claimedAccount = false
+
+    try {
+      await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
+      claimedAccount = true
+
+      this.sendProgress(`🔄 Đang lấy token để quét inbox page ${normalizedPageName || normalizedPageUid}...`, {
+        accountId,
+        contactType: PAGE_INBOX_CONTACT_TYPE,
+        runKey: loadState.runKey
+      })
+
+      const page = this.backgroundPages.getOrCreate(accountId, runnableAccount.flatformType)
+      this.selectAutomationBrowser(accountId)
+      this.startBackgroundPreview(accountId, page, 'Đang quét người nhắn tin với page')
+
+      await page.navigate('https://business.facebook.com/content_management')
+      await this.sleep(5000)
+
+      const userAccessToken = await this.extractFacebookUserAccessToken(page)
+      if (!userAccessToken) {
+        throw new Error('Không lấy được token Facebook. Vui lòng mở lại tab Facebook/Business và thử lại.')
+      }
+
+      const cookieHeader = await this.getFacebookCookieHeader(page)
+      const pageAccessToken = await this.getPageAccessToken(normalizedPageUid, userAccessToken, cookieHeader)
+      if (!pageAccessToken) {
+        throw new Error('Không lấy được Page access token. Tài khoản cần có quyền nhắn tin trên page này.')
+      }
+
+      let nextUrl = this.buildPageInboxConversationsUrl(normalizedPageUid, pageAccessToken)
+      const seenPsids = new Set<string>()
+      let pendingContacts: localContactRepo.PageInboxContactInput[] = []
+      let savedCount = 0
+      let scannedCount = 0
+      let fetchFailureCount = 0
+      let fetchFailureMessage = ''
+
+      while (nextUrl) {
+        if (this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted) break
+
+        let response: GraphApiResponse<PageInboxConversation[]>
+        try {
+          response = await this.fetchGraphJson<PageInboxConversation[]>(nextUrl, cookieHeader)
+          fetchFailureCount = 0
+          fetchFailureMessage = ''
+        } catch (err: any) {
+          fetchFailureCount += 1
+          fetchFailureMessage = err?.message || String(err)
+          if (fetchFailureCount >= PAGE_INBOX_MAX_FETCH_FAILURES) break
+          this.sendProgress(`Facebook đang phản hồi lỗi, thử lại lần ${fetchFailureCount + 1}/${PAGE_INBOX_MAX_FETCH_FAILURES}...`, {
+            accountId,
+            contactType: PAGE_INBOX_CONTACT_TYPE,
+            runKey: loadState.runKey
+          })
+          await this.sleep(2000)
+          if (this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted) break
+          continue
+        }
+
+        const conversations = Array.isArray(response.data) ? response.data : []
+        scannedCount += conversations.length
+
+        for (const conversation of conversations) {
+          const contact = this.mapPageInboxConversation(
+            accountId,
+            normalizedPageUid,
+            normalizedPageName,
+            conversation
+          )
+          if (!contact || seenPsids.has(contact.uid)) continue
+          seenPsids.add(contact.uid)
+          pendingContacts.push(contact)
+        }
+
+        const cancelledAfterPage = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+        if (pendingContacts.length >= PAGE_INBOX_BATCH_SIZE) {
+          savedCount += localContactRepo.upsertPageInboxContacts(pendingContacts)
+          pendingContacts = []
+          if (!cancelledAfterPage) this.sendProgress(`💾 Đã lưu ${savedCount} ${typeName}...`, {
+            accountId,
+            contactType: PAGE_INBOX_CONTACT_TYPE,
+            runKey: loadState.runKey
+          })
+        } else if (!cancelledAfterPage) {
+          this.sendProgress(`🔎 Đã đọc ${scannedCount} cuộc trò chuyện, tìm được ${seenPsids.size} người.`, {
+            accountId,
+            contactType: PAGE_INBOX_CONTACT_TYPE,
+            runKey: loadState.runKey
+          })
+        }
+
+        if (cancelledAfterPage) break
+        nextUrl = response.paging?.next || ''
+      }
+
+      if (pendingContacts.length > 0) {
+        savedCount += localContactRepo.upsertPageInboxContacts(pendingContacts)
+      }
+
+      const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+      if (stopped) {
+        this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu ${savedCount} data.`, {
+          accountId,
+          contactType: PAGE_INBOX_CONTACT_TYPE,
+          runKey: loadState.runKey
+        })
+        return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+          success: true,
+          count: savedCount,
+          stopped: true
+        }, loadState.runKey)
+      }
+
+      if (fetchFailureCount >= PAGE_INBOX_MAX_FETCH_FAILURES) {
+        this.sendProgress(`Server tin nhắn của Facebook bị lỗi hoặc đang bảo trì. Đã lưu ${savedCount} data.`, {
+          accountId,
+          contactType: PAGE_INBOX_CONTACT_TYPE,
+          runKey: loadState.runKey
+        })
+        return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+          success: true,
+          count: savedCount,
+          error: fetchFailureMessage
+        }, loadState.runKey)
+      }
+
+      this.sendProgress(`✅ Đã quét và lưu ${savedCount} ${typeName} vào máy.`, {
+        accountId,
+        contactType: PAGE_INBOX_CONTACT_TYPE,
+        runKey: loadState.runKey
+      })
+      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        success: true,
+        count: savedCount
+      }, loadState.runKey)
+    } catch (err: any) {
+      const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+      const errMsg = err?.message || String(err)
+      if (stopped) {
+        this.sendProgress(`Đã dừng quét ${typeName}.`, {
+          accountId,
+          contactType: PAGE_INBOX_CONTACT_TYPE,
+          runKey: loadState.runKey
+        })
+        return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+          success: true,
+          count: 0,
+          stopped: true
+        }, loadState.runKey)
+      }
+
+      this.sendProgress(`❌ Lỗi quét ${typeName}: ${errMsg}`, {
+        accountId,
+        contactType: PAGE_INBOX_CONTACT_TYPE,
+        runKey: loadState.runKey
+      })
+      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        success: false,
+        count: 0,
+        error: errMsg
+      }, loadState.runKey)
+    } finally {
+      if (this.activeLoads.get(accountId) === loadState) {
+        this.activeLoads.delete(accountId)
+        this.cancelledLoads.delete(accountId)
+        this.stopBackgroundPreview(accountId)
+        this.backgroundPages.destroy(accountId)
+        if (claimedAccount) {
+          await this.restoreAccountStatus(accountId, previousStatus)
+        }
+      }
+    }
+  }
+
   cancelLoad(accountId: number): void {
     this.cancelledLoads.add(accountId)
     const active = this.activeLoads.get(accountId)
     if (active) {
       active.variables.contactScanCancelled = true
     }
-    this.sendProgress('Đã dừng quét data.', {
-      accountId,
-      contactType: active?.contactType,
-      runKey: active?.runKey
-    })
   }
 
   stopAll(): void {
@@ -158,6 +423,14 @@ export class ContactLoader {
     }
 
     const workflowName = options.workflowName || CONTACT_SCAN_WORKFLOWS[contactType]
+    if (!workflowName) {
+      return this.completeLoad(accountId, contactType, {
+        ...resultMeta,
+        success: false,
+        count: 0,
+        error: `Chưa có workflow quét data cho loại ${contactType}`
+      })
+    }
     const workflow = await workflowV2Repo.getWorkflowByName(workflowName)
     if (!workflow) {
       return this.completeLoad(accountId, contactType, {
@@ -355,6 +628,157 @@ export class ContactLoader {
     return null
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  private async extractFacebookUserAccessToken(page: PageController): Promise<string> {
+    const token = await page.evaluate<string>(`
+      var html = [
+        document.documentElement ? document.documentElement.innerHTML : '',
+        document.body ? document.body.innerHTML : ''
+      ].join('\\n');
+      var match = html.match(/EAAG[^"'\\\\<\\s]+/);
+      return match ? match[0] : '';
+    `).catch(() => '')
+
+    if (token) return token
+
+    await page.navigate('https://business.facebook.com/latest/content_management').catch(() => undefined)
+    await this.sleep(5000)
+    return await page.evaluate<string>(`
+      var html = [
+        document.documentElement ? document.documentElement.innerHTML : '',
+        document.body ? document.body.innerHTML : ''
+      ].join('\\n');
+      var match = html.match(/EAAG[^"'\\\\<\\s]+/);
+      return match ? match[0] : '';
+    `).catch(() => '')
+  }
+
+  private async getFacebookCookieHeader(page: PageController): Promise<string> {
+    return (
+      await page.getCookieHeader('https://business.facebook.com').catch(() => '') ||
+      await page.getCookieHeader('https://www.facebook.com').catch(() => '')
+    )
+  }
+
+  private buildGraphHeaders(cookieHeader: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+    }
+    if (cookieHeader) headers.Cookie = cookieHeader
+    return headers
+  }
+
+  private formatGraphError(error: GraphApiError): string {
+    const code = error.code ? `#${error.code}` : ''
+    const subcode = error.error_subcode ? `/${error.error_subcode}` : ''
+    const message = error.message || 'Graph API trả về lỗi'
+    return [code + subcode, message].filter(Boolean).join(' ')
+  }
+
+  private async fetchGraphJson<T>(url: string, cookieHeader: string): Promise<GraphApiResponse<T>> {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.buildGraphHeaders(cookieHeader)
+    })
+    const data = await response.json().catch(() => null) as GraphApiResponse<T> | null
+    if (!response.ok || data?.error) {
+      throw new Error(data?.error ? this.formatGraphError(data.error) : `Graph API lỗi HTTP ${response.status}`)
+    }
+    return data || {}
+  }
+
+  private async getPageAccessToken(pageUid: string, userAccessToken: string, cookieHeader: string): Promise<string> {
+    const url = `${FACEBOOK_GRAPH_API_BASE}/${encodeURIComponent(pageUid)}?fields=access_token&access_token=${encodeURIComponent(userAccessToken)}`
+    const response = await this.fetchGraphJson<never>(url, cookieHeader)
+    return String(response.access_token || '').trim()
+  }
+
+  private buildPageInboxConversationsUrl(pageUid: string, pageAccessToken: string): string {
+    const fields = 'participants,messages.limit(25){id,message,created_time,from}'
+    return `${FACEBOOK_GRAPH_API_BASE}/${encodeURIComponent(pageUid)}/conversations?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(pageAccessToken)}`
+  }
+
+  private mapPageInboxConversation(
+    accountId: number,
+    pageUid: string,
+    pageName: string,
+    conversation: PageInboxConversation
+  ): localContactRepo.PageInboxContactInput | null {
+    const conversationId = String(conversation.id || '').trim()
+    const participants = Array.isArray(conversation.participants?.data) ? conversation.participants!.data! : []
+    const customer = participants.find(participant => String(participant.id || '').trim() !== pageUid) || participants[0]
+    const customerPsid = String(customer?.id || '').trim()
+    if (!conversationId || !customerPsid || customerPsid === pageUid) return null
+
+    const customerName = String(customer?.name || customerPsid).replace(/\s+/g, ' ').trim()
+    const messages = Array.isArray(conversation.messages?.data) ? conversation.messages!.data! : []
+    const normalizedMessages = messages
+      .map(message => ({
+        id: String(message.id || '').trim(),
+        text: String(message.message || '').replace(/\s+/g, ' ').trim(),
+        createdTime: this.normalizeGraphDate(message.created_time),
+        fromId: String(message.from?.id || '').trim(),
+        fromName: String(message.from?.name || '').replace(/\s+/g, ' ').trim()
+      }))
+      .filter(message => message.text || message.createdTime || message.fromId)
+
+    const customerMessages = normalizedMessages.filter(message => message.fromId === customerPsid)
+    const phone = this.extractPhoneFromMessages(customerMessages.length > 0 ? customerMessages : normalizedMessages)
+    const lastMessage = normalizedMessages[0]
+    const lastCustomerMessage = customerMessages[0]
+    const messageHistory = normalizedMessages
+      .map(message => {
+        const sender = message.fromId === pageUid ? (pageName || 'Page') : (message.fromName || customerName)
+        const time = message.createdTime ? `${message.createdTime} ` : ''
+        return `${time}${sender}: ${message.text}`.trim()
+      })
+      .filter(Boolean)
+      .join('\n')
+
+    return {
+      accountId,
+      name: customerName,
+      uid: customerPsid,
+      extraData: {
+        source: 'facebook_page_inbox',
+        pageUid,
+        pageName,
+        conversationId,
+        phone,
+        lastMessageAt: lastMessage?.createdTime || null,
+        lastMessageText: lastMessage?.text || '',
+        lastCustomerMessageAt: lastCustomerMessage?.createdTime || null,
+        lastCustomerMessageText: lastCustomerMessage?.text || '',
+        messageHistory,
+        messages: normalizedMessages
+      }
+    }
+  }
+
+  private normalizeGraphDate(value: unknown): string {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    const parsed = new Date(raw)
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString()
+    return raw
+  }
+
+  private extractPhoneFromMessages(messages: Array<{ text?: string }>): string {
+    for (const message of messages) {
+      const text = String(message.text || '')
+      const matches = text.match(PHONE_RE) || []
+      for (const match of matches) {
+        const phone = match.replace(/\D/g, '')
+        if (phone.length >= 9 && phone.length <= 12) return phone
+      }
+    }
+    return ''
+  }
+
   private startLoad(
     accountId: number,
     contactType: ContactType,
@@ -372,7 +796,7 @@ export class ContactLoader {
     const runKey = `contacts-${accountId}-${options.runKeyLabel || contactType}-${Date.now()}`
     const defaultTargetUrl = typeof workflowDefaultVariables.targetUrl === 'string' && workflowDefaultVariables.targetUrl
       ? workflowDefaultVariables.targetUrl
-      : CONTACT_SCAN_TARGET_URLS[contactType]
+      : CONTACT_SCAN_TARGET_URLS[contactType] || 'https://www.facebook.com'
     const variables: Record<string, unknown> = {
       ...workflowDefaultVariables,
       accountId,
@@ -538,12 +962,14 @@ export class ContactLoader {
       case 'person': return 'người trên Facebook'
       case 'group': return 'group'
       case 'page': return 'page'
+      case 'page_inbox_customer': return 'người từng nhắn tin với page'
     }
   }
 
   private getPreviewTitle(contactType: ContactType): string {
     if (contactType === 'person') return 'Đang quét bạn bè nền'
     if (contactType === 'group') return 'Đang quét group nền'
+    if (contactType === 'page_inbox_customer') return 'Đang quét người nhắn tin với page'
     return 'Đang quét page nền'
   }
 

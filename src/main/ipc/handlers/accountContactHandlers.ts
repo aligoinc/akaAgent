@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { IPC_EVENTS } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
+import * as localContactRepo from '../../data/repositories/localAccountContactRepository'
 
 export function registerAccountContactHandlers(supabase: SupabaseService, contactLoader: ContactLoader): void {
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_FRIENDS, async (_, accountId: number) => {
@@ -20,6 +21,10 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
     return contactLoader.loadPostCommenters(accountId, postUrl, maxCommenters)
   })
 
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS, async (_, accountId: number, pageUid: string, pageName?: string) => {
+    return contactLoader.loadPageInboxCustomers(accountId, pageUid, pageName)
+  })
+
   ipcMain.handle(IPC_EVENTS.CONTACTS_CANCEL_LOAD, async (_, accountId: number) => {
     contactLoader.cancelLoad(accountId)
     return { success: true }
@@ -29,7 +34,18 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
     return supabase.listContacts(accountId, contactType as any)
   })
 
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_PAGE_INBOX, async (_, accountId: number, query = {}) => {
+    return localContactRepo.listPageInboxContacts(accountId, query as any)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACTS_EXPORT_PAGE_INBOX, async (_, accountId: number, query = {}) => {
+    return localContactRepo.exportPageInboxContacts(accountId, query as any)
+  })
+
   ipcMain.handle(IPC_EVENTS.CONTACTS_DELETE, async (_, accountId: number, contactType: string) => {
+    if (contactType === 'page_inbox_customer') {
+      return localContactRepo.deletePageInboxContacts(accountId)
+    }
     return supabase.deleteContacts(accountId, contactType as any)
   })
 
