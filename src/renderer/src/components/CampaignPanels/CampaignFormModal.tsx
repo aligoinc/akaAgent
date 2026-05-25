@@ -104,6 +104,30 @@ type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
 type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
 type AiContentAction = 'multi' | 'rewrite'
+interface FindDataFlagState {
+  isFindPhone: boolean
+  isFindLinkGroupZalo: boolean
+  isFindUid: boolean
+  isFindPostLink: boolean
+  isFindInPost: boolean
+  isFindInComment: boolean
+  isFindNewInteractors: boolean
+  isFindInGroupMembers: boolean
+}
+
+const normalizeFindDataFlagState = <T extends FindDataFlagState>(state: T): T => {
+  const supportsPost = state.isFindPhone || state.isFindLinkGroupZalo || state.isFindUid || state.isFindPostLink
+  const supportsComment = state.isFindPhone || state.isFindLinkGroupZalo || state.isFindUid
+  const supportsUidOnlySources = state.isFindUid
+
+  return {
+    ...state,
+    isFindInPost: supportsPost ? (state.isFindPostLink ? true : state.isFindInPost) : false,
+    isFindInComment: supportsComment ? state.isFindInComment : false,
+    isFindNewInteractors: supportsUidOnlySources ? state.isFindNewInteractors : false,
+    isFindInGroupMembers: supportsUidOnlySources ? state.isFindInGroupMembers : false
+  }
+}
 
 const CONTENT_TEMPLATE_TARGET_LABELS: Record<AiContentTarget, string> = {
   content: 'nội dung chiến dịch',
@@ -553,6 +577,20 @@ export default function CampaignFormModal({
       ? 'all'
       : 'none'
   const savedDailyStopTime = normalizeTimeInput(campaign?.dailyStopTime)
+  const initialFindDataFlags = normalizeFindDataFlagState({
+    isFindPhone: campaign?.extraSettings?.isFindPhone ?? false,
+    isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
+    isFindUid: draftRequiredTargetField === 'findUidTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindUid ?? false),
+    isFindPostLink: draftRequiredTargetField === 'findPostLinkTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindPostLink ?? false),
+    isFindInPost: Boolean(
+      draftRequiredTargetField === 'findPostLinkTargetCampaignIds' ||
+      campaign?.extraSettings?.isFindPostLink ||
+      campaign?.extraSettings?.isFindInPost
+    ),
+    isFindInComment: campaign?.extraSettings?.isFindInComment ?? false,
+    isFindNewInteractors: campaign?.extraSettings?.isFindNewInteractors ?? false,
+    isFindInGroupMembers: campaign?.extraSettings?.isFindInGroupMembers ?? false
+  })
 
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
@@ -640,18 +678,11 @@ export default function CampaignFormModal({
     sourceLinks: campaign?.extraSettings?.sourceLinks || '',
     pagePostMode: (campaign?.extraSettings?.pagePostMode || 'api') as 'api' | 'ui',
     // Tìm kiếm data trong group
-    isFindPhone: campaign?.extraSettings?.isFindPhone ?? false,
-    isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
-    isFindUid: draftRequiredTargetField === 'findUidTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindUid ?? false),
-    isFindPostLink: draftRequiredTargetField === 'findPostLinkTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindPostLink ?? false),
-    isFindInPost: campaign?.extraSettings?.isFindInPost ?? false,
+    ...initialFindDataFlags,
     sortTypePost: (campaign?.extraSettings?.sortTypePost || 'most_relevant') as CampaignExtraSettings['sortTypePost'],
     countPostFindData: campaign?.extraSettings?.countPostFindData ?? 10,
-    isFindInComment: campaign?.extraSettings?.isFindInComment ?? false,
     sortTypeComment: (campaign?.extraSettings?.sortTypeComment || 'most_relevant') as CampaignExtraSettings['sortTypeComment'],
     countCommentFindData: campaign?.extraSettings?.countCommentFindData ?? 30,
-    isFindNewInteractors: campaign?.extraSettings?.isFindNewInteractors ?? false,
-    isFindInGroupMembers: campaign?.extraSettings?.isFindInGroupMembers ?? false,
     countGroupMemberFindData: campaign?.extraSettings?.countGroupMemberFindData ?? 100,
     findDataRerunEnabled: campaign?.extraSettings?.findDataRerunEnabled ?? false,
     findDataRerunAfterHours: normalizeHourValue(campaign?.extraSettings?.findDataRerunAfterHours),
@@ -746,6 +777,10 @@ export default function CampaignFormModal({
     formData.isFindUid ||
     formData.isFindPostLink
   )
+  const hasFindDataTargetSelection = showFoundDataHandlingSection
+  const canUseFindDataPostSource = hasFindDataTargetSelection
+  const canUseFindDataCommentSource = formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid
+  const canUseFindDataUidOnlySources = formData.isFindUid
   const usesFindDataPostFeed = formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink || formData.isFindNewInteractors
   const usesFindDataCommentFeed = formData.isFindInComment || formData.isFindNewInteractors
   const usesFindDataFeed = usesFindDataPostFeed || usesFindDataCommentFeed
@@ -884,8 +919,8 @@ export default function CampaignFormModal({
         ...ALL_STEPS.find(s => s.id === 'content')!,
         title: 'Cấu hình tìm kiếm',
         fields: [
-          { key: 'findDataScope', label: 'Tìm kiếm từ đâu' },
-          { key: 'findDataTargets', label: 'Tìm kiếm gì' }
+          { key: 'findDataTargets', label: 'Tìm kiếm gì' },
+          { key: 'findDataScope', label: 'Tìm kiếm từ đâu' }
         ]
       }
       const detailsStep: StepDef = {
@@ -1642,6 +1677,10 @@ export default function CampaignFormModal({
           : formData.suggestedFriendsCount)
         : 10
       const formSchedule = toIsoDateTimeValue(formData.schedule)
+      const normalizedFindData = normalizeFindDataFlagState(formData)
+      const canUseFindDataContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment
+      const saveFindDataPostSort = normalizedFindData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
+      const saveFindDataCommentSort = normalizedFindData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
 
       return {
         campaignPayload: {
@@ -1725,34 +1764,34 @@ export default function CampaignFormModal({
             sourceLinks: formData.sourceLinks,
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
             pagePostMode: formData.pagePostMode,
-            isFindPhone: formData.isFindPhone,
-            isFindLinkGroupZalo: formData.isFindLinkGroupZalo,
-            isFindUid: formData.isFindUid,
-            isFindPostLink: formData.isFindPostLink,
-            isFindInPost: formData.isFindInPost,
-            sortTypePost: effectiveFindDataPostSort,
+            isFindPhone: normalizedFindData.isFindPhone,
+            isFindLinkGroupZalo: normalizedFindData.isFindLinkGroupZalo,
+            isFindUid: normalizedFindData.isFindUid,
+            isFindPostLink: normalizedFindData.isFindPostLink,
+            isFindInPost: normalizedFindData.isFindInPost,
+            sortTypePost: saveFindDataPostSort,
             countPostFindData: formData.countPostFindData,
-            isFindInComment: formData.isFindInComment,
-            sortTypeComment: effectiveFindDataCommentSort,
+            isFindInComment: normalizedFindData.isFindInComment,
+            sortTypeComment: saveFindDataCommentSort,
             countCommentFindData: formData.countCommentFindData,
-            isFindNewInteractors: formData.isFindNewInteractors,
-            isFindInGroupMembers: formData.isFindInGroupMembers,
+            isFindNewInteractors: normalizedFindData.isFindNewInteractors,
+            isFindInGroupMembers: normalizedFindData.isFindInGroupMembers,
             countGroupMemberFindData: formData.countGroupMemberFindData,
             findDataRerunEnabled: isFindDataGroupCampaign ? formData.findDataRerunEnabled : false,
             findDataRerunAfterHours: isFindDataGroupCampaign
               ? normalizeHourValue(formData.findDataRerunAfterHours)
               : DEFAULT_FIND_DATA_RERUN_AFTER_HOURS,
-            isFindByKeywords: usesFindDataContentConditions ? formData.isFindByKeywords : false,
-            keywords: usesFindDataContentConditions ? formData.keywords : '',
-            isFindByContentAI: usesFindDataContentConditions ? formData.isFindByContentAI : false,
-            contentAI: usesFindDataContentConditions ? formData.contentAI : '',
-            findUidTargetCampaignIds: formData.isFindUid && handleFoundUidData ? getCampaignIdList(formData.findUidTargetCampaignIds) : [],
-            findPostLinkTargetCampaignIds: formData.isFindPostLink && handleFoundPostLinkData ? getCampaignIdList(formData.findPostLinkTargetCampaignIds) : [],
-            findPhoneSmsTargetCampaignIds: formData.isFindPhone && handleFoundPhoneSmsData ? getCampaignIdList(formData.findPhoneSmsTargetCampaignIds) : [],
-            findPhoneZaloWebTargetCampaignIds: formData.isFindPhone && handleFoundPhoneZaloWebData ? getCampaignIdList(formData.findPhoneZaloWebTargetCampaignIds) : [],
-            findZaloGroupLinkWebTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData ? getCampaignIdList(formData.findZaloGroupLinkWebTargetCampaignIds) : [],
-            findPhoneAkaBizDesktopTargetCampaignIds: formData.isFindPhone && handleFoundPhoneAkaBizDesktopData ? getCampaignIdList(formData.findPhoneAkaBizDesktopTargetCampaignIds) : [],
-            findZaloGroupLinkAkaBizDesktopTargetCampaignIds: formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData ? getCampaignIdList(formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds) : []
+            isFindByKeywords: canUseFindDataContentConditionsForSave ? formData.isFindByKeywords : false,
+            keywords: canUseFindDataContentConditionsForSave ? formData.keywords : '',
+            isFindByContentAI: canUseFindDataContentConditionsForSave ? formData.isFindByContentAI : false,
+            contentAI: canUseFindDataContentConditionsForSave ? formData.contentAI : '',
+            findUidTargetCampaignIds: normalizedFindData.isFindUid && handleFoundUidData ? getCampaignIdList(formData.findUidTargetCampaignIds) : [],
+            findPostLinkTargetCampaignIds: normalizedFindData.isFindPostLink && handleFoundPostLinkData ? getCampaignIdList(formData.findPostLinkTargetCampaignIds) : [],
+            findPhoneSmsTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneSmsData ? getCampaignIdList(formData.findPhoneSmsTargetCampaignIds) : [],
+            findPhoneZaloWebTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneZaloWebData ? getCampaignIdList(formData.findPhoneZaloWebTargetCampaignIds) : [],
+            findZaloGroupLinkWebTargetCampaignIds: normalizedFindData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData ? getCampaignIdList(formData.findZaloGroupLinkWebTargetCampaignIds) : [],
+            findPhoneAkaBizDesktopTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneAkaBizDesktopData ? getCampaignIdList(formData.findPhoneAkaBizDesktopTargetCampaignIds) : [],
+            findZaloGroupLinkAkaBizDesktopTargetCampaignIds: normalizedFindData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData ? getCampaignIdList(formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds) : []
           } as CampaignExtraSettings,
           images: formData.images
         },
@@ -1794,25 +1833,18 @@ export default function CampaignFormModal({
       return
     }
     if (isFindDataGroupCampaign) {
-      if (!formData.isFindInPost && !formData.isFindInComment && !formData.isFindNewInteractors && !formData.isFindInGroupMembers) {
+      if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink) {
+        showAlert('Vui lòng chọn ít nhất một loại data cần tìm.', 'error')
+        return
+      }
+      const normalizedFindData = normalizeFindDataFlagState(formData)
+      if (!normalizedFindData.isFindInPost && !normalizedFindData.isFindInComment && !normalizedFindData.isFindNewInteractors && !normalizedFindData.isFindInGroupMembers) {
         showAlert('Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment, Những người tương tác mới hoặc Thành viên group mới.', 'error')
-        return
-      }
-      if (formData.isFindInGroupMembers && !formData.isFindUid) {
-        showAlert('Thành viên group mới chỉ hỗ trợ tìm Uid user facebook. Vui lòng bật Uid user facebook hoặc bỏ chọn Thành viên group mới.', 'error')
-        return
-      }
-      if (formData.isFindNewInteractors && !formData.isFindUid) {
-        showAlert('Những người tương tác mới chỉ hỗ trợ tìm Uid user facebook. Vui lòng bật Uid user facebook hoặc bỏ chọn Những người tương tác mới.', 'error')
         return
       }
       const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
       if (formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
         showAlert('Vui lòng nhập số giờ chạy lại lớn hơn hoặc bằng 1.', 'error')
-        return
-      }
-      if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink) {
-        showAlert('Vui lòng chọn ít nhất một loại data cần tìm.', 'error')
         return
       }
       if (formData.isFindUid && handleFoundUidData && formData.findUidTargetCampaignIds.length === 0 && !isDraftAutoLinkedFindUid) {
@@ -2941,66 +2973,57 @@ export default function CampaignFormModal({
     </div>
   )
 
+  const sanitizeFindDataSourceSelection = normalizeFindDataFlagState
+
+  const handleFindPhoneTargetChange = (checked: boolean) => {
+    setFormData(p => sanitizeFindDataSourceSelection({
+      ...p,
+      isFindPhone: checked,
+      findPhoneSmsTargetCampaignIds: checked ? p.findPhoneSmsTargetCampaignIds : [],
+      findPhoneZaloWebTargetCampaignIds: checked ? p.findPhoneZaloWebTargetCampaignIds : [],
+      findPhoneAkaBizDesktopTargetCampaignIds: checked ? p.findPhoneAkaBizDesktopTargetCampaignIds : []
+    }))
+    if (!checked) {
+      setHandleFoundPhoneSmsData(false)
+      setHandleFoundPhoneZaloWebData(false)
+      setHandleFoundPhoneAkaBizDesktopData(false)
+    }
+  }
+
+  const handleFindZaloGroupTargetChange = (checked: boolean) => {
+    setFormData(p => sanitizeFindDataSourceSelection({
+      ...p,
+      isFindLinkGroupZalo: checked,
+      findZaloGroupLinkWebTargetCampaignIds: checked ? p.findZaloGroupLinkWebTargetCampaignIds : [],
+      findZaloGroupLinkAkaBizDesktopTargetCampaignIds: checked ? p.findZaloGroupLinkAkaBizDesktopTargetCampaignIds : []
+    }))
+    if (!checked) {
+      setHandleFoundZaloGroupLinkWebData(false)
+      setHandleFoundZaloGroupLinkAkaBizDesktopData(false)
+    }
+  }
+
+  const handleFindUidTargetChange = (checked: boolean) => {
+    setFormData(p => sanitizeFindDataSourceSelection({
+      ...p,
+      isFindUid: checked,
+      findUidTargetCampaignIds: checked ? p.findUidTargetCampaignIds : []
+    }))
+    if (!checked) setHandleFoundUidData(false)
+  }
+
+  const handleFindPostLinkTargetChange = (checked: boolean) => {
+    setFormData(p => sanitizeFindDataSourceSelection({
+      ...p,
+      isFindPostLink: checked,
+      isFindInPost: checked ? true : p.isFindInPost,
+      findPostLinkTargetCampaignIds: checked ? p.findPostLinkTargetCampaignIds : []
+    }))
+    if (!checked) setHandleFoundPostLinkData(false)
+  }
+
   const renderFindDataSearchConfig = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div className="extra-comment-options">
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Tìm kiếm từ đâu</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <label className="schedule-checkbox-label">
-            <input
-              type="checkbox"
-              checked={formData.isFindInPost}
-              onChange={e => setFormData(p => ({ ...p, isFindInPost: e.target.checked }))}
-            />
-            <span>Bài post</span>
-          </label>
-          <label className="schedule-checkbox-label">
-            <input
-              type="checkbox"
-              checked={formData.isFindInComment}
-              onChange={e => setFormData(p => ({ ...p, isFindInComment: e.target.checked }))}
-            />
-            <span>Comment</span>
-          </label>
-          <label className="schedule-checkbox-label find-data-source-option">
-            <input
-              type="checkbox"
-              checked={formData.isFindNewInteractors}
-              onChange={e => {
-                const checked = e.target.checked
-                setFormData(p => ({
-                  ...p,
-                  isFindNewInteractors: checked,
-                  isFindUid: checked ? true : p.isFindUid
-                }))
-              }}
-            />
-            <span className="find-data-source-option-text">
-              <span className="find-data-source-option-title">Những người tương tác mới</span>
-              <span className="find-data-source-option-description">Là những người đăng bài hoặc comment trong 1 phiên chạy mới hoặc trong 1 ngày</span>
-            </span>
-          </label>
-          <label className="schedule-checkbox-label find-data-source-option">
-            <input
-              type="checkbox"
-              checked={formData.isFindInGroupMembers}
-              onChange={e => {
-                const checked = e.target.checked
-                setFormData(p => ({
-                  ...p,
-                  isFindInGroupMembers: checked,
-                  isFindUid: checked ? true : p.isFindUid
-                }))
-              }}
-            />
-            <span className="find-data-source-option-text">
-              <span className="find-data-source-option-title">Thành viên group mới</span>
-              <span className="find-data-source-option-description">Là thành viên tham gia vào group mới nhất theo số lượng cài đặt hoặc theo phiên chạy mới nhất</span>
-            </span>
-          </label>
-        </div>
-      </div>
-
       <div className="extra-comment-options">
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Tìm kiếm gì</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -3008,19 +3031,7 @@ export default function CampaignFormModal({
             <input
               type="checkbox"
               checked={formData.isFindPhone}
-              onChange={e => {
-                const checked = e.target.checked
-                setFormData(p => ({
-                  ...p,
-                  isFindPhone: checked,
-                  findPhoneSmsTargetCampaignIds: checked ? p.findPhoneSmsTargetCampaignIds : [],
-                  findPhoneZaloWebTargetCampaignIds: checked ? p.findPhoneZaloWebTargetCampaignIds : []
-                }))
-                if (!checked) {
-                  setHandleFoundPhoneSmsData(false)
-                  setHandleFoundPhoneZaloWebData(false)
-                }
-              }}
+              onChange={e => handleFindPhoneTargetChange(e.target.checked)}
             />
             <span>Số điện thoại</span>
           </label>
@@ -3028,15 +3039,7 @@ export default function CampaignFormModal({
             <input
               type="checkbox"
               checked={formData.isFindLinkGroupZalo}
-              onChange={e => {
-                const checked = e.target.checked
-                setFormData(p => ({
-                  ...p,
-                  isFindLinkGroupZalo: checked,
-                  findZaloGroupLinkWebTargetCampaignIds: checked ? p.findZaloGroupLinkWebTargetCampaignIds : []
-                }))
-                if (!checked) setHandleFoundZaloGroupLinkWebData(false)
-              }}
+              onChange={e => handleFindZaloGroupTargetChange(e.target.checked)}
             />
             <span>Link group Zalo</span>
           </label>
@@ -3045,15 +3048,7 @@ export default function CampaignFormModal({
               type="checkbox"
               checked={formData.isFindUid}
               disabled={isDraftAutoLinkedFindUid}
-              onChange={e => {
-                const checked = e.target.checked
-                setFormData(p => ({
-                  ...p,
-                  isFindUid: checked,
-                  findUidTargetCampaignIds: checked ? p.findUidTargetCampaignIds : []
-                }))
-                if (!checked) setHandleFoundUidData(false)
-              }}
+              onChange={e => handleFindUidTargetChange(e.target.checked)}
             />
             <span>Uid user facebook</span>
           </label>
@@ -3062,20 +3057,81 @@ export default function CampaignFormModal({
               type="checkbox"
               checked={formData.isFindPostLink}
               disabled={isDraftAutoLinkedPostLink}
-              onChange={e => {
-                const checked = e.target.checked
-                setFormData(p => ({
-                  ...p,
-                  isFindPostLink: checked,
-                  findPostLinkTargetCampaignIds: checked ? p.findPostLinkTargetCampaignIds : []
-                }))
-                if (!checked) setHandleFoundPostLinkData(false)
-              }}
+              onChange={e => handleFindPostLinkTargetChange(e.target.checked)}
             />
             <span>Link post</span>
           </label>
         </div>
       </div>
+
+      {hasFindDataTargetSelection && (
+        <div className="extra-comment-options">
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Tìm kiếm từ đâu</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {canUseFindDataPostSource && (
+              <label className="schedule-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={formData.isFindPostLink || formData.isFindInPost}
+                  onChange={e => {
+                    const checked = e.target.checked
+                    setFormData(p => sanitizeFindDataSourceSelection({ ...p, isFindInPost: checked }))
+                  }}
+                />
+                <span>Bài post</span>
+              </label>
+            )}
+            {canUseFindDataCommentSource && (
+              <label className="schedule-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={formData.isFindInComment}
+                  onChange={e => setFormData(p => sanitizeFindDataSourceSelection({ ...p, isFindInComment: e.target.checked }))}
+                />
+                <span>Comment</span>
+              </label>
+            )}
+            {canUseFindDataUidOnlySources && (
+              <label className="schedule-checkbox-label find-data-source-option">
+                <input
+                  type="checkbox"
+                  checked={formData.isFindNewInteractors}
+                  onChange={e => {
+                    const checked = e.target.checked
+                    setFormData(p => sanitizeFindDataSourceSelection({
+                      ...p,
+                      isFindNewInteractors: checked
+                    }))
+                  }}
+                />
+                <span className="find-data-source-option-text">
+                  <span className="find-data-source-option-title">Những người tương tác mới</span>
+                  <span className="find-data-source-option-description">Là những người đăng bài hoặc comment trong 1 phiên chạy mới hoặc trong 1 ngày</span>
+                </span>
+              </label>
+            )}
+            {canUseFindDataUidOnlySources && (
+              <label className="schedule-checkbox-label find-data-source-option">
+                <input
+                  type="checkbox"
+                  checked={formData.isFindInGroupMembers}
+                  onChange={e => {
+                    const checked = e.target.checked
+                    setFormData(p => sanitizeFindDataSourceSelection({
+                      ...p,
+                      isFindInGroupMembers: checked
+                    }))
+                  }}
+                />
+                <span className="find-data-source-option-text">
+                  <span className="find-data-source-option-title">Thành viên group mới</span>
+                  <span className="find-data-source-option-description">Là thành viên tham gia vào group mới nhất theo số lượng cài đặt hoặc theo phiên chạy mới nhất</span>
+                </span>
+              </label>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 
