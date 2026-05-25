@@ -19,6 +19,9 @@ const electronAPI = {
   resetDeviceLock: (): Promise<DeviceLockResetResult> =>
     ipcRenderer.invoke(IPC_EVENTS.AUTH_RESET_DEVICE_LOCK),
 
+  changePassword: (oldPassword: string, newPassword: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTH_CHANGE_PASSWORD, oldPassword, newPassword),
+
   // Theme
   setTheme: (theme: 'light' | 'dark'): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.THEME_CHANGE, theme),

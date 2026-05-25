@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC_EVENTS } from '../../../shared/types'
-import { login as loginQuery, resetDeviceLock } from '../../data/repositories/authRepository'
+import { changePassword, login as loginQuery, resetDeviceLock } from '../../data/repositories/authRepository'
 import { setCurrentUser, getCurrentUser } from '../../data/currentUser'
 
 interface AuthLifecycleHooks {
@@ -42,5 +42,11 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     const user = getCurrentUser()
     if (!user) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi đổi máy tính.')
     return resetDeviceLock(user)
+  })
+
+  ipcMain.handle(IPC_EVENTS.AUTH_CHANGE_PASSWORD, async (_, oldPassword: string, newPassword: string) => {
+    const user = getCurrentUser()
+    if (!user) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi đổi mật khẩu.')
+    return changePassword(user, oldPassword, newPassword)
   })
 }

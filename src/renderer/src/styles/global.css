@@ -937,6 +937,26 @@ button.btn-icon:not(.btn):disabled {
   font-weight: 600;
 }
 
+.change-password-modal {
+  width: min(440px, calc(100vw - 32px));
+  max-height: none;
+}
+
+.change-password-modal .modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.change-password-body {
+  display: grid;
+  gap: 16px;
+}
+
+.change-password-body .stepper-form-group {
+  margin-bottom: 0;
+}
+
 .modal-body {
   flex: 1;
   overflow-y: auto;

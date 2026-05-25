@@ -131,7 +131,7 @@ Relations between find-data source campaigns and internal target campaigns are e
 - `mapXxxFromDB(row)` trong [mappers.ts](src/main/data/mappers.ts) chuyển snake_case → camelCase
 - Built-in records live in Supabase DB (`auto_blocks`, `auto_workflows`, `auto_elements`) and DB is the source of truth. There is no `seedV2` runtime/source fallback; update built-ins via admin UI/IPC or explicit SQL migration.
 - `org_staff.akabiz_integrations` stores current-staff external akaBiz connections (`sms`/`zaloWeb` plus `akaBizDesktop` with `installPath`/`dbPath`); use [staffIntegrationRepository.ts](src/main/data/repositories/staffIntegrationRepository.ts), not renderer local storage.
-- Auth login khóa `org_staff` theo 1 máy qua `device_fingerprint_hash` (SHA-256 platform + OS machine ID) trong [authRepository.ts](src/main/data/repositories/authRepository.ts) + [deviceIdentity.ts](src/main/services/deviceIdentity.ts). Login options local: `Ghi nhớ` chỉ prefill, `Tự động` mới auto-login, `AUTH_RESET_DEVICE_LOCK` xoá local auto-login; startup dùng Electron login item IPC trong [handlers.ts](src/main/ipc/handlers.ts).
+- Auth login khóa `org_staff` theo 1 máy qua `device_fingerprint_hash` (SHA-256 platform + OS machine ID) trong [authRepository.ts](src/main/data/repositories/authRepository.ts) + [deviceIdentity.ts](src/main/services/deviceIdentity.ts). Login options local: `Ghi nhớ` chỉ prefill, `Tự động` mới auto-login, `AUTH_RESET_DEVICE_LOCK` xoá local auto-login; đổi mật khẩu dùng `AUTH_CHANGE_PASSWORD`, kiểm tra mật khẩu cũ rồi update `org_staff.password`; startup dùng Electron login item IPC trong [handlers.ts](src/main/ipc/handlers.ts).
 
 Migration pattern: write SQL files under `migrations/` (`migrations/migration.sql` for base schema, keep versioned files as `migrations/migration_vN_*.sql`, e.g. `migrations/migration_v2_workflow.sql`, `migrations/migration_v3_campaign_data.sql`, `migrations/migration_v6_rename_campaign_workflow_tables.sql`, `migrations/migration_v34_message_uid_campaign.sql`). Apply via `mcp__supabase__apply_migration`. Use idempotent UPSERT by UNIQUE name for engine v2 or explicit IDs where appropriate.
 
@@ -157,7 +157,7 @@ Status values trong DB lưu **tiếng Việt có dấu**:
 ### IPC pattern
 
 [src/main/ipc/handlers.ts](src/main/ipc/handlers.ts) gom các nhóm trong `handlers/` directory:
-- `authHandlers` (login/logout/me)
+- `authHandlers` (login/logout/me/reset device lock/change password)
 - `campaignHandlers` (CRUD campaign + scheduler control)
 - `browserHandlers` ([handlers/browserHandlers.ts](src/main/ipc/handlers/browserHandlers.ts)) — webview register/unregister/status. Khi register cũng register vào cả `WebviewRegistry` (cho contactLoader / scheduler `isRegistered` check) lẫn `PageControllerRegistry` (editor/test runs dùng visible webview)
 - `accountHandlers` / `accountContactHandlers` / `updateHandlers`
