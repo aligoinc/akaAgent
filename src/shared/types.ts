@@ -206,6 +206,7 @@ export interface Campaign {
   organizationId?: number
   createdAt?: string
   updatedAt?: string
+  lastRunAt?: string | null
   // Joined fields
   actionName?: string
   accountName?: string

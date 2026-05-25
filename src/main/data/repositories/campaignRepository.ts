@@ -10,6 +10,7 @@ const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
+const LAST_RUN_LOOKUP_CONCURRENCY = 10
 
 interface VietnamDateTimeParts {
   year: number
@@ -166,6 +167,47 @@ function isPastScheduleEnd(campaign: Campaign, schedule: Date): boolean {
 
 // =========== CAMPAIGNS ===========
 
+async function getLatestCampaignRunTimes(campaignIds: number[]): Promise<Map<number, string>> {
+  const latestByCampaignId = new Map<number, string>()
+  const uniqueIds = Array.from(new Set(campaignIds.filter(id => Number.isFinite(id))))
+
+  for (let i = 0; i < uniqueIds.length; i += LAST_RUN_LOOKUP_CONCURRENCY) {
+    const batch = uniqueIds.slice(i, i + LAST_RUN_LOOKUP_CONCURRENCY)
+    const rows = await Promise.all(batch.map(async campaignId => {
+      const { data, error } = await client()
+        .from('auto_campaign_input_data')
+        .select('campaign_id, date_action')
+        .eq('campaign_id', campaignId)
+        .eq('is_delete', false)
+        .not('date_action', 'is', null)
+        .order('date_action', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) throw new Error(`Failed to get latest campaign run time: ${error.message}`)
+      return data
+    }))
+
+    for (const row of rows) {
+      const campaignId = row?.campaign_id as number | undefined
+      const dateAction = row?.date_action as string | undefined
+      if (campaignId && dateAction) {
+        latestByCampaignId.set(campaignId, dateAction)
+      }
+    }
+  }
+
+  return latestByCampaignId
+}
+
+async function withLatestCampaignRunTime(campaign: Campaign): Promise<Campaign> {
+  const latestRunTimes = await getLatestCampaignRunTimes([campaign.id])
+  return {
+    ...campaign,
+    lastRunAt: latestRunTimes.get(campaign.id) ?? null
+  }
+}
+
 export async function getCampaign(id: number): Promise<Campaign | null> {
   const u = requireCurrentUser()
   const { data, error } = await client()
@@ -189,7 +231,12 @@ export async function listCampaigns(): Promise<Campaign[]> {
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
-  return (data || []).map(row => mapCampaignFromDB(row))
+  const campaigns = (data || []).map(row => mapCampaignFromDB(row))
+  const latestRunTimes = await getLatestCampaignRunTimes(campaigns.map(campaign => campaign.id))
+  return campaigns.map(campaign => ({
+    ...campaign,
+    lastRunAt: latestRunTimes.get(campaign.id) ?? null
+  }))
 }
 
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
@@ -260,7 +307,11 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
     .single()
 
   if (error) throw new Error(`Failed to update campaign: ${error.message}`)
-  return mapCampaignFromDB(data)
+  const campaign = mapCampaignFromDB(data)
+  if (campaign.status === 'tạm dừng' || campaign.status === 'hoàn thành') {
+    return withLatestCampaignRunTime(campaign)
+  }
+  return campaign
 }
 
 export async function deleteCampaign(id: number): Promise<void> {
