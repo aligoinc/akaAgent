@@ -196,7 +196,7 @@ const GROUP_POST_ACTIONS = new Set([
   FIND_DATA_GROUP_ACTION_ID
 ])
 
-// Campaign action IDs that show the "Nguồn đăng bài" section (source links, copy content, share, reels)
+// Campaign action IDs that share timeline/page source-content controls.
 const TIMELINE_POST_ACTIONS = new Set([
   'facebook_timeline_post',
   PAGE_POST_ACTION_ID
@@ -748,15 +748,18 @@ export default function CampaignFormModal({
   const showExtraSection = isFacebookGroupPostCampaign || isCommentSeedingCampaign
   const showFindDataSourceSection = !!targetFindDataField && !hideDetailsSection
   const hasSelectedFindDataSourceCampaign = showFindDataSourceSection && (selectedFindDataSourceCampaignIds.length > 0 || isDraftTargetFromFindData)
-  const requiresTimelineSourceLinks = isTimelinePostCampaign && (formData.copyContentFromSource || (!isPagePostCampaign && formData.sharePost))
-  const hasTimelineSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
-  const isUsingTimelineSourceContent = isTimelinePostCampaign && formData.copyContentFromSource
-  const usesSourceContentAiPrompt = isUsingTimelineSourceContent && formData.rewriteSourceContentWithAI
+  const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
+  const supportsSourceSharePost = isTimelinePostCampaign && !isPagePostCampaign
+  const supportsSourceReels = isTimelinePostCampaign && !isPagePostCampaign
+  const requiresSourceLinks = supportsSourceContent && (formData.copyContentFromSource || (supportsSourceSharePost && formData.sharePost))
+  const hasSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
+  const isUsingSourceContent = supportsSourceContent && formData.copyContentFromSource
+  const usesSourceContentAiPrompt = isUsingSourceContent && formData.rewriteSourceContentWithAI
   const hasSourceContentAiPrompt = formData.sourceContentAiPrompt.trim().length > 0
   const requiresMainContentOrMedia =
     !isFindDataGroupCampaign &&
     !isCommentSeedingCampaign &&
-    !isUsingTimelineSourceContent &&
+    !isUsingSourceContent &&
     (!isMessageUidCampaign || formData.enableMessage)
   const hasMainContentText = formData.content.trim().length > 0
   const hasSelectedMainMedia = formData.imageOption !== 'none' && formData.images.length > 0
@@ -936,7 +939,7 @@ export default function CampaignFormModal({
     }
     if (isFacebookGroupPostCampaign) {
       return ALL_STEPS.flatMap(step => {
-        if (step.id === 'content') return [step, GROUP_POST_COMMENT_STEP, GROUP_POST_BUMP_STEP]
+        if (step.id === 'content') return [SOURCE_CONTENT_STEP, step, GROUP_POST_COMMENT_STEP, GROUP_POST_BUMP_STEP]
         if (step.id === 'extra') {
           return [{
             ...step,
@@ -1283,7 +1286,7 @@ export default function CampaignFormModal({
       case 'leaveGroupOnPendingApproval': return true
       case 'autoJoinGroupAfterPost': return true
       case 'shuffleGroupList': return true
-      case 'sourceContent': return (!requiresTimelineSourceLinks || hasTimelineSourceLinks) && (!usesSourceContentAiPrompt || hasSourceContentAiPrompt)
+      case 'sourceContent': return (!requiresSourceLinks || hasSourceLinks) && (!usesSourceContentAiPrompt || hasSourceContentAiPrompt)
       case 'images': return true  // optional
       case 'commentImages': return true  // optional
       case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindNewInteractors || formData.isFindInGroupMembers
@@ -1636,7 +1639,7 @@ export default function CampaignFormModal({
           timeSleepBetween2: formData.timeSleepBetween2,
           content: formData.content,
           extraSettings: {
-            sharePost: isPagePostCampaign ? false : formData.sharePost,
+            sharePost: supportsSourceSharePost ? formData.sharePost : false,
             rewriteContentEachRun: formData.rewriteContentEachRun,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
@@ -1692,7 +1695,7 @@ export default function CampaignFormModal({
             sourceContentAiPrompt: formData.copyContentFromSource && formData.rewriteSourceContentWithAI
               ? formData.sourceContentAiPrompt
               : '',
-            postAsReels: isPagePostCampaign ? false : formData.postAsReels,
+            postAsReels: supportsSourceReels ? formData.postAsReels : false,
             sourceLinks: formData.sourceLinks,
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
             pagePostMode: formData.pagePostMode,
@@ -1743,7 +1746,7 @@ export default function CampaignFormModal({
     if (!validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
       return
     }
-    if (requiresTimelineSourceLinks && !hasTimelineSourceLinks) {
+    if (requiresSourceLinks && !hasSourceLinks) {
       showAlert('Vui lòng nhập ít nhất một uid/link nguồn để copy hoặc chia sẻ nội dung.', 'error')
       return
     }
@@ -2756,7 +2759,7 @@ export default function CampaignFormModal({
     </div>
   )
 
-  const renderTimelineSourceContentSettings = () => (
+  const renderSourceContentSettings = () => (
     <div>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 12 }}>
         <label className="schedule-checkbox-label">
@@ -2784,7 +2787,7 @@ export default function CampaignFormModal({
           <span>Lấy kèm hình ảnh</span>
         </label>
       </div>
-      {!isPagePostCampaign && (
+      {supportsSourceSharePost && (
         <div style={{ marginBottom: 12 }}>
           <label className="schedule-checkbox-label">
             <input
@@ -2838,7 +2841,7 @@ export default function CampaignFormModal({
         </div>
       )}
 
-      {!isPagePostCampaign && (
+      {supportsSourceReels && (
         <div style={{ marginTop: 12 }}>
           <label className="schedule-checkbox-label">
             <input
@@ -4049,7 +4052,7 @@ export default function CampaignFormModal({
       <textarea
         ref={campaignContentTextareaRef}
         className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
-        placeholder={isTimelinePostCampaign && formData.copyContentFromSource
+        placeholder={supportsSourceContent && formData.copyContentFromSource
           ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
           : isMessageCampaign
             ? "Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."
@@ -4828,7 +4831,7 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {isTimelinePostCampaign && (
+            {supportsSourceContent && (
               <div
                 className="stepper-section"
                 ref={el => { sectionRefs.current['sourceContent'] = el }}
@@ -4846,7 +4849,7 @@ export default function CampaignFormModal({
 
                 {!collapsedSections['sourceContent'] && (
                   <div className="stepper-section-body">
-                    {renderTimelineSourceContentSettings()}
+                    {renderSourceContentSettings()}
                   </div>
                 )}
               </div>

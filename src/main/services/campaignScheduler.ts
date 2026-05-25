@@ -591,7 +591,8 @@ export class CampaignScheduler {
 
     const shouldRotateSourceLink =
       (campaign.actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
-      (campaign.actionId === PAGE_POST_ACTION_ID && extra.copyContentFromSource === true)
+      (campaign.actionId === PAGE_POST_ACTION_ID && extra.copyContentFromSource === true) ||
+      (campaign.actionId === 'facebook_group_post' && extra.copyContentFromSource === true)
     const sourceLinks = shouldRotateSourceLink
       ? (extra.sourceLinks || '').split(/[,\r\n]+/).map(s => s.trim()).filter(Boolean)
       : []
