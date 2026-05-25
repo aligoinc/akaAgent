@@ -98,6 +98,7 @@ const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
+const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
@@ -994,6 +995,9 @@ export class CampaignScheduler {
       case MESSAGE_FRIEND_ACTION_ID:
         actions.push({ code: 'fb_message_friend', name: 'Nhắn tin bạn bè' })
         break
+      case PAGE_INBOX_MESSAGE_ACTION_ID:
+        actions.push({ code: 'fb_message_page_inbox_customer', name: 'Nhắn tin khách inbox page' })
+        break
       case MESSAGE_UID_ACTION_ID:
         if (extra.enableMessage !== false) actions.push({ code: 'fb_message_stranger', name: 'Nhắn tin người lạ' })
         if (extra.enableAddFriend) actions.push({ code: 'fb_add_friend', name: 'Kết bạn' })
@@ -1024,6 +1028,8 @@ export class CampaignScheduler {
     const extra = campaign.extraSettings || {}
     switch (actionCode) {
       case 'fb_message_friend':
+        return true
+      case 'fb_message_page_inbox_customer':
         return true
       case 'fb_message_stranger':
         return campaign.actionId !== MESSAGE_UID_ACTION_ID || extra.enableMessage !== false
@@ -1064,6 +1070,7 @@ export class CampaignScheduler {
       case 'fb_comment': return 'Comment'
       case 'fb_message_stranger': return 'Nhắn tin người lạ'
       case 'fb_message_friend': return 'Nhắn tin bạn bè'
+      case 'fb_message_page_inbox_customer': return 'Nhắn tin khách inbox page'
       case 'fb_add_friend': return 'Kết bạn'
       case 'fb_like_post': return 'Like post'
       default: return actionCode
@@ -1079,6 +1086,7 @@ export class CampaignScheduler {
 
   private getMessageActionCode(campaign: Campaign): string {
     if (campaign.actionId === MESSAGE_UID_ACTION_ID) return 'fb_message_stranger'
+    if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID) return 'fb_message_page_inbox_customer'
     return 'fb_message_friend'
   }
 
@@ -1219,7 +1227,7 @@ export class CampaignScheduler {
     const lowerMessage = message.toLowerCase()
     let actionCode: string | undefined
 
-    if (errorStep?.blockName === 'fb_send_message') actionCode = this.getMessageActionCode(campaign)
+    if (errorStep?.blockName === 'fb_send_message' || errorStep?.blockName === 'fb_send_page_inbox_message') actionCode = this.getMessageActionCode(campaign)
     else if (errorStep?.blockName === 'fb_add_friend') actionCode = 'fb_add_friend'
     else if (errorStep?.blockName === 'fb_comment_at_position' || errorStep?.blockName === 'fb_comment_current_post') actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_click_like_current_post') actionCode = 'fb_like_post'
@@ -1398,8 +1406,10 @@ export class CampaignScheduler {
       pageName: detail?.name || '',
       businessUrl: 'https://business.facebook.com/content_management',
       // Message extras
-      enableMessage: campaign.actionId === MESSAGE_FRIEND_ACTION_ID ? true : (extra.enableMessage ?? false),
-      enableAddFriend: campaign.actionId === MESSAGE_FRIEND_ACTION_ID ? false : (extra.enableAddFriend ?? false),
+      enableMessage: (campaign.actionId === MESSAGE_FRIEND_ACTION_ID || campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID) ? true : (extra.enableMessage ?? false),
+      enableAddFriend: (campaign.actionId === MESSAGE_FRIEND_ACTION_ID || campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID) ? false : (extra.enableAddFriend ?? false),
+      pageInboxPageUid: extra.pageInboxPageUid || '',
+      pageInboxPageName: extra.pageInboxPageName || '',
       // Find data in group extras
       isFindPhone: extra.isFindPhone ?? false,
       isFindLinkGroupZalo: extra.isFindLinkGroupZalo ?? false,
@@ -1436,7 +1446,7 @@ export class CampaignScheduler {
    * Scan steps theo block_name (cố định) để biết bước nào succeeded:
    *   - fb_click_post_button → "Đăng bài"
    *   - fb_comment_at_position/fb_comment_current_post → "Comment"
-   *   - fb_send_message → "Nhắn tin"
+   *   - fb_send_message/fb_send_page_inbox_message → "Nhắn tin"
    *   - fb_add_friend → "Kết bạn"
    * Mỗi milestone ghi 1 row vào auto_campaign_details với status:
    *   - 'thành công' = action OK
@@ -1928,12 +1938,14 @@ export class CampaignScheduler {
 
     // Nhắn tin — phân biệt 3 status: thành công / thất bại (FB block) / lỗi (exception)
     const msgSteps = steps.filter(s =>
-      s.blockName === 'fb_send_message' &&
+      (s.blockName === 'fb_send_message' || s.blockName === 'fb_send_page_inbox_message') &&
       (s.status === 'success' || s.status === 'error')
     )
     for (const s of msgSteps) {
       const out = (s.output as any) || {}
       const errMsg = out.error || s.error || 'Lỗi không xác định'
+      const isPageInboxMessage = s.blockName === 'fb_send_page_inbox_message' || campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
+      const actionName = isPageInboxMessage ? 'Nhắn tin khách inbox page' : 'Nhắn tin'
       const status: 'thành công' | 'thất bại' | 'lỗi' =
         s.status === 'error' ? 'lỗi'
         : out.ok === true ? 'thành công'
@@ -1945,13 +1957,13 @@ export class CampaignScheduler {
           campaignId: campaign.id,
           accountId,
           actionCode: this.getMessageActionCode(campaign),
-          actionName: 'Nhắn tin',
+          actionName,
           status,
           errorCode,
-          log: status === 'thành công' ? `Nhắn tin thành công đến ${inputDataName}` : `Lỗi nhắn tin đến ${inputDataName}: ${errMsg}`
+          log: status === 'thành công' ? `${actionName} thành công đến ${inputDataName}` : `Lỗi ${actionName.toLowerCase()} đến ${inputDataName}: ${errMsg}`
         })
-        if (status === 'thành công') await this.logCampaignProgress(campaign.id, `💬 Nhắn tin thành công đến "${inputDataName}"`)
-        else await this.logCampaignProgress(campaign.id, `❌ Lỗi nhắn tin "${inputDataName}": ${errMsg}`)
+        if (status === 'thành công') await this.logCampaignProgress(campaign.id, `💬 ${actionName} thành công đến "${inputDataName}"`)
+        else await this.logCampaignProgress(campaign.id, `❌ Lỗi ${actionName.toLowerCase()} "${inputDataName}": ${errMsg}`)
       } catch (err) { console.error('Failed log message:', err) }
     }
 

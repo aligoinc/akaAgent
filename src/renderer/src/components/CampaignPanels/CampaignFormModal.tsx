@@ -126,6 +126,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   fb_comment: 'Comment',
   fb_message_stranger: 'Nhắn tin người lạ',
   fb_message_friend: 'Nhắn tin bạn bè',
+  fb_message_page_inbox_customer: 'Nhắn tin khách inbox page',
   fb_add_friend: 'Kết bạn',
   fb_like_post: 'Like post'
 }
@@ -182,12 +183,14 @@ const SIMPLE_CAMPAIGN_ACTIONS = new Set([
 
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
+const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   MESSAGE_FRIEND_ACTION_ID,
-  MESSAGE_UID_ACTION_ID
+  MESSAGE_UID_ACTION_ID,
+  PAGE_INBOX_MESSAGE_ACTION_ID
 ])
 
 // Campaign action IDs for "Đăng bài vào group" type — show "Chọn nhóm" picker in data list
@@ -626,6 +629,8 @@ export default function CampaignFormModal({
     enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? false,
     useSuggestedFriends: campaign?.extraSettings?.useSuggestedFriends ?? false,
     suggestedFriendsCount: campaign?.extraSettings?.suggestedFriendsCount ?? 10,
+    pageInboxPageUid: campaign?.extraSettings?.pageInboxPageUid || '',
+    pageInboxPageName: campaign?.extraSettings?.pageInboxPageName || '',
     // Nguồn đăng bài (timeline post)
     copyContentFromSource: campaign?.extraSettings?.copyContentFromSource ?? false,
     includeSourceImages: campaign?.extraSettings?.includeSourceImages ?? false,
@@ -709,6 +714,7 @@ export default function CampaignFormModal({
   const isMessageCampaign = MESSAGE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isMessageFriendCampaign = formData.actionId === MESSAGE_FRIEND_ACTION_ID
   const isMessageUidCampaign = formData.actionId === MESSAGE_UID_ACTION_ID
+  const isPageInboxMessageCampaign = formData.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
   const isFacebookGroupPostCampaign = formData.actionId === 'facebook_group_post'
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
@@ -730,7 +736,9 @@ export default function CampaignFormModal({
   const canPickPages = isPagePostCampaign
   const canPickFriends = isMessageFriendCampaign
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
-  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign
+  const canPickPageInboxCustomers = isPageInboxMessageCampaign
+  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign
+  const requiresSingleAccount = isPageInboxMessageCampaign
   const showActionOptionsSection = isMessageUidCampaign
   const showFoundDataHandlingSection = isFindDataGroupCampaign && (
     formData.isFindPhone ||
@@ -924,8 +932,19 @@ export default function CampaignFormModal({
           if (s.id === 'details') {
             return {
               ...s,
-              title: isMessageFriendCampaign ? 'Danh sách bạn bè' : 'Danh sách UID',
-              fields: [{ key: 'details', label: isMessageFriendCampaign ? 'Bạn bè' : 'UID' }]
+              title: isMessageFriendCampaign
+                ? 'Danh sách bạn bè'
+                : isPageInboxMessageCampaign
+                  ? 'Danh sách khách inbox Page'
+                  : 'Danh sách UID',
+              fields: [{
+                key: 'details',
+                label: isMessageFriendCampaign
+                  ? 'Bạn bè'
+                  : isPageInboxMessageCampaign
+                    ? 'Khách inbox Page'
+                    : 'UID'
+              }]
             }
           }
           return s
@@ -1049,6 +1068,11 @@ export default function CampaignFormModal({
       findDataSourceSelectionTouchedRef.current = false
     }
   }, [sourceSelectionScopeKey])
+
+  useEffect(() => {
+    if (!requiresSingleAccount || formData.accountIds.length <= 1) return
+    setFormData(prev => ({ ...prev, accountIds: prev.accountIds.slice(0, 1) }))
+  }, [requiresSingleAccount, formData.accountIds.length])
 
   useEffect(() => {
     if (!showFindDataSourceSection) {
@@ -1607,8 +1631,8 @@ export default function CampaignFormModal({
 
       const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
       const effectivePostKeywordFilter = isCommentSeedingCampaign ? '' : formData.postKeywordFilter
-      const effectiveEnableMessage = isMessageFriendCampaign ? true : formData.enableMessage
-      const effectiveEnableAddFriend = isMessageFriendCampaign ? false : formData.enableAddFriend
+      const effectiveEnableMessage = (isMessageFriendCampaign || isPageInboxMessageCampaign) ? true : formData.enableMessage
+      const effectiveEnableAddFriend = (isMessageFriendCampaign || isPageInboxMessageCampaign) ? false : formData.enableAddFriend
       const effectiveUseSuggestedFriends = isMessageUidCampaign
         ? (isEditingSavedCampaign ? campaign?.extraSettings?.useSuggestedFriends === true : formData.useSuggestedFriends)
         : false
@@ -1689,6 +1713,8 @@ export default function CampaignFormModal({
             enableAddFriend: effectiveEnableAddFriend,
             useSuggestedFriends: effectiveUseSuggestedFriends,
             suggestedFriendsCount: effectiveSuggestedFriendsCount,
+            pageInboxPageUid: isPageInboxMessageCampaign ? formData.pageInboxPageUid : '',
+            pageInboxPageName: isPageInboxMessageCampaign ? formData.pageInboxPageName : '',
             copyContentFromSource: formData.copyContentFromSource,
             includeSourceImages: formData.includeSourceImages,
             rewriteSourceContentWithAI: formData.copyContentFromSource ? formData.rewriteSourceContentWithAI : false,
@@ -1738,6 +1764,10 @@ export default function CampaignFormModal({
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
+      return
+    }
+    if (requiresSingleAccount && formData.accountIds.length !== 1) {
+      showAlert('Chiến dịch gửi tin khách inbox Page chỉ hỗ trợ chọn 1 tài khoản.', 'error')
       return
     }
     if (showContentSection && !validateSelectedImages('Media', formData.imageOption, formData.images)) {
@@ -1864,9 +1894,15 @@ export default function CampaignFormModal({
       showAlert(
         isMessageUidCampaign
           ? 'Vui lòng thêm ít nhất một UID vào danh sách data.'
+          : isPageInboxMessageCampaign
+            ? 'Vui lòng chọn ít nhất một khách inbox Page.'
           : 'Vui lòng thêm ít nhất một bạn bè vào danh sách data.',
         'error'
       )
+      return
+    }
+    if (isPageInboxMessageCampaign && !String(formData.pageInboxPageUid || '').trim()) {
+      showAlert('Vui lòng chọn khách inbox Page từ form Quét data để xác định Page cần gửi tin.', 'error')
       return
     }
     if (!isEditingSavedCampaign && isSuggestedFriendsUidCampaign && normalizeSuggestedFriendsCount(formData.suggestedFriendsCount) < 1) {
@@ -1893,6 +1929,8 @@ export default function CampaignFormModal({
           ? 'Vui lòng nhập link bài post cho tất cả dòng trong danh sách data.'
           : isPagePostCampaign
             ? 'Danh sách fanpage có page thiếu Page ID. Vui lòng chọn lại page từ data scan.'
+            : isPageInboxMessageCampaign
+              ? 'Danh sách khách inbox Page có dòng thiếu PSID. Vui lòng chọn lại từ data scan.'
             : 'Vui lòng nhập UID hoặc link cho tất cả dòng trong danh sách data.',
         'error'
       )
@@ -2246,7 +2284,7 @@ export default function CampaignFormModal({
 
   const [dataScanPicker, setDataScanPicker] = useState<{
     action: DataScanAction
-    mode: 'friends' | 'users' | 'groups' | 'pages'
+    mode: 'friends' | 'users' | 'groups' | 'pages' | 'pageInboxCustomers'
     initialStatusFilter?: 'active' | 'inactive' | 'all'
     allowedActions?: DataScanAction[]
   } | null>(null)
@@ -2354,6 +2392,53 @@ export default function CampaignFormModal({
       return
     }
     showAlert(`Đã thêm ${addedCount} page.`, 'success')
+  }
+
+  const onPageInboxCustomersSelected = (contacts: AutoAccountContact[]) => {
+    const pageInboxContacts = contacts.filter(c => c.contactType === 'page_inbox_customer')
+    if (pageInboxContacts.length === 0) {
+      showAlert('Không có khách inbox Page hợp lệ để thêm vào chiến dịch.', 'error')
+      return
+    }
+
+    const pageKeys = new Map<string, string>()
+    for (const contact of pageInboxContacts) {
+      const pageUid = String(contact.extraData?.pageUid || '').trim()
+      const pageName = String(contact.extraData?.pageName || '').trim()
+      if (pageUid) pageKeys.set(pageUid, pageName)
+    }
+
+    if (pageKeys.size !== 1) {
+      showAlert('Vui lòng chỉ chọn khách inbox của cùng một Page trong một chiến dịch.', 'error')
+      return
+    }
+
+    const [[pageUid, pageName]] = Array.from(pageKeys.entries())
+    const currentPageUid = String(formData.pageInboxPageUid || '').trim()
+    if (details.length > 0 && currentPageUid && currentPageUid !== pageUid) {
+      showAlert('Danh sách hiện tại đang thuộc Page khác. Vui lòng xoá hết data trước khi chọn khách của Page mới.', 'error')
+      return
+    }
+    const newRows: Partial<CampaignInputData>[] = pageInboxContacts.map(c => ({
+      name: c.name,
+      uid: c.uid || '',
+      phone: String(c.extraData?.phone || ''),
+      email: '',
+      note: '',
+      status: 'chờ xử lý'
+    }))
+
+    setFormData(p => ({
+      ...p,
+      pageInboxPageUid: pageUid,
+      pageInboxPageName: pageName
+    }))
+    const addedCount = appendUniqueDetails(newRows)
+    if (addedCount === 0) {
+      showAlert('Các khách inbox Page đã chọn đã có trong danh sách.', 'error')
+      return
+    }
+    showAlert(`Đã thêm ${addedCount} khách inbox Page.`, 'success')
   }
 
   const syncFindDataSourceCampaignLinks = async (targetCampaignIds: number[]) => {
@@ -4385,7 +4470,7 @@ export default function CampaignFormModal({
                   <div className="stepper-form-group" ref={accountDropdownRef}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <label style={{ margin: 0 }}>Tài khoản <span className="required">*</span></label>
-                      {accounts.length > 0 && !(campaign && campaign.id) && (
+                      {accounts.length > 0 && !(campaign && campaign.id) && !requiresSingleAccount && (
                         <button
                           type="button"
                           className="btn btn-ghost"
@@ -4424,12 +4509,12 @@ export default function CampaignFormModal({
                             {accounts.map(a => (
                               <label key={a.id} className="account-checkbox-option">
                                 <input
-                                  type={campaign && campaign.id ? "radio" : "checkbox"}
-                                  name={campaign && campaign.id ? "account-selection" : undefined}
+                                  type={(campaign && campaign.id) || requiresSingleAccount ? "radio" : "checkbox"}
+                                  name={(campaign && campaign.id) || requiresSingleAccount ? "account-selection" : undefined}
                                   checked={formData.accountIds.includes(a.id)}
                                   onChange={(e) => {
                                     const checked = e.target.checked;
-                                    if (campaign && campaign.id) {
+                                    if ((campaign && campaign.id) || requiresSingleAccount) {
                                       setFormData(p => ({
                                         ...p,
                                         accountIds: [a.id]
@@ -5094,6 +5179,8 @@ export default function CampaignFormModal({
                             ? 'Danh sách group/page/profile'
                             : isMessageFriendCampaign
                               ? 'Danh sách bạn bè'
+                              : isPageInboxMessageCampaign
+                                ? 'Danh sách khách inbox Page'
                               : isMessageUidCampaign
                                 ? 'Danh sách UID'
                                 : 'Danh sách data'}
@@ -5126,7 +5213,7 @@ export default function CampaignFormModal({
                   )}
                   {!isEditingSavedCampaign && (
                     <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
-                      {!isPagePostCampaign && (
+                      {!isPagePostCampaign && !isPageInboxMessageCampaign && (
                         <button className="btn btn-secondary" onClick={addDetailRow}>
                           <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
                         </button>
@@ -5180,6 +5267,30 @@ export default function CampaignFormModal({
                           title="Chọn data từ danh sách user Facebook"
                         >
                           <Users size={14} /> Chọn data
+                        </button>
+                      )}
+                      {canPickPageInboxCustomers && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            if (formData.accountIds.length === 0) {
+                              showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                              return
+                            }
+                            if (formData.accountIds.length !== 1) {
+                              showAlert('Chiến dịch này chỉ hỗ trợ chọn 1 tài khoản.', 'error')
+                              return
+                            }
+                            setDataScanPicker({
+                              action: 'facebook_page_inbox_customers',
+                              mode: 'pageInboxCustomers',
+                              initialStatusFilter: 'all',
+                              allowedActions: ['facebook_page_inbox_customers']
+                            })
+                          }}
+                          title="Chọn khách từng inbox với Page từ dữ liệu local"
+                        >
+                          <Users size={14} /> Chọn khách inbox Page
                         </button>
                       )}
                       {canPickGroups && (
@@ -5364,6 +5475,8 @@ export default function CampaignFormModal({
                 ? onUsersSelected
                 : dataScanPicker.mode === 'pages'
                   ? onPagesSelected
+                  : dataScanPicker.mode === 'pageInboxCustomers'
+                    ? onPageInboxCustomersSelected
                   : onGroupsSelected
           }
         />

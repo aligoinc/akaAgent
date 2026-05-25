@@ -874,6 +874,177 @@ export class PageController {
     return { fileCount: count }
   }
 
+  /** Drag-and-drop file vào selector trong document chính hoặc iframe cùng origin. */
+  async dropFileDeep(selector: string, filePaths: string[]): Promise<{ fileCount: number }> {
+    if (!filePaths || filePaths.length === 0) return { fileCount: 0 }
+    const resolved = await this.resolveFilePaths(filePaths)
+
+    const hasTarget = await this.exec<boolean>(`
+      function resolveDeepSelector(selector) {
+        function resolveIn(doc) {
+          try {
+            if (selector.startsWith('/') || selector.startsWith('(')) {
+              var result = doc.evaluate(selector, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+              for (var i = 0; i < result.snapshotLength; i++) {
+                var node = result.snapshotItem(i);
+                if (node) return node;
+              }
+              return null;
+            }
+            return doc.querySelector(selector);
+          } catch (e) {
+            return null;
+          }
+        }
+        var target = resolveIn(document);
+        if (target) return target;
+        var frames = Array.from(document.querySelectorAll('iframe'));
+        for (var i = 0; i < frames.length; i++) {
+          try {
+            var doc = frames[i].contentDocument || (frames[i].contentWindow && frames[i].contentWindow.document);
+            if (!doc) continue;
+            target = resolveIn(doc);
+            if (target) return target;
+          } catch (e) {}
+        }
+        return null;
+      }
+      return !!resolveDeepSelector(${safeJS(selector)});
+    `).catch(() => false)
+
+    if (!hasTarget) {
+      throw new Error('Drop target not found')
+    }
+
+    let count = 0
+    for (const filePath of resolved) {
+      const uniqueId = `__drop_deep_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      try {
+        await this.exec(`
+          function resolveDeepSelector(selector) {
+            function resolveIn(doc) {
+              try {
+                if (selector.startsWith('/') || selector.startsWith('(')) {
+                  var result = doc.evaluate(selector, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                  for (var i = 0; i < result.snapshotLength; i++) {
+                    var node = result.snapshotItem(i);
+                    if (node) return node;
+                  }
+                  return null;
+                }
+                return doc.querySelector(selector);
+              } catch (e) {
+                return null;
+              }
+            }
+            var target = resolveIn(document);
+            if (target) return target;
+            var frames = Array.from(document.querySelectorAll('iframe'));
+            for (var i = 0; i < frames.length; i++) {
+              try {
+                var doc = frames[i].contentDocument || (frames[i].contentWindow && frames[i].contentWindow.document);
+                if (!doc) continue;
+                target = resolveIn(doc);
+                if (target) return target;
+              } catch (e) {}
+            }
+            return null;
+          }
+          var selector = ${safeJS(selector)};
+          var b = resolveDeepSelector(selector);
+          if (!b) throw new Error("Drop target not found");
+          try { b.scrollIntoView({behavior:'instant', block:'center'}); } catch (e) {}
+          var a = document.createElement('INPUT');
+          a.setAttribute('type', 'file');
+          a.setAttribute('multiple', 'true');
+          a.setAttribute('data-drop-id', ${safeJS(uniqueId)});
+          a.setAttribute('style', 'position:fixed;z-index:2147483647;left:0;top:0;opacity:0;');
+          a.onchange = function() {
+            var target = resolveDeepSelector(selector);
+            if (!target) throw new Error("Drop target not found");
+            var c = target.ownerDocument || document;
+            var win = c.defaultView || window;
+            var files = Array.from(this.files || []);
+            var dt = null;
+            try {
+              dt = new win.DataTransfer();
+              files.forEach(function(file) { dt.items.add(file); });
+            } catch (e) {
+              dt = {
+                items: [],
+                files: this.files,
+                types: ['Files'],
+                effectAllowed: 'all',
+                dropEffect: 'copy',
+                setData: function(){},
+                getData: function(){ return ''; },
+                clearData: function(){},
+                setDragImage: function(){}
+              };
+            }
+            dt.effectAllowed = 'all';
+            dt.dropEffect = 'copy';
+
+            var targets = [];
+            function addTarget(el) {
+              if (el && targets.indexOf(el) === -1) targets.push(el);
+            }
+            addTarget(target);
+            try { addTarget(target.querySelector('[contenteditable="true"]')); } catch (e) {}
+            try { addTarget(target.querySelector('[role="textbox"]')); } catch (e) {}
+            try { addTarget(c.querySelector('[role="dialog"] [contenteditable="true"]')); } catch (e) {}
+            try { addTarget(c.querySelector('[role="dialog"]')); } catch (e) {}
+
+            ['dragenter', 'dragover', 'drop'].forEach(function(name) {
+              targets.forEach(function(item) {
+                var eventInit = { bubbles: true, cancelable: true, composed: true, dataTransfer: dt, view: win };
+                var event;
+                try {
+                  event = new win.DragEvent(name, eventInit);
+                } catch (e) {
+                  event = c.createEvent('DragEvent');
+                  event.initEvent(name, true, true);
+                }
+                try { Object.defineProperty(event, 'dataTransfer', { value: dt }); } catch (e) {}
+                item.dispatchEvent(event);
+              });
+            });
+
+            if (a.parentElement) a.parentElement.removeChild(a);
+          };
+          document.documentElement.appendChild(a);
+          a.getBoundingClientRect();
+          return ${safeJS(uniqueId)};
+        `)
+
+        try { this.wc.debugger.attach('1.3') } catch {}
+        try {
+          const { root } = await this.wc.debugger.sendCommand('DOM.getDocument', {})
+          const { nodeId } = await this.wc.debugger.sendCommand('DOM.querySelector', {
+            nodeId: root.nodeId,
+            selector: `[data-drop-id="${uniqueId}"]`
+          })
+          if (!nodeId) throw new Error('Cannot locate deep drop input via CDP')
+          await this.wc.debugger.sendCommand('DOM.setFileInputFiles', { nodeId, files: [filePath] })
+          await this.exec(`
+            var el = document.querySelector('[data-drop-id="${uniqueId}"]');
+            if (el) {
+              el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            }
+          `)
+          count++
+          await new Promise(r => setTimeout(r, 2000))
+        } finally {
+          try { this.wc.debugger.detach() } catch {}
+        }
+      } catch (err) {
+        console.error(`[PageController] dropFileDeep failed for ${filePath}:`, err)
+      }
+    }
+    return { fileCount: count }
+  }
+
   /** Resolve data: URI thành temp file paths. Trả filesystem paths. */
   private async resolveFilePaths(paths: string[]): Promise<string[]> {
     const { writeFileSync, existsSync } = await import('fs')
