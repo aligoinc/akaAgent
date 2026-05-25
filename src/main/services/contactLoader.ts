@@ -38,6 +38,7 @@ const POST_COMMENTERS_WORKFLOW = '[Built-in] Facebook - Quét người comment b
 const PAGE_INBOX_CONTACT_TYPE: ContactType = 'page_inbox_customer'
 const FACEBOOK_GRAPH_API_BASE = 'https://graph.facebook.com/v25.0'
 const PAGE_INBOX_BATCH_SIZE = 500
+const PAGE_INBOX_MAX_CONTACTS = 100000
 const PAGE_INBOX_MAX_FETCH_FAILURES = 3
 const PHONE_RE = /((\+?84|0)[\s.-]?)?(3[2-9]|5[689]|7[06-9]|8[1-689]|9[0-46-9])[0-9\s.-]{7,}/g
 
@@ -239,6 +240,7 @@ export class ContactLoader {
       let scannedCount = 0
       let fetchFailureCount = 0
       let fetchFailureMessage = ''
+      let reachedMaxContacts = false
 
       while (nextUrl) {
         if (this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted) break
@@ -275,6 +277,10 @@ export class ContactLoader {
           if (!contact || seenPsids.has(contact.uid)) continue
           seenPsids.add(contact.uid)
           pendingContacts.push(contact)
+          if (seenPsids.size >= PAGE_INBOX_MAX_CONTACTS) {
+            reachedMaxContacts = true
+            break
+          }
         }
 
         const cancelledAfterPage = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
@@ -295,6 +301,7 @@ export class ContactLoader {
         }
 
         if (cancelledAfterPage) break
+        if (reachedMaxContacts) break
         nextUrl = response.paging?.next || ''
       }
 
@@ -329,7 +336,9 @@ export class ContactLoader {
         }, loadState.runKey)
       }
 
-      this.sendProgress(`✅ Đã quét và lưu ${savedCount} ${typeName} vào máy.`, {
+      this.sendProgress(reachedMaxContacts
+        ? `✅ Đã quét và lưu ${savedCount} ${typeName}. Đã đạt giới hạn ${PAGE_INBOX_MAX_CONTACTS.toLocaleString('vi-VN')} data.`
+        : `✅ Đã quét và lưu ${savedCount} ${typeName}.`, {
         accountId,
         contactType: PAGE_INBOX_CONTACT_TYPE,
         runKey: loadState.runKey
