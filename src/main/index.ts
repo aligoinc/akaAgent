@@ -36,14 +36,16 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  return mainWindow
+}
+
+function loadRenderer(mainWindow: BrowserWindow): void {
   // Hot reload in dev, load from file in prod
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
-
-  return mainWindow
 }
 
 app.whenReady().then(() => {
@@ -62,9 +64,12 @@ app.whenReady().then(() => {
   } catch (error) {
     console.error('FAILED TO REGISTER IPC HANDLERS:', error)
   }
+  loadRenderer(mainWindow)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      loadRenderer(createWindow())
+    }
   })
 })
 
