@@ -387,6 +387,12 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           { label: 'Ngày chạy trong tháng', value: formatMonthDays(campaign.scheduleDays), hidden: scheduleType !== 'monthly' },
           { label: 'Ngày kết thúc', value: campaign.scheduleEndDate ? formatDateTime(campaign.scheduleEndDate) : 'Không giới hạn' },
           { label: 'Giờ dừng trong ngày', value: formatTime(campaign.dailyStopTime) },
+          { label: 'Chạy nhiều khung giờ', value: onOff(extra.multiDailyTimeSlotsEnabled), hidden: !['facebook_timeline_post', 'facebook_page_post'].includes(actionId) && !extra.multiDailyTimeSlotsEnabled },
+          {
+            label: 'Các khung giờ trong ngày',
+            value: textOrDash(String(extra.multiDailyTimeSlots || '').split(',').map(item => item.trim()).filter(Boolean).join(', ')),
+            hidden: !extra.multiDailyTimeSlotsEnabled && !extra.multiDailyTimeSlots
+          },
           { label: 'Lặp cùng giờ ngày mới', value: onOff(campaign.continueNextDay), hidden: scheduleType !== 'daily' },
           { label: 'Reset data chu kỳ mới', value: onOff(campaign.refreshData), hidden: scheduleType === 'daily' }
         ])}
