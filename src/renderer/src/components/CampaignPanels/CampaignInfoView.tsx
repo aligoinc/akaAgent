@@ -262,6 +262,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || !!extra.includeSourceImages
     || !!extra.rewriteSourceContentWithAI
     || !!extra.sharePost
+    || !!extra.postWithBackground
     || !!extra.postAsReels
     || !!extra.pagePostMode
   const hasCommentSettings = COMMENT_ACTIONS.has(actionId)
@@ -286,6 +287,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Danh sách nguồn', value: textOrDash(extra.sourceLinks), fullWidth: true },
     { label: 'Vị trí nguồn kế tiếp', value: extra.sourceLinkIndex ?? '-', hidden: extra.sourceLinkIndex === undefined },
     { label: 'Chia sẻ bài viết', value: onOff(extra.sharePost), hidden: actionId !== 'facebook_timeline_post' && !extra.sharePost },
+    { label: 'Đăng bài với phông nền', value: onOff(extra.postWithBackground), hidden: !['facebook_timeline_post', 'facebook_page_post'].includes(actionId) && !extra.postWithBackground },
     { label: 'Đăng Reels', value: onOff(extra.postAsReels), hidden: actionId !== 'facebook_timeline_post' && !extra.postAsReels },
     { label: 'Mode đăng fanpage', value: extra.pagePostMode === 'ui' ? 'Giao diện Facebook' : 'Graph API', hidden: actionId !== 'facebook_page_post' && !extra.pagePostMode },
     { label: 'AI edit nội dung nguồn', value: onOff(extra.rewriteSourceContentWithAI) },
