@@ -308,12 +308,92 @@ export class CampaignScheduler {
       }
     }
 
+    if (await this.handleMultiDailyTimeSlotAfterCompletion(campaign, now)) {
+      return
+    }
+
     if (await this.handleFindDataRerunAfterCompletion(campaign, now)) {
       return
     }
 
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
     await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+  }
+
+  private async handleMultiDailyTimeSlotAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+    if (
+      !['facebook_timeline_post', PAGE_POST_ACTION_ID].includes(campaign.actionId) ||
+      campaign.extraSettings?.multiDailyTimeSlotsEnabled !== true
+    ) {
+      return false
+    }
+
+    const slots = this.normalizeMultiDailyTimeSlots(campaign.extraSettings.multiDailyTimeSlots)
+    if (slots.length < 2) return false
+
+    const currentSchedule = campaign.schedule ? new Date(campaign.schedule) : null
+    if (!currentSchedule || Number.isNaN(currentSchedule.getTime()) || !this.isSameVietnamDay(currentSchedule, now)) {
+      return false
+    }
+
+    const currentParts = this.getVietnamDateTimeParts(currentSchedule)
+    const currentSlotMinute = currentParts.hour * 60 + currentParts.minute
+    let nextSlot = ''
+    let nextSchedule: Date | null = null
+
+    for (const slot of slots) {
+      const slotMinute = this.getTimeSlotMinute(slot)
+      if (slotMinute <= currentSlotMinute) continue
+
+      const candidate = this.withVietnamTimeSlot(currentSchedule, slot)
+      if (!candidate || candidate.getTime() <= now.getTime()) continue
+
+      nextSlot = slot
+      nextSchedule = candidate
+      break
+    }
+
+    if (!nextSchedule) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không còn khung giờ chạy trong hôm nay)`)
+      return true
+    }
+
+    if (this.isAfterDailyStopTime(nextSchedule, campaign.dailyStopTime)) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.logCampaignProgress(
+        campaign.id,
+        `✅ Hoàn thành chiến dịch "${campaign.name}" (khung giờ ${nextSlot} vượt quá giờ dừng trong ngày)`
+      )
+      return true
+    }
+
+    const details = await this.supabase.listCampaignInputData(campaign.id)
+    const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length
+    if (details.length > 0 && resettableCount === 0) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+      return true
+    }
+    if (campaign.actionId === PAGE_POST_ACTION_ID && details.length === 0) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có page cần chạy lại ở khung giờ tiếp theo)`)
+      return true
+    }
+
+    if (resettableCount > 0) {
+      await this.supabase.resetCampaignInputDataForRerun(campaign.id)
+    }
+    await this.updateCampaignAndBroadcast(campaign.id, {
+      status: 'chờ xử lý',
+      schedule: nextSchedule.toISOString(),
+      note: null
+    })
+    await this.logCampaignProgress(
+      campaign.id,
+      `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch "${campaign.name}" ở khung giờ ${nextSlot} (${this.formatVietnamDateTime(nextSchedule)})`
+    )
+    return true
   }
 
   private async handleFindDataRerunAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
@@ -384,6 +464,69 @@ export class CampaignScheduler {
   private normalizeFindDataRerunAfterHours(value: unknown): number {
     const parsed = Math.floor(Number(value))
     return Number.isFinite(parsed) && parsed >= 1 ? parsed : 0
+  }
+
+  private parseMultiDailyTimeSlot(value: string): string | null {
+    const raw = value.trim().toLowerCase().replace(/\s+/g, '')
+    if (!raw) return null
+
+    const match = raw.match(/^(\d{1,2})(?::(\d{1,2})|h(\d{1,2})?|h)?$/)
+    if (!match) return null
+
+    const hour = Number(match[1])
+    const minute = Number(match[2] ?? match[3] ?? 0)
+    if (
+      !Number.isInteger(hour) ||
+      !Number.isInteger(minute) ||
+      hour < 0 ||
+      hour > 23 ||
+      minute < 0 ||
+      minute > 59
+    ) {
+      return null
+    }
+
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+  }
+
+  private normalizeMultiDailyTimeSlots(value: unknown): string[] {
+    const slotMinutes = new Map<number, string>()
+    String(value || '')
+      .split(/[,\r\n]+/)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .forEach(item => {
+        const slot = this.parseMultiDailyTimeSlot(item)
+        if (!slot) return
+        slotMinutes.set(this.getTimeSlotMinute(slot), slot)
+      })
+
+    return Array.from(slotMinutes.entries())
+      .sort(([left], [right]) => left - right)
+      .map(([, slot]) => slot)
+  }
+
+  private getTimeSlotMinute(slot: string): number {
+    const [hour, minute] = slot.split(':').map(Number)
+    return hour * 60 + minute
+  }
+
+  private withVietnamTimeSlot(day: Date, slot: string): Date | null {
+    const [hour, minute] = slot.split(':').map(Number)
+    if (
+      !Number.isInteger(hour) ||
+      !Number.isInteger(minute) ||
+      hour < 0 ||
+      hour > 23 ||
+      minute < 0 ||
+      minute > 59
+    ) {
+      return null
+    }
+
+    const parts = this.getVietnamDateTimeParts(day)
+    const pad = (value: number) => String(value).padStart(2, '0')
+    return new Date(`${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(hour)}:${pad(minute)}:00+07:00`)
   }
 
   private getVietnamDateTimeParts(date: Date): { year: number; month: number; day: number; hour: number; minute: number; second: number } {

@@ -295,6 +295,65 @@ const normalizeTimeInput = (value?: string | null): string => {
   return `${match[1].padStart(2, '0')}:${match[2]}`
 }
 
+const parseDailyTimeSlot = (value: string): string | null => {
+  const raw = value.trim().toLowerCase().replace(/\s+/g, '')
+  if (!raw) return null
+
+  const match = raw.match(/^(\d{1,2})(?::(\d{1,2})|h(\d{1,2})?|h)?$/)
+  if (!match) return null
+
+  const hour = Number(match[1])
+  const minute = Number(match[2] ?? match[3] ?? 0)
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null
+  }
+
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+const parseDailyTimeSlots = (value: string): { slots: string[]; invalidItems: string[] } => {
+  const items = String(value || '')
+    .split(/[,\r\n]+/)
+    .map(item => item.trim())
+    .filter(Boolean)
+  const invalidItems: string[] = []
+  const slotMinutes = new Map<string, string>()
+
+  for (const item of items) {
+    const slot = parseDailyTimeSlot(item)
+    if (!slot) {
+      invalidItems.push(item)
+      continue
+    }
+    const [hour, minute] = slot.split(':').map(Number)
+    slotMinutes.set(String(hour * 60 + minute), slot)
+  }
+
+  const slots = Array.from(slotMinutes.values()).sort((a, b) => {
+    const [aHour, aMinute] = a.split(':').map(Number)
+    const [bHour, bMinute] = b.split(':').map(Number)
+    return (aHour * 60 + aMinute) - (bHour * 60 + bMinute)
+  })
+
+  return { slots, invalidItems }
+}
+
+const normalizeDailyTimeSlotsText = (value?: string | null): string =>
+  parseDailyTimeSlots(String(value || '')).slots.join(', ')
+
+const setDateTimeLocalTime = (value: string, slot: string): string => {
+  const datePart = String(value || '').split('T')[0]
+  if (!datePart) return value
+  return `${datePart}T${slot}`
+}
+
 const clampPostBumpCount = (value: unknown): number => {
   const parsed = Math.floor(Number(value))
   if (!Number.isFinite(parsed)) return DEFAULT_POST_BUMP_COUNT
@@ -606,8 +665,8 @@ export default function CampaignFormModal({
     continueNextDay: campaign?.continueNextDay ?? true,
     refreshData: campaign?.refreshData ?? true,
     timeSleepBetween2: campaign?.timeSleepBetween2 ?? 30,
-    multiDailyTimeSlotsEnabled: false,
-    multiDailyTimeSlots: '',
+    multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
+    multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
     content: campaign?.content || '',
     // Extra settings
     sharePost: campaign?.extraSettings?.sharePost ?? false,
@@ -798,6 +857,7 @@ export default function CampaignFormModal({
   const supportsSourceSharePost = isTimelinePostCampaign && !isPagePostCampaign
   const supportsSourceReels = isTimelinePostCampaign && !isPagePostCampaign
   const isPostBackgroundCampaign = formData.actionId === 'facebook_timeline_post' || isPagePostCampaign
+  const isMultiDailyTimeSlotsCampaign = formData.actionId === 'facebook_timeline_post' || isPagePostCampaign
   const isPostBackgroundApiModeDisabled = isPagePostCampaign && formData.pagePostMode === 'api'
   const hasSourceContentSelection = supportsSourceContent && (formData.copyContentFromSource || (supportsSourceSharePost && formData.sharePost))
   const isPostBackgroundSourceDisabled = isPostBackgroundCampaign && hasSourceContentSelection
@@ -1732,7 +1792,13 @@ export default function CampaignFormModal({
           ? (campaign?.extraSettings?.suggestedFriendsCount ?? formData.suggestedFriendsCount)
           : formData.suggestedFriendsCount)
         : 10
-      const formSchedule = toIsoDateTimeValue(formData.schedule)
+      const normalizedMultiDailySlots = isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled
+        ? parseDailyTimeSlots(formData.multiDailyTimeSlots).slots
+        : []
+      const scheduleInput = normalizedMultiDailySlots.length > 0
+        ? setDateTimeLocalTime(formData.schedule, normalizedMultiDailySlots[0])
+        : formData.schedule
+      const formSchedule = toIsoDateTimeValue(scheduleInput)
       const normalizedFindData = normalizeFindDataFlagState(formData)
       const canUseFindDataContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment
       const saveFindDataPostSort = normalizedFindData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
@@ -1838,6 +1904,10 @@ export default function CampaignFormModal({
             findDataRerunAfterHours: isFindDataGroupCampaign
               ? normalizeHourValue(formData.findDataRerunAfterHours)
               : DEFAULT_FIND_DATA_RERUN_AFTER_HOURS,
+            multiDailyTimeSlotsEnabled: isMultiDailyTimeSlotsCampaign ? formData.multiDailyTimeSlotsEnabled : false,
+            multiDailyTimeSlots: isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled
+              ? normalizedMultiDailySlots.join(',')
+              : '',
             isFindByKeywords: canUseFindDataContentConditionsForSave ? formData.isFindByKeywords : false,
             keywords: canUseFindDataContentConditionsForSave ? formData.keywords : '',
             isFindByContentAI: canUseFindDataContentConditionsForSave ? formData.isFindByContentAI : false,
@@ -1893,6 +1963,17 @@ export default function CampaignFormModal({
     if (postBackgroundError) {
       showAlert(postBackgroundError, 'error')
       return
+    }
+    if (isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled) {
+      const { slots, invalidItems } = parseDailyTimeSlots(formData.multiDailyTimeSlots)
+      if (invalidItems.length > 0) {
+        showAlert(`Khung giờ không hợp lệ: ${invalidItems.join(', ')}. Vui lòng nhập dạng hh:mm, ví dụ 09:00, 10:30.`, 'error')
+        return
+      }
+      if (slots.length < 2) {
+        showAlert('Vui lòng nhập ít nhất 2 khung giờ chạy trong ngày.', 'error')
+        return
+      }
     }
     if (isFindDataGroupCampaign) {
       if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink) {
@@ -4298,7 +4379,7 @@ export default function CampaignFormModal({
   }
 
   const renderMultiDailyTimeSlotsSection = () => {
-    if (!isTimelinePostCampaign) return null
+    if (!isMultiDailyTimeSlotsCampaign) return null
 
     return (
       <div className="schedule-multi-window-panel">
@@ -4324,8 +4405,8 @@ export default function CampaignFormModal({
           />
           <div className="schedule-multi-window-notes">
             <div>- Chiến dịch chỉ được kích hoạt chạy khung giờ này khi chiến dịch đã chạy ở khung giờ trước (hoặc chính) là hoàn thành (Đã chạy hết toàn bộ data)</div>
-            <div>- Chiến dịch chỉ chạy những data có trạng thái là thành công</div>
-            <div>- Cách viết: hh,mm,... mỗi khung giờ cách nhau bởi dấu phẩy, hh: giờ, mm: phút</div>
+            <div>- Chiến dịch chỉ chạy những data có trạng thái là chờ xử lý</div>
+            <div>- Cách viết: hh:mm, hh:mm,... mỗi khung giờ cách nhau bởi dấu phẩy, hh: giờ, mm: phút</div>
           </div>
         </div>
       </div>

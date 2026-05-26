@@ -168,6 +168,8 @@ export interface CampaignExtraSettings {
   countGroupMemberFindData?: number
   findDataRerunEnabled?: boolean
   findDataRerunAfterHours?: number
+  multiDailyTimeSlotsEnabled?: boolean // Đăng bài profile/page: chạy nhiều khung giờ trong cùng ngày
+  multiDailyTimeSlots?: string         // Danh sách HH:mm, cách nhau bởi dấu phẩy
   isFindByKeywords?: boolean
   keywords?: string
   isFindByContentAI?: boolean

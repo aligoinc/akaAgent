@@ -120,7 +120,7 @@ function resolveNextSchedule(campaign: Campaign, todayStart: Date): Date | null 
   if (!campaign.schedule) return null
 
   const scheduleType: CampaignScheduleType = campaign.scheduleType || 'daily'
-  const timeSource = scheduleType === 'daily' ? campaign.schedule : (campaign.originalSchedule || campaign.schedule)
+  const timeSource = campaign.originalSchedule || campaign.schedule
   const timeDate = new Date(timeSource)
   if (Number.isNaN(timeDate.getTime())) return null
   const scheduleTime = parseVietnamParts(timeDate)
