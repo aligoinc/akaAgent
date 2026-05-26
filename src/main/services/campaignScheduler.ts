@@ -590,10 +590,17 @@ export class CampaignScheduler {
       await this.logCampaignProgress(campaign.id, `🔀 Đã xáo trộn danh sách ${details.length} group`)
     }
 
+    const sourcePagePostMode = extra.pagePostMode || 'api'
+    const shouldPostWithBackground = extra.postWithBackground === true && (
+      campaign.actionId === 'facebook_timeline_post' ||
+      (campaign.actionId === PAGE_POST_ACTION_ID && sourcePagePostMode === 'ui')
+    )
     const shouldRotateSourceLink =
-      (campaign.actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
-      (campaign.actionId === PAGE_POST_ACTION_ID && extra.copyContentFromSource === true) ||
-      (campaign.actionId === 'facebook_group_post' && extra.copyContentFromSource === true)
+      !shouldPostWithBackground && (
+        (campaign.actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
+        (campaign.actionId === PAGE_POST_ACTION_ID && extra.copyContentFromSource === true) ||
+        (campaign.actionId === 'facebook_group_post' && extra.copyContentFromSource === true)
+      )
     const sourceLinks = shouldRotateSourceLink
       ? (extra.sourceLinks || '').split(/[,\r\n]+/).map(s => s.trim()).filter(Boolean)
       : []
@@ -1329,6 +1336,12 @@ export class CampaignScheduler {
     const canUseFindDataContentConditions = extra.isFindInPost === true || extra.isFindInComment === true
     const validImages = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
     const validCommentImages = (extra.commentImages || []).filter(fp => this.isUsableImagePath(fp)).slice(0, 1)
+    const pagePostMode = extra.pagePostMode || 'api'
+    const postWithBackground = extra.postWithBackground === true && (
+      campaign.actionId === 'facebook_timeline_post' ||
+      (campaign.actionId === PAGE_POST_ACTION_ID && pagePostMode === 'ui')
+    )
+    const validPostImages = postWithBackground ? [] : validImages
 
     // Comment iterations
     const enableComment = extra.enableComment ?? false
@@ -1366,7 +1379,7 @@ export class CampaignScheduler {
       rewriteContentEachRun: extra.rewriteContentEachRun === true,
       campaignInputDataName: detail?.name || '',
       inputDataName: detail?.name || '',
-      images: validImages,
+      images: validPostImages,
       accountId,
       // Comment
       enableComment,
@@ -1391,17 +1404,18 @@ export class CampaignScheduler {
       groupPostRequiresPostApproval: groupPostApproval?.requiresPostApproval ?? null,
       groupPostApprovalSource: groupPostApproval?.source || '',
       // Timeline post extras
-      sharePost: extra.sharePost ?? false,
-      copyContentFromSource: extra.copyContentFromSource ?? false,
-      includeSourceImages: extra.includeSourceImages ?? false,
-      rewriteSourceContentWithAI: extra.rewriteSourceContentWithAI === true,
-      sourceContentAiPrompt: extra.sourceContentAiPrompt || '',
-      postAsReels: extra.postAsReels ?? false,
+      sharePost: postWithBackground ? false : (extra.sharePost ?? false),
+      postWithBackground,
+      copyContentFromSource: postWithBackground ? false : (extra.copyContentFromSource ?? false),
+      includeSourceImages: postWithBackground ? false : (extra.includeSourceImages ?? false),
+      rewriteSourceContentWithAI: postWithBackground ? false : extra.rewriteSourceContentWithAI === true,
+      sourceContentAiPrompt: postWithBackground ? '' : (extra.sourceContentAiPrompt || ''),
+      postAsReels: postWithBackground ? false : (extra.postAsReels ?? false),
       sourceLink: currentSourceLink,
       targetUrl: detail?.uid || currentSourceLink,
-      videoPath: validImages[0] || '',
+      videoPath: validPostImages[0] || '',
       // Page post extras
-      pagePostMode: extra.pagePostMode || 'api',
+      pagePostMode,
       pageUid: detail?.uid || '',
       pageName: detail?.name || '',
       businessUrl: 'https://business.facebook.com/content_management',

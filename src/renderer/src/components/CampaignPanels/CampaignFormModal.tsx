@@ -797,7 +797,14 @@ export default function CampaignFormModal({
   const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
   const supportsSourceSharePost = isTimelinePostCampaign && !isPagePostCampaign
   const supportsSourceReels = isTimelinePostCampaign && !isPagePostCampaign
-  const requiresSourceLinks = supportsSourceContent && (formData.copyContentFromSource || (supportsSourceSharePost && formData.sharePost))
+  const isPostBackgroundCampaign = formData.actionId === 'facebook_timeline_post' || isPagePostCampaign
+  const isPostBackgroundApiModeDisabled = isPagePostCampaign && formData.pagePostMode === 'api'
+  const hasSourceContentSelection = supportsSourceContent && (formData.copyContentFromSource || (supportsSourceSharePost && formData.sharePost))
+  const isPostBackgroundSourceDisabled = isPostBackgroundCampaign && hasSourceContentSelection
+  const isPostBackgroundDisabled = isPostBackgroundApiModeDisabled || isPostBackgroundSourceDisabled
+  const canUsePostBackground = isPostBackgroundCampaign && !isPostBackgroundDisabled
+  const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground
+  const requiresSourceLinks = hasSourceContentSelection
   const hasSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
   const isUsingSourceContent = supportsSourceContent && formData.copyContentFromSource
   const usesSourceContentAiPrompt = isUsingSourceContent && formData.rewriteSourceContentWithAI
@@ -1077,6 +1084,24 @@ export default function CampaignFormModal({
     postBumpContent: null
   })
   const accountDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setFormData(prev => {
+      if (!prev.postWithBackground) return prev
+
+      const supported = prev.actionId === 'facebook_timeline_post' || prev.actionId === PAGE_POST_ACTION_ID
+      const pageApiMode = prev.actionId === PAGE_POST_ACTION_ID && prev.pagePostMode === 'api'
+      if (!supported || pageApiMode) {
+        return { ...prev, postWithBackground: false }
+      }
+
+      return prev
+    })
+  }, [
+    formData.actionId,
+    formData.pagePostMode,
+    formData.postWithBackground
+  ])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1520,6 +1545,33 @@ export default function CampaignFormModal({
   const splitAiContentVariants = (content: string): string[] =>
     content.trim().split('|').map(item => item.trim()).filter(Boolean)
 
+  const getPostBackgroundValidationError = (): string | null => {
+    if (!isPostBackgroundActive) return null
+
+    const variants = splitAiContentVariants(formData.content)
+    if (variants.length === 0) return 'Vui lòng nhập nội dung để đăng bài với phông nền.'
+
+    const tooLongIndex = variants.findIndex(variant => variant.length > 130)
+    if (tooLongIndex >= 0) {
+      return `Nội dung phông nền số ${tooLongIndex + 1} không được quá 130 ký tự.`
+    }
+
+    const tooManyLinesIndex = variants.findIndex(variant => variant.split(/\r?\n/).length > 3)
+    if (tooManyLinesIndex >= 0) {
+      return `Nội dung phông nền số ${tooManyLinesIndex + 1} chỉ được tối đa 3 dòng.`
+    }
+
+    if (formData.imageOption !== 'none' && formData.images.length > 0) {
+      return 'Đăng bài với phông nền không thể gửi kèm ảnh. Vui lòng chọn Không gửi ảnh trước khi lưu.'
+    }
+
+    if (formData.copyContentFromSource || formData.sharePost || formData.postAsReels) {
+      return 'Đăng bài với phông nền không hỗ trợ copy/chia sẻ nội dung từ nguồn hoặc đăng Reels.'
+    }
+
+    return null
+  }
+
   const formatAiMultiContent = (content: string): string =>
     splitAiContentVariants(content).join(' |\n')
 
@@ -1630,7 +1682,8 @@ export default function CampaignFormModal({
   const buildCampaignSaveBundleItems = (): CampaignSaveBundleItem[] => {
     const accountChunks: Partial<CampaignInputData>[][] = []
     const numAccounts = formData.accountIds.length
-    const detailSource = hideDetailsSection ? [] : details
+    const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post'
+    const detailSource = shouldDiscardDetailsForSave || hideDetailsSection ? [] : details
 
     if (formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
       for (let i = 0; i < numAccounts; i++) {
@@ -1705,8 +1758,8 @@ export default function CampaignFormModal({
           timeSleepBetween2: formData.timeSleepBetween2,
           content: formData.content,
           extraSettings: {
-            sharePost: supportsSourceSharePost ? formData.sharePost : false,
-            postWithBackground: isTimelinePostCampaign ? formData.postWithBackground : false,
+            sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
+            postWithBackground: isPostBackgroundActive,
             rewriteContentEachRun: formData.rewriteContentEachRun,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
@@ -1726,7 +1779,7 @@ export default function CampaignFormModal({
               rateLimitMinutes: accountRateLimitMinutes,
               byActionCode
             },
-            imageOption: formData.imageOption,
+            imageOption: isPostBackgroundActive ? 'none' : formData.imageOption,
             randomImageCount: formData.randomImageCount,
             commentImageOption: formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none',
             commentImages: formData.commentImages.slice(0, 1),
@@ -1758,13 +1811,13 @@ export default function CampaignFormModal({
             suggestedFriendsCount: effectiveSuggestedFriendsCount,
             pageInboxPageUid: isPageInboxMessageCampaign ? formData.pageInboxPageUid : '',
             pageInboxPageName: isPageInboxMessageCampaign ? formData.pageInboxPageName : '',
-            copyContentFromSource: formData.copyContentFromSource,
-            includeSourceImages: formData.includeSourceImages,
-            rewriteSourceContentWithAI: formData.copyContentFromSource ? formData.rewriteSourceContentWithAI : false,
-            sourceContentAiPrompt: formData.copyContentFromSource && formData.rewriteSourceContentWithAI
+            copyContentFromSource: isPostBackgroundActive ? false : formData.copyContentFromSource,
+            includeSourceImages: isPostBackgroundActive ? false : formData.includeSourceImages,
+            rewriteSourceContentWithAI: !isPostBackgroundActive && formData.copyContentFromSource ? formData.rewriteSourceContentWithAI : false,
+            sourceContentAiPrompt: !isPostBackgroundActive && formData.copyContentFromSource && formData.rewriteSourceContentWithAI
               ? formData.sourceContentAiPrompt
               : '',
-            postAsReels: supportsSourceReels ? formData.postAsReels : false,
+            postAsReels: supportsSourceReels && !isPostBackgroundActive ? formData.postAsReels : false,
             sourceLinks: formData.sourceLinks,
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
             pagePostMode: formData.pagePostMode,
@@ -1834,6 +1887,11 @@ export default function CampaignFormModal({
           : 'Vui lòng nhập nội dung chiến dịch hoặc chọn ít nhất một ảnh.',
         'error'
       )
+      return
+    }
+    const postBackgroundError = getPostBackgroundValidationError()
+    if (postBackgroundError) {
+      showAlert(postBackgroundError, 'error')
       return
     }
     if (isFindDataGroupCampaign) {
@@ -2006,9 +2064,18 @@ export default function CampaignFormModal({
 
     try {
       const { deleteCampaignInputData, updateCampaignInputData, createCampaignInputData, createCampaign, updateCampaign } = useCampaignStore.getState()
+      const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post'
+      const detailIdsToDelete = shouldDiscardDetailsForSave
+        ? Array.from(new Set([
+          ...deletedIds,
+          ...details
+            .map(item => item.id)
+            .filter((id): id is number => typeof id === 'number')
+        ]))
+        : deletedIds
 
-      if (!isEditingSavedCampaign) {
-        for (const id of deletedIds) {
+      if (!isEditingSavedCampaign || shouldDiscardDetailsForSave) {
+        for (const id of detailIdsToDelete) {
           await deleteCampaignInputData(id)
         }
       }
@@ -2692,6 +2759,11 @@ export default function CampaignFormModal({
             Lưu ý: Facebook chỉ cho phép comment 1 ảnh.
           </div>
         )}
+        {!isComment && isPostBackgroundActive && (
+          <div className="schedule-hint" style={{ marginTop: -8, marginBottom: 16 }}>
+            Đăng bài với phông nền không hỗ trợ gửi media.
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           <div style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -2864,7 +2936,7 @@ export default function CampaignFormModal({
           <input
             type="checkbox"
             checked={formData.pagePostMode === 'api'}
-            onChange={() => setFormData(p => ({ ...p, pagePostMode: 'api' }))}
+            onChange={() => setFormData(p => ({ ...p, pagePostMode: 'api', postWithBackground: false }))}
           />
           <span>Đăng bài bằng API</span>
         </label>
@@ -2892,6 +2964,8 @@ export default function CampaignFormModal({
               setFormData(p => ({
                 ...p,
                 copyContentFromSource: checked,
+                postWithBackground: checked ? false : p.postWithBackground,
+                includeSourceImages: checked ? p.includeSourceImages : false,
                 rewriteSourceContentWithAI: checked ? p.rewriteSourceContentWithAI : false
               }))
             }}
@@ -2914,7 +2988,14 @@ export default function CampaignFormModal({
             <input
               type="checkbox"
               checked={formData.sharePost}
-              onChange={e => setFormData(p => ({ ...p, sharePost: e.target.checked }))}
+              onChange={e => {
+                const checked = e.target.checked
+                setFormData(p => ({
+                  ...p,
+                  sharePost: checked,
+                  postWithBackground: checked ? false : p.postWithBackground
+                }))
+              }}
             />
             <span>Đăng bài bằng cách chia sẻ</span>
           </label>
@@ -4181,19 +4262,37 @@ export default function CampaignFormModal({
     </label>
   )
 
+  const setPostBackgroundEnabled = (checked: boolean) => {
+    setFormData(p => ({
+      ...p,
+      postWithBackground: checked
+    }))
+  }
+
   const renderPostBackgroundOption = () => {
-    if (!isTimelinePostCampaign) return null
+    if (!isPostBackgroundCampaign) return null
 
     return (
       <div className="stepper-form-group">
         <label className="schedule-checkbox-label">
           <input
             type="checkbox"
-            checked={formData.postWithBackground}
-            onChange={e => setFormData(p => ({ ...p, postWithBackground: e.target.checked }))}
+            checked={isPostBackgroundActive}
+            disabled={isPostBackgroundDisabled}
+            onChange={e => setPostBackgroundEnabled(e.target.checked)}
           />
-          <span>Đăng bài với phông nền <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(tối đa 130 ký tự)</em></span>
+          <span>Đăng bài với phông nền <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(tối đa 130 ký tự, 3 dòng và KHÔNG đăng ảnh)</em></span>
         </label>
+        {isPostBackgroundApiModeDisabled && (
+          <div className="schedule-hint" style={{ marginTop: 6 }}>
+            Tùy chọn này chỉ áp dụng khi đăng bài trên giao diện.
+          </div>
+        )}
+        {isPostBackgroundSourceDisabled && (
+          <div className="schedule-hint" style={{ marginTop: 6 }}>
+            Tùy chọn này không áp dụng khi đang dùng nguồn nội dung.
+          </div>
+        )}
       </div>
     )
   }
