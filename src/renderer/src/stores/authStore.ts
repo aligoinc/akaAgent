@@ -131,13 +131,11 @@ export const useAuthStore = create<AuthState>()(
             savedCredentials
           })
         } catch (err: any) {
-          writeStoredCreds(null)
           set({
             user: null,
             loggingIn: false,
             errorMessage: err?.message || 'Đăng nhập thất bại',
-            loginOptions,
-            savedCredentials: null
+            loginOptions
           })
           throw err
         }
@@ -147,8 +145,7 @@ export const useAuthStore = create<AuthState>()(
         if (window.electronAPI) {
           try { await window.electronAPI.logout() } catch { /* ignore */ }
         }
-        writeStoredCreds(null)
-        set({ user: null, errorMessage: null, savedCredentials: null })
+        set({ user: null, errorMessage: null })
       },
 
       resetDeviceLock: async () => {
@@ -210,13 +207,12 @@ export const useAuthStore = create<AuthState>()(
             savedCredentials: creds
           })
         } catch (err: any) {
-          writeStoredCreds(null)
           set({
             user: null,
             initializing: false,
             errorMessage: err?.message || 'Đăng nhập tự động thất bại',
             loginOptions,
-            savedCredentials: null
+            savedCredentials: creds
           })
         }
       },
