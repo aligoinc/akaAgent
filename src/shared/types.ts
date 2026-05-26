@@ -104,6 +104,7 @@ export interface CampaignActionLimitSettings extends ActionLimitConfig {
 
 export interface CampaignExtraSettings {
   sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
+  postWithBackground?: boolean   // UI flag: đăng bài với phông nền (runtime chưa dùng)
   rewriteContentEachRun?: boolean // DB block viết lại nội dung chính bằng AI trước mỗi lượt chạy
   enableComment?: boolean        // kiếm comment
   commentGroupMode?: 'all' | 'pending_only' | 'published_only' // group nào được comment sau khi đăng bài group

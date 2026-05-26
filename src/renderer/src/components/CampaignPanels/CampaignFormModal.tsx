@@ -606,9 +606,12 @@ export default function CampaignFormModal({
     continueNextDay: campaign?.continueNextDay ?? true,
     refreshData: campaign?.refreshData ?? true,
     timeSleepBetween2: campaign?.timeSleepBetween2 ?? 30,
+    multiDailyTimeSlotsEnabled: false,
+    multiDailyTimeSlots: '',
     content: campaign?.content || '',
     // Extra settings
     sharePost: campaign?.extraSettings?.sharePost ?? false,
+    postWithBackground: campaign?.extraSettings?.postWithBackground ?? false,
     rewriteContentEachRun: campaign?.extraSettings?.rewriteContentEachRun ?? false,
     enableComment: campaign?.extraSettings?.enableComment ?? false,
     commentGroupMode: (campaign?.extraSettings?.commentGroupMode || 'all') as CommentGroupMode,
@@ -1703,6 +1706,7 @@ export default function CampaignFormModal({
           content: formData.content,
           extraSettings: {
             sharePost: supportsSourceSharePost ? formData.sharePost : false,
+            postWithBackground: isTimelinePostCampaign ? formData.postWithBackground : false,
             rewriteContentEachRun: formData.rewriteContentEachRun,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
@@ -4177,6 +4181,58 @@ export default function CampaignFormModal({
     </label>
   )
 
+  const renderPostBackgroundOption = () => {
+    if (!isTimelinePostCampaign) return null
+
+    return (
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.postWithBackground}
+            onChange={e => setFormData(p => ({ ...p, postWithBackground: e.target.checked }))}
+          />
+          <span>Đăng bài với phông nền <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(tối đa 130 ký tự)</em></span>
+        </label>
+      </div>
+    )
+  }
+
+  const renderMultiDailyTimeSlotsSection = () => {
+    if (!isTimelinePostCampaign) return null
+
+    return (
+      <div className="schedule-multi-window-panel">
+        <div className="schedule-multi-window-header">
+          <span>Cài đặt chạy nhiều khung giờ trong 1 ngày</span>
+        </div>
+        <div className="schedule-multi-window-body">
+          <label className="schedule-checkbox-label schedule-multi-window-checkbox">
+            <input
+              type="checkbox"
+              checked={formData.multiDailyTimeSlotsEnabled}
+              onChange={e => setFormData(p => ({ ...p, multiDailyTimeSlotsEnabled: e.target.checked }))}
+            />
+            <span>Chạy trong nhiều khung giờ trong 1 ngày</span>
+          </label>
+          <input
+            type="text"
+            className="stepper-input schedule-multi-window-input"
+            placeholder="hh:mm, hh:mm,..."
+            value={formData.multiDailyTimeSlots}
+            onChange={e => setFormData(p => ({ ...p, multiDailyTimeSlots: e.target.value }))}
+            disabled={!formData.multiDailyTimeSlotsEnabled}
+          />
+          <div className="schedule-multi-window-notes">
+            <div>- Chiến dịch chỉ được kích hoạt chạy khung giờ này khi chiến dịch đã chạy ở khung giờ trước (hoặc chính) là hoàn thành (Đã chạy hết toàn bộ data)</div>
+            <div>- Chiến dịch chỉ chạy những data có trạng thái là thành công</div>
+            <div>- Cách viết: hh,mm,... mỗi khung giờ cách nhau bởi dấu phẩy, hh: giờ, mm: phút</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const renderRewriteCommentContentEachRunOption = () => (
     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
       <input
@@ -4772,61 +4828,6 @@ export default function CampaignFormModal({
                     </div>
                   </div>
 
-                  <div className="stepper-form-group" style={{ maxWidth: 320 }}>
-                    <label className="schedule-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.useDailyStopTime}
-                        onChange={e => setFormData(p => ({
-                          ...p,
-                          useDailyStopTime: e.target.checked,
-                          dailyStopTime: p.dailyStopTime || DEFAULT_DAILY_STOP_TIME
-                        }))}
-                      />
-                      <span>Giờ dừng chạy trong ngày</span>
-                    </label>
-                    <input
-                      type="time"
-                      value={formData.dailyStopTime}
-                      onChange={e => setFormData(p => ({ ...p, dailyStopTime: e.target.value }))}
-                      className="stepper-input"
-                      disabled={!formData.useDailyStopTime}
-                      title="Để trống nếu không giới hạn"
-                    />
-                  </div>
-
-                  {isFindDataGroupCampaign && (
-                    <div className="stepper-form-group" style={{ maxWidth: 360 }}>
-                      <label className="schedule-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={formData.findDataRerunEnabled}
-                          onChange={e => setFormData(p => ({
-                            ...p,
-                            findDataRerunEnabled: e.target.checked,
-                            findDataRerunAfterHours: normalizeHourValue(p.findDataRerunAfterHours)
-                          }))}
-                        />
-                        <span>Chạy lại sau mỗi (giờ)</span>
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={formData.findDataRerunAfterHours}
-                        onChange={e => setFormData(p => ({
-                          ...p,
-                          findDataRerunAfterHours: normalizeHourValue(e.target.value)
-                        }))}
-                        className="stepper-input"
-                        disabled={!formData.findDataRerunEnabled}
-                      />
-                      <span className="schedule-hint">
-                        Khi chạy hết data, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.
-                      </span>
-                    </div>
-                  )}
-
                   {/* Monthly days */}
                   <div className="stepper-form-group">
                     <label>Lịch tháng</label>
@@ -4888,6 +4889,63 @@ export default function CampaignFormModal({
                       </label>
                     </div>
                   )}
+
+                  <div className="stepper-form-group" style={{ maxWidth: 320 }}>
+                    <label className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.useDailyStopTime}
+                        onChange={e => setFormData(p => ({
+                          ...p,
+                          useDailyStopTime: e.target.checked,
+                          dailyStopTime: p.dailyStopTime || DEFAULT_DAILY_STOP_TIME
+                        }))}
+                      />
+                      <span>Giờ dừng chạy trong ngày</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.dailyStopTime}
+                      onChange={e => setFormData(p => ({ ...p, dailyStopTime: e.target.value }))}
+                      className="stepper-input"
+                      disabled={!formData.useDailyStopTime}
+                      title="Để trống nếu không giới hạn"
+                    />
+                  </div>
+
+                  {isFindDataGroupCampaign && (
+                    <div className="stepper-form-group" style={{ maxWidth: 360 }}>
+                      <label className="schedule-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.findDataRerunEnabled}
+                          onChange={e => setFormData(p => ({
+                            ...p,
+                            findDataRerunEnabled: e.target.checked,
+                            findDataRerunAfterHours: normalizeHourValue(p.findDataRerunAfterHours)
+                          }))}
+                        />
+                        <span>Chạy lại sau mỗi (giờ)</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={formData.findDataRerunAfterHours}
+                        onChange={e => setFormData(p => ({
+                          ...p,
+                          findDataRerunAfterHours: normalizeHourValue(e.target.value)
+                        }))}
+                        className="stepper-input"
+                        disabled={!formData.findDataRerunEnabled}
+                      />
+                      <span className="schedule-hint">
+                        Khi chạy hết data, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.
+                      </span>
+                    </div>
+                  )}
+
+                  {renderMultiDailyTimeSlotsSection()}
                 </div>
               )}
             </div>
@@ -5016,6 +5074,7 @@ export default function CampaignFormModal({
 
               {!collapsedSections['content'] && (
                 <div className="stepper-section-body">
+                  {renderPostBackgroundOption()}
 	                  {isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
 	                    <>
 	                  {isMessageCampaign ? (

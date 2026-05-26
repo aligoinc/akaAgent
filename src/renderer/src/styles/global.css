@@ -3918,6 +3918,48 @@ button.btn-icon:not(.btn):disabled {
   font-style: italic;
 }
 
+.schedule-multi-window-panel {
+  overflow: hidden;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+}
+
+.schedule-multi-window-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.schedule-multi-window-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.schedule-multi-window-checkbox {
+  font-size: 14px;
+}
+
+.schedule-multi-window-input {
+  max-width: 100%;
+}
+
+.schedule-multi-window-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.55;
+}
+
 .stepper-input:disabled {
   opacity: 0.4;
   cursor: not-allowed;
