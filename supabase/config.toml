@@ -1,0 +1,5 @@
+[functions.send-email]
+verify_jwt = false
+
+[functions.aka-agent-email-notification-worker]
+verify_jwt = false

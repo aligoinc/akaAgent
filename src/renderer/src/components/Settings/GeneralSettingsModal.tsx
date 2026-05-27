@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Edit3, FileText, FolderOpen, Link2, MessageSquareText, Monitor, Phone, Plus, Search, Trash2, X } from 'lucide-react'
+import { CheckCircle2, Edit3, FileText, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, Save, Search, Trash2, X } from 'lucide-react'
 import {
   AkaBizIntegrationInfo,
   AkaBizIntegrationKind,
   AkaBizIntegrations,
   AkaBizStaffBasic,
-  ContentTemplate
+  ContentTemplate,
+  EmailNotificationSettings
 } from '../../../../shared/types'
 import { useUiStore } from '../../stores/uiStore'
 
-export type GeneralSettingsMenu = 'akabiz' | 'templates'
+export type GeneralSettingsMenu = 'akabiz' | 'templates' | 'emailNotifications'
 
 interface GeneralSettingsModalProps {
   initialMenu?: GeneralSettingsMenu
@@ -29,6 +30,14 @@ interface TemplateFormState {
   id: number | null
   name: string
   content: string
+}
+
+const DEFAULT_EMAIL_NOTIFICATION_SETTINGS: EmailNotificationSettings = {
+  isEnabled: false,
+  recipientEmails: [],
+  notifyCampaignCompleted: true,
+  dailyReportEnabled: false,
+  dailyReportTime: '18:00'
 }
 
 const INTEGRATION_CARDS: IntegrationCardConfig[] = [
@@ -73,6 +82,18 @@ function formatAkaBizError(err: unknown, fallback: string): string {
   return message || fallback
 }
 
+function parseRecipientEmails(value: string): string[] {
+  const seen = new Set<string>()
+  const emails: string[] = []
+  for (const raw of value.split(/[,\n;]/)) {
+    const email = raw.trim().toLowerCase()
+    if (!email || seen.has(email)) continue
+    seen.add(email)
+    emails.push(email)
+  }
+  return emails
+}
+
 export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }: GeneralSettingsModalProps) {
   const showAlert = useUiStore(s => s.showAlert)
   const showConfirm = useUiStore(s => s.showConfirm)
@@ -87,6 +108,10 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
   const [templateBusy, setTemplateBusy] = useState(false)
   const [templateSearch, setTemplateSearch] = useState('')
   const [templateForm, setTemplateForm] = useState<TemplateFormState>({ id: null, name: '', content: '' })
+  const [emailSettings, setEmailSettings] = useState<EmailNotificationSettings>(DEFAULT_EMAIL_NOTIFICATION_SETTINGS)
+  const [emailRecipientsText, setEmailRecipientsText] = useState('')
+  const [emailSettingsLoading, setEmailSettingsLoading] = useState(true)
+  const [emailSettingsBusy, setEmailSettingsBusy] = useState(false)
   const [editingIntegrations, setEditingIntegrations] = useState<Record<AkaBizIntegrationKind, boolean>>({
     sms: false,
     zaloWeb: false,
@@ -130,9 +155,24 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
     }
   }
 
+  const loadEmailSettings = async () => {
+    if (!window.electronAPI?.getEmailNotificationSettings) return
+    setEmailSettingsLoading(true)
+    try {
+      const data = await window.electronAPI.getEmailNotificationSettings()
+      setEmailSettings(data)
+      setEmailRecipientsText((data.recipientEmails || []).join('\n'))
+    } catch (err) {
+      showAlert(formatAkaBizError(err, 'Không thể tải cài đặt thông báo email.'), 'error')
+    } finally {
+      setEmailSettingsLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadIntegrations()
     loadTemplates()
+    loadEmailSettings()
   }, [])
 
   useEffect(() => {
@@ -206,6 +246,34 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
       },
       { title: 'Xoá mẫu nội dung', confirmText: 'Xoá', variant: 'danger' }
     )
+  }
+
+  const handleSaveEmailSettings = async () => {
+    if (!window.electronAPI?.saveEmailNotificationSettings) {
+      showAlert('Tính năng thông báo email chưa sẵn sàng.', 'error')
+      return
+    }
+    const recipientEmails = parseRecipientEmails(emailRecipientsText)
+    if (emailSettings.isEnabled && recipientEmails.length === 0) {
+      showAlert('Vui lòng nhập ít nhất một email nhận thông báo.', 'error')
+      return
+    }
+
+    setEmailSettingsBusy(true)
+    try {
+      const saved = await window.electronAPI.saveEmailNotificationSettings({
+        ...emailSettings,
+        recipientEmails,
+        dailyReportTime: emailSettings.dailyReportTime || '18:00'
+      })
+      setEmailSettings(saved)
+      setEmailRecipientsText((saved.recipientEmails || []).join('\n'))
+      showAlert('Đã lưu cài đặt thông báo email.', 'success')
+    } catch (err) {
+      showAlert(formatAkaBizError(err, 'Không thể lưu cài đặt thông báo email.'), 'error')
+    } finally {
+      setEmailSettingsBusy(false)
+    }
   }
 
   const handleSelectDesktopInstallPath = async () => {
@@ -406,6 +474,84 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
     </div>
   )
 
+  const renderEmailNotificationContent = () => (
+    <div className="email-notification-settings">
+      <div className="content-template-editor">
+        <div className="content-template-editor-head">
+          <div className="content-template-title">Nhận thông báo</div>
+        </div>
+
+        {emailSettingsLoading ? (
+          <div className="text-center text-secondary" style={{ padding: 24 }}>Đang tải...</div>
+        ) : (
+          <>
+            <div className="email-notification-form-grid">
+              <label className="schedule-checkbox-label email-notification-toggle">
+                <input
+                  type="checkbox"
+                  checked={emailSettings.isEnabled}
+                  onChange={event => setEmailSettings(prev => ({ ...prev, isEnabled: event.target.checked }))}
+                  disabled={emailSettingsBusy}
+                />
+                <span>Bật thông báo email</span>
+              </label>
+
+              <div className="content-template-field full">
+                <label>Email nhận thông báo</label>
+                <input
+                  className="stepper-input email-notification-recipient-input"
+                  value={emailRecipientsText}
+                  onChange={event => setEmailRecipientsText(event.target.value)}
+                  placeholder="Nhập email nhận thông báo"
+                  disabled={emailSettingsBusy}
+                />
+              </div>
+
+              <div className="email-notification-option-list">
+                <label className="schedule-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={emailSettings.notifyCampaignCompleted}
+                    onChange={event => setEmailSettings(prev => ({ ...prev, notifyCampaignCompleted: event.target.checked }))}
+                    disabled={emailSettingsBusy || !emailSettings.isEnabled}
+                  />
+                  <span>Gửi khi chiến dịch hoàn thành</span>
+                </label>
+                <label className="schedule-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={emailSettings.dailyReportEnabled}
+                    onChange={event => setEmailSettings(prev => ({ ...prev, dailyReportEnabled: event.target.checked }))}
+                    disabled={emailSettingsBusy || !emailSettings.isEnabled}
+                  />
+                  <span>Báo cáo hàng ngày</span>
+                </label>
+              </div>
+
+              <div className="content-template-field email-notification-time-field">
+                <label>Giờ gửi báo cáo</label>
+                <input
+                  type="time"
+                  className="stepper-input"
+                  value={(emailSettings.dailyReportTime || '18:00').slice(0, 5)}
+                  onChange={event => setEmailSettings(prev => ({ ...prev, dailyReportTime: event.target.value }))}
+                  disabled={emailSettingsBusy || !emailSettings.isEnabled || !emailSettings.dailyReportEnabled}
+                />
+              </div>
+            </div>
+
+            <div className="content-template-editor-actions">
+              <button type="button" className="btn btn-primary" onClick={handleSaveEmailSettings} disabled={emailSettingsBusy}>
+                <Save size={15} />
+                <span>{emailSettingsBusy ? 'Đang lưu...' : 'Lưu cài đặt'}</span>
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="general-settings-modal" onClick={event => event.stopPropagation()}>
@@ -434,6 +580,13 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
             >
               <FileText size={15} />
               <span>Mẫu nội dung</span>
+            </button>
+            <button
+              className={`general-settings-nav-item ${activeMenu === 'emailNotifications' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('emailNotifications')}
+            >
+              <Mail size={15} />
+              <span>Nhận thông báo</span>
             </button>
           </aside>
 
@@ -545,7 +698,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
                   )
                 })}
               </div>
-            )) : renderTemplatesContent()}
+            )) : activeMenu === 'templates' ? renderTemplatesContent() : renderEmailNotificationContent()}
           </section>
         </div>
       </div>

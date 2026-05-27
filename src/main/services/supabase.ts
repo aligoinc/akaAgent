@@ -1,4 +1,4 @@
-import { ActionLimitConfig, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
@@ -6,6 +6,7 @@ import * as accountContactRepo from '../data/repositories/accountContactReposito
 import * as accountActionRepo from '../data/repositories/accountActionRepository'
 import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
 import * as contentTemplateRepo from '../data/repositories/contentTemplateRepository'
+import * as emailNotificationRepo from '../data/repositories/emailNotificationRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -77,6 +78,12 @@ export class SupabaseService {
   createContentTemplate(template: Partial<ContentTemplate>) { return contentTemplateRepo.createContentTemplate(template) }
   updateContentTemplate(id: number, updates: Partial<ContentTemplate>) { return contentTemplateRepo.updateContentTemplate(id, updates) }
   deleteContentTemplate(id: number) { return contentTemplateRepo.deleteContentTemplate(id) }
+
+  // =========== EMAIL NOTIFICATIONS ===========
+  getEmailNotificationSettings() { return emailNotificationRepo.getEmailNotificationSettings() }
+  saveEmailNotificationSettings(settings: Partial<EmailNotificationSettings>) {
+    return emailNotificationRepo.saveEmailNotificationSettings(settings)
+  }
 
   // =========== ACCOUNT ACTION LIMITS / ERRORS ===========
   listAccountActions(flatformType?: string) { return accountActionRepo.listAccountActions(flatformType) }
