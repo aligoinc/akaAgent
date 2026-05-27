@@ -1330,6 +1330,36 @@ button.btn-icon:not(.btn):disabled {
   gap: 6px;
 }
 
+.email-notification-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.email-notification-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.email-notification-toggle {
+  width: fit-content;
+}
+
+.email-notification-recipient-input {
+  width: 100%;
+}
+
+.email-notification-option-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.email-notification-time-field {
+  max-width: 240px;
+}
+
 .btn-icon.danger {
   color: var(--accent-danger, #ef4444);
 }
@@ -1349,6 +1379,10 @@ button.btn-icon:not(.btn):disabled {
   .content-template-search {
     min-width: 0;
     width: 100%;
+  }
+
+  .email-notification-option-list {
+    grid-template-columns: 1fr;
   }
 }
 

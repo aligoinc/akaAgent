@@ -209,6 +209,7 @@ export interface Campaign {
   organizationId?: number
   createdAt?: string
   updatedAt?: string
+  completedAt?: string | null
   lastRunAt?: string | null
   // Joined fields
   actionName?: string
@@ -379,6 +380,20 @@ export interface ContentTemplate {
   updatedAt?: string
 }
 
+export interface EmailNotificationSettings {
+  id?: number
+  staffId?: number
+  organizationId?: number | null
+  isEnabled: boolean
+  recipientEmails: string[]
+  notifyCampaignCompleted: boolean
+  dailyReportEnabled: boolean
+  dailyReportTime: string
+  isDelete?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
 // ============================================
 // Auth Types
 // ============================================
@@ -526,6 +541,10 @@ export const IPC_EVENTS = {
   DB_CREATE_CONTENT_TEMPLATE: 'db:create-content-template',
   DB_UPDATE_CONTENT_TEMPLATE: 'db:update-content-template',
   DB_DELETE_CONTENT_TEMPLATE: 'db:delete-content-template',
+
+  // Email Notifications
+  EMAIL_NOTIFICATION_SETTINGS_GET: 'email-notification-settings:get',
+  EMAIL_NOTIFICATION_SETTINGS_SAVE: 'email-notification-settings:save',
 
   // Webview registration (embedded browser tabs)
   WEBVIEW_REGISTER: 'webview:register',

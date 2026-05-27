@@ -106,12 +106,10 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     organizationId: row.organization_id as number | undefined,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
+    completedAt: (row.completed_at as string | null) ?? null,
+    lastRunAt: (row.last_run_at as string | null) ?? null,
     actionName: (row as any).auto_campaign_actions?.name as string | undefined,
     accountName: (row as any).auto_accounts?.name as string | undefined
-  }
-
-  if ('last_run_at' in row) {
-    campaign.lastRunAt = (row.last_run_at as string | null) ?? null
   }
 
   return campaign

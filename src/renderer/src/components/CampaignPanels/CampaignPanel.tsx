@@ -290,7 +290,16 @@ const getCampaignTimeSortValue = (value: string | undefined | null) => {
   return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time
 }
 
+const shouldSortCampaignByLastRun = (status: string) => (
+  status === 'tạm dừng' || status === 'hoàn thành'
+)
+
 const getCampaignListSortTime = (campaign: Campaign) => {
+  if (shouldSortCampaignByLastRun(campaign.status)) {
+    const lastRunTime = getCampaignTimeSortValue(campaign.lastRunAt)
+    if (Number.isFinite(lastRunTime)) return lastRunTime
+  }
+
   return getCampaignTimeSortValue(campaign.schedule)
 }
 
