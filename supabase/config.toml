@@ -3,3 +3,9 @@ verify_jwt = false
 
 [functions.aka-agent-email-notification-worker]
 verify_jwt = false
+
+[functions.insert_aka_customer]
+verify_jwt = false
+
+[functions.create-aka-crm]
+verify_jwt = false
