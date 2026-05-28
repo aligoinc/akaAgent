@@ -45,6 +45,13 @@ interface SuggestedFriendProfile {
   uid: string
 }
 
+interface NewsfeedActionAvailability {
+  allowLike: boolean
+  allowComment: boolean
+  blockedReasons: string[]
+  allCheckedActionsBlocked: boolean
+}
+
 interface PostBumpTarget {
   campaignId: number
 }
@@ -100,6 +107,7 @@ const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
+const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
@@ -126,6 +134,7 @@ export class CampaignScheduler {
   private activeAccountRuns = new Set<number>()
   private activeV2Aborts = new Map<number, AbortController>()
   private pauseRequests = new Set<number>()
+  private loggedNewsfeedMilestoneKeys = new Set<string>()
   private backgroundPages = new BackgroundPageManager()
   private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<string>()
@@ -202,7 +211,12 @@ export class CampaignScheduler {
 
     if (campaign.status === 'đang chạy') {
       this.pauseRequests.add(campaignId)
-      return await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
+      const updated = await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
+      if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+        const abort = this.activeV2Aborts.get(campaignId)
+        if (abort && !abort.signal.aborted) abort.abort()
+      }
+      return updated
     }
 
     throw new Error('Chỉ có thể tạm dừng chiến dịch khi trạng thái là "chờ xử lý" hoặc "đang chạy".')
@@ -442,6 +456,20 @@ export class CampaignScheduler {
     return true
   }
 
+  private isNewsfeedDailyCampaign(campaign: Campaign): boolean {
+    return campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && (campaign.scheduleType || 'daily') === 'daily'
+  }
+
+  private async completeNewsfeedDailyWithoutNextDay(campaign: Campaign, reason?: string): Promise<void> {
+    const note = reason?.trim() || null
+    await this.updateCampaignAndBroadcast(campaign.id, {
+      status: 'hoàn thành',
+      note
+    })
+    const suffix = note ? ` (${note})` : ''
+    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"${suffix}`)
+  }
+
   private getFutureInputSchedule(detail: CampaignInputData, now: Date): Date | null {
     if (!detail.schedule) return null
     const scheduledAt = new Date(detail.schedule)
@@ -654,9 +682,11 @@ export class CampaignScheduler {
       }
 
       const actionDescriptors = this.getCampaignActionDescriptors(campaign, action)
-      const preflightActionDescriptors = campaign.actionId === 'facebook_group_post' && campaign.extraSettings?.skipPostIfGroupRequiresApproval === true
-        ? actionDescriptors.filter(action => action.code !== 'fb_post_group')
-        : actionDescriptors
+      const preflightActionDescriptors = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+        ? []
+        : campaign.actionId === 'facebook_group_post' && campaign.extraSettings?.skipPostIfGroupRequiresApproval === true
+          ? actionDescriptors.filter(action => action.code !== 'fb_post_group')
+          : actionDescriptors
       const preflightLimit = await this.checkActionLimits(
         account.id,
         campaign,
@@ -677,7 +707,11 @@ export class CampaignScheduler {
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.recoverStuckCampaignInputData(campaign.id, errMsg)
-      await this.handleRuntimeError(account, campaign, 'err_undefined', undefined, { message: errMsg })
+      if (this.isNewsfeedDailyCampaign(campaign)) {
+        await this.completeNewsfeedDailyWithoutNextDay(campaign, errMsg)
+      } else {
+        await this.handleRuntimeError(account, campaign, 'err_undefined', undefined, { message: errMsg })
+      }
       await this.releaseRunningAccount(account.id)
       await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     }
@@ -791,14 +825,30 @@ export class CampaignScheduler {
       const targetActionDescriptors = groupPostApproval.skipPostByKnownApproval
         ? actionDescriptors.filter(action => action.code !== 'fb_post_group')
         : actionDescriptors
+      let newsfeedAvailability: NewsfeedActionAvailability | undefined
 
       // Check action disable/rate limit immediately before each target.
       try {
-        const limitStatus = await this.checkActionLimits(account.id, campaign, targetActionDescriptors, limitConfig)
-        if (limitStatus && !limitStatus.ok) {
-          stoppedBeforeCompletion = true
-          await this.handleLimitStatus(account, campaign, limitStatus)
-          break
+        if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+          newsfeedAvailability = await this.resolveNewsfeedActionAvailability(account.id, campaign, targetActionDescriptors, limitConfig)
+          if (newsfeedAvailability.allCheckedActionsBlocked) {
+            stoppedBeforeCompletion = true
+            const message = newsfeedAvailability.blockedReasons.join('; ') || 'Các hành động newsfeed đang đạt giới hạn'
+            if (this.isNewsfeedDailyCampaign(campaign)) {
+              await this.completeNewsfeedDailyWithoutNextDay(campaign, message)
+            } else {
+              await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+              await this.logCampaignProgress(campaign.id, `⚠️ Tạm dừng "${campaign.name}": ${message}`)
+            }
+            break
+          }
+        } else {
+          const limitStatus = await this.checkActionLimits(account.id, campaign, targetActionDescriptors, limitConfig)
+          if (limitStatus && !limitStatus.ok) {
+            stoppedBeforeCompletion = true
+            await this.handleLimitStatus(account, campaign, limitStatus)
+            break
+          }
         }
       } catch (err) {
         console.error('Rate limit check error:', err)
@@ -822,7 +872,15 @@ export class CampaignScheduler {
       }
 
       // Build variables
-      const variables = this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval)
+      const variables = {
+        ...this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval),
+        ...(campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+          ? {
+            allowNewsfeedLike: newsfeedAvailability?.allowLike ?? true,
+            allowNewsfeedComment: newsfeedAvailability?.allowComment ?? true
+          }
+          : {})
+      }
 
       // Update detail status running
       if (detail) {
@@ -868,6 +926,9 @@ export class CampaignScheduler {
           persist: true,
           onStepProgress: (step: RunStepV2) => {
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+            if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
+              void this.logNewsfeedMilestoneStep(campaign, detail, account.id, step)
+            }
           },
           onLog: (entry) => {
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
@@ -878,6 +939,7 @@ export class CampaignScheduler {
         await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed')
 
         const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
+        const pauseCancelledRun = campaignPauseRequested && !accountStopReason && result.status === 'cancelled'
         let runtimeStopTriggered = false
 
         if (accountStopReason) {
@@ -892,6 +954,8 @@ export class CampaignScheduler {
           if (result.status === 'completed') {
             await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
             await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${detail.name || detail.uid || 'N/A'}"`)
+          } else if (pauseCancelledRun) {
+            await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: CAMPAIGN_PAUSE_PENDING_NOTE })
           } else {
             // campaign_input_data enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở campaign_details)
             const errMsg = result.error || 'Lỗi không xác định'
@@ -900,13 +964,19 @@ export class CampaignScheduler {
           }
         }
 
-        if (!accountStopReason && result.status !== 'completed') {
+        if (!accountStopReason && result.status !== 'completed' && !pauseCancelledRun) {
           const runtimeError = this.normalizeRuntimeError(campaign, result.steps, result.error)
-          const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
-            message: runtimeError.message
-          })
-          runtimeStopTriggered = handled.triggered
-          shouldStopAfterTarget = handled.triggered
+          if (this.isNewsfeedDailyCampaign(campaign)) {
+            await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
+            runtimeStopTriggered = true
+            shouldStopAfterTarget = true
+          } else {
+            const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
+              message: runtimeError.message
+            })
+            runtimeStopTriggered = handled.triggered
+            shouldStopAfterTarget = handled.triggered
+          }
         }
 
         if (campaignPauseRequested) {
@@ -920,26 +990,38 @@ export class CampaignScheduler {
       } catch (err: any) {
         const errMsg = err?.message || String(err)
         const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
+        const pauseAbortTriggered = campaignPauseRequested && !accountStopReason && abort.signal.aborted
         let runtimeStopTriggered = false
         if (detail) {
           await this.supabase.updateCampaignInputData(detail.id, {
-            status: accountStopReason ? 'chờ xử lý' : 'hoàn thành',
-            note: accountStopReason || errMsg
+            status: accountStopReason || pauseAbortTriggered ? 'chờ xử lý' : 'hoàn thành',
+            note: accountStopReason || (pauseAbortTriggered ? CAMPAIGN_PAUSE_PENDING_NOTE : errMsg)
           })
         }
-        if (accountStopReason) {
+        if (pauseAbortTriggered) {
+          shouldCompletePauseAfterTarget = true
+          shouldStopAfterTarget = true
+        } else if (accountStopReason) {
           await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
           shouldStopAfterTarget = true
         } else {
           const runtimeError = this.normalizeRuntimeError(campaign, [], errMsg)
-          const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
-            message: runtimeError.message
-          })
-          runtimeStopTriggered = handled.triggered
-          shouldStopAfterTarget = handled.triggered
+          if (this.isNewsfeedDailyCampaign(campaign)) {
+            await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
+            runtimeStopTriggered = true
+            shouldStopAfterTarget = true
+          } else {
+            const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
+              message: runtimeError.message
+            })
+            runtimeStopTriggered = handled.triggered
+            shouldStopAfterTarget = handled.triggered
+          }
         }
-        await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
-        if (campaignPauseRequested) {
+        if (!pauseAbortTriggered) {
+          await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
+        }
+        if (campaignPauseRequested && !pauseAbortTriggered) {
           if (!accountStopReason && !runtimeStopTriggered) {
             shouldCompletePauseAfterTarget = true
             shouldStopAfterTarget = true
@@ -1157,6 +1239,14 @@ export class CampaignScheduler {
         actions.push({ code: 'fb_comment', name: 'Comment' })
         if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
         break
+      case NEWSFEED_INTERACTION_ACTION_ID:
+        if (String(extra.newsfeedCommentKind || '').trim() && Number(extra.newsfeedCommentLimit || 0) > 0) {
+          actions.push({ code: 'fb_comment', name: 'Comment' })
+        }
+        if (String(extra.newsfeedLikeKind || '').trim() && Number(extra.newsfeedLikeLimit || 0) > 0) {
+          actions.push({ code: 'fb_like_post', name: 'Like post' })
+        }
+        break
     }
 
     return this.filterCampaignActionDescriptors(campaign, this.dedupeActionDescriptors(actions))
@@ -1167,7 +1257,9 @@ export class CampaignScheduler {
     actions: CampaignActionDescriptor[]
   ): CampaignActionDescriptor[] {
     const configuredCodes = campaign.extraSettings?.actionLimits?.enabledActionCodes
-    const configuredSet = Array.isArray(configuredCodes) ? new Set(configuredCodes) : null
+    const configuredSet = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+      ? null
+      : Array.isArray(configuredCodes) ? new Set(configuredCodes) : null
     return actions.filter(action => {
       if (configuredSet && !configuredSet.has(action.code)) return false
       return this.isActionCheckEnabledForCampaign(campaign, action.code)
@@ -1187,9 +1279,15 @@ export class CampaignScheduler {
         if (campaign.actionId === MESSAGE_FRIEND_ACTION_ID) return false
         return campaign.actionId !== MESSAGE_UID_ACTION_ID || extra.enableAddFriend === true
       case 'fb_comment':
+        if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+          return String(extra.newsfeedCommentKind || '').trim().length > 0 && Number(extra.newsfeedCommentLimit || 0) > 0
+        }
         if (this.isCommentSeedingCampaign(campaign.actionId)) return true
         return extra.enableComment === true
       case 'fb_like_post':
+        if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+          return String(extra.newsfeedLikeKind || '').trim().length > 0 && Number(extra.newsfeedLikeLimit || 0) > 0
+        }
         return extra.enablePostLike === true
       default:
         return true
@@ -1257,6 +1355,47 @@ export class CampaignScheduler {
       if (!limitStatus.ok) return limitStatus
     }
     return null
+  }
+
+  private async resolveNewsfeedActionAvailability(
+    accountId: number,
+    campaign: Campaign,
+    actionDescriptors: CampaignActionDescriptor[],
+    limitConfig?: CampaignActionLimitSettings
+  ): Promise<NewsfeedActionAvailability> {
+    const extra = campaign.extraSettings || {}
+    const likeConfigured = String(extra.newsfeedLikeKind || '').trim().length > 0 && Number(extra.newsfeedLikeLimit || 0) > 0
+    const commentConfigured = String(extra.newsfeedCommentKind || '').trim().length > 0 && Number(extra.newsfeedCommentLimit || 0) > 0
+    let allowLike = likeConfigured
+    let allowComment = commentConfigured
+    const blockedReasons: string[] = []
+    const checkedCodes = new Set(actionDescriptors.map(action => action.code))
+
+    const checkOne = async (code: 'fb_like_post' | 'fb_comment', name: string): Promise<boolean> => {
+      const limitStatus = await this.supabase.getAccountRateLimitStatus(
+        accountId,
+        code,
+        name,
+        this.getActionLimitConfig(code, limitConfig)
+      )
+      if (limitStatus.ok) return true
+      blockedReasons.push(await this.buildLimitPreflightNote(limitStatus))
+      return false
+    }
+
+    if (likeConfigured && checkedCodes.has('fb_like_post')) {
+      allowLike = await checkOne('fb_like_post', this.getAccountActionName('fb_like_post'))
+    }
+    if (commentConfigured && checkedCodes.has('fb_comment')) {
+      allowComment = await checkOne('fb_comment', this.getAccountActionName('fb_comment'))
+    }
+
+    return {
+      allowLike,
+      allowComment,
+      blockedReasons,
+      allCheckedActionsBlocked: blockedReasons.length > 0 && !allowLike && !allowComment
+    }
   }
 
   private getActionLimitConfig(
@@ -1381,6 +1520,8 @@ export class CampaignScheduler {
     else if (errorStep?.blockName === 'fb_add_friend') actionCode = 'fb_add_friend'
     else if (errorStep?.blockName === 'fb_comment_at_position' || errorStep?.blockName === 'fb_comment_current_post') actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_click_like_current_post') actionCode = 'fb_like_post'
+    else if (errorStep?.blockName && errorStep.blockName.startsWith('fb_newsfeed_comment')) actionCode = 'fb_comment'
+    else if (errorStep?.blockName === 'fb_newsfeed_like_post') actionCode = 'fb_like_post'
     else if (errorStep?.blockName === 'fb_click_post_button') actionCode = this.getPostActionCode(campaign) || undefined
     else if (
       errorStep?.blockName === 'fb_page_post_api' ||
@@ -1538,6 +1679,14 @@ export class CampaignScheduler {
       enablePostLike: extra.enablePostLike ?? false,
       postsPerTarget: extra.postsPerTarget ?? commentCount,
       keywordFilter: extra.postKeywordFilter ?? extra.keywordFilter ?? '',
+      // Newsfeed interaction extras
+      newsfeedTimeMinutes: extra.newsfeedTimeMinutes ?? 20,
+      newsfeedLikeKind: extra.newsfeedLikeKind || '',
+      newsfeedLikeLimit: extra.newsfeedLikeLimit ?? 10,
+      newsfeedCommentKind: extra.newsfeedCommentKind || '',
+      newsfeedCommentLimit: extra.newsfeedCommentLimit ?? 10,
+      newsfeedCommentContent: extra.newsfeedCommentContent || '',
+      newsfeedCommentUseAI: extra.newsfeedCommentUseAI === true,
       // Group post extras
       leaveGroupOnPendingApproval: extra.leaveGroupOnPendingApproval ?? false,
       autoJoinGroupAfterPost: extra.autoJoinGroupAfterPost ?? false,
@@ -1595,6 +1744,84 @@ export class CampaignScheduler {
         inputDataPhone: detail.phone,
         inputDataEmail: detail.email
       } : {})
+    }
+  }
+
+  private async logNewsfeedMilestoneStep(
+    campaign: Campaign,
+    detail: CampaignInputData | null,
+    accountId: number,
+    step: RunStepV2
+  ): Promise<void> {
+    if (step.status !== 'success') return
+    if (step.blockName !== 'fb_newsfeed_like_post' && step.blockName !== 'fb_newsfeed_comment_submit') return
+
+    const out = (step.output as any) || {}
+    const isLike = step.blockName === 'fb_newsfeed_like_post'
+    const isComment = step.blockName === 'fb_newsfeed_comment_submit'
+    if (isLike && out.liked !== true) return
+    if (isComment && out.commented !== true) return
+
+    const key = [
+      campaign.id,
+      step.runId ?? 'run',
+      step.nodeId || step.blockName,
+      step.startedAt || step.completedAt || JSON.stringify(out)
+    ].join(':')
+    if (this.loggedNewsfeedMilestoneKeys.has(key)) return
+    this.loggedNewsfeedMilestoneKeys.add(key)
+
+    const targetName = String(out.targetName || 'bài viết newsfeed').trim()
+    const postContent = String(out.postContent || '').trim()
+
+    try {
+      if (isLike) {
+        const preview = postContent.length > 50 ? postContent.substring(0, 50) + '...' : postContent
+        await this.supabase.createCampaignDetail({
+          inputDataId: detail?.id,
+          campaignId: campaign.id,
+          accountId,
+          actionCode: 'fb_like_post',
+          actionName: 'Like post',
+          status: 'thành công',
+          log: preview ? `Đã like bài newsfeed của ${targetName}: "${preview}"` : `Đã like bài newsfeed của ${targetName}`,
+          data: {
+            targetName,
+            targetUid: out.targetUid || undefined,
+            postContent: postContent || undefined,
+            source: 'newsfeed',
+            runId: step.runId,
+            nodeId: step.nodeId
+          }
+        })
+        await this.logCampaignProgress(campaign.id, `👍 Đã like bài newsfeed của "${targetName}"`)
+        return
+      }
+
+      const text = String(out.text || '').trim()
+      const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
+      await this.supabase.createCampaignDetail({
+        inputDataId: detail?.id,
+        campaignId: campaign.id,
+        accountId,
+        actionCode: 'fb_comment',
+        actionName: 'Comment',
+        status: 'thành công',
+        log: preview ? `Đã comment bài newsfeed của ${targetName}: "${preview}"` : `Đã comment bài newsfeed của ${targetName}`,
+        data: {
+          targetName,
+          targetUid: out.targetUid || undefined,
+          postContent: postContent || undefined,
+          commentContent: text || undefined,
+          source: 'newsfeed',
+          runId: step.runId,
+          nodeId: step.nodeId
+        }
+      })
+      await this.logCampaignProgress(campaign.id, `💬 Đã comment bài newsfeed của "${targetName}"`)
+    } catch (err) {
+      this.loggedNewsfeedMilestoneKeys.delete(key)
+      console.error('Failed log newsfeed milestone:', err)
     }
   }
 
@@ -1816,6 +2043,11 @@ export class CampaignScheduler {
         await this.pushFoundPhonesToAkaBizDesktopCampaigns(campaign, newPhonesForExternal)
         await this.pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(campaign, newZaloGroupLinksForExternal)
       }
+      return
+    }
+
+    if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+      for (const s of steps) await this.logNewsfeedMilestoneStep(campaign, detail, accountId, s)
       return
     }
 

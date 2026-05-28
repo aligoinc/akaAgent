@@ -202,9 +202,11 @@ const WEEKDAYS = [
 
 // Campaign action IDs that don't need detail data (no Section 6) and extra group settings (no Section 5)
 const SIMPLE_CAMPAIGN_ACTIONS = new Set([
-  'facebook_timeline_post'
+  'facebook_timeline_post',
+  'facebook_newsfeed_interaction'
 ])
 
+const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
@@ -245,6 +247,19 @@ const COMMENT_SEEDING_ACTIONS = new Set([
   'facebook_comment_seeding',
   'facebook_comment_seeding_post'
 ])
+
+const NEWSFEED_SETTINGS_STEP: StepDef = {
+  id: 'newsfeedSettings',
+  title: 'Lướt newsfeed',
+  fields: [
+    { key: 'newsfeedTimeMinutes', label: 'Thời gian lướt' },
+    { key: 'newsfeedLikeKind', label: 'Like nội dung có tính chất' },
+    { key: 'newsfeedLikeLimit', label: 'Like tối đa' },
+    { key: 'newsfeedCommentKind', label: 'Comment bài post có tính chất' },
+    { key: 'newsfeedCommentContent', label: 'Nội dung comment' },
+    { key: 'newsfeedCommentLimit', label: 'Comment tối đa' }
+  ]
+}
 
 const POST_SORT_OPTIONS = [
   { value: 'most_relevant', label: 'Phù hợp nhất' },
@@ -671,7 +686,7 @@ export default function CampaignFormModal({
     dailyStopTime: savedDailyStopTime || DEFAULT_DAILY_STOP_TIME,
     scheduleDays: campaign?.scheduleDays || '',
     scheduleWeekDays: campaign?.scheduleWeekDays || '',
-    continueNextDay: campaign?.continueNextDay ?? true,
+    continueNextDay: (lockedActionId || campaign?.actionId) === NEWSFEED_INTERACTION_ACTION_ID ? false : (campaign?.continueNextDay ?? true),
     refreshData: campaign?.refreshData ?? true,
     timeSleepBetween2: campaign?.timeSleepBetween2 ?? 30,
     multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
@@ -690,6 +705,13 @@ export default function CampaignFormModal({
     enablePostLike: campaign?.extraSettings?.enablePostLike ?? false,
     postsPerTarget: campaign?.extraSettings?.postsPerTarget ?? campaign?.extraSettings?.commentCount ?? 3,
     postKeywordFilter: campaign?.extraSettings?.postKeywordFilter ?? campaign?.extraSettings?.keywordFilter ?? '',
+    newsfeedTimeMinutes: campaign?.extraSettings?.newsfeedTimeMinutes ?? 20,
+    newsfeedLikeKind: campaign?.extraSettings?.newsfeedLikeKind || '',
+    newsfeedLikeLimit: campaign?.extraSettings?.newsfeedLikeLimit ?? 10,
+    newsfeedCommentKind: campaign?.extraSettings?.newsfeedCommentKind || '',
+    newsfeedCommentLimit: campaign?.extraSettings?.newsfeedCommentLimit ?? 10,
+    newsfeedCommentContent: campaign?.extraSettings?.newsfeedCommentContent || '',
+    newsfeedCommentUseAI: campaign?.extraSettings?.newsfeedCommentUseAI ?? false,
     dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
     rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
     rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES,
@@ -821,6 +843,7 @@ export default function CampaignFormModal({
   const isFacebookGroupPostCampaign = formData.actionId === 'facebook_group_post'
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const isPagePostCampaign = formData.actionId === PAGE_POST_ACTION_ID
+  const isNewsfeedInteractionCampaign = formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
@@ -881,6 +904,7 @@ export default function CampaignFormModal({
   const requiresMainContentOrMedia =
     !isFindDataGroupCampaign &&
     !isCommentSeedingCampaign &&
+    !isNewsfeedInteractionCampaign &&
     !isUsingSourceContent &&
     (!isMessageUidCampaign || formData.enableMessage)
   const hasMainContentText = formData.content.trim().length > 0
@@ -904,6 +928,10 @@ export default function CampaignFormModal({
       if (actionCode === 'fb_comment') return true
       if (actionCode === 'fb_like_post') return formData.enablePostLike
     }
+    if (isNewsfeedInteractionCampaign) {
+      if (actionCode === 'fb_comment') return true
+      if (actionCode === 'fb_like_post') return true
+    }
     return true
   }
   const visibleLimitActionCodes = limitActionCodes.filter(isLimitActionVisible)
@@ -912,7 +940,7 @@ export default function CampaignFormModal({
     ? visibleLimitActionCodes.filter(code => code !== 'fb_comment')
     : visibleLimitActionCodes
   const showGroupPostCommentLimit = isFacebookGroupPostCampaign && visibleLimitActionCodes.includes('fb_comment')
-  const showContentSection = !isFindDataGroupCampaign && (!isMessageUidCampaign || formData.enableMessage)
+  const showContentSection = !isFindDataGroupCampaign && !isNewsfeedInteractionCampaign && (!isMessageUidCampaign || formData.enableMessage)
   const visibleScheduleFields: StepDef['fields'] = [
     { key: 'scheduleType', label: 'Loại lịch' },
     { key: 'schedule', label: 'Ngày chạy' },
@@ -934,6 +962,12 @@ export default function CampaignFormModal({
   const STEPS = applyVisibleScheduleFields((() => {
     if (!hasSelectedCampaignAction) return ALL_STEPS.filter(s => s.id === 'general')
     if (isSimpleCampaign) {
+      if (isNewsfeedInteractionCampaign) {
+        const generalStep = ALL_STEPS.find(s => s.id === 'general')!
+        const scheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
+        const limitStep = ALL_STEPS.find(s => s.id === 'limits')!
+        return [generalStep, NEWSFEED_SETTINGS_STEP, scheduleStep, limitStep]
+      }
       const simpleSteps = ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
       return isTimelinePostCampaign
         ? simpleSteps.flatMap(step => step.id === 'content' ? [SOURCE_CONTENT_STEP, step] : [step])
@@ -1771,7 +1805,7 @@ export default function CampaignFormModal({
   const buildCampaignSaveBundleItems = (): CampaignSaveBundleItem[] => {
     const accountChunks: Partial<CampaignInputData>[][] = []
     const numAccounts = formData.accountIds.length
-    const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post'
+    const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
     const detailSource = shouldDiscardDetailsForSave || hideDetailsSection ? [] : details
 
     if (formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
@@ -1851,7 +1885,7 @@ export default function CampaignFormModal({
           dailyStopTime: formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null,
           scheduleDays: normalizedScheduleDays,
           scheduleWeekDays: normalizedScheduleWeekDays,
-          continueNextDay: formData.continueNextDay,
+          continueNextDay: isNewsfeedInteractionCampaign ? false : formData.continueNextDay,
           refreshData: formData.refreshData,
           timeSleepBetween2: formData.timeSleepBetween2,
           content: formData.content,
@@ -1869,6 +1903,13 @@ export default function CampaignFormModal({
             postsPerTarget: effectivePostsPerTarget,
             postKeywordFilter: effectivePostKeywordFilter,
             keywordFilter: effectivePostKeywordFilter,
+            newsfeedTimeMinutes: isNewsfeedInteractionCampaign ? Math.max(1, Number(formData.newsfeedTimeMinutes) || 20) : undefined,
+            newsfeedLikeKind: isNewsfeedInteractionCampaign ? formData.newsfeedLikeKind.trim() : '',
+            newsfeedLikeLimit: isNewsfeedInteractionCampaign ? Math.max(0, Number(formData.newsfeedLikeLimit) || 0) : 0,
+            newsfeedCommentKind: isNewsfeedInteractionCampaign ? formData.newsfeedCommentKind.trim() : '',
+            newsfeedCommentLimit: isNewsfeedInteractionCampaign ? Math.max(0, Number(formData.newsfeedCommentLimit) || 0) : 0,
+            newsfeedCommentContent: isNewsfeedInteractionCampaign ? formData.newsfeedCommentContent : '',
+            newsfeedCommentUseAI: isNewsfeedInteractionCampaign ? formData.newsfeedCommentUseAI : false,
             actionLimits: {
               sleepBetweenActions: formData.timeSleepBetween2,
               enabledActionCodes,
@@ -1973,6 +2014,24 @@ export default function CampaignFormModal({
     }
     if (!validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
       return
+    }
+    if (isNewsfeedInteractionCampaign) {
+      const timeMinutes = Math.floor(Number(formData.newsfeedTimeMinutes))
+      const commentLimit = Math.floor(Number(formData.newsfeedCommentLimit))
+      if (!Number.isFinite(timeMinutes) || timeMinutes <= 0) {
+        showAlert('Vui lòng nhập thời gian lướt newsfeed lớn hơn 0 phút.', 'error')
+        return
+      }
+      if (
+        Number.isFinite(commentLimit) &&
+        commentLimit > 0 &&
+        formData.newsfeedCommentKind.trim() &&
+        !formData.newsfeedCommentUseAI &&
+        !formData.newsfeedCommentContent.trim()
+      ) {
+        showAlert('Vui lòng nhập nội dung comment hoặc bật AI tạo nội dung comment.', 'error')
+        return
+      }
     }
     if (requiresSourceLinks && !hasSourceLinks) {
       showAlert('Vui lòng nhập ít nhất một uid/link nguồn để copy hoặc chia sẻ nội dung.', 'error')
@@ -2177,7 +2236,7 @@ export default function CampaignFormModal({
 
     try {
       const { deleteCampaignInputData, updateCampaignInputData, createCampaignInputData, createCampaign, updateCampaign } = useCampaignStore.getState()
-      const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post'
+      const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
       const detailIdsToDelete = shouldDiscardDetailsForSave
         ? Array.from(new Set([
           ...deletedIds,
@@ -2750,6 +2809,99 @@ export default function CampaignFormModal({
     }
     e.target.value = ''
   }
+
+  const renderNewsfeedInteractionSettings = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div className="stepper-form-row">
+        <div className="stepper-form-group third">
+          <label>Thời gian lướt (phút)</label>
+          <input
+            type="number"
+            min={1}
+            value={formData.newsfeedTimeMinutes}
+            onChange={e => setFormData(p => ({ ...p, newsfeedTimeMinutes: Math.max(1, Number(e.target.value) || 1) }))}
+            className="stepper-input"
+          />
+        </div>
+      </div>
+
+      <div className="action-limit-card">
+        <div className="action-limit-card-header">
+          <strong>Like/tim</strong>
+          <span>fb_like_post</span>
+        </div>
+        <div className="stepper-form-row">
+          <div className="stepper-form-group">
+            <label>Like nội dung có tính chất</label>
+            <input
+              type="text"
+              value={formData.newsfeedLikeKind}
+              onChange={e => setFormData(p => ({ ...p, newsfeedLikeKind: e.target.value }))}
+              className="stepper-input"
+              placeholder="Ví dụ: bài viết tuyển dụng, bán hàng, bất động sản"
+            />
+          </div>
+          <div className="stepper-form-group third">
+            <label>Like tối đa/chiến dịch</label>
+            <input
+              type="number"
+              min={0}
+              value={formData.newsfeedLikeLimit}
+              onChange={e => setFormData(p => ({ ...p, newsfeedLikeLimit: Math.max(0, Number(e.target.value) || 0) }))}
+              className="stepper-input"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="action-limit-card">
+        <div className="action-limit-card-header">
+          <strong>Comment</strong>
+          <span>fb_comment</span>
+        </div>
+        <div className="stepper-form-row">
+          <div className="stepper-form-group">
+            <label>Comment bài post có tính chất</label>
+            <input
+              type="text"
+              value={formData.newsfeedCommentKind}
+              onChange={e => setFormData(p => ({ ...p, newsfeedCommentKind: e.target.value }))}
+              className="stepper-input"
+              placeholder="Ví dụ: hỏi mua sản phẩm, cần tư vấn, tìm dịch vụ"
+            />
+          </div>
+          <div className="stepper-form-group third">
+            <label>Comment tối đa/chiến dịch</label>
+            <input
+              type="number"
+              min={0}
+              value={formData.newsfeedCommentLimit}
+              onChange={e => setFormData(p => ({ ...p, newsfeedCommentLimit: Math.max(0, Number(e.target.value) || 0) }))}
+              className="stepper-input"
+            />
+          </div>
+        </div>
+        <div className="stepper-form-group">
+          <label>Nội dung comment</label>
+          <textarea
+            value={formData.newsfeedCommentContent}
+            onChange={e => setFormData(p => ({ ...p, newsfeedCommentContent: e.target.value }))}
+            className="stepper-textarea"
+            rows={4}
+            placeholder="Dùng dấu | để tách nhiều nội dung."
+          />
+        </div>
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.newsfeedCommentUseAI}
+            onChange={e => setFormData(p => ({ ...p, newsfeedCommentUseAI: e.target.checked }))}
+          />
+          <span>Hoặc lời nhắc AI tạo nội dung</span>
+        </label>
+      </div>
+    </div>
+  )
 
   const insertCampaignContentToken = (token: string) => {
     const textarea = campaignContentTextareaRef.current
@@ -4980,6 +5132,30 @@ export default function CampaignFormModal({
               </div>
             )}
 
+            {isNewsfeedInteractionCampaign && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['newsfeedSettings'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('newsfeedSettings')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('newsfeedSettings')}</span>
+                    <span className="stepper-section-title">Lướt newsfeed</span>
+                  </div>
+                  {collapsedSections['newsfeedSettings'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['newsfeedSettings'] && (
+                  <div className="stepper-section-body">
+                    {renderNewsfeedInteractionSettings()}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Section 2: Lịch chạy */}
             <div
               className="stepper-section"
@@ -5091,7 +5267,7 @@ export default function CampaignFormModal({
                   )}
 
                   {/* Conditional checkbox based on schedule type */}
-                  {formData.scheduleType === 'daily' && (
+                  {formData.scheduleType === 'daily' && !isNewsfeedInteractionCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input

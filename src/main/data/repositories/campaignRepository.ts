@@ -17,6 +17,7 @@ import * as errorPolicyRepo from './errorPolicyRepository'
 const client = () => getSupabaseClient()
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
+const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
 
@@ -476,6 +477,17 @@ export async function maintainCampaignSchedules(): Promise<Campaign[]> {
       }
 
       if (scheduleType === 'daily') {
+        if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+          if (campaign.status !== 'hoàn thành') {
+            const updated = await updateCampaign(campaign.id, {
+              status: 'hoàn thành',
+              note: 'Chiến dịch lướt newsfeed không chạy tiếp qua ngày'
+            })
+            updatedCampaigns.push(updated)
+          }
+          continue
+        }
+
         if (campaign.status !== 'chờ xử lý') continue
 
         if (campaign.continueNextDay) {
