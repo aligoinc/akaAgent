@@ -348,8 +348,17 @@ const parseDailyTimeSlots = (value: string): { slots: string[]; invalidItems: st
 const normalizeDailyTimeSlotsText = (value?: string | null): string =>
   parseDailyTimeSlots(String(value || '')).slots.join(', ')
 
+const getDateTimeLocalDate = (value?: string | null): string => String(value || '').split('T')[0] || ''
+
+const getDateTimeLocalTime = (value?: string | null): string => normalizeTimeInput(String(value || '').split('T')[1])
+
+const setDateTimeLocalDate = (value: string, datePart: string): string => {
+  const timePart = getDateTimeLocalTime(value) || getDateTimeLocalTime(formatDateTimeLocal(new Date()))
+  return `${datePart}T${timePart}`
+}
+
 const setDateTimeLocalTime = (value: string, slot: string): string => {
-  const datePart = String(value || '').split('T')[0]
+  const datePart = getDateTimeLocalDate(value)
   if (!datePart) return value
   return `${datePart}T${slot}`
 }
@@ -904,7 +913,25 @@ export default function CampaignFormModal({
     : visibleLimitActionCodes
   const showGroupPostCommentLimit = isFacebookGroupPostCampaign && visibleLimitActionCodes.includes('fb_comment')
   const showContentSection = !isFindDataGroupCampaign && (!isMessageUidCampaign || formData.enableMessage)
-  const STEPS = (() => {
+  const visibleScheduleFields: StepDef['fields'] = [
+    { key: 'scheduleType', label: 'Loại lịch' },
+    { key: 'schedule', label: 'Ngày chạy' },
+    ...(formData.scheduleType === 'daily' ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
+    ...(formData.scheduleType === 'weekly' ? [{ key: 'scheduleWeekDays', label: 'Lịch tuần' }] : []),
+    ...(formData.scheduleType === 'monthly' ? [{ key: 'scheduleDays', label: 'Lịch tháng' }] : []),
+    { key: 'dailyStopTime', label: 'Giờ dừng' }
+  ]
+  const applyVisibleScheduleFields = (steps: StepDef[]) => steps.map(step => {
+    if (step.id !== 'schedule') return step
+    const hasFindDataRerun = step.fields.some(field => field.key === 'findDataRerun')
+    return {
+      ...step,
+      fields: hasFindDataRerun
+        ? [...visibleScheduleFields, { key: 'findDataRerun', label: 'Chạy lại sau mỗi' }]
+        : visibleScheduleFields
+    }
+  })
+  const STEPS = applyVisibleScheduleFields((() => {
     if (!hasSelectedCampaignAction) return ALL_STEPS.filter(s => s.id === 'general')
     if (isSimpleCampaign) {
       const simpleSteps = ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
@@ -1079,7 +1106,7 @@ export default function CampaignFormModal({
       })
     }
     return ALL_STEPS.filter(s => s.id !== 'extra' || showExtraSection)
-  })()
+  })())
   const getSectionNumber = (stepId: string) => Math.max(1, STEPS.findIndex(s => s.id === stepId) + 1)
   const stepIdsKey = STEPS.map(s => s.id).join('|')
 
@@ -1414,6 +1441,8 @@ export default function CampaignFormModal({
       case 'schedule': return !!formData.schedule
       case 'scheduleType': return !!formData.scheduleType
       case 'scheduleEndDate': return !!formData.scheduleEndDate
+      case 'scheduleDays': return formData.scheduleDays.trim().length > 0
+      case 'scheduleWeekDays': return formData.scheduleWeekDays.split(',').filter(Boolean).length > 0
       case 'dailyStopTime': return true
       case 'findDataRerun': return !formData.findDataRerunEnabled || formData.findDataRerunAfterHours >= 1
       case 'timeSleepBetween2': return formData.timeSleepBetween2 >= 0
@@ -1799,6 +1828,11 @@ export default function CampaignFormModal({
         ? setDateTimeLocalTime(formData.schedule, normalizedMultiDailySlots[0])
         : formData.schedule
       const formSchedule = toIsoDateTimeValue(scheduleInput)
+      const normalizedScheduleEndDate = formData.scheduleType === 'daily'
+        ? null
+        : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null)
+      const normalizedScheduleDays = formData.scheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
+      const normalizedScheduleWeekDays = formData.scheduleType === 'weekly' ? formData.scheduleWeekDays : ''
       const normalizedFindData = normalizeFindDataFlagState(formData)
       const canUseFindDataContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment
       const saveFindDataPostSort = normalizedFindData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
@@ -1813,12 +1847,10 @@ export default function CampaignFormModal({
           schedule: formSchedule,
           originalSchedule: formSchedule,
           scheduleType: formData.scheduleType,
-          scheduleEndDate: formData.scheduleType === 'daily'
-            ? null
-            : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null),
+          scheduleEndDate: normalizedScheduleEndDate,
           dailyStopTime: formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null,
-          scheduleDays: formData.scheduleDays || undefined,
-          scheduleWeekDays: formData.scheduleWeekDays || undefined,
+          scheduleDays: normalizedScheduleDays,
+          scheduleWeekDays: normalizedScheduleWeekDays,
           continueNextDay: formData.continueNextDay,
           refreshData: formData.refreshData,
           timeSleepBetween2: formData.timeSleepBetween2,
@@ -4986,62 +5018,77 @@ export default function CampaignFormModal({
                   </div>
 
                   {/* Start date / End date */}
-                  <div className="stepper-form-row">
-                    <div className="stepper-form-group half">
+                  <div className="stepper-form-row schedule-run-row">
+                    <div className="stepper-form-group schedule-time-field">
+                      <label>Giờ chạy</label>
+                      <input
+                        type="time"
+                        value={getDateTimeLocalTime(formData.schedule)}
+                        onChange={e => setFormData(p => ({ ...p, schedule: setDateTimeLocalTime(p.schedule, e.target.value) }))}
+                        className="stepper-input"
+                      />
+                    </div>
+                    <div className="stepper-form-group schedule-date-field">
                       <label>Ngày chạy</label>
                       <input
-                        type="datetime-local"
-                        value={formData.schedule}
-                        onChange={e => setFormData(p => ({ ...p, schedule: e.target.value }))}
-                        className="stepper-input"
-                      />
-                    </div>
-                    <div className="stepper-form-group half">
-                      <label>Ngày kết thúc</label>
-                      <input
                         type="date"
-                        value={formData.scheduleEndDate}
-                        onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
+                        value={getDateTimeLocalDate(formData.schedule)}
+                        onChange={e => setFormData(p => ({ ...p, schedule: setDateTimeLocalDate(p.schedule, e.target.value) }))}
                         className="stepper-input"
-                        disabled={formData.scheduleType === 'daily'}
                       />
                     </div>
+                    {formData.scheduleType !== 'daily' && (
+                      <div className="stepper-form-group schedule-end-date-field">
+                        <label>Ngày kết thúc</label>
+                        <input
+                          type="date"
+                          value={formData.scheduleEndDate}
+                          onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
+                          className="stepper-input"
+                        />
+                      </div>
+                    )}
+                    {formData.scheduleType === 'daily' && (
+                      <div className="stepper-form-group schedule-end-date-field schedule-placeholder-field" aria-hidden="true" />
+                    )}
                   </div>
 
                   {/* Monthly days */}
-                  <div className="stepper-form-group">
-                    <label>Lịch tháng</label>
-                    <input
-                      type="text"
-                      value={formData.scheduleDays}
-                      onChange={e => setFormData(p => ({ ...p, scheduleDays: e.target.value }))}
-                      className="stepper-input"
-                      placeholder="Ví dụ: 5,10,19,25"
-                      disabled={formData.scheduleType !== 'monthly'}
-                    />
-                    <span className="schedule-hint">Danh sách ngày chạy, các ngày cách nhau bởi dấu phẩy.</span>
-                  </div>
+                  {formData.scheduleType === 'monthly' && (
+                    <div className="stepper-form-group">
+                      <label>Lịch tháng</label>
+                      <input
+                        type="text"
+                        value={formData.scheduleDays}
+                        onChange={e => setFormData(p => ({ ...p, scheduleDays: e.target.value }))}
+                        className="stepper-input"
+                        placeholder="Ví dụ: 5,10,19,25"
+                      />
+                      <span className="schedule-hint">Danh sách ngày chạy, các ngày cách nhau bởi dấu phẩy.</span>
+                    </div>
+                  )}
 
                   {/* Weekly days */}
-                  <div className="stepper-form-group">
-                    <label>Lịch tuần</label>
-                    <div className="schedule-weekday-group">
-                      {WEEKDAYS.map(day => {
-                        const selectedDays = formData.scheduleWeekDays ? formData.scheduleWeekDays.split(',') : []
-                        return (
-                          <label key={day.value} className="schedule-checkbox-label">
-                            <input
-                              type="checkbox"
-                              checked={selectedDays.includes(day.value)}
-                              onChange={() => toggleWeekDay(day.value)}
-                              disabled={formData.scheduleType !== 'weekly'}
-                            />
-                            <span>{day.label}</span>
-                          </label>
-                        )
-                      })}
+                  {formData.scheduleType === 'weekly' && (
+                    <div className="stepper-form-group">
+                      <label>Lịch tuần</label>
+                      <div className="schedule-weekday-group">
+                        {WEEKDAYS.map(day => {
+                          const selectedDays = formData.scheduleWeekDays ? formData.scheduleWeekDays.split(',') : []
+                          return (
+                            <label key={day.value} className="schedule-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={selectedDays.includes(day.value)}
+                                onChange={() => toggleWeekDay(day.value)}
+                              />
+                              <span>{day.label}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Conditional checkbox based on schedule type */}
                   {formData.scheduleType === 'daily' && (

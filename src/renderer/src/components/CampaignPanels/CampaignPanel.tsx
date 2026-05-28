@@ -99,10 +99,8 @@ const CAMPAIGN_PLATFORM_OPTIONS: CampaignFilterOption[] = [
   { value: 'facebook', label: 'Facebook' }
 ]
 
-const DETAIL_DOCK_DEFAULT_HEIGHT = 220
-const DETAIL_DOCK_MIN_HEIGHT = 140
-const DETAIL_DOCK_MAX_HEIGHT = 900
-const DETAIL_DOCK_TOP_RESERVED_HEIGHT = 96
+const DETAIL_DOCK_MIN_HEIGHT = 220
+const DETAIL_DOCK_LIST_MIN_HEIGHT = 220
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
@@ -397,7 +395,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [detailTab, setDetailTab] = useState<DetailTab>('info')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
-  const [detailDockHeight, setDetailDockHeight] = useState(DETAIL_DOCK_DEFAULT_HEIGHT)
+  const [detailDockHeight, setDetailDockHeight] = useState<number | null>(null)
   const [foundDataExportKinds, setFoundDataExportKinds] = useState<Set<FoundDataKind>>(
     () => new Set(FOUND_DATA_EXPORT_OPTIONS.map(option => option.kind))
   )
@@ -412,6 +410,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
   const [showInitialCampaignLoading, setShowInitialCampaignLoading] = useState(true)
   const [showManualCampaignLoading, setShowManualCampaignLoading] = useState(false)
+  const workAreaRef = useRef<HTMLDivElement>(null)
+  const detailDockRef = useRef<HTMLDivElement>(null)
   const filterPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -736,8 +736,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }
 
   const getDetailDockMaxHeight = () => {
-    const availableHeight = window.innerHeight - DETAIL_DOCK_TOP_RESERVED_HEIGHT
-    return Math.max(DETAIL_DOCK_MIN_HEIGHT, Math.min(DETAIL_DOCK_MAX_HEIGHT, availableHeight))
+    const workAreaHeight = workAreaRef.current?.getBoundingClientRect().height || window.innerHeight
+    return Math.max(DETAIL_DOCK_MIN_HEIGHT, workAreaHeight - DETAIL_DOCK_LIST_MIN_HEIGHT)
   }
 
   const handleDetailDockResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -745,7 +745,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     event.preventDefault()
 
     const startY = event.clientY
-    const startHeight = detailDockHeight
+    const startHeight = detailDockRef.current?.getBoundingClientRect().height || detailDockHeight || DETAIL_DOCK_MIN_HEIGHT
     const previousCursor = document.body.style.cursor
     const previousUserSelect = document.body.style.userSelect
 
@@ -1122,262 +1122,266 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
   return (
     <div className="campaign-panel" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div className="campaign-panel-header">
-        <span className="campaign-panel-title">Chiến dịch</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {canManageCampaignActions && (
-            <button className="btn btn-ghost btn-icon" onClick={() => setShowActionManager(true)} title="Quản lý Hành động">
-              <Settings2 size={14} />
-            </button>
-          )}
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={handleReloadCampaigns}
-            disabled={showCampaignTableLoading}
-            title="Làm mới"
-          >
-            <RefreshCw size={14} />
-          </button>
-          <button className="btn btn-primary btn-icon" onClick={() => { setEditingCampaign(null); setShowForm(true); }} title="Thêm chiến dịch">
-            <Plus size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div className="campaign-list-filter-panel" ref={filterPanelRef}>
-        <div className="campaign-filter-row campaign-filter-time-row">
-          <div className="campaign-filter-field campaign-filter-time-preset">
-            <label>Thời gian</label>
-            <select
-              className="stepper-input campaign-filter-control"
-              value={timePreset}
-              onChange={event => handleTimePresetChange(event.target.value as CampaignTimePreset)}
+      <div className="campaign-panel-top">
+        <div className="campaign-panel-header">
+          <span className="campaign-panel-title">Chiến dịch</span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {canManageCampaignActions && (
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowActionManager(true)} title="Quản lý Hành động">
+                <Settings2 size={14} />
+              </button>
+            )}
+            <button
+              className="btn btn-ghost btn-icon"
+              onClick={handleReloadCampaigns}
+              disabled={showCampaignTableLoading}
+              title="Làm mới"
             >
-              {CAMPAIGN_TIME_PRESETS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+              <RefreshCw size={14} />
+            </button>
+            <button className="btn btn-primary btn-icon" onClick={() => { setEditingCampaign(null); setShowForm(true); }} title="Thêm chiến dịch">
+              <Plus size={14} />
+            </button>
           </div>
+        </div>
 
-          <div className="campaign-filter-field campaign-filter-date-field">
-            <label>Từ ngày</label>
-            <input
-              type="date"
-              className="stepper-input campaign-filter-date-input"
-              value={dateFrom}
-              onChange={event => setDateFrom(event.target.value)}
-              disabled={timePreset === 'all'}
-            />
-          </div>
+        <div className="campaign-list-filter-panel" ref={filterPanelRef}>
+          <div className="campaign-filter-row campaign-filter-time-row">
+            <div className="campaign-filter-field campaign-filter-time-preset">
+              <label>Thời gian</label>
+              <select
+                className="stepper-input campaign-filter-control"
+                value={timePreset}
+                onChange={event => handleTimePresetChange(event.target.value as CampaignTimePreset)}
+              >
+                {CAMPAIGN_TIME_PRESETS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
 
-          <div className="campaign-filter-field campaign-filter-date-field">
-            <label>Đến ngày</label>
-            <input
-              type="date"
-              className="stepper-input campaign-filter-date-input"
-              value={dateTo}
-              onChange={event => setDateTo(event.target.value)}
-              disabled={timePreset === 'all'}
-            />
-          </div>
-
-          <div className="campaign-filter-field campaign-filter-search-field">
-            <label>Tìm kiếm</label>
-            <div className="campaign-filter-search-box">
-              <Search size={15} />
+            <div className="campaign-filter-field campaign-filter-date-field">
+              <label>Từ ngày</label>
               <input
-                value={campaignNameSearch}
-                onChange={event => setCampaignNameSearch(event.target.value)}
-                placeholder="Nhập tên chiến dịch..."
+                type="date"
+                className="stepper-input campaign-filter-date-input"
+                value={dateFrom}
+                onChange={event => setDateFrom(event.target.value)}
+                disabled={timePreset === 'all'}
               />
             </div>
+
+            <div className="campaign-filter-field campaign-filter-date-field">
+              <label>Đến ngày</label>
+              <input
+                type="date"
+                className="stepper-input campaign-filter-date-input"
+                value={dateTo}
+                onChange={event => setDateTo(event.target.value)}
+                disabled={timePreset === 'all'}
+              />
+            </div>
+
+            <div className="campaign-filter-field campaign-filter-search-field">
+              <label>Tìm kiếm</label>
+              <div className="campaign-filter-search-box">
+                <Search size={15} />
+                <input
+                  value={campaignNameSearch}
+                  onChange={event => setCampaignNameSearch(event.target.value)}
+                  placeholder="Nhập tên chiến dịch..."
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="campaign-filter-row campaign-filter-select-row">
+            {renderMultiSelectFilter(
+              'status',
+              'Trạng thái chiến dịch',
+              CAMPAIGN_STATUS_FILTER_OPTIONS,
+              statusFilters,
+              value => setStatusFilters(prev => toggleStringValue(prev, value)),
+              () => setStatusFilters([])
+            )}
+            {renderMultiSelectFilter(
+              'platform',
+              'Nền tảng',
+              CAMPAIGN_PLATFORM_OPTIONS,
+              platformFilters,
+              value => setPlatformFilters(prev => toggleStringValue(prev, value)),
+              () => setPlatformFilters([])
+            )}
+            {renderMultiSelectFilter(
+              'action',
+              'Loại chiến dịch',
+              actionFilterOptions,
+              actionFilters,
+              value => setActionFilters(prev => toggleStringValue(prev, value)),
+              () => setActionFilters([]),
+              true
+            )}
           </div>
         </div>
 
-        <div className="campaign-filter-row campaign-filter-select-row">
-          {renderMultiSelectFilter(
-            'status',
-            'Trạng thái chiến dịch',
-            CAMPAIGN_STATUS_FILTER_OPTIONS,
-            statusFilters,
-            value => setStatusFilters(prev => toggleStringValue(prev, value)),
-            () => setStatusFilters([])
-          )}
-          {renderMultiSelectFilter(
-            'platform',
-            'Nền tảng',
-            CAMPAIGN_PLATFORM_OPTIONS,
-            platformFilters,
-            value => setPlatformFilters(prev => toggleStringValue(prev, value)),
-            () => setPlatformFilters([])
-          )}
-          {renderMultiSelectFilter(
-            'action',
-            'Loại chiến dịch',
-            actionFilterOptions,
-            actionFilters,
-            value => setActionFilters(prev => toggleStringValue(prev, value)),
-            () => setActionFilters([]),
-            true
-          )}
-        </div>
-      </div>
-
-      {/* Filter indicator */}
-      {filterAccountId && (
-        <div className="campaign-filter-bar">
-          <span>Lọc theo: <strong>{filterAccountName}</strong></span>
-          <button className="btn-icon" onClick={onClearFilter} title="Bỏ lọc">
-            <X size={12} />
-          </button>
-        </div>
-      )}
-
-      {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
-        <div className="campaign-bulk-action-bar">
-          <span>Đã chọn <strong>{selectedIds.size}</strong> chiến dịch</span>
-          <div className="bulk-action-buttons">
-            <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading} onClick={handleBulkResume} title="Tiếp tục các chiến dịch đang tạm dừng">
-              <Play size={12} /> Tiếp tục
-            </button>
-            <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading} onClick={handleBulkPause} title="Tạm dừng các chiến dịch đang chạy/chờ">
-              <Pause size={12} /> Tạm dừng
-            </button>
-            <button className="btn btn-danger btn-sm" disabled={bulkActionLoading} onClick={handleBulkDelete} title="Xoá các chiến dịch đã chọn">
-              <Trash2 size={12} /> Xoá
-            </button>
-            <button className="btn-icon" onClick={() => setSelectedIds(new Set())} title="Bỏ chọn tất cả">
+        {/* Filter indicator */}
+        {filterAccountId && (
+          <div className="campaign-filter-bar">
+            <span>Lọc theo: <strong>{filterAccountName}</strong></span>
+            <button className="btn-icon" onClick={onClearFilter} title="Bỏ lọc">
               <X size={12} />
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {showForm && (
-        <CampaignFormModal
-          campaign={editingCampaign}
-          cloneFromId={cloneFromId}
-          onOpenGeneralSettings={onOpenGeneralSettings}
-          onClose={() => {
-            setShowForm(false)
-            setEditingCampaign(null)
-            setCloneFromId(undefined)
-            loadCampaigns()
-            if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
-          }}
-        />
-      )}
-
-      {showActionManager && canManageCampaignActions && (
-        <ActionManagerModal onClose={() => {
-          setShowActionManager(false)
-          loadCampaignActions()
-        }} />
-      )}
-
-      {/* Campaign Table */}
-      <div className="campaign-panel-content" style={{ flex: 1, minHeight: 0 }}>
-        {!showCampaignTableLoading && filteredCampaigns.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-text">{emptyCampaignText}</div></div>
-        ) : (
-          <div className="campaign-table">
-            <div className="campaign-table-header">
-              <div className="campaign-col col-checkbox">
-                <input
-                  type="checkbox"
-                  checked={!showCampaignTableLoading && filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
-                  disabled={showCampaignTableLoading}
-                  ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
-                  onChange={toggleSelectAll}
-                />
-              </div>
-              <div className="campaign-col col-name">Tên</div>
-              <div className="campaign-col col-action">Hành động</div>
-              <div className="campaign-col col-account">Tài khoản</div>
-              <div className="campaign-col col-status">Trạng thái</div>
-              <div className="campaign-col col-schedule">Lịch chạy</div>
-              <div className="campaign-col col-note">Ghi chú</div>
-              <div className="campaign-col col-ops"></div>
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="campaign-bulk-action-bar">
+            <span>Đã chọn <strong>{selectedIds.size}</strong> chiến dịch</span>
+            <div className="bulk-action-buttons">
+              <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading} onClick={handleBulkResume} title="Tiếp tục các chiến dịch đang tạm dừng">
+                <Play size={12} /> Tiếp tục
+              </button>
+              <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading} onClick={handleBulkPause} title="Tạm dừng các chiến dịch đang chạy/chờ">
+                <Pause size={12} /> Tạm dừng
+              </button>
+              <button className="btn btn-danger btn-sm" disabled={bulkActionLoading} onClick={handleBulkDelete} title="Xoá các chiến dịch đã chọn">
+                <Trash2 size={12} /> Xoá
+              </button>
+              <button className="btn-icon" onClick={() => setSelectedIds(new Set())} title="Bỏ chọn tất cả">
+                <X size={12} />
+              </button>
             </div>
-            {showCampaignTableLoading ? (
-              <div className="campaign-table-loading-row">
-                <RefreshCw size={15} className="spin" />
-                <span>Đang tải danh sách chiến dịch...</span>
-              </div>
-            ) : filteredCampaigns.map(campaign => {
-              const actionLabel = campaign.actionName || campaign.actionId
-              const accountLabel = campaign.accountName || '-'
-              const scheduleLabel = campaign.schedule ? new Date(campaign.schedule).toLocaleString('vi-VN') : '-'
-
-              return (
-                <div
-                  key={campaign.id}
-                  className={`campaign-table-row ${getCampaignStatusClass(campaign.status)} ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
-                  onClick={() => handleRowClick(campaign)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <div className="campaign-col col-checkbox" onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(campaign.id)}
-                      onChange={() => toggleSelectOne(campaign.id)}
-                    />
-                  </div>
-                  <div className="campaign-col col-name" title={campaign.name}>
-                    <div>{campaign.name}</div>
-                  </div>
-                  <div className="campaign-col col-action" title={actionLabel}>{actionLabel}</div>
-                  <div className="campaign-col col-account" title={accountLabel}>{accountLabel}</div>
-                  <div className="campaign-col col-status" title={campaign.status}>
-                    <span className="status-badge">
-                      {campaign.status}
-                    </span>
-                  </div>
-                  <div className="campaign-col col-schedule" title={scheduleLabel}>
-                    {scheduleLabel}
-                  </div>
-                  <div className="campaign-col col-note" title={campaign.note || ''}>
-                    {campaign.note ? (
-                      <span className="campaign-note-text">{campaign.note}</span>
-                    ) : '-'}
-                  </div>
-                  <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
-                    <button className="btn-icon assistant" onClick={() => handleAskAssistant(campaign)} title="Hỏi trợ lý">
-                      <Sparkles size={12} />
-                    </button>
-                    {canPauseCampaign(campaign.status) && (
-                      <button className="btn-icon" onClick={() => handlePause(campaign)} title="Tạm dừng">
-                        <Pause size={12} />
-                      </button>
-                    )}
-                    {canResumeCampaign(campaign.status) && (
-                      <button className="btn-icon" onClick={() => handleResume(campaign)} title="Tiếp tục">
-                        <Play size={12} />
-                      </button>
-                    )}
-                    <button className="btn-icon" onClick={() => handleClone(campaign)} title="Nhân bản">
-                      <Copy size={12} />
-                    </button>
-                    <button className="btn-icon" onClick={() => handleEdit(campaign)} title="Sửa">
-                      <Edit3 size={12} />
-                    </button>
-                    <button className="btn-icon" onClick={() => handleDelete(campaign)} title="Xoá">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
           </div>
         )}
+
+        {showForm && (
+          <CampaignFormModal
+            campaign={editingCampaign}
+            cloneFromId={cloneFromId}
+            onOpenGeneralSettings={onOpenGeneralSettings}
+            onClose={() => {
+              setShowForm(false)
+              setEditingCampaign(null)
+              setCloneFromId(undefined)
+              loadCampaigns()
+              if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
+            }}
+          />
+        )}
+
+        {showActionManager && canManageCampaignActions && (
+          <ActionManagerModal onClose={() => {
+            setShowActionManager(false)
+            loadCampaignActions()
+          }} />
+        )}
+
       </div>
 
-      {/* Bottom Detail Dock */}
-      {selectedCampaignId && (
+      <div className="campaign-work-area" ref={workAreaRef}>
+        {/* Campaign Table */}
+        <div className="campaign-panel-content campaign-table-scroll" style={{ flex: 1, minHeight: 0 }}>
+          {!showCampaignTableLoading && filteredCampaigns.length === 0 ? (
+            <div className="empty-state"><div className="empty-state-text">{emptyCampaignText}</div></div>
+          ) : (
+            <div className="campaign-table">
+              <div className="campaign-table-header">
+                <div className="campaign-col col-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={!showCampaignTableLoading && filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
+                    disabled={showCampaignTableLoading}
+                    ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
+                    onChange={toggleSelectAll}
+                  />
+                </div>
+                <div className="campaign-col col-name">Tên</div>
+                <div className="campaign-col col-action">Hành động</div>
+                <div className="campaign-col col-account">Tài khoản</div>
+                <div className="campaign-col col-status">Trạng thái</div>
+                <div className="campaign-col col-schedule">Lịch chạy</div>
+                <div className="campaign-col col-note">Ghi chú</div>
+                <div className="campaign-col col-ops"></div>
+              </div>
+              {showCampaignTableLoading ? (
+                <div className="campaign-table-loading-row">
+                  <RefreshCw size={15} className="spin" />
+                  <span>Đang tải danh sách chiến dịch...</span>
+                </div>
+              ) : filteredCampaigns.map(campaign => {
+                const actionLabel = campaign.actionName || campaign.actionId
+                const accountLabel = campaign.accountName || '-'
+                const scheduleLabel = campaign.schedule ? new Date(campaign.schedule).toLocaleString('vi-VN') : '-'
+
+                return (
+                  <div
+                    key={campaign.id}
+                    className={`campaign-table-row ${getCampaignStatusClass(campaign.status)} ${selectedCampaignId === campaign.id ? 'selected' : ''} ${selectedIds.has(campaign.id) ? 'multi-selected' : ''}`}
+                    onClick={() => handleRowClick(campaign)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="campaign-col col-checkbox" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(campaign.id)}
+                        onChange={() => toggleSelectOne(campaign.id)}
+                      />
+                    </div>
+                    <div className="campaign-col col-name" title={campaign.name}>
+                      <div>{campaign.name}</div>
+                    </div>
+                    <div className="campaign-col col-action" title={actionLabel}>{actionLabel}</div>
+                    <div className="campaign-col col-account" title={accountLabel}>{accountLabel}</div>
+                    <div className="campaign-col col-status" title={campaign.status}>
+                      <span className="status-badge">
+                        {campaign.status}
+                      </span>
+                    </div>
+                    <div className="campaign-col col-schedule" title={scheduleLabel}>
+                      {scheduleLabel}
+                    </div>
+                    <div className="campaign-col col-note" title={campaign.note || ''}>
+                      {campaign.note ? (
+                        <span className="campaign-note-text">{campaign.note}</span>
+                      ) : '-'}
+                    </div>
+                    <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
+                      <button className="btn-icon assistant" onClick={() => handleAskAssistant(campaign)} title="Hỏi trợ lý">
+                        <Sparkles size={12} />
+                      </button>
+                      {canPauseCampaign(campaign.status) && (
+                        <button className="btn-icon" onClick={() => handlePause(campaign)} title="Tạm dừng">
+                          <Pause size={12} />
+                        </button>
+                      )}
+                      {canResumeCampaign(campaign.status) && (
+                        <button className="btn-icon" onClick={() => handleResume(campaign)} title="Tiếp tục">
+                          <Play size={12} />
+                        </button>
+                      )}
+                      <button className="btn-icon" onClick={() => handleClone(campaign)} title="Nhân bản">
+                        <Copy size={12} />
+                      </button>
+                      <button className="btn-icon" onClick={() => handleEdit(campaign)} title="Sửa">
+                        <Edit3 size={12} />
+                      </button>
+                      <button className="btn-icon" onClick={() => handleDelete(campaign)} title="Xoá">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Detail Dock */}
         <div
-          className="campaign-detail-dock"
-          style={detailDockOpen ? { height: detailDockHeight } : undefined}
+          className={`campaign-detail-dock ${detailDockOpen ? 'is-open' : 'is-collapsed'}`}
+          ref={detailDockRef}
+          style={detailDockOpen && detailDockHeight !== null ? { height: detailDockHeight, flexBasis: detailDockHeight } : undefined}
         >
           {detailDockOpen && (
             <div
@@ -1390,7 +1394,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           )}
           <div className="detail-dock-header" onClick={() => setDetailDockOpen(!detailDockOpen)}>
             <span className="detail-dock-title">
-              Chi tiết: <strong>{selectedCampaign?.name || ''}</strong>
+              {selectedCampaign ? <>Chi tiết: <strong>{selectedCampaign.name || ''}</strong></> : 'Chi tiết chiến dịch'}
             </span>
             <button className="btn-icon">
               {detailDockOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -1399,6 +1403,10 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
           {detailDockOpen && (
             <div className="detail-dock-body">
+              {!selectedCampaign ? (
+                <div className="campaign-detail-empty-state">Chọn một chiến dịch để xem chi tiết.</div>
+              ) : (
+                <>
               {/* Tabs */}
               <div className="detail-dock-tabs">
                 <button
@@ -1447,6 +1455,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                 </button>
               </div>
 
+              <div className="detail-dock-tab-content">
               {/* Tab: Campaign info */}
               {detailTab === 'info' && selectedCampaign && (
                 <CampaignInfoView
@@ -1663,10 +1672,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                   )}
                 </>
               )}
+              </div>
+                </>
+              )}
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
