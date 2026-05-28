@@ -9,7 +9,6 @@ import {
   CampaignAssistantContextSnapshot,
   CampaignAssistantMessage,
   CampaignDetail,
-  CampaignInputData,
   IPC_EVENTS
 } from '../../../shared/types'
 import { requireCurrentUser } from '../../data/currentUser'
@@ -17,6 +16,8 @@ import * as accountRepo from '../../data/repositories/accountRepository'
 import * as accountActionRepo from '../../data/repositories/accountActionRepository'
 import * as campaignRepo from '../../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../../data/repositories/campaignActionRepository'
+import * as errorPolicyRepo from '../../data/repositories/errorPolicyRepository'
+import * as runV2Repo from '../../data/repositories/runV2Repository'
 import { getSettingValue, listActiveSystemSettingsByKeys } from '../../data/repositories/systemSettingsRepository'
 
 const AKA_AI_BASE_URL = 'https://api.akaapp.vn'
@@ -189,7 +190,7 @@ function parseVietnamLogDateKey(value: string): string | null {
   return `${match[6]}-${pad2(Number(match[5]))}-${pad2(Number(match[4]))}`
 }
 
-function parseTodayCampaignProgress(logText: string, dayKey: string, limit: number): Array<Record<string, unknown>> {
+function parseCampaignProgressLogs(logText: string, dayKey: string, limit: number): Array<Record<string, unknown>> {
   const entries: Array<Record<string, unknown>> = []
   const lines = (logText || '').split('\n')
 
@@ -198,18 +199,20 @@ function parseTodayCampaignProgress(logText: string, dayKey: string, limit: numb
     if (!line) continue
     const match = line.match(/^\[([^\]]+)\]\s*(.*)$/)
     if (!match) continue
-    if (parseVietnamLogDateKey(match[1]) !== dayKey) continue
+    const dateKey = parseVietnamLogDateKey(match[1])
     entries.push({
       order: index + 1,
       time: match[1],
+      dateKey,
       message: sanitizeTextForAssistant(match[2] || '')
     })
   }
 
-  return entries.slice(-limit)
+  const todayEntries = entries.filter(entry => entry.dateKey === dayKey)
+  return (todayEntries.length > 0 ? todayEntries : entries).slice(-limit)
 }
 
-const SECRET_FIELD_PATTERN = /(password|cookie|token|secret|keyapi|api[_-]?key|auth(code)?|login(data)?|imei|session)/i
+const SECRET_FIELD_PATTERN = /(password|cookie|token|secret|keyapi|api[_-]?key|auth(code)?|login[_-]?data|imei|session)/i
 const INTERNAL_ID_FIELD_PATTERN = /(^id$|Id$|Ids$|ID$|IDs$|_id$|_ids$|uid$|uids$)/
 
 function sanitizeTextForAssistant(value: string, maxLength = 1600): string {
@@ -219,6 +222,7 @@ function sanitizeTextForAssistant(value: string, maxLength = 1600): string {
     .replace(/EAAG[A-Za-z0-9_-]{12,}/g, '[masked_token]')
     .replace(/(c_user|xs|fr|datr|sb)=[^;\s]+/gi, '$1=[masked]')
     .replace(/data:[^;\s]+;base64,[A-Za-z0-9+/=]+/g, '[masked_file]')
+    .replace(/\b[A-Za-z0-9+/]{160,}={0,2}\b/g, '[masked_base64]')
     .replace(/\/Users\/[^\s"']+/g, '[masked_file]')
     .replace(/[A-Za-z]:\\[^\s"']+/g, '[masked_file]')
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}...` : trimmed
@@ -263,34 +267,8 @@ function stripInternalIdsForAssistant(value: unknown, key = '', depth = 0): unkn
   return String(value)
 }
 
-function mapInputDataForContext(row: CampaignInputData): Record<string, unknown> {
-  return sanitizeForAssistant({
-    id: row.id,
-    name: row.name || '',
-    uid: row.uid || '',
-    phone: row.phone || '',
-    email: row.email || '',
-    status: row.status,
-    note: row.note || '',
-    schedule: row.schedule || null,
-    dateAction: row.dateAction || null,
-    createdAt: row.createdAt || null
-  }) as Record<string, unknown>
-}
-
-function mapCampaignDetailForContext(row: CampaignDetail): Record<string, unknown> {
-  return sanitizeForAssistant({
-    id: row.id,
-    inputDataId: row.inputDataId ?? null,
-    actionCode: row.actionCode || null,
-    actionName: row.actionName,
-    status: row.status,
-    errorCode: row.errorCode || null,
-    log: row.log || '',
-    data: row.data || null,
-    postUrl: row.postUrl || '',
-    createdAt: row.createdAt || null
-  }) as Record<string, unknown>
+function mapRecordForContext(value: unknown): Record<string, unknown> {
+  return sanitizeForAssistant(value) as Record<string, unknown>
 }
 
 function buildRuleDiagnosis(campaign: Campaign, account: Awaited<ReturnType<typeof accountRepo.getAccount>>, action: Awaited<ReturnType<typeof campaignActionRepo.getCampaignAction>>, inputCounts: Record<string, number>, todayDetails: CampaignDetail[]): Record<string, unknown> {
@@ -339,74 +317,81 @@ async function buildCampaignAssistantContext(campaignId: number, settings: Assis
   if (!campaign) throw new Error('Không tìm thấy chiến dịch.')
 
   const dayRange = getVietnamDayRange()
-  const [account, action, inputCounts, todayInputData, todayActionDetails] = await Promise.all([
+  const [account, action, inputCounts, inputData, runResults, todayActionDetails] = await Promise.all([
     accountRepo.getAccount(campaign.accountId),
     campaignActionRepo.getCampaignAction(campaign.actionId),
     campaignRepo.getCampaignInputDataStatusCounts(campaign.id),
-    campaignRepo.listCampaignInputDataByDateActionRange(campaign.id, dayRange.startIso, dayRange.endIso, settings.maxContextRows),
+    campaignRepo.listCampaignInputData(campaign.id),
+    campaignRepo.listAllCampaignDetailsByCampaign(campaign.id),
     campaignRepo.listCampaignDetailsByCreatedAtRange(campaign.id, dayRange.startIso, dayRange.endIso, settings.maxContextRows)
   ])
   const actionOverview = account
     ? await accountActionRepo.listAccountActionOverview(account.id).catch(() => [])
     : []
-  const todayProgress = parseTodayCampaignProgress(campaign.log, dayRange.key, settings.maxContextRows)
+  const progressLogs = parseCampaignProgressLogs(campaign.log, dayRange.key, settings.maxContextRows)
   const totalInputData = Object.values(inputCounts).reduce((sum, count) => sum + count, 0)
+  let campaignErrorDetails = await campaignRepo.listCampaignErrorDetailsByCreatedAtRange(
+    campaign.id,
+    dayRange.startIso,
+    dayRange.endIso,
+    settings.maxContextRows
+  )
+  if (campaignErrorDetails.length === 0) {
+    campaignErrorDetails = await campaignRepo.listLatestCampaignErrorDetails(campaign.id, settings.maxContextRows)
+  }
+  const relevantActionCodes = Array.from(new Set([
+    ...(action?.limitCheckActionCodes || []),
+    ...runResults.map(detail => detail.actionCode || '').filter(Boolean),
+    ...actionOverview.map(item => item.action.code).filter(Boolean)
+  ]))
+  const [accountErrorStates, runTraces] = await Promise.all([
+    account
+      ? errorPolicyRepo.listAccountErrorStatesWithPolicies(account.id, relevantActionCodes, {
+        startIso: dayRange.startIso,
+        endIso: dayRange.endIso,
+        limit: settings.maxContextRows
+      }).catch(() => [])
+      : [],
+    runV2Repo.listCampaignBugRunTraces(
+      campaign.id,
+      dayRange.startIso,
+      dayRange.endIso,
+      settings.maxContextRows
+    ).catch(() => [])
+  ])
 
   return {
     snapshotAt: new Date().toISOString(),
-    campaign: sanitizeForAssistant({
-      id: campaign.id,
+    campaign: mapRecordForContext(campaign),
+    campaignSummary: mapRecordForContext({
       name: campaign.name,
-      actionId: campaign.actionId,
       actionName: campaign.actionName || action?.name || campaign.actionId,
+      accountName: campaign.accountName || account?.name || '',
       status: campaign.status,
       schedule: campaign.schedule || null,
       originalSchedule: campaign.originalSchedule || null,
       scheduleType: campaign.scheduleType || 'daily',
       dailyStopTime: campaign.dailyStopTime || null,
       note: campaign.note || '',
-      content: campaign.content || '',
-      extraSettings: campaign.extraSettings || {},
-      imageCount: Array.isArray(campaign.images) ? campaign.images.length : 0,
       lastRunAt: campaign.lastRunAt || null,
       completedAt: campaign.completedAt || null
-    }) as Record<string, unknown>,
-    account: account ? sanitizeForAssistant({
-      id: account.id,
-      name: account.name,
-      flatformType: account.flatformType,
-      loginStatus: account.loginStatus,
-      status: account.status,
-      isActive: account.isActive,
-      rateLimitMinutes: account.rateLimitMinutes ?? null
-    }) as Record<string, unknown> : null,
-    action: action ? sanitizeForAssistant({
-      id: action.id,
-      name: action.name,
-      flatformType: action.flatformType,
-      workflowId: action.workflowId ?? null,
-      limitCheckActionCodes: action.limitCheckActionCodes || []
-    }) as Record<string, unknown> : null,
+    }),
+    account: account ? mapRecordForContext(account) : null,
+    action: action ? mapRecordForContext(action) : null,
     inputSummary: {
       total: totalInputData,
       byStatus: inputCounts
     },
-    actionState: {
-      actions: actionOverview.map(item => sanitizeForAssistant({
-        code: item.action.code,
-        name: item.action.name,
-        isActive: item.action.isActive,
-        countActionInDay: item.status.countActionInDay,
-        isDisable: item.status.isDisable,
-        dateEnable: item.status.dateEnable || null,
-        windowActionCount: item.windowActionCount,
-        windowMinutes: item.windowMinutes
-      }))
+    inputData: inputData.map(mapRecordForContext),
+    runResults: runResults.map(mapRecordForContext),
+    progressLogs,
+    bugLogs: {
+      campaignErrorDetails: campaignErrorDetails.map(mapRecordForContext),
+      accountErrorStates: accountErrorStates.map(mapRecordForContext),
+      runTraces: runTraces.map(mapRecordForContext)
     },
+    accountActionLimits: actionOverview.map(mapRecordForContext),
     ruleDiagnosis: buildRuleDiagnosis(campaign, account, action, inputCounts, todayActionDetails),
-    todayProgress,
-    todayInputData: todayInputData.map(mapInputDataForContext),
-    todayActionDetails: todayActionDetails.map(mapCampaignDetailForContext),
     limits: {
       maxContextRows: settings.maxContextRows,
       maxMessages: settings.maxMessages

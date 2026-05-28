@@ -450,14 +450,20 @@ export interface CampaignAssistantMessage {
 export interface CampaignAssistantContextSnapshot {
   snapshotAt: string
   campaign: Record<string, unknown>
+  campaignSummary: Record<string, unknown>
   account: Record<string, unknown> | null
   action: Record<string, unknown> | null
   inputSummary: Record<string, unknown>
-  actionState: Record<string, unknown>
+  inputData: Array<Record<string, unknown>>
+  runResults: Array<Record<string, unknown>>
+  progressLogs: Array<Record<string, unknown>>
+  bugLogs: {
+    campaignErrorDetails: Array<Record<string, unknown>>
+    accountErrorStates: Array<Record<string, unknown>>
+    runTraces: Array<Record<string, unknown>>
+  }
+  accountActionLimits: Array<Record<string, unknown>>
   ruleDiagnosis: Record<string, unknown>
-  todayProgress: Array<Record<string, unknown>>
-  todayInputData: Array<Record<string, unknown>>
-  todayActionDetails: Array<Record<string, unknown>>
   limits: {
     maxContextRows: number
     maxMessages: number
