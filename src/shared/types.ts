@@ -428,6 +428,60 @@ export interface AiWriteMultiOtherContentRequest {
   countContent: number
 }
 
+export interface SystemSetting {
+  id: number
+  key: string
+  value?: string | null
+  description?: string | null
+  isSecret: boolean
+  isActive: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type CampaignAssistantMessageRole = 'user' | 'assistant'
+
+export interface CampaignAssistantMessage {
+  role: CampaignAssistantMessageRole
+  content: string
+  timestamp?: number
+}
+
+export interface CampaignAssistantContextSnapshot {
+  snapshotAt: string
+  campaign: Record<string, unknown>
+  account: Record<string, unknown> | null
+  action: Record<string, unknown> | null
+  inputSummary: Record<string, unknown>
+  actionState: Record<string, unknown>
+  ruleDiagnosis: Record<string, unknown>
+  todayProgress: Array<Record<string, unknown>>
+  todayInputData: Array<Record<string, unknown>>
+  todayActionDetails: Array<Record<string, unknown>>
+  limits: {
+    maxContextRows: number
+    maxMessages: number
+  }
+}
+
+export interface CampaignAssistantContextResult {
+  contextSnapshot: CampaignAssistantContextSnapshot
+}
+
+export interface CampaignAssistantChatRequest {
+  campaignId: number
+  contextSnapshot: CampaignAssistantContextSnapshot
+  messages: CampaignAssistantMessage[]
+}
+
+export interface CampaignAssistantChatResponse {
+  content: string
+  provider: 'deepseek'
+  model: string
+  generatedAt: string
+  usage?: unknown
+}
+
 export type AkaBizIntegrationKind = 'sms' | 'zaloWeb' | 'akaBizDesktop'
 export type AkaBizCampaignListKind = 'sms' | 'zaloPhone' | 'zaloGroupLink' | 'desktopZaloPhone' | 'desktopZaloGroupLink'
 
@@ -488,6 +542,8 @@ export const IPC_EVENTS = {
   // AI content tools
   AI_REWRITE_CONTENT: 'ai:rewrite-content',
   AI_WRITE_MULTI_OTHER_CONTENT: 'ai:write-multi-other-content',
+  AI_CAMPAIGN_ASSISTANT_CONTEXT: 'ai:campaign-assistant-context',
+  AI_CAMPAIGN_ASSISTANT_CHAT: 'ai:campaign-assistant-chat',
 
   // akaBiz external integrations
   AKABIZ_INTEGRATIONS_GET: 'akabiz:integrations:get',
