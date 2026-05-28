@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
-import { CAMPAIGN_STATUSES, type Campaign, type CampaignDetail } from '../../../../shared/types'
+import { CAMPAIGN_STATUSES, type Campaign, type CampaignDetail, type CampaignRelationSummary } from '../../../../shared/types'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -18,7 +18,7 @@ interface CampaignPanelProps {
   onAskAssistant?: (campaignId: number) => void
 }
 
-type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData'
+type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 type CampaignFilterDropdown = 'status' | 'platform' | 'action'
@@ -82,6 +82,8 @@ const CAMPAIGN_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }>
 ]
 
 const DEFAULT_CAMPAIGN_TIME_PRESET: CampaignTimePreset = '7_days'
+const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
+const FIND_DATA_TARGET_FIELDS = ['findUidTargetCampaignIds', 'findPostLinkTargetCampaignIds'] as const
 
 const CAMPAIGN_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUSES.map(status => ({
   value: status,
@@ -124,6 +126,15 @@ const toStringList = (value: unknown): string[] => {
   if (!Array.isArray(value)) return []
   return value.map(item => String(item || '').trim()).filter(Boolean)
 }
+
+const toNumberList = (value: unknown): number[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => Number(item))
+    .filter(item => Number.isFinite(item) && item > 0)
+}
+
+const uniqueNumbers = (values: number[]): number[] => Array.from(new Set(values))
 
 const toGroupMemberList = (value: unknown): FoundGroupMember[] => {
   if (!Array.isArray(value)) return []
@@ -378,10 +389,11 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
+    campaignRelationSummaries, loadingCampaignRelationSummaries,
     loadCampaigns, loadCampaignActions, loadAccounts,
     createCampaign, updateCampaign, deleteCampaign, cloneCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
-    loadCampaignInputData, loadCampaignDetails
+    loadCampaignInputData, loadCampaignDetails, loadCampaignRelationSummaries
   } = useCampaignStore()
   const canManageCampaignActions = useAuthStore(s => s.user?.staffId === 1)
   const showAlert = useUiStore(s => s.showAlert)
@@ -648,7 +660,22 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const selectedCampaignAction = selectedCampaign
     ? campaignActions.find(action => action.id === selectedCampaign.actionId)
     : undefined
-  const isSelectedFindDataCampaign = selectedCampaign?.actionId === 'facebook_find_data_group'
+  const isSelectedFindDataCampaign = selectedCampaign?.actionId === FIND_DATA_GROUP_ACTION_ID
+  const linkedFindDataSourceCampaignIds = useMemo(() => {
+    if (!selectedCampaign) return []
+    return uniqueNumbers(
+      campaigns
+        .filter(source => source.actionId === FIND_DATA_GROUP_ACTION_ID)
+        .filter(source => FIND_DATA_TARGET_FIELDS.some(field =>
+          toNumberList(source.extraSettings?.[field]).includes(selectedCampaign.id)
+        ))
+        .map(source => source.id)
+    )
+  }, [campaigns, selectedCampaign])
+  const linkedFindDataTargetCampaignIds = useMemo(() => {
+    if (!selectedCampaign || selectedCampaign.actionId !== FIND_DATA_GROUP_ACTION_ID) return []
+    return uniqueNumbers(FIND_DATA_TARGET_FIELDS.flatMap(field => toNumberList(selectedCampaign.extraSettings?.[field])))
+  }, [selectedCampaign])
   const runLogEntries = useMemo(
     () => parseCampaignRunLog(selectedCampaign?.log || ''),
     [selectedCampaign?.log]
@@ -723,8 +750,31 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   useEffect(() => {
     if (detailTab === 'foundData' && !isSelectedFindDataCampaign) {
       setDetailTab('actions')
+      return
     }
-  }, [detailTab, isSelectedFindDataCampaign])
+    if (detailTab === 'findDataCampaigns' && linkedFindDataSourceCampaignIds.length === 0) {
+      setDetailTab('info')
+      return
+    }
+    if (detailTab === 'sourceCampaigns' && linkedFindDataTargetCampaignIds.length === 0) {
+      setDetailTab('info')
+    }
+  }, [detailTab, isSelectedFindDataCampaign, linkedFindDataSourceCampaignIds.length, linkedFindDataTargetCampaignIds.length])
+
+  useEffect(() => {
+    if (!selectedCampaignId) return
+    if (detailTab === 'findDataCampaigns') {
+      loadCampaignRelationSummaries(linkedFindDataSourceCampaignIds)
+    } else if (detailTab === 'sourceCampaigns') {
+      loadCampaignRelationSummaries(linkedFindDataTargetCampaignIds)
+    }
+  }, [
+    selectedCampaignId,
+    detailTab,
+    linkedFindDataSourceCampaignIds,
+    linkedFindDataTargetCampaignIds,
+    loadCampaignRelationSummaries
+  ])
 
   const toggleFoundDataExportKind = (kind: FoundDataKind) => {
     setFoundDataExportKinds(prev => {
@@ -806,6 +856,92 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           </div>
         )}
       </div>
+    )
+  }
+
+  const getRelationBreakdownTitle = (
+    breakdown: CampaignRelationSummary['successBreakdown'],
+    includeStatus: boolean
+  ) => {
+    if (breakdown.length === 0) return '0'
+    return breakdown
+      .map(item => `${item.actionName}${includeStatus ? ` (${item.status})` : ''}: ${item.count}`)
+      .join('\n')
+  }
+
+  const renderRelationBreakdownCell = (
+    total: number,
+    breakdown: CampaignRelationSummary['successBreakdown'],
+    includeStatus: boolean,
+    tone: 'success' | 'failure'
+  ) => {
+    if (total === 0) return <span className="campaign-relation-count muted">0</span>
+
+    return (
+      <div
+        className="campaign-relation-breakdown"
+        title={getRelationBreakdownTitle(breakdown, includeStatus)}
+      >
+        <strong className={`campaign-relation-count ${tone}`}>{total}</strong>
+        <div className="campaign-relation-breakdown-list">
+          {breakdown.map(item => (
+            <span
+              key={`${item.actionName}-${item.status}`}
+              className={`campaign-relation-breakdown-chip ${item.status === 'lỗi' ? 'error' : tone}`}
+            >
+              {item.actionName}{includeStatus ? ` (${item.status})` : ''}: {item.count}
+            </span>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const renderCampaignRelationSummaries = (emptyMessage: string) => {
+    if (loadingCampaignRelationSummaries) {
+      return <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
+    }
+    if (campaignRelationSummaries.length === 0) {
+      return <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>{emptyMessage}</div>
+    }
+
+    return (
+      <table className="campaign-grid campaign-relation-grid" style={{ fontSize: 12 }}>
+        <thead>
+          <tr>
+            <th>Loại chiến dịch</th>
+            <th>Tên chiến dịch</th>
+            <th>Tài khoản</th>
+            <th>Chờ gửi</th>
+            <th>Thành công</th>
+            <th>Thất bại</th>
+          </tr>
+        </thead>
+        <tbody>
+          {campaignRelationSummaries.map(summary => {
+            const actionLabel = summary.actionName || summary.actionId || '-'
+            const accountLabel = summary.accountName || (summary.accountId ? `#${summary.accountId}` : '-')
+            return (
+              <tr key={summary.campaignId}>
+                <td title={actionLabel}>{actionLabel}</td>
+                <td title={summary.campaignName || '-'}>
+                  <strong>{summary.campaignName || `#${summary.campaignId}`}</strong>
+                </td>
+                <td title={accountLabel}>{accountLabel}</td>
+                <td title={`${summary.pendingInputCount} data input đang chờ xử lý`}>
+                  <span className="campaign-relation-count pending">{summary.pendingInputCount}</span>
+                </td>
+                <td>
+                  {renderRelationBreakdownCell(summary.successCount, summary.successBreakdown, false, 'success')}
+                </td>
+                <td>
+                  {renderRelationBreakdownCell(summary.failureCount, summary.failureBreakdown, true, 'failure')}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     )
   }
 
@@ -1441,6 +1577,22 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     Data tìm được ({foundDataItems.length})
                   </button>
                 )}
+                {linkedFindDataSourceCampaignIds.length > 0 && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'findDataCampaigns' ? 'active' : ''}`}
+                    onClick={() => setDetailTab('findDataCampaigns')}
+                  >
+                    Chiến dịch tìm data ({linkedFindDataSourceCampaignIds.length})
+                  </button>
+                )}
+                {linkedFindDataTargetCampaignIds.length > 0 && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'sourceCampaigns' ? 'active' : ''}`}
+                    onClick={() => setDetailTab('sourceCampaigns')}
+                  >
+                    Chiến dịch nguồn ({linkedFindDataTargetCampaignIds.length})
+                  </button>
+                )}
                 <button
                   className={`detail-dock-tab ${detailTab === 'runLog' ? 'active' : ''}`}
                   onClick={() => setDetailTab('runLog')}
@@ -1570,6 +1722,16 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     </table>
                   )}
                 </>
+              )}
+
+              {/* Tab: Find-data campaigns feeding this campaign */}
+              {detailTab === 'findDataCampaigns' && (
+                renderCampaignRelationSummaries('Chưa có chiến dịch tìm data liên kết.')
+              )}
+
+              {/* Tab: Campaigns receiving data from this find-data campaign */}
+              {detailTab === 'sourceCampaigns' && (
+                renderCampaignRelationSummaries('Chưa có chiến dịch nguồn liên kết.')
               )}
 
               {/* Tab: Campaign run log from auto_campaigns.log */}

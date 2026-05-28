@@ -59,6 +59,7 @@ export class SupabaseService {
 
   // =========== CAMPAIGN INPUT DATA (việc-cần-làm) ===========
   listCampaignInputData(campaignId: number) { return campaignRepo.listCampaignInputData(campaignId) }
+  listCampaignRelationSummaries(campaignIds: number[]) { return campaignRepo.listCampaignRelationSummaries(campaignIds) }
   createCampaignInputData(action: Partial<CampaignInputData>) { return campaignRepo.createCampaignInputData(action) }
   updateCampaignInputData(id: number, updates: Partial<CampaignInputData>) { return campaignRepo.updateCampaignInputData(id, updates) }
   resetCampaignInputDataForRerun(campaignId: number) { return campaignRepo.resetCampaignInputDataForRerun(campaignId) }

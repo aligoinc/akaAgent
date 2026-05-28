@@ -124,6 +124,10 @@ export function registerCampaignHandlers(supabase: SupabaseService, campaignPaus
     return supabase.listCampaignInputData(campaignId)
   })
 
+  ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_RELATION_SUMMARIES, async (_, campaignIds: number[]) => {
+    return supabase.listCampaignRelationSummaries(campaignIds)
+  })
+
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN_INPUT_DATA, async (_, actionData) => {
     return supabase.createCampaignInputData(actionData)
   })

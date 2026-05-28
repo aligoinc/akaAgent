@@ -1,4 +1,13 @@
-import { AccountActionLimitStatus, ActionLimitConfig, Campaign, CampaignInput, CampaignInputData, CampaignDetail } from '../../../shared/types'
+import {
+  AccountActionLimitStatus,
+  ActionLimitConfig,
+  Campaign,
+  CampaignInput,
+  CampaignInputData,
+  CampaignDetail,
+  CampaignDetailStatus,
+  CampaignRelationSummary
+} from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -10,6 +19,12 @@ const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
+
+interface CampaignRelationDetailRow {
+  campaign_id: number
+  action_name: string | null
+  status: CampaignDetailStatus
+}
 
 interface VietnamDateTimeParts {
   year: number
@@ -691,6 +706,134 @@ export async function getCampaignInputDataStatusCounts(campaignId: number): Prom
   }))
 
   return counts
+}
+
+async function countPendingCampaignInputData(campaignId: number): Promise<number> {
+  const { count, error } = await client()
+    .from('auto_campaign_input_data')
+    .select('*', { count: 'exact', head: true })
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .eq('status', 'chờ xử lý')
+
+  if (error) throw new Error(`Failed to count pending campaign input data: ${error.message}`)
+  return count ?? 0
+}
+
+async function listRelationDetailRows(campaignIds: number[]): Promise<CampaignRelationDetailRow[]> {
+  const rows: CampaignRelationDetailRow[] = []
+  const pageSize = 1000
+  let from = 0
+
+  while (true) {
+    const { data, error } = await client()
+      .from('auto_campaign_details')
+      .select('campaign_id, action_name, status')
+      .in('campaign_id', campaignIds)
+      .eq('is_delete', false)
+      .in('status', ['thành công', 'thất bại', 'lỗi'])
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+
+    if (error) throw new Error(`Failed to list campaign relation details: ${error.message}`)
+
+    const page = (data || []) as CampaignRelationDetailRow[]
+    rows.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+
+  return rows
+}
+
+const incrementRelationBreakdown = (
+  breakdown: CampaignRelationSummary['successBreakdown'],
+  actionName: string,
+  status: CampaignDetailStatus
+): void => {
+  const existing = breakdown.find(item => item.actionName === actionName && item.status === status)
+  if (existing) {
+    existing.count += 1
+    return
+  }
+  breakdown.push({ actionName, status, count: 1 })
+}
+
+const sortRelationBreakdown = (breakdown: CampaignRelationSummary['successBreakdown']): void => {
+  breakdown.sort((a, b) =>
+    b.count - a.count ||
+    a.actionName.localeCompare(b.actionName, 'vi') ||
+    a.status.localeCompare(b.status, 'vi')
+  )
+}
+
+export async function listCampaignRelationSummaries(campaignIds: number[]): Promise<CampaignRelationSummary[]> {
+  const u = requireCurrentUser()
+  const ids = Array.from(new Set(
+    campaignIds
+      .map(id => Number(id))
+      .filter(id => Number.isFinite(id) && id > 0)
+  ))
+
+  if (ids.length === 0) return []
+
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .in('id', ids)
+
+  if (error) throw new Error(`Failed to list campaign relation summaries: ${error.message}`)
+
+  const campaigns = (data || []).map(row => mapCampaignFromDB(row))
+  const pendingCounts = await Promise.all(
+    campaigns.map(campaign => countPendingCampaignInputData(campaign.id))
+  )
+  const summaryById = new Map<number, CampaignRelationSummary>()
+
+  campaigns.forEach((campaign, index) => {
+    summaryById.set(campaign.id, {
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      actionId: campaign.actionId,
+      actionName: campaign.actionName,
+      accountId: campaign.accountId,
+      accountName: campaign.accountName,
+      pendingInputCount: pendingCounts[index] ?? 0,
+      successCount: 0,
+      failureCount: 0,
+      errorCount: 0,
+      successBreakdown: [],
+      failureBreakdown: []
+    })
+  })
+
+  const ownedIds = Array.from(summaryById.keys())
+  const details = ownedIds.length > 0 ? await listRelationDetailRows(ownedIds) : []
+  for (const detail of details) {
+    const summary = summaryById.get(detail.campaign_id)
+    if (!summary) continue
+
+    const actionName = String(detail.action_name || '').trim() || 'Không rõ'
+    if (detail.status === 'thành công') {
+      summary.successCount += 1
+      incrementRelationBreakdown(summary.successBreakdown, actionName, detail.status)
+    } else {
+      summary.failureCount += 1
+      if (detail.status === 'lỗi') summary.errorCount += 1
+      incrementRelationBreakdown(summary.failureBreakdown, actionName, detail.status)
+    }
+  }
+
+  for (const summary of summaryById.values()) {
+    sortRelationBreakdown(summary.successBreakdown)
+    sortRelationBreakdown(summary.failureBreakdown)
+  }
+
+  return ids
+    .map(id => summaryById.get(id))
+    .filter((summary): summary is CampaignRelationSummary => !!summary)
 }
 
 export async function createCampaignInputData(action: Partial<CampaignInputData>): Promise<CampaignInputData> {

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail } from '../../../shared/types'
+import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -55,6 +55,11 @@ interface CampaignStore {
   campaignDetails: CampaignDetail[]
   loadingCampaignDetails: boolean
   loadCampaignDetails: (campaignId: number) => Promise<void>
+
+  // Linked campaign summaries for find-data source/target tabs
+  campaignRelationSummaries: CampaignRelationSummary[]
+  loadingCampaignRelationSummaries: boolean
+  loadCampaignRelationSummaries: (campaignIds: number[]) => Promise<void>
 
   // Logs
   logs: { timestamp: string; message: string }[]
@@ -313,6 +318,30 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       console.error('Failed to load campaign details:', err)
     } finally {
       set({ loadingCampaignDetails: false })
+    }
+  },
+
+  // =========== LINKED CAMPAIGN SUMMARIES ===========
+  campaignRelationSummaries: [],
+  loadingCampaignRelationSummaries: false,
+
+  loadCampaignRelationSummaries: async (campaignIds) => {
+    if (!window.electronAPI) return
+    const ids = Array.from(new Set(campaignIds.map(id => Number(id)).filter(id => Number.isFinite(id) && id > 0)))
+    if (ids.length === 0) {
+      set({ campaignRelationSummaries: [], loadingCampaignRelationSummaries: false })
+      return
+    }
+
+    set({ loadingCampaignRelationSummaries: true })
+    try {
+      const summaries = await window.electronAPI.listCampaignRelationSummaries(ids)
+      set({ campaignRelationSummaries: summaries })
+    } catch (err) {
+      console.error('Failed to load campaign relation summaries:', err)
+      set({ campaignRelationSummaries: [] })
+    } finally {
+      set({ loadingCampaignRelationSummaries: false })
     }
   },
 
