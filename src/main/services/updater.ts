@@ -212,6 +212,12 @@ function runWindowsInstaller(installerPath: string): void {
   child.unref()
 }
 
+function quitAppAfterInstallerOpens(delayMs = 1500): void {
+  setTimeout(() => {
+    app.quit()
+  }, delayMs)
+}
+
 export async function downloadAndInstall(
   mainWindow: BrowserWindow | null
 ): Promise<{ success: boolean; error?: string }> {
@@ -245,12 +251,10 @@ export async function downloadAndInstall(
         if (spawnErr instanceof Error) console.warn('spawn installer failed, used shell.openPath:', spawnErr.message)
       }
 
-      emit({ phase: 'done', message: 'Bộ cài đặt đã khởi chạy. Thoát ứng dụng để tiếp tục cài đặt.' })
+      emit({ phase: 'done', message: 'Bộ cài đặt đã khởi chạy. Ứng dụng sẽ tự thoát để tiếp tục cài đặt.' })
 
       // Give the installer ~1.5s to appear before we quit ourselves so it can replace the exe.
-      setTimeout(() => {
-        app.quit()
-      }, 1500)
+      quitAppAfterInstallerOpens()
 
       return { success: true }
     }
@@ -260,8 +264,10 @@ export async function downloadAndInstall(
 
     emit({
       phase: 'done',
-      message: 'File cập nhật đã mở. Thoát ứng dụng rồi kéo akaBizAuto vào Applications để hoàn tất cài đặt.'
+      message: 'File cập nhật đã mở. Ứng dụng sẽ tự thoát để bạn kéo akaBizAuto vào Applications.'
     })
+
+    quitAppAfterInstallerOpens()
 
     return { success: true }
   } catch (err) {
