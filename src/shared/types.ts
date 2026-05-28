@@ -281,6 +281,27 @@ export interface CampaignDetail {
   createdAt?: string
 }
 
+export interface CampaignRelationActionBreakdown {
+  actionName: string
+  status: CampaignDetailStatus
+  count: number
+}
+
+export interface CampaignRelationSummary {
+  campaignId: number
+  campaignName: string
+  actionId: string
+  actionName?: string
+  accountId?: number
+  accountName?: string
+  pendingInputCount: number
+  successCount: number
+  failureCount: number
+  errorCount: number
+  successBreakdown: CampaignRelationActionBreakdown[]
+  failureBreakdown: CampaignRelationActionBreakdown[]
+}
+
 // ============================================
 // Account Contact Types
 // ============================================
@@ -591,6 +612,7 @@ export const IPC_EVENTS = {
   DB_CREATE_CAMPAIGN_INPUT_DATA: 'db:create-campaign-input-data',
   DB_UPDATE_CAMPAIGN_INPUT_DATA: 'db:update-campaign-input-data',
   DB_DELETE_CAMPAIGN_INPUT_DATA: 'db:delete-campaign-input-data',
+  DB_LIST_CAMPAIGN_RELATION_SUMMARIES: 'db:list-campaign-relation-summaries',
 
   // Database Campaign Details (per-milestone log)
   DB_LIST_CAMPAIGN_DETAILS_BY_INPUT_DATA: 'db:list-campaign-details',
