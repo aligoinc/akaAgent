@@ -298,7 +298,11 @@ function buildRuleDiagnosis(campaign: Campaign, account: Awaited<ReturnType<type
   if (String(campaign.note || '').includes('Đang chờ data từ chiến dịch tìm data')) {
     return { reason: 'waiting_find_data_source', severity: 'info', message: campaign.note }
   }
-  if (pendingInputCount === 0 && runningInputCount === 0 && campaign.actionId !== 'facebook_timeline_post') {
+  if (
+    pendingInputCount === 0 &&
+    runningInputCount === 0 &&
+    !['facebook_timeline_post', 'facebook_newsfeed_interaction'].includes(campaign.actionId)
+  ) {
     return { reason: 'no_pending_data', severity: 'info', message: 'Không còn data chờ xử lý trong chiến dịch.' }
   }
   if (errorsToday.length >= 3) {

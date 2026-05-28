@@ -118,6 +118,14 @@ export interface CampaignExtraSettings {
   postsPerTarget?: number
   postKeywordFilter?: string
   keywordFilter?: string
+  // Lướt newsfeed và tương tác
+  newsfeedTimeMinutes?: number
+  newsfeedLikeKind?: string
+  newsfeedLikeLimit?: number
+  newsfeedCommentKind?: string
+  newsfeedCommentLimit?: number
+  newsfeedCommentContent?: string
+  newsfeedCommentUseAI?: boolean
   actionLimits?: CampaignActionLimitSettings // giới hạn gửi theo action_code; top-level là fallback cho campaign cũ
   imageOption?: 'none' | 'all' | 'random'
   randomImageCount?: number

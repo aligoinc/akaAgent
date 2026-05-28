@@ -51,6 +51,7 @@ const COMMENT_SORT_LABELS: Record<NonNullable<CampaignExtraSettings['sortTypeCom
 }
 
 const DEFAULT_RATE_LIMIT_MINUTES = 65
+const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const POST_ACTIONS_WITH_SOURCE = new Set(['facebook_timeline_post', 'facebook_page_post', 'facebook_group_post'])
 const COMMENT_ACTIONS = new Set(['facebook_group_post', 'facebook_comment_seeding', 'facebook_comment_seeding_post'])
 const MESSAGE_ACTIONS = new Set(['facebook_message_friend', 'facebook_message_uid', 'facebook_page_to_message'])
@@ -280,6 +281,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || getFindDataSourceLabels(extra).length > 0
     || linkedSourceCampaigns.length > 0
   const hasPostBump = actionId === 'facebook_group_post' || !!extra.enablePostBump
+  const hasNewsfeedSettings = actionId === NEWSFEED_INTERACTION_ACTION_ID
 
   const sourceRows: InfoRow[] = [
     { label: 'Copy nội dung từ nguồn', value: onOff(extra.copyContentFromSource) },
@@ -333,6 +335,16 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Số bạn bè đề xuất', value: extra.suggestedFriendsCount ?? '-', hidden: !extra.useSuggestedFriends },
     { label: 'Page inbox', value: textOrDash(extra.pageInboxPageName || extra.pageInboxPageUid), hidden: actionId !== 'facebook_page_to_message' && !extra.pageInboxPageUid },
     { label: 'Page UID', value: textOrDash(extra.pageInboxPageUid), hidden: actionId !== 'facebook_page_to_message' && !extra.pageInboxPageUid }
+  ]
+
+  const newsfeedRows: InfoRow[] = [
+    { label: 'Thời gian lướt', value: `${extra.newsfeedTimeMinutes ?? 20} phút` },
+    { label: 'Like nội dung có tính chất', value: textOrDash(extra.newsfeedLikeKind) },
+    { label: 'Like tối đa', value: extra.newsfeedLikeLimit ?? 0 },
+    { label: 'Comment bài post có tính chất', value: textOrDash(extra.newsfeedCommentKind) },
+    { label: 'Comment tối đa', value: extra.newsfeedCommentLimit ?? 0 },
+    { label: 'AI tạo comment', value: onOff(extra.newsfeedCommentUseAI) },
+    { label: 'Nội dung comment', value: textOrDash(extra.newsfeedCommentContent), fullWidth: true }
   ]
 
   const findDataRows: InfoRow[] = [
@@ -408,6 +420,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
         ])}
 
         {renderSection('Cài đặt hành động', [
+          ...newsfeedRows.map(row => ({ ...row, hidden: row.hidden || !hasNewsfeedSettings })),
           ...commentRows.map(row => ({ ...row, hidden: row.hidden || !hasCommentSettings })),
           ...groupPostRows.map(row => ({ ...row, hidden: row.hidden || actionId !== 'facebook_group_post' })),
           ...postBumpRows.map(row => ({ ...row, hidden: row.hidden || !hasPostBump })),
