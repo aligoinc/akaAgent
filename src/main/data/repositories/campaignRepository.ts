@@ -654,6 +654,45 @@ export async function listCampaignInputData(campaignId: number): Promise<Campaig
   return (data || []).map(row => mapCampaignInputDataFromDB(row))
 }
 
+export async function listCampaignInputDataByDateActionRange(
+  campaignId: number,
+  startIso: string,
+  endIso: string,
+  limit: number
+): Promise<CampaignInputData[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_input_data')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .gte('date_action', startIso)
+    .lt('date_action', endIso)
+    .order('date_action', { ascending: false })
+    .limit(limit)
+
+  if (error) throw new Error(`Failed to list campaign input data by date_action: ${error.message}`)
+  return (data || []).map(row => mapCampaignInputDataFromDB(row))
+}
+
+export async function getCampaignInputDataStatusCounts(campaignId: number): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {}
+  const statuses: CampaignInput['status'][] = ['chờ xử lý', 'đang chạy', 'hoàn thành', 'tạm dừng', 'lỗi']
+
+  await Promise.all(statuses.map(async status => {
+    const { count, error } = await client()
+      .from('auto_campaign_input_data')
+      .select('*', { count: 'exact', head: true })
+      .eq('campaign_id', campaignId)
+      .eq('is_delete', false)
+      .eq('status', status)
+
+    if (error) throw new Error(`Failed to count campaign input data status "${status}": ${error.message}`)
+    if ((count ?? 0) > 0) counts[status] = count ?? 0
+  }))
+
+  return counts
+}
+
 export async function createCampaignInputData(action: Partial<CampaignInputData>): Promise<CampaignInputData> {
   const payload = {
     campaign_id: action.campaignId,
@@ -748,6 +787,26 @@ export async function listCampaignDetailsByCampaign(campaignId: number): Promise
     .limit(500)
 
   if (error) throw new Error(`Failed to list campaign details by campaign: ${error.message}`)
+  return (data || []).map(row => mapCampaignDetailFromDB(row))
+}
+
+export async function listCampaignDetailsByCreatedAtRange(
+  campaignId: number,
+  startIso: string,
+  endIso: string,
+  limit: number
+): Promise<CampaignDetail[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_details')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .gte('created_at', startIso)
+    .lt('created_at', endIso)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw new Error(`Failed to list campaign details by created_at: ${error.message}`)
   return (data || []).map(row => mapCampaignDetailFromDB(row))
 }
 

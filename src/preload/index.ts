@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -39,6 +39,12 @@ const electronAPI = {
 
   writeMultiOtherContentWithAI: (data: AiWriteMultiOtherContentRequest): Promise<string> =>
     ipcRenderer.invoke(IPC_EVENTS.AI_WRITE_MULTI_OTHER_CONTENT, data),
+
+  getCampaignAssistantContext: (campaignId: number): Promise<CampaignAssistantContextResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.AI_CAMPAIGN_ASSISTANT_CONTEXT, campaignId),
+
+  chatCampaignAssistant: (request: CampaignAssistantChatRequest): Promise<CampaignAssistantChatResponse> =>
+    ipcRenderer.invoke(IPC_EVENTS.AI_CAMPAIGN_ASSISTANT_CHAT, request),
 
   // akaBiz external integrations
   getAkaBizIntegrations: (): Promise<AkaBizIntegrations> =>

@@ -12,6 +12,7 @@ interface CampaignPageProps {
 export default function CampaignPage({ onNavigateToBrowser, onOpenGeneralSettings }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
+  const [assistantOpenRequest, setAssistantOpenRequest] = useState<{ campaignId: number; requestedAt: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef<{ index: number; startX: number; startWidths: number[] } | null>(null)
 
@@ -54,6 +55,10 @@ export default function CampaignPage({ onNavigateToBrowser, onOpenGeneralSetting
     setFilterAccountId(accountId)
   }, [])
 
+  const handleAskAssistant = useCallback((campaignId: number) => {
+    setAssistantOpenRequest({ campaignId, requestedAt: Date.now() })
+  }, [])
+
   return (
     <div className="campaign-page" ref={containerRef}>
       {/* Account Panel */}
@@ -76,6 +81,7 @@ export default function CampaignPage({ onNavigateToBrowser, onOpenGeneralSetting
           filterAccountId={filterAccountId}
           onClearFilter={() => setFilterAccountId(null)}
           onOpenGeneralSettings={onOpenGeneralSettings}
+          onAskAssistant={handleAskAssistant}
         />
       </div>
 
@@ -87,7 +93,7 @@ export default function CampaignPage({ onNavigateToBrowser, onOpenGeneralSetting
 
       {/* Log Panel */}
       <div className="campaign-page-panel" style={{ width: panelWidths[2], minWidth: 200 }}>
-        <LogPanel />
+        <LogPanel assistantOpenRequest={assistantOpenRequest} />
       </div>
     </div>
   )

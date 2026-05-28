@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -15,6 +15,7 @@ interface CampaignPanelProps {
   filterAccountId?: number | null
   onClearFilter?: () => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
+  onAskAssistant?: (campaignId: number) => void
 }
 
 type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData'
@@ -374,7 +375,7 @@ const parseCampaignRunLog = (log: string): RunLogEntry[] => {
   return entries
 }
 
-export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGeneralSettings }: CampaignPanelProps) {
+export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGeneralSettings, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
@@ -956,6 +957,11 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
   }
 
+  const handleAskAssistant = (campaign: Campaign) => {
+    setSelectedCampaignId(campaign.id)
+    onAskAssistant?.(campaign.id)
+  }
+
   const actionById = useMemo(
     () => new Map(campaignActions.map(action => [action.id, action])),
     [campaignActions]
@@ -1337,6 +1343,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     ) : '-'}
                   </div>
                   <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
+                    <button className="btn-icon assistant" onClick={() => handleAskAssistant(campaign)} title="Hỏi trợ lý">
+                      <Sparkles size={12} />
+                    </button>
                     {canPauseCampaign(campaign.status) && (
                       <button className="btn-icon" onClick={() => handlePause(campaign)} title="Tạm dừng">
                         <Pause size={12} />
