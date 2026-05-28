@@ -4,6 +4,35 @@ import { mapAutoErrorPolicyFromDB } from '../mappers'
 
 const client = () => getSupabaseClient()
 
+export interface AccountErrorState {
+  id: number
+  accountId: number
+  actionCode: string
+  errorCode: string
+  countConsecutiveErrors: number
+  lastErrorAt?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AccountErrorStateWithPolicy {
+  state: AccountErrorState
+  policy: AutoErrorPolicy | null
+}
+
+function mapAccountErrorStateFromDB(row: Record<string, unknown>): AccountErrorState {
+  return {
+    id: row.id as number,
+    accountId: row.account_id as number,
+    actionCode: (row.action_code as string) || '',
+    errorCode: row.error_code as string,
+    countConsecutiveErrors: row.count_consecutive_errors as number,
+    lastErrorAt: (row.last_error_at as string | null) ?? null,
+    createdAt: row.created_at as string | undefined,
+    updatedAt: row.updated_at as string | undefined
+  }
+}
+
 export async function getErrorPolicy(errorCode: string): Promise<AutoErrorPolicy | null> {
   const { data, error } = await client()
     .from('auto_error')
@@ -27,6 +56,72 @@ export async function listErrorPolicies(): Promise<AutoErrorPolicy[]> {
 
   if (error) throw new Error(`Failed to list error policies: ${error.message}`)
   return (data || []).map(row => mapAutoErrorPolicyFromDB(row))
+}
+
+async function attachPolicies(rows: Record<string, unknown>[]): Promise<AccountErrorStateWithPolicy[]> {
+  const states = rows.map(mapAccountErrorStateFromDB)
+  const errorCodes = Array.from(new Set(states.map(state => state.errorCode).filter(Boolean)))
+  if (errorCodes.length === 0) {
+    return states.map(state => ({ state, policy: null }))
+  }
+
+  const { data, error } = await client()
+    .from('auto_error')
+    .select('*')
+    .in('error_code', errorCodes)
+    .eq('is_active', true)
+    .eq('is_delete', false)
+
+  if (error) throw new Error(`Failed to list error policies for states: ${error.message}`)
+  const policyByCode = new Map((data || []).map(row => {
+    const policy = mapAutoErrorPolicyFromDB(row)
+    return [policy.errorCode, policy]
+  }))
+
+  return states.map(state => ({
+    state,
+    policy: policyByCode.get(state.errorCode) || null
+  }))
+}
+
+export async function listAccountErrorStatesWithPolicies(
+  accountId: number,
+  actionCodes: string[],
+  options: { startIso?: string; endIso?: string; limit: number }
+): Promise<AccountErrorStateWithPolicy[]> {
+  const normalizedActionCodes = Array.from(new Set([
+    ...actionCodes.map(code => code.trim()).filter(Boolean),
+    ''
+  ]))
+
+  const readRows = async (withDateRange: boolean): Promise<Record<string, unknown>[]> => {
+    let query = client()
+      .from('auto_account_error_state')
+      .select('*')
+      .eq('account_id', accountId)
+      .order('last_error_at', { ascending: false })
+      .limit(options.limit)
+
+    if (normalizedActionCodes.length > 0) {
+      query = query.in('action_code', normalizedActionCodes)
+    }
+    if (withDateRange && options.startIso && options.endIso) {
+      query = query
+        .gte('last_error_at', options.startIso)
+        .lt('last_error_at', options.endIso)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(`Failed to list account error states: ${error.message}`)
+    return (data || []) as Record<string, unknown>[]
+  }
+
+  let rows = await readRows(Boolean(options.startIso && options.endIso))
+  if (rows.length === 0 && options.startIso && options.endIso) {
+    rows = await readRows(false)
+  }
+
+  return attachPolicies(rows)
 }
 
 export async function incrementConsecutiveError(

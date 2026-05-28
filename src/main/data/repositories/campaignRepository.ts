@@ -790,6 +790,18 @@ export async function listCampaignDetailsByCampaign(campaignId: number): Promise
   return (data || []).map(row => mapCampaignDetailFromDB(row))
 }
 
+export async function listAllCampaignDetailsByCampaign(campaignId: number): Promise<CampaignDetail[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_details')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .order('created_at', { ascending: true })
+
+  if (error) throw new Error(`Failed to list all campaign details by campaign: ${error.message}`)
+  return (data || []).map(row => mapCampaignDetailFromDB(row))
+}
+
 export async function listCampaignDetailsByCreatedAtRange(
   campaignId: number,
   startIso: string,
@@ -807,6 +819,44 @@ export async function listCampaignDetailsByCreatedAtRange(
     .limit(limit)
 
   if (error) throw new Error(`Failed to list campaign details by created_at: ${error.message}`)
+  return (data || []).map(row => mapCampaignDetailFromDB(row))
+}
+
+export async function listCampaignErrorDetailsByCreatedAtRange(
+  campaignId: number,
+  startIso: string,
+  endIso: string,
+  limit: number
+): Promise<CampaignDetail[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_details')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .or('status.eq.lỗi,error_code.not.is.null')
+    .gte('created_at', startIso)
+    .lt('created_at', endIso)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw new Error(`Failed to list campaign error details by created_at: ${error.message}`)
+  return (data || []).map(row => mapCampaignDetailFromDB(row))
+}
+
+export async function listLatestCampaignErrorDetails(
+  campaignId: number,
+  limit: number
+): Promise<CampaignDetail[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_details')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .or('status.eq.lỗi,error_code.not.is.null')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw new Error(`Failed to list latest campaign error details: ${error.message}`)
   return (data || []).map(row => mapCampaignDetailFromDB(row))
 }
 
