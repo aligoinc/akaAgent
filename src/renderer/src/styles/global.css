@@ -2406,6 +2406,22 @@ button.btn-icon:not(.btn):disabled {
   padding: 8px;
 }
 
+.campaign-panel-content.campaign-table-scroll {
+  padding: 0 8px 8px;
+}
+
+.campaign-panel-top {
+  flex-shrink: 0;
+}
+
+.campaign-work-area {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* =========== PANEL FORM =========== */
 .panel-form {
   display: flex;
@@ -2601,7 +2617,8 @@ button.btn-icon:not(.btn):disabled {
   position: sticky;
   top: 0;
   background: var(--bg-elevated);
-  z-index: 1;
+  z-index: 3;
+  box-shadow: 0 -8px 0 var(--bg-elevated);
 }
 
 .campaign-table-row {
@@ -3766,6 +3783,22 @@ button.btn-icon:not(.btn):disabled {
 .stepper-form-group.third {
   flex: 1;
   min-width: 0;
+}
+
+.schedule-run-row .schedule-time-field {
+  flex: 2 1 0;
+  min-width: 120px;
+}
+
+.schedule-run-row .schedule-date-field,
+.schedule-run-row .schedule-end-date-field {
+  flex: 4 1 0;
+  min-width: 180px;
+}
+
+.schedule-run-row .schedule-placeholder-field {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .action-limit-card-list {
@@ -5194,11 +5227,16 @@ button.btn-icon:not(.btn):disabled {
 .campaign-detail-dock {
   border-top: 1px solid var(--border-default);
   background: var(--bg-secondary);
-  flex-shrink: 0;
+  flex: 0 0 34px;
   display: flex;
   flex-direction: column;
   min-height: 34px;
-  max-height: calc(100vh - 96px);
+  overflow: hidden;
+}
+
+.campaign-detail-dock.is-open {
+  flex-basis: 20%;
+  min-height: 220px;
 }
 
 .detail-dock-resize-handle {
@@ -5253,17 +5291,37 @@ button.btn-icon:not(.btn):disabled {
 }
 
 .detail-dock-body {
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   flex: 1;
   min-height: 0;
   background: var(--bg-secondary);
 }
 
-.detail-dock-body .campaign-grid {
+.detail-dock-tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+}
+
+.campaign-detail-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 20px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.detail-dock-tab-content .campaign-grid {
   font-size: 11px;
 }
 
-.detail-dock-body .campaign-grid th {
+.detail-dock-tab-content .campaign-grid th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -5879,8 +5937,8 @@ button.btn-icon:not(.btn):disabled {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: 7px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border-default);
   background: var(--bg-secondary);
   position: relative;
@@ -5889,7 +5947,7 @@ button.btn-icon:not(.btn):disabled {
 
 .campaign-filter-row {
   display: grid;
-  gap: 10px 14px;
+  gap: 8px 12px;
   align-items: end;
 }
 
@@ -5905,28 +5963,30 @@ button.btn-icon:not(.btn):disabled {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .campaign-filter-field label {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .campaign-filter-control {
   width: 100%;
-  height: 36px;
-  padding: 7px 10px;
+  height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
 }
 
 .campaign-filter-date-input {
   width: 100%;
-  height: 36px;
-  padding: 7px 10px;
+  height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
 }
 
 .campaign-filter-date-input:disabled {
@@ -5946,18 +6006,18 @@ button.btn-icon:not(.btn):disabled {
 
 .campaign-multi-select-trigger {
   width: 100%;
-  height: 36px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: 6px;
+  padding: 5px 8px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
   color: var(--text-primary);
   font-family: var(--font-family);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
@@ -5997,8 +6057,8 @@ button.btn-icon:not(.btn):disabled {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
+  gap: 7px;
+  padding: 6px 8px;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -6053,11 +6113,11 @@ button.btn-icon:not(.btn):disabled {
 
 .campaign-filter-search-box {
   width: 100%;
-  height: 36px;
+  height: 30px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
+  gap: 6px;
+  padding: 0 8px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
@@ -6079,7 +6139,7 @@ button.btn-icon:not(.btn):disabled {
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-family);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .campaign-filter-search-box input::placeholder {
