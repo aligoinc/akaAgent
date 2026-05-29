@@ -1,5 +1,5 @@
--- Make Facebook newsfeed interaction tolerate skippable per-post/per-action DOM failures.
--- Selector set is unchanged; operation order still follows akaBizAuto Newsfeed_Fb.
+-- Keep Facebook newsfeed like/comment anchored to the same post root as C# Selenium snapshot iteration.
+-- Selectors stay unchanged; only the per-batch root handling is updated.
 
 BEGIN;
 
@@ -9,11 +9,15 @@ const state = vars.newsfeedState || {}
 if (state.shouldContinue !== true) return { hasPost: false, skipped: true }
 
 const selectors = {
-  post: await helpers.element('fb_newsfeed_post')
+  post: await helpers.element('fb_newsfeed_post'),
+  author: await helpers.element('fb_newsfeed_post_author_link'),
+  content: await helpers.element('fb_newsfeed_post_content'),
+  like: await helpers.element('fb_newsfeed_like_button'),
+  commentButton: await helpers.element('fb_newsfeed_comment_button')
 }
 
 const result = await page.evaluate(`
-  const selector = __args[0];
+  const selectors = __args[0];
   const cursor = Number(__args[1] || 0);
   const batchIdArg = String(__args[2] || '');
   const batchIndexArg = Number(__args[3] || 0);
@@ -28,6 +32,10 @@ const result = await page.evaluate(`
     const result = document.evaluate(xpath, root || document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
     for (let i = 0; i < result.snapshotLength; i++) out.push(result.snapshotItem(i));
     return out.filter(Boolean);
+  }
+  function xpathOne(xpath, root) {
+    const result = document.evaluate(xpath, root || document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+    return result.singleNodeValue || null;
   }
   function clearCurrent() {
     try {
@@ -49,6 +57,39 @@ const result = await page.evaluate(`
   function findBatchPost(batchId, batchIndex) {
     return document.querySelector('[data-aka-newsfeed-batch-id="' + batchId + '"][data-aka-newsfeed-batch-index="' + batchIndex + '"]');
   }
+  function normalizePostRoot(rawPost) {
+    let node = rawPost;
+    for (let i = 0; node && i < 10; i++) {
+      if (node === document.body || node === document.documentElement) break;
+      if (node.getAttribute && node.getAttribute('role') === 'feed') break;
+      const hasAuthor = !!xpathOne(selectors.author, node);
+      const hasContent = !!xpathOne(selectors.content, node);
+      const hasAction = !!xpathOne(selectors.like, node) || !!xpathOne(selectors.commentButton, node);
+      if (hasAuthor && hasContent && hasAction) return node;
+      node = node.parentElement;
+    }
+    return rawPost;
+  }
+  function buildBatchPosts(rawPosts, startCursor) {
+    const batchPosts = [];
+    function addRoot(root, rawIndex) {
+      for (let i = 0; i < batchPosts.length; i++) {
+        const existing = batchPosts[i].root;
+        if (existing === root || existing.contains(root)) return;
+        if (root.contains(existing)) {
+          batchPosts[i] = { root, rawIndex: Math.min(batchPosts[i].rawIndex, rawIndex) };
+          return;
+        }
+      }
+      batchPosts.push({ root, rawIndex });
+    }
+    for (let i = startCursor; i < rawPosts.length; i++) {
+      const root = normalizePostRoot(rawPosts[i]);
+      if (!root) continue;
+      addRoot(root, i);
+    }
+    return batchPosts;
+  }
 
   let batchId = batchIdArg;
   let batchIndex = batchIndexArg;
@@ -59,37 +100,43 @@ const result = await page.evaluate(`
   if (!batchId || batchIndex >= batchSize) {
     clearBatch();
     clearCurrent();
-    let posts = xpathAll(selector, document);
-    if (posts.length === 0) {
+    let rawPosts = xpathAll(selectors.post, document);
+    if (rawPosts.length === 0) {
       return { hasPost: false, total: 0, postIndex: cursor + 1, nextCursor: cursor, batchId: '', batchIndex: 0, batchSize: 0, batchRawCount: 0, batchStartCursor: cursor };
     }
 
-    if (cursor >= posts.length) {
-      posts[posts.length - 1].scrollIntoView(true);
+    if (cursor >= rawPosts.length) {
+      rawPosts[rawPosts.length - 1].scrollIntoView(true);
       await delay(loadPostDelayMs);
-      posts = xpathAll(selector, document);
+      rawPosts = xpathAll(selectors.post, document);
     }
 
-    if (cursor >= posts.length) {
-      return { hasPost: false, total: posts.length, postIndex: cursor + 1, nextCursor: cursor, batchId: '', batchIndex: 0, batchSize: 0, batchRawCount: posts.length, batchStartCursor: cursor };
+    if (cursor >= rawPosts.length) {
+      return { hasPost: false, total: rawPosts.length, postIndex: cursor + 1, nextCursor: cursor, batchId: '', batchIndex: 0, batchSize: 0, batchRawCount: rawPosts.length, batchStartCursor: cursor };
+    }
+
+    const batchPosts = buildBatchPosts(rawPosts, cursor);
+    if (batchPosts.length === 0) {
+      return { hasPost: false, total: rawPosts.length, postIndex: cursor + 1, nextCursor: cursor, batchId: '', batchIndex: 0, batchSize: 0, batchRawCount: rawPosts.length, batchStartCursor: cursor };
     }
 
     batchId = makeBatchId();
     batchIndex = 0;
     batchStartCursor = cursor;
-    batchRawCount = posts.length;
-    batchSize = Math.max(0, posts.length - cursor);
+    batchRawCount = rawPosts.length;
+    batchSize = batchPosts.length;
 
-    for (let i = cursor; i < posts.length; i++) {
-      const post = posts[i];
+    for (let i = 0; i < batchPosts.length; i++) {
+      const post = batchPosts[i].root;
       post.setAttribute('data-aka-newsfeed-batch-id', batchId);
-      post.setAttribute('data-aka-newsfeed-batch-index', String(i - cursor));
-      post.setAttribute('data-aka-newsfeed-batch-raw-index', String(i));
+      post.setAttribute('data-aka-newsfeed-batch-index', String(i));
+      post.setAttribute('data-aka-newsfeed-batch-raw-index', String(batchPosts[i].rawIndex));
     }
   }
 
   const post = findBatchPost(batchId, batchIndex);
-  const postIndex = batchStartCursor + batchIndex + 1;
+  const rawIndex = post ? Number(post.getAttribute('data-aka-newsfeed-batch-raw-index') || (batchStartCursor + batchIndex)) : (batchStartCursor + batchIndex);
+  const postIndex = rawIndex + 1;
   const nextBatchIndex = batchIndex + 1;
   if (!post) {
     clearCurrent();
@@ -151,136 +198,6 @@ return result
 $code$,
 updated_at = now()
 WHERE name = 'fb_newsfeed_select_next_post';
-
-UPDATE public.auto_blocks
-SET code = $code$
-const state = vars.newsfeedState || {}
-const post = state.currentPost || {}
-const shouldRunLike = input.shouldLike === true || input.conditionResult === true || input.branch === 'true'
-if (shouldRunLike !== true || state.remainingLike <= 0) return { liked: false }
-const selectors = { like: await helpers.element('fb_newsfeed_like_button') }
-const actionGap = helpers.randomBetween(Number(state.actionGapSeconds || 4) * 600, Number(state.actionGapSeconds || 4) * 1400)
-
-const result = await page.evaluate(`
-  const selector = __args[0];
-  const stepDelayMs = Number(__args[1] || 1000);
-  const actionGap = Number(__args[2] || 0);
-  const batchId = String(__args[3] || '');
-  const batchIndex = Number(__args[4]);
-  function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-  function xpathOne(xpath, root) {
-    const result = document.evaluate(xpath, root || document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-    return result.singleNodeValue || null;
-  }
-  function findActionRoot(start, selector) {
-    let node = start;
-    for (let i = 0; node && i < 8; i++) {
-      if (xpathOne(selector, node)) return node;
-      if (node === document.body || (node.getAttribute && node.getAttribute('role') === 'feed')) break;
-      node = node.parentElement;
-    }
-    return start;
-  }
-  function findCurrentPost() {
-    const current = document.querySelector('[data-aka-newsfeed-current="1"]');
-    if (current) return current;
-    if (batchId && batchIndex >= 0) {
-      return document.querySelector('[data-aka-newsfeed-batch-id="' + batchId + '"][data-aka-newsfeed-batch-index="' + batchIndex + '"]');
-    }
-    return null;
-  }
-  try {
-    const post = findCurrentPost();
-    if (!post) return { clicked: false, skipReason: 'Không tìm thấy post newsfeed hiện tại' };
-    const root = findActionRoot(post, selector);
-    const likeBtn = xpathOne(selector, root);
-    if (!likeBtn) return { clicked: false, skipReason: 'Không tìm thấy nút Thích trong post hiện tại' };
-    likeBtn.scrollIntoView(false);
-    await delay(stepDelayMs);
-    likeBtn.click();
-    await delay(stepDelayMs + actionGap);
-    return { clicked: true };
-  } catch (e) {
-    return { clicked: false, skipReason: e && e.message ? e.message : String(e) };
-  }
-`, selectors.like, state.stepDelayMs, actionGap, state.newsfeedCurrentBatchId || '', Number(state.newsfeedCurrentBatchIndex ?? -1)).catch(e => ({
-  clicked: false,
-  skipReason: e && e.message ? e.message : String(e)
-}))
-
-if (result.clicked !== true) {
-  const skipReason = result.skipReason || 'không tìm thấy hoặc không click được nút Thích'
-  helpers.log('Bỏ qua like newsfeed: ' + skipReason)
-  return { liked: false, skipReason }
-}
-
-state.remainingLike = Math.max(0, Number(state.remainingLike || 0) - 1)
-state.likeDone = Number(state.likeDone || 0) + 1
-helpers.log('Đã like bài newsfeed của ' + (post.targetName || 'người đăng'))
-return {
-  liked: true,
-  targetName: post.targetName || '',
-  targetUid: post.targetUid || '',
-  postContent: post.postContent || ''
-}
-$code$,
-updated_at = now()
-WHERE name = 'fb_newsfeed_like_post';
-
-UPDATE public.auto_blocks
-SET code = $code$
-const state = vars.newsfeedState || {}
-const shouldRunComment = input.shouldComment === true || input.conditionResult === true || input.branch === 'true'
-if (shouldRunComment !== true || state.remainingComment <= 0) return { opened: false }
-const selectors = { commentButton: await helpers.element('fb_newsfeed_comment_button') }
-const actionGap = helpers.randomBetween(Number(state.actionGapSeconds || 4) * 600, Number(state.actionGapSeconds || 4) * 1400)
-const result = await page.evaluate(`
-  const selector = __args[0];
-  const delayMs = Number(__args[1] || 1000) + Number(__args[2] || 0);
-  const batchId = String(__args[3] || '');
-  const batchIndex = Number(__args[4]);
-  function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-  function xpathOne(xpath, root) {
-    const result = document.evaluate(xpath, root || document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-    return result.singleNodeValue || null;
-  }
-  function findActionRoot(start, selector) {
-    let node = start;
-    for (let i = 0; node && i < 8; i++) {
-      if (xpathOne(selector, node)) return node;
-      if (node === document.body || (node.getAttribute && node.getAttribute('role') === 'feed')) break;
-      node = node.parentElement;
-    }
-    return start;
-  }
-  function findCurrentPost() {
-    const current = document.querySelector('[data-aka-newsfeed-current="1"]');
-    if (current) return current;
-    if (batchId && batchIndex >= 0) {
-      return document.querySelector('[data-aka-newsfeed-batch-id="' + batchId + '"][data-aka-newsfeed-batch-index="' + batchIndex + '"]');
-    }
-    return null;
-  }
-  try {
-    const post = findCurrentPost();
-    if (!post) return { opened: false, skipReason: 'Không tìm thấy post newsfeed hiện tại' };
-    const root = findActionRoot(post, selector);
-    const btn = xpathOne(selector, root);
-    if (!btn) return { opened: false, skipReason: 'Không tìm thấy nút Bình luận' };
-    btn.click();
-    await delay(delayMs);
-    return { opened: true };
-  } catch (e) {
-    return { opened: false, skipReason: e && e.message ? e.message : String(e) };
-  }
-`, selectors.commentButton, state.stepDelayMs, actionGap, state.newsfeedCurrentBatchId || '', Number(state.newsfeedCurrentBatchIndex ?? -1))
-if (result.opened !== true && result.skipReason) {
-  helpers.log('Bỏ qua mở comment newsfeed: ' + result.skipReason)
-}
-return result
-$code$,
-updated_at = now()
-WHERE name = 'fb_newsfeed_comment_open';
 
 UPDATE public.auto_blocks
 SET code = $code$
@@ -369,65 +286,6 @@ return result
 $code$,
 updated_at = now()
 WHERE name = 'fb_newsfeed_comment_focus';
-
-UPDATE public.auto_blocks
-SET code = $code$
-const state = vars.newsfeedState || {}
-const text = String(state.commentText || '').replace(/\t/g, '      ')
-if (input.focused !== true || !text.trim()) return { pasted: false, text }
-const inputSelector = '[data-aka-newsfeed-comment-input="1"]'
-try {
-  await page.waitForSelector(inputSelector, { timeout: 8000 })
-  await page.click(inputSelector)
-  await helpers.sleep(1000, signal)
-  await page.type(inputSelector, text, { clearFirst: true })
-  await helpers.sleep(1000, signal)
-} catch (e) {
-  const skipReason = e && e.message ? e.message : String(e)
-  helpers.log('Bỏ qua nhập comment newsfeed: ' + skipReason)
-  return { pasted: false, text, skipReason }
-}
-const wordCount = text ? text.split(' ').filter(Boolean).length : 0
-const tc = helpers.randomBetween(1, Number(state.tcWrite || 3))
-const per100 = helpers.randomBetween(Number(state.timeWrite100WordsMin || 90), Number(state.timeWrite100WordsMin || 90) * 2)
-const sleepMs = (tc + Math.floor(per100 * wordCount / 100)) * 1000
-await helpers.sleep(sleepMs, signal)
-return { pasted: true, typed: true, text, writeSleepMs: sleepMs }
-$code$,
-updated_at = now()
-WHERE name = 'fb_newsfeed_comment_paste';
-
-UPDATE public.auto_blocks
-SET code = $code$
-const state = vars.newsfeedState || {}
-const post = state.currentPost || {}
-const text = String(input.text || state.commentText || '')
-if (input.pasted !== true || state.remainingComment <= 0) return { commented: false, text }
-const inputSelector = '[data-aka-newsfeed-comment-input="1"]'
-try {
-  await page.waitForSelector(inputSelector, { timeout: 8000 })
-  await page.click(inputSelector)
-  await helpers.sleep(500, signal)
-  await page.press('Enter')
-  await helpers.sleep(10000, signal)
-} catch (e) {
-  const skipReason = e && e.message ? e.message : String(e)
-  helpers.log('Bỏ qua gửi comment newsfeed: ' + skipReason)
-  return { commented: false, text, skipReason }
-}
-state.remainingComment = Math.max(0, Number(state.remainingComment || 0) - 1)
-state.commentDone = Number(state.commentDone || 0) + 1
-helpers.log('Đã comment bài newsfeed của ' + (post.targetName || 'người đăng'))
-return {
-  commented: true,
-  text,
-  targetName: post.targetName || '',
-  targetUid: post.targetUid || '',
-  postContent: post.postContent || ''
-}
-$code$,
-updated_at = now()
-WHERE name = 'fb_newsfeed_comment_submit';
 
 UPDATE public.auto_blocks
 SET code = $code$

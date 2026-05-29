@@ -1,7 +1,18 @@
--- Make Facebook newsfeed interaction tolerate skippable per-post/per-action DOM failures.
--- Selector set is unchanged; operation order still follows akaBizAuto Newsfeed_Fb.
+-- Align newsfeed post root and like selector with the current Facebook DOM shape.
+-- Keep action lookup scoped to the current post element, matching C# postEle.FindElement.
 
 BEGIN;
+
+INSERT INTO public.auto_elements (name, xpath, description, category, is_builtin, staff_id, organization_id, updated_at)
+VALUES
+  ('fb_newsfeed_post', $$//*[@class='x1lliihq']//*[@class='x1lliihq']$$, 'Newsfeed post root.', 'facebook', true, NULL, NULL, now()),
+  ('fb_newsfeed_like_button', $$.//*[@role='button' and .='Thích']$$, 'Like button inside a post.', 'facebook', true, NULL, NULL, now())
+ON CONFLICT (name) DO UPDATE SET
+  xpath = EXCLUDED.xpath,
+  description = EXCLUDED.description,
+  category = EXCLUDED.category,
+  is_builtin = true,
+  updated_at = now();
 
 UPDATE public.auto_blocks
 SET code = $code$
@@ -172,15 +183,6 @@ const result = await page.evaluate(`
     const result = document.evaluate(xpath, root || document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return result.singleNodeValue || null;
   }
-  function findActionRoot(start, selector) {
-    let node = start;
-    for (let i = 0; node && i < 8; i++) {
-      if (xpathOne(selector, node)) return node;
-      if (node === document.body || (node.getAttribute && node.getAttribute('role') === 'feed')) break;
-      node = node.parentElement;
-    }
-    return start;
-  }
   function findCurrentPost() {
     const current = document.querySelector('[data-aka-newsfeed-current="1"]');
     if (current) return current;
@@ -192,8 +194,7 @@ const result = await page.evaluate(`
   try {
     const post = findCurrentPost();
     if (!post) return { clicked: false, skipReason: 'Không tìm thấy post newsfeed hiện tại' };
-    const root = findActionRoot(post, selector);
-    const likeBtn = xpathOne(selector, root);
+    const likeBtn = xpathOne(selector, post);
     if (!likeBtn) return { clicked: false, skipReason: 'Không tìm thấy nút Thích trong post hiện tại' };
     likeBtn.scrollIntoView(false);
     await delay(stepDelayMs);
@@ -244,15 +245,6 @@ const result = await page.evaluate(`
     const result = document.evaluate(xpath, root || document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return result.singleNodeValue || null;
   }
-  function findActionRoot(start, selector) {
-    let node = start;
-    for (let i = 0; node && i < 8; i++) {
-      if (xpathOne(selector, node)) return node;
-      if (node === document.body || (node.getAttribute && node.getAttribute('role') === 'feed')) break;
-      node = node.parentElement;
-    }
-    return start;
-  }
   function findCurrentPost() {
     const current = document.querySelector('[data-aka-newsfeed-current="1"]');
     if (current) return current;
@@ -264,8 +256,7 @@ const result = await page.evaluate(`
   try {
     const post = findCurrentPost();
     if (!post) return { opened: false, skipReason: 'Không tìm thấy post newsfeed hiện tại' };
-    const root = findActionRoot(post, selector);
-    const btn = xpathOne(selector, root);
+    const btn = xpathOne(selector, post);
     if (!btn) return { opened: false, skipReason: 'Không tìm thấy nút Bình luận' };
     btn.click();
     await delay(delayMs);
@@ -303,15 +294,6 @@ const result = await page.evaluate(`
     const result = document.evaluate(xpath, root || document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return result.singleNodeValue || null;
   }
-  function findActionRoot(start, selector) {
-    let node = start;
-    for (let i = 0; node && i < 8; i++) {
-      if (xpathOne(selector, node)) return node;
-      if (node === document.body || (node.getAttribute && node.getAttribute('role') === 'feed')) break;
-      node = node.parentElement;
-    }
-    return start;
-  }
   function findCurrentPost() {
     const current = document.querySelector('[data-aka-newsfeed-current="1"]');
     if (current) return current;
@@ -325,8 +307,7 @@ const result = await page.evaluate(`
     if (!currentPost) return { focused: false, skipReason: 'Không tìm thấy post newsfeed hiện tại' };
 
     const dialog = xpathOne(selectors.dialog, document);
-    const postRoot = findActionRoot(currentPost, selectors.commentButton);
-    const root = dialog || postRoot;
+    const root = dialog || currentPost;
 
     const cmtBtn = xpathOne(selectors.commentButton, root);
     if (cmtBtn) {
@@ -369,128 +350,5 @@ return result
 $code$,
 updated_at = now()
 WHERE name = 'fb_newsfeed_comment_focus';
-
-UPDATE public.auto_blocks
-SET code = $code$
-const state = vars.newsfeedState || {}
-const text = String(state.commentText || '').replace(/\t/g, '      ')
-if (input.focused !== true || !text.trim()) return { pasted: false, text }
-const inputSelector = '[data-aka-newsfeed-comment-input="1"]'
-try {
-  await page.waitForSelector(inputSelector, { timeout: 8000 })
-  await page.click(inputSelector)
-  await helpers.sleep(1000, signal)
-  await page.type(inputSelector, text, { clearFirst: true })
-  await helpers.sleep(1000, signal)
-} catch (e) {
-  const skipReason = e && e.message ? e.message : String(e)
-  helpers.log('Bỏ qua nhập comment newsfeed: ' + skipReason)
-  return { pasted: false, text, skipReason }
-}
-const wordCount = text ? text.split(' ').filter(Boolean).length : 0
-const tc = helpers.randomBetween(1, Number(state.tcWrite || 3))
-const per100 = helpers.randomBetween(Number(state.timeWrite100WordsMin || 90), Number(state.timeWrite100WordsMin || 90) * 2)
-const sleepMs = (tc + Math.floor(per100 * wordCount / 100)) * 1000
-await helpers.sleep(sleepMs, signal)
-return { pasted: true, typed: true, text, writeSleepMs: sleepMs }
-$code$,
-updated_at = now()
-WHERE name = 'fb_newsfeed_comment_paste';
-
-UPDATE public.auto_blocks
-SET code = $code$
-const state = vars.newsfeedState || {}
-const post = state.currentPost || {}
-const text = String(input.text || state.commentText || '')
-if (input.pasted !== true || state.remainingComment <= 0) return { commented: false, text }
-const inputSelector = '[data-aka-newsfeed-comment-input="1"]'
-try {
-  await page.waitForSelector(inputSelector, { timeout: 8000 })
-  await page.click(inputSelector)
-  await helpers.sleep(500, signal)
-  await page.press('Enter')
-  await helpers.sleep(10000, signal)
-} catch (e) {
-  const skipReason = e && e.message ? e.message : String(e)
-  helpers.log('Bỏ qua gửi comment newsfeed: ' + skipReason)
-  return { commented: false, text, skipReason }
-}
-state.remainingComment = Math.max(0, Number(state.remainingComment || 0) - 1)
-state.commentDone = Number(state.commentDone || 0) + 1
-helpers.log('Đã comment bài newsfeed của ' + (post.targetName || 'người đăng'))
-return {
-  commented: true,
-  text,
-  targetName: post.targetName || '',
-  targetUid: post.targetUid || '',
-  postContent: post.postContent || ''
-}
-$code$,
-updated_at = now()
-WHERE name = 'fb_newsfeed_comment_submit';
-
-UPDATE public.auto_blocks
-SET code = $code$
-const state = vars.newsfeedState || {}
-const elapsedMs = Date.now() - Number(state.startedAt || Date.now())
-state.shouldContinue = elapsedMs < Number(state.maxMs || 0) && (Number(state.remainingLike || 0) > 0 || Number(state.remainingComment || 0) > 0)
-if (state.shouldContinue === true) {
-  const batchIndex = Number(state.newsfeedBatchIndex || 0)
-  const batchSize = Number(state.newsfeedBatchSize || 0)
-  if (batchSize > 0 && batchIndex >= batchSize) {
-    const result = await page.evaluate(`
-      const batchId = String(__args[0] || '');
-      const batchSize = Number(__args[1] || 0);
-      const batchRawCount = Number(__args[2] || 0);
-      const loadPostDelayMs = Number(__args[3] || 5000);
-      function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-      function clearBatch() {
-        try {
-          document.querySelectorAll('[data-aka-newsfeed-batch-id]').forEach(el => {
-            el.removeAttribute('data-aka-newsfeed-batch-id');
-            el.removeAttribute('data-aka-newsfeed-batch-index');
-            el.removeAttribute('data-aka-newsfeed-batch-raw-index');
-          });
-        } catch {}
-      }
-      try {
-        const lastIndex = Math.max(0, batchSize - 1);
-        const lastPost = document.querySelector('[data-aka-newsfeed-batch-id="' + batchId + '"][data-aka-newsfeed-batch-index="' + lastIndex + '"]');
-        if (lastPost) {
-          lastPost.scrollIntoView(true);
-          await delay(loadPostDelayMs);
-        }
-        clearBatch();
-        return { cursor: batchRawCount, batchCleared: true };
-      } catch {
-        clearBatch();
-        return { cursor: batchRawCount, batchCleared: true };
-      }
-    `, state.newsfeedBatchId || '', batchSize, state.newsfeedBatchRawCount || state.lastCount || state.cursor || 0, state.loadPostDelayMs).catch(() => ({
-      cursor: Number(state.newsfeedBatchRawCount || state.lastCount || state.cursor || 0),
-      batchCleared: true
-    }))
-
-    state.cursor = Number(result.cursor || state.cursor || 0)
-    state.newsfeedBatchId = ''
-    state.newsfeedBatchIndex = 0
-    state.newsfeedBatchSize = 0
-    state.newsfeedBatchRawCount = 0
-    state.newsfeedBatchStartCursor = state.cursor
-    state.newsfeedCurrentBatchId = ''
-    state.newsfeedCurrentBatchIndex = -1
-  }
-}
-return {
-  shouldContinue: state.shouldContinue,
-  elapsedMs,
-  remainingLike: Number(state.remainingLike || 0),
-  remainingComment: Number(state.remainingComment || 0),
-  likeDone: Number(state.likeDone || 0),
-  commentDone: Number(state.commentDone || 0)
-}
-$code$,
-updated_at = now()
-WHERE name = 'fb_newsfeed_advance_cursor';
 
 COMMIT;
