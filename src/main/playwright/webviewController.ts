@@ -1,4 +1,4 @@
-import { session, webContents, WebContents } from 'electron'
+import { webContents, WebContents } from 'electron'
 
 /**
  * Thin wrapper exposing connectivity + URL of an Electron <webview>'s WebContents.
@@ -35,46 +35,8 @@ export class WebviewController {
 export class WebviewRegistry {
   private registry: Map<number, number> = new Map() // accountId → webContentsId
 
-  private getExpectedPartition(accountId: number): string {
-    return `persist:account_${accountId}`
-  }
-
-  validateWebContentsForAccount(accountId: number, webContentsId: number): { success: boolean; reason?: string } {
-    const wc = webContents.fromId(webContentsId)
-    if (!wc || wc.isDestroyed()) {
-      return { success: false, reason: 'Tab trình duyệt không khả dụng' }
-    }
-
-    const expectedSession = session.fromPartition(this.getExpectedPartition(accountId))
-    if (wc.session !== expectedSession) {
-      return { success: false, reason: 'Tab trình duyệt không khớp hồ sơ tài khoản' }
-    }
-
-    return { success: true }
-  }
-
-  isWebContentsForAccount(accountId: number, webContentsId: number): boolean {
-    return this.validateWebContentsForAccount(accountId, webContentsId).success
-  }
-
-  private getRegisteredWebContents(accountId: number): WebContents | null {
-    const wcId = this.registry.get(accountId)
-    if (wcId === undefined) return null
-
-    const validation = this.validateWebContentsForAccount(accountId, wcId)
-    if (!validation.success) {
-      this.registry.delete(accountId)
-      return null
-    }
-
-    return webContents.fromId(wcId) ?? null
-  }
-
-  register(accountId: number, webContentsId: number): { success: boolean; reason?: string } {
-    const validation = this.validateWebContentsForAccount(accountId, webContentsId)
-    if (!validation.success) return validation
+  register(accountId: number, webContentsId: number): void {
     this.registry.set(accountId, webContentsId)
-    return { success: true }
   }
 
   unregister(accountId: number): void {
@@ -82,12 +44,25 @@ export class WebviewRegistry {
   }
 
   isRegistered(accountId: number): boolean {
-    return !!this.getRegisteredWebContents(accountId)
+    const wcId = this.registry.get(accountId)
+    if (wcId === undefined) return false
+    // Verify the webContents still exists
+    const wc = webContents.fromId(wcId)
+    if (!wc || wc.isDestroyed()) {
+      this.registry.delete(accountId)
+      return false
+    }
+    return true
   }
 
   getController(accountId: number): WebviewController | null {
-    const wc = this.getRegisteredWebContents(accountId)
-    if (!wc) return null
+    const wcId = this.registry.get(accountId)
+    if (wcId === undefined) return null
+    const wc = webContents.fromId(wcId)
+    if (!wc || wc.isDestroyed()) {
+      this.registry.delete(accountId)
+      return null
+    }
     return new WebviewController(wc)
   }
 
@@ -104,8 +79,8 @@ export class WebviewRegistry {
   listRegistered(): Array<{ accountId: number; connected: boolean }> {
     const result: Array<{ accountId: number; connected: boolean }> = []
     for (const [accountId, wcId] of this.registry.entries()) {
-      const connected = this.isWebContentsForAccount(accountId, wcId)
-      if (!connected) this.registry.delete(accountId)
+      const wc = webContents.fromId(wcId)
+      const connected = !!wc && !wc.isDestroyed()
       result.push({ accountId, connected })
     }
     return result

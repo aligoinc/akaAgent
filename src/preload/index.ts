@@ -66,7 +66,7 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_EVENTS.AKABIZ_DESKTOP_INSTALL_PATH_VALIDATE, installPath),
 
   // Webview registration (embedded browser tabs)
-  registerWebview: (accountId: number, webContentsId: number): Promise<{ success: boolean; reason?: string }> =>
+  registerWebview: (accountId: number, webContentsId: number): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_EVENTS.WEBVIEW_REGISTER, accountId, webContentsId),
 
   unregisterWebview: (accountId: number): Promise<{ success: boolean }> =>

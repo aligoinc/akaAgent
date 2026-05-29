@@ -59,10 +59,6 @@ export function startAccountPoller(webviewRegistry: WebviewRegistry, mainWindow:
       if (!connected) continue
       const wcId = webviewRegistry.getWebContentsId(accountId)
       if (!wcId) continue
-      if (!webviewRegistry.isWebContentsForAccount(accountId, wcId)) {
-        webviewRegistry.unregister(accountId)
-        continue
-      }
 
       try {
         const newStatus = await checkAccountLogin(accountId, wcId)

@@ -28,7 +28,6 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   }>>(new Map())
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
-  const registeredWebviewElements = useRef<WeakSet<Electron.WebviewTag>>(new WeakSet())
 
   // Filter out disabled (isActive=false) accounts - they don't get browser tabs
   const activeAccounts = accounts.filter(a => a.isActive)
@@ -109,20 +108,13 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
     if (!el) return
     const wv = el as Electron.WebviewTag
     webviewRefs.current.set(account.id, wv)
-    if (registeredWebviewElements.current.has(wv)) return
-    registeredWebviewElements.current.add(wv)
 
-    const onDomReady = async () => {
+    const onDomReady = () => {
       try {
         const wcId = (wv as any).getWebContentsId()
         if (wcId && window.electronAPI) {
-          const result = await window.electronAPI.registerWebview(account.id, wcId)
-          if (result.success) {
-            registeredIds.current.add(account.id)
-          } else {
-            registeredIds.current.delete(account.id)
-            console.warn('Failed to register webview:', result.reason)
-          }
+          window.electronAPI.registerWebview(account.id, wcId)
+          registeredIds.current.add(account.id)
         }
       } catch (err) {
         console.error('Failed to register webview:', err)
