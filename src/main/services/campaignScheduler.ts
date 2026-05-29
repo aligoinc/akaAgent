@@ -54,8 +54,6 @@ interface NewsfeedActionAvailability {
 
 interface AccountRunBlockOptions {
   checkLogin?: boolean
-  campaignId?: number
-  tolerateIdleWhileOwned?: boolean
 }
 
 interface PostBumpTarget {
@@ -138,7 +136,6 @@ export class CampaignScheduler {
   private running = false
   private dispatching = false
   private activeAccountRuns = new Set<number>()
-  private accountRunOwners = new Map<number, number>() // accountId -> campaignId
   private activeV2Aborts = new Map<number, AbortController>()
   private pauseRequests = new Set<number>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
@@ -210,7 +207,6 @@ export class CampaignScheduler {
     }
     this.stopAllBackgroundPreviews()
     this.backgroundPages.destroyAll()
-    this.accountRunOwners.clear()
     this.sendLog('⏹ Scheduler đã dừng.')
   }
 
@@ -727,7 +723,7 @@ export class CampaignScheduler {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy', note: null })
       await this.logCampaignProgress(campaign.id, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
-      await this.claimRunningAccount(account.id, campaign.id)
+      await this.updateAccountAndBroadcast(account.id, { status: 'đang chạy' })
 
       await this.executeCampaignV2(account, campaign, action.workflowId, actionDescriptors)
     } catch (err) {
@@ -738,7 +734,7 @@ export class CampaignScheduler {
       } else {
         await this.handleRuntimeError(account, campaign, 'err_undefined', undefined, { message: errMsg })
       }
-      await this.releaseRunningAccount(account.id, campaign.id)
+      await this.releaseRunningAccount(account.id)
       await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     }
   }
@@ -763,7 +759,7 @@ export class CampaignScheduler {
     const extra = campaign.extraSettings || {}
 
     if (this.isCampaignPauseRequested(campaign.id)) {
-      await this.releaseRunningAccount(account.id, campaign.id)
+      await this.releaseRunningAccount(account.id)
       await this.completeCampaignPause(campaign)
       return
     }
@@ -771,7 +767,7 @@ export class CampaignScheduler {
     if (this.shouldUseSuggestedFriends(campaign) && details.length === 0) {
       details = await this.collectSuggestedFriendInputData(account, campaign, workflowId)
       if (this.isCampaignPauseRequested(campaign.id)) {
-        await this.releaseRunningAccount(account.id, campaign.id)
+        await this.releaseRunningAccount(account.id)
         await this.completeCampaignPause(campaign)
         return
       }
@@ -779,7 +775,7 @@ export class CampaignScheduler {
         const message = 'Không lấy được đề xuất bạn bè từ Facebook'
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
         await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
-        await this.releaseRunningAccount(account.id, campaign.id)
+        await this.releaseRunningAccount(account.id)
         return
       }
     }
@@ -822,20 +818,16 @@ export class CampaignScheduler {
       // Check pause
       const cur = await this.supabase.getCampaign(campaign.id)
       if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
-        await this.releaseRunningAccount(account.id, campaign.id)
+        await this.releaseRunningAccount(account.id)
         await this.completeCampaignPause(campaign)
         return
       }
 
-      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy', {
-        checkLogin: false,
-        campaignId: campaign.id,
-        tolerateIdleWhileOwned: true
-      })
+      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy', { checkLogin: false })
       if (accountBlockReason) {
         stoppedBeforeCompletion = true
         await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
-        await this.releaseRunningAccount(account.id, campaign.id)
+        await this.releaseRunningAccount(account.id)
         return
       }
 
@@ -884,14 +876,11 @@ export class CampaignScheduler {
         console.error('Rate limit check error:', err)
       }
 
-      const accountLoginBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy', {
-        campaignId: campaign.id,
-        tolerateIdleWhileOwned: true
-      })
+      const accountLoginBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
       if (accountLoginBlockReason) {
         stoppedBeforeCompletion = true
         await this.stopCampaignForAccountCondition(account, campaign, accountLoginBlockReason)
-        await this.releaseRunningAccount(account.id, campaign.id)
+        await this.releaseRunningAccount(account.id)
         return
       }
 
@@ -945,10 +934,7 @@ export class CampaignScheduler {
       const accountGuard = setInterval(() => {
         void (async () => {
           if (accountStopReason || abort.signal.aborted) return
-          const reason = await this.getAccountRunBlockReason(account.id, 'đang chạy', {
-            campaignId: campaign.id,
-            tolerateIdleWhileOwned: true
-          })
+          const reason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
           if (reason) {
             accountStopReason = reason
             abort.abort()
@@ -1082,7 +1068,7 @@ export class CampaignScheduler {
       }
 
       if (shouldCompletePauseAfterTarget) {
-        await this.releaseRunningAccount(account.id, campaign.id)
+        await this.releaseRunningAccount(account.id)
         await this.completeCampaignPause(campaign)
         return
       }
@@ -1099,7 +1085,7 @@ export class CampaignScheduler {
           await this.logCampaignProgress(campaign.id, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
           const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime)
           if (sleepResult === 'paused') {
-            await this.releaseRunningAccount(account.id, campaign.id)
+            await this.releaseRunningAccount(account.id)
             await this.completeCampaignPause(campaign)
             return
           }
@@ -1114,7 +1100,7 @@ export class CampaignScheduler {
         await this.handleCampaignCompletion(campaign)
       }
     }
-    await this.releaseRunningAccount(account.id, campaign.id)
+    await this.releaseRunningAccount(account.id)
   }
 
   private shouldUseSuggestedFriends(campaign: Campaign): boolean {
@@ -1497,24 +1483,10 @@ export class CampaignScheduler {
     expectedStatus: 'chờ xử lý' | 'đang chạy',
     options: AccountRunBlockOptions = {}
   ): Promise<string | null> {
-    const { checkLogin = true, campaignId, tolerateIdleWhileOwned = false } = options
+    const { checkLogin = true } = options
     const account = await this.supabase.getAccount(accountId)
     if (!account) return 'Không tìm thấy tài khoản'
     if (checkLogin && account.loginStatus !== 'đã đăng nhập') return 'Tài khoản bị đăng xuất'
-    if (
-      expectedStatus === 'đang chạy' &&
-      tolerateIdleWhileOwned &&
-      campaignId !== undefined &&
-      this.accountRunOwners.get(accountId) === campaignId &&
-      account.status === 'chờ xử lý'
-    ) {
-      try {
-        await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
-      } catch (err) {
-        console.error(`Failed to repair running account status for account ${accountId}:`, err)
-      }
-      return null
-    }
     if (account.status !== expectedStatus) return `Tài khoản đang ở trạng thái ${account.status}`
     return null
   }
@@ -3608,31 +3580,10 @@ export class CampaignScheduler {
     return updated
   }
 
-  private async claimRunningAccount(accountId: number, campaignId: number): Promise<void> {
-    await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
-    this.accountRunOwners.set(accountId, campaignId)
-  }
-
-  private async releaseRunningAccount(accountId: number, campaignId: number): Promise<void> {
-    const ownerCampaignId = this.accountRunOwners.get(accountId)
-    if (ownerCampaignId === undefined) return
-    if (ownerCampaignId !== campaignId) {
-      console.warn(
-        `Skip releasing account ${accountId}: owned by campaign ${ownerCampaignId}, release requested by ${campaignId}`
-      )
-      return
-    }
-
-    try {
-      const account = await this.supabase.getAccount(accountId)
-      if (account?.status === 'đang chạy') {
-        await this.updateAccountAndBroadcast(accountId, { status: 'chờ xử lý' })
-      }
-    } finally {
-      if (this.accountRunOwners.get(accountId) === campaignId) {
-        this.accountRunOwners.delete(accountId)
-      }
-    }
+  private async releaseRunningAccount(accountId: number): Promise<void> {
+    const account = await this.supabase.getAccount(accountId)
+    if (!account || account.status !== 'đang chạy') return
+    await this.updateAccountAndBroadcast(accountId, { status: 'chờ xử lý' })
   }
 
   private resolveImageSelection(
