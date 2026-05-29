@@ -1,5 +1,6 @@
-import { ActionLimitConfig, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
+import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
 import * as accountContactRepo from '../data/repositories/accountContactRepository'
@@ -31,6 +32,10 @@ export class SupabaseService {
   updateAccount(id: number, updates: Partial<AutoAccount>) { return accountRepo.updateAccount(id, updates) }
   deleteAccount(id: number) { return accountRepo.deleteAccount(id) }
   getEligibleAccounts() { return accountRepo.getEligibleAccounts() }
+  listAccountGroups(flatformType?: string) { return accountGroupRepo.listAccountGroups(flatformType) }
+  createAccountGroup(group: Partial<AutoAccountGroup>) { return accountGroupRepo.createAccountGroup(group) }
+  updateAccountGroup(id: number, updates: Partial<AutoAccountGroup>) { return accountGroupRepo.updateAccountGroup(id, updates) }
+  deleteAccountGroup(id: number) { return accountGroupRepo.deleteAccountGroup(id) }
 
   // =========== CAMPAIGN ACTIONS ===========
   listCampaignActions() { return campaignActionRepo.listCampaignActions() }

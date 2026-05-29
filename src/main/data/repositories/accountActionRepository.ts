@@ -1,4 +1,4 @@
-import { AccountActionOverview, AutoAccountAction, AutoAccountActionStatus } from '../../../shared/types'
+import { AccountActionOverview, AccountGroupSettings, AutoAccountAction, AutoAccountActionStatus } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAutoAccountActionFromDB, mapAutoAccountActionStatusFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -216,30 +216,37 @@ async function loadOverviewActionStatuses(
 
 async function loadWindowActionCounts(
   accountId: number,
-  actionCodes: string[],
-  timeFrameStart: string
+  actionWindowMinutes: Map<string, number>
 ): Promise<Map<string, number>> {
-  if (actionCodes.length === 0) return new Map()
+  if (actionWindowMinutes.size === 0) return new Map()
 
-  const { data } = await runOverviewQuery(
-    'Failed to count account action window',
-    () => client()
-      .from('auto_campaign_details')
-      .select('action_code')
-      .eq('account_id', accountId)
-      .in('action_code', actionCodes)
-      .in('status', RATED_ACTION_STATUSES)
-      .gte('created_at', timeFrameStart)
-  )
   const counts = new Map<string, number>()
-
-  for (const row of (data || []) as Record<string, unknown>[]) {
-    const actionCode = String(row.action_code || '').trim()
-    if (!actionCode) continue
-    counts.set(actionCode, (counts.get(actionCode) || 0) + 1)
+  for (const [actionCode, windowMinutes] of actionWindowMinutes.entries()) {
+    const timeFrameStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
+    const { count } = await runOverviewQuery(
+      'Failed to count account action window',
+      () => client()
+        .from('auto_campaign_details')
+        .select('*', { count: 'exact', head: true })
+        .eq('account_id', accountId)
+        .eq('action_code', actionCode)
+        .in('status', RATED_ACTION_STATUSES)
+        .gte('created_at', timeFrameStart)
+    )
+    counts.set(actionCode, count || 0)
   }
 
   return counts
+}
+
+function getOverviewWindowMinutes(
+  actionCode: string,
+  accountRateLimitMinutes: unknown,
+  groupSettings: AccountGroupSettings | null
+): number {
+  return normalizeRateLimitMinutes(
+    groupSettings?.byActionCode?.[actionCode]?.rateLimitMinutes ?? accountRateLimitMinutes
+  )
 }
 
 export async function listAccountActionOverview(accountId: number): Promise<AccountActionOverview[]> {
@@ -248,7 +255,7 @@ export async function listAccountActionOverview(accountId: number): Promise<Acco
     'Failed to get account for action overview',
     () => client()
       .from('auto_accounts')
-      .select('id, flatform_type, rate_limit_minutes')
+      .select('id, flatform_type, rate_limit_minutes, auto_account_groups(settings)')
       .eq('id', accountId)
       .eq('staff_id', u.staffId)
       .eq('is_delete', false)
@@ -260,10 +267,13 @@ export async function listAccountActionOverview(accountId: number): Promise<Acco
 
   const actions = await withTransientRetry(() => listAccountActions(account.flatform_type as string))
   const actionCodes = actions.map(action => action.code).filter(Boolean)
-  const windowMinutes = normalizeRateLimitMinutes(account.rate_limit_minutes)
-  const timeFrameStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
+  const groupSettings = ((account as any).auto_account_groups?.settings as AccountGroupSettings | null) ?? null
+  const actionWindowMinutes = new Map(actionCodes.map(actionCode => [
+    actionCode,
+    getOverviewWindowMinutes(actionCode, account.rate_limit_minutes, groupSettings)
+  ]))
   const statusByActionCode = await loadOverviewActionStatuses(accountId, actionCodes)
-  const windowCountByActionCode = await loadWindowActionCounts(accountId, actionCodes, timeFrameStart)
+  const windowCountByActionCode = await loadWindowActionCounts(accountId, actionWindowMinutes)
 
   return actions.map(action => {
     const status = statusByActionCode.get(action.code)
@@ -272,7 +282,7 @@ export async function listAccountActionOverview(accountId: number): Promise<Acco
       action,
       status,
       windowActionCount: windowCountByActionCode.get(action.code) || 0,
-      windowMinutes
+      windowMinutes: actionWindowMinutes.get(action.code) || DEFAULT_RATE_LIMIT_MINUTES
     }
   })
 }

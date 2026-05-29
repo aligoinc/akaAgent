@@ -10,6 +10,27 @@ export interface AutoAccount {
   status: string
   isActive: boolean
   rateLimitMinutes?: number | null
+  accountGroupId?: number | null
+  accountGroupName?: string | null
+  accountGroupSettings?: AccountGroupSettings | null
+  isDelete: boolean
+  staffId?: number
+  organizationId?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AccountGroupSettings {
+  sleepBetweenActions?: number | null
+  byActionCode?: Record<string, ActionLimitConfig>
+}
+
+export interface AutoAccountGroup {
+  id: number
+  name: string
+  flatformType: string
+  settings: AccountGroupSettings
+  isActive: boolean
   isDelete: boolean
   staffId?: number
   organizationId?: number
@@ -206,7 +227,6 @@ export interface Campaign {
   scheduleWeekDays?: string      // comma-separated weekday numbers e.g. "2,3,5" (2=Mon..8=Sun)
   continueNextDay?: boolean      // daily: continue at scheduled time next day if not finished
   refreshData?: boolean          // weekly/monthly: reset data to pending when all done
-  timeSleepBetween2: number   // seconds
   log: string
   note?: string | null
   content?: string
@@ -594,6 +614,10 @@ export const IPC_EVENTS = {
   DB_UPDATE_ACCOUNT: 'db:update-account',
   DB_DELETE_ACCOUNT: 'db:delete-account',
   DB_LIST_ACCOUNT_ACTIONS: 'db:list-account-actions',
+  DB_LIST_ACCOUNT_GROUPS: 'db:list-account-groups',
+  DB_CREATE_ACCOUNT_GROUP: 'db:create-account-group',
+  DB_UPDATE_ACCOUNT_GROUP: 'db:update-account-group',
+  DB_DELETE_ACCOUNT_GROUP: 'db:delete-account-group',
 
   // Database Campaign Actions
   DB_LIST_CAMPAIGN_ACTIONS: 'db:list-campaign-actions',

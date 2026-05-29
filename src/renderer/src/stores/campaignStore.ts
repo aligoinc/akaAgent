@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary } from '../../../shared/types'
+import { AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -9,6 +9,12 @@ interface CampaignStore {
   createAccount: (data: Partial<AutoAccount>) => Promise<AutoAccount>
   updateAccount: (id: number, updates: Partial<AutoAccount>) => Promise<void>
   deleteAccount: (id: number) => Promise<void>
+  accountGroups: AutoAccountGroup[]
+  loadingAccountGroups: boolean
+  loadAccountGroups: (flatformType?: string) => Promise<void>
+  createAccountGroup: (data: Partial<AutoAccountGroup>) => Promise<AutoAccountGroup>
+  updateAccountGroup: (id: number, updates: Partial<AutoAccountGroup>) => Promise<void>
+  deleteAccountGroup: (id: number) => Promise<void>
 
   // Campaign Actions
   campaignActions: CampaignAction[] // active only
@@ -72,6 +78,8 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   // =========== ACCOUNTS ===========
   accounts: [],
   loadingAccounts: false,
+  accountGroups: [],
+  loadingAccountGroups: false,
 
   loadAccounts: async () => {
     if (!window.electronAPI) return
@@ -102,6 +110,40 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   deleteAccount: async (id) => {
     if (!window.electronAPI) return
     await window.electronAPI.deleteAccount(id)
+    await get().loadAccounts()
+  },
+
+  loadAccountGroups: async (flatformType) => {
+    if (!window.electronAPI) return
+    set({ loadingAccountGroups: true })
+    try {
+      const accountGroups = await window.electronAPI.listAccountGroups(flatformType)
+      set({ accountGroups })
+    } catch (err) {
+      console.error('Failed to load account groups:', err)
+    } finally {
+      set({ loadingAccountGroups: false })
+    }
+  },
+
+  createAccountGroup: async (data) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    const group = await window.electronAPI.createAccountGroup(data)
+    await get().loadAccountGroups()
+    return group
+  },
+
+  updateAccountGroup: async (id, updates) => {
+    if (!window.electronAPI) return
+    await window.electronAPI.updateAccountGroup(id, updates)
+    await get().loadAccountGroups()
+    await get().loadAccounts()
+  },
+
+  deleteAccountGroup: async (id) => {
+    if (!window.electronAPI) return
+    await window.electronAPI.deleteAccountGroup(id)
+    await get().loadAccountGroups()
     await get().loadAccounts()
   },
 

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Plus } from 'lucide-react'
+import { FolderCog, Plus } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { AutoAccount } from '../../../../shared/types'
 import AccountContextMenu from './AccountContextMenu'
 import AccountInfoModal from './AccountInfoModal'
+import AccountGroupAssignModal from './AccountGroupAssignModal'
+import AccountGroupManagerModal from './AccountGroupManagerModal'
 import { useUiStore } from '../../stores/uiStore'
 
 interface AccountPanelProps {
@@ -12,13 +14,28 @@ interface AccountPanelProps {
 }
 
 export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
-  const { accounts, loadAccounts, createAccount, updateAccount, deleteAccount } = useCampaignStore()
+  const {
+    accounts,
+    accountGroups,
+    loadAccounts,
+    loadAccountGroups,
+    createAccount,
+    updateAccount,
+    deleteAccount,
+    createAccountGroup,
+    updateAccountGroup,
+    deleteAccountGroup
+  } = useCampaignStore()
   const [showForm, setShowForm] = useState(false)
+  const [showGroupManager, setShowGroupManager] = useState(false)
+  const [groupManagerPlatform, setGroupManagerPlatform] = useState('facebook')
+  const [groupAssignAccount, setGroupAssignAccount] = useState<AutoAccount | null>(null)
   const [editingAccount, setEditingAccount] = useState<AutoAccount | null>(null)
   const [infoAccount, setInfoAccount] = useState<AutoAccount | null>(null)
   const [formData, setFormData] = useState({ 
     name: '', 
-    flatformType: 'facebook'
+    flatformType: 'facebook',
+    accountGroupId: null as number | null
   })
 
   // Context menu state
@@ -29,14 +46,33 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   useEffect(() => {
     loadAccounts()
-  }, [loadAccounts])
+    loadAccountGroups()
+  }, [loadAccounts, loadAccountGroups])
+
+  const resetForm = () => {
+    setFormData({ name: '', flatformType: 'facebook', accountGroupId: null })
+  }
+
+  const openCreateForm = () => {
+    setShowForm(true)
+    setEditingAccount(null)
+    resetForm()
+  }
+
+  const openGroupManager = (platform = formData.flatformType) => {
+    setGroupManagerPlatform(platform)
+    setShowGroupManager(true)
+  }
+
+  const formAccountGroups = accountGroups.filter(group => group.flatformType === formData.flatformType && group.isActive)
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) return
     try {
       const payload = {
         name: formData.name,
-        flatformType: formData.flatformType
+        flatformType: formData.flatformType,
+        accountGroupId: formData.accountGroupId
       }
 
       if (editingAccount) {
@@ -46,7 +82,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       }
       setShowForm(false)
       setEditingAccount(null)
-      setFormData({ name: '', flatformType: 'facebook' })
+      resetForm()
     } catch (err) {
       console.error('Failed to save account:', err)
     }
@@ -65,7 +101,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setEditingAccount(account)
     setFormData({ 
       name: account.name,
-      flatformType: account.flatformType
+      flatformType: account.flatformType,
+      accountGroupId: account.accountGroupId ?? null
     })
     setShowForm(true)
   }
@@ -131,6 +168,16 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setInfoAccount(account)
   }
 
+  const handleChangeGroup = (account: AutoAccount) => {
+    setGroupAssignAccount(account)
+  }
+
+  const handleAssignAccountsToGroup = async (accountIds: number[], accountGroupId: number | null) => {
+    for (const accountId of accountIds) {
+      await updateAccount(accountId, { accountGroupId })
+    }
+  }
+
   const handleFilterCampaigns = (accountId: number) => {
     onFilterCampaigns?.(accountId)
   }
@@ -156,9 +203,14 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     <div className="campaign-panel">
       <div className="campaign-panel-header">
         <span className="campaign-panel-title">Tài khoản</span>
-        <button className="btn btn-primary btn-icon" onClick={() => { setShowForm(true); setEditingAccount(null); setFormData({ name: '', flatformType: 'facebook' }) }} title="Thêm tài khoản">
-          <Plus size={14} />
-        </button>
+        <div className="campaign-panel-header-actions">
+          <button className="btn btn-secondary btn-icon" onClick={() => openGroupManager()} title="Nhóm tài khoản">
+            <FolderCog size={14} />
+          </button>
+          <button className="btn btn-primary btn-icon" onClick={openCreateForm} title="Thêm tài khoản">
+            <Plus size={14} />
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -173,7 +225,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           />
           <select
             value={formData.flatformType}
-            onChange={e => setFormData(prev => ({ ...prev, flatformType: e.target.value }))}
+            onChange={e => setFormData(prev => ({ ...prev, flatformType: e.target.value, accountGroupId: null }))}
             className="panel-input"
           >
             <option value="facebook">Facebook</option>
@@ -183,8 +235,31 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
             <option value="other">Khác</option>
           </select>
 
+          <div className="panel-input-row">
+            <select
+              value={formData.accountGroupId ?? ''}
+              onChange={e => setFormData(prev => ({
+                ...prev,
+                accountGroupId: e.target.value ? Number(e.target.value) : null
+              }))}
+              className="panel-input"
+            >
+              <option value="">Không thuộc nhóm</option>
+              {formAccountGroups.map(group => (
+                <option key={group.id} value={group.id}>{group.name}</option>
+              ))}
+            </select>
+            <button
+              className="btn btn-secondary btn-icon"
+              onClick={() => openGroupManager(formData.flatformType)}
+              title="Tạo hoặc sửa nhóm"
+            >
+              <FolderCog size={14} />
+            </button>
+          </div>
+
           <div className="panel-form-actions">
-            <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingAccount(null) }}>Huỷ</button>
+            <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingAccount(null); resetForm() }}>Huỷ</button>
             <button className="btn btn-primary" onClick={handleSubmit}>{editingAccount ? 'Cập nhật' : 'Tạo'}</button>
           </div>
         </div>
@@ -212,6 +287,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                 </div>
                 <div className="account-card-meta">
                   <span className="account-card-status">{account.status}</span>
+                  {account.accountGroupName && (
+                    <span className="account-group-tag" title={account.accountGroupName}>{account.accountGroupName}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -234,6 +312,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           onDisable={handleDisable}
           onViewInfo={handleViewInfo}
           onEdit={handleEdit}
+          onChangeGroup={handleChangeGroup}
           onDelete={handleDelete}
           onFilterCampaigns={handleFilterCampaigns}
         />
@@ -243,6 +322,34 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         <AccountInfoModal
           account={infoAccount}
           onClose={() => setInfoAccount(null)}
+        />
+      )}
+
+      {showGroupManager && (
+        <AccountGroupManagerModal
+          groups={accountGroups}
+          accounts={accounts}
+          initialPlatform={groupManagerPlatform}
+          onClose={() => setShowGroupManager(false)}
+          onCreateGroup={createAccountGroup}
+          onUpdateGroup={updateAccountGroup}
+          onDeleteGroup={deleteAccountGroup}
+          onAssignAccounts={handleAssignAccountsToGroup}
+        />
+      )}
+
+      {groupAssignAccount && (
+        <AccountGroupAssignModal
+          account={groupAssignAccount}
+          groups={accountGroups}
+          onClose={() => setGroupAssignAccount(null)}
+          onManageGroups={(platform) => {
+            setGroupAssignAccount(null)
+            openGroupManager(platform)
+          }}
+          onSave={async (accountId, accountGroupId) => {
+            await handleAssignAccountsToGroup([accountId], accountGroupId)
+          }}
         />
       )}
     </div>

@@ -94,6 +94,10 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
             <strong>{account.isActive ? 'Đang bật' : 'Đã tắt'}</strong>
           </div>
           <div className="account-info-field">
+            <span>Nhóm tài khoản</span>
+            <strong>{account.accountGroupName || 'Không thuộc nhóm'}</strong>
+          </div>
+          <div className="account-info-field">
             <span>Hành động hôm nay</span>
             <strong>{totalToday}</strong>
           </div>

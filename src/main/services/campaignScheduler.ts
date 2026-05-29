@@ -700,7 +700,7 @@ export class CampaignScheduler {
           ? actionDescriptors.filter(action => action.code !== 'fb_post_group')
           : actionDescriptors
       const preflightLimit = await this.checkActionLimits(
-        account.id,
+        account,
         campaign,
         preflightActionDescriptors,
         campaign.extraSettings?.actionLimits
@@ -842,7 +842,7 @@ export class CampaignScheduler {
       // Check action disable/rate limit immediately before each target.
       try {
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
-          newsfeedAvailability = await this.resolveNewsfeedActionAvailability(account.id, campaign, targetActionDescriptors, limitConfig)
+          newsfeedAvailability = await this.resolveNewsfeedActionAvailability(account, campaign, targetActionDescriptors, limitConfig)
           if (newsfeedAvailability.allCheckedActionsBlocked) {
             stoppedBeforeCompletion = true
             const message = newsfeedAvailability.blockedReasons.join('; ') || 'Các hành động newsfeed đang đạt giới hạn'
@@ -855,7 +855,7 @@ export class CampaignScheduler {
             break
           }
         } else {
-          const limitStatus = await this.checkActionLimits(account.id, campaign, targetActionDescriptors, limitConfig)
+          const limitStatus = await this.checkActionLimits(account, campaign, targetActionDescriptors, limitConfig)
           if (limitStatus && !limitStatus.ok) {
             stoppedBeforeCompletion = true
             await this.handleLimitStatus(account, campaign, limitStatus)
@@ -1062,7 +1062,7 @@ export class CampaignScheduler {
 
       // Sleep between details
       if (i < targets.length - 1) {
-        const sleepTime = extra.actionLimits?.sleepBetweenActions ?? campaign.timeSleepBetween2 ?? 0
+        const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
         if (sleepTime > 0) {
           await this.logCampaignProgress(campaign.id, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
           const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime)
@@ -1351,7 +1351,7 @@ export class CampaignScheduler {
   }
 
   private async checkActionLimits(
-    accountId: number,
+    account: AutoAccount,
     campaign: Campaign,
     actionDescriptors: CampaignActionDescriptor[],
     limitConfig?: CampaignActionLimitSettings
@@ -1359,10 +1359,10 @@ export class CampaignScheduler {
     void campaign
     for (const action of actionDescriptors) {
       const limitStatus = await this.supabase.getAccountRateLimitStatus(
-        accountId,
+        account.id,
         action.code,
         action.name,
-        this.getActionLimitConfig(action.code, limitConfig)
+        this.getActionLimitConfig(action.code, limitConfig, account)
       )
       if (!limitStatus.ok) return limitStatus
     }
@@ -1370,7 +1370,7 @@ export class CampaignScheduler {
   }
 
   private async resolveNewsfeedActionAvailability(
-    accountId: number,
+    account: AutoAccount,
     campaign: Campaign,
     actionDescriptors: CampaignActionDescriptor[],
     limitConfig?: CampaignActionLimitSettings
@@ -1385,10 +1385,10 @@ export class CampaignScheduler {
 
     const checkOne = async (code: 'fb_like_post' | 'fb_comment', name: string): Promise<boolean> => {
       const limitStatus = await this.supabase.getAccountRateLimitStatus(
-        accountId,
+        account.id,
         code,
         name,
-        this.getActionLimitConfig(code, limitConfig)
+        this.getActionLimitConfig(code, limitConfig, account)
       )
       if (limitStatus.ok) return true
       blockedReasons.push(await this.buildLimitPreflightNote(limitStatus))
@@ -1410,7 +1410,18 @@ export class CampaignScheduler {
     }
   }
 
-  private getActionLimitConfig(
+  private normalizePositiveLimitValue(value: unknown): number | undefined {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+  }
+
+  private normalizeNonNegativeLimitValue(value: unknown): number | undefined {
+    if (value === null || value === undefined || value === '') return undefined
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
+  }
+
+  private getCampaignActionLimitConfig(
     actionCode: string,
     limitConfig?: CampaignActionLimitSettings
   ): ActionLimitConfig | undefined {
@@ -1422,6 +1433,31 @@ export class CampaignScheduler {
       rateLimitCount: limitConfig.rateLimitCount,
       rateLimitMinutes: limitConfig.rateLimitMinutes
     }
+  }
+
+  private getActionLimitConfig(
+    actionCode: string,
+    limitConfig?: CampaignActionLimitSettings,
+    account?: AutoAccount
+  ): ActionLimitConfig | undefined {
+    const campaignLimit = this.getCampaignActionLimitConfig(actionCode, limitConfig)
+    const groupLimit = account?.accountGroupSettings?.byActionCode?.[actionCode]
+    if (!groupLimit) return campaignLimit
+
+    return {
+      dailyLimit: this.normalizePositiveLimitValue(groupLimit.dailyLimit) ?? campaignLimit?.dailyLimit,
+      rateLimitCount: this.normalizePositiveLimitValue(groupLimit.rateLimitCount) ?? campaignLimit?.rateLimitCount,
+      rateLimitMinutes: this.normalizePositiveLimitValue(groupLimit.rateLimitMinutes) ?? campaignLimit?.rateLimitMinutes
+    }
+  }
+
+  private getEffectiveSleepBetweenActions(
+    account: AutoAccount,
+    limitConfig?: CampaignActionLimitSettings
+  ): number {
+    return this.normalizeNonNegativeLimitValue(account.accountGroupSettings?.sleepBetweenActions)
+      ?? this.normalizeNonNegativeLimitValue(limitConfig?.sleepBetweenActions)
+      ?? 0
   }
 
   private async getAccountRunBlockReason(
@@ -3252,7 +3288,6 @@ export class CampaignScheduler {
       dailyStopTime: null,
       continueNextDay: true,
       refreshData: true,
-      timeSleepBetween2: 0,
       content,
       extraSettings: {
         enableComment: true,

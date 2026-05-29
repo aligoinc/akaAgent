@@ -1,4 +1,5 @@
 export * as accountRepo from './accountRepository'
+export * as accountGroupRepo from './accountGroupRepository'
 export * as campaignRepo from './campaignRepository'
 export * as campaignActionRepo from './campaignActionRepository'
 export * as accountContactRepo from './accountContactRepository'

@@ -224,7 +224,6 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     schedule_week_days: campaign.scheduleWeekDays || null,
     continue_next_day: campaign.continueNextDay ?? false,
     refresh_data: campaign.refreshData ?? false,
-    time_sleep_between_2: campaign.timeSleepBetween2 ?? 30,
     content: campaign.content || '',
     extra_settings: campaign.extraSettings || {},
     images: campaign.images || [],
@@ -260,7 +259,6 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   if (updates.scheduleWeekDays !== undefined) payload.schedule_week_days = updates.scheduleWeekDays
   if (updates.continueNextDay !== undefined) payload.continue_next_day = updates.continueNextDay
   if (updates.refreshData !== undefined) payload.refresh_data = updates.refreshData
-  if (updates.timeSleepBetween2 !== undefined) payload.time_sleep_between_2 = updates.timeSleepBetween2
   if (updates.content !== undefined) payload.content = updates.content
   if (updates.extraSettings !== undefined) payload.extra_settings = updates.extraSettings
   if (updates.images !== undefined) payload.images = updates.images
@@ -317,7 +315,6 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       schedule_week_days: origCamp.schedule_week_days,
       continue_next_day: origCamp.continue_next_day,
       refresh_data: origCamp.refresh_data,
-      time_sleep_between_2: origCamp.time_sleep_between_2,
       content: origCamp.content,
       extra_settings: origCamp.extra_settings,
       images: origCamp.images,

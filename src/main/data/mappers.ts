@@ -1,4 +1,4 @@
-import { AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate } from '../../shared/types'
+import { AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   return {
@@ -9,6 +9,24 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
     status: row.status as string,
     isActive: row.is_active as boolean,
     rateLimitMinutes: (row.rate_limit_minutes as number | null) ?? null,
+    accountGroupId: (row.account_group_id as number | null) ?? null,
+    accountGroupName: ((row as any).auto_account_groups?.name as string | null | undefined) ?? null,
+    accountGroupSettings: ((row as any).auto_account_groups?.settings as AutoAccount['accountGroupSettings']) ?? null,
+    isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: row.organization_id as number | undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapAccountGroupFromDB(row: Record<string, unknown>): AutoAccountGroup {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    flatformType: row.flatform_type as string,
+    settings: (row.settings as AutoAccountGroup['settings']) || {},
+    isActive: row.is_active as boolean,
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,
@@ -95,7 +113,6 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     scheduleWeekDays: row.schedule_week_days as string | undefined,
     continueNextDay: (row.continue_next_day as boolean) ?? false,
     refreshData: (row.refresh_data as boolean) ?? false,
-    timeSleepBetween2: row.time_sleep_between_2 as number,
     content: (row.content as string) || '',
     extraSettings: (row.extra_settings as Campaign['extraSettings']) || {},
     images: (row.images as string[]) || [],

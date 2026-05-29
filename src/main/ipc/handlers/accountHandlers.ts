@@ -23,6 +23,22 @@ export function registerAccountHandlers(supabase: SupabaseService, webviewRegist
     return supabase.deleteAccount(id)
   })
 
+  ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNT_GROUPS, async (_, flatformType?: string) => {
+    return supabase.listAccountGroups(flatformType)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_CREATE_ACCOUNT_GROUP, async (_, groupData) => {
+    return supabase.createAccountGroup(groupData)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT_GROUP, async (_, id: number, updates) => {
+    return supabase.updateAccountGroup(id, updates)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_DELETE_ACCOUNT_GROUP, async (_, id: number) => {
+    return supabase.deleteAccountGroup(id)
+  })
+
   ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, async (_, flatformType?: string) => {
     return supabase.listAccountActions(flatformType)
   })

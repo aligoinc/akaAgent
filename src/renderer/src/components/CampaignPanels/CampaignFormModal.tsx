@@ -527,7 +527,7 @@ const ALL_STEPS: StepDef[] = [
     id: 'limits',
     title: 'Giới hạn hành động',
     fields: [
-      { key: 'timeSleepBetween2', label: 'Nghỉ giữa 2 lần' },
+      { key: 'sleepBetweenActions', label: 'Nghỉ giữa 2 lần' },
       { key: 'dailyLimit', label: 'Giới hạn trong ngày (đến 24h)' },
       { key: 'rateLimitCount', label: 'Giới hạn trong giờ' }
     ]
@@ -690,7 +690,7 @@ export default function CampaignFormModal({
     scheduleWeekDays: campaign?.scheduleWeekDays || '',
     continueNextDay: (lockedActionId || campaign?.actionId) === NEWSFEED_INTERACTION_ACTION_ID ? false : (campaign?.continueNextDay ?? true),
     refreshData: campaign?.refreshData ?? true,
-    timeSleepBetween2: campaign?.timeSleepBetween2 ?? 30,
+    sleepBetweenActions: campaign?.extraSettings?.actionLimits?.sleepBetweenActions ?? 30,
     multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
     multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
     content: campaign?.content || '',
@@ -1175,6 +1175,11 @@ export default function CampaignFormModal({
       : [normalizeRateLimitMinutes(formData.rateLimitMinutes)]
   )).sort((a, b) => a - b)
   const rateLimitMinutesLabel = selectedRateLimitMinuteValues.join('/')
+  const selectedAccountGroupNames = Array.from(new Set(
+    formData.accountIds
+      .map(accountId => accounts.find(account => account.id === accountId)?.accountGroupName)
+      .filter((name): name is string => !!name)
+  ))
 
   const [details, setDetails] = useState<Partial<CampaignInputData>[]>([])
   const [deletedIds, setDeletedIds] = useState<number[]>([])
@@ -1481,7 +1486,7 @@ export default function CampaignFormModal({
       case 'scheduleWeekDays': return formData.scheduleWeekDays.split(',').filter(Boolean).length > 0
       case 'dailyStopTime': return true
       case 'findDataRerun': return !formData.findDataRerunEnabled || formData.findDataRerunAfterHours >= 1
-      case 'timeSleepBetween2': return formData.timeSleepBetween2 >= 0
+      case 'sleepBetweenActions': return formData.sleepBetweenActions >= 0
       case 'dailyLimit': return formData.dailyLimit >= 0
       case 'rateLimitCount': return formData.rateLimitCount >= 0
       case 'rateLimitMinutes': return formData.rateLimitMinutes >= 0
@@ -1889,7 +1894,6 @@ export default function CampaignFormModal({
           scheduleWeekDays: normalizedScheduleWeekDays,
           continueNextDay: isNewsfeedInteractionCampaign ? false : formData.continueNextDay,
           refreshData: formData.refreshData,
-          timeSleepBetween2: formData.timeSleepBetween2,
           content: formData.content,
           extraSettings: {
             sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
@@ -1913,7 +1917,7 @@ export default function CampaignFormModal({
             newsfeedCommentContent: isNewsfeedInteractionCampaign ? formData.newsfeedCommentContent : '',
             newsfeedCommentUseAI: isNewsfeedInteractionCampaign ? formData.newsfeedCommentUseAI : false,
             actionLimits: {
-              sleepBetweenActions: formData.timeSleepBetween2,
+              sleepBetweenActions: formData.sleepBetweenActions,
               enabledActionCodes,
               dailyLimit: formData.dailyLimit,
               rateLimitCount: formData.rateLimitCount,
@@ -5057,7 +5061,9 @@ export default function CampaignFormModal({
                                     }
                                   }}
                                 />
-                                <span title={`${a.name} (${a.flatformType})`}>{a.name} ({a.flatformType})</span>
+                                <span title={`${a.name} (${a.flatformType})`}>
+                                  {a.name} ({a.flatformType}){a.accountGroupName ? ` - ${a.accountGroupName}` : ''}
+                                </span>
                               </label>
                             ))}
                             {accounts.length === 0 && (
@@ -5427,12 +5433,17 @@ export default function CampaignFormModal({
                       <label>Thời gian nghỉ giữa 2 lần gửi (giây)</label>
                       <input
                         type="number"
-                        value={formData.timeSleepBetween2}
-                        onChange={e => setFormData(p => ({ ...p, timeSleepBetween2: parseInt(e.target.value) || 0 }))}
+                        value={formData.sleepBetweenActions}
+                        onChange={e => setFormData(p => ({ ...p, sleepBetweenActions: parseInt(e.target.value) || 0 }))}
                         className="stepper-input"
                       />
                     </div>
                   </div>
+                  {selectedAccountGroupNames.length > 0 && (
+                    <div className="account-group-campaign-note">
+                      Các tài khoản thuộc nhóm: {selectedAccountGroupNames.join(', ')}. Khi chạy, hệ thống ưu tiên thời gian nghỉ và giới hạn đã cài trong nhóm.
+                    </div>
+                  )}
                   {generalLimitActionCodes.length === 0 ? (
                     <div className="text-muted" style={{ fontSize: 12, marginTop: 12 }}>
                       {visibleLimitActionCodes.length === 0
