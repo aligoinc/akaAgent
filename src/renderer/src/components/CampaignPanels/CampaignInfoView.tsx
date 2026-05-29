@@ -266,11 +266,13 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || !!extra.postWithBackground
     || !!extra.postAsReels
     || !!extra.pagePostMode
-  const hasCommentSettings = COMMENT_ACTIONS.has(actionId)
+  const hasCommentSettings = actionId !== NEWSFEED_INTERACTION_ACTION_ID && (
+    COMMENT_ACTIONS.has(actionId)
     || !!extra.enableComment
     || !!extra.commentContent
     || !!extra.commentImages?.length
     || !!extra.enablePostLike
+  )
   const hasMessageSettings = MESSAGE_ACTIONS.has(actionId)
     || extra.enableMessage !== undefined
     || extra.enableAddFriend !== undefined
@@ -339,12 +341,14 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
 
   const newsfeedRows: InfoRow[] = [
     { label: 'Thời gian lướt', value: `${extra.newsfeedTimeMinutes ?? 20} phút` },
-    { label: 'Like nội dung có tính chất', value: textOrDash(extra.newsfeedLikeKind) },
-    { label: 'Like tối đa', value: extra.newsfeedLikeLimit ?? 0 },
-    { label: 'Comment bài post có tính chất', value: textOrDash(extra.newsfeedCommentKind) },
-    { label: 'Comment tối đa', value: extra.newsfeedCommentLimit ?? 0 },
-    { label: 'AI tạo comment', value: onOff(extra.newsfeedCommentUseAI) },
-    { label: 'Nội dung comment', value: textOrDash(extra.newsfeedCommentContent), fullWidth: true }
+    { label: 'Thực hiện like', value: onOff(extra.enablePostLike) },
+    { label: 'Like nội dung có tính chất', value: textOrDash(extra.newsfeedLikeKind), hidden: !extra.enablePostLike },
+    { label: 'Like tối đa', value: extra.newsfeedLikeLimit ?? 0, hidden: !extra.enablePostLike },
+    { label: 'Thực hiện comment', value: onOff(extra.enableComment) },
+    { label: 'Comment bài post có tính chất', value: textOrDash(extra.newsfeedCommentKind), hidden: !extra.enableComment },
+    { label: 'Comment tối đa', value: extra.newsfeedCommentLimit ?? 0, hidden: !extra.enableComment },
+    { label: 'AI tạo comment', value: onOff(extra.newsfeedCommentUseAI), hidden: !extra.enableComment },
+    { label: 'Nội dung comment', value: textOrDash(extra.newsfeedCommentContent), fullWidth: true, hidden: !extra.enableComment }
   ]
 
   const findDataRows: InfoRow[] = [

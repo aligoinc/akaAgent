@@ -157,6 +157,18 @@ export class CampaignScheduler {
     return actionId === COMMENT_SEEDING_POST_ACTION_ID
   }
 
+  private isNewsfeedLikeConfigured(extra: Campaign['extraSettings']): boolean {
+    return extra?.enablePostLike === true
+      && String(extra.newsfeedLikeKind || '').trim().length > 0
+      && Number(extra.newsfeedLikeLimit || 0) > 0
+  }
+
+  private isNewsfeedCommentConfigured(extra: Campaign['extraSettings']): boolean {
+    return extra?.enableComment === true
+      && String(extra.newsfeedCommentKind || '').trim().length > 0
+      && Number(extra.newsfeedCommentLimit || 0) > 0
+  }
+
   private getFindDataTargetCampaignField(campaign: Campaign): FindDataTargetCampaignField | null {
     if (campaign.actionId === MESSAGE_UID_ACTION_ID) return 'findUidTargetCampaignIds'
     if (campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID) return 'findPostLinkTargetCampaignIds'
@@ -1240,10 +1252,10 @@ export class CampaignScheduler {
         if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
         break
       case NEWSFEED_INTERACTION_ACTION_ID:
-        if (String(extra.newsfeedCommentKind || '').trim() && Number(extra.newsfeedCommentLimit || 0) > 0) {
+        if (this.isNewsfeedCommentConfigured(extra)) {
           actions.push({ code: 'fb_comment', name: 'Comment' })
         }
-        if (String(extra.newsfeedLikeKind || '').trim() && Number(extra.newsfeedLikeLimit || 0) > 0) {
+        if (this.isNewsfeedLikeConfigured(extra)) {
           actions.push({ code: 'fb_like_post', name: 'Like post' })
         }
         break
@@ -1280,13 +1292,13 @@ export class CampaignScheduler {
         return campaign.actionId !== MESSAGE_UID_ACTION_ID || extra.enableAddFriend === true
       case 'fb_comment':
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
-          return String(extra.newsfeedCommentKind || '').trim().length > 0 && Number(extra.newsfeedCommentLimit || 0) > 0
+          return this.isNewsfeedCommentConfigured(extra)
         }
         if (this.isCommentSeedingCampaign(campaign.actionId)) return true
         return extra.enableComment === true
       case 'fb_like_post':
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
-          return String(extra.newsfeedLikeKind || '').trim().length > 0 && Number(extra.newsfeedLikeLimit || 0) > 0
+          return this.isNewsfeedLikeConfigured(extra)
         }
         return extra.enablePostLike === true
       default:
@@ -1364,8 +1376,8 @@ export class CampaignScheduler {
     limitConfig?: CampaignActionLimitSettings
   ): Promise<NewsfeedActionAvailability> {
     const extra = campaign.extraSettings || {}
-    const likeConfigured = String(extra.newsfeedLikeKind || '').trim().length > 0 && Number(extra.newsfeedLikeLimit || 0) > 0
-    const commentConfigured = String(extra.newsfeedCommentKind || '').trim().length > 0 && Number(extra.newsfeedCommentLimit || 0) > 0
+    const likeConfigured = this.isNewsfeedLikeConfigured(extra)
+    const commentConfigured = this.isNewsfeedCommentConfigured(extra)
     let allowLike = likeConfigured
     let allowComment = commentConfigured
     const blockedReasons: string[] = []

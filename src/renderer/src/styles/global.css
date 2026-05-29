@@ -3853,6 +3853,169 @@ button.btn-icon:not(.btn):disabled {
   font-weight: 500;
 }
 
+.newsfeed-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.newsfeed-duration-row {
+  display: flex;
+  align-items: flex-start;
+}
+
+.newsfeed-duration-field {
+  width: min(220px, 100%);
+  margin-bottom: 2px;
+}
+
+.newsfeed-action-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  padding: 14px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.newsfeed-action-card.is-disabled {
+  border-color: color-mix(in srgb, var(--border-default) 82%, transparent);
+}
+
+.newsfeed-action-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.newsfeed-action-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.newsfeed-action-toggle input[type="checkbox"],
+.newsfeed-ai-toggle input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.newsfeed-action-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.newsfeed-action-title svg {
+  color: var(--text-secondary);
+  flex: 0 0 auto;
+}
+
+.newsfeed-action-code {
+  display: inline-flex;
+  align-items: center;
+  max-width: 45%;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.newsfeed-action-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.newsfeed-action-fields {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 170px);
+  gap: 14px;
+  align-items: end;
+}
+
+.newsfeed-action-fields .stepper-form-group,
+.newsfeed-action-body > .stepper-form-group {
+  margin-bottom: 0;
+}
+
+.newsfeed-limit-field {
+  min-width: 0;
+}
+
+.newsfeed-comment-textarea {
+  min-height: 104px;
+}
+
+.newsfeed-ai-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.newsfeed-ai-toggle input[type="checkbox"]:disabled,
+.newsfeed-ai-toggle input[type="checkbox"]:disabled + span {
+  cursor: not-allowed;
+}
+
+.newsfeed-action-card .stepper-input:disabled,
+.newsfeed-action-card .stepper-textarea:disabled {
+  opacity: 0.66;
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-elevated));
+}
+
+.newsfeed-action-card.is-disabled .newsfeed-action-title,
+.newsfeed-action-card.is-disabled .newsfeed-action-title svg,
+.newsfeed-action-card.is-disabled .newsfeed-ai-toggle {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 720px) {
+  .newsfeed-action-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .newsfeed-action-code {
+    max-width: 100%;
+  }
+
+  .newsfeed-action-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .newsfeed-limit-field {
+    max-width: 180px;
+  }
+}
+
 .ai-content-toolbar {
   display: flex;
   flex-wrap: wrap;
