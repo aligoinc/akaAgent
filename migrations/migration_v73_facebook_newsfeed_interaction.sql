@@ -37,10 +37,12 @@ VALUES
   NULL,
 $block$
 const timeMinutes = Math.max(1, Math.floor(Number(vars.newsfeedTimeMinutes || input.newsfeedTimeMinutes || 20)))
+const likeEnabled = vars.enablePostLike === true || input.enablePostLike === true
+const commentEnabled = vars.enableComment === true || input.enableComment === true
 const likeKind = String(vars.newsfeedLikeKind || input.newsfeedLikeKind || '').trim()
 const commentKind = String(vars.newsfeedCommentKind || input.newsfeedCommentKind || '').trim()
-const likeLimit = likeKind ? Math.max(0, Math.floor(Number(vars.newsfeedLikeLimit ?? input.newsfeedLikeLimit ?? 10))) : 0
-const commentLimit = commentKind ? Math.max(0, Math.floor(Number(vars.newsfeedCommentLimit ?? input.newsfeedCommentLimit ?? 10))) : 0
+const likeLimit = likeEnabled ? Math.max(0, Math.floor(Number(vars.newsfeedLikeLimit ?? input.newsfeedLikeLimit ?? 10))) : 0
+const commentLimit = commentEnabled ? Math.max(0, Math.floor(Number(vars.newsfeedCommentLimit ?? input.newsfeedCommentLimit ?? 10))) : 0
 const allowLike = vars.allowNewsfeedLike !== false
 const allowComment = vars.allowNewsfeedComment !== false
 const remainingLike = allowLike ? likeLimit : 0
@@ -58,6 +60,8 @@ vars.newsfeedState = {
   timeRead100WordsMin: 20,
   tcWrite: 3,
   timeWrite100WordsMin: 90,
+  likeEnabled,
+  commentEnabled,
   likeKind,
   commentKind,
   commentContent: String(vars.newsfeedCommentContent || input.newsfeedCommentContent || ''),
@@ -962,8 +966,10 @@ SELECT
   ]'::jsonb,
   '[
     {"name":"newsfeedTimeMinutes","type":"number","label":"Thời gian lướt"},
+    {"name":"enablePostLike","type":"boolean","label":"Thực hiện like"},
     {"name":"newsfeedLikeKind","type":"string","label":"Like nội dung có tính chất"},
     {"name":"newsfeedLikeLimit","type":"number","label":"Like tối đa"},
+    {"name":"enableComment","type":"boolean","label":"Thực hiện comment"},
     {"name":"newsfeedCommentKind","type":"string","label":"Comment bài post có tính chất"},
     {"name":"newsfeedCommentLimit","type":"number","label":"Comment tối đa"},
     {"name":"newsfeedCommentContent","type":"string","label":"Nội dung comment"},
@@ -971,7 +977,7 @@ SELECT
     {"name":"allowNewsfeedLike","type":"boolean","label":"Cho phép like"},
     {"name":"allowNewsfeedComment","type":"boolean","label":"Cho phép comment"}
   ]'::jsonb,
-  '{"newsfeedTimeMinutes":20,"newsfeedLikeKind":"","newsfeedLikeLimit":10,"newsfeedCommentKind":"","newsfeedCommentLimit":10,"newsfeedCommentContent":"","newsfeedCommentUseAI":false,"allowNewsfeedLike":true,"allowNewsfeedComment":true}'::jsonb,
+  '{"newsfeedTimeMinutes":20,"enablePostLike":false,"newsfeedLikeKind":"","newsfeedLikeLimit":10,"enableComment":false,"newsfeedCommentKind":"","newsfeedCommentLimit":10,"newsfeedCommentContent":"","newsfeedCommentUseAI":false,"allowNewsfeedLike":true,"allowNewsfeedComment":true}'::jsonb,
   true,
   NULL,
   NULL,

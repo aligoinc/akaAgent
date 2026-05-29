@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2 } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -253,8 +253,10 @@ const NEWSFEED_SETTINGS_STEP: StepDef = {
   title: 'Lướt newsfeed',
   fields: [
     { key: 'newsfeedTimeMinutes', label: 'Thời gian lướt' },
+    { key: 'enablePostLike', label: 'Thực hiện like' },
     { key: 'newsfeedLikeKind', label: 'Like nội dung có tính chất' },
     { key: 'newsfeedLikeLimit', label: 'Like tối đa' },
+    { key: 'enableComment', label: 'Thực hiện comment' },
     { key: 'newsfeedCommentKind', label: 'Comment bài post có tính chất' },
     { key: 'newsfeedCommentContent', label: 'Nội dung comment' },
     { key: 'newsfeedCommentLimit', label: 'Comment tối đa' }
@@ -929,8 +931,8 @@ export default function CampaignFormModal({
       if (actionCode === 'fb_like_post') return formData.enablePostLike
     }
     if (isNewsfeedInteractionCampaign) {
-      if (actionCode === 'fb_comment') return true
-      if (actionCode === 'fb_like_post') return true
+      if (actionCode === 'fb_comment') return formData.enableComment
+      if (actionCode === 'fb_like_post') return formData.enablePostLike
     }
     return true
   }
@@ -2017,18 +2019,33 @@ export default function CampaignFormModal({
     }
     if (isNewsfeedInteractionCampaign) {
       const timeMinutes = Math.floor(Number(formData.newsfeedTimeMinutes))
+      const likeLimit = Math.floor(Number(formData.newsfeedLikeLimit))
       const commentLimit = Math.floor(Number(formData.newsfeedCommentLimit))
       if (!Number.isFinite(timeMinutes) || timeMinutes <= 0) {
         showAlert('Vui lòng nhập thời gian lướt newsfeed lớn hơn 0 phút.', 'error')
         return
       }
-      if (
-        Number.isFinite(commentLimit) &&
-        commentLimit > 0 &&
-        formData.newsfeedCommentKind.trim() &&
-        !formData.newsfeedCommentUseAI &&
-        !formData.newsfeedCommentContent.trim()
-      ) {
+      if (!formData.enablePostLike && !formData.enableComment) {
+        showAlert('Vui lòng chọn ít nhất một hành động like hoặc comment cho chiến dịch lướt newsfeed.', 'error')
+        return
+      }
+      if (formData.enablePostLike && !formData.newsfeedLikeKind.trim()) {
+        showAlert('Vui lòng nhập tính chất bài viết cần like.', 'error')
+        return
+      }
+      if (formData.enablePostLike && (!Number.isFinite(likeLimit) || likeLimit <= 0)) {
+        showAlert('Vui lòng nhập số like tối đa lớn hơn 0.', 'error')
+        return
+      }
+      if (formData.enableComment && !formData.newsfeedCommentKind.trim()) {
+        showAlert('Vui lòng nhập tính chất bài viết cần comment.', 'error')
+        return
+      }
+      if (formData.enableComment && (!Number.isFinite(commentLimit) || commentLimit <= 0)) {
+        showAlert('Vui lòng nhập số comment tối đa lớn hơn 0.', 'error')
+        return
+      }
+      if (formData.enableComment && !formData.newsfeedCommentUseAI && !formData.newsfeedCommentContent.trim()) {
         showAlert('Vui lòng nhập nội dung comment hoặc bật AI tạo nội dung comment.', 'error')
         return
       }
@@ -2811,9 +2828,9 @@ export default function CampaignFormModal({
   }
 
   const renderNewsfeedInteractionSettings = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div className="stepper-form-row">
-        <div className="stepper-form-group third">
+    <div className="newsfeed-settings-panel">
+      <div className="newsfeed-duration-row">
+        <div className="stepper-form-group newsfeed-duration-field">
           <label>Thời gian lướt (phút)</label>
           <input
             type="number"
@@ -2825,80 +2842,114 @@ export default function CampaignFormModal({
         </div>
       </div>
 
-      <div className="action-limit-card">
-        <div className="action-limit-card-header">
-          <strong>Like/tim</strong>
-          <span>fb_like_post</span>
+      <div className={`newsfeed-action-card ${formData.enablePostLike ? 'is-enabled' : 'is-disabled'}`}>
+        <div className="newsfeed-action-header">
+          <label className="newsfeed-action-toggle">
+            <input
+              type="checkbox"
+              checked={formData.enablePostLike}
+              onChange={e => setFormData(p => ({ ...p, enablePostLike: e.target.checked }))}
+            />
+            <span className="newsfeed-action-title">
+              <Heart size={16} />
+              <span>Like/tim</span>
+            </span>
+          </label>
+          <span className="newsfeed-action-code">fb_like_post</span>
         </div>
-        <div className="stepper-form-row">
-          <div className="stepper-form-group">
-            <label>Like nội dung có tính chất</label>
-            <input
-              type="text"
-              value={formData.newsfeedLikeKind}
-              onChange={e => setFormData(p => ({ ...p, newsfeedLikeKind: e.target.value }))}
-              className="stepper-input"
-              placeholder="Ví dụ: bài viết tuyển dụng, bán hàng, bất động sản"
-            />
-          </div>
-          <div className="stepper-form-group third">
-            <label>Like tối đa/chiến dịch</label>
-            <input
-              type="number"
-              min={0}
-              value={formData.newsfeedLikeLimit}
-              onChange={e => setFormData(p => ({ ...p, newsfeedLikeLimit: Math.max(0, Number(e.target.value) || 0) }))}
-              className="stepper-input"
-            />
+
+        <div className="newsfeed-action-body">
+          <div className="newsfeed-action-fields">
+            <div className="stepper-form-group">
+              <label>Tính chất bài viết</label>
+              <input
+                type="text"
+                value={formData.newsfeedLikeKind}
+                onChange={e => setFormData(p => ({ ...p, newsfeedLikeKind: e.target.value }))}
+                className="stepper-input"
+                disabled={!formData.enablePostLike}
+                placeholder="Ví dụ: vui vẻ, tuyển dụng, bán hàng"
+              />
+            </div>
+            <div className="stepper-form-group newsfeed-limit-field">
+              <label>Tối đa</label>
+              <input
+                type="number"
+                min={1}
+                value={formData.newsfeedLikeLimit}
+                onChange={e => setFormData(p => ({ ...p, newsfeedLikeLimit: Math.max(0, Number(e.target.value) || 0) }))}
+                className="stepper-input"
+                disabled={!formData.enablePostLike}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="action-limit-card">
-        <div className="action-limit-card-header">
-          <strong>Comment</strong>
-          <span>fb_comment</span>
+      <div className={`newsfeed-action-card ${formData.enableComment ? 'is-enabled' : 'is-disabled'}`}>
+        <div className="newsfeed-action-header">
+          <label className="newsfeed-action-toggle">
+            <input
+              type="checkbox"
+              checked={formData.enableComment}
+              onChange={e => setFormData(p => ({ ...p, enableComment: e.target.checked }))}
+            />
+            <span className="newsfeed-action-title">
+              <MessageCircle size={16} />
+              <span>Comment</span>
+            </span>
+          </label>
+          <span className="newsfeed-action-code">fb_comment</span>
         </div>
-        <div className="stepper-form-row">
+
+        <div className="newsfeed-action-body">
+          <div className="newsfeed-action-fields">
+            <div className="stepper-form-group">
+              <label>Tính chất bài viết</label>
+              <input
+                type="text"
+                value={formData.newsfeedCommentKind}
+                onChange={e => setFormData(p => ({ ...p, newsfeedCommentKind: e.target.value }))}
+                className="stepper-input"
+                disabled={!formData.enableComment}
+                placeholder="Ví dụ: hỏi mua sản phẩm, cần tư vấn"
+              />
+            </div>
+            <div className="stepper-form-group newsfeed-limit-field">
+              <label>Tối đa</label>
+              <input
+                type="number"
+                min={1}
+                value={formData.newsfeedCommentLimit}
+                onChange={e => setFormData(p => ({ ...p, newsfeedCommentLimit: Math.max(0, Number(e.target.value) || 0) }))}
+                className="stepper-input"
+                disabled={!formData.enableComment}
+              />
+            </div>
+          </div>
+
           <div className="stepper-form-group">
-            <label>Comment bài post có tính chất</label>
-            <input
-              type="text"
-              value={formData.newsfeedCommentKind}
-              onChange={e => setFormData(p => ({ ...p, newsfeedCommentKind: e.target.value }))}
-              className="stepper-input"
-              placeholder="Ví dụ: hỏi mua sản phẩm, cần tư vấn, tìm dịch vụ"
+            <label>Nội dung comment</label>
+            <textarea
+              value={formData.newsfeedCommentContent}
+              onChange={e => setFormData(p => ({ ...p, newsfeedCommentContent: e.target.value }))}
+              className="stepper-textarea newsfeed-comment-textarea"
+              rows={3}
+              disabled={!formData.enableComment}
+              placeholder="Dùng dấu | để tách nhiều nội dung."
             />
           </div>
-          <div className="stepper-form-group third">
-            <label>Comment tối đa/chiến dịch</label>
+
+          <label className="newsfeed-ai-toggle">
             <input
-              type="number"
-              min={0}
-              value={formData.newsfeedCommentLimit}
-              onChange={e => setFormData(p => ({ ...p, newsfeedCommentLimit: Math.max(0, Number(e.target.value) || 0) }))}
-              className="stepper-input"
+              type="checkbox"
+              checked={formData.newsfeedCommentUseAI}
+              onChange={e => setFormData(p => ({ ...p, newsfeedCommentUseAI: e.target.checked }))}
+              disabled={!formData.enableComment}
             />
-          </div>
+            <span>Hoặc lời nhắc AI tạo nội dung</span>
+          </label>
         </div>
-        <div className="stepper-form-group">
-          <label>Nội dung comment</label>
-          <textarea
-            value={formData.newsfeedCommentContent}
-            onChange={e => setFormData(p => ({ ...p, newsfeedCommentContent: e.target.value }))}
-            className="stepper-textarea"
-            rows={4}
-            placeholder="Dùng dấu | để tách nhiều nội dung."
-          />
-        </div>
-        <label className="schedule-checkbox-label">
-          <input
-            type="checkbox"
-            checked={formData.newsfeedCommentUseAI}
-            onChange={e => setFormData(p => ({ ...p, newsfeedCommentUseAI: e.target.checked }))}
-          />
-          <span>Hoặc lời nhắc AI tạo nội dung</span>
-        </label>
       </div>
     </div>
   )
