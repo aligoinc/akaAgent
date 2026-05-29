@@ -52,6 +52,10 @@ interface NewsfeedActionAvailability {
   allCheckedActionsBlocked: boolean
 }
 
+interface AccountRunBlockOptions {
+  checkLogin?: boolean
+}
+
 interface PostBumpTarget {
   campaignId: number
 }
@@ -670,7 +674,7 @@ export class CampaignScheduler {
       }
       campaign = currentCampaign
 
-      const startBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý')
+      const startBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý', { checkLogin: false })
       if (startBlockReason) {
         await this.updateCampaignPreflightNote(campaign, startBlockReason)
         return
@@ -707,6 +711,12 @@ export class CampaignScheduler {
       )
       if (preflightLimit && !preflightLimit.ok) {
         await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(preflightLimit))
+        return
+      }
+
+      const startLoginBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý')
+      if (startLoginBlockReason) {
+        await this.updateCampaignPreflightNote(campaign, startLoginBlockReason)
         return
       }
 
@@ -813,7 +823,7 @@ export class CampaignScheduler {
         return
       }
 
-      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy', { checkLogin: false })
       if (accountBlockReason) {
         stoppedBeforeCompletion = true
         await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
@@ -864,6 +874,14 @@ export class CampaignScheduler {
         }
       } catch (err) {
         console.error('Rate limit check error:', err)
+      }
+
+      const accountLoginBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+      if (accountLoginBlockReason) {
+        stoppedBeforeCompletion = true
+        await this.stopCampaignForAccountCondition(account, campaign, accountLoginBlockReason)
+        await this.releaseRunningAccount(account.id)
+        return
       }
 
       const automationPage = this.getAutomationPage(account, campaign.id)
@@ -1462,11 +1480,13 @@ export class CampaignScheduler {
 
   private async getAccountRunBlockReason(
     accountId: number,
-    expectedStatus: 'chờ xử lý' | 'đang chạy'
+    expectedStatus: 'chờ xử lý' | 'đang chạy',
+    options: AccountRunBlockOptions = {}
   ): Promise<string | null> {
+    const { checkLogin = true } = options
     const account = await this.supabase.getAccount(accountId)
     if (!account) return 'Không tìm thấy tài khoản'
-    if (account.loginStatus !== 'đã đăng nhập') return 'Tài khoản bị đăng xuất'
+    if (checkLogin && account.loginStatus !== 'đã đăng nhập') return 'Tài khoản bị đăng xuất'
     if (account.status !== expectedStatus) return `Tài khoản đang ở trạng thái ${account.status}`
     return null
   }

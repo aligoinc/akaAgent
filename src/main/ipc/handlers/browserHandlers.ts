@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, webContents } from 'electron'
 import { IPC_EVENTS } from '../../../shared/types'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import { PageControllerRegistry } from '../../v2/runtime/pageController'
@@ -14,10 +14,13 @@ export function registerBrowserHandlers(
   pageRegistry: PageControllerRegistry
 ): void {
   ipcMain.handle(IPC_EVENTS.WEBVIEW_REGISTER, (_, accountId: number, webContentsId: number) => {
-    webviewRegistry.register(accountId, webContentsId)
+    const registration = webviewRegistry.register(accountId, webContentsId)
+    if (!registration.success) {
+      pageRegistry.unregister(accountId)
+      return registration
+    }
 
     try {
-      const { webContents } = require('electron')
       const wc = webContents.fromId(webContentsId)
       if (wc && !wc.isDestroyed()) {
         wc.setBackgroundThrottling(false)
@@ -26,7 +29,7 @@ export function registerBrowserHandlers(
       }
     } catch {}
 
-    return { success: true }
+    return registration
   })
 
   ipcMain.handle(IPC_EVENTS.WEBVIEW_UNREGISTER, (_, accountId: number) => {

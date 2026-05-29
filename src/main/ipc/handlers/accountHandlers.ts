@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, webContents } from 'electron'
 import { IPC_EVENTS } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { WebviewRegistry } from '../../playwright/webviewController'
@@ -52,8 +52,11 @@ export function registerAccountHandlers(supabase: SupabaseService, webviewRegist
     if (!wcId) {
       return { success: false, reason: 'Tab trình duyệt chưa được mở' }
     }
+    if (!webviewRegistry.isWebContentsForAccount(accountId, wcId)) {
+      webviewRegistry.unregister(accountId)
+      return { success: false, reason: 'Tab trình duyệt không khớp hồ sơ tài khoản' }
+    }
     try {
-      const { webContents } = require('electron')
       const wc = webContents.fromId(wcId)
       if (!wc || wc.isDestroyed()) {
         return { success: false, reason: 'Tab trình duyệt không khả dụng' }
@@ -78,8 +81,11 @@ export function registerAccountHandlers(supabase: SupabaseService, webviewRegist
     if (!webContentsId) {
       return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt chưa được mở' }
     }
+    if (!webviewRegistry.isWebContentsForAccount(accountId, webContentsId)) {
+      webviewRegistry.unregister(accountId)
+      return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt không khớp hồ sơ tài khoản' }
+    }
     try {
-      const { webContents } = require('electron')
       const wc = webContents.fromId(webContentsId)
       if (!wc) {
         return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt không khả dụng' }
