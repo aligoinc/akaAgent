@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
-  Info
+  Info, FolderCog
 } from 'lucide-react'
 import { AutoAccount } from '../../../../shared/types'
 
@@ -27,6 +27,7 @@ interface AccountContextMenuProps {
   onDisable: (account: AutoAccount) => void
   onViewInfo: (account: AutoAccount) => void
   onEdit: (account: AutoAccount) => void
+  onChangeGroup: (account: AutoAccount) => void
   onDelete: (account: AutoAccount) => void
   onFilterCampaigns: (accountId: number) => void
 }
@@ -44,6 +45,7 @@ export default function AccountContextMenu({
   onDisable,
   onViewInfo,
   onEdit,
+  onChangeGroup,
   onDelete,
   onFilterCampaigns
 }: AccountContextMenuProps) {
@@ -188,6 +190,13 @@ export default function AccountContextMenu({
         >
           <Edit3 size={14} />
           <span>Sửa tài khoản</span>
+        </button>
+        <button
+          className="context-menu-item"
+          onClick={() => handleAction(() => onChangeGroup(account))}
+        >
+          <FolderCog size={14} />
+          <span>{account.accountGroupId ? 'Đổi nhóm tài khoản' : 'Thêm vào nhóm'}</span>
         </button>
         <button
           className="context-menu-item accent-error"

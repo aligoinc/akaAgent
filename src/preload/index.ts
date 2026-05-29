@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -87,6 +87,18 @@ const electronAPI = {
 
   deleteAccount: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_ACCOUNT, id),
+
+  listAccountGroups: (flatformType?: string): Promise<AutoAccountGroup[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_LIST_ACCOUNT_GROUPS, flatformType),
+
+  createAccountGroup: (data: Partial<AutoAccountGroup>): Promise<AutoAccountGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_CREATE_ACCOUNT_GROUP, data),
+
+  updateAccountGroup: (id: number, updates: Partial<AutoAccountGroup>): Promise<AutoAccountGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_ACCOUNT_GROUP, id, updates),
+
+  deleteAccountGroup: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_ACCOUNT_GROUP, id),
 
   listAccountActions: (flatformType?: string): Promise<AutoAccountAction[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, flatformType),

@@ -374,7 +374,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
 
   const limitRows: InfoRow[] = [
     { label: 'Hành động kiểm tra giới hạn', value: formatActionCodeChips(limitCodes) },
-    { label: 'Nghỉ giữa actions', value: `${extra.actionLimits?.sleepBetweenActions ?? campaign.timeSleepBetween2 ?? 0} giây` },
+    { label: 'Nghỉ giữa actions', value: `${extra.actionLimits?.sleepBetweenActions ?? 0} giây` },
     ...byActionCode.map(([code, limit]) => ({
       label: `Giới hạn ${getActionCodeLabel(code)}`,
       value: formatLimitValue(limit, limitWindowMinutes)

@@ -2,6 +2,7 @@ import { AutoAccount } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
+import * as accountGroupRepo from './accountGroupRepository'
 
 const client = () => getSupabaseClient()
 const DEFAULT_RATE_LIMIT_MINUTES = 65
@@ -15,7 +16,7 @@ export async function getAccount(id: number): Promise<AutoAccount | null> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
-    .select('*')
+    .select('*, auto_account_groups(name, settings)')
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
@@ -29,7 +30,7 @@ export async function listAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
-    .select('*')
+    .select('*, auto_account_groups(name, settings)')
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
@@ -40,13 +41,16 @@ export async function listAccounts(): Promise<AutoAccount[]> {
 
 export async function createAccount(account: Partial<AutoAccount>): Promise<AutoAccount> {
   const u = requireCurrentUser()
+  const flatformType = account.flatformType || 'facebook'
+  const accountGroupId = await accountGroupRepo.validateAccountGroupForAccount(account.accountGroupId, flatformType)
   const payload = {
     name: account.name,
-    flatform_type: account.flatformType || 'facebook',
+    flatform_type: flatformType,
     login_status: account.loginStatus || 'ch\u01b0a \u0111\u0103ng nh\u1eadp',
     status: account.status || 'ch\u1edd x\u1eed l\u00fd',
     is_active: account.isActive ?? true,
     rate_limit_minutes: normalizeRateLimitMinutes(account.rateLimitMinutes),
+    account_group_id: accountGroupId,
     staff_id: u.staffId,
     organization_id: u.organizationId
   }
@@ -54,7 +58,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
   const { data, error } = await client()
     .from('auto_accounts')
     .insert(payload)
-    .select()
+    .select('*, auto_account_groups(name, settings)')
     .single()
 
   if (error) throw new Error(`Failed to create account: ${error.message}`)
@@ -64,19 +68,33 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
 export async function updateAccount(id: number, updates: Partial<AutoAccount>): Promise<AutoAccount> {
   const u = requireCurrentUser()
   const payload: any = { updated_at: new Date().toISOString() }
+  let current: AutoAccount | null = null
+  if (updates.accountGroupId !== undefined || updates.flatformType !== undefined) {
+    current = await getAccount(id)
+    if (!current) throw new Error('Không tìm thấy tài khoản')
+  }
+  const targetFlatformType = updates.flatformType ?? current?.flatformType
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.flatformType !== undefined) payload.flatform_type = updates.flatformType
   if (updates.loginStatus !== undefined) payload.login_status = updates.loginStatus
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.isActive !== undefined) payload.is_active = updates.isActive
   if (updates.rateLimitMinutes !== undefined) payload.rate_limit_minutes = normalizeRateLimitMinutes(updates.rateLimitMinutes)
+  if (updates.accountGroupId !== undefined) {
+    payload.account_group_id = await accountGroupRepo.validateAccountGroupForAccount(
+      updates.accountGroupId,
+      targetFlatformType || 'facebook'
+    )
+  } else if (updates.flatformType !== undefined) {
+    payload.account_group_id = null
+  }
 
   const { data, error } = await client()
     .from('auto_accounts')
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
-    .select()
+    .select('*, auto_account_groups(name, settings)')
     .single()
 
   if (error) throw new Error(`Failed to update account: ${error.message}`)
@@ -98,7 +116,7 @@ export async function getEligibleAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
-    .select('*')
+    .select('*, auto_account_groups(name, settings)')
     .eq('staff_id', u.staffId)
     .eq('is_active', true)
     .eq('is_delete', false)
