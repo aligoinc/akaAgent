@@ -196,6 +196,9 @@ export interface CampaignExtraSettings {
   isFindNewInteractors?: boolean
   isFindInGroupMembers?: boolean
   countGroupMemberFindData?: number
+  findDataGoalModeEnabled?: boolean
+  findDataGoalPriority?: 'phone' | 'zalo_group_link' | 'facebook_uid' | 'post_link'
+  findDataGoalDailyLimit?: number
   findDataRerunEnabled?: boolean
   findDataRerunAfterHours?: number
   multiDailyTimeSlotsEnabled?: boolean // Đăng bài profile/page: chạy nhiều khung giờ trong cùng ngày

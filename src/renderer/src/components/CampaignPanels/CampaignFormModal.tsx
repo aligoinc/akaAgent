@@ -106,6 +106,13 @@ type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
 type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
 type AiContentAction = 'multi' | 'rewrite'
+type FindDataGoalPriority = NonNullable<CampaignExtraSettings['findDataGoalPriority']>
+interface FindDataGoalFlagState {
+  isFindPhone: boolean
+  isFindLinkGroupZalo: boolean
+  isFindUid: boolean
+  isFindPostLink: boolean
+}
 interface FindDataFlagState {
   isFindPhone: boolean
   isFindLinkGroupZalo: boolean
@@ -306,9 +313,39 @@ const SEARCH_POST_TAGGED_LOCATION_OPTIONS = [
 
 const DEFAULT_DAILY_STOP_TIME = '18:00'
 const DEFAULT_FIND_DATA_RERUN_AFTER_HOURS = 1
+const DEFAULT_FIND_DATA_GOAL_DAILY_LIMIT = 30
 const DEFAULT_POST_BUMP_COUNT = 3
 const DEFAULT_POST_BUMP_INITIAL_DELAY_MINUTES = 30
 const DEFAULT_POST_BUMP_INTERVAL_MINUTES = 10
+
+const FIND_DATA_GOAL_OPTIONS: Array<{
+  value: FindDataGoalPriority
+  label: string
+  isAvailable: (state: FindDataGoalFlagState) => boolean
+}> = [
+  { value: 'phone', label: 'Số điện thoại', isAvailable: state => state.isFindPhone },
+  { value: 'zalo_group_link', label: 'Link group Zalo', isAvailable: state => state.isFindLinkGroupZalo },
+  { value: 'facebook_uid', label: 'Uid user facebook', isAvailable: state => state.isFindUid },
+  { value: 'post_link', label: 'Link post', isAvailable: state => state.isFindPostLink }
+]
+
+const normalizeFindDataGoalDailyLimit = (value: unknown): number => {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed)) return DEFAULT_FIND_DATA_GOAL_DAILY_LIMIT
+  return Math.max(1, parsed)
+}
+
+const getAvailableFindDataGoalOptions = (state: FindDataGoalFlagState) =>
+  FIND_DATA_GOAL_OPTIONS.filter(option => option.isAvailable(state))
+
+const normalizeFindDataGoalPriority = (
+  state: FindDataGoalFlagState,
+  value?: CampaignExtraSettings['findDataGoalPriority'] | ''
+): FindDataGoalPriority | '' => {
+  const options = getAvailableFindDataGoalOptions(state)
+  if (value && options.some(option => option.value === value)) return value
+  return options[0]?.value || ''
+}
 
 const MESSAGE_FULL_NAME_TOKEN = '#{FULL_NAME}'
 const MESSAGE_DATE_OPTIONS: { value: MessageDateOption; label: string; token: string }[] = [
@@ -813,6 +850,9 @@ export default function CampaignFormModal({
     sortTypeComment: (campaign?.extraSettings?.sortTypeComment || 'most_relevant') as CampaignExtraSettings['sortTypeComment'],
     countCommentFindData: campaign?.extraSettings?.countCommentFindData ?? 30,
     countGroupMemberFindData: campaign?.extraSettings?.countGroupMemberFindData ?? 100,
+    findDataGoalModeEnabled: campaign?.extraSettings?.findDataGoalModeEnabled ?? false,
+    findDataGoalPriority: (campaign?.extraSettings?.findDataGoalPriority || '') as FindDataGoalPriority | '',
+    findDataGoalDailyLimit: normalizeFindDataGoalDailyLimit(campaign?.extraSettings?.findDataGoalDailyLimit),
     countSearchPostFindData: campaign?.extraSettings?.countSearchPostFindData ?? campaign?.extraSettings?.countPostFindData ?? 10,
     countSearchGroupFindData: campaign?.extraSettings?.countSearchGroupFindData ?? 20,
     searchPostRecentOnly: campaign?.extraSettings?.searchPostRecentOnly ?? false,
@@ -937,6 +977,8 @@ export default function CampaignFormModal({
     formData.isFindFacebookGroup
   )
   const hasFindDataTargetSelection = showFoundDataHandlingSection
+  const findDataGoalOptions = getAvailableFindDataGoalOptions(formData)
+  const effectiveFindDataGoalPriority = normalizeFindDataGoalPriority(formData, formData.findDataGoalPriority)
   const canUseFindDataPostSource = formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink
   const canUseFindDataCommentSource = formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid
   const canUseFindDataUidOnlySources = formData.isFindUid && isFindDataGroupCampaign
@@ -1303,6 +1345,29 @@ export default function CampaignFormModal({
     formData.actionId,
     formData.pagePostMode,
     formData.postWithBackground
+  ])
+
+  useEffect(() => {
+    setFormData(prev => {
+      if (!prev.findDataGoalModeEnabled) return prev
+
+      const nextPriority = normalizeFindDataGoalPriority(prev, prev.findDataGoalPriority)
+      const nextDailyLimit = normalizeFindDataGoalDailyLimit(prev.findDataGoalDailyLimit)
+      if (prev.findDataGoalPriority === nextPriority && prev.findDataGoalDailyLimit === nextDailyLimit) return prev
+      return {
+        ...prev,
+        findDataGoalPriority: nextPriority,
+        findDataGoalDailyLimit: nextDailyLimit
+      }
+    })
+  }, [
+    formData.findDataGoalModeEnabled,
+    formData.findDataGoalPriority,
+    formData.findDataGoalDailyLimit,
+    formData.isFindPhone,
+    formData.isFindLinkGroupZalo,
+    formData.isFindUid,
+    formData.isFindPostLink
   ])
 
   useEffect(() => {
@@ -1952,6 +2017,9 @@ export default function CampaignFormModal({
       const canUseFindDataContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment
       const saveFindDataPostSort = normalizedFindData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
       const saveFindDataCommentSort = normalizedFindData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
+      const saveFindDataGoalPriority = formData.findDataGoalModeEnabled
+        ? normalizeFindDataGoalPriority(normalizedFindData, formData.findDataGoalPriority) || undefined
+        : undefined
 
       return {
         campaignPayload: {
@@ -2054,6 +2122,11 @@ export default function CampaignFormModal({
             isFindNewInteractors: normalizedFindData.isFindNewInteractors,
             isFindInGroupMembers: normalizedFindData.isFindInGroupMembers,
             countGroupMemberFindData: formData.countGroupMemberFindData,
+            findDataGoalModeEnabled: isFindDataCampaign ? formData.findDataGoalModeEnabled : false,
+            findDataGoalPriority: isFindDataCampaign ? saveFindDataGoalPriority : undefined,
+            findDataGoalDailyLimit: isFindDataCampaign
+              ? normalizeFindDataGoalDailyLimit(formData.findDataGoalDailyLimit)
+              : DEFAULT_FIND_DATA_GOAL_DAILY_LIMIT,
             countSearchPostFindData: isFindDataSearchCampaign ? Math.max(1, Number(formData.countSearchPostFindData) || 1) : undefined,
             countSearchGroupFindData: isFindDataSearchCampaign ? Math.max(1, Number(formData.countSearchGroupFindData) || 1) : undefined,
             searchPostRecentOnly: isFindDataSearchCampaign ? formData.searchPostRecentOnly : false,
@@ -3685,6 +3758,69 @@ export default function CampaignFormModal({
               </label>
             )}
           </div>
+        </div>
+      )}
+
+      {hasFindDataTargetSelection && (
+        <div className="extra-comment-options">
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Mục tiêu tìm kiếm</div>
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={formData.findDataGoalModeEnabled}
+              onChange={e => {
+                const checked = e.target.checked
+                setFormData(p => ({
+                  ...p,
+                  findDataGoalModeEnabled: checked,
+                  findDataGoalPriority: checked
+                    ? normalizeFindDataGoalPriority(p, p.findDataGoalPriority)
+                    : p.findDataGoalPriority,
+                  findDataGoalDailyLimit: normalizeFindDataGoalDailyLimit(p.findDataGoalDailyLimit)
+                }))
+              }}
+            />
+            <span>Chế độ theo đuổi mục tiêu</span>
+          </label>
+
+          {formData.findDataGoalModeEnabled && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+              <div className="stepper-form-group">
+                <label>Lựa chọn ưu tiên</label>
+                {findDataGoalOptions.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {findDataGoalOptions.map(option => (
+                      <label key={option.value} className="schedule-radio-label">
+                        <input
+                          type="radio"
+                          name="find-data-goal-priority"
+                          checked={effectiveFindDataGoalPriority === option.value}
+                          onChange={() => setFormData(p => ({ ...p, findDataGoalPriority: option.value }))}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="schedule-hint">Chọn ít nhất một loại data ở phần Tìm kiếm gì để đặt ưu tiên.</div>
+                )}
+              </div>
+
+              <div className="stepper-form-group" style={{ maxWidth: 240 }}>
+                <label>Số lượng mỗi ngày là</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formData.findDataGoalDailyLimit}
+                  onChange={e => setFormData(p => ({
+                    ...p,
+                    findDataGoalDailyLimit: normalizeFindDataGoalDailyLimit(e.target.value)
+                  }))}
+                  className="stepper-input"
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
