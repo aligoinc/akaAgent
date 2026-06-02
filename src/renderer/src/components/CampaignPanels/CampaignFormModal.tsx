@@ -112,6 +112,7 @@ interface FindDataGoalFlagState {
   isFindLinkGroupZalo: boolean
   isFindUid: boolean
   isFindPostLink: boolean
+  isFindFacebookGroup: boolean
 }
 interface FindDataFlagState {
   isFindPhone: boolean
@@ -326,7 +327,8 @@ const FIND_DATA_GOAL_OPTIONS: Array<{
   { value: 'phone', label: 'Số điện thoại', isAvailable: state => state.isFindPhone },
   { value: 'zalo_group_link', label: 'Link group Zalo', isAvailable: state => state.isFindLinkGroupZalo },
   { value: 'facebook_uid', label: 'Uid user facebook', isAvailable: state => state.isFindUid },
-  { value: 'post_link', label: 'Link post', isAvailable: state => state.isFindPostLink }
+  { value: 'post_link', label: 'Link post', isAvailable: state => state.isFindPostLink },
+  { value: 'facebook_group', label: 'Link group Facebook', isAvailable: state => state.isFindFacebookGroup }
 ]
 
 const normalizeFindDataGoalDailyLimit = (value: unknown): number => {
@@ -1367,7 +1369,8 @@ export default function CampaignFormModal({
     formData.isFindPhone,
     formData.isFindLinkGroupZalo,
     formData.isFindUid,
-    formData.isFindPostLink
+    formData.isFindPostLink,
+    formData.isFindFacebookGroup
   ])
 
   useEffect(() => {

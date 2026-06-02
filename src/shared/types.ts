@@ -197,7 +197,7 @@ export interface CampaignExtraSettings {
   isFindInGroupMembers?: boolean
   countGroupMemberFindData?: number
   findDataGoalModeEnabled?: boolean
-  findDataGoalPriority?: 'phone' | 'zalo_group_link' | 'facebook_uid' | 'post_link'
+  findDataGoalPriority?: 'phone' | 'zalo_group_link' | 'facebook_uid' | 'post_link' | 'facebook_group'
   findDataGoalDailyLimit?: number
   findDataRerunEnabled?: boolean
   findDataRerunAfterHours?: number

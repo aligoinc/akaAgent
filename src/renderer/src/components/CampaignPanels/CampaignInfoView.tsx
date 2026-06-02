@@ -73,7 +73,8 @@ const FIND_DATA_GOAL_PRIORITY_LABELS: Record<NonNullable<CampaignExtraSettings['
   phone: 'Số điện thoại',
   zalo_group_link: 'Link group Zalo',
   facebook_uid: 'Uid user facebook',
-  post_link: 'Link post'
+  post_link: 'Link post',
+  facebook_group: 'Link group Facebook'
 }
 
 const DEFAULT_RATE_LIMIT_MINUTES = 65
