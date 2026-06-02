@@ -186,6 +186,7 @@ export interface CampaignExtraSettings {
   isFindLinkGroupZalo?: boolean
   isFindUid?: boolean
   isFindPostLink?: boolean
+  isFindFacebookGroup?: boolean
   isFindInPost?: boolean
   sortTypePost?: 'most_relevant' | 'recent_activity' | 'new_posts'
   countPostFindData?: number
@@ -210,6 +211,22 @@ export interface CampaignExtraSettings {
   findZaloGroupLinkWebTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Zalo Web đã chọn
   findPhoneAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm SĐT, đẩy sang campaign akaBiz Desktop đã chọn
   findZaloGroupLinkAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Desktop đã chọn
+  // Tìm kiếm data bằng Facebook Search — UI/config phase
+  countSearchPostFindData?: number
+  countSearchGroupFindData?: number
+  searchPostRecentOnly?: boolean
+  searchPostSeenOnly?: boolean
+  searchPostDateFilter?: 'all' | 'today' | 'this_week' | 'this_month'
+  searchPostAuthorFilter?: 'all' | 'you' | 'friends' | 'groups_pages'
+  searchPostTaggedLocation?: 'all' | 'near_me'
+  searchGroupCity?: string
+  searchGroupNearMe?: boolean
+  searchGroupPublicOnly?: boolean
+  searchGroupMineOnly?: boolean
+  minSearchGroupMembers?: number
+  minSearchGroupPostsPerDay?: number
+  findFacebookGroupPostTargetCampaignIds?: number[] // Khi tìm group Facebook, đẩy sang campaign đăng bài group
+  findFacebookGroupCommentTargetCampaignIds?: number[] // Khi tìm group Facebook, đẩy sang campaign comment seeding group/page/profile
 }
 
 export interface Campaign {

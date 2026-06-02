@@ -23,6 +23,8 @@ type CampaignPickerSource =
   | { type: 'findDataSource' }
   | { type: 'messageUidTarget' }
   | { type: 'postLinkTarget' }
+  | { type: 'groupPostTarget' }
+  | { type: 'groupCommentTarget' }
   | { type: 'external'; kind: AkaBizCampaignListKind }
 type InternalCampaignPickerSourceType = Exclude<CampaignPickerSource['type'], 'external'>
 
@@ -109,16 +111,17 @@ interface FindDataFlagState {
   isFindLinkGroupZalo: boolean
   isFindUid: boolean
   isFindPostLink: boolean
+  isFindFacebookGroup: boolean
   isFindInPost: boolean
   isFindInComment: boolean
   isFindNewInteractors: boolean
   isFindInGroupMembers: boolean
 }
 
-const normalizeFindDataFlagState = <T extends FindDataFlagState>(state: T): T => {
+const normalizeFindDataFlagState = <T extends FindDataFlagState>(state: T, options: { isSearchCampaign?: boolean } = {}): T => {
   const supportsPost = state.isFindPhone || state.isFindLinkGroupZalo || state.isFindUid || state.isFindPostLink
   const supportsComment = state.isFindPhone || state.isFindLinkGroupZalo || state.isFindUid
-  const supportsUidOnlySources = state.isFindUid
+  const supportsUidOnlySources = state.isFindUid && !options.isSearchCampaign
 
   return {
     ...state,
@@ -211,7 +214,10 @@ const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
+const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
+const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
+const GROUP_POST_ACTION_ID = 'facebook_group_post'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   MESSAGE_FRIEND_ACTION_ID,
@@ -221,7 +227,7 @@ const MESSAGE_CAMPAIGN_ACTIONS = new Set([
 
 // Campaign action IDs for "Đăng bài vào group" type — show "Chọn nhóm" picker in data list
 const GROUP_POST_ACTIONS = new Set([
-  'facebook_group_post',
+  GROUP_POST_ACTION_ID,
   FIND_DATA_GROUP_ACTION_ID
 ])
 
@@ -235,8 +241,12 @@ const FIND_DATA_GROUP_ACTIONS = new Set([
   FIND_DATA_GROUP_ACTION_ID
 ])
 
+const FIND_DATA_SEARCH_ACTIONS = new Set([
+  FIND_DATA_SEARCH_ACTION_ID
+])
+
 const COMMENT_SEEDING_FEED_ACTIONS = new Set([
-  'facebook_comment_seeding'
+  COMMENT_SEEDING_FEED_ACTION_ID
 ])
 
 const COMMENT_SEEDING_POST_ACTIONS = new Set([
@@ -244,7 +254,7 @@ const COMMENT_SEEDING_POST_ACTIONS = new Set([
 ])
 
 const COMMENT_SEEDING_ACTIONS = new Set([
-  'facebook_comment_seeding',
+  COMMENT_SEEDING_FEED_ACTION_ID,
   'facebook_comment_seeding_post'
 ])
 
@@ -273,6 +283,25 @@ const COMMENT_SORT_OPTIONS = [
   { value: 'most_relevant', label: 'Phù hợp nhất' },
   { value: 'all_comments', label: 'Tất cả bình luận' },
   { value: 'newest', label: 'Mới nhất' }
+] as const
+
+const SEARCH_POST_DATE_FILTER_OPTIONS = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'this_week', label: 'Tuần này' },
+  { value: 'this_month', label: 'Tháng này' }
+] as const
+
+const SEARCH_POST_AUTHOR_FILTER_OPTIONS = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'you', label: 'Bài viết của bạn' },
+  { value: 'friends', label: 'Bạn bè' },
+  { value: 'groups_pages', label: 'Nhóm và Trang' }
+] as const
+
+const SEARCH_POST_TAGGED_LOCATION_OPTIONS = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'near_me', label: 'Gần tôi' }
 ] as const
 
 const DEFAULT_DAILY_STOP_TIME = '18:00'
@@ -484,6 +513,7 @@ const getFindDataTypeLabels = (extra: CampaignExtraSettings | undefined): string
   if (extra?.isFindPhone) labels.push('SĐT')
   if (extra?.isFindLinkGroupZalo) labels.push('Link group Zalo')
   if (extra?.isFindPostLink) labels.push('Link bài post')
+  if (extra?.isFindFacebookGroup) labels.push('Link group Facebook')
   return labels
 }
 
@@ -493,6 +523,7 @@ const getFindDataSourceLabels = (extra: CampaignExtraSettings | undefined): stri
   if (extra?.isFindInComment) labels.push('Comment')
   if (extra?.isFindNewInteractors) labels.push('Tương tác mới')
   if (extra?.isFindInGroupMembers) labels.push('Thành viên group')
+  if (extra?.isFindFacebookGroup) labels.push('Group Facebook')
   return labels
 }
 
@@ -662,11 +693,14 @@ export default function CampaignFormModal({
       ? 'all'
       : 'none'
   const savedDailyStopTime = normalizeTimeInput(campaign?.dailyStopTime)
+  const initialActionId = lockedActionId || campaign?.actionId || ''
+  const initialIsFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(initialActionId)
   const initialFindDataFlags = normalizeFindDataFlagState({
     isFindPhone: campaign?.extraSettings?.isFindPhone ?? false,
     isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
     isFindUid: draftRequiredTargetField === 'findUidTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindUid ?? false),
     isFindPostLink: draftRequiredTargetField === 'findPostLinkTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindPostLink ?? false),
+    isFindFacebookGroup: campaign?.extraSettings?.isFindFacebookGroup ?? false,
     isFindInPost: Boolean(
       draftRequiredTargetField === 'findPostLinkTargetCampaignIds' ||
       campaign?.extraSettings?.isFindPostLink ||
@@ -675,11 +709,11 @@ export default function CampaignFormModal({
     isFindInComment: campaign?.extraSettings?.isFindInComment ?? false,
     isFindNewInteractors: campaign?.extraSettings?.isFindNewInteractors ?? false,
     isFindInGroupMembers: campaign?.extraSettings?.isFindInGroupMembers ?? false
-  })
+  }, { isSearchCampaign: initialIsFindDataSearchCampaign })
 
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
-    actionId: lockedActionId || campaign?.actionId || '',
+    actionId: initialActionId,
     accountIds: campaign?.accountId ? [campaign.accountId] : [] as number[],
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
@@ -779,6 +813,19 @@ export default function CampaignFormModal({
     sortTypeComment: (campaign?.extraSettings?.sortTypeComment || 'most_relevant') as CampaignExtraSettings['sortTypeComment'],
     countCommentFindData: campaign?.extraSettings?.countCommentFindData ?? 30,
     countGroupMemberFindData: campaign?.extraSettings?.countGroupMemberFindData ?? 100,
+    countSearchPostFindData: campaign?.extraSettings?.countSearchPostFindData ?? campaign?.extraSettings?.countPostFindData ?? 10,
+    countSearchGroupFindData: campaign?.extraSettings?.countSearchGroupFindData ?? 20,
+    searchPostRecentOnly: campaign?.extraSettings?.searchPostRecentOnly ?? false,
+    searchPostSeenOnly: campaign?.extraSettings?.searchPostSeenOnly ?? false,
+    searchPostDateFilter: (campaign?.extraSettings?.searchPostDateFilter || 'all') as NonNullable<CampaignExtraSettings['searchPostDateFilter']>,
+    searchPostAuthorFilter: (campaign?.extraSettings?.searchPostAuthorFilter || 'all') as NonNullable<CampaignExtraSettings['searchPostAuthorFilter']>,
+    searchPostTaggedLocation: (campaign?.extraSettings?.searchPostTaggedLocation || 'all') as NonNullable<CampaignExtraSettings['searchPostTaggedLocation']>,
+    searchGroupCity: campaign?.extraSettings?.searchGroupCity || '',
+    searchGroupNearMe: campaign?.extraSettings?.searchGroupNearMe ?? false,
+    searchGroupPublicOnly: campaign?.extraSettings?.searchGroupPublicOnly ?? false,
+    searchGroupMineOnly: campaign?.extraSettings?.searchGroupMineOnly ?? false,
+    minSearchGroupMembers: campaign?.extraSettings?.minSearchGroupMembers ?? 0,
+    minSearchGroupPostsPerDay: campaign?.extraSettings?.minSearchGroupPostsPerDay ?? 0,
     findDataRerunEnabled: campaign?.extraSettings?.findDataRerunEnabled ?? false,
     findDataRerunAfterHours: normalizeHourValue(campaign?.extraSettings?.findDataRerunAfterHours),
     isFindByKeywords: campaign?.extraSettings?.isFindByKeywords ?? false,
@@ -791,7 +838,9 @@ export default function CampaignFormModal({
     findPhoneZaloWebTargetCampaignIds: campaign?.extraSettings?.findPhoneZaloWebTargetCampaignIds || [] as number[],
     findZaloGroupLinkWebTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkWebTargetCampaignIds || [] as number[],
     findPhoneAkaBizDesktopTargetCampaignIds: campaign?.extraSettings?.findPhoneAkaBizDesktopTargetCampaignIds || [] as number[],
-    findZaloGroupLinkAkaBizDesktopTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || [] as number[]
+    findZaloGroupLinkAkaBizDesktopTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || [] as number[],
+    findFacebookGroupPostTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupPostTargetCampaignIds || [] as number[],
+    findFacebookGroupCommentTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || [] as number[]
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
   const commentImageInputRef = useRef<HTMLInputElement>(null)
@@ -815,6 +864,12 @@ export default function CampaignFormModal({
   )
   const [handleFoundZaloGroupLinkAkaBizDesktopData, setHandleFoundZaloGroupLinkAkaBizDesktopData] = useState(() =>
     (campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || []).length > 0
+  )
+  const [handleFoundFacebookGroupPostData, setHandleFoundFacebookGroupPostData] = useState(() =>
+    (campaign?.extraSettings?.findFacebookGroupPostTargetCampaignIds || []).length > 0
+  )
+  const [handleFoundFacebookGroupCommentData, setHandleFoundFacebookGroupCommentData] = useState(() =>
+    (campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || []).length > 0
   )
   const [selectedFindDataSourceCampaignIds, setSelectedFindDataSourceCampaignIds] = useState<number[]>([])
   const findDataSourceSelectionTouchedRef = useRef(false)
@@ -847,6 +902,8 @@ export default function CampaignFormModal({
   const isPagePostCampaign = formData.actionId === PAGE_POST_ACTION_ID
   const isNewsfeedInteractionCampaign = formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
+  const isFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)
+  const isFindDataCampaign = isFindDataGroupCampaign || isFindDataSearchCampaign
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
@@ -872,18 +929,25 @@ export default function CampaignFormModal({
     formData.isFindLinkGroupZalo ||
     formData.isFindUid ||
     formData.isFindPostLink
+  ) || isFindDataSearchCampaign && (
+    formData.isFindPhone ||
+    formData.isFindLinkGroupZalo ||
+    formData.isFindUid ||
+    formData.isFindPostLink ||
+    formData.isFindFacebookGroup
   )
   const hasFindDataTargetSelection = showFoundDataHandlingSection
-  const canUseFindDataPostSource = hasFindDataTargetSelection
+  const canUseFindDataPostSource = formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink
   const canUseFindDataCommentSource = formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid
-  const canUseFindDataUidOnlySources = formData.isFindUid
+  const canUseFindDataUidOnlySources = formData.isFindUid && isFindDataGroupCampaign
   const usesFindDataPostFeed = formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink || formData.isFindNewInteractors
   const usesFindDataCommentFeed = formData.isFindInComment || formData.isFindNewInteractors
+  const usesFindDataSearchGroup = isFindDataSearchCampaign && formData.isFindFacebookGroup
   const usesFindDataFeed = usesFindDataPostFeed || usesFindDataCommentFeed
   const usesFindDataContentConditions = formData.isFindInPost || formData.isFindInComment
   const effectiveFindDataPostSort = formData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
   const effectiveFindDataCommentSort = formData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
-  const showFindDataConditionsSection = isFindDataGroupCampaign && (usesFindDataFeed || formData.isFindInGroupMembers)
+  const showFindDataConditionsSection = isFindDataCampaign && (usesFindDataFeed || formData.isFindInGroupMembers || usesFindDataSearchGroup)
   const showExtraSection = isFacebookGroupPostCampaign || isCommentSeedingCampaign
   const showFindDataSourceSection = !!targetFindDataField && !hideDetailsSection
   const hasSelectedFindDataSourceCampaign = showFindDataSourceSection && (selectedFindDataSourceCampaignIds.length > 0 || isDraftTargetFromFindData)
@@ -904,7 +968,7 @@ export default function CampaignFormModal({
   const usesSourceContentAiPrompt = isUsingSourceContent && formData.rewriteSourceContentWithAI
   const hasSourceContentAiPrompt = formData.sourceContentAiPrompt.trim().length > 0
   const requiresMainContentOrMedia =
-    !isFindDataGroupCampaign &&
+    !isFindDataCampaign &&
     !isCommentSeedingCampaign &&
     !isNewsfeedInteractionCampaign &&
     !isUsingSourceContent &&
@@ -912,7 +976,7 @@ export default function CampaignFormModal({
   const hasMainContentText = formData.content.trim().length > 0
   const hasSelectedMainMedia = formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
-  const detailsColumnCount = isCommentSeedingPostCampaign
+  const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign
     ? (isEditingSavedCampaign ? 1 : 2)
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 3 : 4)
@@ -942,7 +1006,7 @@ export default function CampaignFormModal({
     ? visibleLimitActionCodes.filter(code => code !== 'fb_comment')
     : visibleLimitActionCodes
   const showGroupPostCommentLimit = isFacebookGroupPostCampaign && visibleLimitActionCodes.includes('fb_comment')
-  const showContentSection = !isFindDataGroupCampaign && !isNewsfeedInteractionCampaign && (!isMessageUidCampaign || formData.enableMessage)
+  const showContentSection = !isFindDataCampaign && !isNewsfeedInteractionCampaign && (!isMessageUidCampaign || formData.enableMessage)
   const visibleScheduleFields: StepDef['fields'] = [
     { key: 'scheduleType', label: 'Loại lịch' },
     { key: 'schedule', label: 'Ngày chạy' },
@@ -1037,7 +1101,7 @@ export default function CampaignFormModal({
         ? steps.flatMap(s => s.id === 'details' ? [FIND_DATA_SOURCE_STEP, s] : [s])
         : steps
     }
-    if (isFindDataGroupCampaign) {
+    if (isFindDataCampaign) {
       const generalStep = ALL_STEPS.find(s => s.id === 'general')!
       const baseScheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
       const scheduleStep: StepDef = {
@@ -1058,8 +1122,8 @@ export default function CampaignFormModal({
       }
       const detailsStep: StepDef = {
         ...ALL_STEPS.find(s => s.id === 'details')!,
-        title: 'Danh sách group',
-        fields: [{ key: 'details', label: 'Group' }]
+        title: isFindDataSearchCampaign ? 'Danh sách từ khóa' : 'Danh sách group',
+        fields: [{ key: 'details', label: isFindDataSearchCampaign ? 'Từ khóa' : 'Group' }]
       }
       return [
         generalStep,
@@ -1156,8 +1220,18 @@ export default function CampaignFormModal({
     c.id !== campaign?.id &&
     !c.isDelete
   )
+  const groupPostCampaignOptions = campaigns.filter(c =>
+    c.actionId === GROUP_POST_ACTION_ID &&
+    c.id !== campaign?.id &&
+    !c.isDelete
+  )
+  const groupCommentCampaignOptions = campaigns.filter(c =>
+    c.actionId === COMMENT_SEEDING_FEED_ACTION_ID &&
+    c.id !== campaign?.id &&
+    !c.isDelete
+  )
   const findDataSourceCampaignOptions = campaigns.filter(c => {
-    if (c.actionId !== FIND_DATA_GROUP_ACTION_ID || c.isDelete || !isEditableFindDataSourceCampaign(c)) return false
+    if ((!FIND_DATA_GROUP_ACTIONS.has(c.actionId) && !FIND_DATA_SEARCH_ACTIONS.has(c.actionId)) || c.isDelete || !isEditableFindDataSourceCampaign(c)) return false
     if (targetFindDataField === 'findUidTargetCampaignIds') return c.extraSettings?.isFindUid === true
     if (targetFindDataField === 'findPostLinkTargetCampaignIds') return c.extraSettings?.isFindPostLink === true
     return false
@@ -1506,11 +1580,11 @@ export default function CampaignFormModal({
       case 'sourceContent': return (!requiresSourceLinks || hasSourceLinks) && (!usesSourceContentAiPrompt || hasSourceContentAiPrompt)
       case 'images': return true  // optional
       case 'commentImages': return true  // optional
-      case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindNewInteractors || formData.isFindInGroupMembers
+      case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindNewInteractors || formData.isFindInGroupMembers || formData.isFindFacebookGroup
       case 'findDataPostConditions': return true
       case 'findDataCommentConditions': return true
       case 'findDataContent': return true
-      case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink
+      case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink || formData.isFindFacebookGroup
       case 'foundDataHandling': return true
       case 'findDataSources': return true
       case 'messageActions': return isMessageFriendCampaign || formData.enableMessage || formData.enableAddFriend
@@ -1874,7 +1948,7 @@ export default function CampaignFormModal({
         : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null)
       const normalizedScheduleDays = formData.scheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
       const normalizedScheduleWeekDays = formData.scheduleType === 'weekly' ? formData.scheduleWeekDays : ''
-      const normalizedFindData = normalizeFindDataFlagState(formData)
+      const normalizedFindData = normalizeFindDataFlagState(formData, { isSearchCampaign: isFindDataSearchCampaign })
       const canUseFindDataContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment
       const saveFindDataPostSort = normalizedFindData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
       const saveFindDataCommentSort = normalizedFindData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
@@ -1970,6 +2044,7 @@ export default function CampaignFormModal({
             isFindLinkGroupZalo: normalizedFindData.isFindLinkGroupZalo,
             isFindUid: normalizedFindData.isFindUid,
             isFindPostLink: normalizedFindData.isFindPostLink,
+            isFindFacebookGroup: isFindDataSearchCampaign ? normalizedFindData.isFindFacebookGroup : false,
             isFindInPost: normalizedFindData.isFindInPost,
             sortTypePost: saveFindDataPostSort,
             countPostFindData: formData.countPostFindData,
@@ -1979,8 +2054,21 @@ export default function CampaignFormModal({
             isFindNewInteractors: normalizedFindData.isFindNewInteractors,
             isFindInGroupMembers: normalizedFindData.isFindInGroupMembers,
             countGroupMemberFindData: formData.countGroupMemberFindData,
-            findDataRerunEnabled: isFindDataGroupCampaign ? formData.findDataRerunEnabled : false,
-            findDataRerunAfterHours: isFindDataGroupCampaign
+            countSearchPostFindData: isFindDataSearchCampaign ? Math.max(1, Number(formData.countSearchPostFindData) || 1) : undefined,
+            countSearchGroupFindData: isFindDataSearchCampaign ? Math.max(1, Number(formData.countSearchGroupFindData) || 1) : undefined,
+            searchPostRecentOnly: isFindDataSearchCampaign ? formData.searchPostRecentOnly : false,
+            searchPostSeenOnly: isFindDataSearchCampaign ? formData.searchPostSeenOnly : false,
+            searchPostDateFilter: isFindDataSearchCampaign ? formData.searchPostDateFilter : 'all',
+            searchPostAuthorFilter: isFindDataSearchCampaign ? formData.searchPostAuthorFilter : 'all',
+            searchPostTaggedLocation: isFindDataSearchCampaign ? formData.searchPostTaggedLocation : 'all',
+            searchGroupCity: isFindDataSearchCampaign ? formData.searchGroupCity.trim() : '',
+            searchGroupNearMe: isFindDataSearchCampaign ? formData.searchGroupNearMe : false,
+            searchGroupPublicOnly: isFindDataSearchCampaign ? formData.searchGroupPublicOnly : false,
+            searchGroupMineOnly: isFindDataSearchCampaign ? formData.searchGroupMineOnly : false,
+            minSearchGroupMembers: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupMembers) || 0) : 0,
+            minSearchGroupPostsPerDay: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupPostsPerDay) || 0) : 0,
+            findDataRerunEnabled: isFindDataCampaign ? formData.findDataRerunEnabled : false,
+            findDataRerunAfterHours: isFindDataCampaign
               ? normalizeHourValue(formData.findDataRerunAfterHours)
               : DEFAULT_FIND_DATA_RERUN_AFTER_HOURS,
             multiDailyTimeSlotsEnabled: isMultiDailyTimeSlotsCampaign ? formData.multiDailyTimeSlotsEnabled : false,
@@ -1997,7 +2085,13 @@ export default function CampaignFormModal({
             findPhoneZaloWebTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneZaloWebData ? getCampaignIdList(formData.findPhoneZaloWebTargetCampaignIds) : [],
             findZaloGroupLinkWebTargetCampaignIds: normalizedFindData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData ? getCampaignIdList(formData.findZaloGroupLinkWebTargetCampaignIds) : [],
             findPhoneAkaBizDesktopTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneAkaBizDesktopData ? getCampaignIdList(formData.findPhoneAkaBizDesktopTargetCampaignIds) : [],
-            findZaloGroupLinkAkaBizDesktopTargetCampaignIds: normalizedFindData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData ? getCampaignIdList(formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds) : []
+            findZaloGroupLinkAkaBizDesktopTargetCampaignIds: normalizedFindData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData ? getCampaignIdList(formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds) : [],
+            findFacebookGroupPostTargetCampaignIds: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup && handleFoundFacebookGroupPostData
+              ? getCampaignIdList(formData.findFacebookGroupPostTargetCampaignIds)
+              : [],
+            findFacebookGroupCommentTargetCampaignIds: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup && handleFoundFacebookGroupCommentData
+              ? getCampaignIdList(formData.findFacebookGroupCommentTargetCampaignIds)
+              : []
           } as CampaignExtraSettings,
           images: formData.images
         },
@@ -2087,14 +2181,19 @@ export default function CampaignFormModal({
         return
       }
     }
-    if (isFindDataGroupCampaign) {
-      if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink) {
+    if (isFindDataCampaign) {
+      if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink && !formData.isFindFacebookGroup) {
         showAlert('Vui lòng chọn ít nhất một loại data cần tìm.', 'error')
         return
       }
-      const normalizedFindData = normalizeFindDataFlagState(formData)
-      if (!normalizedFindData.isFindInPost && !normalizedFindData.isFindInComment && !normalizedFindData.isFindNewInteractors && !normalizedFindData.isFindInGroupMembers) {
-        showAlert('Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment, Những người tương tác mới hoặc Thành viên group mới.', 'error')
+      const normalizedFindData = normalizeFindDataFlagState(formData, { isSearchCampaign: isFindDataSearchCampaign })
+      if (!normalizedFindData.isFindInPost && !normalizedFindData.isFindInComment && !normalizedFindData.isFindNewInteractors && !normalizedFindData.isFindInGroupMembers && !normalizedFindData.isFindFacebookGroup) {
+        showAlert(
+          isFindDataSearchCampaign
+            ? 'Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment hoặc Group Facebook.'
+            : 'Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment, Những người tương tác mới hoặc Thành viên group mới.',
+          'error'
+        )
         return
       }
       const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
@@ -2108,6 +2207,14 @@ export default function CampaignFormModal({
       }
       if (formData.isFindPostLink && handleFoundPostLinkData && formData.findPostLinkTargetCampaignIds.length === 0 && !isDraftAutoLinkedPostLink) {
         showAlert('Vui lòng chọn ít nhất một chiến dịch nhận link bài post.', 'error')
+        return
+      }
+      if (isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupPostData && formData.findFacebookGroupPostTargetCampaignIds.length === 0) {
+        showAlert('Vui lòng chọn ít nhất một chiến dịch đăng bài vào group để nhận group Facebook.', 'error')
+        return
+      }
+      if (isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupCommentData && formData.findFacebookGroupCommentTargetCampaignIds.length === 0) {
+        showAlert('Vui lòng chọn ít nhất một chiến dịch comment seeding để nhận group Facebook.', 'error')
         return
       }
       if (formData.isFindPhone && handleFoundPhoneSmsData) {
@@ -2161,7 +2268,7 @@ export default function CampaignFormModal({
         }
       }
       if (!isEditingSavedCampaign && details.length === 0) {
-        showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
+        showAlert(isFindDataSearchCampaign ? 'Vui lòng thêm ít nhất một từ khóa vào danh sách data.' : 'Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
         return
       }
     }
@@ -2210,9 +2317,11 @@ export default function CampaignFormModal({
       )
       return
     }
-    if (!isEditingSavedCampaign && (isGroupPostCampaign || isCommentSeedingCampaign || isMessageCampaign || isPagePostCampaign) && !hideDetailsSection && details.some(d => !String(d.uid || '').trim())) {
+    if (!isEditingSavedCampaign && (isFindDataCampaign || isGroupPostCampaign || isCommentSeedingCampaign || isMessageCampaign || isPagePostCampaign) && !hideDetailsSection && details.some(d => !String(d.uid || '').trim())) {
       showAlert(
-        isCommentSeedingPostCampaign
+        isFindDataSearchCampaign
+          ? 'Vui lòng nhập từ khóa cho tất cả dòng trong danh sách data.'
+          : isCommentSeedingPostCampaign
           ? 'Vui lòng nhập link bài post cho tất cả dòng trong danh sách data.'
           : isPagePostCampaign
             ? 'Danh sách fanpage có page thiếu Page ID. Vui lòng chọn lại page từ data scan.'
@@ -2412,7 +2521,7 @@ export default function CampaignFormModal({
       const createdUidTargetIds = (await Promise.all(tempUidTargetIds.map(tempId => persistDraftByTempId(tempId)))).flat()
       const createdPostLinkTargetIds = (await Promise.all(tempPostLinkTargetIds.map(tempId => persistDraftByTempId(tempId)))).flat()
 
-      if (isFindDataGroupCampaign) {
+      if (isFindDataCampaign) {
         await patchSavedSourceCampaignTargets('findUidTargetCampaignIds', createdUidTargetIds)
         await patchSavedSourceCampaignTargets('findPostLinkTargetCampaignIds', createdPostLinkTargetIds)
       }
@@ -2509,10 +2618,11 @@ export default function CampaignFormModal({
           // A: Tên (0), B: Uid (1), C: Sđt (2), D: Email (3)
           const cells = row.map((cell: any) => String(cell || '').trim())
           const postLink = cells.find(cell => /^https?:\/\//i.test(cell) || /facebook\.com|fb\.watch/i.test(cell)) || cells[1] || cells[0] || ''
-          const name = isCommentSeedingPostCampaign ? '' : String(row[0] || '').trim()
-          const uid = isCommentSeedingPostCampaign ? postLink : String(row[1] || '').trim()
-          const phone = isCommentSeedingPostCampaign ? '' : String(row[2] || '').trim()
-          const email = isCommentSeedingPostCampaign ? '' : String(row[3] || '').trim()
+          const searchKeyword = cells[0] || cells[1] || ''
+          const name = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : String(row[0] || '').trim()
+          const uid = isFindDataSearchCampaign ? searchKeyword : isCommentSeedingPostCampaign ? postLink : String(row[1] || '').trim()
+          const phone = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : String(row[2] || '').trim()
+          const email = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : String(row[3] || '').trim()
 
           newRows.push({
             name,
@@ -2565,9 +2675,16 @@ export default function CampaignFormModal({
 
         if (newRows.length > 0) {
           setDetails(prev => [...prev, ...newRows])
-          showAlert(`Đã thêm ${newRows.length} ${isCommentSeedingPostCampaign ? 'link bài post' : 'UID'} từ file TXT.`, 'success')
+          showAlert(`Đã thêm ${newRows.length} ${isFindDataSearchCampaign ? 'từ khóa' : isCommentSeedingPostCampaign ? 'link bài post' : 'UID'} từ file TXT.`, 'success')
         } else {
-          showAlert(isCommentSeedingPostCampaign ? 'File TXT trống hoặc không có link bài post hợp lệ.' : 'File TXT trống hoặc không có UID hợp lệ.', 'error')
+          showAlert(
+            isFindDataSearchCampaign
+              ? 'File TXT trống hoặc không có từ khóa hợp lệ.'
+              : isCommentSeedingPostCampaign
+                ? 'File TXT trống hoặc không có link bài post hợp lệ.'
+                : 'File TXT trống hoặc không có UID hợp lệ.',
+            'error'
+          )
         }
       } catch (err) {
         console.error('Lỗi khi đọc file TXT:', err)
@@ -3387,7 +3504,7 @@ export default function CampaignFormModal({
       findPhoneSmsTargetCampaignIds: checked ? p.findPhoneSmsTargetCampaignIds : [],
       findPhoneZaloWebTargetCampaignIds: checked ? p.findPhoneZaloWebTargetCampaignIds : [],
       findPhoneAkaBizDesktopTargetCampaignIds: checked ? p.findPhoneAkaBizDesktopTargetCampaignIds : []
-    }))
+    }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) {
       setHandleFoundPhoneSmsData(false)
       setHandleFoundPhoneZaloWebData(false)
@@ -3401,7 +3518,7 @@ export default function CampaignFormModal({
       isFindLinkGroupZalo: checked,
       findZaloGroupLinkWebTargetCampaignIds: checked ? p.findZaloGroupLinkWebTargetCampaignIds : [],
       findZaloGroupLinkAkaBizDesktopTargetCampaignIds: checked ? p.findZaloGroupLinkAkaBizDesktopTargetCampaignIds : []
-    }))
+    }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) {
       setHandleFoundZaloGroupLinkWebData(false)
       setHandleFoundZaloGroupLinkAkaBizDesktopData(false)
@@ -3413,7 +3530,7 @@ export default function CampaignFormModal({
       ...p,
       isFindUid: checked,
       findUidTargetCampaignIds: checked ? p.findUidTargetCampaignIds : []
-    }))
+    }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) setHandleFoundUidData(false)
   }
 
@@ -3423,8 +3540,21 @@ export default function CampaignFormModal({
       isFindPostLink: checked,
       isFindInPost: checked ? true : p.isFindInPost,
       findPostLinkTargetCampaignIds: checked ? p.findPostLinkTargetCampaignIds : []
-    }))
+    }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) setHandleFoundPostLinkData(false)
+  }
+
+  const handleFindFacebookGroupTargetChange = (checked: boolean) => {
+    setFormData(p => sanitizeFindDataSourceSelection({
+      ...p,
+      isFindFacebookGroup: checked,
+      findFacebookGroupPostTargetCampaignIds: checked ? p.findFacebookGroupPostTargetCampaignIds : [],
+      findFacebookGroupCommentTargetCampaignIds: checked ? p.findFacebookGroupCommentTargetCampaignIds : []
+    }, { isSearchCampaign: isFindDataSearchCampaign }))
+    if (!checked) {
+      setHandleFoundFacebookGroupPostData(false)
+      setHandleFoundFacebookGroupCommentData(false)
+    }
   }
 
   const renderFindDataSearchConfig = () => (
@@ -3466,6 +3596,16 @@ export default function CampaignFormModal({
             />
             <span>Link post</span>
           </label>
+          {isFindDataSearchCampaign && (
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.isFindFacebookGroup}
+                onChange={e => handleFindFacebookGroupTargetChange(e.target.checked)}
+              />
+              <span>Link group Facebook</span>
+            </label>
+          )}
         </div>
       </div>
 
@@ -3480,7 +3620,7 @@ export default function CampaignFormModal({
                   checked={formData.isFindPostLink || formData.isFindInPost}
                   onChange={e => {
                     const checked = e.target.checked
-                    setFormData(p => sanitizeFindDataSourceSelection({ ...p, isFindInPost: checked }))
+                    setFormData(p => sanitizeFindDataSourceSelection({ ...p, isFindInPost: checked }, { isSearchCampaign: isFindDataSearchCampaign }))
                   }}
                 />
                 <span>Bài post</span>
@@ -3491,7 +3631,7 @@ export default function CampaignFormModal({
                 <input
                   type="checkbox"
                   checked={formData.isFindInComment}
-                  onChange={e => setFormData(p => sanitizeFindDataSourceSelection({ ...p, isFindInComment: e.target.checked }))}
+                  onChange={e => setFormData(p => sanitizeFindDataSourceSelection({ ...p, isFindInComment: e.target.checked }, { isSearchCampaign: isFindDataSearchCampaign }))}
                 />
                 <span>Comment</span>
               </label>
@@ -3506,7 +3646,7 @@ export default function CampaignFormModal({
                     setFormData(p => sanitizeFindDataSourceSelection({
                       ...p,
                       isFindNewInteractors: checked
-                    }))
+                    }, { isSearchCampaign: isFindDataSearchCampaign }))
                   }}
                 />
                 <span className="find-data-source-option-text">
@@ -3525,13 +3665,23 @@ export default function CampaignFormModal({
                     setFormData(p => sanitizeFindDataSourceSelection({
                       ...p,
                       isFindInGroupMembers: checked
-                    }))
+                    }, { isSearchCampaign: isFindDataSearchCampaign }))
                   }}
                 />
                 <span className="find-data-source-option-text">
                   <span className="find-data-source-option-title">Thành viên group mới</span>
                   <span className="find-data-source-option-description">Là thành viên tham gia vào group mới nhất theo số lượng cài đặt hoặc theo phiên chạy mới nhất</span>
                 </span>
+              </label>
+            )}
+            {isFindDataSearchCampaign && formData.isFindFacebookGroup && (
+              <label className="schedule-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={formData.isFindFacebookGroup}
+                  onChange={e => handleFindFacebookGroupTargetChange(e.target.checked)}
+                />
+                <span>Group Facebook</span>
               </label>
             )}
           </div>
@@ -3629,6 +3779,8 @@ export default function CampaignFormModal({
     if (source.type === 'findDataSource') return [...findDataSourceCampaignOptions.map(toFindDataSourcePickerRow), ...draftRows]
     if (source.type === 'messageUidTarget') return [...messageUidCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
     if (source.type === 'postLinkTarget') return [...postLinkCommentCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
+    if (source.type === 'groupPostTarget') return groupPostCampaignOptions.map(toInternalCampaignPickerRow)
+    if (source.type === 'groupCommentTarget') return groupCommentCampaignOptions.map(toInternalCampaignPickerRow)
     return (externalCampaigns[source.kind] || []).map(toExternalCampaignPickerRow)
   }
 
@@ -4121,6 +4273,62 @@ export default function CampaignFormModal({
           )}
         </div>
       )}
+
+      {isFindDataSearchCampaign && formData.isFindFacebookGroup && (
+        <div className="extra-comment-options">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={handleFoundFacebookGroupPostData}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundFacebookGroupPostData(checked)
+                if (!checked) setFormData(p => ({ ...p, findFacebookGroupPostTargetCampaignIds: [] }))
+              }}
+            />
+            <span>Đẩy group sang chiến dịch đăng bài vào group</span>
+          </label>
+          {handleFoundFacebookGroupPostData && (
+            <div className="stepper-form-group" style={{ marginTop: 12 }}>
+              <label>Chọn chiến dịch</label>
+              {renderInternalCampaignPicker(
+                { type: 'groupPostTarget' },
+                formData.findFacebookGroupPostTargetCampaignIds || [],
+                ids => setFormData(p => ({ ...p, findFacebookGroupPostTargetCampaignIds: ids })),
+                'Chưa có chiến dịch Đăng bài vào group để nhận group Facebook.'
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isFindDataSearchCampaign && formData.isFindFacebookGroup && (
+        <div className="extra-comment-options">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={handleFoundFacebookGroupCommentData}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundFacebookGroupCommentData(checked)
+                if (!checked) setFormData(p => ({ ...p, findFacebookGroupCommentTargetCampaignIds: [] }))
+              }}
+            />
+            <span>Đẩy group sang chiến dịch comment seeding vào group</span>
+          </label>
+          {handleFoundFacebookGroupCommentData && (
+            <div className="stepper-form-group" style={{ marginTop: 12 }}>
+              <label>Chọn chiến dịch</label>
+              {renderInternalCampaignPicker(
+                { type: 'groupCommentTarget' },
+                formData.findFacebookGroupCommentTargetCampaignIds || [],
+                ids => setFormData(p => ({ ...p, findFacebookGroupCommentTargetCampaignIds: ids })),
+                'Chưa có chiến dịch Comment seeding group/page/profile để nhận group Facebook.'
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 
@@ -4131,7 +4339,7 @@ export default function CampaignFormModal({
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Bài post</div>
           <div className="stepper-form-row">
             <div className="stepper-form-group half">
-              <label>Cách hiển thị bài post trong group</label>
+              <label>{isFindDataSearchCampaign ? 'Cách hiển thị bài post search' : 'Cách hiển thị bài post trong group'}</label>
               <select
                 value={effectiveFindDataPostSort}
                 onChange={e => setFormData(p => ({ ...p, sortTypePost: e.target.value as CampaignExtraSettings['sortTypePost'] }))}
@@ -4142,16 +4350,74 @@ export default function CampaignFormModal({
               </select>
             </div>
             <div className="stepper-form-group half">
-              <label>Số post tối đa trong 1 group</label>
+              <label>{isFindDataSearchCampaign ? 'Số post tối đa / từ khóa' : 'Số post tối đa trong 1 group'}</label>
               <input
                 type="number"
                 min={1}
-                value={formData.countPostFindData}
-                onChange={e => setFormData(p => ({ ...p, countPostFindData: Math.max(1, Number(e.target.value) || 1) }))}
+                value={isFindDataSearchCampaign ? formData.countSearchPostFindData : formData.countPostFindData}
+                onChange={e => {
+                  const value = Math.max(1, Number(e.target.value) || 1)
+                  setFormData(p => isFindDataSearchCampaign
+                    ? { ...p, countSearchPostFindData: value }
+                    : { ...p, countPostFindData: value }
+                  )
+                }}
                 className="stepper-input"
               />
             </div>
           </div>
+          {isFindDataSearchCampaign && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+              <label className="schedule-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={formData.searchPostRecentOnly}
+                  onChange={e => setFormData(p => ({ ...p, searchPostRecentOnly: e.target.checked }))}
+                />
+                <span>Bài viết mới đây</span>
+              </label>
+              <label className="schedule-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={formData.searchPostSeenOnly}
+                  onChange={e => setFormData(p => ({ ...p, searchPostSeenOnly: e.target.checked }))}
+                />
+                <span>Bài viết bạn đã xem</span>
+              </label>
+              <div className="stepper-form-row">
+                <div className="stepper-form-group third">
+                  <label>Ngày đăng</label>
+                  <select
+                    value={formData.searchPostDateFilter}
+                    onChange={e => setFormData(p => ({ ...p, searchPostDateFilter: e.target.value as NonNullable<CampaignExtraSettings['searchPostDateFilter']> }))}
+                    className="stepper-input"
+                  >
+                    {SEARCH_POST_DATE_FILTER_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                </div>
+                <div className="stepper-form-group third">
+                  <label>Bài viết của</label>
+                  <select
+                    value={formData.searchPostAuthorFilter}
+                    onChange={e => setFormData(p => ({ ...p, searchPostAuthorFilter: e.target.value as NonNullable<CampaignExtraSettings['searchPostAuthorFilter']> }))}
+                    className="stepper-input"
+                  >
+                    {SEARCH_POST_AUTHOR_FILTER_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                </div>
+                <div className="stepper-form-group third">
+                  <label>Vị trí được gắn thẻ</label>
+                  <select
+                    value={formData.searchPostTaggedLocation}
+                    onChange={e => setFormData(p => ({ ...p, searchPostTaggedLocation: e.target.value as NonNullable<CampaignExtraSettings['searchPostTaggedLocation']> }))}
+                    className="stepper-input"
+                  >
+                    {SEARCH_POST_TAGGED_LOCATION_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -4196,6 +4462,80 @@ export default function CampaignFormModal({
               onChange={e => setFormData(p => ({ ...p, countGroupMemberFindData: Math.max(1, Number(e.target.value) || 1) }))}
               className="stepper-input"
             />
+          </div>
+        </div>
+      )}
+
+      {usesFindDataSearchGroup && (
+        <div className="extra-comment-options">
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Group Facebook</div>
+          <div className="stepper-form-row">
+            <div className="stepper-form-group third">
+              <label>Số group tối đa / từ khóa</label>
+              <input
+                type="number"
+                min={1}
+                value={formData.countSearchGroupFindData}
+                onChange={e => setFormData(p => ({ ...p, countSearchGroupFindData: Math.max(1, Number(e.target.value) || 1) }))}
+                className="stepper-input"
+              />
+            </div>
+            <div className="stepper-form-group third">
+              <label>Số lượng thành viên tối thiểu</label>
+              <input
+                type="number"
+                min={0}
+                value={formData.minSearchGroupMembers}
+                onChange={e => setFormData(p => ({ ...p, minSearchGroupMembers: Math.max(0, Number(e.target.value) || 0) }))}
+                className="stepper-input"
+              />
+            </div>
+            <div className="stepper-form-group third">
+              <label>Số bài đăng tối thiểu/ngày</label>
+              <input
+                type="number"
+                min={0}
+                value={formData.minSearchGroupPostsPerDay}
+                onChange={e => setFormData(p => ({ ...p, minSearchGroupPostsPerDay: Math.max(0, Number(e.target.value) || 0) }))}
+                className="stepper-input"
+              />
+            </div>
+          </div>
+          <div className="stepper-form-group">
+            <label>Tỉnh/Thành phố</label>
+            <input
+              type="text"
+              value={formData.searchGroupCity}
+              onChange={e => setFormData(p => ({ ...p, searchGroupCity: e.target.value }))}
+              className="stepper-input"
+              placeholder="Ví dụ: Hà Nội, Hồ Chí Minh"
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.searchGroupNearMe}
+                onChange={e => setFormData(p => ({ ...p, searchGroupNearMe: e.target.checked }))}
+              />
+              <span>Gần tôi</span>
+            </label>
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.searchGroupPublicOnly}
+                onChange={e => setFormData(p => ({ ...p, searchGroupPublicOnly: e.target.checked }))}
+              />
+              <span>Nhóm công khai</span>
+            </label>
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.searchGroupMineOnly}
+                onChange={e => setFormData(p => ({ ...p, searchGroupMineOnly: e.target.checked }))}
+              />
+              <span>Nhóm của tôi</span>
+            </label>
           </div>
         </div>
       )}
@@ -4715,7 +5055,9 @@ export default function CampaignFormModal({
       : rows
     const loading = isCampaignPickerLoading(campaignPickerModal.source)
     const colSpan = campaignPickerModal.columns.length + 1
-    const canAddInternalCampaign = !draftMode && campaignPickerModal.source.type !== 'external'
+    const canAddInternalCampaign = !draftMode &&
+      campaignPickerModal.source.type !== 'external' &&
+      !!getDraftActionIdForPickerSource(campaignPickerModal.source)
 
     const renderCell = (row: CampaignPickerRow, column: CampaignPickerColumn) => {
       if (column === 'name') return <span className="campaign-picker-table-name">{row.name}</span>
@@ -5117,7 +5459,7 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {isFindDataGroupCampaign && (
+            {isFindDataCampaign && (
               <div
                 className="stepper-section"
                 ref={el => { sectionRefs.current['content'] = el }}
@@ -5373,7 +5715,7 @@ export default function CampaignFormModal({
                     />
                   </div>
 
-                  {isFindDataGroupCampaign && (
+                  {isFindDataCampaign && (
                     <div className="stepper-form-group" style={{ maxWidth: 360 }}>
                       <label className="schedule-checkbox-label">
                         <input
@@ -5749,8 +6091,10 @@ export default function CampaignFormModal({
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('details')}</span>
                   <span className="stepper-section-title">
-                    {isFindDataGroupCampaign
-                      ? 'Danh sách group'
+                    {isFindDataSearchCampaign
+                      ? 'Danh sách từ khóa'
+                      : isFindDataGroupCampaign
+                        ? 'Danh sách group'
                       : isCommentSeedingPostCampaign
                         ? 'Danh sách bài post'
                         : isPagePostCampaign
@@ -5795,7 +6139,7 @@ export default function CampaignFormModal({
                     <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
                       {!isPagePostCampaign && !isPageInboxMessageCampaign && (
                         <button className="btn btn-secondary" onClick={addDetailRow}>
-                          <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
+                          <Plus size={14} /> {isFindDataSearchCampaign ? 'Thêm từ khóa' : isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
                         </button>
                       )}
                       {canUploadData && (
@@ -5947,9 +6291,9 @@ export default function CampaignFormModal({
                   <div className="stepper-grid-container">
                     <table className="campaign-grid">
                       <thead>
-                        {isCommentSeedingPostCampaign ? (
+                        {isCommentSeedingPostCampaign || isFindDataSearchCampaign ? (
                           <tr>
-                            <th>Link bài post</th>
+                            <th>{isFindDataSearchCampaign ? 'Từ khóa' : 'Link bài post'}</th>
                             {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                           </tr>
                         ) : isPagePostCampaign ? (
@@ -5977,13 +6321,13 @@ export default function CampaignFormModal({
                         ) : (
                           details.map((d, i) => (
                             <tr key={d.id || `new-${i}`}>
-                              {isCommentSeedingPostCampaign ? (
+                              {isCommentSeedingPostCampaign || isFindDataSearchCampaign ? (
                                 <td>
                                   <input
                                     type="text"
                                     value={d.uid || ''}
                                     onChange={e => updateDetailRow(i, 'uid', e.target.value)}
-                                    placeholder="Dán link bài post..."
+                                    placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : 'Dán link bài post...'}
                                     disabled={isEditingSavedCampaign}
                                   />
                                 </td>
