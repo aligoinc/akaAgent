@@ -50,6 +50,25 @@ const COMMENT_SORT_LABELS: Record<NonNullable<CampaignExtraSettings['sortTypeCom
   newest: 'Mới nhất'
 }
 
+const SEARCH_POST_DATE_FILTER_LABELS: Record<NonNullable<CampaignExtraSettings['searchPostDateFilter']>, string> = {
+  all: 'Tất cả',
+  today: 'Hôm nay',
+  this_week: 'Tuần này',
+  this_month: 'Tháng này'
+}
+
+const SEARCH_POST_AUTHOR_FILTER_LABELS: Record<NonNullable<CampaignExtraSettings['searchPostAuthorFilter']>, string> = {
+  all: 'Tất cả',
+  you: 'Bài viết của bạn',
+  friends: 'Bạn bè',
+  groups_pages: 'Nhóm và Trang'
+}
+
+const SEARCH_POST_TAGGED_LOCATION_LABELS: Record<NonNullable<CampaignExtraSettings['searchPostTaggedLocation']>, string> = {
+  all: 'Tất cả',
+  near_me: 'Gần tôi'
+}
+
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const POST_ACTIONS_WITH_SOURCE = new Set(['facebook_timeline_post', 'facebook_page_post', 'facebook_group_post'])
@@ -197,6 +216,7 @@ const getFindDataTypeLabels = (extra: CampaignExtraSettings): string[] => {
   if (extra.isFindPhone) labels.push('SĐT')
   if (extra.isFindLinkGroupZalo) labels.push('Link group Zalo')
   if (extra.isFindPostLink) labels.push('Link bài post')
+  if (extra.isFindFacebookGroup) labels.push('Link group Facebook')
   return labels
 }
 
@@ -206,17 +226,24 @@ const getFindDataSourceLabels = (extra: CampaignExtraSettings): string[] => {
   if (extra.isFindInComment) labels.push('Comment')
   if (extra.isFindNewInteractors) labels.push('Tương tác mới')
   if (extra.isFindInGroupMembers) labels.push('Thành viên group')
+  if (extra.isFindFacebookGroup) labels.push('Group Facebook')
   return labels
 }
 
 const findLinkedSourceCampaigns = (campaign: Campaign, campaigns: Campaign[]): Campaign[] => {
-  const targetField = campaign.actionId === 'facebook_message_uid'
-    ? 'findUidTargetCampaignIds'
+  const targetFields = campaign.actionId === 'facebook_message_uid'
+    ? ['findUidTargetCampaignIds']
     : campaign.actionId === 'facebook_comment_seeding_post'
-      ? 'findPostLinkTargetCampaignIds'
-      : null
-  if (!targetField) return []
-  return campaigns.filter(source => getNumberList(source.extraSettings?.[targetField]).includes(campaign.id))
+      ? ['findPostLinkTargetCampaignIds']
+      : campaign.actionId === 'facebook_group_post'
+        ? ['findFacebookGroupPostTargetCampaignIds']
+        : campaign.actionId === 'facebook_comment_seeding'
+          ? ['findFacebookGroupCommentTargetCampaignIds']
+          : []
+  if (targetFields.length === 0) return []
+  return campaigns.filter(source => targetFields.some(field =>
+    getNumberList(source.extraSettings?.[field as keyof CampaignExtraSettings]).includes(campaign.id)
+  ))
 }
 
 const formatLinkedCampaigns = (items: Campaign[]) => {
@@ -278,7 +305,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || extra.enableAddFriend !== undefined
     || !!extra.useSuggestedFriends
     || !!extra.pageInboxPageUid
-  const hasFindDataSettings = actionId === 'facebook_find_data_group'
+  const hasFindDataSettings = actionId === 'facebook_find_data_group' || actionId === 'facebook_find_data_search'
     || getFindDataTypeLabels(extra).length > 0
     || getFindDataSourceLabels(extra).length > 0
     || linkedSourceCampaigns.length > 0
@@ -359,7 +386,20 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Sort comment', value: COMMENT_SORT_LABELS[extra.sortTypeComment || 'most_relevant'], hidden: !extra.isFindInComment && !extra.isFindNewInteractors },
     { label: 'Số comment tối đa / post', value: extra.countCommentFindData ?? '-', hidden: !extra.isFindInComment && !extra.isFindNewInteractors },
     { label: 'Số thành viên group tối đa', value: extra.countGroupMemberFindData ?? '-', hidden: !extra.isFindInGroupMembers },
-    { label: 'Chạy lại sau mỗi', value: extra.findDataRerunEnabled ? `${extra.findDataRerunAfterHours || 1} giờ` : 'Tắt', hidden: actionId !== 'facebook_find_data_group' && !extra.findDataRerunEnabled },
+    { label: 'Số post search tối đa / từ khóa', value: extra.countSearchPostFindData ?? '-', hidden: actionId !== 'facebook_find_data_search' || !extra.isFindInPost },
+    { label: 'Bài viết mới đây', value: onOff(extra.searchPostRecentOnly), hidden: actionId !== 'facebook_find_data_search' || !extra.isFindInPost },
+    { label: 'Bài viết đã xem', value: onOff(extra.searchPostSeenOnly), hidden: actionId !== 'facebook_find_data_search' || !extra.isFindInPost },
+    { label: 'Ngày đăng search', value: SEARCH_POST_DATE_FILTER_LABELS[extra.searchPostDateFilter || 'all'], hidden: actionId !== 'facebook_find_data_search' || !extra.isFindInPost },
+    { label: 'Bài viết của', value: SEARCH_POST_AUTHOR_FILTER_LABELS[extra.searchPostAuthorFilter || 'all'], hidden: actionId !== 'facebook_find_data_search' || !extra.isFindInPost },
+    { label: 'Vị trí được gắn thẻ', value: SEARCH_POST_TAGGED_LOCATION_LABELS[extra.searchPostTaggedLocation || 'all'], hidden: actionId !== 'facebook_find_data_search' || !extra.isFindInPost },
+    { label: 'Số group search tối đa / từ khóa', value: extra.countSearchGroupFindData ?? '-', hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
+    { label: 'Tỉnh/Thành phố group', value: textOrDash(extra.searchGroupCity), hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup || !extra.searchGroupCity },
+    { label: 'Group gần tôi', value: onOff(extra.searchGroupNearMe), hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
+    { label: 'Chỉ group công khai', value: onOff(extra.searchGroupPublicOnly), hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
+    { label: 'Chỉ group của tôi', value: onOff(extra.searchGroupMineOnly), hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
+    { label: 'Thành viên tối thiểu', value: extra.minSearchGroupMembers ?? 0, hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
+    { label: 'Bài đăng tối thiểu/ngày', value: extra.minSearchGroupPostsPerDay ?? 0, hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
+    { label: 'Chạy lại sau mỗi', value: extra.findDataRerunEnabled ? `${extra.findDataRerunAfterHours || 1} giờ` : 'Tắt', hidden: !['facebook_find_data_group', 'facebook_find_data_search'].includes(actionId) && !extra.findDataRerunEnabled },
     { label: 'Lọc theo từ khóa', value: extra.isFindByKeywords ? textOrDash(extra.keywords) : 'Tắt', fullWidth: true, hidden: !extra.isFindByKeywords && !extra.keywords },
     { label: 'Lọc bằng AI', value: extra.isFindByContentAI ? textOrDash(extra.contentAI) : 'Tắt', fullWidth: true, hidden: !extra.isFindByContentAI && !extra.contentAI },
     { label: 'Đẩy UID sang campaign', value: formatCampaignRefs(extra.findUidTargetCampaignIds, campaigns), hidden: !extra.findUidTargetCampaignIds?.length },
@@ -369,6 +409,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Đẩy link Zalo sang Zalo Web', value: textOrDash(getNumberList(extra.findZaloGroupLinkWebTargetCampaignIds).join(', ')), hidden: !extra.findZaloGroupLinkWebTargetCampaignIds?.length },
     { label: 'Đẩy SĐT sang akaBiz Desktop', value: textOrDash(getNumberList(extra.findPhoneAkaBizDesktopTargetCampaignIds).join(', ')), hidden: !extra.findPhoneAkaBizDesktopTargetCampaignIds?.length },
     { label: 'Đẩy link Zalo sang akaBiz Desktop', value: textOrDash(getNumberList(extra.findZaloGroupLinkAkaBizDesktopTargetCampaignIds).join(', ')), hidden: !extra.findZaloGroupLinkAkaBizDesktopTargetCampaignIds?.length },
+    { label: 'Đẩy group sang campaign đăng bài', value: formatCampaignRefs(extra.findFacebookGroupPostTargetCampaignIds, campaigns), hidden: !extra.findFacebookGroupPostTargetCampaignIds?.length },
+    { label: 'Đẩy group sang campaign comment seeding', value: formatCampaignRefs(extra.findFacebookGroupCommentTargetCampaignIds, campaigns), hidden: !extra.findFacebookGroupCommentTargetCampaignIds?.length },
     { label: 'Nguồn tìm data liên kết', value: formatLinkedCampaigns(linkedSourceCampaigns), hidden: linkedSourceCampaigns.length === 0 }
   ]
 
