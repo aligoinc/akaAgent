@@ -69,6 +69,13 @@ const SEARCH_POST_TAGGED_LOCATION_LABELS: Record<NonNullable<CampaignExtraSettin
   near_me: 'Gần tôi'
 }
 
+const FIND_DATA_GOAL_PRIORITY_LABELS: Record<NonNullable<CampaignExtraSettings['findDataGoalPriority']>, string> = {
+  phone: 'Số điện thoại',
+  zalo_group_link: 'Link group Zalo',
+  facebook_uid: 'Uid user facebook',
+  post_link: 'Link post'
+}
+
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const POST_ACTIONS_WITH_SOURCE = new Set(['facebook_timeline_post', 'facebook_page_post', 'facebook_group_post'])
@@ -308,6 +315,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const hasFindDataSettings = actionId === 'facebook_find_data_group' || actionId === 'facebook_find_data_search'
     || getFindDataTypeLabels(extra).length > 0
     || getFindDataSourceLabels(extra).length > 0
+    || !!extra.findDataGoalModeEnabled
     || linkedSourceCampaigns.length > 0
   const hasPostBump = actionId === 'facebook_group_post' || !!extra.enablePostBump
   const hasNewsfeedSettings = actionId === NEWSFEED_INTERACTION_ACTION_ID
@@ -381,6 +389,9 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const findDataRows: InfoRow[] = [
     { label: 'Nguồn tìm', value: formatActionCodeChips(getFindDataSourceLabels(extra)) },
     { label: 'Loại data cần tìm', value: formatActionCodeChips(getFindDataTypeLabels(extra)) },
+    { label: 'Chế độ theo đuổi mục tiêu', value: onOff(extra.findDataGoalModeEnabled), hidden: !extra.findDataGoalModeEnabled },
+    { label: 'Ưu tiên mục tiêu', value: extra.findDataGoalPriority ? FIND_DATA_GOAL_PRIORITY_LABELS[extra.findDataGoalPriority] : '-', hidden: !extra.findDataGoalModeEnabled },
+    { label: 'Số lượng mục tiêu/ngày', value: extra.findDataGoalDailyLimit ?? 30, hidden: !extra.findDataGoalModeEnabled },
     { label: 'Sort bài post', value: POST_SORT_LABELS[extra.sortTypePost || 'most_relevant'], hidden: !extra.isFindInPost && !extra.isFindNewInteractors },
     { label: 'Số post tối đa / group', value: extra.countPostFindData ?? '-', hidden: !extra.isFindInPost && !extra.isFindNewInteractors },
     { label: 'Sort comment', value: COMMENT_SORT_LABELS[extra.sortTypeComment || 'most_relevant'], hidden: !extra.isFindInComment && !extra.isFindNewInteractors },
