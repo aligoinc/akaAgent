@@ -76,6 +76,10 @@ export class SupabaseService {
   listCampaignDetailsByCampaign(campaignId: number) { return campaignRepo.listCampaignDetailsByCampaign(campaignId) }
   createCampaignDetail(action: Partial<CampaignDetail>) { return campaignRepo.createCampaignDetail(action) }
   deleteCampaignDetail(id: number) { return campaignRepo.deleteCampaignDetail(id) }
+  incrementCampaignBadTargetCount(campaignId: number, inputDataId: number | null | undefined, reason: string) {
+    return campaignRepo.incrementCampaignBadTargetCount(campaignId, inputDataId, reason)
+  }
+  resetCampaignBadTargetCount(campaignId: number) { return campaignRepo.resetCampaignBadTargetCount(campaignId) }
   getAccountRateLimitStatus(accountId: number, actionCode: string, actionName: string, limitConfig?: ActionLimitConfig) {
     return campaignRepo.getAccountRateLimitStatus(accountId, actionCode, actionName, limitConfig)
   }

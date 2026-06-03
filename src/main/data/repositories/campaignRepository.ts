@@ -27,6 +27,17 @@ interface CampaignRelationDetailRow {
   status: CampaignDetailStatus
 }
 
+export interface CampaignErrorState {
+  id: number
+  campaignId: number
+  countConsecutiveBadTargets: number
+  lastInputDataId?: number | null
+  lastReason?: string | null
+  lastBadTargetAt?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
 interface VietnamDateTimeParts {
   year: number
   month: number
@@ -107,6 +118,19 @@ function withVietnamTime(day: Date, time: Pick<VietnamDateTimeParts, 'hour' | 'm
 function formatVietnamTimeForQuery(date = new Date()): string {
   const parts = parseVietnamParts(date)
   return `${pad2(parts.hour)}:${pad2(parts.minute)}:${pad2(parts.second)}`
+}
+
+function mapCampaignErrorStateFromDB(row: Record<string, unknown>): CampaignErrorState {
+  return {
+    id: row.id as number,
+    campaignId: row.campaign_id as number,
+    countConsecutiveBadTargets: Number(row.count_consecutive_bad_targets || 0),
+    lastInputDataId: (row.last_input_data_id as number | null) ?? null,
+    lastReason: (row.last_reason as string | null) ?? null,
+    lastBadTargetAt: (row.last_bad_target_at as string | null) ?? null,
+    createdAt: row.created_at as string | undefined,
+    updatedAt: row.updated_at as string | undefined
+  }
 }
 
 function getVietnamWeekdayNumber(date: Date): number {
@@ -913,6 +937,73 @@ export async function deleteCampaignInputData(id: number): Promise<void> {
     .eq('id', id)
 
   if (error) throw new Error(`Failed to delete campaign input data: ${error.message}`)
+}
+
+// =========== CAMPAIGN ERROR STATE (campaign-scoped consecutive bad targets) ===========
+
+export async function getCampaignErrorState(campaignId: number): Promise<CampaignErrorState | null> {
+  const { data, error } = await client()
+    .from('auto_campaign_error_state')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to get campaign error state: ${error.message}`)
+  return data ? mapCampaignErrorStateFromDB(data) : null
+}
+
+export async function incrementCampaignBadTargetCount(
+  campaignId: number,
+  inputDataId: number | null | undefined,
+  reason: string
+): Promise<CampaignErrorState> {
+  const existing = await getCampaignErrorState(campaignId)
+  const now = new Date().toISOString()
+  const nextCount = (existing?.countConsecutiveBadTargets || 0) + 1
+  const payload = {
+    count_consecutive_bad_targets: nextCount,
+    last_input_data_id: inputDataId ?? null,
+    last_reason: reason || null,
+    last_bad_target_at: now,
+    updated_at: now
+  }
+
+  if (existing) {
+    const { data, error } = await client()
+      .from('auto_campaign_error_state')
+      .update(payload)
+      .eq('id', existing.id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to update campaign error state: ${error.message}`)
+    return mapCampaignErrorStateFromDB(data)
+  }
+
+  const { data, error } = await client()
+    .from('auto_campaign_error_state')
+    .insert({
+      campaign_id: campaignId,
+      ...payload
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to create campaign error state: ${error.message}`)
+  return mapCampaignErrorStateFromDB(data)
+}
+
+export async function resetCampaignBadTargetCount(campaignId: number): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_error_state')
+    .upsert({
+      campaign_id: campaignId,
+      count_consecutive_bad_targets: 0,
+      last_reason: null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'campaign_id' })
+
+  if (error) throw new Error(`Failed to reset campaign error state: ${error.message}`)
 }
 
 // =========== CAMPAIGN DETAILS (per-milestone log) ===========
