@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FolderCog, Plus } from 'lucide-react'
+import { FolderCog, Loader2, Plus } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { AutoAccount } from '../../../../shared/types'
 import AccountContextMenu from './AccountContextMenu'
@@ -32,6 +32,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [groupAssignAccount, setGroupAssignAccount] = useState<AutoAccount | null>(null)
   const [editingAccount, setEditingAccount] = useState<AutoAccount | null>(null)
   const [infoAccount, setInfoAccount] = useState<AutoAccount | null>(null)
+  const [savingAccount, setSavingAccount] = useState(false)
   const [formData, setFormData] = useState({ 
     name: '', 
     flatformType: 'facebook',
@@ -67,7 +68,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const formAccountGroups = accountGroups.filter(group => group.flatformType === formData.flatformType && group.isActive)
 
   const handleSubmit = async () => {
-    if (!formData.name.trim()) return
+    if (savingAccount || !formData.name.trim()) return
+    setSavingAccount(true)
     try {
       const payload = {
         name: formData.name,
@@ -85,6 +87,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       resetForm()
     } catch (err) {
       console.error('Failed to save account:', err)
+    } finally {
+      setSavingAccount(false)
     }
   }
 
@@ -260,7 +264,10 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
           <div className="panel-form-actions">
             <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingAccount(null); resetForm() }}>Huỷ</button>
-            <button className="btn btn-primary" onClick={handleSubmit}>{editingAccount ? 'Cập nhật' : 'Tạo'}</button>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={savingAccount}>
+              {savingAccount && <Loader2 size={14} className="animate-spin" />}
+              {savingAccount ? 'Đang lưu...' : editingAccount ? 'Cập nhật' : 'Tạo'}
+            </button>
           </div>
         </div>
       )}
