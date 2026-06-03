@@ -25,6 +25,10 @@ type ReportDetailModalState = {
   count: number
 }
 
+interface ReportPageProps {
+  isActive: boolean
+}
+
 const RANGE_OPTIONS: Array<{ value: ReportRangePreset; label: string }> = [
   { value: 'today', label: 'Hôm nay' },
   { value: 'yesterday', label: 'Hôm qua' },
@@ -150,7 +154,7 @@ function makeDetailExportRows(rows: AccountActionReportDetailRow[]) {
   }))
 }
 
-export default function ReportPage() {
+export default function ReportPage({ isActive }: ReportPageProps) {
   const showAlert = useUiStore(state => state.showAlert)
   const [platform, setPlatform] = useState(DEFAULT_PLATFORM)
   const [accounts, setAccounts] = useState<AutoAccount[]>([])
@@ -172,6 +176,7 @@ export default function ReportPage() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [exportingDetail, setExportingDetail] = useState(false)
   const filterRef = useRef<HTMLDivElement>(null)
+  const hasInitializedRef = useRef(false)
 
   const platformAccounts = useMemo(
     () => accounts.filter(account => !platform || account.flatformType === platform),
@@ -284,9 +289,17 @@ export default function ReportPage() {
   }
 
   useEffect(() => {
-    void loadOptions(DEFAULT_PLATFORM)
+    if (!isActive) return
+
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true
+      void loadOptions(DEFAULT_PLATFORM)
+      return
+    }
+
+    void loadReport()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isActive])
 
   useEffect(() => {
     if (!openDropdown) return
@@ -575,9 +588,9 @@ export default function ReportPage() {
             <span>Bộ lọc</span>
           </div>
           <div className="report-panel-actions">
-            <button className="btn btn-primary" onClick={() => loadReport()} disabled={loadingOptions || loadingReport}>
+            <button className="btn btn-primary report-load-button" onClick={() => loadReport()} disabled={loadingOptions || loadingReport}>
               <Search size={14} />
-              Áp dụng
+              Tải báo cáo
             </button>
           </div>
         </div>
