@@ -292,8 +292,16 @@ function buildRuleDiagnosis(campaign: Campaign, account: Awaited<ReturnType<type
   if (campaign.status === 'hoàn thành') {
     return { reason: 'campaign_completed', severity: 'info', message: 'Chiến dịch đã hoàn thành.' }
   }
-  if (!action?.workflowId) {
-    return { reason: 'workflow_missing', severity: 'blocking', message: 'Loại chiến dịch chưa có workflow chạy.' }
+  const useTestWorkflow = requireCurrentUser().useTestWorkflow === true
+  const workflowId = useTestWorkflow ? action?.testWorkflowId : action?.workflowId
+  if (!workflowId) {
+    return {
+      reason: useTestWorkflow ? 'test_workflow_missing' : 'workflow_missing',
+      severity: 'blocking',
+      message: useTestWorkflow
+        ? 'Loại chiến dịch chưa có workflow test.'
+        : 'Loại chiến dịch chưa có workflow chạy.'
+    }
   }
   if (String(campaign.note || '').includes('Đang chờ data từ chiến dịch tìm data')) {
     return { reason: 'waiting_find_data_source', severity: 'info', message: campaign.note }

@@ -42,6 +42,7 @@ export function mapCampaignActionFromDB(row: Record<string, unknown>): CampaignA
     flatformType: row.flatform_type as string,
     isActive: row.is_active as boolean,
     workflowId: row.workflow_id as number | undefined,
+    testWorkflowId: row.test_workflow_id as number | undefined,
     limitCheckActionCodes: Array.isArray(row.limit_check_action_codes) ? row.limit_check_action_codes as string[] : [],
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string

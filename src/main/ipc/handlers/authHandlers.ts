@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC_EVENTS } from '../../../shared/types'
-import { changePassword, login as loginQuery, resetDeviceLock } from '../../data/repositories/authRepository'
+import { changePassword, login as loginQuery, resetDeviceLock, updateUseTestWorkflow } from '../../data/repositories/authRepository'
 import { setCurrentUser, getCurrentUser } from '../../data/currentUser'
 
 interface AuthLifecycleHooks {
@@ -48,5 +48,13 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     const user = getCurrentUser()
     if (!user) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi đổi mật khẩu.')
     return changePassword(user, oldPassword, newPassword)
+  })
+
+  ipcMain.handle(IPC_EVENTS.AUTH_UPDATE_USE_TEST_WORKFLOW, async (_, useTestWorkflow: boolean) => {
+    const user = getCurrentUser()
+    if (!user) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi đổi chế độ workflow test.')
+    const updatedUser = await updateUseTestWorkflow(user, !!useTestWorkflow)
+    setCurrentUser(updatedUser)
+    return updatedUser
   })
 }

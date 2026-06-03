@@ -44,6 +44,7 @@ export interface CampaignAction {
   flatformType: string
   isActive: boolean
   workflowId?: number       // engine v2 (BIGINT, FK auto_workflows.id)
+  testWorkflowId?: number   // engine v2 test workflow (BIGINT, FK auto_workflows.id)
   limitCheckActionCodes: string[]
   isDelete: boolean
   createdAt?: string
@@ -563,6 +564,7 @@ export interface AuthUser {
   username: string
   organizationName: string
   isAdminAkabiz: boolean
+  useTestWorkflow: boolean
   deviceLabel?: string | null
   devicePlatform?: string | null
   deviceBoundAt?: string | null
@@ -698,6 +700,7 @@ export const IPC_EVENTS = {
   AUTH_ME: 'auth:me',
   AUTH_RESET_DEVICE_LOCK: 'auth:reset-device-lock',
   AUTH_CHANGE_PASSWORD: 'auth:change-password',
+  AUTH_UPDATE_USE_TEST_WORKFLOW: 'auth:update-use-test-workflow',
 
   // App
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',

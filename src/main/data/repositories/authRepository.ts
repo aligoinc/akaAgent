@@ -20,6 +20,7 @@ interface StaffRow extends StaffDeviceColumns {
   password: string
   is_active: boolean
   is_admin_akabiz: boolean
+  use_test_workflow: boolean
 }
 
 const STAFF_SELECT = [
@@ -30,6 +31,7 @@ const STAFF_SELECT = [
   'password',
   'is_active',
   'is_admin_akabiz',
+  'use_test_workflow',
   'device_fingerprint_hash',
   'device_label',
   'device_platform',
@@ -158,6 +160,7 @@ export async function login(username: string, password: string): Promise<AuthUse
     username: staffRow.username,
     organizationName: (org?.name as string) || '',
     isAdminAkabiz: !!staffRow.is_admin_akabiz,
+    useTestWorkflow: !!staffRow.use_test_workflow,
     deviceLabel: deviceRecord.device_label || null,
     devicePlatform: deviceRecord.device_platform || null,
     deviceBoundAt: deviceRecord.device_bound_at || null,
@@ -220,4 +223,21 @@ export async function changePassword(user: AuthUser, oldPassword: string, newPas
 
   if (updateError) throw new Error(`Đổi mật khẩu thất bại: ${updateError.message}`)
   return { success: true }
+}
+
+export async function updateUseTestWorkflow(user: AuthUser, useTestWorkflow: boolean): Promise<AuthUser> {
+  if (!user.isAdminAkabiz) {
+    throw new Error('Chỉ admin akaBiz mới được bật/tắt workflow test.')
+  }
+
+  const { error } = await client()
+    .from('org_staff')
+    .update({
+      use_test_workflow: useTestWorkflow,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', user.staffId)
+
+  if (error) throw new Error(`Không thể lưu chế độ workflow test: ${error.message}`)
+  return { ...user, useTestWorkflow }
 }
