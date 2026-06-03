@@ -74,6 +74,9 @@ interface FindDataSourceCounts {
   newInteractors: {
     uids: number
   }
+  facebookGroups: {
+    groups: number
+  }
 }
 
 interface FindDataUniqueCounts {
@@ -82,6 +85,7 @@ interface FindDataUniqueCounts {
   uids: number
   postLinks: number
   groupMembers: number
+  facebookGroups?: number
 }
 
 interface FindDataGroupMember {
@@ -90,17 +94,33 @@ interface FindDataGroupMember {
   url: string
 }
 
+interface FindDataFacebookGroup {
+  url: string
+  name: string
+  privacy?: string
+  memberCount?: number
+  postsPerDay?: number
+  keyword?: string
+}
+
 interface FindDataPreviousValues {
   phones: Set<string>
   linkGroupZalos: Set<string>
   uids: Set<string>
   postLinks: Set<string>
+  facebookGroups: Set<string>
   detailCount: number
 }
 
-type FindDataTargetCampaignField = 'findUidTargetCampaignIds' | 'findPostLinkTargetCampaignIds'
+type FindDataTargetCampaignField =
+  | 'findUidTargetCampaignIds'
+  | 'findPostLinkTargetCampaignIds'
+  | 'findFacebookGroupPostTargetCampaignIds'
+  | 'findFacebookGroupCommentTargetCampaignIds'
 
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
+const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
+const GROUP_POST_ACTION_ID = 'facebook_group_post'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
@@ -172,13 +192,21 @@ export class CampaignScheduler {
   private getFindDataTargetCampaignField(campaign: Campaign): FindDataTargetCampaignField | null {
     if (campaign.actionId === MESSAGE_UID_ACTION_ID) return 'findUidTargetCampaignIds'
     if (campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID) return 'findPostLinkTargetCampaignIds'
+    if (campaign.actionId === GROUP_POST_ACTION_ID) return 'findFacebookGroupPostTargetCampaignIds'
+    if (campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID) return 'findFacebookGroupCommentTargetCampaignIds'
     return null
   }
 
   private isMatchingFindDataSource(sourceCampaign: Campaign, targetField: FindDataTargetCampaignField): boolean {
-    if (sourceCampaign.actionId !== FIND_DATA_GROUP_ACTION_ID || sourceCampaign.isDelete) return false
+    if (sourceCampaign.isDelete) return false
+    const isFindDataGroup = sourceCampaign.actionId === FIND_DATA_GROUP_ACTION_ID
+    const isFindDataSearch = sourceCampaign.actionId === FIND_DATA_SEARCH_ACTION_ID
+    if (!isFindDataGroup && !isFindDataSearch) return false
+
     if (targetField === 'findUidTargetCampaignIds') return sourceCampaign.extraSettings?.isFindUid === true
-    return sourceCampaign.extraSettings?.isFindPostLink === true
+    if (targetField === 'findPostLinkTargetCampaignIds') return sourceCampaign.extraSettings?.isFindPostLink === true
+    if (!isFindDataSearch) return false
+    return sourceCampaign.extraSettings?.isFindFacebookGroup === true
   }
 
   start(): void {
@@ -423,7 +451,10 @@ export class CampaignScheduler {
   }
 
   private async handleFindDataRerunAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
-    if (campaign.actionId !== FIND_DATA_GROUP_ACTION_ID || campaign.extraSettings?.findDataRerunEnabled !== true) {
+    if (
+      (campaign.actionId !== FIND_DATA_GROUP_ACTION_ID && campaign.actionId !== FIND_DATA_SEARCH_ACTION_ID) ||
+      campaign.extraSettings?.findDataRerunEnabled !== true
+    ) {
       return false
     }
 
@@ -1778,6 +1809,21 @@ export class CampaignScheduler {
       isFindNewInteractors: extra.isFindNewInteractors ?? false,
       isFindInGroupMembers: extra.isFindInGroupMembers ?? false,
       countGroupMemberFindData: extra.countGroupMemberFindData ?? 100,
+      // Find data by Facebook Search extras
+      isFindFacebookGroup: extra.isFindFacebookGroup ?? false,
+      countSearchPostFindData: extra.countSearchPostFindData ?? extra.countPostFindData ?? 10,
+      countSearchGroupFindData: extra.countSearchGroupFindData ?? 20,
+      searchPostRecentOnly: extra.searchPostRecentOnly ?? false,
+      searchPostSeenOnly: extra.searchPostSeenOnly ?? false,
+      searchPostDateFilter: extra.searchPostDateFilter ?? 'all',
+      searchPostAuthorFilter: extra.searchPostAuthorFilter ?? 'all',
+      searchPostTaggedLocation: extra.searchPostTaggedLocation ?? 'all',
+      searchGroupCity: extra.searchGroupCity || '',
+      searchGroupNearMe: extra.searchGroupNearMe ?? false,
+      searchGroupPublicOnly: extra.searchGroupPublicOnly ?? false,
+      searchGroupMineOnly: extra.searchGroupMineOnly ?? false,
+      minSearchGroupMembers: extra.minSearchGroupMembers ?? 0,
+      minSearchGroupPostsPerDay: extra.minSearchGroupPostsPerDay ?? 0,
       isFindByKeywords: canUseFindDataContentConditions ? (extra.isFindByKeywords ?? false) : false,
       keywords: canUseFindDataContentConditions ? (extra.keywords ?? '') : '',
       isFindByContentAI: canUseFindDataContentConditions ? (extra.isFindByContentAI ?? false) : false,
@@ -1895,9 +1941,10 @@ export class CampaignScheduler {
     void overallSuccess
     const inputDataName = detail?.name || detail?.uid || ''
 
-    // Tìm kiếm data trong group — 1 milestone tổng kết theo group, dữ liệu chi tiết nằm trong JSONB data.
-    if (campaign.actionId === 'facebook_find_data_group') {
-      const summaryStep = steps.find(s => s.blockName === 'fb_find_group_data_summary')
+    // Tìm kiếm data — 1 milestone tổng kết, dữ liệu chi tiết nằm trong JSONB data.
+    if (campaign.actionId === FIND_DATA_GROUP_ACTION_ID || campaign.actionId === FIND_DATA_SEARCH_ACTION_ID) {
+      const isFindDataSearch = campaign.actionId === FIND_DATA_SEARCH_ACTION_ID
+      const summaryStep = steps.find(s => s.blockName === (isFindDataSearch ? 'fb_find_search_data_summary' : 'fb_find_group_data_summary'))
       const errorStep = steps.find(s => s.status === 'error')
       const out = ((summaryStep?.output as any) || {}) as {
         phones?: unknown[]
@@ -1905,9 +1952,11 @@ export class CampaignScheduler {
         uids?: unknown[]
         postLinks?: unknown[]
         groupMembers?: unknown[]
+        facebookGroups?: unknown[]
         sourceCounts?: unknown
         message?: string
         groupUrl?: string
+        searchKeyword?: string
         total?: number
         error?: string
       }
@@ -1918,8 +1967,11 @@ export class CampaignScheduler {
         ? out.postLinks.map(link => this.cleanPostLinkForStorage(String(link))).filter(Boolean)
         : []
       const rawGroupMembers = this.normalizeFoundGroupMembers(out.groupMembers)
+      const rawFacebookGroups = this.normalizeFoundFacebookGroups(out.facebookGroups)
       const sourceCounts = this.normalizeFindDataSourceCounts(out.sourceCounts)
-      const targetName = inputDataName || out.groupUrl || 'group'
+      const targetName = isFindDataSearch
+        ? (String(out.searchKeyword || '').trim() || inputDataName || detail?.uid || 'từ khóa search')
+        : (inputDataName || out.groupUrl || 'group')
       const isSuccess = summaryStep?.status === 'success'
       const previousInputValues = isSuccess
         ? await this.getPreviouslyFoundValuesForInputData(campaign.id, detail?.id)
@@ -1932,6 +1984,7 @@ export class CampaignScheduler {
       const scanPhones = this.filterNewExternalValues(rawPhones, new Set<string>())
       const scanLinkGroupZalos = this.filterNewExternalValues(rawLinkGroupZalos, new Set<string>())
       const scanPostLinks = this.filterNewPostLinkValues(rawPostLinks, new Set<string>())
+      const scanFacebookGroups = this.filterNewFacebookGroups(rawFacebookGroups, new Set<string>())
       const groupMembers = this.filterNewGroupMembers(rawGroupMembers, previousInputValues.uids)
       const groupMemberUidKeys = this.getGroupMemberUidKeys(groupMembers)
       const uids = this.filterNewUidValues(rawUids, previousInputValues.uids)
@@ -1939,6 +1992,7 @@ export class CampaignScheduler {
       const phones = this.filterNewExternalValues(rawPhones, previousInputValues.phones)
       const linkGroupZalos = this.filterNewExternalValues(rawLinkGroupZalos, previousInputValues.linkGroupZalos)
       const postLinks = this.filterNewPostLinkValues(rawPostLinks, previousInputValues.postLinks)
+      const facebookGroups = this.filterNewFacebookGroups(rawFacebookGroups, previousInputValues.facebookGroups)
       const groupMemberNameByUid = new Map<string, string>()
       for (const member of groupMembers) {
         const key = this.normalizeUidForCompare(member.uid)
@@ -1950,7 +2004,8 @@ export class CampaignScheduler {
         uids: scanUids.length,
         postLinks: scanPostLinks.length,
         groupMembers: scanGroupMembers.length,
-        total: scanPhones.length + scanLinkGroupZalos.length + scanUids.length + scanPostLinks.length + scanGroupMembers.length
+        facebookGroups: scanFacebookGroups.length,
+        total: scanPhones.length + scanLinkGroupZalos.length + scanUids.length + scanPostLinks.length + scanGroupMembers.length + scanFacebookGroups.length
       }
       const filteredCounts = {
         phones: phones.length,
@@ -1958,7 +2013,8 @@ export class CampaignScheduler {
         uids: uids.length,
         postLinks: postLinks.length,
         groupMembers: groupMembers.length,
-        total: phones.length + linkGroupZalos.length + uids.length + postLinks.length + groupMembers.length
+        facebookGroups: facebookGroups.length,
+        total: phones.length + linkGroupZalos.length + uids.length + postLinks.length + groupMembers.length + facebookGroups.length
       }
       const duplicateCounts = {
         phones: Math.max(0, rawCounts.phones - filteredCounts.phones),
@@ -1966,6 +2022,7 @@ export class CampaignScheduler {
         uids: Math.max(0, rawCounts.uids - filteredCounts.uids),
         postLinks: Math.max(0, rawCounts.postLinks - filteredCounts.postLinks),
         groupMembers: Math.max(0, rawCounts.groupMembers - filteredCounts.groupMembers),
+        facebookGroups: Math.max(0, rawCounts.facebookGroups - filteredCounts.facebookGroups),
         total: Math.max(0, rawCounts.total - filteredCounts.total)
       }
       const findUidTargetCampaignIds = Array.isArray(campaign.extraSettings?.findUidTargetCampaignIds)
@@ -1973,6 +2030,12 @@ export class CampaignScheduler {
         : []
       const findPostLinkTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPostLinkTargetCampaignIds)
         ? campaign.extraSettings.findPostLinkTargetCampaignIds
+        : []
+      const findFacebookGroupPostTargetCampaignIds = Array.isArray(campaign.extraSettings?.findFacebookGroupPostTargetCampaignIds)
+        ? campaign.extraSettings.findFacebookGroupPostTargetCampaignIds
+        : []
+      const findFacebookGroupCommentTargetCampaignIds = Array.isArray(campaign.extraSettings?.findFacebookGroupCommentTargetCampaignIds)
+        ? campaign.extraSettings.findFacebookGroupCommentTargetCampaignIds
         : []
       const findPhoneSmsTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPhoneSmsTargetCampaignIds)
         ? campaign.extraSettings.findPhoneSmsTargetCampaignIds
@@ -1996,11 +2059,12 @@ export class CampaignScheduler {
           linkGroupZalos: linkGroupZalos.length,
           uids: uids.length,
           postLinks: postLinks.length,
-          groupMembers: groupMembers.length
+          groupMembers: groupMembers.length,
+          facebookGroups: facebookGroups.length
         },
         sourceCounts,
         campaign.extraSettings || {},
-        { isFollowUpInputRun }
+        { isFollowUpInputRun, isSearch: isFindDataSearch }
       )
       const errMsg = out.error || summaryStep?.error || errorStep?.error || 'Lỗi không xác định'
       const previousCampaignValues = isSuccess
@@ -2016,14 +2080,16 @@ export class CampaignScheduler {
           status: isSuccess ? 'thành công' : 'lỗi',
           log: isSuccess
             ? successLog
-            : `Lỗi tìm data trong ${targetName}: ${errMsg}`,
+            : `Lỗi tìm data ${isFindDataSearch ? 'bằng search' : 'trong group'} ${targetName}: ${errMsg}`,
           data: {
-            groupUrl: out.groupUrl || detail?.uid,
+            groupUrl: isFindDataSearch ? targetName : (out.groupUrl || detail?.uid),
+            searchKeyword: isFindDataSearch ? targetName : undefined,
             phones,
             linkGroupZalos,
             uids,
             postLinks,
             groupMembers,
+            facebookGroups,
             counts: filteredCounts,
             rawCounts,
             duplicateCounts,
@@ -2031,6 +2097,8 @@ export class CampaignScheduler {
             sourceCounts,
             findUidTargetCampaignIds,
             findPostLinkTargetCampaignIds,
+            findFacebookGroupPostTargetCampaignIds,
+            findFacebookGroupCommentTargetCampaignIds,
             findPhoneSmsTargetCampaignIds,
             findPhoneZaloWebTargetCampaignIds,
             findZaloGroupLinkWebTargetCampaignIds,
@@ -2040,7 +2108,7 @@ export class CampaignScheduler {
           }
         })
         if (isSuccess) await this.logCampaignProgress(campaign.id, `✅ ${successLog}`)
-        else await this.logCampaignProgress(campaign.id, `❌ Lỗi tìm data trong "${targetName}": ${errMsg}`)
+        else await this.logCampaignProgress(campaign.id, `❌ Lỗi tìm data ${isFindDataSearch ? 'bằng search' : 'trong group'} "${targetName}": ${errMsg}`)
       } catch (err) { console.error('Failed log find data:', err) }
 
       if (isSuccess) {
@@ -2052,6 +2120,7 @@ export class CampaignScheduler {
         const newPostLinksForInternal = this.filterNewPostLinkValues(postLinks, previousCampaignValues.postLinks)
         const newPhonesForExternal = this.filterNewExternalValues(phones, previousCampaignValues.phones)
         const newZaloGroupLinksForExternal = this.filterNewExternalValues(linkGroupZalos, previousCampaignValues.linkGroupZalos)
+        const newFacebookGroupsForInternal = this.filterNewFacebookGroups(facebookGroups, previousCampaignValues.facebookGroups)
         await this.logFindDataDuplicatePushSummary(campaign, {
           label: 'UID',
           foundCount: foundUidsForPush.length,
@@ -2063,6 +2132,15 @@ export class CampaignScheduler {
           foundCount: postLinks.length,
           pushedCount: newPostLinksForInternal.length,
           hasTarget: this.getFindDataConfiguredTargetCampaignIds(findPostLinkTargetCampaignIds, campaign.id).length > 0
+        })
+        await this.logFindDataDuplicatePushSummary(campaign, {
+          label: 'link group Facebook',
+          foundCount: facebookGroups.length,
+          pushedCount: newFacebookGroupsForInternal.length,
+          hasTarget: [
+            ...this.getFindDataConfiguredTargetCampaignIds(findFacebookGroupPostTargetCampaignIds, campaign.id),
+            ...this.getFindDataConfiguredTargetCampaignIds(findFacebookGroupCommentTargetCampaignIds, campaign.id)
+          ].length > 0
         })
         await this.logFindDataDuplicatePushSummary(campaign, {
           label: 'SĐT',
@@ -2085,6 +2163,7 @@ export class CampaignScheduler {
         })
         await this.pushFoundUidsToTargetCampaigns(campaign, newUidsForInternal, groupMemberNameByUid)
         await this.pushFoundPostLinksToTargetCampaigns(campaign, newPostLinksForInternal)
+        await this.pushFoundFacebookGroupsToTargetCampaigns(campaign, newFacebookGroupsForInternal)
         await this.pushFoundPhonesToSmsCampaigns(campaign, newPhonesForExternal)
         await this.pushFoundPhonesToZaloWebCampaigns(campaign, newPhonesForExternal)
         await this.pushFoundZaloGroupLinksToZaloWebCampaigns(campaign, newZaloGroupLinksForExternal)
@@ -2552,6 +2631,69 @@ export class CampaignScheduler {
     }
   }
 
+  private async pushFoundFacebookGroupsToTargetCampaigns(sourceCampaign: Campaign, rawGroups: FindDataFacebookGroup[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindFacebookGroup) return
+
+    const targetConfigs = [
+      {
+        ids: this.getFindDataConfiguredTargetCampaignIds(
+          sourceCampaign.extraSettings.findFacebookGroupPostTargetCampaignIds,
+          sourceCampaign.id
+        ),
+        actionId: GROUP_POST_ACTION_ID,
+        label: 'chiến dịch đăng bài group'
+      },
+      {
+        ids: this.getFindDataConfiguredTargetCampaignIds(
+          sourceCampaign.extraSettings.findFacebookGroupCommentTargetCampaignIds,
+          sourceCampaign.id
+        ),
+        actionId: COMMENT_SEEDING_FEED_ACTION_ID,
+        label: 'chiến dịch comment seeding'
+      }
+    ]
+    const hasTarget = targetConfigs.some(config => config.ids.length > 0)
+    if (!hasTarget) return
+
+    const groupMap = new Map<string, FindDataFacebookGroup>()
+    for (const rawGroup of rawGroups) {
+      const group = this.normalizeFoundFacebookGroup(rawGroup)
+      const key = this.normalizeFacebookGroupUrlForCompare(group.url)
+      if (group.url && key && !groupMap.has(key)) {
+        groupMap.set(key, group)
+      }
+    }
+    const groups = Array.from(groupMap.values())
+    if (groups.length === 0) return
+
+    for (const config of targetConfigs) {
+      for (const targetCampaignId of config.ids) {
+        try {
+          const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
+          if (!targetCampaign || targetCampaign.actionId !== config.actionId) continue
+
+          for (const group of groups) {
+            await this.supabase.createCampaignInputData({
+              campaignId: targetCampaign.id,
+              name: group.name || group.url,
+              uid: group.url,
+              status: 'chờ xử lý',
+              note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
+            })
+          }
+
+          await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${groups.length} link group Facebook sang ${config.label} "${targetCampaign.name}"`)
+          await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${groups.length} link group Facebook từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+          if (targetCampaign.status === 'hoàn thành') {
+            await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
+          }
+        } catch (err) {
+          console.error('Failed to push found Facebook groups to target campaign:', err)
+        }
+      }
+    }
+  }
+
   private getFindDataConfiguredTargetCampaignIds(rawIds: unknown, sourceCampaignId: number): number[] {
     return Array.from(new Set(
       (Array.isArray(rawIds) ? rawIds : [])
@@ -2623,6 +2765,62 @@ export class CampaignScheduler {
     return result
   }
 
+  private cleanFacebookGroupUrlForStorage(rawUrl: unknown): string {
+    const value = String(rawUrl || '').trim()
+    if (!value) return ''
+    try {
+      const url = new URL(value, 'https://www.facebook.com')
+      const parts = url.pathname.split('/').filter(Boolean)
+      const groupIndex = parts.findIndex(part => part.toLowerCase() === 'groups')
+      const groupKey = groupIndex >= 0 ? parts[groupIndex + 1] : ''
+      if (!groupKey) return ''
+      return `https://www.facebook.com/groups/${groupKey}/`
+    } catch {
+      const cleaned = value.replace(/^https?:\/\/(www\.)?facebook\.com\/?/i, '').replace(/^\/+|\/+$/g, '')
+      const parts = cleaned.split('/').filter(Boolean)
+      const groupIndex = parts.findIndex(part => part.toLowerCase() === 'groups')
+      const groupKey = groupIndex >= 0 ? parts[groupIndex + 1] : ''
+      return groupKey ? `https://www.facebook.com/groups/${groupKey}/` : ''
+    }
+  }
+
+  private normalizeFacebookGroupUrlForCompare(rawUrl: unknown): string {
+    return this.cleanFacebookGroupUrlForStorage(rawUrl).replace(/\/+$/g, '').toLowerCase()
+  }
+
+  private normalizeFoundFacebookGroup(rawGroup: unknown): FindDataFacebookGroup {
+    const source = rawGroup && typeof rawGroup === 'object'
+      ? rawGroup as { url?: unknown; name?: unknown; privacy?: unknown; memberCount?: unknown; postsPerDay?: unknown; keyword?: unknown }
+      : { url: rawGroup }
+    const url = this.cleanFacebookGroupUrlForStorage(source.url)
+    const numberOrUndefined = (value: unknown): number | undefined => {
+      const numericValue = Number(value)
+      return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : undefined
+    }
+    return {
+      url,
+      name: String(source.name || '').trim(),
+      privacy: String(source.privacy || '').trim() || undefined,
+      memberCount: numberOrUndefined(source.memberCount),
+      postsPerDay: numberOrUndefined(source.postsPerDay),
+      keyword: String(source.keyword || '').trim() || undefined
+    }
+  }
+
+  private normalizeFoundFacebookGroups(rawGroups: unknown): FindDataFacebookGroup[] {
+    if (!Array.isArray(rawGroups)) return []
+    const result: FindDataFacebookGroup[] = []
+    const seen = new Set<string>()
+    for (const rawGroup of rawGroups) {
+      const group = this.normalizeFoundFacebookGroup(rawGroup)
+      const key = this.normalizeFacebookGroupUrlForCompare(group.url)
+      if (!group.url || !key || seen.has(key)) continue
+      seen.add(key)
+      result.push(group)
+    }
+    return result
+  }
+
   private normalizeFindDataSourceCounts(rawCounts: unknown): FindDataSourceCounts {
     const raw = rawCounts && typeof rawCounts === 'object'
       ? rawCounts as Record<string, unknown>
@@ -2638,6 +2836,9 @@ export class CampaignScheduler {
       : {}
     const rawNewInteractors = raw.newInteractors && typeof raw.newInteractors === 'object'
       ? raw.newInteractors as Record<string, unknown>
+      : {}
+    const rawFacebookGroups = raw.facebookGroups && typeof raw.facebookGroups === 'object'
+      ? raw.facebookGroups as Record<string, unknown>
       : {}
 
     const count = (value: unknown) => {
@@ -2662,6 +2863,9 @@ export class CampaignScheduler {
       },
       newInteractors: {
         uids: count(rawNewInteractors.uids)
+      },
+      facebookGroups: {
+        groups: count(rawFacebookGroups.groups)
       }
     }
   }
@@ -2671,20 +2875,23 @@ export class CampaignScheduler {
     counts: FindDataUniqueCounts,
     sourceCounts: FindDataSourceCounts,
     extra: Campaign['extraSettings'],
-    options: { isFollowUpInputRun?: boolean } = {}
+    options: { isFollowUpInputRun?: boolean; isSearch?: boolean } = {}
   ): string {
     const isFollowUpInputRun = options.isFollowUpInputRun === true
+    const isSearch = options.isSearch === true
     const uidCount = counts.uids + counts.groupMembers
     const uniqueParts: string[] = []
     if (extra?.isFindUid) uniqueParts.push(`${uidCount} UID${isFollowUpInputRun ? ' mới' : ''}`)
     if (extra?.isFindPostLink) uniqueParts.push(`${counts.postLinks} link bài post${isFollowUpInputRun ? ' mới' : ''}`)
     if (extra?.isFindPhone) uniqueParts.push(`${counts.phones} số điện thoại${isFollowUpInputRun ? ' mới' : ''}`)
     if (extra?.isFindLinkGroupZalo) uniqueParts.push(`${counts.linkGroupZalos} link group Zalo${isFollowUpInputRun ? ' mới' : ''}`)
+    if (extra?.isFindFacebookGroup) uniqueParts.push(`${counts.facebookGroups || 0} link group Facebook${isFollowUpInputRun ? ' mới' : ''}`)
+    const title = isSearch ? 'Tìm data bằng search:' : 'Tìm data trong group:'
 
     if (isFollowUpInputRun) {
       const summary = uniqueParts.join(' - ')
       return [
-        'Tìm data mới trong group:',
+        isSearch ? 'Tìm data mới bằng search:' : 'Tìm data mới trong group:',
         targetName,
         '',
         summary
@@ -2714,8 +2921,10 @@ export class CampaignScheduler {
     if (extra?.isFindLinkGroupZalo && extra?.isFindInComment) zaloParts.push(`${sourceCounts.comment.linkGroupZalos} link group Zalo trong comment`)
     if (zaloParts.length > 0) sourceLines.push(zaloParts.join(' - '))
 
+    if (extra?.isFindFacebookGroup) sourceLines.push(`${sourceCounts.facebookGroups.groups} link group Facebook từ kết quả search group`)
+
     return [
-      'Tìm data trong group:',
+      title,
       targetName,
       '',
       ...sourceLines,
@@ -2780,6 +2989,19 @@ export class CampaignScheduler {
     return result
   }
 
+  private filterNewFacebookGroups(rawGroups: FindDataFacebookGroup[], existingValues: Set<string>): FindDataFacebookGroup[] {
+    const result: FindDataFacebookGroup[] = []
+    const seen = new Set<string>()
+    for (const rawGroup of rawGroups) {
+      const group = this.normalizeFoundFacebookGroup(rawGroup)
+      const key = this.normalizeFacebookGroupUrlForCompare(group.url)
+      if (!group.url || !key || existingValues.has(key) || seen.has(key)) continue
+      seen.add(key)
+      result.push(group)
+    }
+    return result
+  }
+
   private getGroupMemberUidKeys(members: FindDataGroupMember[]): Set<string> {
     return new Set(
       members
@@ -2794,6 +3016,7 @@ export class CampaignScheduler {
       linkGroupZalos: new Set(),
       uids: new Set(),
       postLinks: new Set(),
+      facebookGroups: new Set(),
       detailCount: 0
     }
   }
@@ -2811,6 +3034,10 @@ export class CampaignScheduler {
     addValues(data.linkGroupZalos, target.linkGroupZalos, value => this.normalizeExternalValueForCompare(value))
     addValues(data.uids, target.uids, value => this.normalizeUidForCompare(String(value || '').trim()))
     addValues(data.postLinks, target.postLinks, value => this.normalizePostLinkForCompare(this.cleanPostLinkForStorage(String(value || ''))))
+    addValues(data.facebookGroups, target.facebookGroups, value => {
+      const group = this.normalizeFoundFacebookGroup(value)
+      return this.normalizeFacebookGroupUrlForCompare(group.url)
+    })
 
     if (Array.isArray(data.groupMembers)) {
       for (const member of data.groupMembers) {
@@ -2818,6 +3045,13 @@ export class CampaignScheduler {
         const uid = String((member as { uid?: unknown }).uid || '').trim()
         const key = this.normalizeUidForCompare(uid)
         if (key) target.uids.add(key)
+      }
+    }
+    if (Array.isArray(data.facebookGroups)) {
+      for (const item of data.facebookGroups) {
+        const group = this.normalizeFoundFacebookGroup(item)
+        const key = this.normalizeFacebookGroupUrlForCompare(group.url)
+        if (key) target.facebookGroups.add(key)
       }
     }
   }
