@@ -2897,6 +2897,14 @@ button.btn-icon:not(.btn):disabled {
   gap: 8px;
 }
 
+.report-load-button {
+  min-width: 128px;
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .report-filter-content {
   display: grid;
   grid-template-columns: minmax(170px, 0.8fr) minmax(240px, 1fr) minmax(220px, 0.9fr) minmax(260px, 1.1fr);

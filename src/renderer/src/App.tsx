@@ -159,7 +159,7 @@ export default function App() {
       </div>
 
       <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <ReportPage />
+        <ReportPage isActive={activePage === 'reports'} />
       </div>
 
       {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}
