@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2 } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -709,6 +709,7 @@ export default function CampaignFormModal({
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const txtFileInputRef = useRef<HTMLInputElement>(null)
+  const [savingCampaign, setSavingCampaign] = useState(false)
 
   const initSchedule = () => {
     if (cloneFromId) return formatDateTimeLocal(new Date())
@@ -1966,11 +1967,24 @@ export default function CampaignFormModal({
     return false
   }
 
-  const buildCampaignSaveBundleItems = (): CampaignSaveBundleItem[] => {
+  const normalizeCampaignInputDataForSave = (rows: Partial<CampaignInputData>[]): Partial<CampaignInputData>[] => {
+    return rows
+      .map(row => ({
+        ...row,
+        name: String(row.name || '').trim(),
+        phone: String(row.phone || '').trim(),
+        uid: String(row.uid || '').trim(),
+        email: String(row.email || '').trim(),
+        note: String(row.note || '').trim()
+      }))
+      .filter(row => row.uid.length > 0)
+  }
+
+  const buildCampaignSaveBundleItems = (detailRows: Partial<CampaignInputData>[] = details): CampaignSaveBundleItem[] => {
     const accountChunks: Partial<CampaignInputData>[][] = []
     const numAccounts = formData.accountIds.length
     const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
-    const detailSource = shouldDiscardDetailsForSave || hideDetailsSection ? [] : details
+    const detailSource = shouldDiscardDetailsForSave || hideDetailsSection ? [] : detailRows
 
     if (formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
       for (let i = 0; i < numAccounts; i++) {
@@ -2192,6 +2206,7 @@ export default function CampaignFormModal({
   }
 
   const handleSave = async () => {
+    if (savingCampaign) return
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
@@ -2272,6 +2287,7 @@ export default function CampaignFormModal({
         return
       }
     }
+    const validDetails = isEditingSavedCampaign ? details : normalizeCampaignInputDataForSave(details)
     if (isFindDataCampaign) {
       if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink && !formData.isFindFacebookGroup) {
         showAlert('Vui lòng chọn ít nhất một loại data cần tìm.', 'error')
@@ -2358,16 +2374,16 @@ export default function CampaignFormModal({
           return
         }
       }
-      if (!isEditingSavedCampaign && details.length === 0) {
+      if (!isEditingSavedCampaign && validDetails.length === 0) {
         showAlert(isFindDataSearchCampaign ? 'Vui lòng thêm ít nhất một từ khóa vào danh sách data.' : 'Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
         return
       }
     }
-    if (!isEditingSavedCampaign && formData.actionId === 'facebook_group_post' && details.length === 0) {
+    if (!isEditingSavedCampaign && formData.actionId === 'facebook_group_post' && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isPagePostCampaign && details.length === 0) {
+    if (!isEditingSavedCampaign && isPagePostCampaign && validDetails.length === 0) {
       showAlert('Vui lòng chọn ít nhất một fanpage.', 'error')
       return
     }
@@ -2375,7 +2391,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng chọn ít nhất một hành động nhắn tin hoặc kết bạn.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && details.length === 0 && !hasSelectedFindDataSourceCampaign) {
+    if (!isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
       showAlert(
         isMessageUidCampaign
           ? 'Vui lòng thêm ít nhất một UID vào danh sách data.'
@@ -2399,26 +2415,11 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập nội dung comment hoặc chọn ảnh comment.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isCommentSeedingCampaign && details.length === 0 && !hasSelectedFindDataSourceCampaign) {
+    if (!isEditingSavedCampaign && isCommentSeedingCampaign && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
       showAlert(
         isCommentSeedingPostCampaign
           ? 'Vui lòng thêm ít nhất một link bài post vào danh sách mục tiêu.'
           : 'Vui lòng thêm ít nhất một group/page/profile vào danh sách mục tiêu.',
-        'error'
-      )
-      return
-    }
-    if (!isEditingSavedCampaign && (isFindDataCampaign || isGroupPostCampaign || isCommentSeedingCampaign || isMessageCampaign || isPagePostCampaign) && !hideDetailsSection && details.some(d => !String(d.uid || '').trim())) {
-      showAlert(
-        isFindDataSearchCampaign
-          ? 'Vui lòng nhập từ khóa cho tất cả dòng trong danh sách data.'
-          : isCommentSeedingPostCampaign
-          ? 'Vui lòng nhập link bài post cho tất cả dòng trong danh sách data.'
-          : isPagePostCampaign
-            ? 'Danh sách fanpage có page thiếu Page ID. Vui lòng chọn lại page từ data scan.'
-            : isPageInboxMessageCampaign
-              ? 'Danh sách khách inbox Page có dòng thiếu PSID. Vui lòng chọn lại từ data scan.'
-            : 'Vui lòng nhập UID hoặc link cho tất cả dòng trong danh sách data.',
         'error'
       )
       return
@@ -2440,6 +2441,10 @@ export default function CampaignFormModal({
       }
     }
 
+    if (!isEditingSavedCampaign && !hideDetailsSection) {
+      setDetails(validDetails)
+    }
+
     if (draftMode) {
       if (!onSaveDraft || !draftPickerSourceType) {
         showAlert('Không thể tạo chiến dịch tạm trong ngữ cảnh hiện tại.', 'error')
@@ -2450,11 +2455,12 @@ export default function CampaignFormModal({
         sourceType: draftPickerSourceType,
         actionId: formData.actionId,
         requiredTargetField: draftRequiredTargetField,
-        items: buildCampaignSaveBundleItems()
+        items: buildCampaignSaveBundleItems(validDetails)
       })
       return
     }
 
+    setSavingCampaign(true)
     try {
       const { deleteCampaignInputData, updateCampaignInputData, createCampaignInputData, createCampaign, updateCampaign } = useCampaignStore.getState()
       const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
@@ -2473,7 +2479,7 @@ export default function CampaignFormModal({
         }
       }
 
-      const saveBundleItems = buildCampaignSaveBundleItems()
+      const saveBundleItems = buildCampaignSaveBundleItems(validDetails)
       const savedCampaignIds: number[] = []
       const savedCampaignPayloadById = new Map<number, Partial<Campaign>>()
 
@@ -2631,6 +2637,7 @@ export default function CampaignFormModal({
       setTimeout(() => onClose(), 1200)
     } catch (err) {
       console.error('Failed to save campaign:', err)
+      setSavingCampaign(false)
       showAlert(formatIpcErrorMessage(err, 'Có lỗi xảy ra khi lưu chiến dịch.'), 'error')
     }
   }
@@ -6542,7 +6549,14 @@ export default function CampaignFormModal({
         {/* Footer */}
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Huỷ</button>
-          <button className="btn btn-primary" onClick={handleSave}>{draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch'}</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={!draftMode && savingCampaign}>
+            {!draftMode && savingCampaign ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Đang lưu...
+              </>
+            ) : draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch'}
+          </button>
         </div>
       </div>
       {dataScanPicker && formData.accountIds.length > 0 && (

@@ -278,12 +278,18 @@ body {
   flex-shrink: 0;
 }
 
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .btn-primary {
   background: var(--accent-primary);
   color: white;
 }
 
-.btn-primary:hover {
+.btn-primary:not(:disabled):hover {
   background: var(--accent-primary-hover);
   box-shadow: var(--shadow-glow);
 }
@@ -294,7 +300,7 @@ body {
   border: 1px solid var(--border-default);
 }
 
-.btn-secondary:hover {
+.btn-secondary:not(:disabled):hover {
   background: var(--bg-hover);
   border-color: var(--border-hover);
 }
@@ -304,7 +310,7 @@ body {
   color: var(--text-secondary);
 }
 
-.btn-ghost:hover {
+.btn-ghost:not(:disabled):hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
 }
@@ -345,7 +351,7 @@ button.btn-icon:not(.btn):disabled {
   color: var(--text-inverse);
 }
 
-.btn-success:hover {
+.btn-success:not(:disabled):hover {
   filter: brightness(1.1);
 }
 
@@ -354,7 +360,7 @@ button.btn-icon:not(.btn):disabled {
   color: white;
 }
 
-.btn-danger:hover {
+.btn-danger:not(:disabled):hover {
   filter: brightness(1.1);
 }
 
