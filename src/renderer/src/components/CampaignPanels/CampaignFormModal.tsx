@@ -17,7 +17,11 @@ import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import { useUiStore } from '../../stores/uiStore'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 
-type FindDataTargetCampaignField = 'findUidTargetCampaignIds' | 'findPostLinkTargetCampaignIds'
+type FindDataTargetCampaignField =
+  | 'findUidTargetCampaignIds'
+  | 'findPostLinkTargetCampaignIds'
+  | 'findFacebookGroupPostTargetCampaignIds'
+  | 'findFacebookGroupCommentTargetCampaignIds'
 type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'dataTypes' | 'sourceTypes'
 type CampaignPickerSource =
   | { type: 'findDataSource' }
@@ -513,6 +517,8 @@ const isEditableFindDataSourceCampaign = (campaign: Campaign): boolean =>
 const getFindDataTargetCampaignField = (actionId: string): FindDataTargetCampaignField | null => {
   if (actionId === MESSAGE_UID_ACTION_ID) return 'findUidTargetCampaignIds'
   if (actionId === COMMENT_SEEDING_POST_ACTION_ID) return 'findPostLinkTargetCampaignIds'
+  if (actionId === GROUP_POST_ACTION_ID) return 'findFacebookGroupPostTargetCampaignIds'
+  if (actionId === COMMENT_SEEDING_FEED_ACTION_ID) return 'findFacebookGroupCommentTargetCampaignIds'
   return null
 }
 
@@ -1278,10 +1284,19 @@ export default function CampaignFormModal({
     if ((!FIND_DATA_GROUP_ACTIONS.has(c.actionId) && !FIND_DATA_SEARCH_ACTIONS.has(c.actionId)) || c.isDelete || !isEditableFindDataSourceCampaign(c)) return false
     if (targetFindDataField === 'findUidTargetCampaignIds') return c.extraSettings?.isFindUid === true
     if (targetFindDataField === 'findPostLinkTargetCampaignIds') return c.extraSettings?.isFindPostLink === true
+    if (targetFindDataField === 'findFacebookGroupPostTargetCampaignIds' || targetFindDataField === 'findFacebookGroupCommentTargetCampaignIds') {
+      return FIND_DATA_SEARCH_ACTIONS.has(c.actionId) && c.extraSettings?.isFindFacebookGroup === true
+    }
     return false
   })
   const findDataSourceCampaignOptionsKey = findDataSourceCampaignOptions
-    .map(c => `${c.id}:${(c.extraSettings?.findUidTargetCampaignIds || []).join(',')}:${(c.extraSettings?.findPostLinkTargetCampaignIds || []).join(',')}`)
+    .map(c => [
+      c.id,
+      (c.extraSettings?.findUidTargetCampaignIds || []).join(','),
+      (c.extraSettings?.findPostLinkTargetCampaignIds || []).join(','),
+      (c.extraSettings?.findFacebookGroupPostTargetCampaignIds || []).join(','),
+      (c.extraSettings?.findFacebookGroupCommentTargetCampaignIds || []).join(',')
+    ].join(':'))
     .join('|')
   const sourceSelectionTargetCampaignId = cloneFromId || (isEditingSavedCampaign && campaign?.id ? campaign.id : null)
   const sourceSelectionScopeKey = `${sourceSelectionTargetCampaignId || 'new'}:${formData.actionId}`
@@ -3994,7 +4009,11 @@ export default function CampaignFormModal({
   const getDraftActionIdForPickerSource = (source: CampaignPickerSource): string | null => {
     if (source.type === 'messageUidTarget') return MESSAGE_UID_ACTION_ID
     if (source.type === 'postLinkTarget') return COMMENT_SEEDING_POST_ACTION_ID
-    if (source.type === 'findDataSource') return FIND_DATA_GROUP_ACTION_ID
+    if (source.type === 'findDataSource') {
+      return targetFindDataField === 'findFacebookGroupPostTargetCampaignIds' || targetFindDataField === 'findFacebookGroupCommentTargetCampaignIds'
+        ? FIND_DATA_SEARCH_ACTION_ID
+        : FIND_DATA_GROUP_ACTION_ID
+    }
     return null
   }
 
@@ -4141,9 +4160,12 @@ export default function CampaignFormModal({
   }
 
   const renderFindDataSourceCampaignPicker = () => {
-    const emptyMessage = targetFindDataField === 'findUidTargetCampaignIds'
-      ? 'Chưa có chiến dịch tìm data phù hợp để làm nguồn UID.'
-      : 'Chưa có chiến dịch tìm data phù hợp để làm nguồn link bài post.'
+    const emptyMessage =
+      targetFindDataField === 'findUidTargetCampaignIds'
+        ? 'Chưa có chiến dịch tìm data phù hợp để làm nguồn UID.'
+        : targetFindDataField === 'findPostLinkTargetCampaignIds'
+          ? 'Chưa có chiến dịch tìm data phù hợp để làm nguồn link bài post.'
+          : 'Chưa có chiến dịch tìm data bằng search phù hợp để làm nguồn link group Facebook.'
 
     if (isDraftTargetFromFindData) {
       return (

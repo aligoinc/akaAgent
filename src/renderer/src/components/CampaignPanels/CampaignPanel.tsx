@@ -19,7 +19,7 @@ interface CampaignPanelProps {
 }
 
 type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataCampaigns' | 'sourceCampaigns'
-type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink'
+type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 type CampaignFilterDropdown = 'status' | 'platform' | 'action'
 
@@ -40,6 +40,7 @@ interface FoundDataPayload {
   uids: string[]
   postLinks: string[]
   groupMembers: FoundGroupMember[]
+  facebookGroups: FoundFacebookGroup[]
   groupUrl: string
   total: number
 }
@@ -48,6 +49,14 @@ interface FoundGroupMember {
   uid: string
   name: string
   url: string
+}
+
+interface FoundFacebookGroup {
+  url: string
+  name: string
+  privacy?: string
+  memberCount?: number
+  postsPerDay?: number
 }
 
 interface FoundDataItem {
@@ -66,7 +75,8 @@ const FOUND_DATA_EXPORT_OPTIONS: { kind: FoundDataKind; label: string }[] = [
   { kind: 'phone', label: 'SĐT' },
   { kind: 'uid', label: 'UID' },
   { kind: 'zalo', label: 'Link group Zalo' },
-  { kind: 'postLink', label: 'Link bài post' }
+  { kind: 'postLink', label: 'Link bài post' },
+  { kind: 'facebookGroup', label: 'Link group Facebook' }
 ]
 
 const CAMPAIGN_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }> = [
@@ -83,7 +93,14 @@ const CAMPAIGN_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }>
 
 const DEFAULT_CAMPAIGN_TIME_PRESET: CampaignTimePreset = '7_days'
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
-const FIND_DATA_TARGET_FIELDS = ['findUidTargetCampaignIds', 'findPostLinkTargetCampaignIds'] as const
+const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
+const FIND_DATA_ACTION_IDS = new Set([FIND_DATA_GROUP_ACTION_ID, FIND_DATA_SEARCH_ACTION_ID])
+const FIND_DATA_TARGET_FIELDS = [
+  'findUidTargetCampaignIds',
+  'findPostLinkTargetCampaignIds',
+  'findFacebookGroupPostTargetCampaignIds',
+  'findFacebookGroupCommentTargetCampaignIds'
+] as const
 
 const CAMPAIGN_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUSES.map(status => ({
   value: status,
@@ -155,6 +172,38 @@ const toGroupMemberList = (value: unknown): FoundGroupMember[] => {
   return members
 }
 
+const toFacebookGroupList = (value: unknown): FoundFacebookGroup[] => {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const groups: FoundFacebookGroup[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const group = item as {
+      url?: unknown
+      name?: unknown
+      privacy?: unknown
+      memberCount?: unknown
+      postsPerDay?: unknown
+    }
+    const url = String(group.url || '').trim()
+    const key = url.replace(/\/+$/g, '').toLowerCase()
+    if (!url || seen.has(key)) continue
+    seen.add(key)
+    const numberOrUndefined = (raw: unknown): number | undefined => {
+      const value = Number(raw)
+      return Number.isFinite(value) && value >= 0 ? value : undefined
+    }
+    groups.push({
+      url,
+      name: String(group.name || '').trim(),
+      privacy: String(group.privacy || '').trim() || undefined,
+      memberCount: numberOrUndefined(group.memberCount),
+      postsPerDay: numberOrUndefined(group.postsPerDay)
+    })
+  }
+  return groups
+}
+
 const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
   const data = detail.data || {}
   const phones = toStringList(data.phones)
@@ -162,6 +211,7 @@ const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
   const uids = toStringList(data.uids)
   const postLinks = toStringList(data.postLinks)
   const groupMembers = toGroupMemberList(data.groupMembers)
+  const facebookGroups = toFacebookGroupList(data.facebookGroups)
   const groupUrl = typeof data.groupUrl === 'string' ? data.groupUrl : ''
   return {
     phones,
@@ -169,8 +219,9 @@ const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
     uids,
     postLinks,
     groupMembers,
+    facebookGroups,
     groupUrl,
-    total: phones.length + linkGroupZalos.length + uids.length + postLinks.length + groupMembers.length
+    total: phones.length + linkGroupZalos.length + uids.length + postLinks.length + groupMembers.length + facebookGroups.length
   }
 }
 
@@ -180,6 +231,7 @@ const getFoundDataKindLabel = (kind: FoundDataKind) => {
     case 'zalo': return 'Link group Zalo'
     case 'uid': return 'UID'
     case 'postLink': return 'Link bài post'
+    case 'facebookGroup': return 'Link group Facebook'
   }
 }
 
@@ -187,6 +239,7 @@ const normalizeFoundDataExportValue = (item: FoundDataItem) => {
   const value = String(item.value || '').trim()
   if (item.kind === 'phone') return value.replace(/[\s.\-()+]/g, '')
   if (item.kind === 'postLink') return value.replace(/\/+$/g, '').toLowerCase()
+  if (item.kind === 'facebookGroup') return value.replace(/\/+$/g, '').toLowerCase()
   return value.toLowerCase()
 }
 
@@ -660,12 +713,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const selectedCampaignAction = selectedCampaign
     ? campaignActions.find(action => action.id === selectedCampaign.actionId)
     : undefined
-  const isSelectedFindDataCampaign = selectedCampaign?.actionId === FIND_DATA_GROUP_ACTION_ID
+  const isSelectedFindDataCampaign = !!selectedCampaign && FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)
   const linkedFindDataSourceCampaignIds = useMemo(() => {
     if (!selectedCampaign) return []
     return uniqueNumbers(
       campaigns
-        .filter(source => source.actionId === FIND_DATA_GROUP_ACTION_ID)
+        .filter(source => FIND_DATA_ACTION_IDS.has(source.actionId))
         .filter(source => FIND_DATA_TARGET_FIELDS.some(field =>
           toNumberList(source.extraSettings?.[field]).includes(selectedCampaign.id)
         ))
@@ -673,7 +726,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     )
   }, [campaigns, selectedCampaign])
   const linkedFindDataTargetCampaignIds = useMemo(() => {
-    if (!selectedCampaign || selectedCampaign.actionId !== FIND_DATA_GROUP_ACTION_ID) return []
+    if (!selectedCampaign || !FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)) return []
     return uniqueNumbers(FIND_DATA_TARGET_FIELDS.flatMap(field => toNumberList(selectedCampaign.extraSettings?.[field])))
   }, [selectedCampaign])
   const runLogEntries = useMemo(
@@ -736,6 +789,15 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           kind: 'postLink' as const,
           label: getFoundDataKindLabel('postLink'),
           value,
+          groupUrl,
+          createdAt
+        })),
+        ...payload.facebookGroups.map((group, index) => ({
+          key: `${detail.id}-facebook-group-${index}`,
+          kind: 'facebookGroup' as const,
+          label: getFoundDataKindLabel('facebookGroup'),
+          value: group.url,
+          name: group.name,
           groupUrl,
           createdAt
         }))
@@ -853,6 +915,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
             <span className="find-data-chip find-data-chip-zalo">Link group Zalo: {payload.linkGroupZalos.length}</span>
             <span className="find-data-chip find-data-chip-uid">UID: {payload.uids.length + payload.groupMembers.length}</span>
             <span className="find-data-chip find-data-chip-postLink">Link Post: {payload.postLinks.length}</span>
+            <span className="find-data-chip find-data-chip-facebookGroup">Link group Facebook: {payload.facebookGroups.length}</span>
           </div>
         )}
       </div>
