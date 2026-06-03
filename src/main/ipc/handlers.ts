@@ -18,6 +18,7 @@ import { registerAiHandlers } from './handlers/aiHandlers'
 import { registerAkaBizIntegrationHandlers } from './handlers/akaBizIntegrationHandlers'
 import { registerContentTemplateHandlers } from './handlers/contentTemplateHandlers'
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
+import { registerReportHandlers } from './handlers/reportHandlers'
 import { getCurrentUser } from '../data/currentUser'
 
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
@@ -156,6 +157,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAkaBizIntegrationHandlers()
   registerContentTemplateHandlers(supabase)
   registerEmailNotificationHandlers(supabase)
+  registerReportHandlers(supabase)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)
   registerAccountHandlers(supabase, webviewRegistry)

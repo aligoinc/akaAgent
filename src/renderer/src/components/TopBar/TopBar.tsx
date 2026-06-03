@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal, KeyRound } from 'lucide-react'
+import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal, KeyRound, BarChart3 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 
 interface TopBarProps {
-  activePage: 'campaigns' | 'workflow-editor' | 'browsers'
-  onPageChange: (page: 'campaigns' | 'workflow-editor' | 'browsers') => void
+  activePage: 'campaigns' | 'workflow-editor' | 'browsers' | 'reports'
+  onPageChange: (page: 'campaigns' | 'workflow-editor' | 'browsers' | 'reports') => void
   onOpenDataScan: () => void
   onOpenGeneralSettings: () => void
   onOpenChangePassword: () => void
@@ -110,6 +110,13 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpe
         >
           <Database size={15} />
           Quét data
+        </button>
+        <button
+          className={`topbar-nav-item ${activePage === 'reports' ? 'active' : ''}`}
+          onClick={() => onPageChange('reports')}
+        >
+          <BarChart3 size={15} />
+          Báo cáo
         </button>
         {canOpenWorkflowEditor && (
           <button
