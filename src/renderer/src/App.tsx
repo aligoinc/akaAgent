@@ -17,8 +17,8 @@ import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
-  const canOpenWorkflowEditor = user?.staffId === 1
-  // Default to campaigns; workflow-editor is only available for staff #1.
+  const canOpenWorkflowEditor = !!user?.isAdminAkabiz
+  // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
   const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
   const [showDataScan, setShowDataScan] = useState(false)
