@@ -1,4 +1,4 @@
-import { ActionLimitConfig, AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
@@ -8,6 +8,7 @@ import * as accountActionRepo from '../data/repositories/accountActionRepository
 import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
 import * as contentTemplateRepo from '../data/repositories/contentTemplateRepository'
 import * as emailNotificationRepo from '../data/repositories/emailNotificationRepository'
+import * as reportRepo from '../data/repositories/reportRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -90,6 +91,10 @@ export class SupabaseService {
   saveEmailNotificationSettings(settings: Partial<EmailNotificationSettings>) {
     return emailNotificationRepo.saveEmailNotificationSettings(settings)
   }
+
+  // =========== REPORTS ===========
+  getAccountActionReport(query: AccountActionReportQuery) { return reportRepo.getAccountActionReport(query) }
+  getAccountActionReportDetails(query: AccountActionReportDetailQuery) { return reportRepo.getAccountActionReportDetails(query) }
 
   // =========== ACCOUNT ACTION LIMITS / ERRORS ===========
   listAccountActions(flatformType?: string) { return accountActionRepo.listAccountActions(flatformType) }

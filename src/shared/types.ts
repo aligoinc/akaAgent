@@ -351,6 +351,95 @@ export interface CampaignRelationSummary {
 }
 
 // ============================================
+// Reports
+// ============================================
+
+export interface AccountActionReportQuery {
+  flatformType?: string
+  accountIds?: number[]
+  actionCodes?: string[]
+  startIso: string
+  endIso: string
+}
+
+export interface AccountActionReportAccount {
+  id: number
+  name: string
+  flatformType: string
+  accountGroupId?: number | null
+  accountGroupName?: string | null
+}
+
+export interface AccountActionReportAction {
+  code: string
+  name: string
+  flatformType: string
+}
+
+export interface AccountActionReportCell {
+  successCount: number
+  failureCount: number
+  pendingCount: number
+}
+
+export interface AccountActionReportRow {
+  account: AccountActionReportAccount
+  countsByActionCode: Record<string, AccountActionReportCell>
+}
+
+export interface AccountActionReportResult {
+  query: AccountActionReportQuery
+  actions: AccountActionReportAction[]
+  rows: AccountActionReportRow[]
+  generatedAt: string
+}
+
+export type AccountActionReportStatusBucket = 'pending' | 'success' | 'failure'
+
+export interface AccountActionReportDetailQuery {
+  flatformType?: string
+  accountId: number
+  actionCode: string
+  statusBucket: AccountActionReportStatusBucket
+  startIso: string
+  endIso: string
+  page?: number
+  pageSize?: number
+  exportAll?: boolean
+}
+
+export interface AccountActionReportDetailRow {
+  id: string
+  source: 'campaign_detail' | 'campaign_input_data'
+  occurredAt?: string | null
+  accountId: number
+  accountName: string
+  campaignId?: number | null
+  campaignName?: string | null
+  actionCode: string
+  actionName: string
+  targetName?: string | null
+  targetUid?: string | null
+  targetPhone?: string | null
+  targetEmail?: string | null
+  status: CampaignDetailStatus | 'chờ xử lý'
+  detailText?: string | null
+  postUrl?: string | null
+}
+
+export interface AccountActionReportDetailResult {
+  query: AccountActionReportDetailQuery
+  rows: AccountActionReportDetailRow[]
+  total: number
+  page: number
+  pageSize: number
+  generatedAt: string
+  accountName: string
+  actionName: string
+  statusLabel: string
+}
+
+// ============================================
 // Account Contact Types
 // ============================================
 
@@ -681,6 +770,10 @@ export const IPC_EVENTS = {
   // Email Notifications
   EMAIL_NOTIFICATION_SETTINGS_GET: 'email-notification-settings:get',
   EMAIL_NOTIFICATION_SETTINGS_SAVE: 'email-notification-settings:save',
+
+  // Reports
+  REPORT_ACCOUNT_ACTION_SUMMARY: 'report:account-action-summary',
+  REPORT_ACCOUNT_ACTION_DETAILS: 'report:account-action-details',
 
   // Webview registration (embedded browser tabs)
   WEBVIEW_REGISTER: 'webview:register',

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import TopBar from './components/TopBar/TopBar'
 import CampaignPage from './pages/CampaignPage'
 import BrowserPage from './pages/BrowserPage'
+import ReportPage from './pages/ReportPage'
 import LoginPage from './pages/LoginPage'
 import WorkflowEditorV2 from './components/v2/WorkflowEditorV2'
 import { useThemeStore } from './stores/themeStore'
@@ -18,7 +19,7 @@ export default function App() {
   const { user, initializing, rehydrateFromStorage } = useAuthStore()
   const canOpenWorkflowEditor = user?.staffId === 1
   // Default to campaigns; workflow-editor is only available for staff #1.
-  const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers'>('campaigns')
+  const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
   const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
   const [showDataScan, setShowDataScan] = useState(false)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
@@ -155,6 +156,10 @@ export default function App() {
         : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
       }>
         <BrowserPage focusAccountId={focusAccountId} onFocusHandled={() => setFocusAccountId(null)} />
+      </div>
+
+      <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <ReportPage />
       </div>
 
       {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}
