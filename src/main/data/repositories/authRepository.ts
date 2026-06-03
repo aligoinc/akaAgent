@@ -19,6 +19,7 @@ interface StaffRow extends StaffDeviceColumns {
   username: string
   password: string
   is_active: boolean
+  is_admin_akabiz: boolean
 }
 
 const STAFF_SELECT = [
@@ -28,6 +29,7 @@ const STAFF_SELECT = [
   'username',
   'password',
   'is_active',
+  'is_admin_akabiz',
   'device_fingerprint_hash',
   'device_label',
   'device_platform',
@@ -143,7 +145,7 @@ export async function login(username: string, password: string): Promise<AuthUse
   // Lookup org separately — embed gặp ambiguous FK (org_staff.organization_id vs org_organization.staff_admin_id).
   const { data: org, error: orgErr } = await client()
     .from('org_organization')
-    .select('id, name, is_admin_akabiz')
+    .select('id, name')
     .eq('id', staffRow.organization_id)
     .maybeSingle()
 
@@ -155,7 +157,7 @@ export async function login(username: string, password: string): Promise<AuthUse
     name: staffRow.name,
     username: staffRow.username,
     organizationName: (org?.name as string) || '',
-    isAdminAkabiz: !!org?.is_admin_akabiz,
+    isAdminAkabiz: !!staffRow.is_admin_akabiz,
     deviceLabel: deviceRecord.device_label || null,
     devicePlatform: deviceRecord.device_platform || null,
     deviceBoundAt: deviceRecord.device_bound_at || null,

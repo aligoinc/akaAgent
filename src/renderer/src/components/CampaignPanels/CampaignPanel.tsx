@@ -448,7 +448,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     loadCampaignInputData, loadCampaignDetails, loadCampaignRelationSummaries
   } = useCampaignStore()
-  const canManageCampaignActions = useAuthStore(s => s.user?.staffId === 1)
+  const canManageCampaignActions = useAuthStore(s => !!s.user?.isAdminAkabiz)
   const showAlert = useUiStore(s => s.showAlert)
 
   const [showForm, setShowForm] = useState(false)

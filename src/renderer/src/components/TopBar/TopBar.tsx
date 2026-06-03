@@ -18,7 +18,7 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpe
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
   const isAdminAkabiz = !!user?.isAdminAkabiz
-  const canOpenWorkflowEditor = user?.staffId === 1
+  const canOpenWorkflowEditor = isAdminAkabiz
 
   useEffect(() => {
     if (!settingsOpen) return
