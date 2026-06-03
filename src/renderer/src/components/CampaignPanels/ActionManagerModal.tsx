@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Edit3, Plus, Save, Trash2, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
+import { useAuthStore } from '../../stores/authStore'
 import { AutoAccountAction, CampaignAction } from '../../../../shared/types'
 import { WorkflowDef } from '../../../../shared/v2Types'
 
@@ -14,6 +15,7 @@ interface ActionFormData {
   name: string
   flatformType: string
   workflowId: number | ''
+  testWorkflowId: number | ''
   limitCheckActionCodes: string[]
   isActive: boolean
 }
@@ -23,6 +25,7 @@ const emptyForm: ActionFormData = {
   name: '',
   flatformType: 'facebook',
   workflowId: '',
+  testWorkflowId: '',
   limitCheckActionCodes: [],
   isActive: true
 }
@@ -39,12 +42,15 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
     updateCampaignAction,
     deleteCampaignAction
   } = useCampaignStore()
+  const user = useAuthStore(state => state.user)
+  const updateUseTestWorkflow = useAuthStore(state => state.updateUseTestWorkflow)
 
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([])
   const [accountActions, setAccountActions] = useState<AutoAccountAction[]>([])
   const [editingAction, setEditingAction] = useState<CampaignAction | null>(null)
   const [formData, setFormData] = useState<ActionFormData>(emptyForm)
   const [isEditing, setIsEditing] = useState(false)
+  const [testModeSaving, setTestModeSaving] = useState(false)
 
   useEffect(() => {
     loadAllCampaignActions()
@@ -76,6 +82,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       name: action.name,
       flatformType: action.flatformType,
       workflowId: action.workflowId ?? '',
+      testWorkflowId: action.testWorkflowId ?? '',
       limitCheckActionCodes: action.limitCheckActionCodes || [],
       isActive: action.isActive
     })
@@ -103,6 +110,21 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
     })
   }
 
+  const handleToggleTestMode = async (checked: boolean) => {
+    setTestModeSaving(true)
+    try {
+      await updateUseTestWorkflow(checked)
+      useUiStore.getState().showAlert(
+        checked ? 'Đã bật chế độ workflow test.' : 'Đã tắt chế độ workflow test.',
+        'success'
+      )
+    } catch (err: any) {
+      useUiStore.getState().showAlert(err?.message || 'Không thể lưu chế độ workflow test.', 'error')
+    } finally {
+      setTestModeSaving(false)
+    }
+  }
+
   const handleDelete = (action: CampaignAction) => {
     useUiStore.getState().showConfirm(
       `Xoá hành động "${action.name}"?`,
@@ -128,13 +150,22 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       useUiStore.getState().showAlert('Vui lòng nhập ID và tên hành động.', 'error')
       return
     }
+    if (formData.workflowId === '') {
+      useUiStore.getState().showAlert('Vui lòng chọn workflow chạy thật.', 'error')
+      return
+    }
+    if (formData.testWorkflowId === '') {
+      useUiStore.getState().showAlert('Vui lòng chọn workflow test.', 'error')
+      return
+    }
 
     const payload: Partial<CampaignAction> = {
       id: formData.id.trim(),
       name: formData.name.trim(),
       flatformType: formData.flatformType,
       isActive: formData.isActive,
-      workflowId: formData.workflowId === '' ? undefined : Number(formData.workflowId),
+      workflowId: Number(formData.workflowId),
+      testWorkflowId: Number(formData.testWorkflowId),
       limitCheckActionCodes: formData.limitCheckActionCodes
     }
 
@@ -164,6 +195,24 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
             <X size={18} />
           </button>
         </div>
+
+        {user?.isAdminAkabiz && (
+          <div className="action-manager-mode-bar">
+            <div className="action-manager-mode-copy">
+              <strong>Chạy bằng workflow test</strong>
+              <span>Khi bật, campaign của tài khoản admin hiện tại sẽ dùng workflow test.</span>
+            </div>
+            <label className="action-manager-mode-toggle">
+              <input
+                type="checkbox"
+                checked={!!user.useTestWorkflow}
+                onChange={event => handleToggleTestMode(event.target.checked)}
+                disabled={testModeSaving}
+              />
+              <span>{testModeSaving ? 'Đang lưu...' : user.useTestWorkflow ? 'Đang bật' : 'Đang tắt'}</span>
+            </label>
+          </div>
+        )}
 
         <div className="action-manager-body">
           <div className="action-manager-list-pane">
@@ -264,10 +313,24 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                     </div>
 
                     <div className="form-group">
-                      <label>Workflow</label>
+                      <label>Workflow chạy thật</label>
                       <select
                         value={formData.workflowId}
                         onChange={e => setFormData(prev => ({ ...prev, workflowId: e.target.value === '' ? '' : Number(e.target.value) }))}
+                        className="panel-input"
+                      >
+                        <option value="">Chưa liên kết</option>
+                        {workflows.map(workflow => (
+                          <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Workflow test</label>
+                      <select
+                        value={formData.testWorkflowId}
+                        onChange={e => setFormData(prev => ({ ...prev, testWorkflowId: e.target.value === '' ? '' : Number(e.target.value) }))}
                         className="panel-input"
                       >
                         <option value="">Chưa liên kết</option>

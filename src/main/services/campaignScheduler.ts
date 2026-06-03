@@ -155,7 +155,8 @@ const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm da
  * run their associated workflow v2 against the account browser session.
  *
  * Engine v2 is the only execution path. Each campaign action template
- * (`auto_campaign_actions.workflow_id`) points to a workflow that already
+ * (`auto_campaign_actions.workflow_id`, or `test_workflow_id` when the
+ * current staff enables workflow test mode) points to a workflow that already
  * encodes the full per-action logic (post / share / reels / message / friend
  * with internal ifElse on extraSettings flags). Scheduler only orchestrates
  * scheduling, rate limits, and per-milestone logging.
@@ -733,8 +734,9 @@ export class CampaignScheduler {
         return
       }
 
-      if (!action.workflowId) {
-        await this.updateCampaignPreflightNote(campaign, 'Loại chiến dịch chưa được liên kết workflow')
+      const workflowSelection = this.resolveCampaignWorkflow(action)
+      if (!workflowSelection.workflowId) {
+        await this.updateCampaignPreflightNote(campaign, workflowSelection.missingNote)
         return
       }
 
@@ -760,7 +762,7 @@ export class CampaignScheduler {
 
       await this.updateAccountAndBroadcast(account.id, { status: 'đang chạy' })
 
-      await this.executeCampaignV2(account, campaign, action.workflowId, actionDescriptors)
+      await this.executeCampaignV2(account, campaign, workflowSelection.workflowId, actionDescriptors)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       await this.recoverStuckCampaignInputData(campaign.id, errMsg)
@@ -1287,6 +1289,18 @@ export class CampaignScheduler {
 
   private getCampaignActionDescriptors(campaign: Campaign, campaignAction?: CampaignAction): CampaignActionDescriptor[] {
     return resolveCampaignActionDescriptors(campaign, campaignAction)
+  }
+
+  private resolveCampaignWorkflow(action: CampaignAction): { workflowId?: number; missingNote: string } {
+    const useTestWorkflow = getCurrentUser()?.useTestWorkflow === true
+    const workflowId = useTestWorkflow ? action.testWorkflowId : action.workflowId
+    const normalizedWorkflowId = Number(workflowId)
+    return {
+      workflowId: Number.isFinite(normalizedWorkflowId) && normalizedWorkflowId > 0 ? normalizedWorkflowId : undefined,
+      missingNote: useTestWorkflow
+        ? 'Loại chiến dịch chưa được liên kết workflow test'
+        : 'Loại chiến dịch chưa được liên kết workflow'
+    }
   }
 
   private getAccountActionName(actionCode: string): string {
