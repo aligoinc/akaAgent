@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignInputData } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -43,6 +43,19 @@ interface RuntimeErrorResult {
   triggered: boolean
   message: string
   policy?: AutoErrorPolicy
+}
+
+interface CampaignBadTargetResult extends RuntimeErrorResult {
+  count?: number
+  threshold?: number | null
+}
+
+interface MilestoneSummary {
+  hasSuccess: boolean
+  hasFailure: boolean
+  hasError: boolean
+  failureReasons: string[]
+  errorReasons: string[]
 }
 
 interface SuggestedFriendProfile {
@@ -754,7 +767,10 @@ export class CampaignScheduler {
       if (this.isNewsfeedDailyCampaign(campaign)) {
         await this.completeNewsfeedDailyWithoutNextDay(campaign, errMsg)
       } else {
-        await this.handleRuntimeError(account, campaign, 'err_undefined', undefined, { message: errMsg })
+        const handled = await this.handleCampaignBadTarget(account, campaign, null, 'err_undefined', undefined, { message: errMsg })
+        if (!handled.triggered) {
+          await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: handled.message })
+        }
       }
       await this.releaseRunningAccount(account.id)
       await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
@@ -980,7 +996,7 @@ export class CampaignScheduler {
         })
 
         // Per-milestone logging — scan steps theo block_name
-        await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed')
+        const milestoneSummary = await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed')
 
         const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
         const pauseCancelledRun = campaignPauseRequested && !accountStopReason && result.status === 'cancelled'
@@ -1008,18 +1024,39 @@ export class CampaignScheduler {
           }
         }
 
-        if (!accountStopReason && result.status !== 'completed' && !pauseCancelledRun) {
-          const runtimeError = this.normalizeRuntimeError(campaign, result.steps, result.error)
-          if (this.isNewsfeedDailyCampaign(campaign)) {
+        if (!accountStopReason && !pauseCancelledRun) {
+          const runtimeError = result.status !== 'completed'
+            ? this.normalizeRuntimeError(campaign, result.steps, result.error)
+            : null
+
+          if (runtimeError && this.isNewsfeedDailyCampaign(campaign)) {
             await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
             runtimeStopTriggered = true
             shouldStopAfterTarget = true
-          } else {
-            const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
-              message: runtimeError.message
-            })
+          } else if (runtimeError) {
+            const handled = await this.handleCampaignBadTarget(
+              account,
+              campaign,
+              detail?.id,
+              runtimeError.errorCode,
+              runtimeError.actionCode,
+              { message: runtimeError.message }
+            )
             runtimeStopTriggered = handled.triggered
             shouldStopAfterTarget = handled.triggered
+          } else if (milestoneSummary.hasError || milestoneSummary.hasFailure) {
+            const handled = await this.handleCampaignBadTarget(
+              account,
+              campaign,
+              detail?.id,
+              'err_undefined',
+              targetActionDescriptors[0]?.code,
+              { message: this.getMilestoneBadReason(milestoneSummary) }
+            )
+            runtimeStopTriggered = handled.triggered
+            shouldStopAfterTarget = handled.triggered
+          } else if (milestoneSummary.hasSuccess) {
+            await this.resetCampaignBadTargetCount(campaign)
           }
         }
 
@@ -1055,9 +1092,14 @@ export class CampaignScheduler {
             runtimeStopTriggered = true
             shouldStopAfterTarget = true
           } else {
-            const handled = await this.handleRuntimeError(account, campaign, runtimeError.errorCode, runtimeError.actionCode, {
-              message: runtimeError.message
-            })
+            const handled = await this.handleCampaignBadTarget(
+              account,
+              campaign,
+              detail?.id,
+              runtimeError.errorCode,
+              runtimeError.actionCode,
+              { message: runtimeError.message }
+            )
             runtimeStopTriggered = handled.triggered
             shouldStopAfterTarget = handled.triggered
           }
@@ -1495,44 +1537,68 @@ export class CampaignScheduler {
     return { errorCode: 'err_undefined', actionCode, message }
   }
 
-  private async handleRuntimeError(
+  private createMilestoneSummary(): MilestoneSummary {
+    return {
+      hasSuccess: false,
+      hasFailure: false,
+      hasError: false,
+      failureReasons: [],
+      errorReasons: []
+    }
+  }
+
+  private recordMilestoneSummary(
+    summary: MilestoneSummary,
+    status: CampaignDetailStatus | undefined,
+    reason?: string | null
+  ): void {
+    const message = String(reason || '').trim()
+    if (status === 'thành công') {
+      summary.hasSuccess = true
+    } else if (status === 'thất bại') {
+      summary.hasFailure = true
+      if (message) summary.failureReasons.push(message)
+    } else if (status === 'lỗi') {
+      summary.hasError = true
+      if (message) summary.errorReasons.push(message)
+    }
+  }
+
+  private getMilestoneBadReason(summary: MilestoneSummary): string {
+    return summary.errorReasons[0] || summary.failureReasons[0] || 'Target có lỗi hoặc thất bại'
+  }
+
+  private getPolicyThreshold(policy: AutoErrorPolicy | null | undefined): number | null {
+    return policy?.countConsecutiveErrors && policy.countConsecutiveErrors > 0
+      ? policy.countConsecutiveErrors
+      : null
+  }
+
+  private async applyRuntimeErrorPolicy(
     account: AutoAccount,
     campaign: Campaign,
     errorCode: string,
     actionCode: string | undefined,
     replacements: Record<string, string | undefined> = {}
   ): Promise<RuntimeErrorResult> {
+    const policyReplacements: Record<string, string | undefined> = {
+      ...replacements,
+      actionCode: replacements.actionCode || actionCode,
+      action_code: replacements.action_code || actionCode
+    }
     const policy = await this.supabase.getErrorPolicy(errorCode) || await this.supabase.getErrorPolicy('err_undefined')
     if (!policy) {
-      const message = replacements.message || 'Có lỗi xảy ra'
+      const message = policyReplacements.message || 'Có lỗi xảy ra'
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
       return { triggered: true, message }
     }
 
-    const threshold = policy.countConsecutiveErrors && policy.countConsecutiveErrors > 0
-      ? policy.countConsecutiveErrors
-      : null
-    if (threshold) {
-      const count = await this.supabase.incrementConsecutiveError(account.id, actionCode, policy.errorCode)
-      if (count < threshold) {
-        const notice = this.addActionContextToMessage(
-          this.renderPolicyMessage(policy.notiRunningProcess, replacements) || policy.errorName,
-          replacements
-        )
-        return {
-          triggered: false,
-          message: `${notice} (${count}/${threshold})`,
-          policy
-        }
-      }
-    }
-
     const message = this.addActionContextToMessage(
-      this.renderPolicyMessage(policy.notiCampaign || policy.notiRunningProcess, replacements)
-      || replacements.message
+      this.renderPolicyMessage(policy.notiCampaign || policy.notiRunningProcess, policyReplacements)
+      || policyReplacements.message
       || policy.errorDesc
       || policy.errorName,
-      replacements
+      policyReplacements
     )
     const campaignStatus = policy.updateStatusCampaign || 'chờ xử lý'
 
@@ -1547,6 +1613,66 @@ export class CampaignScheduler {
     await this.logCampaignProgress(campaign.id, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
 
     return { triggered: true, message, policy }
+  }
+
+  private async handleCampaignBadTarget(
+    account: AutoAccount,
+    campaign: Campaign,
+    inputDataId: number | null | undefined,
+    errorCode: string,
+    actionCode: string | undefined,
+    replacements: Record<string, string | undefined> = {}
+  ): Promise<CampaignBadTargetResult> {
+    const policyReplacements: Record<string, string | undefined> = {
+      ...replacements,
+      actionCode: replacements.actionCode || actionCode,
+      action_code: replacements.action_code || actionCode
+    }
+    const policy = await this.supabase.getErrorPolicy(errorCode) || await this.supabase.getErrorPolicy('err_undefined')
+    const threshold = this.getPolicyThreshold(policy)
+    if (!policy || !threshold) {
+      return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
+    }
+
+    const notice = this.addActionContextToMessage(
+      this.renderPolicyMessage(policy.notiRunningProcess, policyReplacements) ||
+      policyReplacements.message ||
+      policy.errorName,
+      policyReplacements
+    )
+    const state = await this.supabase.incrementCampaignBadTargetCount(
+      campaign.id,
+      inputDataId,
+      policyReplacements.message || notice
+    )
+    const count = state.countConsecutiveBadTargets
+
+    if (count < threshold) {
+      const message = `${notice} (${count}/${threshold})`
+      await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+      return { triggered: false, message, policy, count, threshold }
+    }
+
+    const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
+    return { ...handled, count, threshold }
+  }
+
+  private async resetCampaignBadTargetCount(campaign: Campaign): Promise<void> {
+    try {
+      await this.supabase.resetCampaignBadTargetCount(campaign.id)
+    } catch (err) {
+      console.error(`Failed to reset campaign bad target counter for campaign ${campaign.id}:`, err)
+    }
+  }
+
+  private async handleRuntimeError(
+    account: AutoAccount,
+    campaign: Campaign,
+    errorCode: string,
+    actionCode: string | undefined,
+    replacements: Record<string, string | undefined> = {}
+  ): Promise<RuntimeErrorResult> {
+    return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, replacements)
   }
 
   private renderPolicyMessage(template: string | null | undefined, replacements: Record<string, string | undefined>): string {
@@ -1815,8 +1941,14 @@ export class CampaignScheduler {
     accountId: number,
     steps: RunStepV2[],
     overallSuccess: boolean
-  ): Promise<void> {
+  ): Promise<MilestoneSummary> {
     void overallSuccess
+    const summary = this.createMilestoneSummary()
+    const createCampaignDetail = async (action: Partial<CampaignDetail>) => {
+      const created = await this.supabase.createCampaignDetail(action)
+      this.recordMilestoneSummary(summary, created.status, created.log || action.log)
+      return created
+    }
     const inputDataName = detail?.name || detail?.uid || ''
 
     // Tìm kiếm data — 1 milestone tổng kết, dữ liệu chi tiết nằm trong JSONB data.
@@ -1950,7 +2082,7 @@ export class CampaignScheduler {
         : this.createEmptyFindDataPreviousValues()
 
       try {
-        await this.supabase.createCampaignDetail({
+        await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
@@ -2048,12 +2180,20 @@ export class CampaignScheduler {
         await this.pushFoundPhonesToAkaBizDesktopCampaigns(campaign, newPhonesForExternal)
         await this.pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(campaign, newZaloGroupLinksForExternal)
       }
-      return
+      return summary
     }
 
     if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
       for (const s of steps) await this.logNewsfeedMilestoneStep(campaign, detail, accountId, s)
-      return
+      const hasNewsfeedSuccess = steps.some(s => {
+        const out = (s.output as any) || {}
+        return (
+          (s.blockName === 'fb_newsfeed_like_post' && out.liked === true) ||
+          (s.blockName === 'fb_newsfeed_comment_submit' && out.commented === true)
+        )
+      })
+      if (hasNewsfeedSuccess) this.recordMilestoneSummary(summary, 'thành công', 'Tương tác newsfeed thành công')
+      return summary
     }
 
     // Đăng bài fanpage — API block trả ok=false cho lỗi Graph; UI workflow mới dùng các block nhỏ.
@@ -2094,7 +2234,7 @@ export class CampaignScheduler {
           : (out.ok === true || out.posted === true) ? 'thành công'
           : 'thất bại'
 
-        await this.supabase.createCampaignDetail({
+        await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
@@ -2151,7 +2291,7 @@ export class CampaignScheduler {
             'Không chuyển được sang fanpage'
           ).trim()
           const status: 'thành công' | 'thất bại' | 'lỗi' = switchToPageStep.status === 'error' ? 'lỗi' : 'thất bại'
-          await this.supabase.createCampaignDetail({
+          await createCampaignDetail({
             inputDataId: detail?.id,
             campaignId: campaign.id,
             accountId,
@@ -2191,7 +2331,7 @@ export class CampaignScheduler {
         const requiresPostApproval = postUrl ? isPending : undefined
         const rawPostLink = String(linkOut.rawPostLink || '').trim()
         const failureMessage = String(out.message || 'Form đăng bài chưa đóng sau 60 giây')
-        await this.supabase.createCampaignDetail({
+        await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
@@ -2229,7 +2369,7 @@ export class CampaignScheduler {
     for (const s of postSteps) {
       try {
         const isPending = steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true
-        await this.supabase.createCampaignDetail({
+        await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
@@ -2298,7 +2438,7 @@ export class CampaignScheduler {
         ? `Đã comment vào ${target}: "${preview}"`
         : `Đã comment vào ${target}`
       try {
-        await this.supabase.createCampaignDetail({
+        await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
@@ -2346,7 +2486,7 @@ export class CampaignScheduler {
         : 'thất bại'
       const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined
       try {
-        await this.supabase.createCampaignDetail({
+        await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
@@ -2375,7 +2515,7 @@ export class CampaignScheduler {
 
       try {
         if (alreadyFriend) {
-          await this.supabase.createCampaignDetail({
+          await createCampaignDetail({
             inputDataId: detail?.id,
             campaignId: campaign.id,
             accountId,
@@ -2387,7 +2527,7 @@ export class CampaignScheduler {
           })
           await this.logCampaignProgress(campaign.id, `ℹ️ Bỏ qua kết bạn với "${inputDataName}" (đã là bạn hoặc nút bị ẩn)`)
         } else if (clicked) {
-          await this.supabase.createCampaignDetail({
+          await createCampaignDetail({
             inputDataId: detail?.id,
             campaignId: campaign.id,
             accountId,
@@ -2401,7 +2541,7 @@ export class CampaignScheduler {
           // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
           const status: 'thất bại' | 'lỗi' = s.status === 'error' ? 'lỗi' : 'thất bại'
           const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined
-          await this.supabase.createCampaignDetail({
+          await createCampaignDetail({
             inputDataId: detail?.id,
             campaignId: campaign.id,
             accountId,
@@ -2415,6 +2555,8 @@ export class CampaignScheduler {
         }
       } catch (err) { console.error('Failed log friend:', err) }
     }
+
+    return summary
   }
 
   private async pushFoundUidsToTargetCampaigns(sourceCampaign: Campaign, rawUids: string[], uidNameByNormalizedUid: Map<string, string> = new Map()): Promise<void> {
