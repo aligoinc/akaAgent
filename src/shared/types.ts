@@ -13,6 +13,11 @@ export interface AutoAccount {
   accountGroupId?: number | null
   accountGroupName?: string | null
   accountGroupSettings?: AccountGroupSettings | null
+  proxyId?: number | null
+  proxyName?: string | null
+  proxyProtocol?: ProxyProtocol | null
+  proxyHost?: string | null
+  proxyPort?: number | null
   isDelete: boolean
   staffId?: number
   organizationId?: number
@@ -36,6 +41,43 @@ export interface AutoAccountGroup {
   organizationId?: number
   createdAt?: string
   updatedAt?: string
+}
+
+export type ProxyProtocol = 'http' | 'https' | 'socks5'
+
+export interface AutoProxy {
+  id: number
+  name: string
+  protocol: ProxyProtocol
+  host: string
+  port: number
+  username?: string | null
+  password?: string | null
+  isActive: boolean
+  isDelete: boolean
+  usageCount?: number
+  staffId?: number
+  organizationId?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ProxyTestRequest {
+  proxyId?: number | null
+  proxy?: Partial<AutoProxy> | null
+  platform?: string
+  testUrl?: string
+}
+
+export interface ProxyTestResult {
+  ok: boolean
+  platform?: string
+  testUrl: string
+  status?: number
+  statusText?: string
+  ip?: string
+  latencyMs: number
+  error?: string
 }
 
 export interface CampaignAction {
@@ -730,6 +772,12 @@ export const IPC_EVENTS = {
   DB_CREATE_ACCOUNT_GROUP: 'db:create-account-group',
   DB_UPDATE_ACCOUNT_GROUP: 'db:update-account-group',
   DB_DELETE_ACCOUNT_GROUP: 'db:delete-account-group',
+  DB_LIST_PROXIES: 'db:list-proxies',
+  DB_CREATE_PROXY: 'db:create-proxy',
+  DB_UPDATE_PROXY: 'db:update-proxy',
+  DB_DELETE_PROXY: 'db:delete-proxy',
+  PROXY_TEST: 'proxy:test',
+  ACCOUNT_PREPARE_BROWSER_SESSION: 'account:prepare-browser-session',
 
   // Database Campaign Actions
   DB_LIST_CAMPAIGN_ACTIONS: 'db:list-campaign-actions',

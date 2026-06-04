@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary } from '../../../shared/types'
+import { AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -15,6 +15,12 @@ interface CampaignStore {
   createAccountGroup: (data: Partial<AutoAccountGroup>) => Promise<AutoAccountGroup>
   updateAccountGroup: (id: number, updates: Partial<AutoAccountGroup>) => Promise<void>
   deleteAccountGroup: (id: number) => Promise<void>
+  proxies: AutoProxy[]
+  loadingProxies: boolean
+  loadProxies: () => Promise<void>
+  createProxy: (data: Partial<AutoProxy>) => Promise<AutoProxy>
+  updateProxy: (id: number, updates: Partial<AutoProxy>) => Promise<void>
+  deleteProxy: (id: number) => Promise<void>
 
   // Campaign Actions
   campaignActions: CampaignAction[] // active only
@@ -80,6 +86,8 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   loadingAccounts: false,
   accountGroups: [],
   loadingAccountGroups: false,
+  proxies: [],
+  loadingProxies: false,
 
   loadAccounts: async () => {
     if (!window.electronAPI) return
@@ -145,6 +153,39 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     await window.electronAPI.deleteAccountGroup(id)
     await get().loadAccountGroups()
     await get().loadAccounts()
+  },
+
+  loadProxies: async () => {
+    if (!window.electronAPI) return
+    set({ loadingProxies: true })
+    try {
+      const proxies = await window.electronAPI.listProxies()
+      set({ proxies })
+    } catch (err) {
+      console.error('Failed to load proxies:', err)
+    } finally {
+      set({ loadingProxies: false })
+    }
+  },
+
+  createProxy: async (data) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    const proxy = await window.electronAPI.createProxy(data)
+    await get().loadProxies()
+    return proxy
+  },
+
+  updateProxy: async (id, updates) => {
+    if (!window.electronAPI) return
+    await window.electronAPI.updateProxy(id, updates)
+    await get().loadProxies()
+    await get().loadAccounts()
+  },
+
+  deleteProxy: async (id) => {
+    if (!window.electronAPI) return
+    await window.electronAPI.deleteProxy(id)
+    await get().loadProxies()
   },
 
   // =========== CAMPAIGN ACTIONS ===========

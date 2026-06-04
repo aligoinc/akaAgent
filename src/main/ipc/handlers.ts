@@ -5,6 +5,7 @@ import { PageControllerRegistry } from '../v2/runtime/pageController'
 import { SupabaseService } from '../services/supabase'
 import { CampaignScheduler } from '../services/campaignScheduler'
 import { ContactLoader } from '../services/contactLoader'
+import { ProxyRuntimeService } from '../services/proxyRuntimeService'
 import { startAccountPoller } from '../domain/accounts/accountPoller'
 
 import { registerBrowserHandlers } from './handlers/browserHandlers'
@@ -36,9 +37,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
-  const campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow)
+  const proxyRuntime = new ProxyRuntimeService((id) => supabase.getProxy(id))
+  const campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow, proxyRuntime)
   campaignScheduler.setPageRegistry(pageRegistry)
-  const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow)
+  const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime)
 
   const runScopedRecovery = async (reason: 'login' | 'logout' | 'quit'): Promise<void> => {
     const user = getCurrentUser()
@@ -160,7 +162,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerReportHandlers(supabase)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)
-  registerAccountHandlers(supabase, webviewRegistry)
+  registerAccountHandlers(supabase, webviewRegistry, proxyRuntime, {
+    destroyBackgroundPage: (accountId) => {
+      campaignScheduler.destroyBackgroundPage(accountId)
+      contactLoader.destroyBackgroundPage(accountId)
+    }
+  })
   registerAccountContactHandlers(supabase, contactLoader)
   registerV2Handlers(mainWindow, pageRegistry)
 

@@ -33,6 +33,7 @@ import {
   isNewsfeedLikeConfigured as resolveIsNewsfeedLikeConfigured,
   type CampaignActionDescriptor
 } from '../domain/campaigns/campaignActionDescriptors'
+import { ProxyRuntimeService } from './proxyRuntimeService'
 
 interface AutomationPageRef {
   page: PageController
@@ -177,11 +178,18 @@ export class CampaignScheduler {
   private backgroundPages = new BackgroundPageManager()
   private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<string>()
+  private proxyRuntime?: ProxyRuntimeService
 
-  constructor(supabase: SupabaseService, webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow) {
+  constructor(
+    supabase: SupabaseService,
+    webviewRegistry: WebviewRegistry,
+    mainWindow: BrowserWindow,
+    proxyRuntime?: ProxyRuntimeService
+  ) {
     this.supabase = supabase
     this.webviewRegistry = webviewRegistry
     this.mainWindow = mainWindow
+    this.proxyRuntime = proxyRuntime
   }
 
   setPageRegistry(reg: PageControllerRegistry): void {
@@ -247,6 +255,10 @@ export class CampaignScheduler {
     this.stopAllBackgroundPreviews()
     this.backgroundPages.destroyAll()
     this.sendLog('⏹ Scheduler đã dừng.')
+  }
+
+  destroyBackgroundPage(accountId: number): void {
+    this.backgroundPages.destroy(accountId)
   }
 
   isRunning(): boolean {
@@ -916,7 +928,7 @@ export class CampaignScheduler {
         console.error('Rate limit check error:', err)
       }
 
-      const automationPage = this.getAutomationPage(account, campaign.id)
+      const automationPage = await this.getAutomationPage(account, campaign.id)
       const page = automationPage.page
 
       let currentSourceLink = ''
@@ -1208,7 +1220,7 @@ export class CampaignScheduler {
 
     await this.logCampaignProgress(campaign.id, `ℹ️ Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
 
-    const automationPage = this.getAutomationPage(account, campaign.id)
+    const automationPage = await this.getAutomationPage(account, campaign.id)
     const page = automationPage.page
     const abort = new AbortController()
     this.activeV2Aborts.set(campaign.id, abort)
@@ -3728,7 +3740,8 @@ export class CampaignScheduler {
     }
   }
 
-  private getAutomationPage(account: AutoAccount, campaignId?: number): AutomationPageRef {
+  private async getAutomationPage(account: AutoAccount, campaignId?: number): Promise<AutomationPageRef> {
+    await this.proxyRuntime?.prepareAccountSession(account)
     this.selectAutomationBrowser(account.id, campaignId)
     return {
       page: this.backgroundPages.getOrCreate(account.id, account.flatformType),

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -102,6 +102,24 @@ const electronAPI = {
 
   deleteAccountGroup: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_ACCOUNT_GROUP, id),
+
+  listProxies: (): Promise<AutoProxy[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_LIST_PROXIES),
+
+  createProxy: (data: Partial<AutoProxy>): Promise<AutoProxy> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_CREATE_PROXY, data),
+
+  updateProxy: (id: number, updates: Partial<AutoProxy>): Promise<AutoProxy> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_PROXY, id, updates),
+
+  deleteProxy: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_PROXY, id),
+
+  testProxy: (request: ProxyTestRequest): Promise<ProxyTestResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.PROXY_TEST, request),
+
+  prepareAccountBrowserSession: (accountId: number): Promise<{ success: boolean; reason?: string }> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_PREPARE_BROWSER_SESSION, accountId),
 
   listAccountActions: (flatformType?: string): Promise<AutoAccountAction[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, flatformType),
