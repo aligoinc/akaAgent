@@ -6,6 +6,7 @@ import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, Aut
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
+import type { BlockRuntimeHelpers, GroupPendingContentCheckOptions, GroupPendingContentCheckResult } from '../v2/runtime/blockHelpers'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 import {
   addSmsCampaignDetail,
@@ -38,6 +39,12 @@ import { ProxyRuntimeService } from './proxyRuntimeService'
 interface AutomationPageRef {
   page: PageController
   source: 'visible' | 'background'
+}
+
+interface BackgroundPreviewOverride {
+  page: PageController
+  title?: string
+  context?: string
 }
 
 interface RuntimeErrorResult {
@@ -178,6 +185,7 @@ export class CampaignScheduler {
   private backgroundPages = new BackgroundPageManager()
   private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<string>()
+  private backgroundPreviewOverrides = new Map<string, BackgroundPreviewOverride>()
   private proxyRuntime?: ProxyRuntimeService
 
   constructor(
@@ -992,12 +1000,14 @@ export class CampaignScheduler {
         this.startBackgroundPreview(account.id, campaign.id, page)
       }
       try {
+        const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, page)
         const result = await this.engineV2.run(workflowId, variables, page, {
           accountId: account.id,
           campaignId: campaign.id,
           campaignInputDataId: detail?.id,
           signal: abort.signal,
           persist: true,
+          runtimeHelpers,
           onStepProgress: (step: RunStepV2) => {
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
             if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
@@ -2353,10 +2363,28 @@ export class CampaignScheduler {
         const postUrl = posted
           ? this.cleanPostLinkForStorage(String(linkOut.postUrl || linkOut.link || out.postUrl || ''))
           : ''
-        const isPending = postUrl.includes('/pending_posts/')
-        const requiresPostApproval = postUrl ? isPending : undefined
+        const detectStep = [...steps].reverse().find(x => x.blockName === 'fb_detect_pending_post' && x.status === 'success')
+        const detectOut = ((detectStep?.output as any) || {}) as {
+          isPending?: unknown
+          pendingCheckConclusive?: unknown
+          pendingContentUrl?: unknown
+          pendingContentLinks?: unknown
+          source?: unknown
+        }
+        const detectHasIsPending = typeof detectOut.isPending === 'boolean'
+        const pendingCheckConclusive = detectOut.pendingCheckConclusive === false
+          ? false
+          : detectHasIsPending
+        const isPending = detectHasIsPending ? detectOut.isPending === true : postUrl.includes('/pending_posts/')
+        const requiresPostApproval = posted
+          ? (isPending ? true : (pendingCheckConclusive ? false : undefined))
+          : undefined
         const rawPostLink = String(linkOut.rawPostLink || '').trim()
         const failureMessage = String(out.message || 'Form đăng bài chưa đóng sau 60 giây')
+        const pendingContentLinks = Array.isArray(detectOut.pendingContentLinks)
+          ? detectOut.pendingContentLinks.map(link => String(link || '').trim()).filter(Boolean)
+          : undefined
+        const pendingApprovalLog = this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive)
         await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
@@ -2370,6 +2398,10 @@ export class CampaignScheduler {
           postUrl: postUrl || undefined,
           data: {
             isPending,
+            pendingCheckConclusive,
+            pendingContentUrl: typeof detectOut.pendingContentUrl === 'string' ? detectOut.pendingContentUrl : undefined,
+            pendingContentLinks,
+            pendingSource: typeof detectOut.source === 'string' ? detectOut.source : undefined,
             rawPostLink: rawPostLink || undefined,
             postUrl: postUrl || undefined,
             submitClosed: posted,
@@ -2379,9 +2411,9 @@ export class CampaignScheduler {
         if (posted) {
           await this.syncGroupPostContactStatus(accountId, detail, requiresPostApproval)
           await this.logCampaignProgress(campaign.id, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
-          if (isPending) await this.logCampaignProgress(campaign.id, `⏳ Bài đang chờ duyệt`)
+          await this.logCampaignProgress(campaign.id, pendingApprovalLog)
           if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)
-          await this.enqueuePostBumpAfterGroupPost(campaign, postUrl)
+          await this.enqueuePostBumpAfterGroupPost(campaign, postUrl, isPending)
         } else {
           await this.logCampaignProgress(campaign.id, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
         }
@@ -2394,7 +2426,15 @@ export class CampaignScheduler {
       : steps.filter(s => s.blockName === 'fb_click_post_button' && s.status === 'success')
     for (const s of postSteps) {
       try {
-        const isPending = steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true
+        const detectOut = ((steps.find(x => x.blockName === 'fb_detect_pending_post')?.output as any) || {}) as {
+          isPending?: unknown
+          pendingCheckConclusive?: unknown
+        }
+        const detectHasIsPending = typeof detectOut.isPending === 'boolean'
+        const pendingCheckConclusive = detectOut.pendingCheckConclusive === false
+          ? false
+          : detectHasIsPending
+        const isPending = detectOut.isPending === true
         await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
@@ -2406,7 +2446,9 @@ export class CampaignScheduler {
           data: isPending ? { isPending: true } : undefined
         })
         await this.logCampaignProgress(campaign.id, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
-        if (isPending) await this.logCampaignProgress(campaign.id, `⏳ Bài đang chờ duyệt`)
+        if (campaign.actionId === 'facebook_group_post') {
+          await this.logCampaignProgress(campaign.id, this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive))
+        }
       } catch (err) { console.error('Failed log post:', err) }
       void s
     }
@@ -3419,12 +3461,12 @@ export class CampaignScheduler {
     return ((parsed % targetCount) + targetCount) % targetCount
   }
 
-  private async enqueuePostBumpAfterGroupPost(campaign: Campaign, rawPostUrl: string): Promise<void> {
+  private async enqueuePostBumpAfterGroupPost(campaign: Campaign, rawPostUrl: string, isPending?: boolean): Promise<void> {
     const extra = campaign.extraSettings || {}
     if (campaign.actionId !== 'facebook_group_post' || extra.enablePostBump !== true) return
 
     const postUrl = this.cleanPostLinkForStorage(rawPostUrl)
-    if (!postUrl || postUrl.includes('/pending_posts/')) return
+    if (!postUrl || isPending === true || postUrl.includes('/pending_posts/')) return
 
     const targets = await this.resolvePostBumpTargets(campaign)
     if (targets.length === 0) {
@@ -3678,6 +3720,13 @@ export class CampaignScheduler {
     return position === 1 ? 'bài đầu tiên' : `bài thứ ${position}`
   }
 
+  private formatGroupPendingProgressLog(isPending: boolean, pendingCheckConclusive: boolean): string {
+    if (isPending) return '⏳ Group cần duyệt bài'
+    return pendingCheckConclusive
+      ? '✅ Group không cần duyệt bài'
+      : '⚠️ Chưa xác định được trạng thái duyệt bài'
+  }
+
   private async syncGroupPostContactStatus(
     accountId: number,
     detail: CampaignInputData | null,
@@ -3749,10 +3798,153 @@ export class CampaignScheduler {
     }
   }
 
+  private createBlockRuntimeHelpers(account: AutoAccount, campaign: Campaign, mainPage: PageController): BlockRuntimeHelpers {
+    return {
+      checkGroupPendingContent: (options) => this.checkGroupPendingContent(account, campaign, mainPage, options)
+    }
+  }
+
+  private async checkGroupPendingContent(
+    account: AutoAccount,
+    campaign: Campaign,
+    mainPage: PageController,
+    options: GroupPendingContentCheckOptions
+  ): Promise<GroupPendingContentCheckResult> {
+    const url = String(options?.url || '').trim()
+    const rawSelector = String(options?.rawSelector || '').trim()
+    const linkSelector = String(options?.linkSelector || '').trim()
+    const timeoutMs = Math.min(30000, Math.max(5000, Number(options?.timeoutMs || 15000)))
+
+    if (!url) {
+      return { ok: false, conclusive: false, url, links: [], error: 'Thiếu URL my_pending_content' }
+    }
+    if (!rawSelector && !linkSelector) {
+      return { ok: false, conclusive: false, url, links: [], error: 'Thiếu selector kiểm tra pending content' }
+    }
+
+    const temp = this.backgroundPages.createTemporary(account.id, account.flatformType)
+    const title = 'Đang kiểm tra bài chờ duyệt'
+    this.setBackgroundPreviewOverride(account.id, campaign.id, temp.page, title)
+
+    try {
+      await this.withTimeout(temp.page.navigate(url), timeoutMs, `Timeout mở trang pending content: ${url}`)
+      try {
+        await this.withTimeout(
+          temp.page.waitForSelector("//*[@role='main']", { timeout: Math.min(timeoutMs, 10000), state: 'attached' }),
+          Math.min(timeoutMs, 12000),
+          'Timeout chờ trang pending content render'
+        )
+      } catch {
+        // Facebook sometimes renders usable links before role=main is visible.
+      }
+      await new Promise(resolve => setTimeout(resolve, 1200))
+      await this.sendBackgroundPreviewSnapshot(account.id, campaign.id, temp.page, title)
+
+      const links = await this.withTimeout(
+        temp.page.evaluate<string[]>(`
+          const rawSelector = String(__args[0] || '');
+          const linkSelector = String(__args[1] || '');
+
+          function xpathAll(xpath) {
+            const out = [];
+            if (!xpath) return out;
+            try {
+              const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+              for (let i = 0; i < result.snapshotLength; i++) {
+                const item = result.snapshotItem(i);
+                if (item) out.push(item);
+              }
+            } catch {}
+            return out;
+          }
+
+          function hrefOf(el) {
+            return el ? (el.href || el.getAttribute('href') || '') : '';
+          }
+
+          function cleanHref(href) {
+            if (!href) return '';
+            try {
+              const url = new URL(href, location.href);
+              if (/^(m|mbasic|mobile)\\.facebook\\.com$/i.test(url.hostname)) {
+                url.hostname = 'www.facebook.com';
+              }
+              url.hash = '';
+              Array.from(url.searchParams.keys()).forEach(key => {
+                if (key.startsWith('__') || key === 'mibextid' || key === 'ref' || key === 'locale') {
+                  url.searchParams.delete(key);
+                }
+              });
+              return url.href;
+            } catch {
+              return String(href || '').trim();
+            }
+          }
+
+          const links = []
+            .concat(xpathAll(rawSelector), xpathAll(linkSelector))
+            .map(el => cleanHref(hrefOf(el)))
+            .filter(Boolean);
+
+          return Array.from(new Set(links));
+        `, rawSelector, linkSelector),
+        Math.min(timeoutMs, 10000),
+        'Timeout đọc link pending content'
+      )
+
+      return {
+        ok: true,
+        conclusive: true,
+        url,
+        links: Array.isArray(links) ? links.map(link => String(link || '').trim()).filter(Boolean) : []
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        conclusive: false,
+        url,
+        links: [],
+        error: err instanceof Error ? err.message : String(err)
+      }
+    } finally {
+      this.clearBackgroundPreviewOverride(account.id, campaign.id)
+      temp.destroy()
+      await this.sendBackgroundPreviewSnapshot(account.id, campaign.id, mainPage, undefined, 'campaign')
+    }
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+        })
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
   private selectAutomationBrowser(accountId: number, campaignId?: number): void {
     try {
       this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_SELECT, { accountId, campaignId })
     } catch {}
+  }
+
+  private setBackgroundPreviewOverride(
+    accountId: number,
+    campaignId: number,
+    page: PageController,
+    title?: string
+  ): void {
+    const key = this.backgroundPreviewKey(accountId, campaignId)
+    this.backgroundPreviewOverrides.set(key, { page, title, context: 'campaign' })
+  }
+
+  private clearBackgroundPreviewOverride(accountId: number, campaignId: number): void {
+    this.backgroundPreviewOverrides.delete(this.backgroundPreviewKey(accountId, campaignId))
   }
 
   private startBackgroundPreview(accountId: number, campaignId: number, page: PageController): void {
@@ -3763,15 +3955,14 @@ export class CampaignScheduler {
       if (this.backgroundPreviewCapturing.has(key)) return
       this.backgroundPreviewCapturing.add(key)
       try {
-        if (!page.isConnected()) return
-        const image = await page.screenshot()
-        this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, {
+        const override = this.backgroundPreviewOverrides.get(key)
+        await this.sendBackgroundPreviewSnapshot(
           accountId,
           campaignId,
-          active: true,
-          image: `data:image/png;base64,${image}`,
-          timestamp: new Date().toISOString()
-        })
+          override?.page || page,
+          override?.title,
+          override?.context
+        )
       } catch {
         // Preview is best-effort; workflow steps remain the source of truth.
       } finally {
@@ -3789,6 +3980,7 @@ export class CampaignScheduler {
     if (timer) clearInterval(timer)
     this.backgroundPreviewTimers.delete(key)
     this.backgroundPreviewCapturing.delete(key)
+    this.backgroundPreviewOverrides.delete(key)
     try {
       this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, {
         accountId,
@@ -3805,6 +3997,31 @@ export class CampaignScheduler {
     }
     this.backgroundPreviewTimers.clear()
     this.backgroundPreviewCapturing.clear()
+    this.backgroundPreviewOverrides.clear()
+  }
+
+  private async sendBackgroundPreviewSnapshot(
+    accountId: number,
+    campaignId: number,
+    page: PageController,
+    title?: string,
+    context?: string
+  ): Promise<void> {
+    try {
+      if (!page.isConnected()) return
+      const image = await page.screenshot()
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, {
+        accountId,
+        campaignId,
+        active: true,
+        image: `data:image/png;base64,${image}`,
+        title,
+        context,
+        timestamp: new Date().toISOString()
+      })
+    } catch {
+      // Preview is best-effort; workflow steps remain the source of truth.
+    }
   }
 
   private backgroundPreviewKey(accountId: number, campaignId: number): string {

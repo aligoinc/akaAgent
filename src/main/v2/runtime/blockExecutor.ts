@@ -1,13 +1,14 @@
 import * as vm from 'vm'
 import { BlockResult } from '../../../shared/v2Types'
 import { PageController } from './pageController'
-import { BlockHelpers, createBlockHelpers } from './blockHelpers'
+import { BlockHelpers, BlockRuntimeHelpers, createBlockHelpers } from './blockHelpers'
 
 export interface BlockExecuteContext {
   input: Record<string, unknown>
   page: PageController
   vars: Record<string, unknown>
   signal: AbortSignal
+  runtimeHelpers?: BlockRuntimeHelpers
   /** Callback gọi cho mỗi `helpers.log()` — thường emit IPC realtime */
   onLog?: (line: string) => void
 }
@@ -39,14 +40,17 @@ export class BlockExecutor {
   async execute(opts: BlockExecuteOptions, ctx: BlockExecuteContext): Promise<BlockResult> {
     const startTime = Date.now()
     const logs: string[] = []
-    const helpers: BlockHelpers = createBlockHelpers((line) => {
-      logs.push(line)
-      try {
-        ctx.onLog?.(line)
-      } catch {
-        // Don't fail block khi onLog throw
-      }
-    })
+    const helpers: BlockHelpers = createBlockHelpers(
+      (line) => {
+        logs.push(line)
+        try {
+          ctx.onLog?.(line)
+        } catch {
+          // Don't fail block khi onLog throw
+        }
+      },
+      ctx.runtimeHelpers
+    )
 
     // Build sandbox global. KHÔNG expose Node-specific objects.
     const sandbox = vm.createContext({

@@ -4,6 +4,7 @@ import {
 } from '../../../shared/v2Types'
 import { PageController } from './pageController'
 import { BlockExecutor } from './blockExecutor'
+import type { BlockRuntimeHelpers } from './blockHelpers'
 import * as blockRepo from '../../data/repositories/blockRepository'
 import * as workflowV2Repo from '../../data/repositories/workflowV2Repository'
 import * as runV2Repo from '../../data/repositories/runV2Repository'
@@ -17,6 +18,8 @@ export interface RunContext {
   onStepProgress?: (step: RunStepV2) => void
   /** Realtime callback cho log từ helpers.log() */
   onLog?: (entry: { nodeId: string; line: string }) => void
+  /** Optional helper implementations exposed to JS blocks. */
+  runtimeHelpers?: BlockRuntimeHelpers
   /** Có persist run + run_steps vào DB không. Test runs có thể skip. */
   persist?: boolean
 }
@@ -255,6 +258,7 @@ export class WorkflowEngineV2 {
           { code, blockName: block.name },
           {
             input, page, vars: variables, signal,
+            runtimeHelpers: ctx.runtimeHelpers,
             onLog: (line) => ctx.onLog?.({ nodeId: node.id, line })
           }
         )
