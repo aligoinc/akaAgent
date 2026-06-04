@@ -61,6 +61,7 @@ interface CampaignBadTargetResult extends RuntimeErrorResult {
 interface MilestoneSummary {
   hasSuccess: boolean
   hasFailure: boolean
+  hasHardFailure: boolean
   hasError: boolean
   failureReasons: string[]
   errorReasons: string[]
@@ -1068,7 +1069,11 @@ export class CampaignScheduler {
             )
             runtimeStopTriggered = handled.triggered
             shouldStopAfterTarget = handled.triggered
-          } else if (milestoneSummary.hasError || milestoneSummary.hasFailure) {
+          } else if (
+            milestoneSummary.hasError ||
+            milestoneSummary.hasHardFailure ||
+            (milestoneSummary.hasFailure && !milestoneSummary.hasSuccess)
+          ) {
             const handled = await this.handleCampaignBadTarget(
               account,
               campaign,
@@ -1577,6 +1582,7 @@ export class CampaignScheduler {
     return {
       hasSuccess: false,
       hasFailure: false,
+      hasHardFailure: false,
       hasError: false,
       failureReasons: [],
       errorReasons: []
@@ -1586,13 +1592,15 @@ export class CampaignScheduler {
   private recordMilestoneSummary(
     summary: MilestoneSummary,
     status: CampaignDetailStatus | undefined,
-    reason?: string | null
+    reason?: string | null,
+    actionName?: string | null
   ): void {
     const message = String(reason || '').trim()
     if (status === 'thành công') {
       summary.hasSuccess = true
     } else if (status === 'thất bại') {
       summary.hasFailure = true
+      if (String(actionName || '').trim() !== 'Comment') summary.hasHardFailure = true
       if (message) summary.failureReasons.push(message)
     } else if (status === 'lỗi') {
       summary.hasError = true
@@ -1982,7 +1990,7 @@ export class CampaignScheduler {
     const summary = this.createMilestoneSummary()
     const createCampaignDetail = async (action: Partial<CampaignDetail>) => {
       const created = await this.supabase.createCampaignDetail(action)
-      this.recordMilestoneSummary(summary, created.status, created.log || action.log)
+      this.recordMilestoneSummary(summary, created.status, created.log || action.log, created.actionName || action.actionName)
       return created
     }
     const inputDataName = detail?.name || detail?.uid || ''
@@ -2484,15 +2492,15 @@ export class CampaignScheduler {
       const position = Number(out.position ?? (i + 1))
       const text = String(out.text ?? '')
       const imageCount = Number(out.imageCount || 0)
-      if (out.commented === false || (text.trim().length === 0 && imageCount <= 0)) continue
-      loggedCommentCount++
+      const commentFailed = out.commentFailed === true
+      if (!commentFailed && (out.commented === false || (text.trim().length === 0 && imageCount <= 0))) continue
       const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
       const commentType = String(campaign.extraSettings?.commentType || '')
       let target: string
       if (this.isCommentSeedingPostCampaign(campaign.actionId)) {
         target = 'bài post'
       } else if (campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID) {
-        target = this.formatOrdinalPost(loggedCommentCount)
+        target = this.formatOrdinalPost(commentFailed ? position : loggedCommentCount + 1)
       } else if (campaign.actionId === 'facebook_group_post' && commentType === 'others') {
         target = this.formatOrdinalPost(position)
       } else if (campaign.actionId === 'facebook_group_post' && commentType === 'all') {
@@ -2502,6 +2510,32 @@ export class CampaignScheduler {
       } else {
         target = position === 1 ? 'bài của mình' : this.formatOrdinalPost(position)
       }
+      if (commentFailed) {
+        const errMsg = String(out.error || s.error || 'Không comment được bài').trim() || 'Không comment được bài'
+        try {
+          await createCampaignDetail({
+            inputDataId: detail?.id,
+            campaignId: campaign.id,
+            accountId,
+            actionCode: 'fb_comment',
+            actionName: 'Comment',
+            status: 'thất bại',
+            log: `Không comment được ${target}: ${errMsg}`,
+            data: {
+              commentPosition: position,
+              commentType: commentType || undefined,
+              commentContent: text,
+              commentImageCount: imageCount,
+              commentFailed: true,
+              error: errMsg
+            }
+          })
+          await this.logCampaignProgress(campaign.id, `⚠️ Không comment được ${target}${detail ? ` tại "${inputDataName}"` : ''}: ${errMsg}`)
+        } catch (err) { console.error('Failed log failed comment:', err) }
+        continue
+      }
+
+      loggedCommentCount++
       const logText = text.trim().length > 0
         ? `Đã comment vào ${target}: "${preview}"`
         : `Đã comment vào ${target}`
