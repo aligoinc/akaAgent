@@ -109,11 +109,12 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
       setBackgroundPreviews(prev => {
         const next = new Map(prev)
         const existing = next.get(preview.accountId)
+        const active = preview.active === true
         next.set(preview.accountId, {
-          active: preview.active,
-          context: preview.context || existing?.context || 'campaign',
-          image: preview.image || existing?.image,
-          title: preview.title || existing?.title,
+          active,
+          context: preview.context || 'campaign',
+          image: active ? (preview.image || existing?.image) : undefined,
+          title: active ? preview.title : undefined,
           timestamp: preview.timestamp
         })
         return next

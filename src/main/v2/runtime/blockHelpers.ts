@@ -19,6 +19,27 @@ export interface BlockHelpers {
   element(name: string): Promise<string>
   /** Concat multiple XPath snippets bằng name + replace ${var} placeholder */
   elementWith(name: string, vars: Record<string, string | number>): Promise<string>
+  /** Check trang group pending-content bằng page phụ nếu runtime hỗ trợ. */
+  checkGroupPendingContent(options: GroupPendingContentCheckOptions): Promise<GroupPendingContentCheckResult>
+}
+
+export interface GroupPendingContentCheckOptions {
+  url: string
+  rawSelector: string
+  linkSelector: string
+  timeoutMs?: number
+}
+
+export interface GroupPendingContentCheckResult {
+  ok: boolean
+  conclusive: boolean
+  url: string
+  links: string[]
+  error?: string
+}
+
+export interface BlockRuntimeHelpers {
+  checkGroupPendingContent?: (options: GroupPendingContentCheckOptions) => Promise<GroupPendingContentCheckResult>
 }
 
 /**
@@ -26,7 +47,10 @@ export interface BlockHelpers {
  * (a) emit lên UI realtime qua IPC `flow:progress`/`v2:run:log`,
  * (b) lưu vào BlockResult.logs cho run history.
  */
-export function createBlockHelpers(logCollector: (message: string) => void): BlockHelpers {
+export function createBlockHelpers(
+  logCollector: (message: string) => void,
+  runtimeHelpers: BlockRuntimeHelpers = {}
+): BlockHelpers {
   return {
     async sleep(ms: number, signal?: AbortSignal): Promise<void> {
       if (signal?.aborted) throw new Error('Block bị huỷ trước khi sleep')
@@ -102,6 +126,19 @@ export function createBlockHelpers(logCollector: (message: string) => void): Blo
         const v = vars[k]
         return v === undefined ? '' : String(v)
       })
+    },
+
+    async checkGroupPendingContent(options: GroupPendingContentCheckOptions): Promise<GroupPendingContentCheckResult> {
+      if (runtimeHelpers.checkGroupPendingContent) {
+        return await runtimeHelpers.checkGroupPendingContent(options)
+      }
+      return {
+        ok: false,
+        conclusive: false,
+        url: String(options?.url || ''),
+        links: [],
+        error: 'Runtime hiện tại không hỗ trợ page phụ để kiểm tra pending content'
+      }
     }
   }
 }

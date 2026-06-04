@@ -80,6 +80,13 @@ interface BlockHelpers {
   element(name: string): Promise<string>;
   /** Concat XPath snippet với placeholder substitution: helpers.elementWith('xx', { n: 3 }) → replace \${n} với 3 */
   elementWith(name: string, vars: Record<string, string | number>): Promise<string>;
+  /** Check trang group pending-content bằng page phụ nếu runtime hỗ trợ. */
+  checkGroupPendingContent(opts: {
+    url: string;
+    rawSelector: string;
+    linkSelector: string;
+    timeoutMs?: number;
+  }): Promise<{ ok: boolean; conclusive: boolean; url: string; links: string[]; error?: string }>;
 }
 
 declare const page: PageController;

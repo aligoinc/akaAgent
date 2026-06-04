@@ -17,6 +17,11 @@ interface BackgroundPageEntry {
   page: PageController
 }
 
+interface TemporaryPageEntry {
+  page: PageController
+  destroy: () => void
+}
+
 /**
  * Hidden offscreen pages for scheduler runs.
  * They share the same persistent partition as the visible webview tabs, so login/session state stays intact
@@ -24,6 +29,7 @@ interface BackgroundPageEntry {
  */
 export class BackgroundPageManager {
   private pages = new Map<number, BackgroundPageEntry>()
+  private temporaryPages = new Set<BrowserWindow>()
 
   getOrCreate(accountId: number, platformType: string): PageController {
     const existing = this.pages.get(accountId)
@@ -66,6 +72,43 @@ export class BackgroundPageManager {
     return page
   }
 
+  createTemporary(accountId: number, platformType: string): TemporaryPageEntry {
+    void platformType
+    const win = new BrowserWindow({
+      width: 1920,
+      height: 1080,
+      show: false,
+      skipTaskbar: true,
+      frame: false,
+      paintWhenInitiallyHidden: true,
+      webPreferences: {
+        partition: `persist:account_${accountId}`,
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false,
+        backgroundThrottling: false,
+        offscreen: true
+      }
+    })
+
+    win.setMenuBarVisibility(false)
+    win.webContents.setUserAgent(DEFAULT_USER_AGENT)
+    win.webContents.setBackgroundThrottling(false)
+    win.on('closed', () => this.temporaryPages.delete(win))
+    this.temporaryPages.add(win)
+
+    const page = new PageController(win.webContents)
+    const destroy = () => {
+      this.temporaryPages.delete(win)
+      if (win.isDestroyed()) return
+      try {
+        win.destroy()
+      } catch {}
+    }
+
+    return { page, destroy }
+  }
+
   destroy(accountId: number): void {
     const entry = this.pages.get(accountId)
     this.pages.delete(accountId)
@@ -78,6 +121,13 @@ export class BackgroundPageManager {
   destroyAll(): void {
     for (const accountId of Array.from(this.pages.keys())) {
       this.destroy(accountId)
+    }
+    for (const win of Array.from(this.temporaryPages)) {
+      this.temporaryPages.delete(win)
+      if (win.isDestroyed()) continue
+      try {
+        win.destroy()
+      } catch {}
     }
   }
 }
