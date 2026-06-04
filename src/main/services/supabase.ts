@@ -1,6 +1,7 @@
-import { ActionLimitConfig, AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
+import * as proxyRepo from '../data/repositories/proxyRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
 import * as accountContactRepo from '../data/repositories/accountContactRepository'
@@ -37,6 +38,11 @@ export class SupabaseService {
   createAccountGroup(group: Partial<AutoAccountGroup>) { return accountGroupRepo.createAccountGroup(group) }
   updateAccountGroup(id: number, updates: Partial<AutoAccountGroup>) { return accountGroupRepo.updateAccountGroup(id, updates) }
   deleteAccountGroup(id: number) { return accountGroupRepo.deleteAccountGroup(id) }
+  listProxies() { return proxyRepo.listProxies() }
+  getProxy(id: number) { return proxyRepo.getProxy(id) }
+  createProxy(proxy: Partial<AutoProxy>) { return proxyRepo.createProxy(proxy) }
+  updateProxy(id: number, updates: Partial<AutoProxy>) { return proxyRepo.updateProxy(id, updates) }
+  deleteProxy(id: number) { return proxyRepo.deleteProxy(id) }
 
   // =========== CAMPAIGN ACTIONS ===========
   listCampaignActions() { return campaignActionRepo.listCampaignActions() }

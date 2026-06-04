@@ -2267,6 +2267,174 @@ button.btn-icon:not(.btn):disabled {
   gap: 12px;
 }
 
+.proxy-manager-modal {
+  width: min(920px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+}
+
+.proxy-manager-body {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 560px;
+}
+
+.proxy-list-pane,
+.proxy-editor {
+  min-width: 0;
+}
+
+.proxy-list-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-right: 1px solid var(--border-default);
+  padding-right: 14px;
+}
+
+.proxy-toolbar {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.proxy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.proxy-empty {
+  padding: 16px 4px;
+  font-size: 12px;
+}
+
+.proxy-list-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.proxy-list-item:hover,
+.proxy-list-item.active {
+  border-color: var(--accent-primary);
+  background: var(--bg-tertiary);
+}
+
+.proxy-list-item span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.proxy-list-item strong,
+.proxy-list-item em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proxy-list-item strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.proxy-list-item em {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.proxy-list-item svg {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.proxy-list-item svg:hover {
+  color: var(--accent-error);
+}
+
+.proxy-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.proxy-import-row,
+.proxy-test-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.proxy-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.proxy-clear-password {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.proxy-test-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.proxy-test-controls {
+  grid-template-columns: 140px minmax(0, 1fr) auto;
+}
+
+.proxy-test-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.proxy-test-result.is-ok {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-success);
+}
+
+.proxy-test-result.is-fail {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--accent-error);
+}
+
+.proxy-test-result span,
+.proxy-test-result em {
+  color: var(--text-secondary);
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 720px) {
   .account-info-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2296,6 +2464,19 @@ button.btn-icon:not(.btn):disabled {
   }
 
   .account-group-list-pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-default);
+    padding-right: 0;
+    padding-bottom: 12px;
+  }
+
+  .proxy-manager-body,
+  .proxy-form-grid,
+  .proxy-test-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .proxy-list-pane {
     border-right: 0;
     border-bottom: 1px solid var(--border-default);
     padding-right: 0;
@@ -7134,6 +7315,13 @@ td.report-account-col span {
 .browser-webview-container webview {
   width: 100%;
   height: 100%;
+}
+
+.browser-session-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: var(--bg-primary);
 }
 
 .browser-background-preview {

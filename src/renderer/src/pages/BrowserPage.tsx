@@ -19,6 +19,7 @@ interface BrowserPageProps {
 export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserPageProps) {
   const { accounts, loadAccounts } = useCampaignStore()
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
+  const [preparedProxyByAccountId, setPreparedProxyByAccountId] = useState<Map<number, number | null>>(new Map())
   const [backgroundPreviews, setBackgroundPreviews] = useState<Map<number, {
     active: boolean
     image?: string
@@ -28,6 +29,7 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   }>>(new Map())
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
+  const preparingSessionKeys = useRef<Set<string>>(new Set())
 
   // Filter out disabled (isActive=false) accounts - they don't get browser tabs
   const activeAccounts = accounts.filter(a => a.isActive)
@@ -43,6 +45,53 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
       setActiveAccountId(activeAccounts[0].id)
     }
   }, [activeAccounts, activeAccountId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    activeAccounts.forEach(account => {
+      const proxyKey = account.proxyId ?? null
+      if (preparedProxyByAccountId.get(account.id) === proxyKey) return
+
+      const prepareKey = `${account.id}:${proxyKey ?? 'none'}`
+      if (preparingSessionKeys.current.has(prepareKey)) return
+      preparingSessionKeys.current.add(prepareKey)
+
+      const markPrepared = () => {
+        if (cancelled) return
+        setPreparedProxyByAccountId(prev => {
+          const next = new Map(prev)
+          next.set(account.id, proxyKey)
+          return next
+        })
+      }
+
+      if (!window.electronAPI?.prepareAccountBrowserSession) {
+        markPrepared()
+        preparingSessionKeys.current.delete(prepareKey)
+        return
+      }
+
+      window.electronAPI.prepareAccountBrowserSession(account.id)
+        .then(result => {
+          if (!result.success) {
+            console.error('Failed to prepare browser session:', result.reason)
+          }
+          markPrepared()
+        })
+        .catch(err => {
+          console.error('Failed to prepare browser session:', err)
+          markPrepared()
+        })
+        .finally(() => {
+          preparingSessionKeys.current.delete(prepareKey)
+        })
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeAccounts, preparedProxyByAccountId])
 
   // Handle focus from external navigation (context menu)
   useEffect(() => {
@@ -98,6 +147,12 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   }
 
   const activeBackgroundPreview = activeAccountId ? backgroundPreviews.get(activeAccountId) : null
+  const isBrowserSessionPrepared = (account: AutoAccount) => (
+    preparedProxyByAccountId.get(account.id) === (account.proxyId ?? null)
+  )
+  const preparedActiveAccounts = activeAccounts.filter(isBrowserSessionPrepared)
+  const activeAccount = activeAccountId ? activeAccounts.find(account => account.id === activeAccountId) : null
+  const activeAccountPreparing = Boolean(activeAccount && !isBrowserSessionPrepared(activeAccount))
   const previewTitle = activeBackgroundPreview?.title || (activeBackgroundPreview?.context === 'contact-scan' ? 'Đang quét data nền' : 'Đang chạy nền')
   const previewDescription = activeBackgroundPreview?.context === 'contact-scan'
     ? 'Quét data đang chạy trong trình duyệt nền.'
@@ -157,7 +212,7 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
             <div className="empty-state-text">Chưa có tài khoản nào hoạt động. Hãy thêm tài khoản ở trang Chiến dịch.</div>
           </div>
         ) : (
-          activeAccounts.map(account => (
+          preparedActiveAccounts.map(account => (
             <webview
               key={account.id}
               ref={(el: any) => handleWebviewRef(account, el)}
@@ -169,7 +224,10 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
                 left: 0,
                 width: '100%',
                 height: '100%',
-                zIndex: activeAccountId === account.id ? 2 : 1
+                zIndex: activeAccountId === account.id ? 2 : 1,
+                opacity: activeAccountId === account.id ? 1 : 0,
+                visibility: activeAccountId === account.id ? 'visible' as const : 'hidden' as const,
+                pointerEvents: activeAccountId === account.id ? 'auto' as const : 'none' as const
               }}
               /* @ts-ignore */
               allowpopups="true"
@@ -177,6 +235,12 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
               useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             />
           ))
+        )}
+
+        {activeAccountPreparing && (
+          <div className="empty-state browser-session-loading">
+            <div className="empty-state-text">Đang chuẩn bị phiên trình duyệt...</div>
+          </div>
         )}
 
         {activeBackgroundPreview?.active && activeBackgroundPreview.image && (

@@ -3,9 +3,11 @@ import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 import * as accountGroupRepo from './accountGroupRepository'
+import * as proxyRepo from './proxyRepository'
 
 const client = () => getSupabaseClient()
 const DEFAULT_RATE_LIMIT_MINUTES = 65
+const ACCOUNT_SELECT = '*, auto_account_groups(name, settings), auto_proxies(name, protocol, host, port)'
 
 function normalizeRateLimitMinutes(value: unknown): number {
   const parsed = Math.floor(Number(value))
@@ -16,7 +18,7 @@ export async function getAccount(id: number): Promise<AutoAccount | null> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
-    .select('*, auto_account_groups(name, settings)')
+    .select(ACCOUNT_SELECT)
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
@@ -30,7 +32,7 @@ export async function listAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
-    .select('*, auto_account_groups(name, settings)')
+    .select(ACCOUNT_SELECT)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
@@ -43,6 +45,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
   const u = requireCurrentUser()
   const flatformType = account.flatformType || 'facebook'
   const accountGroupId = await accountGroupRepo.validateAccountGroupForAccount(account.accountGroupId, flatformType)
+  const proxyId = await proxyRepo.validateProxyForAccount(account.proxyId)
   const payload = {
     name: account.name,
     flatform_type: flatformType,
@@ -51,6 +54,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
     is_active: account.isActive ?? true,
     rate_limit_minutes: normalizeRateLimitMinutes(account.rateLimitMinutes),
     account_group_id: accountGroupId,
+    proxy_id: proxyId,
     staff_id: u.staffId,
     organization_id: u.organizationId
   }
@@ -58,7 +62,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
   const { data, error } = await client()
     .from('auto_accounts')
     .insert(payload)
-    .select('*, auto_account_groups(name, settings)')
+    .select(ACCOUNT_SELECT)
     .single()
 
   if (error) throw new Error(`Failed to create account: ${error.message}`)
@@ -69,7 +73,7 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
   const u = requireCurrentUser()
   const payload: any = { updated_at: new Date().toISOString() }
   let current: AutoAccount | null = null
-  if (updates.accountGroupId !== undefined || updates.flatformType !== undefined) {
+  if (updates.accountGroupId !== undefined || updates.flatformType !== undefined || updates.proxyId !== undefined) {
     current = await getAccount(id)
     if (!current) throw new Error('Không tìm thấy tài khoản')
   }
@@ -88,13 +92,20 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
   } else if (updates.flatformType !== undefined) {
     payload.account_group_id = null
   }
+  if (updates.proxyId !== undefined) {
+    const proxyId = await proxyRepo.validateProxyForAccount(updates.proxyId)
+    if ((current?.proxyId ?? null) !== proxyId && current?.status === 'đang chạy') {
+      throw new Error('Chỉ được đổi proxy khi tài khoản không đang chạy')
+    }
+    payload.proxy_id = proxyId
+  }
 
   const { data, error } = await client()
     .from('auto_accounts')
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
-    .select('*, auto_account_groups(name, settings)')
+    .select(ACCOUNT_SELECT)
     .single()
 
   if (error) throw new Error(`Failed to update account: ${error.message}`)
@@ -116,7 +127,7 @@ export async function getEligibleAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
-    .select('*, auto_account_groups(name, settings)')
+    .select(ACCOUNT_SELECT)
     .eq('staff_id', u.staffId)
     .eq('is_active', true)
     .eq('is_delete', false)

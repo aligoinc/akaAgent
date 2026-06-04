@@ -1,4 +1,4 @@
-import { AutoAccount, AutoAccountGroup, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate } from '../../shared/types'
+import { AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   return {
@@ -12,7 +12,31 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
     accountGroupId: (row.account_group_id as number | null) ?? null,
     accountGroupName: ((row as any).auto_account_groups?.name as string | null | undefined) ?? null,
     accountGroupSettings: ((row as any).auto_account_groups?.settings as AutoAccount['accountGroupSettings']) ?? null,
+    proxyId: (row.proxy_id as number | null) ?? null,
+    proxyName: ((row as any).auto_proxies?.name as string | null | undefined) ?? null,
+    proxyProtocol: ((row as any).auto_proxies?.protocol as AutoAccount['proxyProtocol']) ?? null,
+    proxyHost: ((row as any).auto_proxies?.host as string | null | undefined) ?? null,
+    proxyPort: ((row as any).auto_proxies?.port as number | null | undefined) ?? null,
     isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: row.organization_id as number | undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapProxyFromDB(row: Record<string, unknown>): AutoProxy {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    protocol: row.protocol as AutoProxy['protocol'],
+    host: row.host as string,
+    port: row.port as number,
+    username: (row.username as string | null) ?? null,
+    password: (row.password as string | null) ?? null,
+    isActive: row.is_active as boolean,
+    isDelete: row.is_delete as boolean,
+    usageCount: (row.usage_count as number | null | undefined) ?? 0,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,
     createdAt: row.created_at as string,

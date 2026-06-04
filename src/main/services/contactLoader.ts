@@ -8,6 +8,7 @@ import { PageController } from '../v2/runtime/pageController'
 import { WorkflowEngineV2, RunResult } from '../v2/runtime/workflowEngine'
 import * as workflowV2Repo from '../data/repositories/workflowV2Repository'
 import * as localContactRepo from '../data/repositories/localAccountContactRepository'
+import { ProxyRuntimeService } from './proxyRuntimeService'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -103,10 +104,21 @@ export class ContactLoader {
   private engineV2 = new WorkflowEngineV2()
   private backgroundPreviewTimers = new Map<number, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<number>()
+  private proxyRuntime?: ProxyRuntimeService
 
-  constructor(supabase: SupabaseService, _webviewRegistry: WebviewRegistry, mainWindow: BrowserWindow) {
+  constructor(
+    supabase: SupabaseService,
+    _webviewRegistry: WebviewRegistry,
+    mainWindow: BrowserWindow,
+    proxyRuntime?: ProxyRuntimeService
+  ) {
     this.supabase = supabase
     this.mainWindow = mainWindow
+    this.proxyRuntime = proxyRuntime
+  }
+
+  destroyBackgroundPage(accountId: number): void {
+    this.backgroundPages.destroy(accountId)
   }
 
   async loadFriends(accountId: number): Promise<ContactLoadResult> {
@@ -215,6 +227,7 @@ export class ContactLoader {
         runKey: loadState.runKey
       })
 
+      await this.proxyRuntime?.prepareAccountSession(runnableAccount)
       const page = this.backgroundPages.getOrCreate(accountId, runnableAccount.flatformType)
       this.selectAutomationBrowser(accountId)
       this.startBackgroundPreview(accountId, page, 'Đang quét người nhắn tin với page')
@@ -477,6 +490,7 @@ export class ContactLoader {
         runKey: loadState.runKey
       })
 
+      await this.proxyRuntime?.prepareAccountSession(runnableAccount)
       const page = this.backgroundPages.getOrCreate(accountId, runnableAccount.flatformType)
       this.selectAutomationBrowser(accountId)
       this.startBackgroundPreview(accountId, page, options.previewTitle || this.getPreviewTitle(contactType))

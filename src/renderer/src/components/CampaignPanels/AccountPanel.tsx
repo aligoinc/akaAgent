@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { FolderCog, Loader2, Plus } from 'lucide-react'
+import { FolderCog, Loader2, Plus, ServerCog } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { AutoAccount } from '../../../../shared/types'
 import AccountContextMenu from './AccountContextMenu'
 import AccountInfoModal from './AccountInfoModal'
 import AccountGroupAssignModal from './AccountGroupAssignModal'
 import AccountGroupManagerModal from './AccountGroupManagerModal'
+import ProxyManagerModal from './ProxyManagerModal'
 import { useUiStore } from '../../stores/uiStore'
 
 interface AccountPanelProps {
@@ -17,26 +18,34 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const {
     accounts,
     accountGroups,
+    proxies,
     loadAccounts,
     loadAccountGroups,
+    loadProxies,
     createAccount,
     updateAccount,
     deleteAccount,
     createAccountGroup,
     updateAccountGroup,
-    deleteAccountGroup
+    deleteAccountGroup,
+    createProxy,
+    updateProxy,
+    deleteProxy
   } = useCampaignStore()
   const [showForm, setShowForm] = useState(false)
   const [showGroupManager, setShowGroupManager] = useState(false)
+  const [showProxyManager, setShowProxyManager] = useState(false)
   const [groupManagerPlatform, setGroupManagerPlatform] = useState('facebook')
+  const [proxyManagerPlatform, setProxyManagerPlatform] = useState('facebook')
   const [groupAssignAccount, setGroupAssignAccount] = useState<AutoAccount | null>(null)
   const [editingAccount, setEditingAccount] = useState<AutoAccount | null>(null)
   const [infoAccount, setInfoAccount] = useState<AutoAccount | null>(null)
   const [savingAccount, setSavingAccount] = useState(false)
   const [formData, setFormData] = useState({ 
-    name: '', 
+    name: '',
     flatformType: 'facebook',
-    accountGroupId: null as number | null
+    accountGroupId: null as number | null,
+    proxyId: null as number | null
   })
 
   // Context menu state
@@ -48,10 +57,11 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   useEffect(() => {
     loadAccounts()
     loadAccountGroups()
-  }, [loadAccounts, loadAccountGroups])
+    loadProxies()
+  }, [loadAccounts, loadAccountGroups, loadProxies])
 
   const resetForm = () => {
-    setFormData({ name: '', flatformType: 'facebook', accountGroupId: null })
+    setFormData({ name: '', flatformType: 'facebook', accountGroupId: null, proxyId: null })
   }
 
   const openCreateForm = () => {
@@ -65,7 +75,13 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setShowGroupManager(true)
   }
 
+  const openProxyManager = (platform = formData.flatformType) => {
+    setProxyManagerPlatform(platform)
+    setShowProxyManager(true)
+  }
+
   const formAccountGroups = accountGroups.filter(group => group.flatformType === formData.flatformType && group.isActive)
+  const activeProxies = proxies.filter(proxy => proxy.isActive && !proxy.isDelete)
 
   const handleSubmit = async () => {
     if (savingAccount || !formData.name.trim()) return
@@ -74,7 +90,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       const payload = {
         name: formData.name,
         flatformType: formData.flatformType,
-        accountGroupId: formData.accountGroupId
+        accountGroupId: formData.accountGroupId,
+        proxyId: formData.proxyId
       }
 
       if (editingAccount) {
@@ -103,10 +120,11 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   const handleEdit = (account: AutoAccount) => {
     setEditingAccount(account)
-    setFormData({ 
+    setFormData({
       name: account.name,
       flatformType: account.flatformType,
-      accountGroupId: account.accountGroupId ?? null
+      accountGroupId: account.accountGroupId ?? null,
+      proxyId: account.proxyId ?? null
     })
     setShowForm(true)
   }
@@ -211,6 +229,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           <button className="btn btn-secondary btn-icon" onClick={() => openGroupManager()} title="Nhóm tài khoản">
             <FolderCog size={14} />
           </button>
+          <button className="btn btn-secondary btn-icon" onClick={() => openProxyManager()} title="Quản lý proxy">
+            <ServerCog size={14} />
+          </button>
           <button className="btn btn-primary btn-icon" onClick={openCreateForm} title="Thêm tài khoản">
             <Plus size={14} />
           </button>
@@ -262,6 +283,31 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
             </button>
           </div>
 
+          <div className="panel-input-row">
+            <select
+              value={formData.proxyId ?? ''}
+              onChange={e => setFormData(prev => ({
+                ...prev,
+                proxyId: e.target.value ? Number(e.target.value) : null
+              }))}
+              className="panel-input"
+            >
+              <option value="">Không dùng proxy</option>
+              {activeProxies.map(proxy => (
+                <option key={proxy.id} value={proxy.id}>
+                  {proxy.name} ({proxy.protocol}://{proxy.host}:{proxy.port})
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn btn-secondary btn-icon"
+              onClick={() => openProxyManager(formData.flatformType)}
+              title="Tạo hoặc sửa proxy"
+            >
+              <ServerCog size={14} />
+            </button>
+          </div>
+
           <div className="panel-form-actions">
             <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingAccount(null); resetForm() }}>Huỷ</button>
             <button className="btn btn-primary" onClick={handleSubmit} disabled={savingAccount}>
@@ -296,6 +342,11 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                   <span className="account-card-status">{account.status}</span>
                   {account.accountGroupName && (
                     <span className="account-group-tag" title={account.accountGroupName}>{account.accountGroupName}</span>
+                  )}
+                  {account.proxyName && (
+                    <span className="account-group-tag" title={`${account.proxyProtocol}://${account.proxyHost}:${account.proxyPort}`}>
+                      {account.proxyName}
+                    </span>
                   )}
                 </div>
               </div>
@@ -342,6 +393,21 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           onUpdateGroup={updateAccountGroup}
           onDeleteGroup={deleteAccountGroup}
           onAssignAccounts={handleAssignAccountsToGroup}
+        />
+      )}
+
+      {showProxyManager && (
+        <ProxyManagerModal
+          proxies={proxies}
+          accounts={accounts}
+          initialPlatform={proxyManagerPlatform}
+          onClose={() => setShowProxyManager(false)}
+          onCreateProxy={createProxy}
+          onUpdateProxy={updateProxy}
+          onDeleteProxy={deleteProxy}
+          onProxyCreated={(proxy) => {
+            setFormData(prev => ({ ...prev, proxyId: proxy.id }))
+          }}
         />
       )}
 
