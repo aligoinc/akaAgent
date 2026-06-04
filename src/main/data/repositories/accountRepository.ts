@@ -73,7 +73,7 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
   const u = requireCurrentUser()
   const payload: any = { updated_at: new Date().toISOString() }
   let current: AutoAccount | null = null
-  if (updates.accountGroupId !== undefined || updates.flatformType !== undefined || updates.proxyId !== undefined) {
+  if (updates.accountGroupId !== undefined || updates.flatformType !== undefined) {
     current = await getAccount(id)
     if (!current) throw new Error('Không tìm thấy tài khoản')
   }
@@ -94,9 +94,6 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
   }
   if (updates.proxyId !== undefined) {
     const proxyId = await proxyRepo.validateProxyForAccount(updates.proxyId)
-    if ((current?.proxyId ?? null) !== proxyId && current?.status === 'đang chạy') {
-      throw new Error('Chỉ được đổi proxy khi tài khoản không đang chạy')
-    }
     payload.proxy_id = proxyId
   }
 

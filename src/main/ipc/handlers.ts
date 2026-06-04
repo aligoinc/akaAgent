@@ -162,12 +162,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerReportHandlers(supabase)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)
-  registerAccountHandlers(supabase, webviewRegistry, proxyRuntime, {
-    destroyBackgroundPage: (accountId) => {
-      campaignScheduler.destroyBackgroundPage(accountId)
-      contactLoader.destroyBackgroundPage(accountId)
-    }
-  })
+  registerAccountHandlers(supabase, webviewRegistry, proxyRuntime)
   registerAccountContactHandlers(supabase, contactLoader)
   registerV2Handlers(mainWindow, pageRegistry)
 

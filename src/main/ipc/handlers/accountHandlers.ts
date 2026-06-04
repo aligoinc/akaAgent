@@ -1,5 +1,5 @@
 import { ipcMain, webContents } from 'electron'
-import { AutoAccount, AutoProxy, IPC_EVENTS, ProxyTestRequest } from '../../../shared/types'
+import { AutoProxy, IPC_EVENTS, ProxyTestRequest } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
@@ -12,37 +12,11 @@ const PLATFORM_URLS: Record<string, string> = {
   instagram: 'https://www.instagram.com'
 }
 
-interface AccountProxyRuntimeHooks {
-  destroyBackgroundPage(accountId: number): void
-}
-
-const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
-
 export function registerAccountHandlers(
   supabase: SupabaseService,
   webviewRegistry: WebviewRegistry,
-  proxyRuntime: ProxyRuntimeService,
-  proxyHooks?: AccountProxyRuntimeHooks
+  proxyRuntime: ProxyRuntimeService
 ): void {
-  const reloadAccountWebview = async (account: AutoAccount): Promise<void> => {
-    const wcId = webviewRegistry.getWebContentsId(account.id)
-    if (!wcId) return
-
-    const wc = webContents.fromId(wcId)
-    if (!wc || wc.isDestroyed()) return
-
-    const url = PLATFORM_URLS[account.flatformType] || 'about:blank'
-    await wc.loadURL(url)
-  }
-
-  const refreshAccountProxyRuntime = async (account: AutoAccount): Promise<void> => {
-    await proxyRuntime.prepareAccountSession(account)
-    proxyHooks?.destroyBackgroundPage(account.id)
-    await reloadAccountWebview(account).catch(err => {
-      console.warn(`Failed to reload account webview after proxy update (${account.id}):`, err)
-    })
-  }
-
   const resolveProxyForTest = async (request: ProxyTestRequest): Promise<Partial<AutoProxy>> => {
     const existing = request.proxyId ? await supabase.getProxy(request.proxyId) : null
     const draft = request.proxy || {}
@@ -65,13 +39,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
-    const payload = updates || {}
-    const shouldRefreshProxy = hasOwn(payload, 'proxyId')
-    const updated = await supabase.updateAccount(id, payload)
-    if (shouldRefreshProxy) {
-      await refreshAccountProxyRuntime(updated)
-    }
-    return updated
+    return supabase.updateAccount(id, updates || {})
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_ACCOUNT, async (_, id: number) => {
@@ -106,13 +74,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_PROXY, async (_, id: number, updates) => {
-    const updated = await supabase.updateProxy(id, updates)
-    const accounts = await supabase.listAccounts()
-    const affectedAccounts = accounts.filter(account => account.proxyId === id)
-    for (const account of affectedAccounts) {
-      await refreshAccountProxyRuntime(account)
-    }
-    return updated
+    return supabase.updateProxy(id, updates)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_PROXY, async (_, id: number) => {
@@ -150,6 +112,8 @@ export function registerAccountHandlers(
         return { success: false, reason: 'Tab trình duyệt không khả dụng' }
       }
       const url = PLATFORM_URLS[flatformType] || 'about:blank'
+      const account = await supabase.getAccount(accountId)
+      if (account) await proxyRuntime.prepareAccountSession(account)
       wc.loadURL(url)
       return { success: true }
     } catch (err: any) {

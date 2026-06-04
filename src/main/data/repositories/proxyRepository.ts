@@ -70,23 +70,6 @@ async function countProxyUsage(proxyId: number, staffId: number): Promise<number
   return count || 0
 }
 
-async function assertNoRunningAccountsForProxy(proxyId: number, staffId: number): Promise<void> {
-  const { data, error } = await client()
-    .from('auto_accounts')
-    .select('name')
-    .eq('proxy_id', proxyId)
-    .eq('staff_id', staffId)
-    .eq('is_delete', false)
-    .eq('status', 'đang chạy')
-    .limit(3)
-
-  if (error) throw new Error(`Failed to check running accounts for proxy: ${error.message}`)
-  if ((data || []).length > 0) {
-    const names = data.map(row => String(row.name || '')).filter(Boolean).join(', ')
-    throw new Error(`Chỉ được sửa proxy khi tài khoản đang dùng không chạy${names ? `: ${names}` : ''}`)
-  }
-}
-
 export async function listProxies(): Promise<AutoProxy[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
@@ -157,8 +140,6 @@ export async function updateProxy(id: number, updates: Partial<AutoProxy>): Prom
   const u = requireCurrentUser()
   const existing = await getProxy(id)
   if (!existing) throw new Error('Không tìm thấy proxy')
-
-  await assertNoRunningAccountsForProxy(id, u.staffId)
 
   const payload = {
     ...buildProxyPayload(updates, existing),

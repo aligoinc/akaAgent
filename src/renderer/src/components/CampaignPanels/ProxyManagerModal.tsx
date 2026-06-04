@@ -156,6 +156,7 @@ export default function ProxyManagerModal({
       const payload = buildPayload()
       if (isEditing && selectedProxy) {
         await onUpdateProxy(selectedProxy.id, payload)
+        useUiStore.getState().showAlert('Đã lưu proxy. Nếu tab Trình duyệt đang mở, hãy tự tải lại trang để áp dụng proxy mới.', 'info')
       } else {
         const created = await onCreateProxy(payload)
         onProxyCreated?.(created)
@@ -261,7 +262,7 @@ export default function ProxyManagerModal({
             <div className={`account-group-editor-heading ${isEditing ? 'is-editing' : 'is-creating'}`}>
               <div>
                 <strong>{isEditing ? `Đang sửa proxy: ${selectedProxy?.name}` : 'Đang tạo proxy mới'}</strong>
-                <span>{isEditing ? 'Thay đổi proxy sẽ reload các tab tài khoản đang dùng proxy này.' : 'Nhập thông tin proxy hoặc paste chuỗi proxy.'}</span>
+                <span>{isEditing ? 'Thay đổi proxy chỉ lưu vào kho proxy; tab Trình duyệt đang mở cần tự tải lại để áp dụng.' : 'Nhập thông tin proxy hoặc paste chuỗi proxy.'}</span>
               </div>
               <em>{isEditing ? 'Sửa proxy' : 'Tạo mới'}</em>
             </div>
