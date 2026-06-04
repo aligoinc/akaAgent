@@ -1,6 +1,6 @@
 {
   "name": "aka-biz-auto",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Browser Automation Desktop App with Visual Flow Builder",
   "main": "./out/main/index.js",
   "author": "akaBiz",
@@ -11,7 +11,7 @@
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
     "build:win": "npm run build && electron-builder --win --config",
-    "build:mac": "npm run build && electron-builder --mac --config"
+    "build:mac": "npm run build && electron-builder --mac dir --config.mac.identity=null --publish never && node scripts/sign-mac-adhoc.cjs dist/mac-arm64/akaBizAuto.app && electron-builder --mac dmg --prepackaged dist/mac-arm64 --config.mac.identity=null --publish never"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
