@@ -153,7 +153,7 @@ export default function App() {
 
       <div style={activePage === 'browsers'
         ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
-        : { display: 'none' }
+        : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
       }>
         <BrowserPage focusAccountId={focusAccountId} onFocusHandled={() => setFocusAccountId(null)} />
       </div>

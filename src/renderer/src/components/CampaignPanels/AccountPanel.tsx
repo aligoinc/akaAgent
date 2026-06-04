@@ -87,6 +87,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     if (savingAccount || !formData.name.trim()) return
     setSavingAccount(true)
     try {
+      const proxyChanged = Boolean(editingAccount && (editingAccount.proxyId ?? null) !== formData.proxyId)
       const payload = {
         name: formData.name,
         flatformType: formData.flatformType,
@@ -96,6 +97,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
       if (editingAccount) {
         await updateAccount(editingAccount.id, payload)
+        if (proxyChanged) {
+          useUiStore.getState().showAlert('Đã lưu proxy cho tài khoản. Nếu tab Trình duyệt đang mở, hãy tự tải lại trang để áp dụng proxy mới.', 'info')
+        }
       } else {
         await createAccount(payload)
       }
