@@ -951,13 +951,14 @@ return result;
 
 $fds_fb_apply_search_group_filters$),
   (2723, 'fb_collect_search_groups', $fds_fb_collect_search_groups$
+
   if (!vars.findDataSearchHasGroup) { vars.findDataSearchGroups = []; return { facebookGroups: [] }; }
 
   const limit = Math.max(1, Number(vars.countSearchGroupFindData || 20));
   const minMembers = Math.max(0, Number(vars.minSearchGroupMembers || 0));
   const minPostsPerDay = Math.max(0, Number(vars.minSearchGroupPostsPerDay || 0));
   const keyword = String(vars.findDataSearchKeyword || '').trim();
-  const groups = await page.evaluate(String.raw`
+  const groupResult = await page.evaluate(String.raw`
     const limit = __args[0]; const minMembers = __args[1]; const minPostsPerDay = __args[2]; const keyword = __args[3];
     function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
     function norm(text) { return String(text || '').replace(/\s+/g, ' ').trim(); }
@@ -965,12 +966,19 @@ $fds_fb_apply_search_group_filters$),
     function parseNumber(text) { const raw = String(text || '').trim(); if (!raw) return 0; const suffixMatch = raw.match(/(k|n|m|tr|triệu|nghìn)$/i); const suffix = suffixMatch ? suffixMatch[1].toLowerCase() : ''; const numberText = raw.replace(/(k|n|m|tr|triệu|nghìn)$/i, '').trim(); let normalized = numberText; if (normalized.includes(',') && !normalized.includes('.')) normalized = normalized.replace(',', '.'); normalized = normalized.replace(/\.(?=\d{3}(\D|$))/g, '').replace(/,/g, '.'); const value = Number(normalized); if (!Number.isFinite(value)) return 0; const multiplier = suffix === 'k' || suffix === 'n' || suffix === 'nghìn' ? 1000 : suffix === 'm' || suffix === 'tr' || suffix === 'triệu' ? 1000000 : 1; return Math.round(value * multiplier); }
     function normalizeGroupUrl(href) { if (!href) return ''; try { const url = new URL(href, location.href); const parts = url.pathname.split('/').filter(Boolean); const groupIndex = parts.findIndex(part => part.toLowerCase() === 'groups'); const groupKey = groupIndex >= 0 ? parts[groupIndex + 1] : ''; if (!groupKey || groupKey === 'feed' || groupKey === 'discover') return ''; return 'https://www.facebook.com/groups/' + groupKey + '/'; } catch { return ''; } }
     function parseGroupCard(link) { const url = normalizeGroupUrl(link.href || link.getAttribute('href') || ''); if (!url) return null; let card = link; for (let depth = 0; depth < 8 && card && card.parentElement; depth++) { const text = norm(card.innerText || card.textContent || ''); if (text.includes('thành viên') || text.includes('members') || text.includes('bài viết/ngày') || text.includes('posts/day')) break; card = card.parentElement; } const text = norm(card.innerText || card.textContent || link.innerText || link.textContent || ''); if (!text || (!text.includes('thành viên') && !text.includes('members'))) return null; let name = norm(link.innerText || link.textContent || link.getAttribute('aria-label') || '').replace(/^Ảnh đại diện của\s+/i, ''); if (!name) { const nameMatch = text.match(/^(.*?)(?:\s+(?:Công khai|Riêng tư|Public|Private)\s*·|\s+[\d.,]+\s*(?:K|N|M|Tr|triệu|nghìn)?\s*(?:thành viên|members))/i); name = norm(nameMatch ? nameMatch[1] : ''); } const memberMatch = text.match(/([\d.,]+\s*(?:K|N|M|Tr|triệu|nghìn)?)\s*thành viên/i) || text.match(/([\d.,]+\s*(?:K|M)?)\s*members/i); const postMatch = text.match(/([\d.,]+)\+?\s*bài viết\/ngày/i) || text.match(/([\d.,]+)\+?\s*posts\/day/i); const privacy = text.includes('Công khai') || text.includes('Public') ? 'Công khai' : text.includes('Riêng tư') || text.includes('Private') ? 'Riêng tư' : ''; return { url, name, privacy, memberCount: memberMatch ? parseNumber(memberMatch[1]) : 0, postsPerDay: postMatch ? parseNumber(postMatch[1]) : 0, keyword, rawText: text }; }
-    function collect() { const main = document.querySelector('[role="main"]') || document.body; const links = Array.from(main.querySelectorAll('a[href*="/groups/"]')).filter(isVisible); const map = new Map(); for (const link of links) { const group = parseGroupCard(link); if (!group) continue; const key = group.url.replace(/\/+$/g, '').toLowerCase(); if (!key || map.has(key)) continue; if (minMembers > 0 && group.memberCount < minMembers) continue; if (minPostsPerDay > 0 && group.postsPerDay < minPostsPerDay) continue; map.set(key, group); if (map.size >= limit) break; } return Array.from(map.values()); }
-    let rows = collect(); const startedAt = Date.now(); let stableCount = 0; while (rows.length < limit && Date.now() - startedAt < 180000 && stableCount < 3) { const before = rows.length; window.scrollBy(0, Math.max(700, Math.floor((window.innerHeight || 800) * 0.9))); await delay(2200); rows = collect(); stableCount = rows.length <= before ? stableCount + 1 : 0; }
-    return rows.slice(0, limit);
+    function getSkipReasons(group) { const reasons = []; if (minMembers > 0 && group.memberCount < minMembers) reasons.push('Không đạt số thành viên tối thiểu'); if (minPostsPerDay > 0 && group.postsPerDay < minPostsPerDay) reasons.push('Không đạt số bài/ngày tối thiểu'); return reasons; }
+    function collect() { const main = document.querySelector('[role="main"]') || document.body; const links = Array.from(main.querySelectorAll('a[href*="/groups/"]')).filter(isVisible); const map = new Map(); for (const link of links) { const group = parseGroupCard(link); if (!group) continue; const key = group.url.replace(/\/+$/g, '').toLowerCase(); if (!key || map.has(key)) continue; const skipReasons = getSkipReasons(group); group.skipReasons = skipReasons; group.skipReason = skipReasons.join('; '); group.accepted = skipReasons.length === 0; map.set(key, group); } return Array.from(map.values()).map((group, index) => Object.assign({}, group, { scanIndex: index + 1 })); }
+    function acceptedCount(rows) { return rows.filter(group => group && group.accepted === true).length; }
+    let rows = collect(); const startedAt = Date.now(); let stableCount = 0; while (acceptedCount(rows) < limit && Date.now() - startedAt < 180000 && stableCount < 3) { const before = rows.length; window.scrollBy(0, Math.max(700, Math.floor((window.innerHeight || 800) * 0.9))); await delay(2200); rows = collect(); stableCount = rows.length <= before ? stableCount + 1 : 0; }
+    const acceptedRows = []; const skippedRows = [];
+    for (const group of rows) { if (group.accepted === true) { if (acceptedRows.length < limit) acceptedRows.push(Object.assign({}, group, { acceptedIndex: acceptedRows.length + 1 })); } else { skippedRows.push(group); } }
+    return { acceptedRows, skippedRows, scannedCount: rows.length };
   `, limit, minMembers, minPostsPerDay, keyword);
 
-  vars.findDataSearchGroups = Array.isArray(groups) ? groups : [];
+  const acceptedGroups = groupResult && Array.isArray(groupResult.acceptedRows) ? groupResult.acceptedRows : [];
+  const skippedGroups = groupResult && Array.isArray(groupResult.skippedRows) ? groupResult.skippedRows : [];
+  const scannedCount = Math.max(acceptedGroups.length + skippedGroups.length, Number(groupResult && groupResult.scannedCount ? groupResult.scannedCount : 0));
+  vars.findDataSearchGroups = acceptedGroups;
   if (!vars.findDataResults || typeof vars.findDataResults !== 'object') vars.findDataResults = {};
   if (!Array.isArray(vars.findDataResults.facebookGroups)) vars.findDataResults.facebookGroups = [];
   if (!vars.findDataResults.sourceData || typeof vars.findDataResults.sourceData !== 'object') vars.findDataResults.sourceData = {};
@@ -979,10 +987,24 @@ $fds_fb_apply_search_group_filters$),
   vars.findDataResults.facebookGroups.push(...vars.findDataSearchGroups);
   vars.findDataResults.sourceData.facebookGroups.groups.push(...vars.findDataSearchGroups.map(group => group.url));
   helpers.log('Đã tải ' + vars.findDataSearchGroups.length + ' group Facebook từ search');
-  await helpers.logRunEvent({ eventType: 'scroll_search_groups', eventName: 'Cuộn search group Facebook', targetType: 'group', status: 'success', isUserVisible: false, elementCount: vars.findDataSearchGroups.length, message: 'Đã cuộn search để tải group Facebook', debugData: { limit, minMembers, minPostsPerDay, searchKeyword: keyword } });
-  await helpers.logRunEvent({ eventType: 'collect_facebook_groups', eventName: 'Lấy danh sách group Facebook', targetType: 'group', status: 'success', isUserVisible: true, elementCount: vars.findDataSearchGroups.length, message: 'Lấy được ' + vars.findDataSearchGroups.length + ' group Facebook từ search', debugData: { limit, minMembers, minPostsPerDay, searchKeyword: keyword } });
-  await helpers.logRunEvents(vars.findDataSearchGroups.map((group, index) => ({ eventType: 'extract_facebook_group_data', eventName: 'Lấy thông tin group Facebook', targetType: 'group', status: 'success', isUserVisible: true, itemIndex: index + 1, targetUrl: group.url, message: 'Đã duyệt group Facebook #' + (index + 1), extractedData: { entity: { type: 'group', url: String(group.url || ''), name: String(group.name || '') || null, uid: null, contentText: [group.privacy, group.memberCount ? group.memberCount + ' thành viên' : '', group.postsPerDay ? group.postsPerDay + ' bài viết/ngày' : ''].filter(Boolean).join(' - ') }, filters: { keywordEnabled: false, keyword: null, matchedKeyword: null, aiPrompt: null, aiFinalPrompt: '', aiRawResult: '', aiCheckResult: '', aiMatched: null, aiReason: null, aiResult: null }, values: { phones: [], zaloGroupLinks: [], postLinks: [], facebookGroups: [String(group.url || '')] } }, debugData: { privacy: group.privacy || '', memberCount: Number(group.memberCount || 0), postsPerDay: Number(group.postsPerDay || 0), searchKeyword: keyword, rawText: group.rawText || '' } })));
-  return { facebookGroups: vars.findDataSearchGroups };
+  await helpers.logRunEvent({ eventType: 'scroll_search_groups', eventName: 'Cuộn search group Facebook', targetType: 'group', status: 'success', isUserVisible: false, elementCount: scannedCount, message: 'Đã cuộn search để tải group Facebook', debugData: { limit, minMembers, minPostsPerDay, scannedCount, acceptedCount: acceptedGroups.length, skippedCount: skippedGroups.length, searchKeyword: keyword } });
+  await helpers.logRunEvent({ eventType: 'collect_facebook_groups', eventName: 'Lấy danh sách group Facebook', targetType: 'group', status: 'success', isUserVisible: true, elementCount: acceptedGroups.length, message: 'Lấy được ' + acceptedGroups.length + ' group Facebook đạt điều kiện từ ' + scannedCount + ' group đã quét', debugData: { limit, minMembers, minPostsPerDay, scannedCount, acceptedCount: acceptedGroups.length, skippedCount: skippedGroups.length, searchKeyword: keyword } });
+
+  function groupContentText(group) { return [group.privacy, group.memberCount ? group.memberCount + ' thành viên' : '', group.postsPerDay ? group.postsPerDay + ' bài viết/ngày' : ''].filter(Boolean).join(' - '); }
+  function groupExtractedData(group) { return { entity: { type: 'group', url: String(group.url || ''), name: String(group.name || '') || null, uid: null, contentText: groupContentText(group) }, filters: { keywordEnabled: false, keyword: null, matchedKeyword: null, aiPrompt: null, aiFinalPrompt: '', aiRawResult: '', aiCheckResult: '', aiMatched: null, aiReason: null, aiResult: null }, values: { phones: [], zaloGroupLinks: [], postLinks: [], facebookGroups: [String(group.url || '')] } }; }
+  function groupDebugData(group, extra) { return Object.assign({ privacy: group.privacy || '', memberCount: Number(group.memberCount || 0), postsPerDay: Number(group.postsPerDay || 0), searchKeyword: keyword, rawText: group.rawText || '', minMembers, minPostsPerDay, scanIndex: Number(group.scanIndex || 0) }, extra || {}); }
+
+  const groupEvents = [];
+  for (const group of acceptedGroups) {
+    groupEvents.push({ eventType: 'extract_facebook_group_data', eventName: 'Lấy thông tin group Facebook', targetType: 'group', status: 'success', isUserVisible: true, itemIndex: Number(group.scanIndex || group.acceptedIndex || 0) || null, targetUrl: group.url, message: 'Đã duyệt group Facebook #' + (group.scanIndex || group.acceptedIndex || ''), extractedData: groupExtractedData(group), debugData: groupDebugData(group, { acceptedIndex: Number(group.acceptedIndex || 0) }) });
+  }
+  for (const group of skippedGroups) {
+    const reason = String(group.skipReason || 'Không đạt điều kiện lọc group');
+    groupEvents.push({ eventType: 'extract_facebook_group_data', eventName: 'Lấy thông tin group Facebook', targetType: 'group', status: 'skipped', isUserVisible: true, itemIndex: Number(group.scanIndex || 0) || null, targetUrl: group.url, message: 'Bỏ qua group Facebook #' + (group.scanIndex || '') + ': ' + reason, extractedData: groupExtractedData(group), debugData: groupDebugData(group, { skipReason: reason, skipReasons: Array.isArray(group.skipReasons) ? group.skipReasons : [] }) });
+  }
+  groupEvents.sort((a, b) => Number(a.itemIndex || 0) - Number(b.itemIndex || 0));
+  await helpers.logRunEvents(groupEvents);
+  return { facebookGroups: vars.findDataSearchGroups, skippedGroups };
 
 $fds_fb_collect_search_groups$),
   (2724, 'fb_find_search_data_summary', $fds_fb_find_search_data_summary$
