@@ -434,6 +434,67 @@ export interface CampaignDetail {
   createdAt?: string
 }
 
+export interface CampaignRunEvent {
+  id: number
+  campaignId?: number | null
+  campaignActionId?: string | null
+  campaignInputId?: number | null
+  campaignInputDataId?: number | null
+  accountId?: number | null
+  runId?: number | null
+  runStepId?: number | null
+  nodeId?: string | null
+  blockId?: number | null
+  blockName?: string | null
+  sequenceNo?: number | null
+  eventType: string
+  eventName?: string | null
+  targetType?: string | null
+  status?: string | null
+  isUserVisible: boolean
+  xpath?: string | null
+  cssSelector?: string | null
+  elementCount?: number | null
+  itemIndex?: number | null
+  targetUrl?: string | null
+  message?: string | null
+  extractedData: Record<string, unknown>
+  debugData: Record<string, unknown>
+  createdAt?: string
+}
+
+export interface CampaignRunEventInput {
+  campaignId?: number | null
+  campaignActionId?: string | null
+  campaignInputId?: number | null
+  campaignInputDataId?: number | null
+  accountId?: number | null
+  runId?: number | null
+  runStepId?: number | null
+  nodeId?: string | null
+  blockId?: number | null
+  blockName?: string | null
+  sequenceNo?: number | null
+  eventType?: string | null
+  eventName?: string | null
+  targetType?: string | null
+  status?: string | null
+  isUserVisible?: boolean | null
+  xpath?: string | null
+  cssSelector?: string | null
+  elementCount?: number | null
+  itemIndex?: number | null
+  targetUrl?: string | null
+  message?: string | null
+  extractedData?: Record<string, unknown> | null
+  debugData?: Record<string, unknown> | null
+}
+
+export interface CampaignRunEventListOptions {
+  userVisibleOnly?: boolean
+  limit?: number
+}
+
 export interface CampaignRelationActionBreakdown {
   actionName: string
   status: CampaignDetailStatus
@@ -875,6 +936,7 @@ export const IPC_EVENTS = {
   DB_LIST_CAMPAIGN_DETAILS_BY_CAMPAIGN: 'db:list-campaign-details-by-campaign',
   DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
   DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
+  DB_LIST_CAMPAIGN_RUN_EVENTS_BY_CAMPAIGN: 'db:list-campaign-run-events-by-campaign',
 
   // Database Content Templates
   DB_LIST_CONTENT_TEMPLATES: 'db:list-content-templates',

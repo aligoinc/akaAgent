@@ -2,11 +2,11 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignRunEventInput } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
-import type { BlockRuntimeHelpers, GroupPendingContentCheckOptions, GroupPendingContentCheckResult } from '../v2/runtime/blockHelpers'
+import type { BlockRuntimeHelpers, BlockRuntimeMetadata, GroupPendingContentCheckOptions, GroupPendingContentCheckResult } from '../v2/runtime/blockHelpers'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 import {
   addSmsCampaignDetail,
@@ -35,6 +35,8 @@ import {
   type CampaignActionDescriptor
 } from '../domain/campaigns/campaignActionDescriptors'
 import { ProxyRuntimeService } from './proxyRuntimeService'
+import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
+import { checkFindDataMeaningAI } from './findDataAiService'
 
 interface AutomationPageRef {
   page: PageController
@@ -158,6 +160,41 @@ const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
+
+type RawRunEventPayload = Record<string, unknown>
+
+function eventValue(payload: RawRunEventPayload, camelKey: string, snakeKey?: string): unknown {
+  if (payload[camelKey] !== undefined) return payload[camelKey]
+  if (snakeKey && payload[snakeKey] !== undefined) return payload[snakeKey]
+  return undefined
+}
+
+function eventString(payload: RawRunEventPayload, camelKey: string, snakeKey?: string): string | null {
+  const value = eventValue(payload, camelKey, snakeKey)
+  if (value === undefined || value === null) return null
+  const text = String(value).trim()
+  return text.length > 0 ? text : null
+}
+
+function eventNumber(payload: RawRunEventPayload, camelKey: string, snakeKey?: string): number | null {
+  const value = eventValue(payload, camelKey, snakeKey)
+  if (value === undefined || value === null || value === '') return null
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
+}
+
+function eventBoolean(payload: RawRunEventPayload, camelKey: string, snakeKey?: string): boolean | null {
+  const value = eventValue(payload, camelKey, snakeKey)
+  if (value === undefined || value === null) return null
+  return value === true || value === 'true' || value === 1 || value === '1'
+}
+
+function eventJsonObject(payload: RawRunEventPayload, camelKey: string, snakeKey?: string): Record<string, unknown> {
+  const value = eventValue(payload, camelKey, snakeKey)
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
 
 /**
  * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
@@ -1001,10 +1038,11 @@ export class CampaignScheduler {
         this.startBackgroundPreview(account.id, campaign.id, page)
       }
       try {
-        const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, page)
+        const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page)
         const result = await this.engineV2.run(workflowId, variables, page, {
           accountId: account.id,
           campaignId: campaign.id,
+          campaignInputId: detail?.inputId ?? null,
           campaignInputDataId: detail?.id,
           signal: abort.signal,
           persist: true,
@@ -3832,9 +3870,72 @@ export class CampaignScheduler {
     }
   }
 
-  private createBlockRuntimeHelpers(account: AutoAccount, campaign: Campaign, mainPage: PageController): BlockRuntimeHelpers {
+  private createBlockRuntimeHelpers(
+    account: AutoAccount,
+    campaign: Campaign,
+    detail: CampaignInputData | null,
+    mainPage: PageController
+  ): BlockRuntimeHelpers {
+    let sequenceNo = 0
+    const normalizeEvent = (
+      rawEvent: CampaignRunEventInput,
+      metadata: BlockRuntimeMetadata
+    ): CampaignRunEventInput => {
+      const payload = (rawEvent && typeof rawEvent === 'object' ? rawEvent : {}) as RawRunEventPayload
+      sequenceNo += 1
+      return {
+        campaignId: metadata.campaignId ?? campaign.id,
+        campaignActionId: campaign.actionId,
+        campaignInputId: metadata.campaignInputId ?? detail?.inputId ?? null,
+        campaignInputDataId: metadata.campaignInputDataId ?? detail?.id ?? null,
+        accountId: metadata.accountId ?? account.id,
+        runId: metadata.runId ?? null,
+        runStepId: metadata.runStepId ?? null,
+        nodeId: metadata.nodeId ?? null,
+        blockId: metadata.blockId ?? null,
+        blockName: metadata.blockName ?? null,
+        sequenceNo,
+        eventType: eventString(payload, 'eventType', 'event_type') || 'info',
+        eventName: eventString(payload, 'eventName', 'event_name'),
+        targetType: eventString(payload, 'targetType', 'target_type'),
+        status: eventString(payload, 'status') || 'success',
+        isUserVisible: eventBoolean(payload, 'isUserVisible', 'is_user_visible') ?? false,
+        xpath: eventString(payload, 'xpath'),
+        cssSelector: eventString(payload, 'cssSelector', 'css_selector'),
+        elementCount: eventNumber(payload, 'elementCount', 'element_count'),
+        itemIndex: eventNumber(payload, 'itemIndex', 'item_index'),
+        targetUrl: eventString(payload, 'targetUrl', 'target_url'),
+        message: eventString(payload, 'message'),
+        extractedData: eventJsonObject(payload, 'extractedData', 'extracted_data'),
+        debugData: eventJsonObject(payload, 'debugData', 'debug_data')
+      }
+    }
+    const logRunEvents = async (
+      events: CampaignRunEventInput[],
+      metadata: BlockRuntimeMetadata
+    ): Promise<{ ok: boolean; insertedCount?: number; error?: string }> => {
+      const rows = (Array.isArray(events) ? events : [])
+        .map(event => normalizeEvent(event, metadata))
+        .filter(event => String(event.eventType || '').trim().length > 0)
+      if (rows.length === 0) return { ok: true, insertedCount: 0 }
+
+      try {
+        await campaignRunEventRepo.createCampaignRunEvents(rows)
+        return { ok: true, insertedCount: rows.length }
+      } catch (err: any) {
+        const message = err?.message ? String(err.message) : String(err)
+        try {
+          console.warn('[campaignRunEvent] failed to insert run events:', message)
+        } catch {}
+        return { ok: false, error: message }
+      }
+    }
+
     return {
-      checkGroupPendingContent: (options) => this.checkGroupPendingContent(account, campaign, mainPage, options)
+      checkGroupPendingContent: (options) => this.checkGroupPendingContent(account, campaign, mainPage, options),
+      logRunEvent: (event, metadata) => logRunEvents([event], metadata),
+      logRunEvents,
+      checkFindDataMeaningAI: (options) => checkFindDataMeaningAI(options)
     }
   }
 

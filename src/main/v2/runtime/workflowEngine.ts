@@ -12,6 +12,7 @@ import * as runV2Repo from '../../data/repositories/runV2Repository'
 export interface RunContext {
   accountId?: number
   campaignId?: number
+  campaignInputId?: number | null
   campaignInputDataId?: number
   signal?: AbortSignal
   /** Realtime callback cho mỗi step transition (running → success/error/skipped) */
@@ -259,6 +260,17 @@ export class WorkflowEngineV2 {
           {
             input, page, vars: variables, signal,
             runtimeHelpers: ctx.runtimeHelpers,
+            runtimeMetadata: {
+              accountId: ctx.accountId,
+              campaignId: ctx.campaignId,
+              campaignInputId: ctx.campaignInputId,
+              campaignInputDataId: ctx.campaignInputDataId,
+              runId,
+              runStepId: stepDbId,
+              nodeId: node.id,
+              blockId: node.blockId,
+              blockName: node.blockName
+            },
             onLog: (line) => ctx.onLog?.({ nodeId: node.id, line })
           }
         )

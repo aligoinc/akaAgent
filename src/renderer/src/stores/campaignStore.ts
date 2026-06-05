@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary } from '../../../shared/types'
+import { AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -69,6 +69,11 @@ interface CampaignStore {
   campaignDetails: CampaignDetail[]
   loadingCampaignDetails: boolean
   loadCampaignDetails: (campaignId: number) => Promise<void>
+
+  // Campaign run events (fine-grained workflow log)
+  campaignRunEvents: CampaignRunEvent[]
+  loadingCampaignRunEvents: boolean
+  loadCampaignRunEvents: (campaignId: number, options?: CampaignRunEventListOptions) => Promise<void>
 
   // Linked campaign summaries for find-data source/target tabs
   campaignRelationSummaries: CampaignRelationSummary[]
@@ -419,6 +424,23 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       console.error('Failed to load campaign details:', err)
     } finally {
       set({ loadingCampaignDetails: false })
+    }
+  },
+
+  // =========== CAMPAIGN RUN EVENTS ===========
+  campaignRunEvents: [],
+  loadingCampaignRunEvents: false,
+
+  loadCampaignRunEvents: async (campaignId, options) => {
+    if (!window.electronAPI) return
+    set({ loadingCampaignRunEvents: true })
+    try {
+      const events = await window.electronAPI.listCampaignRunEventsByCampaign(campaignId, options)
+      set({ campaignRunEvents: events })
+    } catch (err) {
+      console.error('Failed to load campaign run events:', err)
+    } finally {
+      set({ loadingCampaignRunEvents: false })
     }
   },
 
