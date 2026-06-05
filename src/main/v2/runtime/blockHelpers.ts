@@ -21,6 +21,16 @@ export interface BlockHelpers {
   elementWith(name: string, vars: Record<string, string | number>): Promise<string>
   /** Check trang group pending-content bằng page phụ nếu runtime hỗ trợ. */
   checkGroupPendingContent(options: GroupPendingContentCheckOptions): Promise<GroupPendingContentCheckResult>
+  /** Optional helper: log a structured execution event when the runtime supports it. */
+  logRunEvent?(event: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
+  /** Optional helper: log multiple structured execution events when the runtime supports it. */
+  logRunEvents?(events: Record<string, unknown>[]): Promise<OptionalHelperUnsupportedResult | unknown>
+}
+
+export interface OptionalHelperUnsupportedResult {
+  ok: false
+  unsupported: true
+  helper: string
 }
 
 export interface GroupPendingContentCheckOptions {
@@ -42,6 +52,27 @@ export interface BlockRuntimeHelpers {
   checkGroupPendingContent?: (options: GroupPendingContentCheckOptions) => Promise<GroupPendingContentCheckResult>
 }
 
+const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents'])
+
+function createUnsupportedOptionalHelper(helper: string) {
+  return async (): Promise<OptionalHelperUnsupportedResult> => ({
+    ok: false,
+    unsupported: true,
+    helper
+  })
+}
+
+function withOptionalHelpers(baseHelpers: BlockHelpers): BlockHelpers {
+  return new Proxy(baseHelpers, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && !(prop in target) && OPTIONAL_HELPER_NAMES.has(prop)) {
+        return createUnsupportedOptionalHelper(prop)
+      }
+      return Reflect.get(target, prop, receiver)
+    }
+  })
+}
+
 /**
  * Tạo helpers instance gắn với 1 run/block. `logCollector` capture log để
  * (a) emit lên UI realtime qua IPC `flow:progress`/`v2:run:log`,
@@ -51,7 +82,7 @@ export function createBlockHelpers(
   logCollector: (message: string) => void,
   runtimeHelpers: BlockRuntimeHelpers = {}
 ): BlockHelpers {
-  return {
+  const baseHelpers: BlockHelpers = {
     async sleep(ms: number, signal?: AbortSignal): Promise<void> {
       if (signal?.aborted) throw new Error('Block bị huỷ trước khi sleep')
       return new Promise((resolve, reject) => {
@@ -141,4 +172,6 @@ export function createBlockHelpers(
       }
     }
   }
+
+  return withOptionalHelpers(baseHelpers)
 }
