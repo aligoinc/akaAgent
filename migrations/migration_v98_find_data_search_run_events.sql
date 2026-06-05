@@ -3,6 +3,26 @@
 
 BEGIN;
 
+INSERT INTO public.auto_elements (name, xpath, description, category, is_builtin, staff_id, organization_id, updated_at)
+VALUES (
+  'fb_search_post_in_uid',
+  '//*[@class=''x1yztbdb x1n2onr6 xh8yej3 x1ja2u2z'']',
+  'Bài viết trong kết quả search Facebook',
+  'facebook',
+  true,
+  null,
+  null,
+  now()
+)
+ON CONFLICT (name) DO UPDATE SET
+  xpath = EXCLUDED.xpath,
+  description = EXCLUDED.description,
+  category = EXCLUDED.category,
+  is_builtin = EXCLUDED.is_builtin,
+  staff_id = EXCLUDED.staff_id,
+  organization_id = EXCLUDED.organization_id,
+  updated_at = now();
+
 CREATE TEMP TABLE _find_data_search_block_codes (
   id bigint PRIMARY KEY,
   name text NOT NULL,
@@ -235,7 +255,7 @@ $fds_fb_apply_search_post_filters$),
   }
 
   const selectors = {
-    posts: await helpers.element('fb_post_in_uid'),
+    posts: await helpers.element('fb_search_post_in_uid'),
     seeMore: await helpers.element('fb_see_more_content_post_btn'),
     uidInPost: await helpers.element('fb_uid_in_post_in_uid'),
     content: await helpers.element('fb_content_in_post_in_uid'),
@@ -620,7 +640,7 @@ $fds_fb_extract_data_from_search_posts$),
   }
 
   const selectors = {
-    posts: await helpers.element('fb_post_in_uid'),
+    posts: await helpers.element('fb_search_post_in_uid'),
     commentButton: await helpers.element('fb_comment_in_post_btn'),
     mostRelevant: await helpers.element('fb_most_relevant_btn'),
     allComments: await helpers.element('fb_all_comments_btn'),
@@ -1029,6 +1049,8 @@ DO $$
 DECLARE
   promoted_count integer;
   remaining_override_count integer;
+  search_post_element_count integer;
+  old_search_post_element_count integer;
 BEGIN
   SELECT count(*) INTO promoted_count
   FROM public.auto_blocks AS block
@@ -1038,6 +1060,24 @@ BEGIN
 
   IF promoted_count <> 11 THEN
     RAISE EXCEPTION 'Expected 11 promoted find-data search blocks, got %', promoted_count;
+  END IF;
+
+  SELECT count(*) INTO search_post_element_count
+  FROM public.auto_elements
+  WHERE name = 'fb_search_post_in_uid'
+    AND xpath = '//*[@class=''x1yztbdb x1n2onr6 xh8yej3 x1ja2u2z'']';
+
+  IF search_post_element_count <> 1 THEN
+    RAISE EXCEPTION 'Expected fb_search_post_in_uid element with search post XPath, got %', search_post_element_count;
+  END IF;
+
+  SELECT count(*) INTO old_search_post_element_count
+  FROM _find_data_search_block_codes
+  WHERE name IN ('fb_collect_search_posts', 'fb_collect_search_post_comments')
+    AND code LIKE '%helpers.element(''fb_post_in_uid'')%';
+
+  IF old_search_post_element_count <> 0 THEN
+    RAISE EXCEPTION 'Expected search collect blocks to use fb_search_post_in_uid, old refs %', old_search_post_element_count;
   END IF;
 
   WITH target_workflows AS (
