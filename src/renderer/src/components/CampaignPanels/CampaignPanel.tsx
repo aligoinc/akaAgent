@@ -430,7 +430,7 @@ const getFindDataLogSource = (event: CampaignRunEvent) => {
   if (sourceKey === 'post' || sourceKey === 'feed' || eventType.includes('post')) return 'Bài viết'
   if (sourceKey === 'comment' || eventType.includes('comment')) return 'Comment'
   if (sourceKey === 'member' || eventType.includes('member')) return 'Thành viên'
-  if (sourceKey === 'group') return 'Group'
+  if (sourceKey === 'group') return 'Group Facebook'
   return ''
 }
 
