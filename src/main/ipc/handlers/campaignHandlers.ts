@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignInputStatus, type CampaignStatus } from '../../../shared/types'
+import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
 interface CampaignPauseController {
@@ -163,6 +163,14 @@ export function registerCampaignHandlers(supabase: SupabaseService, campaignPaus
 
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_DETAILS_BY_CAMPAIGN, async (_, campaignId: number) => {
     return supabase.listCampaignDetailsByCampaign(campaignId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_RUN_EVENTS_BY_CAMPAIGN, async (
+    _,
+    campaignId: number,
+    options?: CampaignRunEventListOptions
+  ) => {
+    return supabase.listCampaignRunEventsByCampaign(campaignId, options)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN_DETAIL, async (_, actionData) => {

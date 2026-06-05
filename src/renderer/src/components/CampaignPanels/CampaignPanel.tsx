@@ -12,7 +12,8 @@ import {
   type CampaignDetail,
   type CampaignInputData,
   type CampaignInputStatus,
-  type CampaignRelationSummary
+  type CampaignRelationSummary,
+  type CampaignRunEvent
 } from '../../../../shared/types'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
@@ -28,13 +29,14 @@ interface CampaignPanelProps {
   onAskAssistant?: (campaignId: number) => void
 }
 
-type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataCampaigns' | 'sourceCampaigns'
+type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'status' | 'platform' | 'action'
-type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'actionsTime' | 'actionsStatus'
+type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'actionsTime' | 'actionsStatus' | 'findDataLogScope'
 type DetailTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'custom'
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
+type FindDataLogScope = 'visible' | 'all'
 
 interface CampaignFilterOption {
   value: string
@@ -96,8 +98,52 @@ interface FoundDataItem {
   createdAt?: string
 }
 
+interface FindDataLogRow {
+  key: string
+  event: CampaignRunEvent
+  timeLabel: string
+  source: string
+  action: string
+  statusLabel: string
+  statusColor: string
+  elementCount: string
+  itemIndex: string
+  link: string
+  name: string
+  uid: string
+  contentText: string
+  phones: string
+  zaloGroupLinks: string
+  postLinks: string
+  keyword: string
+  matchedKeyword: string
+  aiFinalPrompt: string
+  aiRawResult: string
+  aiMeaningCheck: string
+}
+
 const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
 const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email']
+const FIND_DATA_LOG_EXPORT_HEADERS = [
+  'Thời gian',
+  'Nguồn',
+  'Hành động',
+  'Trạng thái',
+  'Số lượng',
+  'STT',
+  'Link',
+  'Tên',
+  'UID',
+  'Nội dung',
+  'SĐT',
+  'Link Zalo',
+  'Link post',
+  'Keyword',
+  'Chứa keyword',
+  'Prompt gửi AI',
+  'Kết quả AI',
+  'Kiểm tra ý nghĩa AI'
+]
 
 const FOUND_DATA_EXPORT_OPTIONS: { kind: FoundDataKind; label: string }[] = [
   { kind: 'phone', label: 'SĐT' },
@@ -181,6 +227,7 @@ const CAMPAIGN_PLATFORM_OPTIONS: CampaignFilterOption[] = [
 
 const DETAIL_DOCK_MIN_HEIGHT = 220
 const DETAIL_DOCK_LIST_MIN_HEIGHT = 220
+const DETAIL_DOCK_MAX_HEIGHT_RESERVE = 16
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
@@ -293,6 +340,139 @@ const getFoundDataKindLabel = (kind: FoundDataKind) => {
     case 'uid': return 'UID'
     case 'postLink': return 'Link bài post'
     case 'facebookGroup': return 'Link group Facebook'
+  }
+}
+
+const getJsonObject = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+)
+
+const getNestedJsonObject = (value: unknown, key: string): Record<string, unknown> => (
+  getJsonObject(getJsonObject(value)[key])
+)
+
+const getStringValue = (value: unknown): string => {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return ''
+}
+
+const getNestedStringValue = (value: unknown, ...keys: string[]): string => {
+  let current: unknown = value
+  for (const key of keys) {
+    current = getJsonObject(current)[key]
+  }
+  return getStringValue(current)
+}
+
+const getStringArrayValue = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map(item => getStringValue(item))
+      .filter(Boolean)
+  }
+  const singleValue = getStringValue(value)
+  return singleValue ? [singleValue] : []
+}
+
+const formatFindDataLogStatus = (status?: string | null) => {
+  switch (String(status || '').toLowerCase()) {
+    case 'success': return 'Thành công'
+    case 'failed': return 'Lỗi'
+    case 'skipped': return 'Bỏ qua'
+    default: return status || '-'
+  }
+}
+
+const getFindDataLogStatusColor = (status?: string | null) => {
+  switch (String(status || '').toLowerCase()) {
+    case 'success': return 'var(--accent-success)'
+    case 'failed': return 'var(--accent-error)'
+    case 'skipped': return 'var(--accent-warning)'
+    default: return 'var(--text-tertiary)'
+  }
+}
+
+const formatFindDataLogBoolean = (value: unknown) => {
+  if (typeof value === 'boolean') return value ? 'Có' : 'Không'
+  const normalized = getStringValue(value).toLowerCase()
+  if (!normalized) return '-'
+  if (['true', '1', 'yes', 'co', 'có'].includes(normalized)) return 'Có'
+  if (['false', '0', 'no', 'khong', 'không'].includes(normalized)) return 'Không'
+  return getStringValue(value)
+}
+
+const isTruthyLogValue = (value: unknown) => {
+  if (typeof value === 'boolean') return value
+  const normalized = getStringValue(value).toLowerCase()
+  return ['true', '1', 'yes', 'co', 'có'].includes(normalized)
+}
+
+const formatFindDataLogAiCheck = (value: unknown) => {
+  const normalized = getStringValue(value).toLowerCase()
+  switch (normalized) {
+    case 'matched': return 'Đúng ý nghĩa'
+    case 'not_matched': return 'Không đúng ý nghĩa'
+    case 'error': return 'Lỗi AI'
+    default: return getStringValue(value) || '-'
+  }
+}
+
+const getFindDataLogSource = (event: CampaignRunEvent) => {
+  const targetType = String(event.targetType || '').toLowerCase()
+  const eventType = String(event.eventType || '').toLowerCase()
+  const entityType = getNestedStringValue(event.extractedData, 'entity', 'type').toLowerCase()
+  const sourceKey = entityType || targetType
+
+  if (eventType === 'find_data_source_summary') return 'Tổng kết'
+  if (sourceKey === 'post' || sourceKey === 'feed' || eventType.includes('post')) return 'Bài viết'
+  if (sourceKey === 'comment' || eventType.includes('comment')) return 'Comment'
+  if (sourceKey === 'member' || eventType.includes('member')) return 'Thành viên'
+  if (sourceKey === 'group') return 'Group'
+  return ''
+}
+
+const buildFindDataLogRow = (event: CampaignRunEvent): FindDataLogRow => {
+  const extractedData = getJsonObject(event.extractedData)
+  const filters = getNestedJsonObject(extractedData, 'filters')
+  const values = getNestedJsonObject(extractedData, 'values')
+  const debugData = getJsonObject(event.debugData)
+  const eventType = String(event.eventType || '').toLowerCase()
+  const link = getNestedStringValue(extractedData, 'entity', 'url') || event.targetUrl || ''
+  const valueUids = getStringArrayValue(values.uids)
+  const canHaveKeywordCheck = eventType === 'extract_post_data' || eventType === 'extract_comment_data'
+  const keywordEnabled = canHaveKeywordCheck && isTruthyLogValue(filters.keywordEnabled)
+  const aiFinalPrompt = getStringValue(filters.aiFinalPrompt) || getStringValue(debugData.aiFinalPrompt)
+  const aiRawResult = getStringValue(filters.aiRawResult)
+    || getStringValue(filters.aiResult)
+    || getStringValue(debugData.aiRawResult)
+    || getStringValue(debugData.aiResult)
+  const aiMeaningCheck = formatFindDataLogAiCheck(filters.aiCheckResult ?? debugData.aiCheckResult)
+
+  return {
+    key: String(event.id),
+    event,
+    timeLabel: formatDisplayDateTime(event.createdAt),
+    source: getFindDataLogSource(event),
+    action: event.eventName || event.eventType || '-',
+    statusLabel: formatFindDataLogStatus(event.status),
+    statusColor: getFindDataLogStatusColor(event.status),
+    elementCount: event.elementCount === null || event.elementCount === undefined ? '-' : String(event.elementCount),
+    itemIndex: event.itemIndex === null || event.itemIndex === undefined ? '-' : String(event.itemIndex),
+    link,
+    name: getNestedStringValue(extractedData, 'entity', 'name'),
+    uid: getNestedStringValue(extractedData, 'entity', 'uid') || valueUids[0] || '',
+    contentText: getNestedStringValue(extractedData, 'entity', 'contentText'),
+    phones: getStringArrayValue(values.phones).join(', '),
+    zaloGroupLinks: getStringArrayValue(values.zaloGroupLinks).join(', '),
+    postLinks: getStringArrayValue(values.postLinks).join(', '),
+    keyword: keywordEnabled ? getStringValue(filters.keyword) : '',
+    matchedKeyword: keywordEnabled ? formatFindDataLogBoolean(filters.matchedKeyword) : '-',
+    aiFinalPrompt: aiFinalPrompt || '-',
+    aiRawResult: aiRawResult || '-',
+    aiMeaningCheck
   }
 }
 
@@ -480,6 +660,10 @@ const getDetailStatusFilterLabel = (options: CampaignFilterOption[], status: str
   if (!status) return 'Tất cả'
   return options.find(option => option.value === status)?.label || status
 }
+
+const getFindDataLogScopeLabel = (scope: FindDataLogScope) => (
+  scope === 'all' ? 'Tất cả log' : 'Log tìm kiếm'
+)
 
 const getDetailOptionPopoverHeight = (optionCount: number, includesDateGrid = false) => (
   DETAIL_POPOVER_PADDING_Y
@@ -898,12 +1082,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
+    campaignRunEvents, loadingCampaignRunEvents,
     campaignRelationSummaries, loadingCampaignRelationSummaries,
     loadCampaigns, loadCampaignActions, loadAccounts,
     updateCampaign, deleteCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign,
-    loadCampaignInputData, loadCampaignDetails, loadCampaignRelationSummaries
+    loadCampaignInputData, loadCampaignDetails, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const canManageCampaignActions = useAuthStore(s => !!s.user?.isAdminAkabiz)
   const showAlert = useUiStore(s => s.showAlert)
@@ -937,6 +1122,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [actionFilters, setActionFilters] = useState<string[]>([])
   const [inputDataFilters, setInputDataFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
   const [actionDetailFilters, setActionDetailFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
+  const [findDataLogScope, setFindDataLogScope] = useState<FindDataLogScope>('visible')
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
   const [openDetailDropdown, setOpenDetailDropdown] = useState<DetailFilterDropdown | null>(null)
   const [detailPopoverPosition, setDetailPopoverPosition] = useState<DetailPopoverPosition | null>(null)
@@ -944,6 +1130,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [showManualCampaignLoading, setShowManualCampaignLoading] = useState(false)
   const workAreaRef = useRef<HTMLDivElement>(null)
   const detailDockRef = useRef<HTMLDivElement>(null)
+  const findDataLogTableWrapRef = useRef<HTMLDivElement>(null)
+  const findDataLogXScrollRef = useRef<HTMLDivElement>(null)
   const filterPanelRef = useRef<HTMLDivElement>(null)
   const inputDataActionMenuRef = useRef<HTMLDivElement>(null)
 
@@ -969,12 +1157,27 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
     if (detailTab === 'actions' || detailTab === 'foundData') {
       loadCampaignDetails(selectedCampaignId)
+      return
     }
-  }, [selectedCampaignId, detailTab, loadCampaignInputData, loadCampaignDetails])
+    if (detailTab === 'findDataLog') {
+      loadCampaignRunEvents(selectedCampaignId, {
+        userVisibleOnly: findDataLogScope === 'visible',
+        limit: 500
+      })
+    }
+  }, [
+    selectedCampaignId,
+    detailTab,
+    loadCampaignInputData,
+    loadCampaignDetails,
+    loadCampaignRunEvents,
+    findDataLogScope
+  ])
 
   useEffect(() => {
     setInputDataFilters(createDefaultDetailFilters())
     setActionDetailFilters(createDefaultDetailFilters())
+    setFindDataLogScope('visible')
     setOpenDetailDropdown(null)
     setDetailPopoverPosition(null)
   }, [selectedCampaignId])
@@ -1581,8 +1784,16 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     return foundDataItems.filter(item => foundDataExportKinds.has(item.kind))
   }, [foundDataItems, foundDataExportKinds])
 
+  const findDataLogRows = useMemo(() => (
+    campaignRunEvents.map(buildFindDataLogRow)
+  ), [campaignRunEvents])
+
   useEffect(() => {
     if (detailTab === 'foundData' && !isSelectedFindDataCampaign) {
+      setDetailTab('actions')
+      return
+    }
+    if (detailTab === 'findDataLog' && !isSelectedFindDataCampaign) {
       setDetailTab('actions')
       return
     }
@@ -1619,9 +1830,23 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     })
   }
 
+  const handleFindDataLogTableScroll = () => {
+    const tableWrap = findDataLogTableWrapRef.current
+    const xScroll = findDataLogXScrollRef.current
+    if (!tableWrap || !xScroll || xScroll.scrollLeft === tableWrap.scrollLeft) return
+    xScroll.scrollLeft = tableWrap.scrollLeft
+  }
+
+  const handleFindDataLogXScroll = () => {
+    const tableWrap = findDataLogTableWrapRef.current
+    const xScroll = findDataLogXScrollRef.current
+    if (!tableWrap || !xScroll || tableWrap.scrollLeft === xScroll.scrollLeft) return
+    tableWrap.scrollLeft = xScroll.scrollLeft
+  }
+
   const getDetailDockMaxHeight = () => {
     const workAreaHeight = workAreaRef.current?.getBoundingClientRect().height || window.innerHeight
-    return Math.max(DETAIL_DOCK_MIN_HEIGHT, workAreaHeight)
+    return Math.max(DETAIL_DOCK_MIN_HEIGHT, workAreaHeight - DETAIL_DOCK_MAX_HEIGHT_RESERVE)
   }
 
   const handleDetailDockResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1881,6 +2106,80 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     } catch (err) {
       console.error('Failed to export found data:', err)
       showAlert('Không thể xuất file Excel data tìm được.', 'error')
+    }
+  }
+
+  const handleExportFindDataLog = () => {
+    if (!selectedCampaign) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (!isSelectedFindDataCampaign) {
+      showAlert('Tab Log tìm data chỉ hỗ trợ chiến dịch tìm data.', 'info')
+      return
+    }
+    if (campaignRunEvents.length === 0) {
+      showAlert('Chưa có log tìm data để xuất.', 'info')
+      return
+    }
+    if (findDataLogRows.length === 0) {
+      showAlert('Chưa có log tìm data để xuất.', 'info')
+      return
+    }
+
+    try {
+      const rows = [
+        FIND_DATA_LOG_EXPORT_HEADERS,
+        ...findDataLogRows.map(row => [
+          row.timeLabel === '-' ? '' : row.timeLabel,
+          row.source,
+          row.action,
+          row.statusLabel,
+          row.elementCount === '-' ? '' : row.elementCount,
+          row.itemIndex === '-' ? '' : row.itemIndex,
+          row.link,
+          row.name,
+          row.uid,
+          row.contentText,
+          row.phones,
+          row.zaloGroupLinks,
+          row.postLinks,
+          row.keyword,
+          row.matchedKeyword === '-' ? '' : row.matchedKeyword,
+          row.aiFinalPrompt === '-' ? '' : row.aiFinalPrompt,
+          row.aiRawResult === '-' ? '' : row.aiRawResult,
+          row.aiMeaningCheck === '-' ? '' : row.aiMeaningCheck
+        ])
+      ]
+      const sheet = utils.aoa_to_sheet(rows)
+      sheet['!cols'] = [
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 8 },
+        { wch: 46 },
+        { wch: 24 },
+        { wch: 22 },
+        { wch: 70 },
+        { wch: 24 },
+        { wch: 46 },
+        { wch: 46 },
+        { wch: 18 },
+        { wch: 14 },
+        { wch: 60 },
+        { wch: 60 },
+        { wch: 20 }
+      ]
+      const workbook = utils.book_new()
+      utils.book_append_sheet(workbook, sheet, 'Log tim data')
+      const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
+      writeFile(workbook, `find-data-log-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      showAlert('Đã xuất log tìm data ra Excel.', 'success')
+    } catch (err) {
+      console.error('Failed to export find data log:', err)
+      showAlert('Không thể xuất file Excel log tìm data.', 'error')
     }
   }
 
@@ -2591,6 +2890,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                 >
                   Lịch sử chạy ({runLogEntries.length})
                 </button>
+                {isSelectedFindDataCampaign && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'findDataLog' ? 'active' : ''}`}
+                    onClick={() => setDetailTab('findDataLog')}
+                  >
+                    Log tìm data ({findDataLogRows.length})
+                  </button>
+                )}
                 <button
                   className={`detail-dock-tab ${detailTab === 'accountInfo' ? 'active' : ''}`}
                   onClick={() => setDetailTab('accountInfo')}
@@ -2599,7 +2906,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                 </button>
               </div>
 
-              <div className="detail-dock-tab-content">
+              <div className={`detail-dock-tab-content ${detailTab === 'findDataLog' ? 'find-data-log-tab-content' : ''}`}>
               {/* Tab: Campaign info */}
               {detailTab === 'info' && selectedCampaign && (
                 <CampaignInfoView
@@ -2790,6 +3097,158 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     </table>
                   )}
                 </>
+              )}
+
+              {/* Tab: Find-data run events */}
+              {detailTab === 'findDataLog' && (
+                <div className="find-data-log-panel">
+                  <div className="detail-export-bar detail-filter-bar find-data-log-toolbar">
+                    <div className="detail-filter-actions">
+                      <div className="report-dropdown-field detail-filter-dropdown-field find-data-log-scope-field">
+                        <button
+                          type="button"
+                          className={`report-filter-button detail-filter-button ${openDetailDropdown === 'findDataLogScope' ? 'active' : ''}`}
+                          onClick={event => handleDetailDropdownToggle(
+                            'findDataLogScope',
+                            event.currentTarget,
+                            180,
+                            getDetailOptionPopoverHeight(2)
+                          )}
+                          disabled={loadingCampaignRunEvents}
+                          title="Chọn phạm vi log tìm data"
+                        >
+                          <strong>{getFindDataLogScopeLabel(findDataLogScope)}</strong>
+                          <ChevronDown size={14} />
+                        </button>
+                        {openDetailDropdown === 'findDataLogScope' && detailPopoverPosition && (
+                          <div
+                            className="report-filter-popover detail-filter-popover"
+                            style={{
+                              top: detailPopoverPosition.top ?? 'auto',
+                              bottom: detailPopoverPosition.bottom ?? 'auto',
+                              left: detailPopoverPosition.left,
+                              width: detailPopoverPosition.width
+                            }}
+                          >
+                            <div className="report-option-list">
+                              {([
+                                { value: 'visible', label: 'Log tìm kiếm' },
+                                { value: 'all', label: 'Tất cả log' }
+                              ] as Array<{ value: FindDataLogScope; label: string }>).map(option => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className={`report-option-button ${findDataLogScope === option.value ? 'selected' : ''}`}
+                                  onClick={() => {
+                                    setFindDataLogScope(option.value)
+                                    closeDetailDropdown()
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleExportFindDataLog}
+                        disabled={loadingCampaignRunEvents || findDataLogRows.length === 0}
+                        title="Xuất log tìm data ra Excel"
+                      >
+                        <Download size={14} /> Xuất Excel
+                      </button>
+                    </div>
+                  </div>
+                  {loadingCampaignRunEvents ? (
+                    <div className="find-data-log-empty text-center text-secondary">Đang tải...</div>
+                  ) : campaignRunEvents.length === 0 ? (
+                    <div className="find-data-log-empty text-center text-muted">Chưa có log tìm data</div>
+                  ) : (
+                    <div className="find-data-log-table-shell">
+                      <div
+                        className="find-data-log-table-wrap"
+                        ref={findDataLogTableWrapRef}
+                        onScroll={handleFindDataLogTableScroll}
+                      >
+                        <table className="campaign-grid find-data-log-grid" style={{ fontSize: 12 }}>
+                          <colgroup>
+                            <col className="find-data-log-col-time" />
+                            <col className="find-data-log-col-source" />
+                            <col className="find-data-log-col-action" />
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th>Thời gian</th>
+                              <th>Nguồn</th>
+                              <th>Hành động</th>
+                              <th>Trạng thái</th>
+                              <th>Số lượng</th>
+                              <th>STT</th>
+                              <th>Link</th>
+                              <th>Tên</th>
+                              <th>UID</th>
+                              <th>Nội dung</th>
+                              <th>SĐT</th>
+                              <th>Link Zalo</th>
+                              <th>Link post</th>
+                              <th>Keyword</th>
+                              <th>Chứa keyword</th>
+                              <th>Prompt gửi AI</th>
+                              <th>Kết quả AI</th>
+                              <th>Kiểm tra ý nghĩa AI</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {findDataLogRows.map(row => (
+                              <tr key={row.key}>
+                                <td title={row.timeLabel} style={{ whiteSpace: 'nowrap' }}>{row.timeLabel}</td>
+                                <td title={row.source}>{row.source}</td>
+                                <td className="find-data-log-cell-text" title={row.action}>{row.action}</td>
+                                <td title={row.statusLabel}>
+                                  <span style={{ color: row.statusColor }}>{row.statusLabel}</span>
+                                </td>
+                                <td title={row.elementCount}>{row.elementCount}</td>
+                                <td title={row.itemIndex}>{row.itemIndex}</td>
+                                <td className="find-data-log-link-cell" title={row.link || '-'}>
+                                  {row.link ? (
+                                    <a
+                                      className="find-data-log-link"
+                                      href={row.link}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      {row.link}
+                                    </a>
+                                  ) : '-'}
+                                </td>
+                                <td className="find-data-log-cell-text" title={row.name || '-'}>{row.name || '-'}</td>
+                                <td className="find-data-log-cell-text" title={row.uid || '-'}>{row.uid || '-'}</td>
+                                <td className="find-data-log-content-cell" title={row.contentText || '-'}>{row.contentText || '-'}</td>
+                                <td className="find-data-log-cell-text" title={row.phones || '-'}>{row.phones || '-'}</td>
+                                <td className="find-data-log-link-cell" title={row.zaloGroupLinks || '-'}>{row.zaloGroupLinks || '-'}</td>
+                                <td className="find-data-log-link-cell" title={row.postLinks || '-'}>{row.postLinks || '-'}</td>
+                                <td className="find-data-log-cell-text" title={row.keyword || '-'}>{row.keyword || '-'}</td>
+                                <td title={row.matchedKeyword}>{row.matchedKeyword}</td>
+                                <td className="find-data-log-content-cell" title={row.aiFinalPrompt || '-'}>{row.aiFinalPrompt || '-'}</td>
+                                <td className="find-data-log-content-cell" title={row.aiRawResult || '-'}>{row.aiRawResult || '-'}</td>
+                                <td className="find-data-log-cell-text" title={row.aiMeaningCheck}>{row.aiMeaningCheck}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div
+                        className="find-data-log-x-scroll"
+                        ref={findDataLogXScrollRef}
+                        onScroll={handleFindDataLogXScroll}
+                      >
+                        <div className="find-data-log-x-scroll-spacer" />
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Tab: Find-data campaigns feeding this campaign */}

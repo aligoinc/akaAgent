@@ -1,8 +1,9 @@
-import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
+import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
 import * as accountContactRepo from '../data/repositories/accountContactRepository'
 import * as accountActionRepo from '../data/repositories/accountActionRepository'
@@ -88,6 +89,12 @@ export class SupabaseService {
   listCampaignDetailsByCampaign(campaignId: number) { return campaignRepo.listCampaignDetailsByCampaign(campaignId) }
   createCampaignDetail(action: Partial<CampaignDetail>) { return campaignRepo.createCampaignDetail(action) }
   deleteCampaignDetail(id: number) { return campaignRepo.deleteCampaignDetail(id) }
+  listCampaignRunEventsByCampaign(campaignId: number, options?: CampaignRunEventListOptions) {
+    return campaignRunEventRepo.listCampaignRunEventsByCampaign(campaignId, options)
+  }
+  listCampaignRunEventsByInputData(inputDataId: number, limit?: number) {
+    return campaignRunEventRepo.listCampaignRunEventsByInputData(inputDataId, limit)
+  }
   incrementCampaignBadTargetCount(campaignId: number, inputDataId: number | null | undefined, reason: string) {
     return campaignRepo.incrementCampaignBadTargetCount(campaignId, inputDataId, reason)
   }

@@ -1,7 +1,7 @@
 import * as vm from 'vm'
 import { BlockResult } from '../../../shared/v2Types'
 import { PageController } from './pageController'
-import { BlockHelpers, BlockRuntimeHelpers, createBlockHelpers } from './blockHelpers'
+import { BlockHelpers, BlockRuntimeHelpers, BlockRuntimeMetadata, createBlockHelpers } from './blockHelpers'
 
 export interface BlockExecuteContext {
   input: Record<string, unknown>
@@ -9,6 +9,7 @@ export interface BlockExecuteContext {
   vars: Record<string, unknown>
   signal: AbortSignal
   runtimeHelpers?: BlockRuntimeHelpers
+  runtimeMetadata?: BlockRuntimeMetadata
   /** Callback gọi cho mỗi `helpers.log()` — thường emit IPC realtime */
   onLog?: (line: string) => void
 }
@@ -49,7 +50,8 @@ export class BlockExecutor {
           // Don't fail block khi onLog throw
         }
       },
-      ctx.runtimeHelpers
+      ctx.runtimeHelpers,
+      ctx.runtimeMetadata
     )
 
     // Build sandbox global. KHÔNG expose Node-specific objects.

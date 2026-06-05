@@ -7457,6 +7457,120 @@ td.report-account-col span {
   line-height: 1.2;
 }
 
+.find-data-log-toolbar {
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.find-data-log-scope-field {
+  width: 150px;
+}
+
+.detail-dock-tab-content.find-data-log-tab-content {
+  overflow: hidden;
+}
+
+.find-data-log-panel {
+  --find-data-log-table-width: 2040px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.find-data-log-empty {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px;
+  font-size: 12px;
+}
+
+.find-data-log-table-shell {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.find-data-log-table-wrap {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.find-data-log-x-scroll {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+
+.find-data-log-x-scroll-spacer {
+  width: var(--find-data-log-table-width);
+  height: 1px;
+}
+
+.find-data-log-grid {
+  min-width: var(--find-data-log-table-width);
+  table-layout: fixed;
+}
+
+.find-data-log-col-time {
+  width: 150px;
+}
+
+.find-data-log-col-action {
+  width: 180px;
+}
+
+.find-data-log-grid th,
+.find-data-log-grid td {
+  vertical-align: top;
+}
+
+.find-data-log-grid th {
+  white-space: nowrap;
+}
+
+.find-data-log-cell-text,
+.find-data-log-link-cell,
+.find-data-log-content-cell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.find-data-log-cell-text,
+.find-data-log-link-cell {
+  white-space: nowrap;
+}
+
+.find-data-log-content-cell {
+  max-width: 320px;
+  white-space: nowrap;
+}
+
+.find-data-log-link {
+  color: var(--accent-info);
+  text-decoration: none;
+}
+
+.find-data-log-link:hover {
+  text-decoration: underline;
+}
+
 .find-data-chip,
 .find-data-kind {
   display: inline-flex;

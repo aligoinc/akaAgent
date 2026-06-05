@@ -1,4 +1,5 @@
 import { resolveXpathByName } from '../../data/repositories/elementV2Repository'
+import type { CampaignRunEventInput } from '../../../shared/types'
 
 export interface BlockHelpers {
   /** Pause execution. Throws khi signal aborted. */
@@ -25,6 +26,8 @@ export interface BlockHelpers {
   logRunEvent?(event: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
   /** Optional helper: log multiple structured execution events when the runtime supports it. */
   logRunEvents?(events: Record<string, unknown>[]): Promise<OptionalHelperUnsupportedResult | unknown>
+  /** Optional helper: check find-data content meaning with the app AI runtime. */
+  checkFindDataMeaningAI?(options: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
 }
 
 export interface OptionalHelperUnsupportedResult {
@@ -48,11 +51,26 @@ export interface GroupPendingContentCheckResult {
   error?: string
 }
 
-export interface BlockRuntimeHelpers {
-  checkGroupPendingContent?: (options: GroupPendingContentCheckOptions) => Promise<GroupPendingContentCheckResult>
+export interface BlockRuntimeMetadata {
+  accountId?: number
+  campaignId?: number
+  campaignInputId?: number | null
+  campaignInputDataId?: number
+  runId?: number
+  runStepId?: number
+  nodeId?: string
+  blockId?: number
+  blockName?: string
 }
 
-const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents'])
+export interface BlockRuntimeHelpers {
+  checkGroupPendingContent?: (options: GroupPendingContentCheckOptions) => Promise<GroupPendingContentCheckResult>
+  logRunEvent?: (event: CampaignRunEventInput, metadata: BlockRuntimeMetadata) => Promise<unknown>
+  logRunEvents?: (events: CampaignRunEventInput[], metadata: BlockRuntimeMetadata) => Promise<unknown>
+  checkFindDataMeaningAI?: (options: Record<string, unknown>, metadata: BlockRuntimeMetadata) => Promise<unknown>
+}
+
+const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents', 'checkFindDataMeaningAI'])
 
 function createUnsupportedOptionalHelper(helper: string) {
   return async (): Promise<OptionalHelperUnsupportedResult> => ({
@@ -80,7 +98,8 @@ function withOptionalHelpers(baseHelpers: BlockHelpers): BlockHelpers {
  */
 export function createBlockHelpers(
   logCollector: (message: string) => void,
-  runtimeHelpers: BlockRuntimeHelpers = {}
+  runtimeHelpers: BlockRuntimeHelpers = {},
+  runtimeMetadata: BlockRuntimeMetadata = {}
 ): BlockHelpers {
   const baseHelpers: BlockHelpers = {
     async sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -169,6 +188,42 @@ export function createBlockHelpers(
         url: String(options?.url || ''),
         links: [],
         error: 'Runtime hiện tại không hỗ trợ page phụ để kiểm tra pending content'
+      }
+    }
+  }
+
+  if (runtimeHelpers.logRunEvent) {
+    baseHelpers.logRunEvent = async (event: Record<string, unknown>) => {
+      try {
+        return await runtimeHelpers.logRunEvent!(event as CampaignRunEventInput, runtimeMetadata)
+      } catch (err: any) {
+        const message = err?.message ? String(err.message) : String(err)
+        logCollector(`[warn] helper logRunEvent failed: ${message}`)
+        return { ok: false, error: message }
+      }
+    }
+  }
+
+  if (runtimeHelpers.logRunEvents) {
+    baseHelpers.logRunEvents = async (events: Record<string, unknown>[]) => {
+      try {
+        return await runtimeHelpers.logRunEvents!(events as CampaignRunEventInput[], runtimeMetadata)
+      } catch (err: any) {
+        const message = err?.message ? String(err.message) : String(err)
+        logCollector(`[warn] helper logRunEvents failed: ${message}`)
+        return { ok: false, error: message }
+      }
+    }
+  }
+
+  if (runtimeHelpers.checkFindDataMeaningAI) {
+    baseHelpers.checkFindDataMeaningAI = async (options: Record<string, unknown>) => {
+      try {
+        return await runtimeHelpers.checkFindDataMeaningAI!(options, runtimeMetadata)
+      } catch (err: any) {
+        const message = err?.message ? String(err.message) : String(err)
+        logCollector(`[warn] helper checkFindDataMeaningAI failed: ${message}`)
+        return { ok: false, checkResult: 'error', error: message }
       }
     }
   }
