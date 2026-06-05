@@ -245,7 +245,7 @@ $fds_fb_apply_search_post_filters$),
   const limit = Math.max(1, Number(vars.countSearchPostFindData || vars.countPostFindData || 10));
   const collectPostLinks = true;
 
-  const posts = await page.evaluate(`
+  const posts = await page.evaluate(String.raw`
     const selectors = __args[0];
     const limit = __args[1];
     const collectPostLinks = __args[2] === true;
@@ -635,7 +635,7 @@ $fds_fb_extract_data_from_search_posts$),
   const commentLimit = Math.max(1, Number(vars.countCommentFindData || 30));
   const sortType = String(vars.sortTypeComment || 'most_relevant');
 
-  const commentResult = await page.evaluate(`
+  const commentResult = await page.evaluate(String.raw`
     const selectors = __args[0];
     const postLimit = __args[1];
     const commentLimit = __args[2];
@@ -937,7 +937,7 @@ $fds_fb_apply_search_group_filters$),
   const minMembers = Math.max(0, Number(vars.minSearchGroupMembers || 0));
   const minPostsPerDay = Math.max(0, Number(vars.minSearchGroupPostsPerDay || 0));
   const keyword = String(vars.findDataSearchKeyword || '').trim();
-  const groups = await page.evaluate(`
+  const groups = await page.evaluate(String.raw`
     const limit = __args[0]; const minMembers = __args[1]; const minPostsPerDay = __args[2]; const keyword = __args[3];
     function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
     function norm(text) { return String(text || '').replace(/\s+/g, ' ').trim(); }
