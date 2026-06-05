@@ -7460,7 +7460,13 @@ td.report-account-col span {
 .find-data-log-toolbar {
   flex: 0 0 auto;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+}
+
+.find-data-log-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .find-data-log-scope-field {

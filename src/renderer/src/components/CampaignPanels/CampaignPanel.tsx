@@ -430,7 +430,7 @@ const getFindDataLogSource = (event: CampaignRunEvent) => {
   if (sourceKey === 'post' || sourceKey === 'feed' || eventType.includes('post')) return 'Bài viết'
   if (sourceKey === 'comment' || eventType.includes('comment')) return 'Comment'
   if (sourceKey === 'member' || eventType.includes('member')) return 'Thành viên'
-  if (sourceKey === 'group') return 'Group'
+  if (sourceKey === 'group') return 'Group Facebook'
   return ''
 }
 
@@ -1090,7 +1090,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign,
     loadCampaignInputData, loadCampaignDetails, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
-  const canManageCampaignActions = useAuthStore(s => !!s.user?.isAdminAkabiz)
+  const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
+  const canManageCampaignActions = isAdminAkabiz
+  const canViewAllFindDataLogs = isAdminAkabiz
   const showAlert = useUiStore(s => s.showAlert)
 
   const [showForm, setShowForm] = useState(false)
@@ -1161,7 +1163,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
     if (detailTab === 'findDataLog') {
       loadCampaignRunEvents(selectedCampaignId, {
-        userVisibleOnly: findDataLogScope === 'visible',
+        userVisibleOnly: !canViewAllFindDataLogs || findDataLogScope === 'visible',
         limit: 500
       })
     }
@@ -1171,7 +1173,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     loadCampaignInputData,
     loadCampaignDetails,
     loadCampaignRunEvents,
-    findDataLogScope
+    findDataLogScope,
+    canViewAllFindDataLogs
   ])
 
   useEffect(() => {
@@ -1181,6 +1184,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     setOpenDetailDropdown(null)
     setDetailPopoverPosition(null)
   }, [selectedCampaignId])
+
+  useEffect(() => {
+    if (!canViewAllFindDataLogs) {
+      if (findDataLogScope !== 'visible') setFindDataLogScope('visible')
+      setOpenDetailDropdown(null)
+      setDetailPopoverPosition(null)
+    }
+  }, [canViewAllFindDataLogs, findDataLogScope])
 
   useEffect(() => {
     setOpenDetailDropdown(null)
@@ -2183,6 +2194,21 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
   }
 
+  const handleLoadFindDataLog = () => {
+    if (!selectedCampaignId) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (!isSelectedFindDataCampaign) {
+      showAlert('Tab Log tìm kiếm chỉ hỗ trợ chiến dịch tìm data.', 'info')
+      return
+    }
+    loadCampaignRunEvents(selectedCampaignId, {
+      userVisibleOnly: !canViewAllFindDataLogs || findDataLogScope === 'visible',
+      limit: 500
+    })
+  }
+
   const handleExportCampaignInputData = () => {
     if (!selectedCampaign) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
@@ -3103,54 +3129,66 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               {detailTab === 'findDataLog' && (
                 <div className="find-data-log-panel">
                   <div className="detail-export-bar detail-filter-bar find-data-log-toolbar">
+                    <div className="find-data-log-toolbar-left">
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleLoadFindDataLog}
+                        disabled={loadingCampaignRunEvents}
+                        title="Tải lại log tìm kiếm"
+                      >
+                        <RefreshCw size={14} className={loadingCampaignRunEvents ? 'spin' : ''} /> Tải lại
+                      </button>
+                    </div>
                     <div className="detail-filter-actions">
-                      <div className="report-dropdown-field detail-filter-dropdown-field find-data-log-scope-field">
-                        <button
-                          type="button"
-                          className={`report-filter-button detail-filter-button ${openDetailDropdown === 'findDataLogScope' ? 'active' : ''}`}
-                          onClick={event => handleDetailDropdownToggle(
-                            'findDataLogScope',
-                            event.currentTarget,
-                            180,
-                            getDetailOptionPopoverHeight(2)
-                          )}
-                          disabled={loadingCampaignRunEvents}
-                          title="Chọn phạm vi log tìm data"
-                        >
-                          <strong>{getFindDataLogScopeLabel(findDataLogScope)}</strong>
-                          <ChevronDown size={14} />
-                        </button>
-                        {openDetailDropdown === 'findDataLogScope' && detailPopoverPosition && (
-                          <div
-                            className="report-filter-popover detail-filter-popover"
-                            style={{
-                              top: detailPopoverPosition.top ?? 'auto',
-                              bottom: detailPopoverPosition.bottom ?? 'auto',
-                              left: detailPopoverPosition.left,
-                              width: detailPopoverPosition.width
-                            }}
+                      {canViewAllFindDataLogs && (
+                        <div className="report-dropdown-field detail-filter-dropdown-field find-data-log-scope-field">
+                          <button
+                            type="button"
+                            className={`report-filter-button detail-filter-button ${openDetailDropdown === 'findDataLogScope' ? 'active' : ''}`}
+                            onClick={event => handleDetailDropdownToggle(
+                              'findDataLogScope',
+                              event.currentTarget,
+                              180,
+                              getDetailOptionPopoverHeight(2)
+                            )}
+                            disabled={loadingCampaignRunEvents}
+                            title="Chọn phạm vi log tìm data"
                           >
-                            <div className="report-option-list">
-                              {([
-                                { value: 'visible', label: 'Log tìm kiếm' },
-                                { value: 'all', label: 'Tất cả log' }
-                              ] as Array<{ value: FindDataLogScope; label: string }>).map(option => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  className={`report-option-button ${findDataLogScope === option.value ? 'selected' : ''}`}
-                                  onClick={() => {
-                                    setFindDataLogScope(option.value)
-                                    closeDetailDropdown()
-                                  }}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
+                            <strong>{getFindDataLogScopeLabel(findDataLogScope)}</strong>
+                            <ChevronDown size={14} />
+                          </button>
+                          {openDetailDropdown === 'findDataLogScope' && detailPopoverPosition && (
+                            <div
+                              className="report-filter-popover detail-filter-popover"
+                              style={{
+                                top: detailPopoverPosition.top ?? 'auto',
+                                bottom: detailPopoverPosition.bottom ?? 'auto',
+                                left: detailPopoverPosition.left,
+                                width: detailPopoverPosition.width
+                              }}
+                            >
+                              <div className="report-option-list">
+                                {([
+                                  { value: 'visible', label: 'Log tìm kiếm' },
+                                  { value: 'all', label: 'Tất cả log' }
+                                ] as Array<{ value: FindDataLogScope; label: string }>).map(option => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    className={`report-option-button ${findDataLogScope === option.value ? 'selected' : ''}`}
+                                    onClick={() => {
+                                      setFindDataLogScope(option.value)
+                                      closeDetailDropdown()
+                                    }}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
                       <button
                         className="btn btn-secondary"
                         onClick={handleExportFindDataLog}
