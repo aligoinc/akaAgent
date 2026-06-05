@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
-import { CAMPAIGN_STATUSES, type Campaign, type CampaignDetail, type CampaignRelationSummary } from '../../../../shared/types'
+import { CAMPAIGN_STATUSES, type Campaign, type CampaignDetail, type CampaignInputData, type CampaignRelationSummary } from '../../../../shared/types'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -22,10 +22,26 @@ type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'found
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 type CampaignFilterDropdown = 'status' | 'platform' | 'action'
+type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'actionsTime' | 'actionsStatus'
+type DetailTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'custom'
 
 interface CampaignFilterOption {
   value: string
   label: string
+}
+
+interface DetailFilterState {
+  timePreset: DetailTimePreset
+  dateFrom: string
+  dateTo: string
+  status: string
+}
+
+interface DetailPopoverPosition {
+  top?: number
+  bottom?: number
+  left: number
+  width: number
 }
 
 interface RunLogEntry {
@@ -91,7 +107,24 @@ const CAMPAIGN_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }>
   { value: '90_days', label: '90 ngày' }
 ]
 
+const DETAIL_TIME_PRESETS: Array<{ value: DetailTimePreset; label: string }> = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'yesterday', label: 'Hôm qua' },
+  { value: '7_days', label: '7 ngày' },
+  { value: '30_days', label: '30 ngày' },
+  { value: 'custom', label: 'Tùy chọn' }
+]
+
 const DEFAULT_CAMPAIGN_TIME_PRESET: CampaignTimePreset = '7_days'
+const DEFAULT_DETAIL_TIME_PRESET: DetailTimePreset = 'all'
+const DETAIL_POPOVER_GAP = 8
+const DETAIL_POPOVER_MARGIN = 8
+const DETAIL_POPOVER_MIN_WIDTH = 180
+const DETAIL_OPTION_HEIGHT = 30
+const DETAIL_OPTION_GAP = 4
+const DETAIL_POPOVER_PADDING_Y = 16
+const DETAIL_CUSTOM_DATE_GRID_HEIGHT = 92
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FIND_DATA_ACTION_IDS = new Set([FIND_DATA_GROUP_ACTION_ID, FIND_DATA_SEARCH_ACTION_ID])
@@ -106,6 +139,17 @@ const CAMPAIGN_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUSES
   value: status,
   label: status
 }))
+
+const INPUT_DATA_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUSES.map(status => ({
+  value: status,
+  label: status
+}))
+
+const CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = [
+  { value: 'thành công', label: 'thành công' },
+  { value: 'thất bại', label: 'thất bại' },
+  { value: 'lỗi', label: 'lỗi' }
+]
 
 const CAMPAIGN_STATUS_SORT_ORDER = new Map<string, number>([
   ['đang chạy', 0],
@@ -301,11 +345,57 @@ const getCampaignDateRange = (preset: CampaignTimePreset, now = new Date()) => {
   }
 }
 
+const getDetailDateRange = (preset: DetailTimePreset, now = new Date()) => {
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const toDate = new Date(day)
+  const fromDate = new Date(day)
+
+  switch (preset) {
+    case 'all':
+      return { fromDate: '', toDate: '' }
+    case 'today':
+      return { fromDate: formatDateInput(day), toDate: formatDateInput(day) }
+    case 'yesterday':
+      fromDate.setDate(day.getDate() - 1)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(fromDate) }
+    case '7_days':
+    case 'custom':
+      fromDate.setDate(day.getDate() - 6)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case '30_days':
+      fromDate.setDate(day.getDate() - 29)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+  }
+}
+
+const createDefaultDetailFilters = (): DetailFilterState => {
+  const range = getDetailDateRange(DEFAULT_DETAIL_TIME_PRESET)
+  return {
+    timePreset: DEFAULT_DETAIL_TIME_PRESET,
+    dateFrom: range.fromDate,
+    dateTo: range.toDate,
+    status: ''
+  }
+}
+
 const parseDateInputBoundary = (value: string, boundary: 'start' | 'end') => {
   if (!value) return null
   const date = new Date(`${value}T${boundary === 'start' ? '00:00:00.000' : '23:59:59.999'}`)
   return Number.isNaN(date.getTime()) ? null : date
 }
+
+const isWithinDateFilter = (value: string | undefined | null, dateStart: Date | null, dateEnd: Date | null) => {
+  if (!value) return false
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return false
+  if (dateStart && date < dateStart) return false
+  if (dateEnd && date > dateEnd) return false
+  return true
+}
+
+const getCampaignInputDataFilterTime = (item: CampaignInputData, campaign: Campaign | null | undefined) => (
+  item.dateAction || item.schedule || campaign?.schedule || ''
+)
 
 const toggleStringValue = (values: string[], value: string) => (
   values.includes(value)
@@ -319,6 +409,64 @@ const getMultiSelectLabel = (options: CampaignFilterOption[], values: string[]) 
     return options.find(option => option.value === values[0])?.label || values[0]
   }
   return `${values.length} đã chọn`
+}
+
+const formatDetailRangeDate = (value: string) => {
+  if (!value) return ''
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('vi-VN')
+}
+
+const getDetailRangeLabel = (filters: DetailFilterState) => {
+  if (filters.timePreset === 'custom') {
+    const startDate = formatDetailRangeDate(filters.dateFrom)
+    const endDate = formatDetailRangeDate(filters.dateTo)
+    if (startDate && endDate) return `${startDate} - ${endDate}`
+    return 'Tùy chọn'
+  }
+
+  return DETAIL_TIME_PRESETS.find(option => option.value === filters.timePreset)?.label || 'Tất cả'
+}
+
+const getDetailStatusFilterLabel = (options: CampaignFilterOption[], status: string) => {
+  if (!status) return 'Tất cả'
+  return options.find(option => option.value === status)?.label || status
+}
+
+const getDetailOptionPopoverHeight = (optionCount: number, includesDateGrid = false) => (
+  DETAIL_POPOVER_PADDING_Y
+  + (optionCount * DETAIL_OPTION_HEIGHT)
+  + (Math.max(0, optionCount - 1) * DETAIL_OPTION_GAP)
+  + (includesDateGrid ? DETAIL_CUSTOM_DATE_GRID_HEIGHT : 0)
+)
+
+const DETAIL_TIME_POPOVER_HEIGHT = getDetailOptionPopoverHeight(DETAIL_TIME_PRESETS.length, true)
+
+const getDetailPopoverPosition = (
+  anchor: HTMLElement,
+  minWidth = DETAIL_POPOVER_MIN_WIDTH,
+  expectedHeight = getDetailOptionPopoverHeight(4)
+): DetailPopoverPosition => {
+  const rect = anchor.getBoundingClientRect()
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+  const maxWidth = Math.max(160, viewportWidth - DETAIL_POPOVER_MARGIN * 2)
+  const width = Math.min(Math.max(rect.width, minWidth), maxWidth)
+  const left = Math.min(
+    Math.max(DETAIL_POPOVER_MARGIN, rect.left),
+    Math.max(DETAIL_POPOVER_MARGIN, viewportWidth - width - DETAIL_POPOVER_MARGIN)
+  )
+  const spaceBelow = viewportHeight - rect.bottom - DETAIL_POPOVER_GAP - DETAIL_POPOVER_MARGIN
+  const spaceAbove = rect.top - DETAIL_POPOVER_GAP - DETAIL_POPOVER_MARGIN
+  if (spaceBelow < expectedHeight && spaceAbove > spaceBelow) {
+    return {
+      bottom: viewportHeight - rect.top + DETAIL_POPOVER_GAP,
+      left,
+      width
+    }
+  }
+
+  return { top: rect.bottom + DETAIL_POPOVER_GAP, left, width }
 }
 
 const normalizeCampaignPlatform = (value: string | undefined | null) => {
@@ -472,7 +620,11 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [statusFilters, setStatusFilters] = useState<string[]>([])
   const [platformFilters, setPlatformFilters] = useState<string[]>([])
   const [actionFilters, setActionFilters] = useState<string[]>([])
+  const [inputDataFilters, setInputDataFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
+  const [actionDetailFilters, setActionDetailFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
+  const [openDetailDropdown, setOpenDetailDropdown] = useState<DetailFilterDropdown | null>(null)
+  const [detailPopoverPosition, setDetailPopoverPosition] = useState<DetailPopoverPosition | null>(null)
   const [showInitialCampaignLoading, setShowInitialCampaignLoading] = useState(true)
   const [showManualCampaignLoading, setShowManualCampaignLoading] = useState(false)
   const workAreaRef = useRef<HTMLDivElement>(null)
@@ -505,6 +657,18 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }, [selectedCampaignId, detailTab, loadCampaignInputData, loadCampaignDetails])
 
   useEffect(() => {
+    setInputDataFilters(createDefaultDetailFilters())
+    setActionDetailFilters(createDefaultDetailFilters())
+    setOpenDetailDropdown(null)
+    setDetailPopoverPosition(null)
+  }, [selectedCampaignId])
+
+  useEffect(() => {
+    setOpenDetailDropdown(null)
+    setDetailPopoverPosition(null)
+  }, [detailTab])
+
+  useEffect(() => {
     if (!openFilterDropdown) return
 
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -516,6 +680,44 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     document.addEventListener('mousedown', handleDocumentMouseDown)
     return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
   }, [openFilterDropdown])
+
+  useEffect(() => {
+    if (!openDetailDropdown) return
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Element) || !target.closest('.detail-filter-dropdown-field')) {
+        setOpenDetailDropdown(null)
+        setDetailPopoverPosition(null)
+      }
+    }
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenDetailDropdown(null)
+        setDetailPopoverPosition(null)
+      }
+    }
+    const handleViewportChange = () => {
+      setOpenDetailDropdown(null)
+      setDetailPopoverPosition(null)
+    }
+    const handleDocumentScroll = (event: Event) => {
+      const target = event.target
+      if (target instanceof Element && target.closest('.detail-filter-popover')) return
+      handleViewportChange()
+    }
+
+    document.addEventListener('mousedown', handleDocumentMouseDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
+    document.addEventListener('scroll', handleDocumentScroll, true)
+    window.addEventListener('resize', handleViewportChange)
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown)
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+      document.removeEventListener('scroll', handleDocumentScroll, true)
+      window.removeEventListener('resize', handleViewportChange)
+    }
+  }, [openDetailDropdown])
 
   // Clear bulk selection when any list filter changes.
   useEffect(() => {
@@ -613,6 +815,48 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     setTimePreset(value)
     setDateFrom(range.fromDate)
     setDateTo(range.toDate)
+  }
+
+  const handleInputDataTimePresetChange = (value: DetailTimePreset) => {
+    const range = getDetailDateRange(value)
+    setInputDataFilters(prev => ({
+      ...prev,
+      timePreset: value,
+      dateFrom: range.fromDate,
+      dateTo: range.toDate
+    }))
+  }
+
+  const handleActionDetailTimePresetChange = (value: DetailTimePreset) => {
+    const range = getDetailDateRange(value)
+    setActionDetailFilters(prev => ({
+      ...prev,
+      timePreset: value,
+      dateFrom: range.fromDate,
+      dateTo: range.toDate
+    }))
+  }
+
+  const handleDetailDropdownToggle = (
+    dropdown: DetailFilterDropdown,
+    anchor: HTMLElement,
+    minWidth = DETAIL_POPOVER_MIN_WIDTH,
+    expectedHeight = getDetailOptionPopoverHeight(4)
+  ) => {
+    setOpenDetailDropdown(current => {
+      if (current === dropdown) {
+        setDetailPopoverPosition(null)
+        return null
+      }
+
+      setDetailPopoverPosition(getDetailPopoverPosition(anchor, minWidth, expectedHeight))
+      return dropdown
+    })
+  }
+
+  const closeDetailDropdown = () => {
+    setOpenDetailDropdown(null)
+    setDetailPopoverPosition(null)
   }
 
   const handleBulkPause = async () => {
@@ -714,6 +958,44 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     ? campaignActions.find(action => action.id === selectedCampaign.actionId)
     : undefined
   const isSelectedFindDataCampaign = !!selectedCampaign && FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)
+  const filteredCampaignInputData = useMemo(() => {
+    const dateStart = parseDateInputBoundary(inputDataFilters.dateFrom, 'start')
+    const dateEnd = parseDateInputBoundary(inputDataFilters.dateTo, 'end')
+    const hasDateFilter = inputDataFilters.timePreset !== 'all' && (!!dateStart || !!dateEnd)
+
+    return campaignInputData.filter(item => {
+      if (inputDataFilters.status && item.status !== inputDataFilters.status) return false
+      if (hasDateFilter) {
+        const filterTime = getCampaignInputDataFilterTime(item, selectedCampaign)
+        if (!isWithinDateFilter(filterTime, dateStart, dateEnd)) return false
+      }
+      return true
+    })
+  }, [
+    campaignInputData,
+    inputDataFilters.dateFrom,
+    inputDataFilters.dateTo,
+    inputDataFilters.status,
+    inputDataFilters.timePreset,
+    selectedCampaign
+  ])
+  const filteredCampaignDetails = useMemo(() => {
+    const dateStart = parseDateInputBoundary(actionDetailFilters.dateFrom, 'start')
+    const dateEnd = parseDateInputBoundary(actionDetailFilters.dateTo, 'end')
+    const hasDateFilter = actionDetailFilters.timePreset !== 'all' && (!!dateStart || !!dateEnd)
+
+    return campaignDetails.filter(detail => {
+      if (actionDetailFilters.status && detail.status !== actionDetailFilters.status) return false
+      if (hasDateFilter && !isWithinDateFilter(detail.createdAt, dateStart, dateEnd)) return false
+      return true
+    })
+  }, [
+    actionDetailFilters.dateFrom,
+    actionDetailFilters.dateTo,
+    actionDetailFilters.status,
+    actionDetailFilters.timePreset,
+    campaignDetails
+  ])
   const linkedFindDataSourceCampaignIds = useMemo(() => {
     if (!selectedCampaign) return []
     return uniqueNumbers(
@@ -849,7 +1131,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
   const getDetailDockMaxHeight = () => {
     const workAreaHeight = workAreaRef.current?.getBoundingClientRect().height || window.innerHeight
-    return Math.max(DETAIL_DOCK_MIN_HEIGHT, workAreaHeight - DETAIL_DOCK_LIST_MIN_HEIGHT)
+    return Math.max(DETAIL_DOCK_MIN_HEIGHT, workAreaHeight)
   }
 
   const handleDetailDockResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1022,9 +1304,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       showAlert('Chưa có lịch sử hành động để xuất.', 'info')
       return
     }
+    if (filteredCampaignDetails.length === 0) {
+      showAlert('Không có lịch sử hành động phù hợp bộ lọc để xuất.', 'info')
+      return
+    }
 
     try {
-      const rows = campaignDetails.map((detail, index) => ({
+      const rows = filteredCampaignDetails.map((detail, index) => ({
         STT: index + 1,
         'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
         'Hành động': detail.actionName || '',
@@ -1117,11 +1403,15 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       showAlert('Chưa có dữ liệu để xuất.', 'info')
       return
     }
+    if (filteredCampaignInputData.length === 0) {
+      showAlert('Không có dữ liệu phù hợp bộ lọc để xuất.', 'info')
+      return
+    }
 
     try {
       const rows = [
         FOUND_DATA_TEMPLATE_HEADERS,
-        ...campaignInputData.map(item => [
+        ...filteredCampaignInputData.map(item => [
           item.name || '',
           item.uid || '',
           item.phone || '',
@@ -1252,6 +1542,144 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     setShowManualCampaignLoading(true)
     loadCampaigns().finally(() => setShowManualCampaignLoading(false))
   }
+
+  const renderDetailFilters = (
+    timeDropdown: DetailFilterDropdown,
+    statusDropdown: DetailFilterDropdown,
+    filters: DetailFilterState,
+    onTimePresetChange: (value: DetailTimePreset) => void,
+    onDateFromChange: (value: string) => void,
+    onDateToChange: (value: string) => void,
+    statusOptions: CampaignFilterOption[],
+    onStatusChange: (value: string) => void
+  ) => (
+    <div className="detail-filter-controls">
+      <div className="report-dropdown-field detail-filter-dropdown-field detail-filter-range-field">
+        <span>Khoảng thời gian</span>
+        <button
+          type="button"
+          className={`report-filter-button detail-filter-button ${openDetailDropdown === timeDropdown ? 'active' : ''}`}
+          onClick={event => handleDetailDropdownToggle(
+            timeDropdown,
+            event.currentTarget,
+            260,
+            DETAIL_TIME_POPOVER_HEIGHT
+          )}
+        >
+          <strong>{getDetailRangeLabel(filters)}</strong>
+          <ChevronDown size={14} />
+        </button>
+        {openDetailDropdown === timeDropdown && detailPopoverPosition && (
+          <div
+            className="report-filter-popover detail-filter-popover"
+            style={{
+              top: detailPopoverPosition.top ?? 'auto',
+              bottom: detailPopoverPosition.bottom ?? 'auto',
+              left: detailPopoverPosition.left,
+              width: detailPopoverPosition.width
+            }}
+          >
+            <div className="report-option-list">
+              {DETAIL_TIME_PRESETS.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`report-option-button ${filters.timePreset === option.value ? 'selected' : ''}`}
+                  onClick={event => {
+                    const anchor = event.currentTarget.closest('.detail-filter-dropdown-field')?.querySelector('.detail-filter-button')
+                    if (anchor instanceof HTMLElement) {
+                      setDetailPopoverPosition(getDetailPopoverPosition(
+                        anchor,
+                        260,
+                        DETAIL_TIME_POPOVER_HEIGHT
+                      ))
+                    }
+                    onTimePresetChange(option.value)
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {filters.timePreset === 'custom' && (
+              <div className="report-date-grid">
+                <label>
+                  <span>Từ ngày</span>
+                  <input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={event => onDateFromChange(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Đến ngày</span>
+                  <input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={event => onDateToChange(event.target.value)}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="report-dropdown-field detail-filter-dropdown-field detail-filter-status-field">
+        <span>Trạng thái</span>
+        <button
+          type="button"
+          className={`report-filter-button detail-filter-button ${openDetailDropdown === statusDropdown ? 'active' : ''}`}
+          onClick={event => handleDetailDropdownToggle(
+            statusDropdown,
+            event.currentTarget,
+            DETAIL_POPOVER_MIN_WIDTH,
+            getDetailOptionPopoverHeight(statusOptions.length + 1)
+          )}
+        >
+          <strong>{getDetailStatusFilterLabel(statusOptions, filters.status)}</strong>
+          <ChevronDown size={14} />
+        </button>
+        {openDetailDropdown === statusDropdown && detailPopoverPosition && (
+          <div
+            className="report-filter-popover detail-filter-popover"
+            style={{
+              top: detailPopoverPosition.top ?? 'auto',
+              bottom: detailPopoverPosition.bottom ?? 'auto',
+              left: detailPopoverPosition.left,
+              width: detailPopoverPosition.width
+            }}
+          >
+            <div className="report-option-list">
+              <button
+                type="button"
+                className={`report-option-button ${!filters.status ? 'selected' : ''}`}
+                onClick={() => {
+                  onStatusChange('')
+                  closeDetailDropdown()
+                }}
+              >
+                Tất cả
+              </button>
+              {statusOptions.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`report-option-button ${filters.status === option.value ? 'selected' : ''}`}
+                  onClick={() => {
+                    onStatusChange(option.value)
+                    closeDetailDropdown()
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
   const renderMultiSelectFilter = (
     key: CampaignFilterDropdown,
@@ -1618,7 +2046,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                   className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
                   onClick={() => setDetailTab('data')}
                 >
-                  Data ban đầu ({campaignInputData.length})
+                  Data ban đầu ({filteredCampaignInputData.length})
                 </button>
                 <button
                   className={`detail-dock-tab ${detailTab === 'actions' ? 'active' : ''}`}
@@ -1627,7 +2055,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
                   }}
                 >
-                  Kết quả chạy ({campaignDetails.length})
+                  Kết quả chạy ({filteredCampaignDetails.length})
                 </button>
                 {isSelectedFindDataCampaign && (
                   <button
@@ -1685,20 +2113,34 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               {/* Tab: Campaign Input Data */}
               {detailTab === 'data' && (
                 <>
-                  <div className="detail-export-bar">
-                    <button
-                      className="btn btn-secondary"
-                      onClick={handleExportCampaignInputData}
-                      disabled={loadingCampaignInputData || campaignInputData.length === 0}
-                      title="Xuất dữ liệu ra Excel"
-                    >
-                      <Download size={14} /> Xuất Excel
-                    </button>
+                  <div className="detail-export-bar detail-filter-bar">
+                    {renderDetailFilters(
+                      'inputDataTime',
+                      'inputDataStatus',
+                      inputDataFilters,
+                      handleInputDataTimePresetChange,
+                      value => setInputDataFilters(prev => ({ ...prev, dateFrom: value })),
+                      value => setInputDataFilters(prev => ({ ...prev, dateTo: value })),
+                      INPUT_DATA_STATUS_FILTER_OPTIONS,
+                      value => setInputDataFilters(prev => ({ ...prev, status: value }))
+                    )}
+                    <div className="detail-filter-actions">
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleExportCampaignInputData}
+                        disabled={loadingCampaignInputData || filteredCampaignInputData.length === 0}
+                        title="Xuất dữ liệu ra Excel"
+                      >
+                        <Download size={14} /> Xuất Excel
+                      </button>
+                    </div>
                   </div>
                   {loadingCampaignInputData ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
                   ) : campaignInputData.length === 0 ? (
                     <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có dữ liệu nào</div>
+                  ) : filteredCampaignInputData.length === 0 ? (
+                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Không có dữ liệu phù hợp bộ lọc</div>
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
@@ -1712,7 +2154,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                         </tr>
                       </thead>
                       <tbody>
-                        {campaignInputData.map(d => (
+                        {filteredCampaignInputData.map(d => (
                           <tr key={d.id}>
                             <td title={d.name || '-'}>{d.name || '-'}</td>
                             <td title={d.uid || '-'} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
@@ -1733,20 +2175,34 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               {/* Tab: Campaign Details (per-milestone log) */}
               {detailTab === 'actions' && (
                 <>
-                  <div className="detail-export-bar">
-                    <button
-                      className="btn btn-secondary"
-                      onClick={handleExportCampaignDetails}
-                      disabled={loadingCampaignDetails || campaignDetails.length === 0}
-                      title="Xuất lịch sử hành động ra Excel"
-                    >
-                      <Download size={14} /> Xuất Excel
-                    </button>
+                  <div className="detail-export-bar detail-filter-bar">
+                    {renderDetailFilters(
+                      'actionsTime',
+                      'actionsStatus',
+                      actionDetailFilters,
+                      handleActionDetailTimePresetChange,
+                      value => setActionDetailFilters(prev => ({ ...prev, dateFrom: value })),
+                      value => setActionDetailFilters(prev => ({ ...prev, dateTo: value })),
+                      CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS,
+                      value => setActionDetailFilters(prev => ({ ...prev, status: value }))
+                    )}
+                    <div className="detail-filter-actions">
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleExportCampaignDetails}
+                        disabled={loadingCampaignDetails || filteredCampaignDetails.length === 0}
+                        title="Xuất lịch sử hành động ra Excel"
+                      >
+                        <Download size={14} /> Xuất Excel
+                      </button>
+                    </div>
                   </div>
                   {loadingCampaignDetails ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
                   ) : campaignDetails.length === 0 ? (
                     <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có hành động nào được ghi nhận</div>
+                  ) : filteredCampaignDetails.length === 0 ? (
+                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Không có kết quả chạy phù hợp bộ lọc</div>
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
@@ -1758,7 +2214,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                         </tr>
                       </thead>
                       <tbody>
-                        {campaignDetails.map(a => {
+                        {filteredCampaignDetails.map(a => {
                           const createdAtLabel = formatDisplayDateTime(a.createdAt)
                           const statusLabel = getDetailStatusLabel(a.status)
                           const detailLogTitle = getCampaignDetailLogTitle(a)
