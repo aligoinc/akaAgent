@@ -6921,6 +6921,253 @@ td.report-account-col span {
   margin-left: auto;
   display: flex;
   align-items: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.input-data-filter-actions {
+  align-items: center;
+}
+
+.input-data-action-spinner {
+  align-self: center;
+  color: var(--text-tertiary);
+}
+
+.input-data-action-menu {
+  position: relative;
+}
+
+.input-data-action-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  z-index: 120;
+}
+
+.input-data-action-menu-list button {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.input-data-action-menu-list button:hover {
+  background: var(--bg-hover);
+}
+
+.input-data-selected-row td {
+  background: var(--bg-hover);
+}
+
+.campaign-grid input[type="checkbox"] {
+  width: auto;
+  min-width: 14px;
+  height: 14px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.add-input-data-modal {
+  width: min(760px, calc(100vw - 40px));
+  max-height: min(760px, calc(100vh - 40px));
+}
+
+.add-input-data-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.add-input-data-selected-count {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.add-input-data-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.add-input-data-grid .stepper-form-group {
+  margin-bottom: 0;
+}
+
+.add-input-data-modal .stepper-form-group > span {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.add-input-data-full-row {
+  grid-column: 1 / -1;
+}
+
+.add-input-data-load-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.add-input-data-target-list {
+  min-height: 150px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.add-input-data-target-table {
+  width: 100%;
+}
+
+.add-input-data-empty {
+  padding: 14px;
+  font-size: 12px;
+}
+
+.add-input-data-target-header,
+.add-input-data-target-row {
+  display: grid;
+  grid-template-columns: 40px minmax(150px, 1fr) minmax(100px, 170px) 100px 130px;
+  align-items: center;
+  gap: 10px;
+}
+
+.add-input-data-target-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 34px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.add-input-data-target-row {
+  min-height: 40px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-default);
+  cursor: pointer;
+  outline: none;
+}
+
+.add-input-data-target-row:hover {
+  background: var(--bg-hover);
+}
+
+.add-input-data-target-row.is-selected {
+  background: rgba(124, 92, 252, 0.12);
+}
+
+.add-input-data-target-row:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--border-active);
+}
+
+.add-input-data-target-row:last-child {
+  border-bottom: none;
+}
+
+.add-input-data-target-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-input-data-target-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.add-input-data-target-name,
+.add-input-data-target-account,
+.add-input-data-target-status-badge,
+.add-input-data-target-schedule {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-input-data-target-name {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.add-input-data-target-account,
+.add-input-data-target-schedule {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.add-input-data-target-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.add-input-data-target-schedule {
+  justify-self: start;
+}
+
+@media (max-width: 720px) {
+  .add-input-data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .add-input-data-target-table {
+    min-width: 0;
+  }
+
+  .add-input-data-target-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .add-input-data-target-header {
+    display: none;
+  }
+
+  .add-input-data-target-account {
+    grid-column: 2;
+  }
+
+  .add-input-data-target-status-badge,
+  .add-input-data-target-schedule {
+    display: none;
+  }
 }
 
 /* Detail Dock Tabs */

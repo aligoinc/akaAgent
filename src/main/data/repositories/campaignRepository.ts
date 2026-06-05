@@ -4,9 +4,15 @@ import {
   Campaign,
   CampaignInput,
   CampaignInputData,
+  CampaignInputStatus,
   CampaignDetail,
   CampaignDetailStatus,
-  CampaignRelationSummary
+  CampaignRelationSummary,
+  AddCampaignInputDataToCampaignRequest,
+  AddCampaignInputDataToCampaignResult,
+  BulkUpdateCampaignInputDataStatusResult,
+  getCampaignInputDataRequirement,
+  isCampaignInputDataValidForAction
 } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
@@ -18,8 +24,24 @@ const client = () => getSupabaseClient()
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE = 500
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
+type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
+
+const uniquePositiveIds = (ids: number[]): number[] => Array.from(new Set(
+  ids
+    .map(id => Number(id))
+    .filter(id => Number.isFinite(id) && id > 0)
+))
+
+const chunkArray = <T>(items: T[], size: number): T[][] => {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
 
 interface CampaignRelationDetailRow {
   campaign_id: number
@@ -913,6 +935,206 @@ export async function updateCampaignInputData(id: number, updates: Partial<Campa
 
   if (error) throw new Error(`Failed to update campaign input data: ${error.message}`)
   return mapCampaignInputDataFromDB(data)
+}
+
+export async function bulkUpdateCampaignInputDataStatus(
+  campaignId: number,
+  ids: number[],
+  status: InputDataBatchStatus
+): Promise<BulkUpdateCampaignInputDataStatusResult> {
+  const u = requireCurrentUser()
+  const inputDataIds = uniquePositiveIds(ids)
+  if (inputDataIds.length === 0) return { updatedCount: 0, skippedCount: 0 }
+  if (status !== 'chờ xử lý' && status !== 'tạm dừng') {
+    throw new Error('Trạng thái data không hợp lệ.')
+  }
+
+  const { count, error: campaignError } = await client()
+    .from('auto_campaigns')
+    .select('id', { count: 'exact', head: true })
+    .eq('id', campaignId)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+
+  if (campaignError) throw new Error(`Failed to verify campaign ownership: ${campaignError.message}`)
+  if ((count ?? 0) === 0) throw new Error('Không tìm thấy chiến dịch.')
+
+  const fromStatus: InputDataBatchStatus = status === 'tạm dừng' ? 'chờ xử lý' : 'tạm dừng'
+  const { data, error } = await client()
+    .from('auto_campaign_input_data')
+    .update({ status })
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+    .eq('status', fromStatus)
+    .in('id', inputDataIds)
+    .select('id')
+
+  if (error) throw new Error(`Failed to bulk update campaign input data status: ${error.message}`)
+
+  const updatedCount = data?.length ?? 0
+  return {
+    updatedCount,
+    skippedCount: Math.max(0, inputDataIds.length - updatedCount)
+  }
+}
+
+export async function addCampaignInputDataToCampaign(
+  request: AddCampaignInputDataToCampaignRequest
+): Promise<AddCampaignInputDataToCampaignResult> {
+  const u = requireCurrentUser()
+  const sourceCampaignId = Number(request.sourceCampaignId)
+  const targetCampaignIds = uniquePositiveIds(request.targetCampaignIds)
+  const sourceInputDataIds = uniquePositiveIds(request.sourceInputDataIds)
+  const campaignStatus = request.campaignStatus
+  const scheduleDate = new Date(request.campaignSchedule)
+
+  if (!Number.isFinite(sourceCampaignId) || sourceCampaignId <= 0) throw new Error('Chiến dịch nguồn không hợp lệ.')
+  if (targetCampaignIds.length === 0) throw new Error('Vui lòng chọn ít nhất một chiến dịch đích.')
+  if (sourceInputDataIds.length === 0) throw new Error('Vui lòng chọn ít nhất một data.')
+  if (campaignStatus !== 'chờ xử lý' && campaignStatus !== 'tạm dừng') throw new Error('Trạng thái chiến dịch không hợp lệ.')
+  if (Number.isNaN(scheduleDate.getTime())) throw new Error('Schedule không hợp lệ.')
+
+  const { data: sourceCampaign, error: sourceCampaignError } = await client()
+    .from('auto_campaigns')
+    .select('id')
+    .eq('id', sourceCampaignId)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (sourceCampaignError) throw new Error(`Failed to verify source campaign: ${sourceCampaignError.message}`)
+  if (!sourceCampaign) throw new Error('Không tìm thấy chiến dịch nguồn.')
+
+  const { data: sourceRows, error: sourceRowsError } = await client()
+    .from('auto_campaign_input_data')
+    .select('*')
+    .eq('campaign_id', sourceCampaignId)
+    .eq('is_delete', false)
+    .in('id', sourceInputDataIds)
+    .order('created_at', { ascending: true })
+
+  if (sourceRowsError) throw new Error(`Failed to load selected campaign input data: ${sourceRowsError.message}`)
+
+  const selectedRows = (sourceRows || []).map(row => mapCampaignInputDataFromDB(row))
+  if (selectedRows.length === 0) throw new Error('Không tìm thấy data đã chọn.')
+
+  const { data: targetRows, error: targetError } = await client()
+    .from('auto_campaigns')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .in('id', targetCampaignIds)
+
+  if (targetError) throw new Error(`Failed to load target campaigns: ${targetError.message}`)
+
+  const targetById = new Map((targetRows || []).map(row => {
+    const campaign = mapCampaignFromDB(row)
+    return [campaign.id, campaign] as const
+  }))
+  const results: AddCampaignInputDataToCampaignResult['targets'] = []
+  const campaignSchedule = scheduleDate.toISOString()
+
+  for (const targetId of targetCampaignIds) {
+    const target = targetById.get(targetId)
+    if (!target) {
+      results.push({
+        campaignId: targetId,
+        campaignName: `ID ${targetId}`,
+        actionId: '',
+        insertedCount: 0,
+        skippedInvalidCount: selectedRows.length,
+        skippedRunning: false,
+        error: 'Không tìm thấy chiến dịch đích.'
+      })
+      continue
+    }
+
+    if (target.status === 'đang chạy') {
+      results.push({
+        campaignId: target.id,
+        campaignName: target.name,
+        actionId: target.actionId,
+        insertedCount: 0,
+        skippedInvalidCount: 0,
+        skippedRunning: true,
+        error: 'Chiến dịch đang chạy, không thể thêm data.'
+      })
+      continue
+    }
+
+    const requirement = getCampaignInputDataRequirement(target.actionId)
+    if (!requirement) {
+      results.push({
+        campaignId: target.id,
+        campaignName: target.name,
+        actionId: target.actionId,
+        insertedCount: 0,
+        skippedInvalidCount: selectedRows.length,
+        skippedRunning: false,
+        error: 'Loại chiến dịch này không hỗ trợ thêm data.'
+      })
+      continue
+    }
+
+    const validRows = selectedRows.filter(row => isCampaignInputDataValidForAction(row, target.actionId))
+    const skippedInvalidCount = selectedRows.length - validRows.length
+    if (validRows.length === 0) {
+      results.push({
+        campaignId: target.id,
+        campaignName: target.name,
+        actionId: target.actionId,
+        insertedCount: 0,
+        skippedInvalidCount,
+        skippedRunning: false,
+        error: `Không có data hợp lệ cho ${requirement.label}.`
+      })
+      continue
+    }
+
+    const payload = validRows.map(row => ({
+      campaign_id: target.id,
+      input_id: null,
+      name: row.name || null,
+      phone: row.phone || null,
+      uid: row.uid || null,
+      email: row.email || null,
+      status: 'chờ xử lý',
+      note: '',
+      schedule: null
+    }))
+
+    let insertedCount = 0
+    for (const chunk of chunkArray(payload, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
+      const { data: insertedRows, error: insertError } = await client()
+        .from('auto_campaign_input_data')
+        .insert(chunk)
+        .select('id')
+
+      if (insertError) throw new Error(`Failed to add input data to campaign "${target.name}": ${insertError.message}`)
+      insertedCount += insertedRows?.length ?? chunk.length
+    }
+
+    await updateCampaign(target.id, {
+      schedule: campaignSchedule,
+      originalSchedule: campaignSchedule,
+      status: campaignStatus
+    })
+
+    results.push({
+      campaignId: target.id,
+      campaignName: target.name,
+      actionId: target.actionId,
+      insertedCount,
+      skippedInvalidCount,
+      skippedRunning: false
+    })
+  }
+
+  return {
+    totalInsertedCount: results.reduce((sum, item) => sum + item.insertedCount, 0),
+    totalSkippedInvalidCount: results.reduce((sum, item) => sum + item.skippedInvalidCount, 0),
+    targets: results
+  }
 }
 
 export async function resetCampaignInputDataForRerun(campaignId: number): Promise<void> {
