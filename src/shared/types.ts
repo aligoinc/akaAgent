@@ -350,6 +350,68 @@ export interface CampaignInputData {
   createdAt?: string
 }
 
+export type CampaignInputDataRequirementField = 'name' | 'phone' | 'uid' | 'email'
+
+export interface CampaignInputDataRequirement {
+  field: CampaignInputDataRequirementField
+  label: string
+}
+
+const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirement> = {
+  facebook_group_post: { field: 'uid', label: 'group URL' },
+  facebook_page_post: { field: 'uid', label: 'Page ID' },
+  facebook_message_friend: { field: 'uid', label: 'UID/link bạn bè' },
+  facebook_message_uid: { field: 'uid', label: 'UID/link profile' },
+  facebook_page_to_message: { field: 'uid', label: 'PSID khách inbox Page' },
+  facebook_find_data_group: { field: 'uid', label: 'group URL' },
+  facebook_find_data_search: { field: 'uid', label: 'từ khóa' },
+  facebook_comment_seeding: { field: 'uid', label: 'group/page/profile' },
+  facebook_comment_seeding_post: { field: 'uid', label: 'link bài post' }
+}
+
+export const getCampaignInputDataRequirement = (actionId?: string | null): CampaignInputDataRequirement | null => {
+  if (!actionId) return null
+  return CAMPAIGN_INPUT_DATA_REQUIREMENTS[actionId] || null
+}
+
+export const isCampaignInputDataValidForAction = (
+  row: Partial<CampaignInputData>,
+  actionId?: string | null
+): boolean => {
+  const requirement = getCampaignInputDataRequirement(actionId)
+  if (!requirement) return false
+  return String(row[requirement.field] || '').trim().length > 0
+}
+
+export interface BulkUpdateCampaignInputDataStatusResult {
+  updatedCount: number
+  skippedCount: number
+}
+
+export interface AddCampaignInputDataToCampaignRequest {
+  sourceCampaignId: number
+  targetCampaignIds: number[]
+  sourceInputDataIds: number[]
+  campaignSchedule: string
+  campaignStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>
+}
+
+export interface AddCampaignInputDataToCampaignTargetResult {
+  campaignId: number
+  campaignName: string
+  actionId: string
+  insertedCount: number
+  skippedInvalidCount: number
+  skippedRunning: boolean
+  error?: string
+}
+
+export interface AddCampaignInputDataToCampaignResult {
+  totalInsertedCount: number
+  totalSkippedInvalidCount: number
+  targets: AddCampaignInputDataToCampaignTargetResult[]
+}
+
 // Status enum cho campaign_details (per-milestone log):
 //   - 'thành công': action OK (đã post, đã comment, đã kết bạn)
 //   - 'thất bại': nghiệp vụ FB từ chối (FB block message, post pending, kết bạn không gửi được)
@@ -803,6 +865,8 @@ export const IPC_EVENTS = {
   DB_LIST_CAMPAIGN_INPUT_DATA: 'db:list-campaign-input-data',
   DB_CREATE_CAMPAIGN_INPUT_DATA: 'db:create-campaign-input-data',
   DB_UPDATE_CAMPAIGN_INPUT_DATA: 'db:update-campaign-input-data',
+  DB_BULK_UPDATE_CAMPAIGN_INPUT_DATA_STATUS: 'db:bulk-update-campaign-input-data-status',
+  DB_ADD_CAMPAIGN_INPUT_DATA_TO_CAMPAIGNS: 'db:add-campaign-input-data-to-campaigns',
   DB_DELETE_CAMPAIGN_INPUT_DATA: 'db:delete-campaign-input-data',
   DB_LIST_CAMPAIGN_RELATION_SUMMARIES: 'db:list-campaign-relation-summaries',
 

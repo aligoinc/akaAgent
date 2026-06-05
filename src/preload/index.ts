@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -181,6 +181,18 @@ const electronAPI = {
 
   updateCampaignInputData: (id: number, updates: Partial<CampaignInputData>): Promise<CampaignInputData> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_CAMPAIGN_INPUT_DATA, id, updates),
+
+  bulkUpdateCampaignInputDataStatus: (
+    campaignId: number,
+    ids: number[],
+    status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
+  ): Promise<BulkUpdateCampaignInputDataStatusResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_BULK_UPDATE_CAMPAIGN_INPUT_DATA_STATUS, campaignId, ids, status),
+
+  addCampaignInputDataToCampaign: (
+    request: AddCampaignInputDataToCampaignRequest
+  ): Promise<AddCampaignInputDataToCampaignResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_ADD_CAMPAIGN_INPUT_DATA_TO_CAMPAIGNS, request),
 
   deleteCampaignInputData: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CAMPAIGN_INPUT_DATA, id),

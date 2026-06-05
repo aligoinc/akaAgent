@@ -87,6 +87,7 @@ interface CampaignFormModalProps {
   draftMode?: boolean
   draftTempId?: number
   lockedActionId?: string
+  initialDetails?: Partial<CampaignInputData>[]
   draftPickerSourceType?: InternalCampaignPickerSourceType
   draftRequiredTargetField?: FindDataTargetCampaignField | null
   onSaveDraft?: (draft: InternalCampaignDraft) => void
@@ -692,6 +693,7 @@ export default function CampaignFormModal({
   draftMode = false,
   draftTempId,
   lockedActionId,
+  initialDetails,
   draftPickerSourceType,
   draftRequiredTargetField,
   onSaveDraft,
@@ -1315,7 +1317,15 @@ export default function CampaignFormModal({
       .filter((name): name is string => !!name)
   ))
 
-  const [details, setDetails] = useState<Partial<CampaignInputData>[]>([])
+  const normalizeInitialDetails = (rows: Partial<CampaignInputData>[] = []): Partial<CampaignInputData>[] => rows.map(row => ({
+    name: row.name || '',
+    phone: row.phone || '',
+    uid: row.uid || '',
+    email: row.email || '',
+    note: '',
+    status: 'chờ xử lý'
+  }))
+  const [details, setDetails] = useState<Partial<CampaignInputData>[]>(() => normalizeInitialDetails(initialDetails))
   const [deletedIds, setDeletedIds] = useState<number[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [akabizIntegrations, setAkaBizIntegrations] = useState<AkaBizIntegrations | null>(null)
@@ -1599,6 +1609,11 @@ export default function CampaignFormModal({
   useEffect(() => {
     async function fetchDetails() {
       const loadId = cloneFromId || (campaign && campaign.id ? campaign.id : null)
+      if (!loadId) {
+        setDetails(normalizeInitialDetails(initialDetails))
+        setDeletedIds([])
+        return
+      }
       if (loadId && window.electronAPI) {
         setLoadingDetails(true)
         try {
@@ -1618,7 +1633,7 @@ export default function CampaignFormModal({
       }
     }
     fetchDetails()
-  }, [campaign, cloneFromId])
+  }, [campaign, cloneFromId, initialDetails])
 
   // Check field completion
   const toggleWeekDay = (day: string) => {

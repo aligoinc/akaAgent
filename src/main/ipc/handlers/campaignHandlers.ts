@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { CAMPAIGN_STATUSES, IPC_EVENTS, type Campaign, type CampaignStatus } from '../../../shared/types'
+import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignInputStatus, type CampaignStatus } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
 interface CampaignPauseController {
@@ -134,6 +134,22 @@ export function registerCampaignHandlers(supabase: SupabaseService, campaignPaus
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN_INPUT_DATA, async (_, id: number, updates) => {
     return supabase.updateCampaignInputData(id, updates)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_BULK_UPDATE_CAMPAIGN_INPUT_DATA_STATUS, async (
+    _,
+    campaignId: number,
+    ids: number[],
+    status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
+  ) => {
+    return supabase.bulkUpdateCampaignInputDataStatus(campaignId, ids, status)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_ADD_CAMPAIGN_INPUT_DATA_TO_CAMPAIGNS, async (
+    _,
+    request: AddCampaignInputDataToCampaignRequest
+  ) => {
+    return supabase.addCampaignInputDataToCampaign(request)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_CAMPAIGN_INPUT_DATA, async (_, id: number) => {

@@ -3,7 +3,17 @@ import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
-import { CAMPAIGN_STATUSES, type Campaign, type CampaignDetail, type CampaignInputData, type CampaignRelationSummary } from '../../../../shared/types'
+import {
+  CAMPAIGN_STATUSES,
+  getCampaignInputDataRequirement,
+  type AddCampaignInputDataToCampaignRequest,
+  type Campaign,
+  type CampaignAction,
+  type CampaignDetail,
+  type CampaignInputData,
+  type CampaignInputStatus,
+  type CampaignRelationSummary
+} from '../../../../shared/types'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -20,10 +30,11 @@ interface CampaignPanelProps {
 
 type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
-type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
+type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'status' | 'platform' | 'action'
 type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'actionsTime' | 'actionsStatus'
 type DetailTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'custom'
+type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
 
 interface CampaignFilterOption {
   value: string
@@ -86,6 +97,7 @@ interface FoundDataItem {
 }
 
 const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
+const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email']
 
 const FOUND_DATA_EXPORT_OPTIONS: { kind: FoundDataKind; label: string }[] = [
   { kind: 'phone', label: 'SĐT' },
@@ -105,6 +117,11 @@ const CAMPAIGN_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }>
   { value: 'last_month', label: 'Tháng trước' },
   { value: '60_days', label: '60 ngày' },
   { value: '90_days', label: '90 ngày' }
+]
+
+const ADD_INPUT_DATA_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }> = [
+  ...CAMPAIGN_TIME_PRESETS,
+  { value: 'custom', label: 'Tùy chọn' }
 ]
 
 const DETAIL_TIME_PRESETS: Array<{ value: DetailTimePreset; label: string }> = [
@@ -303,6 +320,34 @@ const getUniqueFoundDataItems = (items: FoundDataItem[]) => {
 
 const formatDisplayDateTime = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
 
+const formatCompactDateTime = (value?: string | null): string => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  const pad = (numberValue: number) => String(numberValue).padStart(2, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())} ${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`
+}
+
+const formatDateTimeLocal = (date: Date): string => {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const toIsoDateTimeValue = (value?: string | null): string | null => {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+const cloneInputDataForNewCampaign = (row: CampaignInputData): Partial<CampaignInputData> => ({
+  name: row.name || '',
+  phone: row.phone || '',
+  uid: row.uid || '',
+  email: row.email || '',
+  status: 'chờ xử lý',
+  note: ''
+})
+
 const formatDateInput = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -341,6 +386,9 @@ const getCampaignDateRange = (preset: CampaignTimePreset, now = new Date()) => {
       return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
     case '90_days':
       fromDate.setDate(day.getDate() - 90)
+      return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
+    case 'custom':
+      fromDate.setDate(day.getDate() - 7)
       return { fromDate: formatDateInput(fromDate), toDate: formatDateInput(toDate) }
   }
 }
@@ -585,6 +633,266 @@ const parseCampaignRunLog = (log: string): RunLogEntry[] => {
   return entries
 }
 
+interface AddInputDataModalSubmit {
+  targetCampaignIds: number[]
+  campaignSchedule: string
+  campaignStatus: InputDataBatchStatus
+}
+
+interface AddInputDataToCampaignModalProps {
+  campaigns: Campaign[]
+  campaignActions: CampaignAction[]
+  selectedCount: number
+  onLoadCampaigns: () => Promise<void>
+  onSubmit: (data: AddInputDataModalSubmit) => Promise<void>
+  onClose: () => void
+}
+
+function AddInputDataToCampaignModal({
+  campaigns,
+  campaignActions,
+  selectedCount,
+  onLoadCampaigns,
+  onSubmit,
+  onClose
+}: AddInputDataToCampaignModalProps) {
+  const defaultRange = useMemo(() => getCampaignDateRange(DEFAULT_CAMPAIGN_TIME_PRESET), [])
+  const [timePreset, setTimePreset] = useState<CampaignTimePreset>(DEFAULT_CAMPAIGN_TIME_PRESET)
+  const [dateFrom, setDateFrom] = useState(defaultRange.fromDate)
+  const [dateTo, setDateTo] = useState(defaultRange.toDate)
+  const [actionId, setActionId] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [selectedTargetIds, setSelectedTargetIds] = useState<Set<number>>(new Set())
+  const [campaignSchedule, setCampaignSchedule] = useState(() => formatDateTimeLocal(new Date()))
+  const [campaignStatus, setCampaignStatus] = useState<InputDataBatchStatus>('chờ xử lý')
+  const [submitting, setSubmitting] = useState(false)
+
+  const actionOptions = useMemo(() => (
+    campaignActions
+      .filter(action => !!getCampaignInputDataRequirement(action.id))
+      .map(action => ({ value: action.id, label: action.name || action.id }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
+  ), [campaignActions])
+
+  const targetCampaigns = useMemo(() => {
+    if (!loaded || !actionId) return []
+    const dateStart = parseDateInputBoundary(dateFrom, 'start')
+    const dateEnd = parseDateInputBoundary(dateTo, 'end')
+    const hasDateFilter = timePreset !== 'all' && (!!dateStart || !!dateEnd)
+
+    return campaigns
+      .filter(campaign => {
+        if (campaign.actionId !== actionId) return false
+        if (campaign.status === 'đang chạy') return false
+        if (!getCampaignInputDataRequirement(campaign.actionId)) return false
+        if (hasDateFilter) {
+          if (!campaign.schedule) return false
+          const scheduleDate = new Date(campaign.schedule)
+          if (Number.isNaN(scheduleDate.getTime())) return false
+          if (dateStart && scheduleDate < dateStart) return false
+          if (dateEnd && scheduleDate > dateEnd) return false
+        }
+        return true
+      })
+      .sort(compareCampaignListOrder)
+  }, [actionId, campaigns, dateFrom, dateTo, loaded, timePreset])
+
+  useEffect(() => {
+    setLoaded(false)
+    setSelectedTargetIds(new Set())
+  }, [actionId, timePreset, dateFrom, dateTo])
+
+  const handleTimePresetChange = (value: CampaignTimePreset) => {
+    if (value === 'custom') {
+      setTimePreset(value)
+      return
+    }
+    const range = getCampaignDateRange(value)
+    setTimePreset(value)
+    setDateFrom(range.fromDate)
+    setDateTo(range.toDate)
+  }
+
+  const toggleTarget = (id: number) => {
+    setSelectedTargetIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleLoad = async () => {
+    if (!actionId) return
+    setLoading(true)
+    try {
+      await onLoadCampaigns()
+      setLoaded(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSubmit = async () => {
+    const scheduleIso = toIsoDateTimeValue(campaignSchedule)
+    if (!scheduleIso || selectedTargetIds.size === 0) return
+
+    setSubmitting(true)
+    try {
+      await onSubmit({
+        targetCampaignIds: Array.from(selectedTargetIds),
+        campaignSchedule: scheduleIso,
+        campaignStatus
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const canSubmit = selectedTargetIds.size > 0 && !!toIsoDateTimeValue(campaignSchedule) && !submitting
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 2200 }} onMouseDown={onClose}>
+      <div className="modal add-input-data-modal" onMouseDown={event => event.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">Thêm data vào chiến dịch</div>
+          <button className="btn-icon" onClick={onClose} title="Đóng">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="modal-body add-input-data-modal-body">
+          <div className="add-input-data-selected-count">
+            Đã chọn <strong>{selectedCount}</strong> data nguồn
+          </div>
+
+          <div className="add-input-data-grid">
+            <label className="stepper-form-group">
+              <span>Khung thời gian</span>
+              <select className="stepper-input" value={timePreset} onChange={event => handleTimePresetChange(event.target.value as CampaignTimePreset)}>
+                {ADD_INPUT_DATA_TIME_PRESETS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="stepper-form-group">
+              <span>Từ ngày</span>
+              <input className="stepper-input" type="date" value={dateFrom} disabled={timePreset === 'all'} onChange={event => setDateFrom(event.target.value)} />
+            </label>
+
+            <label className="stepper-form-group">
+              <span>Đến ngày</span>
+              <input className="stepper-input" type="date" value={dateTo} disabled={timePreset === 'all'} onChange={event => setDateTo(event.target.value)} />
+            </label>
+
+            <label className="stepper-form-group add-input-data-full-row">
+              <span>Loại chiến dịch</span>
+              <select className="stepper-input" value={actionId} onChange={event => setActionId(event.target.value)}>
+                <option value="">Chọn loại chiến dịch</option>
+                {actionOptions.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="add-input-data-load-row">
+            <button className="btn btn-secondary" onClick={handleLoad} disabled={!actionId || loading}>
+              {loading ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />}
+              Load chiến dịch
+            </button>
+          </div>
+
+          <div className="stepper-form-group">
+	            <span>Danh sách chiến dịch</span>
+            <div className="add-input-data-target-list">
+              {!loaded ? (
+                <div className="text-muted add-input-data-empty">Bấm Load chiến dịch để xem danh sách chiến dịch.</div>
+	              ) : targetCampaigns.length === 0 ? (
+	                <div className="text-muted add-input-data-empty">Không có chiến dịch phù hợp.</div>
+	              ) : (
+	                <div className="add-input-data-target-table">
+		                  <div className="add-input-data-target-header">
+		                    <span></span>
+		                    <span>Tên chiến dịch</span>
+		                    <span>Tài khoản</span>
+		                    <span>Trạng thái</span>
+		                    <span>Lịch chạy</span>
+		                  </div>
+	                  {targetCampaigns.map(campaign => {
+	                    const selected = selectedTargetIds.has(campaign.id)
+	                    return (
+	                      <div
+	                        key={campaign.id}
+	                        className={`add-input-data-target-row${selected ? ' is-selected' : ''}`}
+	                        role="checkbox"
+	                        aria-checked={selected}
+	                        tabIndex={0}
+	                        onClick={() => toggleTarget(campaign.id)}
+	                        onKeyDown={event => {
+	                          if (event.key === 'Enter' || event.key === ' ') {
+	                            event.preventDefault()
+	                            toggleTarget(campaign.id)
+	                          }
+	                        }}
+	                      >
+	                        <span className="add-input-data-target-check">
+	                          <input
+	                            type="checkbox"
+	                            checked={selected}
+	                            onClick={event => event.stopPropagation()}
+	                            onKeyDown={event => event.stopPropagation()}
+	                            onChange={() => toggleTarget(campaign.id)}
+	                          />
+		                        </span>
+		                        <span className="add-input-data-target-main">
+		                          <span className="add-input-data-target-name" title={campaign.name}>{campaign.name}</span>
+		                        </span>
+		                        <span className="add-input-data-target-account" title={campaign.accountName || '-'}>
+		                          {campaign.accountName || 'Không rõ tài khoản'}
+		                        </span>
+		                        <span className="add-input-data-target-status-badge">{campaign.status}</span>
+	                        <span className="add-input-data-target-schedule" title={formatCompactDateTime(campaign.schedule)}>
+	                          {formatCompactDateTime(campaign.schedule)}
+	                        </span>
+	                      </div>
+	                    )
+	                  })}
+	                </div>
+	              )}
+            </div>
+          </div>
+
+          <div className="add-input-data-grid">
+            <label className="stepper-form-group">
+              <span>Lịch chạy</span>
+              <input className="stepper-input" type="datetime-local" value={campaignSchedule} onChange={event => setCampaignSchedule(event.target.value)} />
+            </label>
+
+            <label className="stepper-form-group">
+              <span>Trạng thái chiến dịch</span>
+              <select className="stepper-input" value={campaignStatus} onChange={event => setCampaignStatus(event.target.value as InputDataBatchStatus)}>
+                <option value="chờ xử lý">chờ xử lý</option>
+                <option value="tạm dừng">tạm dừng</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Huỷ</button>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={!canSubmit}>
+            {submitting ? <RefreshCw size={14} className="spin" /> : <Plus size={14} />}
+            Thêm
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGeneralSettings, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
@@ -592,8 +900,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     campaignDetails, loadingCampaignDetails,
     campaignRelationSummaries, loadingCampaignRelationSummaries,
     loadCampaigns, loadCampaignActions, loadAccounts,
-    createCampaign, updateCampaign, deleteCampaign, cloneCampaign,
+    updateCampaign, deleteCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
+    bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign,
     loadCampaignInputData, loadCampaignDetails, loadCampaignRelationSummaries
   } = useCampaignStore()
   const canManageCampaignActions = useAuthStore(s => !!s.user?.isAdminAkabiz)
@@ -601,13 +910,19 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
   const [showForm, setShowForm] = useState(false)
   const [showActionManager, setShowActionManager] = useState(false)
+  const [showAddInputDataModal, setShowAddInputDataModal] = useState(false)
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
+  const [campaignFormInitialActionId, setCampaignFormInitialActionId] = useState<string | undefined>(undefined)
+  const [campaignFormInitialDetails, setCampaignFormInitialDetails] = useState<Partial<CampaignInputData>[] | undefined>(undefined)
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
   const [detailTab, setDetailTab] = useState<DetailTab>('info')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [selectedInputDataIds, setSelectedInputDataIds] = useState<Set<number>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [inputDataActionLoading, setInputDataActionLoading] = useState(false)
+  const [openInputDataActionMenu, setOpenInputDataActionMenu] = useState(false)
   const [detailDockHeight, setDetailDockHeight] = useState<number | null>(null)
   const [foundDataExportKinds, setFoundDataExportKinds] = useState<Set<FoundDataKind>>(
     () => new Set(FOUND_DATA_EXPORT_OPTIONS.map(option => option.kind))
@@ -630,6 +945,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const workAreaRef = useRef<HTMLDivElement>(null)
   const detailDockRef = useRef<HTMLDivElement>(null)
   const filterPanelRef = useRef<HTMLDivElement>(null)
+  const inputDataActionMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -719,17 +1035,46 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
   }, [openDetailDropdown])
 
+  useEffect(() => {
+    if (!openInputDataActionMenu) return
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (!inputDataActionMenuRef.current?.contains(event.target as Node)) {
+        setOpenInputDataActionMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentMouseDown)
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
+  }, [openInputDataActionMenu])
+
   // Clear bulk selection when any list filter changes.
   useEffect(() => {
     setSelectedIds(new Set())
   }, [filterAccountId, timePreset, dateFrom, dateTo, campaignNameSearch, statusFilters, platformFilters, actionFilters])
+
+  useEffect(() => {
+    setSelectedInputDataIds(new Set())
+    setOpenInputDataActionMenu(false)
+  }, [
+    selectedCampaignId,
+    detailTab,
+    inputDataFilters.timePreset,
+    inputDataFilters.dateFrom,
+    inputDataFilters.dateTo,
+    inputDataFilters.status,
+    campaignInputData
+  ])
 
   const handleEdit = (campaign: Campaign) => {
     if (!canEditCampaign(campaign.status)) {
       showAlert('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
       return
     }
+    setCampaignFormInitialActionId(undefined)
+    setCampaignFormInitialDetails(undefined)
     setEditingCampaign(campaign)
+    setCloneFromId(undefined)
     setShowForm(true)
   }
 
@@ -754,6 +1099,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       status: 'tạm dừng',
       log: ''
     }
+    setCampaignFormInitialActionId(undefined)
+    setCampaignFormInitialDetails(undefined)
     setCloneFromId(campaign.id)
     setEditingCampaign(cloneData)
     setShowForm(true)
@@ -811,6 +1158,10 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }
 
   const handleTimePresetChange = (value: CampaignTimePreset) => {
+    if (value === 'custom') {
+      setTimePreset(value)
+      return
+    }
     const range = getCampaignDateRange(value)
     setTimePreset(value)
     setDateFrom(range.fromDate)
@@ -919,6 +1270,137 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     )
   }
 
+  const toggleSelectInputData = (id: number) => {
+    setSelectedInputDataIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAllInputData = () => {
+    setSelectedInputDataIds(prev => {
+      const allFilteredSelected = filteredCampaignInputData.length > 0 && filteredCampaignInputData.every(item => prev.has(item.id))
+      const next = new Set(prev)
+      filteredCampaignInputData.forEach(item => {
+        if (allFilteredSelected) next.delete(item.id)
+        else next.add(item.id)
+      })
+      return next
+    })
+  }
+
+  const handleInputDataBatchStatus = async (status: InputDataBatchStatus) => {
+    if (inputDataActionLoading) {
+      showAlert('Đang xử lý thao tác trước đó, vui lòng chờ.', 'info')
+      return
+    }
+    if (loadingCampaignInputData) {
+      showAlert('Đang tải data, vui lòng chờ.', 'info')
+      return
+    }
+    if (!selectedCampaign) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (selectedInputDataRows.length === 0) {
+      showAlert('Vui lòng chọn data', 'info')
+      return
+    }
+
+    const eligibleStatus: InputDataBatchStatus = status === 'tạm dừng' ? 'chờ xử lý' : 'tạm dừng'
+    const eligibleCount = selectedInputDataRows.filter(row => row.status === eligibleStatus).length
+    if (eligibleCount === 0) {
+      showAlert(status === 'tạm dừng'
+        ? 'Không có data nào có thể tạm dừng. Chỉ data "chờ xử lý" mới được tạm dừng.'
+        : 'Không có data nào có thể tiếp tục. Chỉ data "tạm dừng" mới được tiếp tục.', 'info')
+      return
+    }
+
+    setInputDataActionLoading(true)
+    try {
+      const result = await bulkUpdateCampaignInputDataStatus(
+        selectedCampaign.id,
+        Array.from(selectedInputDataIds),
+        status
+      )
+      showAlert(
+        `Đã cập nhật ${result.updatedCount} data${result.skippedCount > 0 ? `, bỏ qua ${result.skippedCount} data không phù hợp.` : '.'}`,
+        'success'
+      )
+      setSelectedInputDataIds(new Set())
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể cập nhật trạng thái data đã chọn.'), 'error')
+    } finally {
+      setInputDataActionLoading(false)
+    }
+  }
+
+  const handleInputDataActionMenuToggle = () => {
+    setOpenInputDataActionMenu(prev => !prev)
+  }
+
+  const handleCreateCampaignFromInputData = () => {
+    if (!selectedCampaign) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (selectedInputDataRows.length === 0) {
+      showAlert('Vui lòng chọn data', 'info')
+      return
+    }
+
+    setEditingCampaign(null)
+    setCloneFromId(undefined)
+    setCampaignFormInitialActionId(selectedCampaign.actionId)
+    setCampaignFormInitialDetails(selectedInputDataRows.map(cloneInputDataForNewCampaign))
+    setOpenInputDataActionMenu(false)
+    setShowForm(true)
+  }
+
+  const handleOpenAddInputDataModal = () => {
+    if (selectedInputDataRows.length === 0) {
+      showAlert('Vui lòng chọn data', 'info')
+      return
+    }
+    setOpenInputDataActionMenu(false)
+    setShowAddInputDataModal(true)
+  }
+
+  const handleAddInputDataToCampaignSubmit = async (data: AddInputDataModalSubmit) => {
+    if (!selectedCampaign) {
+      showAlert('Vui lòng chọn chiến dịch nguồn.', 'error')
+      return
+    }
+    const request: AddCampaignInputDataToCampaignRequest = {
+      sourceCampaignId: selectedCampaign.id,
+      sourceInputDataIds: Array.from(selectedInputDataIds),
+      targetCampaignIds: data.targetCampaignIds,
+      campaignSchedule: data.campaignSchedule,
+      campaignStatus: data.campaignStatus
+    }
+
+    try {
+      const result = await addCampaignInputDataToCampaign(request)
+      if (result.totalInsertedCount === 0) {
+        const firstError = result.targets.find(target => target.error)?.error
+        showAlert(firstError || 'Không có data hợp lệ để thêm vào chiến dịch.', 'error')
+        return
+      }
+
+      const successTargets = result.targets.filter(target => target.insertedCount > 0)
+      const skippedText = result.totalSkippedInvalidCount > 0
+        ? ` Bỏ qua ${result.totalSkippedInvalidCount} data không phù hợp.`
+        : ''
+      showAlert(`Đã thêm ${result.totalInsertedCount} data vào ${successTargets.length} chiến dịch.${skippedText}`, 'success')
+      setSelectedInputDataIds(new Set())
+      setShowAddInputDataModal(false)
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể thêm data vào chiến dịch.'), 'error')
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       // Campaign / data layer status
@@ -979,6 +1461,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     inputDataFilters.timePreset,
     selectedCampaign
   ])
+  const selectedInputDataRows = useMemo(
+    () => campaignInputData.filter(item => selectedInputDataIds.has(item.id)),
+    [campaignInputData, selectedInputDataIds]
+  )
+  const selectedFilteredInputDataCount = useMemo(
+    () => filteredCampaignInputData.reduce((count, item) => count + (selectedInputDataIds.has(item.id) ? 1 : 0), 0),
+    [filteredCampaignInputData, selectedInputDataIds]
+  )
   const filteredCampaignDetails = useMemo(() => {
     const dateStart = parseDateInputBoundary(actionDetailFilters.dateFrom, 'start')
     const dateEnd = parseDateInputBoundary(actionDetailFilters.dateTo, 'end')
@@ -1399,28 +1889,19 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
     }
-    if (campaignInputData.length === 0) {
-      showAlert('Chưa có dữ liệu để xuất.', 'info')
-      return
-    }
-    if (filteredCampaignInputData.length === 0) {
-      showAlert('Không có dữ liệu phù hợp bộ lọc để xuất.', 'info')
+    if (selectedInputDataRows.length === 0) {
+      showAlert('Vui lòng chọn data', 'info')
       return
     }
 
     try {
       const rows = [
-        FOUND_DATA_TEMPLATE_HEADERS,
-        ...filteredCampaignInputData.map(item => [
+        CAMPAIGN_INPUT_DATA_EXPORT_HEADERS,
+        ...selectedInputDataRows.map(item => [
           item.name || '',
           item.uid || '',
           item.phone || '',
-          item.email || '',
-          '',
-          '',
-          '',
-          '',
-          ''
+          item.email || ''
         ])
       ]
       const sheet = utils.aoa_to_sheet(rows)
@@ -1428,12 +1909,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
         { wch: 24 },
         { wch: 48 },
         { wch: 18 },
-        { wch: 28 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 }
+        { wch: 28 }
       ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Sheet1')
@@ -1766,7 +2242,17 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
             >
               <RefreshCw size={14} />
             </button>
-            <button className="btn btn-primary btn-icon" onClick={() => { setEditingCampaign(null); setShowForm(true); }} title="Thêm chiến dịch">
+            <button
+              className="btn btn-primary btn-icon"
+              onClick={() => {
+                setEditingCampaign(null)
+                setCloneFromId(undefined)
+                setCampaignFormInitialActionId(undefined)
+                setCampaignFormInitialDetails(undefined)
+                setShowForm(true)
+              }}
+              title="Thêm chiến dịch"
+            >
               <Plus size={14} />
             </button>
           </div>
@@ -1886,14 +2372,29 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           <CampaignFormModal
             campaign={editingCampaign}
             cloneFromId={cloneFromId}
+            lockedActionId={campaignFormInitialActionId}
+            initialDetails={campaignFormInitialDetails}
             onOpenGeneralSettings={onOpenGeneralSettings}
             onClose={() => {
               setShowForm(false)
               setEditingCampaign(null)
               setCloneFromId(undefined)
+              setCampaignFormInitialActionId(undefined)
+              setCampaignFormInitialDetails(undefined)
               loadCampaigns()
               if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
             }}
+          />
+        )}
+
+        {showAddInputDataModal && (
+          <AddInputDataToCampaignModal
+            campaigns={campaigns}
+            campaignActions={campaignActions}
+            selectedCount={selectedInputDataRows.length}
+            onLoadCampaigns={loadCampaigns}
+            onSubmit={handleAddInputDataToCampaignSubmit}
+            onClose={() => setShowAddInputDataModal(false)}
           />
         )}
 
@@ -2123,16 +2624,47 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                       value => setInputDataFilters(prev => ({ ...prev, dateTo: value })),
                       INPUT_DATA_STATUS_FILTER_OPTIONS,
                       value => setInputDataFilters(prev => ({ ...prev, status: value }))
-                    )}
-                    <div className="detail-filter-actions">
-                      <button
-                        className="btn btn-secondary"
-                        onClick={handleExportCampaignInputData}
-                        disabled={loadingCampaignInputData || filteredCampaignInputData.length === 0}
-                        title="Xuất dữ liệu ra Excel"
-                      >
-                        <Download size={14} /> Xuất Excel
-                      </button>
+	                    )}
+	                    <div className="detail-filter-actions input-data-filter-actions">
+	                      <button
+	                        className="btn btn-secondary btn-sm"
+	                        onClick={() => handleInputDataBatchStatus('chờ xử lý')}
+	                        title="Tiếp tục data đã chọn"
+	                      >
+	                        <Play size={12} /> Tiếp tục
+	                      </button>
+	                      <button
+	                        className="btn btn-secondary btn-sm"
+	                        onClick={() => handleInputDataBatchStatus('tạm dừng')}
+	                        title="Tạm dừng data đã chọn"
+	                      >
+	                        <Pause size={12} /> Tạm dừng
+	                      </button>
+	                      <div className="input-data-action-menu" ref={inputDataActionMenuRef}>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={handleInputDataActionMenuToggle}
+                          title="Hành động với data đã chọn"
+                        >
+                          Hành động <ChevronDown size={14} />
+                        </button>
+                        {openInputDataActionMenu && (
+                          <div className="input-data-action-menu-list">
+                            <button type="button" onClick={handleCreateCampaignFromInputData}>
+                              <Plus size={14} /> Tạo chiến dịch
+                            </button>
+                            <button type="button" onClick={handleOpenAddInputDataModal}>
+                              <Plus size={14} /> Thêm vào chiến dịch
+                            </button>
+                            <button type="button" onClick={() => { setOpenInputDataActionMenu(false); handleExportCampaignInputData() }}>
+                              <Download size={14} /> Xuất Excel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {inputDataActionLoading && (
+                        <RefreshCw size={14} className="spin input-data-action-spinner" />
+                      )}
                     </div>
                   </div>
                   {loadingCampaignInputData ? (
@@ -2145,6 +2677,16 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
                         <tr>
+                          <th style={{ width: 36 }}>
+                            <input
+                              type="checkbox"
+                              checked={filteredCampaignInputData.length > 0 && selectedFilteredInputDataCount === filteredCampaignInputData.length}
+                              ref={el => {
+                                if (el) el.indeterminate = selectedFilteredInputDataCount > 0 && selectedFilteredInputDataCount < filteredCampaignInputData.length
+                              }}
+                              onChange={toggleSelectAllInputData}
+                            />
+                          </th>
                           <th>Tên</th>
                           <th>UID</th>
                           <th>SĐT</th>
@@ -2155,7 +2697,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                       </thead>
                       <tbody>
                         {filteredCampaignInputData.map(d => (
-                          <tr key={d.id}>
+                          <tr key={d.id} className={selectedInputDataIds.has(d.id) ? 'input-data-selected-row' : ''}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selectedInputDataIds.has(d.id)}
+                                onChange={() => toggleSelectInputData(d.id)}
+                              />
+                            </td>
                             <td title={d.name || '-'}>{d.name || '-'}</td>
                             <td title={d.uid || '-'} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
                             <td title={d.phone || '-'}>{d.phone || '-'}</td>
