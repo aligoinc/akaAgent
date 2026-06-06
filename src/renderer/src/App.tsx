@@ -26,7 +26,7 @@ export default function App() {
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
   const [showChangePassword, setShowChangePassword] = useState(false)
 
-  // Bootstrap auth: re-login from stored creds (or land on LoginPage).
+  // Bootstrap auth from DB-backed device login settings (or land on LoginPage).
   useEffect(() => {
     rehydrateFromStorage()
   }, [rehydrateFromStorage])

@@ -736,6 +736,24 @@ export interface AuthUser {
   deviceLastSeenAt?: string | null
 }
 
+export interface LoginPreferences {
+  rememberLogin: boolean
+  autoLogin: boolean
+  startupEnabled: boolean
+}
+
+export interface SavedLoginCredentials {
+  username: string
+  password: string
+}
+
+export interface AuthBootstrapResult {
+  user: AuthUser | null
+  loginOptions: LoginPreferences
+  savedCredentials: SavedLoginCredentials | null
+  errorMessage?: string | null
+}
+
 export interface DeviceLockResetResult {
   success: boolean
 }
@@ -861,6 +879,9 @@ export const IPC_EVENTS = {
 
   // Auth
   AUTH_LOGIN: 'auth:login',
+  AUTH_BOOTSTRAP: 'auth:bootstrap',
+  AUTH_REVOKE_REMEMBERED_LOGIN: 'auth:revoke-remembered-login',
+  AUTH_UPDATE_LOGIN_PREFERENCES: 'auth:update-login-preferences',
   AUTH_LOGOUT: 'auth:logout',
   AUTH_ME: 'auth:me',
   AUTH_RESET_DEVICE_LOCK: 'auth:reset-device-lock',

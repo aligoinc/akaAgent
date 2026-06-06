@@ -14,26 +14,12 @@ export default function LoginPage() {
   } = useAuthStore()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [startupEnabled, setStartupEnabled] = useState(false)
 
   useEffect(() => {
     if (!loginOptions.rememberLogin || !savedCredentials) return
     setUsername(savedCredentials.username)
     setPassword(savedCredentials.password)
   }, [loginOptions.rememberLogin, savedCredentials])
-
-  useEffect(() => {
-    let active = true
-    if (!window.electronAPI?.getStartupSetting) return
-    window.electronAPI.getStartupSetting()
-      .then(res => {
-        if (active) setStartupEnabled(!!res.enabled)
-      })
-      .catch(err => console.warn('Get startup setting failed:', err))
-    return () => {
-      active = false
-    }
-  }, [])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -42,17 +28,6 @@ export default function LoginPage() {
       await login(username.trim(), password, loginOptions)
     } catch {
       /* error đã được set vào store, render bên dưới */
-    }
-  }
-
-  const handleStartupChange = async (checked: boolean) => {
-    setStartupEnabled(checked)
-    try {
-      const res = await window.electronAPI.setStartupSetting(checked)
-      setStartupEnabled(!!res.enabled)
-    } catch (err) {
-      setStartupEnabled(!checked)
-      console.error('Set startup setting failed:', err)
     }
   }
 
@@ -156,7 +131,7 @@ export default function LoginPage() {
             <input
               type="checkbox"
               checked={loginOptions.rememberLogin}
-              onChange={(e) => setLoginOptions({ rememberLogin: e.target.checked })}
+              onChange={(e) => { void setLoginOptions({ rememberLogin: e.target.checked }) }}
               disabled={loggingIn}
               style={checkboxStyle}
             />
@@ -166,7 +141,7 @@ export default function LoginPage() {
             <input
               type="checkbox"
               checked={loginOptions.autoLogin}
-              onChange={(e) => setLoginOptions({ autoLogin: e.target.checked })}
+              onChange={(e) => { void setLoginOptions({ autoLogin: e.target.checked }) }}
               disabled={loggingIn}
               style={checkboxStyle}
             />
@@ -175,8 +150,8 @@ export default function LoginPage() {
           <label style={optionStyle}>
             <input
               type="checkbox"
-              checked={startupEnabled}
-              onChange={(e) => handleStartupChange(e.target.checked)}
+              checked={loginOptions.startupEnabled}
+              onChange={(e) => { void setLoginOptions({ startupEnabled: e.target.checked }) }}
               disabled={loggingIn}
               style={checkboxStyle}
             />
