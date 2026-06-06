@@ -60,6 +60,51 @@ function clearLegacyAuthStorage(): void {
   }
 }
 
+function formatAuthErrorMessage(err: unknown, fallback: string): string {
+  const rawMessage = err instanceof Error
+    ? err.message
+    : typeof err === 'string'
+      ? err
+      : ''
+
+  const message = rawMessage
+    .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim()
+
+  if (!message) return fallback
+
+  const technicalPatterns = [
+    /schema cache/i,
+    /could not find/i,
+    /relation .* does not exist/i,
+    /column .* does not exist/i,
+    /permission denied/i,
+    /violates .* constraint/i,
+    /duplicate key/i,
+    /invalid input syntax/i,
+    /null value/i,
+    /foreign key/i,
+    /postgrest/i,
+    /\bpgrst/i,
+    /\bsupabase/i,
+    /jwt/i,
+    /cannot read propert/i,
+    /is not a function/i,
+    /api not available/i
+  ]
+
+  if (technicalPatterns.some(pattern => pattern.test(message))) {
+    return fallback
+  }
+
+  if (/fetch failed|failed to fetch|network|econn|enotfound|timeout|timed out/i.test(message)) {
+    return 'Không thể kết nối máy chủ. Vui lòng kiểm tra internet và thử lại.'
+  }
+
+  return message
+}
+
 export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   initializing: true,
@@ -97,7 +142,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
       set({
         loginOptions: current.loginOptions,
         savedCredentials: current.savedCredentials,
-        errorMessage: err?.message || 'Không thể tắt ghi nhớ đăng nhập'
+        errorMessage: formatAuthErrorMessage(err, 'Không thể tắt ghi nhớ đăng nhập. Vui lòng thử lại sau.')
       })
     }
   },
@@ -120,7 +165,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
       set({
         user: null,
         loggingIn: false,
-        errorMessage: err?.message || 'Đăng nhập thất bại',
+        errorMessage: formatAuthErrorMessage(err, 'Đăng nhập thất bại. Vui lòng thử lại sau.'),
         loginOptions
       })
       throw err
@@ -140,7 +185,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     } catch (err: any) {
       set({
         recoveringCredentials: false,
-        errorMessage: err?.message || 'Không thể lấy lại tên đăng nhập'
+        errorMessage: formatAuthErrorMessage(err, 'Không thể lấy lại tên đăng nhập. Vui lòng thử lại sau.')
       })
     }
   },
@@ -197,10 +242,14 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
     try {
       const snapshot = await window.electronAPI.bootstrapAuth()
+      const bootstrapErrorMessage = snapshot.errorMessage
+        ? formatAuthErrorMessage(snapshot.errorMessage, 'Không thể tải tuỳ chọn đăng nhập. Vui lòng thử lại sau.')
+        : null
+
       set({
         user: snapshot.user,
         initializing: false,
-        errorMessage: snapshot.errorMessage || null,
+        errorMessage: bootstrapErrorMessage,
         loginOptions: snapshot.loginOptions,
         savedCredentials: snapshot.savedCredentials
       })
@@ -208,7 +257,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
       set({
         user: null,
         initializing: false,
-        errorMessage: err?.message || 'Không thể tải tuỳ chọn đăng nhập',
+        errorMessage: formatAuthErrorMessage(err, 'Không thể tải tuỳ chọn đăng nhập. Vui lòng thử lại sau.'),
         loginOptions: DEFAULT_LOGIN_OPTIONS,
         savedCredentials: null
       })

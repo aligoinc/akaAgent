@@ -10,6 +10,9 @@ import { getSupabaseClient } from '../supabaseClient'
 
 const client = () => getSupabaseClient()
 
+const AKA_AGENT_PRODUCT_ID = 3
+const ACCOUNT_EXPIRED_MESSAGE = 'Tài khoản của bạn đã hết hạn'
+
 export const DEFAULT_LOGIN_PREFERENCES: LoginPreferences = {
   rememberLogin: true,
   autoLogin: true,
@@ -50,6 +53,10 @@ interface DeviceLoginSettingsRow {
   is_delete?: boolean | null
   created_at?: string
   updated_at?: string
+}
+
+interface OrganizationProductRow {
+  expiration_date?: string | null
 }
 
 const STAFF_SELECT = [
@@ -101,6 +108,41 @@ function normalizeDeviceHash(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function throwAuthTechnicalError(context: string, userMessage: string, error: unknown): never {
+  console.error(`[auth] ${context}:`, error)
+  throw new Error(userMessage)
+}
+
+async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'organization_id'>): Promise<void> {
+  const { data, error } = await client()
+    .from('org_organization_product')
+    .select('expiration_date')
+    .eq('organization_id', staff.organization_id)
+    .eq('product_id', AKA_AGENT_PRODUCT_ID)
+    .eq('is_deleted', false)
+    .order('expiration_date', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throwAuthTechnicalError(
+      'check staff subscription',
+      'Không thể kiểm tra hạn sử dụng. Vui lòng thử lại sau.',
+      error
+    )
+  }
+
+  const row = data as unknown as OrganizationProductRow | null
+  const expirationTime = row?.expiration_date ? Date.parse(row.expiration_date) : NaN
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+
+  if (!Number.isFinite(expirationTime) || expirationTime < todayStart.getTime()) {
+    throw new Error(ACCOUNT_EXPIRED_MESSAGE)
+  }
+}
+
 async function loadStaffDevice(staffId: number): Promise<StaffDeviceColumns | null> {
   const { data, error } = await client()
     .from('org_staff')
@@ -108,7 +150,13 @@ async function loadStaffDevice(staffId: number): Promise<StaffDeviceColumns | nu
     .eq('id', staffId)
     .maybeSingle()
 
-  if (error) throw new Error(`Đăng nhập thất bại: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'load staff device',
+      'Không thể kiểm tra thiết bị đăng nhập. Vui lòng thử lại sau.',
+      error
+    )
+  }
   return data as StaffDeviceColumns | null
 }
 
@@ -119,7 +167,13 @@ async function loadStaffById(staffId: number): Promise<StaffRow | null> {
     .eq('id', staffId)
     .maybeSingle()
 
-  if (error) throw new Error(`Không thể tải tài khoản đã ghi nhớ: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'load remembered staff',
+      'Không thể tải tài khoản đã ghi nhớ. Vui lòng đăng nhập lại.',
+      error
+    )
+  }
   return data as unknown as StaffRow | null
 }
 
@@ -131,7 +185,13 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     .eq('id', staffRow.organization_id)
     .maybeSingle()
 
-  if (orgErr) throw new Error(`Đăng nhập thất bại: ${orgErr.message}`)
+  if (orgErr) {
+    throwAuthTechnicalError(
+      'load auth organization',
+      'Đăng nhập thất bại. Vui lòng thử lại sau.',
+      orgErr
+    )
+  }
 
   return {
     staffId: staffRow.id,
@@ -169,7 +229,13 @@ async function ensureStaffDeviceLock(staff: StaffRow): Promise<StaffDeviceColumn
       .select(DEVICE_SELECT)
       .maybeSingle()
 
-    if (error) throw new Error(`Đăng nhập thất bại: ${error.message}`)
+    if (error) {
+      throwAuthTechnicalError(
+        'bind staff device',
+        'Không thể xác thực thiết bị đăng nhập. Vui lòng thử lại sau.',
+        error
+      )
+    }
     const updatedDevice = updated as unknown as StaffDeviceColumns | null
     if (normalizeDeviceHash(updatedDevice?.device_fingerprint_hash) === device.fingerprintHash) {
       return updatedDevice as StaffDeviceColumns
@@ -199,7 +265,13 @@ async function ensureStaffDeviceLock(staff: StaffRow): Promise<StaffDeviceColumn
     .select(DEVICE_SELECT)
     .maybeSingle()
 
-  if (error) throw new Error(`Đăng nhập thất bại: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'refresh staff device',
+      'Không thể xác thực thiết bị đăng nhập. Vui lòng thử lại sau.',
+      error
+    )
+  }
   const updatedDevice = updated as unknown as StaffDeviceColumns | null
   if (normalizeDeviceHash(updatedDevice?.device_fingerprint_hash) !== device.fingerprintHash) {
     throw new Error(deviceLockedMessage())
@@ -228,7 +300,13 @@ async function loadLatestDeviceLoginSettingsRow(
     .limit(1)
     .maybeSingle()
 
-  if (error) throw new Error(`Không thể tải tuỳ chọn đăng nhập: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'load device login settings',
+      'Không thể tải tuỳ chọn đăng nhập. Vui lòng thử lại sau.',
+      error
+    )
+  }
   return data as unknown as DeviceLoginSettingsRow | null
 }
 
@@ -263,6 +341,12 @@ export async function loadLoginSettingsForCurrentDevice(): Promise<AuthBootstrap
     return buildAuthBootstrapResult(loginOptions, null)
   }
 
+  try {
+    await ensureStaffSubscriptionActive(staff)
+  } catch (err: any) {
+    return buildAuthBootstrapResult(loginOptions, null, err?.message || ACCOUNT_EXPIRED_MESSAGE)
+  }
+
   return buildAuthBootstrapResult(loginOptions, {
     username: staff.username,
     password: staff.password
@@ -281,11 +365,19 @@ export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials>
     .limit(1)
     .maybeSingle()
 
-  if (error) throw new Error(`Không thể lấy lại tài khoản đăng nhập: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'recover device credentials',
+      'Không thể lấy lại tên đăng nhập. Vui lòng thử lại sau.',
+      error
+    )
+  }
   const staff = data as unknown as StaffRow | null
   if (!staff) {
     throw new Error('Không tìm thấy tài khoản đang được cấp quyền trên máy tính này.')
   }
+
+  await ensureStaffSubscriptionActive(staff)
 
   return {
     username: staff.username,
@@ -319,7 +411,13 @@ export async function saveDeviceLoginSettings(
     .select()
     .single()
 
-  if (error) throw new Error(`Không thể lưu tuỳ chọn đăng nhập: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'save device login settings',
+      'Không thể lưu tuỳ chọn đăng nhập. Vui lòng thử lại sau.',
+      error
+    )
+  }
   return mapLoginPreferencesFromRow(data as unknown as DeviceLoginSettingsRow)
 }
 
@@ -346,7 +444,13 @@ export async function revokeRememberedLoginForCurrentDevice(): Promise<AuthBoots
     .select()
     .single()
 
-  if (error) throw new Error(`Không thể tắt ghi nhớ đăng nhập: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'revoke remembered login',
+      'Không thể tắt ghi nhớ đăng nhập. Vui lòng thử lại sau.',
+      error
+    )
+  }
   return buildAuthBootstrapResult(mapLoginPreferencesFromRow(data as unknown as DeviceLoginSettingsRow), null)
 }
 
@@ -376,7 +480,13 @@ export async function updateLoginPreferencesForCurrentDevice(
     })
     .eq('id', row.id)
 
-  if (error) throw new Error(`Không thể lưu tuỳ chọn đăng nhập: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'update login preferences',
+      'Không thể lưu tuỳ chọn đăng nhập. Vui lòng thử lại sau.',
+      error
+    )
+  }
   return loadLoginSettingsForCurrentDevice()
 }
 
@@ -400,7 +510,13 @@ export async function updateStartupSettingForCurrentDevice(
       .select()
       .single()
 
-    if (error) throw new Error(`Không thể lưu tuỳ chọn khởi động: ${error.message}`)
+    if (error) {
+      throwAuthTechnicalError(
+        'update startup setting',
+        'Không thể lưu tuỳ chọn khởi động. Vui lòng thử lại sau.',
+        error
+      )
+    }
     return mapLoginPreferencesFromRow(data as unknown as DeviceLoginSettingsRow)
   }
 
@@ -428,11 +544,18 @@ export async function login(username: string, password: string): Promise<AuthUse
     .eq('username', u)
     .maybeSingle()
 
-  if (error) throw new Error(`Đăng nhập thất bại: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'login staff lookup',
+      'Đăng nhập thất bại. Vui lòng thử lại sau.',
+      error
+    )
+  }
   const staffRow = staff as unknown as StaffRow | null
   if (!staffRow) throw new Error('Tên đăng nhập không tồn tại.')
   if (staffRow.password !== p) throw new Error('Mật khẩu không đúng.')
   if (!staffRow.is_active) throw new Error('Tài khoản đã bị khoá.')
+  await ensureStaffSubscriptionActive(staffRow)
 
   const deviceRecord = await ensureStaffDeviceLock(staffRow)
   return buildAuthUser(staffRow, deviceRecord)
@@ -461,7 +584,13 @@ export async function resetDeviceLock(user: AuthUser): Promise<DeviceLockResetRe
     })
     .eq('id', user.staffId)
 
-  if (error) throw new Error(`Đổi máy tính thất bại: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'reset device lock',
+      'Đổi máy tính thất bại. Vui lòng thử lại sau.',
+      error
+    )
+  }
 
   const nowAfterReset = new Date().toISOString()
   await client()
@@ -489,7 +618,13 @@ export async function changePassword(user: AuthUser, oldPassword: string, newPas
     .eq('id', user.staffId)
     .maybeSingle()
 
-  if (error) throw new Error(`Đổi mật khẩu thất bại: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'load staff for password change',
+      'Đổi mật khẩu thất bại. Vui lòng thử lại sau.',
+      error
+    )
+  }
   const staffRow = staff as unknown as Pick<StaffRow, 'id' | 'password' | 'is_active'> | null
   if (!staffRow) throw new Error('Không tìm thấy tài khoản để đổi mật khẩu.')
   if (!staffRow.is_active) throw new Error('Tài khoản đã bị khoá.')
@@ -503,7 +638,13 @@ export async function changePassword(user: AuthUser, oldPassword: string, newPas
     })
     .eq('id', user.staffId)
 
-  if (updateError) throw new Error(`Đổi mật khẩu thất bại: ${updateError.message}`)
+  if (updateError) {
+    throwAuthTechnicalError(
+      'update staff password',
+      'Đổi mật khẩu thất bại. Vui lòng thử lại sau.',
+      updateError
+    )
+  }
   return { success: true }
 }
 
@@ -520,6 +661,12 @@ export async function updateUseTestWorkflow(user: AuthUser, useTestWorkflow: boo
     })
     .eq('id', user.staffId)
 
-  if (error) throw new Error(`Không thể lưu chế độ workflow test: ${error.message}`)
+  if (error) {
+    throwAuthTechnicalError(
+      'update workflow test mode',
+      'Không thể lưu chế độ workflow test. Vui lòng thử lại sau.',
+      error
+    )
+  }
   return { ...user, useTestWorkflow }
 }
