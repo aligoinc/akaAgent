@@ -150,6 +150,7 @@ type FindDataTargetCampaignField =
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const GROUP_POST_ACTION_ID = 'facebook_group_post'
+const GROUP_POST_FREQUENCY_LIMIT_ERROR_CODE = 'err_group_post_frequency_limit'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
@@ -1600,7 +1601,7 @@ export class CampaignScheduler {
     else if (errorStep?.blockName === 'fb_click_like_current_post') actionCode = 'fb_like_post'
     else if (errorStep?.blockName && errorStep.blockName.startsWith('fb_newsfeed_comment')) actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_newsfeed_like_post') actionCode = 'fb_like_post'
-    else if (errorStep?.blockName === 'fb_click_post_button') actionCode = this.getPostActionCode(campaign) || undefined
+    else if (errorStep?.blockName === 'fb_click_post_button' || errorStep?.blockName === 'fb_verify_group_post_form_closed') actionCode = this.getPostActionCode(campaign) || undefined
     else if (
       errorStep?.blockName === 'fb_page_post_api' ||
       errorStep?.blockName === 'fb_post_current_identity_ui' ||
@@ -1611,6 +1612,9 @@ export class CampaignScheduler {
 
     if (lowerMessage.includes('bạn đã đạt giới hạn về số tin nhắn đang chờ')) {
       return { errorCode: 'err_limit_waiting_message', actionCode, message }
+    }
+    if (campaign.actionId === GROUP_POST_ACTION_ID && lowerMessage.includes('giới hạn tần suất bạn đăng bài')) {
+      return { errorCode: GROUP_POST_FREQUENCY_LIMIT_ERROR_CODE, actionCode, message }
     }
 
     return { errorCode: 'err_undefined', actionCode, message }
@@ -2398,12 +2402,12 @@ export class CampaignScheduler {
 
     // Đăng bài group — xác nhận submit bằng việc form đóng, rồi lưu link bài vừa đăng nếu lấy được.
     const groupPostVerifySteps = campaign.actionId === 'facebook_group_post'
-      ? steps.filter(s => s.blockName === 'fb_verify_group_post_form_closed' && s.status === 'success')
+      ? steps.filter(s => s.blockName === 'fb_verify_group_post_form_closed' && (s.status === 'success' || s.status === 'error'))
       : []
     for (const s of groupPostVerifySteps) {
       try {
         const out = (s.output as any) || {}
-        const posted = out.posted === true || out.ok === true
+        const posted = s.status === 'success' && (out.posted === true || out.ok === true)
         const linkStep = [...steps].reverse().find(x => x.blockName === 'fb_get_first_group_post_link' && x.status === 'success')
         const linkOut = ((linkStep?.output as any) || {}) as { postUrl?: unknown; link?: unknown; rawPostLink?: unknown }
         const postUrl = posted
@@ -2426,7 +2430,14 @@ export class CampaignScheduler {
           ? (isPending ? true : (pendingCheckConclusive ? false : undefined))
           : undefined
         const rawPostLink = String(linkOut.rawPostLink || '').trim()
-        const failureMessage = String(out.message || 'Form đăng bài chưa đóng sau 60 giây')
+        const failureMessage = String(s.error || out.error || out.message || 'Form đăng bài chưa đóng sau 60 giây')
+        const status: 'thành công' | 'thất bại' | 'lỗi' =
+          posted ? 'thành công'
+          : s.status === 'error' ? 'lỗi'
+          : 'thất bại'
+        const errorCode = status === 'lỗi'
+          ? this.normalizeRuntimeError(campaign, [s], failureMessage).errorCode
+          : undefined
         const pendingContentLinks = Array.isArray(detectOut.pendingContentLinks)
           ? detectOut.pendingContentLinks.map(link => String(link || '').trim()).filter(Boolean)
           : undefined
@@ -2437,10 +2448,13 @@ export class CampaignScheduler {
           accountId,
           actionCode: this.getPostActionCode(campaign),
           actionName: 'Đăng bài',
-          status: posted ? 'thành công' : 'thất bại',
+          status,
+          errorCode,
           log: posted
             ? (detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : `Đăng bài thành công${isPending ? ' (chờ duyệt)' : ''}`)
-            : (detail ? `Đăng bài thất bại vào ${inputDataName}: ${failureMessage}` : `Đăng bài thất bại: ${failureMessage}`),
+            : status === 'lỗi'
+              ? (detail ? `Lỗi đăng bài vào ${inputDataName}: ${failureMessage}` : `Lỗi đăng bài: ${failureMessage}`)
+              : (detail ? `Đăng bài thất bại vào ${inputDataName}: ${failureMessage}` : `Đăng bài thất bại: ${failureMessage}`),
           postUrl: postUrl || undefined,
           data: {
             isPending,
@@ -2451,6 +2465,7 @@ export class CampaignScheduler {
             rawPostLink: rawPostLink || undefined,
             postUrl: postUrl || undefined,
             submitClosed: posted,
+            errorCode,
             error: posted ? undefined : failureMessage
           }
         })
@@ -2460,6 +2475,8 @@ export class CampaignScheduler {
           await this.logCampaignProgress(campaign.id, pendingApprovalLog)
           if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)
           await this.enqueuePostBumpAfterGroupPost(campaign, postUrl, isPending)
+        } else if (status === 'lỗi') {
+          await this.logCampaignProgress(campaign.id, `❌ Lỗi đăng bài${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
         } else {
           await this.logCampaignProgress(campaign.id, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
         }
