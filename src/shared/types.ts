@@ -882,6 +882,7 @@ export const IPC_EVENTS = {
   AUTH_BOOTSTRAP: 'auth:bootstrap',
   AUTH_REVOKE_REMEMBERED_LOGIN: 'auth:revoke-remembered-login',
   AUTH_UPDATE_LOGIN_PREFERENCES: 'auth:update-login-preferences',
+  AUTH_RECOVER_DEVICE_CREDENTIALS: 'auth:recover-device-credentials',
   AUTH_LOGOUT: 'auth:logout',
   AUTH_ME: 'auth:me',
   AUTH_RESET_DEVICE_LOCK: 'auth:reset-device-lock',

@@ -5,6 +5,7 @@ import {
   loadLoginSettingsForCurrentDevice,
   login as loginQuery,
   normalizeLoginPreferences,
+  recoverDeviceCredentials,
   resetDeviceLock,
   revokeRememberedLoginForCurrentDevice,
   saveDeviceLoginSettings,
@@ -88,6 +89,10 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     const snapshot = await updateLoginPreferencesForCurrentDevice(updates || {})
     syncStartupSetting(snapshot.loginOptions.startupEnabled)
     return snapshot
+  })
+
+  ipcMain.handle(IPC_EVENTS.AUTH_RECOVER_DEVICE_CREDENTIALS, async () => {
+    return recoverDeviceCredentials()
   })
 
   ipcMain.handle(IPC_EVENTS.AUTH_LOGOUT, async () => {

@@ -3,8 +3,24 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
 
+let mainWindow: BrowserWindow | null = null
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
+function focusMainWindow(): void {
+  const win = mainWindow || BrowserWindow.getAllWindows()[0]
+  if (!win || win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  if (!win.isVisible()) win.show()
+  win.focus()
+}
+
 function createWindow(): BrowserWindow {
-  const mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1000,
@@ -27,16 +43,16 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  window.on('ready-to-show', () => {
+    window.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  window.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
-  return mainWindow
+  return window
 }
 
 function loadRenderer(mainWindow: BrowserWindow): void {
@@ -48,33 +64,49 @@ function loadRenderer(mainWindow: BrowserWindow): void {
   }
 }
 
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.akabiz.auto')
-
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    focusMainWindow()
   })
 
-  const mainWindow = createWindow()
+  app.whenReady().then(() => {
+    electronApp.setAppUserModelId('com.akabiz.auto')
 
-  // Register IPC handlers
-  try {
-    registerIpcHandlers(mainWindow)
-    console.log('IPC handlers registered successfully.')
-  } catch (error) {
-    console.error('FAILED TO REGISTER IPC HANDLERS:', error)
-  }
-  loadRenderer(mainWindow)
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      loadRenderer(createWindow())
+    mainWindow = createWindow()
+    mainWindow.on('closed', () => {
+      mainWindow = null
+    })
+
+    // Register IPC handlers
+    try {
+      registerIpcHandlers(mainWindow)
+      console.log('IPC handlers registered successfully.')
+    } catch (error) {
+      console.error('FAILED TO REGISTER IPC HANDLERS:', error)
+    }
+    loadRenderer(mainWindow)
+
+    app.on('activate', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        focusMainWindow()
+        return
+      }
+
+      mainWindow = createWindow()
+      mainWindow.on('closed', () => {
+        mainWindow = null
+      })
+      loadRenderer(mainWindow)
+    })
+  })
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit()
     }
   })
-})
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
+}
