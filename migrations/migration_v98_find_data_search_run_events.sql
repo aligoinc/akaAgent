@@ -13,6 +13,16 @@ VALUES (
   null,
   null,
   now()
+),
+(
+  'fb_group_user_author_in_post',
+  './/a[contains(@href,''/groups/'') and contains(@href,''/user/'') and @tabindex=''0'']',
+  'Link người đăng bài dạng group user trong post',
+  'facebook',
+  true,
+  null,
+  null,
+  now()
 )
 ON CONFLICT (name) DO UPDATE SET
   xpath = EXCLUDED.xpath,
@@ -257,6 +267,7 @@ $fds_fb_apply_search_post_filters$),
   const selectors = {
     posts: await helpers.element('fb_search_post_in_uid'),
     seeMore: await helpers.element('fb_see_more_content_post_btn'),
+    groupUserAuthorInPost: await helpers.element('fb_group_user_author_in_post'),
     uidInPost: await helpers.element('fb_uid_in_post_in_uid'),
     content: await helpers.element('fb_content_in_post_in_uid'),
     rawPostLink: await helpers.element('RawPostLinkInUid'),
@@ -316,6 +327,13 @@ $fds_fb_apply_search_post_filters$),
         const url = new URL(href, location.href);
         if (/^(m|mbasic|mobile)\.facebook\.com$/i.test(url.hostname)) url.hostname = 'www.facebook.com';
         if (!/facebook\.com$/i.test(url.hostname) && !/\.facebook\.com$/i.test(url.hostname)) return '';
+        const multiPermalink = String(url.searchParams.get('multi_permalinks') || '').trim();
+        if (multiPermalink) {
+          const parts = url.pathname.split('/').filter(Boolean);
+          const groupIndex = parts.indexOf('groups');
+          const groupId = groupIndex >= 0 ? String(parts[groupIndex + 1] || '').trim() : '';
+          if (groupId) return 'https://www.facebook.com/groups/' + encodeURIComponent(groupId) + '/posts/' + encodeURIComponent(multiPermalink) + '/';
+        }
         url.hash = '';
         Array.from(url.searchParams.keys()).forEach(key => {
           if (key.startsWith('__') || key === 'mibextid' || key === 'ref' || key === 'locale' || key === 'comment_id' || key === 'reply_comment_id') {
@@ -341,7 +359,8 @@ $fds_fb_apply_search_post_filters$),
     function isPostPermalink(href) {
       if (!href || isCommentPermalink(href)) return false;
       const raw = String(href || '');
-      return raw.includes('/posts/') || raw.includes('story_fbid=') || raw.includes('/videos/') || raw.includes('/reel/') || raw.includes('/watch/') || raw.includes('/permalink/') || raw.includes('/photos/') || raw.includes('/photo.php') || raw.includes('/permalink.php');
+      if (raw.includes('/hashtag/') || raw.includes('hashtag_id=')) return false;
+      return raw.includes('/posts/') || raw.includes('story_fbid=') || raw.includes('multi_permalinks=') || raw.includes('/videos/') || raw.includes('/reel/') || raw.includes('/watch/') || raw.includes('/permalink/') || raw.includes('/photos/') || raw.includes('/photo.php') || raw.includes('/permalink.php');
     }
     function firstPostLink(post) {
       const links = xpathAll(selectors.postLink, post)
@@ -369,6 +388,8 @@ $fds_fb_apply_search_post_filters$),
         try { rawLinkEl.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}
         simulateFocusin(rawLinkEl);
         await delay(500);
+        const focusedRawPostLink = cleanPostHref(hrefOf(rawLinkEl));
+        if (focusedRawPostLink && (!rawPostLink || rawPostLink.includes('/search/'))) rawPostLink = focusedRawPostLink;
         postLink = firstPostLink(post);
         if (postLink) break;
       }
@@ -445,10 +466,11 @@ $fds_fb_apply_search_post_filters$),
         contentParts.push(...Array.from(post.querySelectorAll('[data-ad-comet-preview="message"], [data-ad-preview="message"], [data-ad-rendering-role="story_message"]')).filter(isVisible).map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean));
       }
       const content = Array.from(new Set(contentParts)).join('\n').trim() || (post.innerText || post.textContent || '').trim();
-      const authorLink = xpathAll(selectors.uidInPost, post)[0] || Array.from(post.querySelectorAll('a[href]')).filter(isVisible).find(link => {
+      const fallbackVisibleProfileLink = Array.from(post.querySelectorAll('a[href]')).filter(isVisible).find(link => {
         const href = hrefOf(link);
         return href && !href.includes('/groups/') && !isPostPermalink(href) && !isCommentPermalink(href);
       }) || null;
+      const authorLink = xpathAll(selectors.groupUserAuthorInPost, post)[0] || xpathAll(selectors.uidInPost, post)[0] || fallbackVisibleProfileLink;
       const authorUrl = authorLink ? hrefOf(authorLink) : '';
       const authorName = authorLink ? (authorLink.innerText || authorLink.textContent || '').trim() : '';
       const linkInfo = collectPostLinks ? await resolvePostLink(post) : { rawPostLink: '', postLink: '' };
@@ -1093,6 +1115,15 @@ BEGIN
     RAISE EXCEPTION 'Expected fb_search_post_in_uid element with search post XPath, got %', search_post_element_count;
   END IF;
 
+  SELECT count(*) INTO search_post_element_count
+  FROM public.auto_elements
+  WHERE name = 'fb_group_user_author_in_post'
+    AND xpath = './/a[contains(@href,''/groups/'') and contains(@href,''/user/'') and @tabindex=''0'']';
+
+  IF search_post_element_count <> 1 THEN
+    RAISE EXCEPTION 'Expected fb_group_user_author_in_post element with group user author XPath, got %', search_post_element_count;
+  END IF;
+
   SELECT count(*) INTO old_search_post_element_count
   FROM _find_data_search_block_codes
   WHERE name IN ('fb_collect_search_posts', 'fb_collect_search_post_comments')
@@ -1100,6 +1131,16 @@ BEGIN
 
   IF old_search_post_element_count <> 0 THEN
     RAISE EXCEPTION 'Expected search collect blocks to use fb_search_post_in_uid, old refs %', old_search_post_element_count;
+  END IF;
+
+  SELECT count(*) INTO old_search_post_element_count
+  FROM _find_data_search_block_codes
+  WHERE name = 'fb_collect_search_posts'
+    AND code LIKE '%helpers.element(''fb_group_user_author_in_post'')%'
+    AND code LIKE '%xpathAll(selectors.groupUserAuthorInPost, post)[0] || xpathAll(selectors.uidInPost, post)[0]%';
+
+  IF old_search_post_element_count <> 1 THEN
+    RAISE EXCEPTION 'Expected fb_collect_search_posts to prioritize group user author link, got %', old_search_post_element_count;
   END IF;
 
   WITH target_workflows AS (
