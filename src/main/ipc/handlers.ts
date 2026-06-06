@@ -21,6 +21,7 @@ import { registerContentTemplateHandlers } from './handlers/contentTemplateHandl
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { getCurrentUser } from '../data/currentUser'
+import { loadLoginSettingsForCurrentDevice, updateStartupSettingForCurrentDevice } from '../data/repositories/authRepository'
 
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
@@ -129,12 +130,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   // App settings
-  ipcMain.handle(IPC_EVENTS.APP_GET_STARTUP_SETTING, () => {
+  ipcMain.handle(IPC_EVENTS.APP_GET_STARTUP_SETTING, async () => {
+    const snapshot = await loadLoginSettingsForCurrentDevice()
+    app.setLoginItemSettings({ openAtLogin: snapshot.loginOptions.startupEnabled })
     return { enabled: app.getLoginItemSettings().openAtLogin }
   })
 
-  ipcMain.handle(IPC_EVENTS.APP_SET_STARTUP_SETTING, (_, enabled: boolean) => {
-    app.setLoginItemSettings({ openAtLogin: !!enabled })
+  ipcMain.handle(IPC_EVENTS.APP_SET_STARTUP_SETTING, async (_, enabled: boolean) => {
+    const loginOptions = await updateStartupSettingForCurrentDevice(!!enabled, getCurrentUser())
+    app.setLoginItemSettings({ openAtLogin: loginOptions.startupEnabled })
     return { enabled: app.getLoginItemSettings().openAtLogin }
   })
 

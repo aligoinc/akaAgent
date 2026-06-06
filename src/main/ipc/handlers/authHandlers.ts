@@ -1,6 +1,16 @@
-import { ipcMain } from 'electron'
-import { IPC_EVENTS } from '../../../shared/types'
-import { changePassword, login as loginQuery, resetDeviceLock, updateUseTestWorkflow } from '../../data/repositories/authRepository'
+import { app, ipcMain } from 'electron'
+import { IPC_EVENTS, LoginPreferences } from '../../../shared/types'
+import {
+  changePassword,
+  loadLoginSettingsForCurrentDevice,
+  login as loginQuery,
+  normalizeLoginPreferences,
+  resetDeviceLock,
+  revokeRememberedLoginForCurrentDevice,
+  saveDeviceLoginSettings,
+  updateLoginPreferencesForCurrentDevice,
+  updateUseTestWorkflow
+} from '../../data/repositories/authRepository'
 import { setCurrentUser, getCurrentUser } from '../../data/currentUser'
 
 interface AuthLifecycleHooks {
@@ -8,9 +18,55 @@ interface AuthLifecycleHooks {
   beforeLogout?: () => Promise<void> | void
 }
 
+function syncStartupSetting(enabled: boolean): void {
+  try {
+    app.setLoginItemSettings({ openAtLogin: !!enabled })
+  } catch (err) {
+    console.error('Failed to sync startup setting:', err)
+  }
+}
+
 export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
-  ipcMain.handle(IPC_EVENTS.AUTH_LOGIN, async (_, username: string, password: string) => {
+  ipcMain.handle(IPC_EVENTS.AUTH_BOOTSTRAP, async () => {
+    const snapshot = await loadLoginSettingsForCurrentDevice()
+    syncStartupSetting(snapshot.loginOptions.startupEnabled)
+
+    if (!snapshot.loginOptions.autoLogin || !snapshot.savedCredentials) {
+      return snapshot
+    }
+
+    try {
+      const user = await loginQuery(snapshot.savedCredentials.username, snapshot.savedCredentials.password)
+      const savedOptions = await saveDeviceLoginSettings(user, snapshot.loginOptions)
+      syncStartupSetting(savedOptions.startupEnabled)
+      setCurrentUser(user)
+      if (hooks.afterLogin) {
+        try {
+          await hooks.afterLogin()
+        } catch (err) {
+          console.error('Post-login hook failed:', err)
+        }
+      }
+      return {
+        ...snapshot,
+        user,
+        loginOptions: savedOptions,
+        errorMessage: null
+      }
+    } catch (err: any) {
+      return {
+        ...snapshot,
+        user: null,
+        errorMessage: err?.message || 'Đăng nhập tự động thất bại'
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_EVENTS.AUTH_LOGIN, async (_, username: string, password: string, options?: Partial<LoginPreferences>) => {
+    const loginOptions = normalizeLoginPreferences(options)
     const user = await loginQuery(username, password)
+    const savedOptions = await saveDeviceLoginSettings(user, loginOptions)
+    syncStartupSetting(savedOptions.startupEnabled)
     setCurrentUser(user)
     if (hooks.afterLogin) {
       try {
@@ -20,6 +76,18 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
       }
     }
     return user
+  })
+
+  ipcMain.handle(IPC_EVENTS.AUTH_REVOKE_REMEMBERED_LOGIN, async () => {
+    const snapshot = await revokeRememberedLoginForCurrentDevice()
+    syncStartupSetting(snapshot.loginOptions.startupEnabled)
+    return snapshot
+  })
+
+  ipcMain.handle(IPC_EVENTS.AUTH_UPDATE_LOGIN_PREFERENCES, async (_, updates: Partial<LoginPreferences>) => {
+    const snapshot = await updateLoginPreferencesForCurrentDevice(updates || {})
+    syncStartupSetting(snapshot.loginOptions.startupEnabled)
+    return snapshot
   })
 
   ipcMain.handle(IPC_EVENTS.AUTH_LOGOUT, async () => {

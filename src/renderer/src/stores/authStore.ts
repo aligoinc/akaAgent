@@ -1,17 +1,16 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { AuthUser } from '../../../shared/types'
+import { AuthUser, LoginPreferences, SavedLoginCredentials } from '../../../shared/types'
 
 interface AuthState {
   user: AuthUser | null
   initializing: boolean
   loggingIn: boolean
   errorMessage: string | null
-  loginOptions: LoginOptions
-  savedCredentials: PersistedCreds | null
+  loginOptions: LoginPreferences
+  savedCredentials: SavedLoginCredentials | null
 
-  setLoginOptions: (updates: Partial<LoginOptions>) => void
-  login: (username: string, password: string, options?: LoginOptions) => Promise<void>
+  setLoginOptions: (updates: Partial<LoginPreferences>) => Promise<void>
+  login: (username: string, password: string, options?: LoginPreferences) => Promise<void>
   logout: () => Promise<void>
   resetDeviceLock: () => Promise<void>
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
@@ -20,215 +19,180 @@ interface AuthState {
   clearError: () => void
 }
 
-interface PersistedCreds {
-  username: string
-  password: string
-}
+const LEGACY_STORAGE_KEYS = [
+  'aka-biz-auth-creds',
+  'aka-biz-auth-user',
+  'aka-biz-login-options'
+]
 
-export interface LoginOptions {
-  rememberLogin: boolean
-  autoLogin: boolean
-}
-
-const CREDS_KEY = 'aka-biz-auth-creds'
-const USER_STATE_KEY = 'aka-biz-auth-user'
-const LOGIN_OPTIONS_KEY = 'aka-biz-login-options'
-const DEFAULT_LOGIN_OPTIONS: LoginOptions = {
+const DEFAULT_LOGIN_OPTIONS: LoginPreferences = {
   rememberLogin: true,
-  autoLogin: true
+  autoLogin: true,
+  startupEnabled: false
 }
 
-function normalizeLoginOptions(options: LoginOptions): LoginOptions {
-  if (options.autoLogin) {
-    return { rememberLogin: true, autoLogin: true }
+function normalizeLoginOptions(options?: Partial<LoginPreferences> | null): LoginPreferences {
+  const merged = {
+    ...DEFAULT_LOGIN_OPTIONS,
+    ...(options || {})
   }
-  if (!options.rememberLogin) {
-    return { rememberLogin: false, autoLogin: false }
+
+  const next: LoginPreferences = {
+    rememberLogin: !!merged.rememberLogin,
+    autoLogin: !!merged.autoLogin,
+    startupEnabled: !!merged.startupEnabled
   }
-  return { rememberLogin: true, autoLogin: false }
+
+  if (next.autoLogin) next.rememberLogin = true
+  if (!next.rememberLogin) next.autoLogin = false
+  return next
 }
 
-function readLoginOptions(): LoginOptions {
+function clearLegacyAuthStorage(): void {
   try {
-    const raw = localStorage.getItem(LOGIN_OPTIONS_KEY)
-    if (!raw) return DEFAULT_LOGIN_OPTIONS
-    return normalizeLoginOptions({
-      ...DEFAULT_LOGIN_OPTIONS,
-      ...(JSON.parse(raw) as Partial<LoginOptions>)
-    })
-  } catch {
-    return DEFAULT_LOGIN_OPTIONS
-  }
-}
-
-function writeLoginOptions(options: LoginOptions): void {
-  localStorage.setItem(LOGIN_OPTIONS_KEY, JSON.stringify(normalizeLoginOptions(options)))
-}
-
-function readStoredCreds(): PersistedCreds | null {
-  try {
-    const raw = localStorage.getItem(CREDS_KEY)
-    if (!raw) return null
-    return JSON.parse(raw) as PersistedCreds
-  } catch {
-    return null
-  }
-}
-
-function writeStoredCreds(creds: PersistedCreds | null): void {
-  if (!creds) {
-    localStorage.removeItem(CREDS_KEY)
-    return
-  }
-  localStorage.setItem(CREDS_KEY, JSON.stringify(creds))
-}
-
-function clearStoredUserState(): void {
-  try {
-    localStorage.removeItem(USER_STATE_KEY)
+    for (const key of LEGACY_STORAGE_KEYS) {
+      localStorage.removeItem(key)
+    }
   } catch {
     // ignore storage failures
   }
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      initializing: true,
-      loggingIn: false,
-      errorMessage: null,
-      loginOptions: readLoginOptions(),
-      savedCredentials: readStoredCreds(),
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: null,
+  initializing: true,
+  loggingIn: false,
+  errorMessage: null,
+  loginOptions: DEFAULT_LOGIN_OPTIONS,
+  savedCredentials: null,
 
-      setLoginOptions: (updates) => set((state) => {
-        const mergedOptions = { ...state.loginOptions, ...updates }
-        if (updates.rememberLogin === false) mergedOptions.autoLogin = false
-        if (updates.autoLogin === true) mergedOptions.rememberLogin = true
-        const nextOptions = normalizeLoginOptions(mergedOptions)
-        writeLoginOptions(nextOptions)
-        if (!nextOptions.rememberLogin) {
-          writeStoredCreds(null)
-          return { loginOptions: nextOptions, savedCredentials: null }
-        }
-        return { loginOptions: nextOptions }
-      }),
+  setLoginOptions: async (updates) => {
+    const current = useAuthStore.getState()
+    const nextOptions = normalizeLoginOptions({ ...current.loginOptions, ...updates })
+    const shouldPersistDisabledOption = !!current.savedCredentials && (
+      updates.rememberLogin === false ||
+      updates.autoLogin === false ||
+      updates.startupEnabled === false
+    )
 
-      login: async (username, password, options) => {
-        if (!window.electronAPI) throw new Error('API not available')
-        const loginOptions = normalizeLoginOptions(options || useAuthStore.getState().loginOptions)
-        writeLoginOptions(loginOptions)
-        set({ loggingIn: true, errorMessage: null })
-        try {
-          const user = await window.electronAPI.login(username, password)
-          const savedCredentials = loginOptions.rememberLogin ? { username, password } : null
-          writeStoredCreds(savedCredentials)
-          if (!savedCredentials) clearStoredUserState()
-          set({
-            user,
-            loggingIn: false,
-            errorMessage: null,
-            loginOptions,
-            savedCredentials
-          })
-        } catch (err: any) {
-          set({
-            user: null,
-            loggingIn: false,
-            errorMessage: err?.message || 'Đăng nhập thất bại',
-            loginOptions
-          })
-          throw err
-        }
-      },
+    set({
+      loginOptions: nextOptions,
+      savedCredentials: nextOptions.rememberLogin ? current.savedCredentials : null,
+      errorMessage: null
+    })
 
-      logout: async () => {
-        if (window.electronAPI) {
-          try { await window.electronAPI.logout() } catch { /* ignore */ }
-        }
-        set({ user: null, errorMessage: null })
-      },
+    if (!shouldPersistDisabledOption || !window.electronAPI?.updateLoginPreferences) return
 
-      resetDeviceLock: async () => {
-        if (!window.electronAPI) throw new Error('API not available')
-        await window.electronAPI.resetDeviceLock()
-        writeStoredCreds(null)
-        clearStoredUserState()
-        set({ savedCredentials: null })
-      },
-
-      changePassword: async (oldPassword, newPassword) => {
-        if (!window.electronAPI) throw new Error('API not available')
-        await window.electronAPI.changePassword(oldPassword, newPassword)
-        const { savedCredentials, user } = useAuthStore.getState()
-        if (!savedCredentials || !user || savedCredentials.username !== user.username) return
-
-        const nextCredentials = { ...savedCredentials, password: newPassword }
-        writeStoredCreds(nextCredentials)
-        set({ savedCredentials: nextCredentials })
-      },
-
-      updateUseTestWorkflow: async (useTestWorkflow) => {
-        if (!window.electronAPI) throw new Error('API not available')
-        const user = await window.electronAPI.updateUseTestWorkflow(useTestWorkflow)
-        set({ user })
-      },
-
-      rehydrateFromStorage: async () => {
-        if (!window.electronAPI) {
-          set({ initializing: false })
-          return
-        }
-        const loginOptions = readLoginOptions()
-        let creds = readStoredCreds()
-        if (!loginOptions.rememberLogin && creds) {
-          writeStoredCreds(null)
-          creds = null
-        }
-        if (!creds) {
-          set({
-            user: null,
-            initializing: false,
-            loginOptions,
-            savedCredentials: null
-          })
-          return
-        }
-        if (!loginOptions.autoLogin) {
-          set({
-            user: null,
-            initializing: false,
-            errorMessage: null,
-            loginOptions,
-            savedCredentials: creds
-          })
-          return
-        }
-        try {
-          const user = await window.electronAPI.login(creds.username, creds.password)
-          set({
-            user,
-            initializing: false,
-            errorMessage: null,
-            loginOptions,
-            savedCredentials: creds
-          })
-        } catch (err: any) {
-          set({
-            user: null,
-            initializing: false,
-            errorMessage: err?.message || 'Đăng nhập tự động thất bại',
-            loginOptions,
-            savedCredentials: creds
-          })
-        }
-      },
-
-      clearError: () => set({ errorMessage: null })
-    }),
-    {
-      name: USER_STATE_KEY,
-      partialize: (state) => ({ user: state.user })
+    try {
+      const snapshot = await window.electronAPI.updateLoginPreferences(nextOptions)
+      set({
+        loginOptions: snapshot.loginOptions,
+        savedCredentials: snapshot.savedCredentials,
+        errorMessage: null
+      })
+    } catch (err: any) {
+      set({
+        loginOptions: current.loginOptions,
+        savedCredentials: current.savedCredentials,
+        errorMessage: err?.message || 'Không thể tắt ghi nhớ đăng nhập'
+      })
     }
-  )
-)
+  },
+
+  login: async (username, password, options) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    const loginOptions = normalizeLoginOptions(options || useAuthStore.getState().loginOptions)
+    set({ loggingIn: true, errorMessage: null })
+    try {
+      const user = await window.electronAPI.login(username, password, loginOptions)
+      const savedCredentials = loginOptions.rememberLogin ? { username, password } : null
+      set({
+        user,
+        loggingIn: false,
+        errorMessage: null,
+        loginOptions,
+        savedCredentials
+      })
+    } catch (err: any) {
+      set({
+        user: null,
+        loggingIn: false,
+        errorMessage: err?.message || 'Đăng nhập thất bại',
+        loginOptions
+      })
+      throw err
+    }
+  },
+
+  logout: async () => {
+    if (window.electronAPI) {
+      try { await window.electronAPI.logout() } catch { /* ignore */ }
+    }
+    set({ user: null, errorMessage: null })
+  },
+
+  resetDeviceLock: async () => {
+    if (!window.electronAPI) throw new Error('API not available')
+    await window.electronAPI.resetDeviceLock()
+    const currentOptions = useAuthStore.getState().loginOptions
+    set({
+      savedCredentials: null,
+      loginOptions: normalizeLoginOptions({
+        ...currentOptions,
+        rememberLogin: false,
+        autoLogin: false
+      }),
+      errorMessage: null
+    })
+  },
+
+  changePassword: async (oldPassword, newPassword) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    await window.electronAPI.changePassword(oldPassword, newPassword)
+    const { savedCredentials, user } = useAuthStore.getState()
+    if (!savedCredentials || !user || savedCredentials.username !== user.username) return
+
+    set({
+      savedCredentials: {
+        ...savedCredentials,
+        password: newPassword
+      }
+    })
+  },
+
+  updateUseTestWorkflow: async (useTestWorkflow) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    const user = await window.electronAPI.updateUseTestWorkflow(useTestWorkflow)
+    set({ user })
+  },
+
+  rehydrateFromStorage: async () => {
+    clearLegacyAuthStorage()
+
+    if (!window.electronAPI?.bootstrapAuth) {
+      set({ initializing: false })
+      return
+    }
+
+    try {
+      const snapshot = await window.electronAPI.bootstrapAuth()
+      set({
+        user: snapshot.user,
+        initializing: false,
+        errorMessage: snapshot.errorMessage || null,
+        loginOptions: snapshot.loginOptions,
+        savedCredentials: snapshot.savedCredentials
+      })
+    } catch (err: any) {
+      set({
+        user: null,
+        initializing: false,
+        errorMessage: err?.message || 'Không thể tải tuỳ chọn đăng nhập',
+        loginOptions: DEFAULT_LOGIN_OPTIONS,
+        savedCredentials: null
+      })
+    }
+  },
+
+  clearError: () => set({ errorMessage: null })
+}))
