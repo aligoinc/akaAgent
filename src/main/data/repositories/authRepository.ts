@@ -269,6 +269,30 @@ export async function loadLoginSettingsForCurrentDevice(): Promise<AuthBootstrap
   })
 }
 
+export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials> {
+  const device = await getCurrentDeviceIdentity()
+  const { data, error } = await client()
+    .from('org_staff')
+    .select(STAFF_SELECT)
+    .eq('device_fingerprint_hash', device.fingerprintHash)
+    .eq('is_active', true)
+    .order('device_last_seen_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(`Không thể lấy lại tài khoản đăng nhập: ${error.message}`)
+  const staff = data as unknown as StaffRow | null
+  if (!staff) {
+    throw new Error('Không tìm thấy tài khoản đang được cấp quyền trên máy tính này.')
+  }
+
+  return {
+    username: staff.username,
+    password: staff.password
+  }
+}
+
 export async function saveDeviceLoginSettings(
   user: AuthUser,
   options?: Partial<LoginPreferences> | null

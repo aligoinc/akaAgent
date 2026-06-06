@@ -6,20 +6,22 @@ export default function LoginPage() {
   const {
     login,
     loggingIn,
+    recoveringCredentials,
     errorMessage,
     clearError,
     loginOptions,
     setLoginOptions,
+    recoverDeviceCredentials,
     savedCredentials
   } = useAuthStore()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
 
   useEffect(() => {
-    if (!loginOptions.rememberLogin || !savedCredentials) return
+    if (!savedCredentials) return
     setUsername(savedCredentials.username)
     setPassword(savedCredentials.password)
-  }, [loginOptions.rememberLogin, savedCredentials])
+  }, [savedCredentials])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -46,6 +48,8 @@ export default function LoginPage() {
     height: 14,
     accentColor: 'var(--accent-primary, #7c3aed)'
   }
+
+  const recoverDisabled = loggingIn || recoveringCredentials
 
   return (
     <div style={{
@@ -124,6 +128,24 @@ export default function LoginPage() {
               outline: 'none'
             }}
           />
+          <button
+            type="button"
+            onClick={() => { void recoverDeviceCredentials() }}
+            disabled={recoverDisabled}
+            style={{
+              alignSelf: 'flex-end',
+              border: 'none',
+              background: 'transparent',
+              color: recoverDisabled ? 'var(--text-tertiary, #888)' : 'var(--accent-primary, #7c3aed)',
+              cursor: recoverDisabled ? 'default' : 'pointer',
+              fontSize: 12,
+              padding: 0,
+              marginTop: 2,
+              textDecoration: recoverDisabled ? 'none' : 'underline'
+            }}
+          >
+            {recoveringCredentials ? 'Đang lấy tên đăng nhập...' : 'Lấy lại tên đăng nhập'}
+          </button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: -4 }}>

@@ -5,12 +5,14 @@ interface AuthState {
   user: AuthUser | null
   initializing: boolean
   loggingIn: boolean
+  recoveringCredentials: boolean
   errorMessage: string | null
   loginOptions: LoginPreferences
   savedCredentials: SavedLoginCredentials | null
 
   setLoginOptions: (updates: Partial<LoginPreferences>) => Promise<void>
   login: (username: string, password: string, options?: LoginPreferences) => Promise<void>
+  recoverDeviceCredentials: () => Promise<void>
   logout: () => Promise<void>
   resetDeviceLock: () => Promise<void>
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
@@ -62,6 +64,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   initializing: true,
   loggingIn: false,
+  recoveringCredentials: false,
   errorMessage: null,
   loginOptions: DEFAULT_LOGIN_OPTIONS,
   savedCredentials: null,
@@ -121,6 +124,24 @@ export const useAuthStore = create<AuthState>()((set) => ({
         loginOptions
       })
       throw err
+    }
+  },
+
+  recoverDeviceCredentials: async () => {
+    if (!window.electronAPI?.recoverDeviceCredentials) throw new Error('API not available')
+    set({ recoveringCredentials: true, errorMessage: null })
+    try {
+      const savedCredentials = await window.electronAPI.recoverDeviceCredentials()
+      set({
+        savedCredentials,
+        recoveringCredentials: false,
+        errorMessage: null
+      })
+    } catch (err: any) {
+      set({
+        recoveringCredentials: false,
+        errorMessage: err?.message || 'Không thể lấy lại tên đăng nhập'
+      })
     }
   },
 
