@@ -8,6 +8,8 @@ import { PageControllerRegistry } from '../../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../../v2/runtime/workflowEngine'
 import { BlockExecutor } from '../../v2/runtime/blockExecutor'
 import { callAiUsing } from '../../services/aiRuntimeService'
+import { captureBlockScreenshot } from '../../services/blockScreenshotService'
+import * as campaignRunEventRepo from '../../data/repositories/campaignRunEventRepository'
 
 const _activeAborts = new Map<string, AbortController>()
 
@@ -75,6 +77,56 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
           persist: true,
           runtimeHelpers: {
             callAIUsing: (code, payload, metadata) => callAiUsing(code, payload, metadata)
+          },
+          onBlockScreenshot: async (request, screenshotPage) => {
+            try {
+              const screenshot = await captureBlockScreenshot({
+                page: screenshotPage,
+                accountId: request.accountId ?? args.accountId,
+                campaignId: request.campaignId ?? null,
+                runId: request.runId ?? null,
+                runStepId: request.runStepId ?? null,
+                nodeId: request.nodeId,
+                blockName: request.blockName,
+                captureReason: request.captureReason
+              })
+              await campaignRunEventRepo.createCampaignRunEvents([{
+                campaignId: request.campaignId ?? null,
+                campaignInputId: request.campaignInputId ?? null,
+                campaignInputDataId: request.campaignInputDataId ?? null,
+                accountId: request.accountId ?? args.accountId,
+                runId: request.runId ?? null,
+                runStepId: request.runStepId ?? null,
+                nodeId: request.nodeId,
+                blockId: request.blockId ?? null,
+                blockName: request.blockName ?? null,
+                eventType: 'browser_screenshot',
+                eventName: 'block_screenshot',
+                targetType: 'browser',
+                status: request.captureReason === 'failure' ? 'failed' : 'success',
+                isUserVisible: true,
+                targetUrl: screenshot.browserUrl,
+                message: request.captureReason === 'failure'
+                  ? 'Đã chụp màn hình khi block lỗi/thất bại'
+                  : 'Đã chụp màn hình khi block thành công',
+                debugData: {
+                  screenshotPath: screenshot.filePath,
+                  screenshotFileName: screenshot.fileName,
+                  screenshotSizeBytes: screenshot.sizeBytes,
+                  browserUrl: screenshot.browserUrl,
+                  captureTiming: request.captureTiming,
+                  captureOn: request.captureOn,
+                  captureReason: request.captureReason,
+                  stepStatus: request.stepStatus,
+                  error: request.error ?? null,
+                  capturedAt: screenshot.capturedAt,
+                  blockStartedAt: request.startedAt ?? null,
+                  blockCompletedAt: request.completedAt ?? null
+                }
+              }])
+            } catch (err) {
+              console.warn('[v2Handlers] block screenshot capture failed:', err)
+            }
           },
           onStepProgress: (step: RunStepV2) => {
             mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: args.runKey, step })

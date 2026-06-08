@@ -1,6 +1,7 @@
 import {
   WorkflowDef, WorkflowNode, WorkflowEdge,
-  BlockDef, RunV2, RunStepV2, StepStatus, RunStatus, BlockResult
+  BlockDef, RunV2, RunStepV2, StepStatus, RunStatus, BlockResult,
+  ScreenshotCaptureOn, ScreenshotCaptureTiming
 } from '../../../shared/v2Types'
 import { PageController } from './pageController'
 import { BlockExecutor } from './blockExecutor'
@@ -22,8 +23,32 @@ export interface RunContext {
   onLog?: (entry: { nodeId: string; line: string }) => void
   /** Optional helper implementations exposed to JS blocks. */
   runtimeHelpers?: BlockRuntimeHelpers
+  /** Best-effort screenshot hook for node-level runtime capture settings. */
+  onBlockScreenshot?: (request: BlockScreenshotCaptureRequest, page: PageController) => Promise<void>
   /** Có persist run + run_steps vào DB không. Test runs có thể skip. */
   persist?: boolean
+}
+
+export interface BlockScreenshotCaptureRequest {
+  organizationId?: number | null
+  accountId?: number
+  campaignId?: number
+  campaignInputId?: number | null
+  campaignInputDataId?: number
+  workflowId?: number
+  runId?: number
+  runStepId?: number
+  nodeId: string
+  blockId?: number
+  blockName?: string
+  stepStatus: StepStatus
+  captureTiming: ScreenshotCaptureTiming
+  captureOn: ScreenshotCaptureOn
+  captureReason: 'success' | 'failure'
+  error?: string
+  output: Record<string, unknown>
+  startedAt?: string
+  completedAt?: string
 }
 
 export interface RunResult {
@@ -43,6 +68,14 @@ interface NodeState {
   durationMs?: number
   stepDbId?: number
 }
+
+const RUNTIME_NODE_CONFIG_KEYS = new Set([
+  'screenshotCaptureTiming',
+  'screenshotCaptureOn'
+])
+
+const SCREENSHOT_CAPTURE_TIMINGS = new Set<ScreenshotCaptureTiming>(['before', 'after', 'both'])
+const SCREENSHOT_CAPTURE_ON = new Set<ScreenshotCaptureOn>(['off', 'success', 'failure', 'always'])
 
 /**
  * WorkflowEngineV2 — DAG executor với parallel + AND/OR join.
@@ -312,6 +345,36 @@ export class WorkflowEngineV2 {
         console.error('[engineV2] updateRunStep failed:', err)
       }
     }
+
+    const screenshotCapture = this.resolveAfterScreenshotCapture(node, result)
+    if (screenshotCapture && ctx.onBlockScreenshot) {
+      try {
+        await ctx.onBlockScreenshot({
+          organizationId: ctx.organizationId,
+          accountId: ctx.accountId,
+          campaignId: ctx.campaignId,
+          campaignInputId: ctx.campaignInputId,
+          campaignInputDataId: ctx.campaignInputDataId,
+          workflowId: workflow.id,
+          runId,
+          runStepId: stepDbId,
+          nodeId: node.id,
+          blockId: node.blockId,
+          blockName: node.blockName,
+          stepStatus: state.status,
+          captureTiming: screenshotCapture.captureTiming,
+          captureOn: screenshotCapture.captureOn,
+          captureReason: screenshotCapture.captureReason,
+          error: state.error,
+          output: state.output,
+          startedAt: state.startedAt,
+          completedAt: state.completedAt
+        }, page)
+      } catch (err) {
+        console.warn('[engineV2] block screenshot capture failed:', err)
+      }
+    }
+
     ctx.onStepProgress?.({
       runId, nodeId: node.id, blockId: node.blockId, blockName: node.blockName,
       status: state.status, input, output: state.output,
@@ -649,7 +712,10 @@ export class WorkflowEngineV2 {
    *     vào input — chỉ control flow.
    */
   private buildInput(node: WorkflowNode, graph: Graph, nodeStates: Map<string, NodeState>): Record<string, unknown> {
-    const input: Record<string, unknown> = { ...(node.config ?? {}) }
+    const input: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(node.config ?? {})) {
+      if (!RUNTIME_NODE_CONFIG_KEYS.has(key)) input[key] = value
+    }
     const parents = graph.parents.get(node.id) ?? []
     for (const edge of parents) {
       const parentState = nodeStates.get(edge.source)
@@ -658,6 +724,22 @@ export class WorkflowEngineV2 {
       }
     }
     return input
+  }
+
+  private resolveAfterScreenshotCapture(
+    node: WorkflowNode,
+    result: BlockResult
+  ): { captureTiming: ScreenshotCaptureTiming; captureOn: ScreenshotCaptureOn; captureReason: 'success' | 'failure' } | null {
+    const captureOn = normalizeScreenshotCaptureOn(node.config?.screenshotCaptureOn)
+    if (captureOn === 'off') return null
+
+    const captureTiming = normalizeScreenshotCaptureTiming(node.config?.screenshotCaptureTiming)
+    if (captureTiming !== 'after' && captureTiming !== 'both') return null
+
+    const captureReason = getBlockResultCaptureReason(result)
+    if (captureOn !== 'always' && captureOn !== captureReason) return null
+
+    return { captureTiming, captureOn, captureReason }
   }
 
   /**
@@ -725,6 +807,24 @@ export class WorkflowEngineV2 {
     }
     return result
   }
+}
+
+function normalizeScreenshotCaptureTiming(value: unknown): ScreenshotCaptureTiming {
+  return typeof value === 'string' && SCREENSHOT_CAPTURE_TIMINGS.has(value as ScreenshotCaptureTiming)
+    ? value as ScreenshotCaptureTiming
+    : 'after'
+}
+
+function normalizeScreenshotCaptureOn(value: unknown): ScreenshotCaptureOn {
+  return typeof value === 'string' && SCREENSHOT_CAPTURE_ON.has(value as ScreenshotCaptureOn)
+    ? value as ScreenshotCaptureOn
+    : 'off'
+}
+
+function getBlockResultCaptureReason(result: BlockResult): 'success' | 'failure' {
+  if (!result.success) return 'failure'
+  if (result.output?.ok === false || result.output?.success === false) return 'failure'
+  return 'success'
 }
 
 interface Graph {

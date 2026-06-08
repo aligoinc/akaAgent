@@ -22,6 +22,11 @@ import { registerEmailNotificationHandlers } from './handlers/emailNotificationH
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { getCurrentUser } from '../data/currentUser'
 import { loadLoginSettingsForCurrentDevice, updateStartupSettingForCurrentDevice } from '../data/repositories/authRepository'
+import {
+  openBlockScreenshot,
+  readBlockScreenshotDataUrl,
+  showBlockScreenshotInFolder
+} from '../services/blockScreenshotService'
 
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
@@ -140,6 +145,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const loginOptions = await updateStartupSettingForCurrentDevice(!!enabled, getCurrentUser())
     app.setLoginItemSettings({ openAtLogin: loginOptions.startupEnabled })
     return { enabled: app.getLoginItemSettings().openAtLogin }
+  })
+
+  ipcMain.handle(IPC_EVENTS.APP_READ_BLOCK_SCREENSHOT, async (_, filePath: string) => {
+    return readBlockScreenshotDataUrl(filePath)
+  })
+
+  ipcMain.handle(IPC_EVENTS.APP_OPEN_BLOCK_SCREENSHOT, async (_, filePath: string) => {
+    return openBlockScreenshot(filePath)
+  })
+
+  ipcMain.handle(IPC_EVENTS.APP_SHOW_BLOCK_SCREENSHOT_IN_FOLDER, async (_, filePath: string) => {
+    return showBlockScreenshotInFolder(filePath)
   })
 
   // Register domain handlers
