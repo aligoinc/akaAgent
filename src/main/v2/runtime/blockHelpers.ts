@@ -28,6 +28,8 @@ export interface BlockHelpers {
   logRunEvents?(events: Record<string, unknown>[]): Promise<OptionalHelperUnsupportedResult | unknown>
   /** Optional helper: check find-data content meaning with the app AI runtime. */
   checkFindDataMeaningAI?(options: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
+  /** Optional helper: call a centralized AI configuration by ai_using.code. */
+  callAIUsing?(code: string, payload?: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
 }
 
 export interface OptionalHelperUnsupportedResult {
@@ -52,10 +54,12 @@ export interface GroupPendingContentCheckResult {
 }
 
 export interface BlockRuntimeMetadata {
+  organizationId?: number | null
   accountId?: number
   campaignId?: number
   campaignInputId?: number | null
   campaignInputDataId?: number
+  workflowId?: number
   runId?: number
   runStepId?: number
   nodeId?: string
@@ -68,9 +72,10 @@ export interface BlockRuntimeHelpers {
   logRunEvent?: (event: CampaignRunEventInput, metadata: BlockRuntimeMetadata) => Promise<unknown>
   logRunEvents?: (events: CampaignRunEventInput[], metadata: BlockRuntimeMetadata) => Promise<unknown>
   checkFindDataMeaningAI?: (options: Record<string, unknown>, metadata: BlockRuntimeMetadata) => Promise<unknown>
+  callAIUsing?: (code: string, payload: Record<string, unknown>, metadata: BlockRuntimeMetadata) => Promise<unknown>
 }
 
-const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents', 'checkFindDataMeaningAI'])
+const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents', 'checkFindDataMeaningAI', 'callAIUsing'])
 
 function createUnsupportedOptionalHelper(helper: string) {
   return async (): Promise<OptionalHelperUnsupportedResult> => ({
@@ -224,6 +229,18 @@ export function createBlockHelpers(
         const message = err?.message ? String(err.message) : String(err)
         logCollector(`[warn] helper checkFindDataMeaningAI failed: ${message}`)
         return { ok: false, checkResult: 'error', error: message }
+      }
+    }
+  }
+
+  if (runtimeHelpers.callAIUsing) {
+    baseHelpers.callAIUsing = async (code: string, payload: Record<string, unknown> = {}) => {
+      try {
+        return await runtimeHelpers.callAIUsing!(code, payload, runtimeMetadata)
+      } catch (err: any) {
+        const message = err?.message ? String(err.message) : String(err)
+        logCollector(`[warn] helper callAIUsing failed: ${message}`)
+        return { ok: false, error: message }
       }
     }
   }

@@ -9,6 +9,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "seed:ai:akabizrpa": "node scripts/seed-ai-from-akabizrpa.mjs",
     "postinstall": "electron-builder install-app-deps",
     "build:win": "npm run build && electron-builder --win --config",
     "build:mac": "npm run build && electron-builder --mac dir --config.mac.identity=null --publish never && node scripts/sign-mac-adhoc.cjs dist/mac-arm64/akaBizAuto.app && electron-builder --mac dmg --prepackaged dist/mac-arm64 --config.mac.identity=null --publish never"
@@ -38,6 +39,7 @@
     "electron": "^33.3.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
+    "mssql": "^12.5.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^5.7.3",

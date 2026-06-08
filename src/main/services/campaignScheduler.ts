@@ -37,6 +37,7 @@ import {
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import { checkFindDataMeaningAI } from './findDataAiService'
+import { callAiUsing } from './aiRuntimeService'
 
 interface AutomationPageRef {
   page: PageController
@@ -1041,6 +1042,7 @@ export class CampaignScheduler {
       try {
         const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page)
         const result = await this.engineV2.run(workflowId, variables, page, {
+          organizationId: campaign.organizationId ?? account.organizationId ?? null,
           accountId: account.id,
           campaignId: campaign.id,
           campaignInputId: detail?.inputId ?? null,
@@ -1291,6 +1293,7 @@ export class CampaignScheduler {
         count,
         suggestedFriendsCount: count
       }, page, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? null,
         accountId: account.id,
         campaignId: campaign.id,
         signal: abort.signal,
@@ -3952,7 +3955,20 @@ export class CampaignScheduler {
       checkGroupPendingContent: (options) => this.checkGroupPendingContent(account, campaign, mainPage, options),
       logRunEvent: (event, metadata) => logRunEvents([event], metadata),
       logRunEvents,
-      checkFindDataMeaningAI: (options) => checkFindDataMeaningAI(options)
+      checkFindDataMeaningAI: (options) => checkFindDataMeaningAI(options),
+      callAIUsing: (code, payload, metadata) => callAiUsing(code, payload, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? metadata.organizationId ?? null,
+        accountId: metadata.accountId,
+        campaignId: metadata.campaignId,
+        campaignInputId: metadata.campaignInputId,
+        campaignInputDataId: metadata.campaignInputDataId,
+        workflowId: metadata.workflowId,
+        runId: metadata.runId,
+        runStepId: metadata.runStepId,
+        nodeId: metadata.nodeId,
+        blockId: metadata.blockId,
+        blockName: metadata.blockName
+      })
     }
   }
 

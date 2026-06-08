@@ -19,9 +19,8 @@ import * as campaignActionRepo from '../../data/repositories/campaignActionRepos
 import * as errorPolicyRepo from '../../data/repositories/errorPolicyRepository'
 import * as runV2Repo from '../../data/repositories/runV2Repository'
 import { getSettingValue, listActiveSystemSettingsByKeys } from '../../data/repositories/systemSettingsRepository'
+import { callAiUsing } from '../../services/aiRuntimeService'
 
-const AKA_AI_BASE_URL = 'https://api.akaapp.vn'
-const AKA_AI_SOURCE = 'aka_agent'
 const AI_REQUEST_TIMEOUT_MS = 120_000
 const VIETNAM_UTC_OFFSET = '+07:00'
 const MAX_CONTENT_CHARS = 8000
@@ -58,33 +57,12 @@ interface VietnamDayRange {
   endIso: string
 }
 
-interface AkaAiResponse {
-  status?: number | string
-  data?: unknown
-  message?: unknown
-}
-
 function requireContent(input: unknown): string {
   const content = typeof input === 'string' ? input.trim() : ''
   if (!content) {
     throw new Error('Vui lòng soạn 1 nội dung trong form nội dung.')
   }
   return content
-}
-
-function unwrapAiContent(payload: unknown): string {
-  const response = payload as AkaAiResponse
-  const ok = response?.status === 1 || response?.status === '1'
-  if (!ok) {
-    const message = typeof response?.message === 'string' && response.message.trim()
-      ? response.message.trim()
-      : 'AI không thể xử lý nội dung lúc này.'
-    throw new Error(message)
-  }
-  if (typeof response.data !== 'string') {
-    throw new Error('AI trả về nội dung không hợp lệ.')
-  }
-  return response.data
 }
 
 function parseJsonObject(value: string, label: string): Record<string, unknown> {
@@ -138,23 +116,6 @@ async function loadAssistantSettings(): Promise<AssistantSettings> {
       MAX_CONTEXT_ROWS_CAP
     )
   }
-}
-
-async function postAiContent(path: string, body: Record<string, unknown>): Promise<string> {
-  requireCurrentUser()
-
-  const response = await fetch(`${AKA_AI_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS)
-  })
-
-  if (!response.ok) {
-    throw new Error(`AI trả về lỗi ${response.status}.`)
-  }
-
-  return unwrapAiContent(await response.json())
 }
 
 function pad2(value: number): string {
@@ -487,11 +448,10 @@ async function callDeepSeek(settings: AssistantSettings, contextSnapshot: Campai
 export function registerAiHandlers(): void {
   ipcMain.handle(IPC_EVENTS.AI_REWRITE_CONTENT, async (_, request: AiRewriteContentRequest) => {
     const content = requireContent(request?.content)
-    return postAiContent('/api/AI/rewriteContent', {
-      content,
-      questionContentName: 'rewrite_content',
-      source: AKA_AI_SOURCE
-    })
+    requireCurrentUser()
+    const result = await callAiUsing('app_ai_rewrite_content', { content })
+    if (!result.ok) throw new Error(result.error || 'AI không thể xử lý nội dung lúc này.')
+    return result.content
   })
 
   ipcMain.handle(IPC_EVENTS.AI_WRITE_MULTI_OTHER_CONTENT, async (_, request: AiWriteMultiOtherContentRequest) => {
@@ -501,12 +461,14 @@ export function registerAiHandlers(): void {
       throw new Error('Số lượng nội dung khác nhau phải từ 2 nội dung trở lên.')
     }
 
-    return postAiContent('/api/AI/writeMultiOtherContent', {
-      countContent,
+    requireCurrentUser()
+    const result = await callAiUsing('app_ai_write_multi_other_content', {
       content,
-      questionContentName: 'write_multi_other_content',
-      source: AKA_AI_SOURCE
+      count: countContent,
+      countContent
     })
+    if (!result.ok) throw new Error(result.error || 'AI không thể xử lý nội dung lúc này.')
+    return result.content
   })
 
   ipcMain.handle(IPC_EVENTS.AI_CAMPAIGN_ASSISTANT_CONTEXT, async (_, campaignId: number): Promise<CampaignAssistantContextResult> => {

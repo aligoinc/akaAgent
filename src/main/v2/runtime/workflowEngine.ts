@@ -10,6 +10,7 @@ import * as workflowV2Repo from '../../data/repositories/workflowV2Repository'
 import * as runV2Repo from '../../data/repositories/runV2Repository'
 
 export interface RunContext {
+  organizationId?: number | null
   accountId?: number
   campaignId?: number
   campaignInputId?: number | null
@@ -262,9 +263,11 @@ export class WorkflowEngineV2 {
             runtimeHelpers: ctx.runtimeHelpers,
             runtimeMetadata: {
               accountId: ctx.accountId,
+              organizationId: ctx.organizationId,
               campaignId: ctx.campaignId,
               campaignInputId: ctx.campaignInputId,
               campaignInputDataId: ctx.campaignInputDataId,
+              workflowId: workflow.id,
               runId,
               runStepId: stepDbId,
               nodeId: node.id,
