@@ -309,7 +309,19 @@ export async function callAiUsing(
       errorMessage: error,
       durationMs
     })
-    return { ok: false, content: '', usingCode, provider, model, generatedAt, durationMs, logId, error }
+    return {
+      ok: false,
+      content: '',
+      usingCode,
+      provider,
+      model,
+      generatedAt,
+      renderedSystemPrompt: request.systemPrompt,
+      renderedUserPrompt: request.userPrompt,
+      durationMs,
+      logId,
+      error
+    }
   }
 
   try {
@@ -359,7 +371,23 @@ export async function callAiUsing(
         tokenOutput: usage.tokenOutput,
         durationMs
       })
-      return { ok: false, content: '', usingCode, provider, model, generatedAt, usage: usage.usage, tokenInput: usage.tokenInput, tokenOutput: usage.tokenOutput, durationMs, logId, rawResponse, error }
+      return {
+        ok: false,
+        content: '',
+        usingCode,
+        provider,
+        model,
+        generatedAt,
+        renderedSystemPrompt: request.systemPrompt,
+        renderedUserPrompt: request.userPrompt,
+        usage: usage.usage,
+        tokenInput: usage.tokenInput,
+        tokenOutput: usage.tokenOutput,
+        durationMs,
+        logId,
+        rawResponse,
+        error
+      }
     }
 
     const content = extractResponseText(rawResponse, config.using.responsePath)
@@ -397,6 +425,8 @@ export async function callAiUsing(
       provider,
       model,
       generatedAt,
+      renderedSystemPrompt: request.systemPrompt,
+      renderedUserPrompt: request.userPrompt,
       usage: usage.usage,
       tokenInput: usage.tokenInput,
       tokenOutput: usage.tokenOutput,
@@ -424,6 +454,18 @@ export async function callAiUsing(
       errorMessage: error,
       durationMs
     })
-    return { ok: false, content: '', usingCode, provider, model, generatedAt, durationMs, logId, error }
+    return {
+      ok: false,
+      content: '',
+      usingCode,
+      provider,
+      model,
+      generatedAt,
+      renderedSystemPrompt: request.systemPrompt,
+      renderedUserPrompt: request.userPrompt,
+      durationMs,
+      logId,
+      error
+    }
   }
 }

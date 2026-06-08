@@ -72,6 +72,8 @@ export interface AiCallResult {
   provider: string
   model: string
   generatedAt: string
+  renderedSystemPrompt?: string | null
+  renderedUserPrompt?: string | null
   usage?: unknown
   tokenInput?: number | null
   tokenOutput?: number | null
