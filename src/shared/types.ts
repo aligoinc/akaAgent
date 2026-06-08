@@ -246,10 +246,14 @@ export interface CampaignExtraSettings {
   findDataRerunAfterHours?: number
   multiDailyTimeSlotsEnabled?: boolean // Đăng bài profile/page: chạy nhiều khung giờ trong cùng ngày
   multiDailyTimeSlots?: string         // Danh sách HH:mm, cách nhau bởi dấu phẩy
-  isFindByKeywords?: boolean
-  keywords?: string
-  isFindByContentAI?: boolean
-  contentAI?: string
+  isFindPostByKeywords?: boolean
+  postKeywords?: string
+  isFindPostByContentAI?: boolean
+  postContentAI?: string
+  isFindCommentByKeywords?: boolean
+  commentKeywords?: string
+  isFindCommentByContentAI?: boolean
+  commentContentAI?: string
   findUidTargetCampaignIds?: number[]          // Khi tìm UID, tự thêm UID vào các campaign facebook_message_uid đã chọn
   findPostLinkTargetCampaignIds?: number[]     // Khi tìm link bài post, tự thêm link vào campaign comment seeding bài post đã chọn
   findPhoneSmsTargetCampaignIds?: number[]       // Khi tìm SĐT, đẩy sang campaign akaBiz Sms đã chọn

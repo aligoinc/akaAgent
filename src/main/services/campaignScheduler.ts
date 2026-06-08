@@ -124,6 +124,21 @@ interface FindDataGroupMember {
   url: string
 }
 
+interface FindDataUidProfile {
+  uid: string
+  name: string
+  url: string
+  source: string
+}
+
+interface FindDataPhoneProfile {
+  phone: string
+  name: string
+  uid: string
+  url: string
+  source: string
+}
+
 interface FindDataFacebookGroup {
   url: string
   name: string
@@ -1789,7 +1804,9 @@ export class CampaignScheduler {
     }
   ): Record<string, unknown> {
     const extra = campaign.extraSettings || {}
-    const canUseFindDataContentConditions = extra.isFindInPost === true || extra.isFindInComment === true
+    const canUseFindDataPostContentConditions =
+      extra.isFindInPost === true || extra.isFindInComment === true || extra.isFindPostLink === true
+    const canUseFindDataCommentContentConditions = extra.isFindInComment === true
     const validImages = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
     const validCommentImages = (extra.commentImages || []).filter(fp => this.isUsableImagePath(fp)).slice(0, 1)
     const pagePostMode = extra.pagePostMode || 'api'
@@ -1917,10 +1934,14 @@ export class CampaignScheduler {
       searchGroupMineOnly: extra.searchGroupMineOnly ?? false,
       minSearchGroupMembers: extra.minSearchGroupMembers ?? 0,
       minSearchGroupPostsPerDay: extra.minSearchGroupPostsPerDay ?? 0,
-      isFindByKeywords: canUseFindDataContentConditions ? (extra.isFindByKeywords ?? false) : false,
-      keywords: canUseFindDataContentConditions ? (extra.keywords ?? '') : '',
-      isFindByContentAI: canUseFindDataContentConditions ? (extra.isFindByContentAI ?? false) : false,
-      contentAI: canUseFindDataContentConditions ? (extra.contentAI ?? '') : '',
+      isFindPostByKeywords: canUseFindDataPostContentConditions ? (extra.isFindPostByKeywords ?? false) : false,
+      postKeywords: canUseFindDataPostContentConditions ? (extra.postKeywords ?? '') : '',
+      isFindPostByContentAI: canUseFindDataPostContentConditions ? (extra.isFindPostByContentAI ?? false) : false,
+      postContentAI: canUseFindDataPostContentConditions ? (extra.postContentAI ?? '') : '',
+      isFindCommentByKeywords: canUseFindDataCommentContentConditions ? (extra.isFindCommentByKeywords ?? false) : false,
+      commentKeywords: canUseFindDataCommentContentConditions ? (extra.commentKeywords ?? '') : '',
+      isFindCommentByContentAI: canUseFindDataCommentContentConditions ? (extra.isFindCommentByContentAI ?? false) : false,
+      commentContentAI: canUseFindDataCommentContentConditions ? (extra.commentContentAI ?? '') : '',
       // Detail-specific.
       // inputDataUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
       // `fb_resolve_url` sẽ verify/normalize tuỳ theo urlType (group/profile/messenger).
@@ -2052,6 +2073,8 @@ export class CampaignScheduler {
         postLinks?: unknown[]
         groupMembers?: unknown[]
         facebookGroups?: unknown[]
+        uidProfiles?: unknown[]
+        phoneProfiles?: unknown[]
         sourceCounts?: unknown
         message?: string
         groupUrl?: string
@@ -2067,6 +2090,8 @@ export class CampaignScheduler {
         : []
       const rawGroupMembers = this.normalizeFoundGroupMembers(out.groupMembers)
       const rawFacebookGroups = this.normalizeFoundFacebookGroups(out.facebookGroups)
+      const rawUidProfiles = this.normalizeFoundUidProfiles(out.uidProfiles)
+      const rawPhoneProfiles = this.normalizeFoundPhoneProfiles(out.phoneProfiles)
       const sourceCounts = this.normalizeFindDataSourceCounts(out.sourceCounts)
       const targetName = isFindDataSearch
         ? (String(out.searchKeyword || '').trim() || inputDataName || detail?.uid || 'từ khóa search')
@@ -2092,10 +2117,16 @@ export class CampaignScheduler {
       const linkGroupZalos = this.filterNewExternalValues(rawLinkGroupZalos, previousInputValues.linkGroupZalos)
       const postLinks = this.filterNewPostLinkValues(rawPostLinks, previousInputValues.postLinks)
       const facebookGroups = this.filterNewFacebookGroups(rawFacebookGroups, previousInputValues.facebookGroups)
+      const uidProfiles = this.filterUidProfilesByUids(rawUidProfiles, uids)
+      const phoneProfiles = this.filterPhoneProfilesByPhones(rawPhoneProfiles, phones)
       const groupMemberNameByUid = new Map<string, string>()
       for (const member of groupMembers) {
         const key = this.normalizeUidForCompare(member.uid)
         if (key && member.name && !groupMemberNameByUid.has(key)) groupMemberNameByUid.set(key, member.name)
+      }
+      for (const profile of uidProfiles) {
+        const key = this.normalizeUidForCompare(profile.uid)
+        if (key && profile.name && !groupMemberNameByUid.has(key)) groupMemberNameByUid.set(key, profile.name)
       }
       const rawCounts = {
         phones: scanPhones.length,
@@ -2189,6 +2220,8 @@ export class CampaignScheduler {
             postLinks,
             groupMembers,
             facebookGroups,
+            uidProfiles,
+            phoneProfiles,
             counts: filteredCounts,
             rawCounts,
             duplicateCounts,
@@ -2220,6 +2253,7 @@ export class CampaignScheduler {
         const newPhonesForExternal = this.filterNewExternalValues(phones, previousCampaignValues.phones)
         const newZaloGroupLinksForExternal = this.filterNewExternalValues(linkGroupZalos, previousCampaignValues.linkGroupZalos)
         const newFacebookGroupsForInternal = this.filterNewFacebookGroups(facebookGroups, previousCampaignValues.facebookGroups)
+        const newPhoneProfilesForExternal = this.filterPhoneProfilesByPhones(phoneProfiles, newPhonesForExternal)
         await this.logFindDataDuplicatePushSummary(campaign, {
           label: 'UID',
           foundCount: foundUidsForPush.length,
@@ -2263,10 +2297,10 @@ export class CampaignScheduler {
         await this.pushFoundUidsToTargetCampaigns(campaign, newUidsForInternal, groupMemberNameByUid)
         await this.pushFoundPostLinksToTargetCampaigns(campaign, newPostLinksForInternal)
         await this.pushFoundFacebookGroupsToTargetCampaigns(campaign, newFacebookGroupsForInternal)
-        await this.pushFoundPhonesToSmsCampaigns(campaign, newPhonesForExternal)
-        await this.pushFoundPhonesToZaloWebCampaigns(campaign, newPhonesForExternal)
+        await this.pushFoundPhonesToSmsCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
+        await this.pushFoundPhonesToZaloWebCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
         await this.pushFoundZaloGroupLinksToZaloWebCampaigns(campaign, newZaloGroupLinksForExternal)
-        await this.pushFoundPhonesToAkaBizDesktopCampaigns(campaign, newPhonesForExternal)
+        await this.pushFoundPhonesToAkaBizDesktopCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
         await this.pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(campaign, newZaloGroupLinksForExternal)
       }
       return summary
@@ -2945,6 +2979,68 @@ export class CampaignScheduler {
     return result
   }
 
+  private normalizeFoundUidProfiles(rawProfiles: unknown): FindDataUidProfile[] {
+    if (!Array.isArray(rawProfiles)) return []
+    const map = new Map<string, FindDataUidProfile>()
+    for (const rawProfile of rawProfiles) {
+      if (!rawProfile || typeof rawProfile !== 'object') continue
+      const profile = rawProfile as { uid?: unknown; name?: unknown; url?: unknown; source?: unknown }
+      const uid = String(profile.uid || '').trim()
+      const key = this.normalizeUidForCompare(uid)
+      if (!uid || !key) continue
+      const nextProfile: FindDataUidProfile = {
+        uid,
+        name: String(profile.name || '').trim(),
+        url: String(profile.url || '').trim(),
+        source: String(profile.source || '').trim()
+      }
+      const current = map.get(key)
+      map.set(key, current ? this.mergeFindDataUidProfile(current, nextProfile) : nextProfile)
+    }
+    return Array.from(map.values())
+  }
+
+  private normalizeFoundPhoneProfiles(rawProfiles: unknown): FindDataPhoneProfile[] {
+    if (!Array.isArray(rawProfiles)) return []
+    const map = new Map<string, FindDataPhoneProfile>()
+    for (const rawProfile of rawProfiles) {
+      if (!rawProfile || typeof rawProfile !== 'object') continue
+      const profile = rawProfile as { phone?: unknown; name?: unknown; uid?: unknown; url?: unknown; source?: unknown }
+      const phone = String(profile.phone || '').trim()
+      const key = this.normalizeExternalValueForCompare(phone)
+      if (!phone || !key) continue
+      const nextProfile: FindDataPhoneProfile = {
+        phone,
+        name: String(profile.name || '').trim(),
+        uid: String(profile.uid || '').trim(),
+        url: String(profile.url || '').trim(),
+        source: String(profile.source || '').trim()
+      }
+      const current = map.get(key)
+      map.set(key, current ? this.mergeFindDataPhoneProfile(current, nextProfile) : nextProfile)
+    }
+    return Array.from(map.values())
+  }
+
+  private mergeFindDataUidProfile(current: FindDataUidProfile, next: FindDataUidProfile): FindDataUidProfile {
+    return {
+      uid: current.uid || next.uid,
+      name: current.name || next.name,
+      url: current.url || next.url,
+      source: current.source || next.source
+    }
+  }
+
+  private mergeFindDataPhoneProfile(current: FindDataPhoneProfile, next: FindDataPhoneProfile): FindDataPhoneProfile {
+    return {
+      phone: current.phone || next.phone,
+      name: current.name || next.name,
+      uid: current.uid || next.uid,
+      url: current.url || next.url,
+      source: current.source || next.source
+    }
+  }
+
   private cleanFacebookGroupUrlForStorage(rawUrl: unknown): string {
     const value = String(rawUrl || '').trim()
     if (!value) return ''
@@ -3169,6 +3265,41 @@ export class CampaignScheduler {
     return result
   }
 
+  private filterUidProfilesByUids(rawProfiles: FindDataUidProfile[], uids: string[]): FindDataUidProfile[] {
+    const allowed = new Set(uids.map(uid => this.normalizeUidForCompare(uid)).filter(Boolean))
+    if (allowed.size === 0) return []
+    const result = new Map<string, FindDataUidProfile>()
+    for (const profile of rawProfiles) {
+      const key = this.normalizeUidForCompare(profile.uid)
+      if (!key || !allowed.has(key)) continue
+      const current = result.get(key)
+      result.set(key, current ? this.mergeFindDataUidProfile(current, profile) : profile)
+    }
+    return Array.from(result.values())
+  }
+
+  private filterPhoneProfilesByPhones(rawProfiles: FindDataPhoneProfile[], phones: string[]): FindDataPhoneProfile[] {
+    const allowed = new Set(phones.map(phone => this.normalizeExternalValueForCompare(phone)).filter(Boolean))
+    if (allowed.size === 0) return []
+    const result = new Map<string, FindDataPhoneProfile>()
+    for (const profile of rawProfiles) {
+      const key = this.normalizeExternalValueForCompare(profile.phone)
+      if (!key || !allowed.has(key)) continue
+      const current = result.get(key)
+      result.set(key, current ? this.mergeFindDataPhoneProfile(current, profile) : profile)
+    }
+    return Array.from(result.values())
+  }
+
+  private getPhoneProfileNameMap(profiles: FindDataPhoneProfile[]): Map<string, string> {
+    const map = new Map<string, string>()
+    for (const profile of profiles) {
+      const key = this.normalizeExternalValueForCompare(profile.phone)
+      if (key && profile.name && !map.has(key)) map.set(key, profile.name)
+    }
+    return map
+  }
+
   private filterNewFacebookGroups(rawGroups: FindDataFacebookGroup[], existingValues: Set<string>): FindDataFacebookGroup[] {
     const result: FindDataFacebookGroup[] = []
     const seen = new Set<string>()
@@ -3332,7 +3463,7 @@ export class CampaignScheduler {
     return targetCampaign
   }
 
-  private async pushFoundPhonesToSmsCampaigns(sourceCampaign: Campaign, rawPhones: string[]): Promise<void> {
+  private async pushFoundPhonesToSmsCampaigns(sourceCampaign: Campaign, rawPhones: string[], phoneProfiles: FindDataPhoneProfile[] = []): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindPhone) return
 
     const targetCampaignIds = this.getExternalTargetCampaignIds(
@@ -3343,6 +3474,7 @@ export class CampaignScheduler {
 
     const phones = this.uniqueExternalValues(rawPhones)
     if (phones.length === 0) return
+    const phoneNameByValue = this.getPhoneProfileNameMap(phoneProfiles)
 
     const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
     if (!integrations?.sms?.staffId) {
@@ -3367,6 +3499,7 @@ export class CampaignScheduler {
             shopId,
             campaignId: targetCampaignId,
             phone,
+            name: phoneNameByValue.get(this.normalizeExternalValueForCompare(phone)) || '',
             content: contentSms[iContentSms++]
           })
           if (iContentSms === contentSms.length) iContentSms = 0
@@ -3379,7 +3512,8 @@ export class CampaignScheduler {
       }
     }
   }
-  private async pushFoundPhonesToZaloWebCampaigns(sourceCampaign: Campaign, rawPhones: string[]): Promise<void> {
+
+  private async pushFoundPhonesToZaloWebCampaigns(sourceCampaign: Campaign, rawPhones: string[], phoneProfiles: FindDataPhoneProfile[] = []): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindPhone) return
 
     const targetCampaignIds = this.getExternalTargetCampaignIds(
@@ -3390,6 +3524,7 @@ export class CampaignScheduler {
 
     const phones = this.uniqueExternalValues(rawPhones)
     if (phones.length === 0) return
+    const phoneNameByValue = this.getPhoneProfileNameMap(phoneProfiles)
 
     const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
     if (!integrations?.zaloWeb?.staffId) {
@@ -3405,6 +3540,7 @@ export class CampaignScheduler {
         await addZaloCampaignDetails(phones.map(phone => ({
           campaignId: targetCampaignId,
           status: 1,
+          name: phoneNameByValue.get(this.normalizeExternalValueForCompare(phone)) || '',
           phone,
           isAutomate: true
         })))
@@ -3453,7 +3589,7 @@ export class CampaignScheduler {
     }
   }
 
-  private async pushFoundPhonesToAkaBizDesktopCampaigns(sourceCampaign: Campaign, rawPhones: string[]): Promise<void> {
+  private async pushFoundPhonesToAkaBizDesktopCampaigns(sourceCampaign: Campaign, rawPhones: string[], phoneProfiles: FindDataPhoneProfile[] = []): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindPhone) return
 
     const targetCampaignIds = this.getExternalTargetCampaignIds(
@@ -3464,6 +3600,7 @@ export class CampaignScheduler {
 
     const phones = this.uniqueExternalValues(rawPhones)
     if (phones.length === 0) return
+    const phoneNameByValue = this.getPhoneProfileNameMap(phoneProfiles)
 
     const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
     const integration = integrations?.akaBizDesktop
@@ -3480,6 +3617,7 @@ export class CampaignScheduler {
         addAkaBizDesktopCampaignDetails(integration, phones.map(phone => ({
           campaignId: targetCampaignId,
           status: 1,
+          name: phoneNameByValue.get(this.normalizeExternalValueForCompare(phone)) || '',
           phone,
           isAutomate: true
         })))
