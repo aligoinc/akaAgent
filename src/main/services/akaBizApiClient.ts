@@ -140,6 +140,7 @@ export async function addSmsCampaignDetail(input: {
   shopId: number
   campaignId: number
   phone: string
+  name: string
   content: string
 }): Promise<void> {
   await requestJson('/api/sms/campaign-details', {

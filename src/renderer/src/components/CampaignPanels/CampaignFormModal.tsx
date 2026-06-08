@@ -656,9 +656,8 @@ const FIND_DATA_CONDITIONS_STEP: StepDef = {
   id: 'findDataConditions',
   title: 'Điều kiện chạy',
   fields: [
-    { key: 'findDataPostConditions', label: 'Điều kiện bài post' },
-    { key: 'findDataCommentConditions', label: 'Điều kiện comment' },
-    { key: 'findDataContent', label: 'Điều kiện nội dung' }
+    { key: 'findDataPostConditions', label: 'Điều kiện bài viết' },
+    { key: 'findDataCommentConditions', label: 'Điều kiện comment' }
   ]
 }
 
@@ -879,10 +878,14 @@ export default function CampaignFormModal({
     minSearchGroupPostsPerDay: campaign?.extraSettings?.minSearchGroupPostsPerDay ?? 0,
     findDataRerunEnabled: campaign?.extraSettings?.findDataRerunEnabled ?? false,
     findDataRerunAfterHours: normalizeHourValue(campaign?.extraSettings?.findDataRerunAfterHours),
-    isFindByKeywords: campaign?.extraSettings?.isFindByKeywords ?? false,
-    keywords: campaign?.extraSettings?.keywords || '',
-    isFindByContentAI: campaign?.extraSettings?.isFindByContentAI ?? false,
-    contentAI: campaign?.extraSettings?.contentAI || '',
+    isFindPostByKeywords: campaign?.extraSettings?.isFindPostByKeywords ?? false,
+    postKeywords: campaign?.extraSettings?.postKeywords || '',
+    isFindPostByContentAI: campaign?.extraSettings?.isFindPostByContentAI ?? false,
+    postContentAI: campaign?.extraSettings?.postContentAI || '',
+    isFindCommentByKeywords: campaign?.extraSettings?.isFindCommentByKeywords ?? false,
+    commentKeywords: campaign?.extraSettings?.commentKeywords || '',
+    isFindCommentByContentAI: campaign?.extraSettings?.isFindCommentByContentAI ?? false,
+    commentContentAI: campaign?.extraSettings?.commentContentAI || '',
     findUidTargetCampaignIds: campaign?.extraSettings?.findUidTargetCampaignIds || [] as number[],
     findPostLinkTargetCampaignIds: campaign?.extraSettings?.findPostLinkTargetCampaignIds || [] as number[],
     findPhoneSmsTargetCampaignIds: campaign?.extraSettings?.findPhoneSmsTargetCampaignIds || [] as number[],
@@ -997,7 +1000,8 @@ export default function CampaignFormModal({
   const usesFindDataCommentFeed = formData.isFindInComment || formData.isFindNewInteractors
   const usesFindDataSearchGroup = isFindDataSearchCampaign && formData.isFindFacebookGroup
   const usesFindDataFeed = usesFindDataPostFeed || usesFindDataCommentFeed
-  const usesFindDataContentConditions = formData.isFindInPost || formData.isFindInComment
+  const usesFindDataPostContentConditions = formData.isFindInPost || formData.isFindInComment || formData.isFindPostLink
+  const usesFindDataCommentContentConditions = formData.isFindInComment
   const effectiveFindDataPostSort = formData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
   const effectiveFindDataCommentSort = formData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
   const showFindDataConditionsSection = isFindDataCampaign && (usesFindDataFeed || formData.isFindInGroupMembers || usesFindDataSearchGroup)
@@ -1682,7 +1686,6 @@ export default function CampaignFormModal({
       case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindNewInteractors || formData.isFindInGroupMembers || formData.isFindFacebookGroup
       case 'findDataPostConditions': return true
       case 'findDataCommentConditions': return true
-      case 'findDataContent': return true
       case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink || formData.isFindFacebookGroup
       case 'foundDataHandling': return true
       case 'findDataSources': return true
@@ -2061,7 +2064,8 @@ export default function CampaignFormModal({
       const normalizedScheduleDays = formData.scheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
       const normalizedScheduleWeekDays = formData.scheduleType === 'weekly' ? formData.scheduleWeekDays : ''
       const normalizedFindData = normalizeFindDataFlagState(formData, { isSearchCampaign: isFindDataSearchCampaign })
-      const canUseFindDataContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment
+      const canUseFindDataPostContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment || normalizedFindData.isFindPostLink
+      const canUseFindDataCommentContentConditionsForSave = normalizedFindData.isFindInComment
       const saveFindDataPostSort = normalizedFindData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
       const saveFindDataCommentSort = normalizedFindData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
       const saveFindDataGoalPriority = formData.findDataGoalModeEnabled
@@ -2195,10 +2199,14 @@ export default function CampaignFormModal({
             multiDailyTimeSlots: isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled
               ? normalizedMultiDailySlots.join(',')
               : '',
-            isFindByKeywords: canUseFindDataContentConditionsForSave ? formData.isFindByKeywords : false,
-            keywords: canUseFindDataContentConditionsForSave ? formData.keywords : '',
-            isFindByContentAI: canUseFindDataContentConditionsForSave ? formData.isFindByContentAI : false,
-            contentAI: canUseFindDataContentConditionsForSave ? formData.contentAI : '',
+            isFindPostByKeywords: canUseFindDataPostContentConditionsForSave ? formData.isFindPostByKeywords : false,
+            postKeywords: canUseFindDataPostContentConditionsForSave ? formData.postKeywords : '',
+            isFindPostByContentAI: canUseFindDataPostContentConditionsForSave ? formData.isFindPostByContentAI : false,
+            postContentAI: canUseFindDataPostContentConditionsForSave ? formData.postContentAI : '',
+            isFindCommentByKeywords: canUseFindDataCommentContentConditionsForSave ? formData.isFindCommentByKeywords : false,
+            commentKeywords: canUseFindDataCommentContentConditionsForSave ? formData.commentKeywords : '',
+            isFindCommentByContentAI: canUseFindDataCommentContentConditionsForSave ? formData.isFindCommentByContentAI : false,
+            commentContentAI: canUseFindDataCommentContentConditionsForSave ? formData.commentContentAI : '',
             findUidTargetCampaignIds: normalizedFindData.isFindUid && handleFoundUidData ? getCampaignIdList(formData.findUidTargetCampaignIds) : [],
             findPostLinkTargetCampaignIds: normalizedFindData.isFindPostLink && handleFoundPostLinkData ? getCampaignIdList(formData.findPostLinkTargetCampaignIds) : [],
             findPhoneSmsTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneSmsData ? getCampaignIdList(formData.findPhoneSmsTargetCampaignIds) : [],
@@ -4515,11 +4523,93 @@ export default function CampaignFormModal({
     </div>
   )
 
+  const renderFindDataPostContentConditions = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Điều kiện nội dung bài viết</div>
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.isFindPostByKeywords}
+            onChange={e => setFormData(p => ({ ...p, isFindPostByKeywords: e.target.checked }))}
+          />
+          <span>Bài viết phải chứa 1 trong các từ khoá (cách nhau dấu phẩy)</span>
+        </label>
+        <input
+          type="text"
+          value={formData.postKeywords}
+          onChange={e => setFormData(p => ({ ...p, postKeywords: e.target.value }))}
+          className="stepper-input"
+          disabled={!formData.isFindPostByKeywords}
+        />
+      </div>
+
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.isFindPostByContentAI}
+            onChange={e => setFormData(p => ({ ...p, isFindPostByContentAI: e.target.checked }))}
+          />
+          <span>Ý nghĩa bài viết là (dùng AI)</span>
+        </label>
+        <textarea
+          className="stepper-textarea"
+          value={formData.postContentAI}
+          onChange={e => setFormData(p => ({ ...p, postContentAI: e.target.value }))}
+          rows={4}
+          disabled={!formData.isFindPostByContentAI}
+        />
+      </div>
+    </div>
+  )
+
+  const renderFindDataCommentContentConditions = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Điều kiện nội dung comment</div>
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.isFindCommentByKeywords}
+            onChange={e => setFormData(p => ({ ...p, isFindCommentByKeywords: e.target.checked }))}
+          />
+          <span>Comment phải chứa 1 trong các từ khoá (cách nhau dấu phẩy)</span>
+        </label>
+        <input
+          type="text"
+          value={formData.commentKeywords}
+          onChange={e => setFormData(p => ({ ...p, commentKeywords: e.target.value }))}
+          className="stepper-input"
+          disabled={!formData.isFindCommentByKeywords}
+        />
+      </div>
+
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.isFindCommentByContentAI}
+            onChange={e => setFormData(p => ({ ...p, isFindCommentByContentAI: e.target.checked }))}
+          />
+          <span>Ý nghĩa comment là (dùng AI)</span>
+        </label>
+        <textarea
+          className="stepper-textarea"
+          value={formData.commentContentAI}
+          onChange={e => setFormData(p => ({ ...p, commentContentAI: e.target.value }))}
+          rows={4}
+          disabled={!formData.isFindCommentByContentAI}
+        />
+      </div>
+    </div>
+  )
+
   const renderFindDataConditions = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {usesFindDataPostFeed && (
         <div className="extra-comment-options">
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Bài post</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Bài viết</div>
           <div className="stepper-form-row">
             <div className="stepper-form-group half">
               <label>{isFindDataSearchCampaign ? 'Cách hiển thị bài post search' : 'Cách hiển thị bài post trong group'}</label>
@@ -4601,6 +4691,7 @@ export default function CampaignFormModal({
               </div>
             </div>
           )}
+          {usesFindDataPostContentConditions && renderFindDataPostContentConditions()}
         </div>
       )}
 
@@ -4630,6 +4721,7 @@ export default function CampaignFormModal({
               />
             </div>
           </div>
+          {usesFindDataCommentContentConditions && renderFindDataCommentContentConditions()}
         </div>
       )}
 
@@ -4723,46 +4815,6 @@ export default function CampaignFormModal({
         </div>
       )}
 
-      {usesFindDataContentConditions && (
-        <div className="extra-comment-options">
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Điều kiện nội dung</div>
-          <div className="stepper-form-group">
-            <label className="schedule-checkbox-label">
-              <input
-                type="checkbox"
-                checked={formData.isFindByKeywords}
-                onChange={e => setFormData(p => ({ ...p, isFindByKeywords: e.target.checked }))}
-              />
-              <span>Nội dung phải chứa 1 trong các từ khoá (cách nhau dấu phẩy)</span>
-            </label>
-            <input
-              type="text"
-              value={formData.keywords}
-              onChange={e => setFormData(p => ({ ...p, keywords: e.target.value }))}
-              className="stepper-input"
-              disabled={!formData.isFindByKeywords}
-            />
-          </div>
-
-          <div className="stepper-form-group">
-            <label className="schedule-checkbox-label">
-              <input
-                type="checkbox"
-                checked={formData.isFindByContentAI}
-                onChange={e => setFormData(p => ({ ...p, isFindByContentAI: e.target.checked }))}
-              />
-              <span>Ý nghĩa của nội dung là (dùng AI)</span>
-            </label>
-            <textarea
-              className="stepper-textarea"
-              value={formData.contentAI}
-              onChange={e => setFormData(p => ({ ...p, contentAI: e.target.value }))}
-              rows={4}
-              disabled={!formData.isFindByContentAI}
-            />
-          </div>
-        </div>
-      )}
     </div>
   )
 

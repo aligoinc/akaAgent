@@ -30,6 +30,7 @@ export interface AkaBizDesktopInstallPathResult {
 export interface AkaBizDesktopCampaignDetailInput {
   campaignId: number
   status: number
+  name?: string | null
   phone?: string | null
   uid?: string | null
   isAutomate: boolean
@@ -191,6 +192,7 @@ export function addAkaBizDesktopCampaignDetails(
       INSERT INTO [autoCampaignDetail] (
         [CampaignId],
         [Status],
+        [Name],
         [Phone],
         [Uid],
         [IsAutomate]
@@ -198,6 +200,7 @@ export function addAkaBizDesktopCampaignDetails(
       VALUES (
         @campaignId,
         @status,
+        @name,
         @phone,
         @uid,
         @isAutomate
@@ -209,6 +212,7 @@ export function addAkaBizDesktopCampaignDetails(
         insert.run({
           campaignId: row.campaignId,
           status: row.status,
+          name: row.name ?? null,
           phone: row.phone ?? null,
           uid: row.uid ?? null,
           isAutomate: row.isAutomate ? 1 : 0

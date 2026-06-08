@@ -70,6 +70,8 @@ interface FoundDataPayload {
   postLinks: string[]
   groupMembers: FoundGroupMember[]
   facebookGroups: FoundFacebookGroup[]
+  uidProfiles: FoundUidProfile[]
+  phoneProfiles: FoundPhoneProfile[]
   groupUrl: string
   total: number
 }
@@ -78,6 +80,21 @@ interface FoundGroupMember {
   uid: string
   name: string
   url: string
+}
+
+interface FoundUidProfile {
+  uid: string
+  name: string
+  url: string
+  source: string
+}
+
+interface FoundPhoneProfile {
+  phone: string
+  name: string
+  uid: string
+  url: string
+  source: string
 }
 
 interface FoundFacebookGroup {
@@ -280,6 +297,48 @@ const toGroupMemberList = (value: unknown): FoundGroupMember[] => {
   return members
 }
 
+const toUidProfileList = (value: unknown): FoundUidProfile[] => {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const profiles: FoundUidProfile[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const profile = item as { uid?: unknown; name?: unknown; url?: unknown; source?: unknown }
+    const uid = String(profile.uid || '').trim()
+    if (!uid || seen.has(uid)) continue
+    seen.add(uid)
+    profiles.push({
+      uid,
+      name: String(profile.name || '').trim(),
+      url: String(profile.url || '').trim(),
+      source: String(profile.source || '').trim()
+    })
+  }
+  return profiles
+}
+
+const toPhoneProfileList = (value: unknown): FoundPhoneProfile[] => {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const profiles: FoundPhoneProfile[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const profile = item as { phone?: unknown; name?: unknown; uid?: unknown; url?: unknown; source?: unknown }
+    const phone = String(profile.phone || '').trim()
+    const key = phone.toLowerCase()
+    if (!phone || seen.has(key)) continue
+    seen.add(key)
+    profiles.push({
+      phone,
+      name: String(profile.name || '').trim(),
+      uid: String(profile.uid || '').trim(),
+      url: String(profile.url || '').trim(),
+      source: String(profile.source || '').trim()
+    })
+  }
+  return profiles
+}
+
 const toFacebookGroupList = (value: unknown): FoundFacebookGroup[] => {
   if (!Array.isArray(value)) return []
   const seen = new Set<string>()
@@ -320,6 +379,8 @@ const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
   const postLinks = toStringList(data.postLinks)
   const groupMembers = toGroupMemberList(data.groupMembers)
   const facebookGroups = toFacebookGroupList(data.facebookGroups)
+  const uidProfiles = toUidProfileList(data.uidProfiles)
+  const phoneProfiles = toPhoneProfileList(data.phoneProfiles)
   const groupUrl = typeof data.groupUrl === 'string' ? data.groupUrl : ''
   return {
     phones,
@@ -328,6 +389,8 @@ const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
     postLinks,
     groupMembers,
     facebookGroups,
+    uidProfiles,
+    phoneProfiles,
     groupUrl,
     total: phones.length + linkGroupZalos.length + uids.length + postLinks.length + groupMembers.length + facebookGroups.length
   }
@@ -1728,6 +1791,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       const createdAt = detail.createdAt
       const memberNameByUid = new Map(payload.groupMembers.map(member => [member.uid, member.name]))
       const memberUidSet = new Set(payload.groupMembers.map(member => member.uid))
+      const uidProfileNameByUid = new Map(payload.uidProfiles.map(profile => [profile.uid, profile.name]))
+      const phoneProfileNameByPhone = new Map(payload.phoneProfiles.map(profile => [profile.phone.toLowerCase(), profile.name]))
       const uidItems = [
         ...[...payload.groupMembers]
           .sort((a, b) => Number(!a.name) - Number(!b.name))
@@ -1747,7 +1812,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
             kind: 'uid' as const,
             label: getFoundDataKindLabel('uid'),
             value,
-            name: memberNameByUid.get(value) || '',
+            name: memberNameByUid.get(value) || uidProfileNameByUid.get(value) || '',
             groupUrl,
             createdAt
           }))
@@ -1758,6 +1823,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           kind: 'phone' as const,
           label: getFoundDataKindLabel('phone'),
           value,
+          name: phoneProfileNameByPhone.get(value.toLowerCase()) || '',
           groupUrl,
           createdAt
         })),
