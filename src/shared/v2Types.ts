@@ -20,6 +20,10 @@ export type LoopType = 'count' | 'while' | 'forEach'
 
 export type MergeMode = 'all' | 'any'
 
+export type ScreenshotCaptureTiming = 'before' | 'after' | 'both'
+
+export type ScreenshotCaptureOn = 'off' | 'success' | 'failure' | 'always'
+
 export interface BlockConfigField {
   name: string
   type: 'string' | 'number' | 'boolean' | 'json' | 'select' | 'textarea' | 'code'

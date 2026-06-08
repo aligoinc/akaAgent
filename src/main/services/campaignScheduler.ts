@@ -5,7 +5,7 @@ import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignRunEventInput } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
-import { WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
+import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
 import type { BlockRuntimeHelpers, BlockRuntimeMetadata, GroupPendingContentCheckOptions, GroupPendingContentCheckResult } from '../v2/runtime/blockHelpers'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 import {
@@ -38,6 +38,7 @@ import { ProxyRuntimeService } from './proxyRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import { checkFindDataMeaningAI } from './findDataAiService'
 import { callAiUsing } from './aiRuntimeService'
+import { captureBlockScreenshot } from './blockScreenshotService'
 
 interface AutomationPageRef {
   page: PageController
@@ -1065,6 +1066,9 @@ export class CampaignScheduler {
           signal: abort.signal,
           persist: true,
           runtimeHelpers,
+          onBlockScreenshot: (request, screenshotPage) => {
+            return this.recordBlockScreenshotEvent(account, campaign, detail, request, screenshotPage)
+          },
           onStepProgress: (step: RunStepV2) => {
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
             if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
@@ -4107,6 +4111,65 @@ export class CampaignScheduler {
         blockId: metadata.blockId,
         blockName: metadata.blockName
       })
+    }
+  }
+
+  private async recordBlockScreenshotEvent(
+    account: AutoAccount,
+    campaign: Campaign,
+    detail: CampaignInputData | null,
+    request: BlockScreenshotCaptureRequest,
+    page: PageController
+  ): Promise<void> {
+    try {
+      const screenshot = await captureBlockScreenshot({
+        page,
+        accountId: request.accountId ?? account.id,
+        campaignId: request.campaignId ?? campaign.id,
+        runId: request.runId ?? null,
+        runStepId: request.runStepId ?? null,
+        nodeId: request.nodeId,
+        blockName: request.blockName,
+        captureReason: request.captureReason
+      })
+      await campaignRunEventRepo.createCampaignRunEvents([{
+        campaignId: request.campaignId ?? campaign.id,
+        campaignActionId: campaign.actionId,
+        campaignInputId: request.campaignInputId ?? detail?.inputId ?? null,
+        campaignInputDataId: request.campaignInputDataId ?? detail?.id ?? null,
+        accountId: request.accountId ?? account.id,
+        runId: request.runId ?? null,
+        runStepId: request.runStepId ?? null,
+        nodeId: request.nodeId,
+        blockId: request.blockId ?? null,
+        blockName: request.blockName ?? null,
+        eventType: 'browser_screenshot',
+        eventName: 'block_screenshot',
+        targetType: 'browser',
+        status: request.captureReason === 'failure' ? 'failed' : 'success',
+        isUserVisible: true,
+        targetUrl: screenshot.browserUrl,
+        message: request.captureReason === 'failure'
+          ? 'Đã chụp màn hình khi block lỗi/thất bại'
+          : 'Đã chụp màn hình khi block thành công',
+        debugData: {
+          screenshotPath: screenshot.filePath,
+          screenshotFileName: screenshot.fileName,
+          screenshotSizeBytes: screenshot.sizeBytes,
+          browserUrl: screenshot.browserUrl,
+          captureTiming: request.captureTiming,
+          captureOn: request.captureOn,
+          captureReason: request.captureReason,
+          stepStatus: request.stepStatus,
+          error: request.error ?? null,
+          capturedAt: screenshot.capturedAt,
+          blockStartedAt: request.startedAt ?? null,
+          blockCompletedAt: request.completedAt ?? null
+        }
+      }])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn('[campaignScheduler] block screenshot capture failed:', message)
     }
   }
 

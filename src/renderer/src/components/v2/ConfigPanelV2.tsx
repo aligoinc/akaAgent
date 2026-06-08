@@ -1,8 +1,21 @@
 import { useState } from 'react'
 import { useWorkflowV2Store } from '../../stores/workflowV2Store'
 import { useBlockLibraryStore } from '../../stores/blockLibraryStore'
-import { BlockConfigField } from '../../../../shared/v2Types'
+import { BlockConfigField, ScreenshotCaptureOn, ScreenshotCaptureTiming } from '../../../../shared/v2Types'
 import CodeEditorDrawer from './CodeEditorDrawer'
+
+const SCREENSHOT_CAPTURE_ON_OPTIONS: Array<{ value: ScreenshotCaptureOn; label: string }> = [
+  { value: 'off', label: 'Tắt' },
+  { value: 'success', label: 'Khi thành công' },
+  { value: 'failure', label: 'Khi lỗi/thất bại' },
+  { value: 'always', label: 'Luôn chụp' }
+]
+
+const SCREENSHOT_CAPTURE_TIMING_OPTIONS: Array<{ value: ScreenshotCaptureTiming; label: string; disabled?: boolean }> = [
+  { value: 'after', label: 'Sau khi chạy block' },
+  { value: 'before', label: 'Trước khi chạy block', disabled: true },
+  { value: 'both', label: 'Trước và sau khi chạy', disabled: true }
+]
 
 export default function ConfigPanelV2() {
   const { current: workflow, selectedNodeId, updateNodeConfig, updateNodeCodeOverride } = useWorkflowV2Store()
@@ -55,6 +68,38 @@ export default function ConfigPanelV2() {
           {block.configSchema.map(field => (
             <ConfigField key={field.name} field={field} value={node.config?.[field.name]} onChange={(v) => setField(field.name, v)} />
           ))}
+
+          <div style={{ marginTop: 16, marginBottom: 8, fontSize: 11, color: '#888' }}>Chụp màn hình browser</div>
+          <div style={{ marginBottom: 12 }}>
+            <label htmlFor="cfg-screenshotCaptureTiming" style={{ display: 'block', fontSize: 11, color: '#aaa', marginBottom: 4 }}>
+              Thời điểm chụp
+            </label>
+            <select
+              id="cfg-screenshotCaptureTiming"
+              value={String(node.config?.screenshotCaptureTiming ?? 'after')}
+              onChange={(e) => setField('screenshotCaptureTiming', e.target.value)}
+              style={fieldStyle}
+            >
+              {SCREENSHOT_CAPTURE_TIMING_OPTIONS.map(option => (
+                <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label htmlFor="cfg-screenshotCaptureOn" style={{ display: 'block', fontSize: 11, color: '#aaa', marginBottom: 4 }}>
+              Điều kiện chụp
+            </label>
+            <select
+              id="cfg-screenshotCaptureOn"
+              value={String(node.config?.screenshotCaptureOn ?? 'off')}
+              onChange={(e) => setField('screenshotCaptureOn', e.target.value)}
+              style={fieldStyle}
+            >
+              {SCREENSHOT_CAPTURE_ON_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
 
           {/* Label */}
           <div style={{ marginTop: 16, marginBottom: 8, fontSize: 11, color: '#888' }}>Hiển thị trên canvas</div>

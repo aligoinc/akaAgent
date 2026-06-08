@@ -91,6 +91,12 @@ export async function listCampaignRunEventsByCampaign(
   if (options.userVisibleOnly === true) {
     query = query.eq('is_user_visible', true)
   }
+  const eventTypes = Array.isArray(options.eventTypes)
+    ? options.eventTypes.map(type => String(type || '').trim()).filter(Boolean)
+    : []
+  if (eventTypes.length > 0) {
+    query = query.in('event_type', Array.from(new Set(eventTypes)))
+  }
 
   const { data, error } = await query
     .order('created_at', { ascending: true })

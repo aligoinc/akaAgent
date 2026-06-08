@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Camera } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -141,6 +141,7 @@ interface FindDataLogRow {
 
 const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
 const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email']
+const BLOCK_SCREENSHOT_EVENT_TYPE = 'browser_screenshot'
 const FIND_DATA_LOG_EXPORT_HEADERS = [
   'Thời gian',
   'Nguồn',
@@ -428,6 +429,25 @@ const getNestedStringValue = (value: unknown, ...keys: string[]): string => {
     current = getJsonObject(current)[key]
   }
   return getStringValue(current)
+}
+
+const getScreenshotPath = (event: CampaignRunEvent): string => (
+  getStringValue(getJsonObject(event.debugData).screenshotPath)
+)
+
+const getScreenshotResultLabel = (event: CampaignRunEvent): string => {
+  const reason = getStringValue(getJsonObject(event.debugData).captureReason)
+  switch (reason || String(event.status || '').toLowerCase()) {
+    case 'success': return 'Thành công'
+    case 'failure': return 'Lỗi/thất bại'
+    case 'failed': return 'Lỗi/thất bại'
+    default: return '-'
+  }
+}
+
+const getScreenshotResultColor = (event: CampaignRunEvent): string => {
+  const reason = getStringValue(getJsonObject(event.debugData).captureReason)
+  return reason === 'failure' || event.status === 'failed' ? '#ef4444' : '#22c55e'
 }
 
 const getStringArrayValue = (value: unknown): string[] => {
@@ -1188,6 +1208,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [inputDataFilters, setInputDataFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
   const [actionDetailFilters, setActionDetailFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
   const [findDataLogScope, setFindDataLogScope] = useState<FindDataLogScope>('visible')
+  const [screenshotDataUrls, setScreenshotDataUrls] = useState<Record<number, string>>({})
+  const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
   const [openDetailDropdown, setOpenDetailDropdown] = useState<DetailFilterDropdown | null>(null)
   const [detailPopoverPosition, setDetailPopoverPosition] = useState<DetailPopoverPosition | null>(null)
@@ -1224,6 +1246,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       loadCampaignDetails(selectedCampaignId)
       return
     }
+    if (detailTab === 'runLog') {
+      loadCampaignRunEvents(selectedCampaignId, {
+        userVisibleOnly: true,
+        eventTypes: [BLOCK_SCREENSHOT_EVENT_TYPE],
+        limit: 500
+      })
+      return
+    }
     if (detailTab === 'findDataLog') {
       loadCampaignRunEvents(selectedCampaignId, {
         userVisibleOnly: !canViewAllFindDataLogs || findDataLogScope === 'visible',
@@ -1244,6 +1274,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     setInputDataFilters(createDefaultDetailFilters())
     setActionDetailFilters(createDefaultDetailFilters())
     setFindDataLogScope('visible')
+    setScreenshotDataUrls({})
+    setScreenshotPreview(null)
     setOpenDetailDropdown(null)
     setDetailPopoverPosition(null)
   }, [selectedCampaignId])
@@ -1782,6 +1814,44 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     () => parseCampaignRunLog(selectedCampaign?.log || ''),
     [selectedCampaign?.log]
   )
+  const runLogScreenshotEvents = useMemo(
+    () => detailTab === 'runLog'
+      ? campaignRunEvents.filter(event => event.eventType === BLOCK_SCREENSHOT_EVENT_TYPE)
+      : [],
+    [campaignRunEvents, detailTab]
+  )
+
+  useEffect(() => {
+    if (detailTab !== 'runLog' || runLogScreenshotEvents.length === 0) {
+      setScreenshotDataUrls({})
+      return
+    }
+
+    let cancelled = false
+    const loadScreenshots = async () => {
+      const entries = await Promise.all(runLogScreenshotEvents.map(async event => {
+        const filePath = getScreenshotPath(event)
+        if (!filePath || !window.electronAPI?.readBlockScreenshotDataUrl) return null
+        try {
+          const result = await window.electronAPI.readBlockScreenshotDataUrl(filePath)
+          return [event.id, result.dataUrl] as const
+        } catch {
+          return null
+        }
+      }))
+      if (cancelled) return
+      const next: Record<number, string> = {}
+      for (const entry of entries) {
+        if (entry) next[entry[0]] = entry[1]
+      }
+      setScreenshotDataUrls(next)
+    }
+
+    void loadScreenshots()
+    return () => {
+      cancelled = true
+    }
+  }, [detailTab, runLogScreenshotEvents])
 
   const foundDataItems = useMemo<FoundDataItem[]>(() => {
     return campaignDetails.flatMap(detail => {
@@ -2275,6 +2345,24 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     })
   }
 
+  const handlePreviewScreenshot = async (event: CampaignRunEvent, cachedDataUrl?: string) => {
+    const title = `${formatDisplayDateTime(event.createdAt)} - ${event.blockName || event.nodeId || 'Screenshot'}`
+    if (cachedDataUrl) {
+      setScreenshotPreview({ dataUrl: cachedDataUrl, title })
+      return
+    }
+
+    const filePath = getScreenshotPath(event)
+    if (!filePath || !window.electronAPI?.readBlockScreenshotDataUrl) return
+    try {
+      const result = await window.electronAPI.readBlockScreenshotDataUrl(filePath)
+      setScreenshotDataUrls(prev => ({ ...prev, [event.id]: result.dataUrl }))
+      setScreenshotPreview({ dataUrl: result.dataUrl, title })
+    } catch {
+      showAlert('Không thể tải ảnh screenshot.', 'error')
+    }
+  }
+
   const handleExportCampaignInputData = () => {
     if (!selectedCampaign) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
@@ -2616,6 +2704,72 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
   return (
     <div className="campaign-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+      {screenshotPreview && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 2600, padding: 24 }}
+          onMouseDown={() => setScreenshotPreview(null)}
+        >
+          <div
+            onMouseDown={event => event.stopPropagation()}
+            style={{
+              width: 'min(1200px, 96vw)',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 8,
+              overflow: 'hidden',
+              boxShadow: 'var(--shadow-lg)'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '10px 12px',
+                borderBottom: '1px solid var(--border-default)'
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {screenshotPreview.title}
+              </div>
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={() => setScreenshotPreview(null)}
+                title="Đóng"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div
+              style={{
+                padding: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'auto',
+                background: 'var(--bg-primary)'
+              }}
+            >
+              <img
+                src={screenshotPreview.dataUrl}
+                alt="Browser screenshot"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: 'calc(92vh - 74px)',
+                  objectFit: 'contain',
+                  borderRadius: 4,
+                  border: '1px solid var(--border-default)'
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       <div className="campaign-panel-top">
         <div className="campaign-panel-header">
           <span className="campaign-panel-title">Chiến dịch</span>
@@ -2980,7 +3134,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                   className={`detail-dock-tab ${detailTab === 'runLog' ? 'active' : ''}`}
                   onClick={() => setDetailTab('runLog')}
                 >
-                  Lịch sử chạy ({runLogEntries.length})
+                  Lịch sử chạy ({runLogEntries.length + runLogScreenshotEvents.length})
                 </button>
                 {isSelectedFindDataCampaign && (
                   <button
@@ -3367,25 +3521,103 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
               {/* Tab: Campaign run log from auto_campaigns.log */}
               {detailTab === 'runLog' && (
-                runLogEntries.length === 0 ? (
+                runLogEntries.length === 0 && runLogScreenshotEvents.length === 0 && !loadingCampaignRunEvents ? (
                   <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có lịch sử chạy</div>
                 ) : (
-                  <table className="campaign-grid" style={{ fontSize: 12 }}>
-                    <thead>
-                      <tr>
-                        <th>Thời gian</th>
-                        <th>Nội dung</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {runLogEntries.map(entry => (
-                        <tr key={entry.key}>
-                          <td title={entry.timestamp || '-'} style={{ whiteSpace: 'nowrap' }}>{entry.timestamp || '-'}</td>
-                          <td className="campaign-detail-log-cell" title={entry.message || '-'}>{entry.message}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {runLogEntries.length > 0 && (
+                      <table className="campaign-grid" style={{ fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            <th>Thời gian</th>
+                            <th>Nội dung</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {runLogEntries.map(entry => (
+                            <tr key={entry.key}>
+                              <td title={entry.timestamp || '-'} style={{ whiteSpace: 'nowrap' }}>{entry.timestamp || '-'}</td>
+                              <td className="campaign-detail-log-cell" title={entry.message || '-'}>{entry.message}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {loadingCampaignRunEvents && (
+                      <div className="text-center text-secondary" style={{ padding: 12, fontSize: 12 }}>Đang tải screenshot...</div>
+                    )}
+
+                    {runLogScreenshotEvents.length > 0 && (
+                      <table className="campaign-grid" style={{ fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            <th>Thời gian</th>
+                            <th>Block</th>
+                            <th>Kết quả chạy</th>
+                            <th>Ảnh</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {runLogScreenshotEvents.map(event => {
+                            const filePath = getScreenshotPath(event)
+                            const resultLabel = getScreenshotResultLabel(event)
+                            const resultColor = getScreenshotResultColor(event)
+                            const imageDataUrl = screenshotDataUrls[event.id]
+                            return (
+                              <tr key={event.id}>
+                                <td title={formatDisplayDateTime(event.createdAt)} style={{ whiteSpace: 'nowrap' }}>
+                                  {formatDisplayDateTime(event.createdAt)}
+                                </td>
+                                <td title={event.blockName || event.nodeId || '-'}>
+                                  <strong>{event.blockName || event.nodeId || '-'}</strong>
+                                  {event.nodeId && <div style={{ color: '#888', fontSize: 11 }}>{event.nodeId}</div>}
+                                </td>
+                                <td title={resultLabel}>
+                                  <span style={{ color: resultColor }}>
+                                    {resultLabel}
+                                  </span>
+                                </td>
+                                <td>
+                                  {imageDataUrl ? (
+                                    <img
+                                      src={imageDataUrl}
+                                      alt="Browser screenshot"
+                                      onClick={() => handlePreviewScreenshot(event, imageDataUrl)}
+                                      title="Click để xem ảnh screenshot"
+                                      style={{
+                                        width: 96,
+                                        height: 54,
+                                        objectFit: 'cover',
+                                        borderRadius: 4,
+                                        border: '1px solid var(--border, #2a2a35)',
+                                        display: 'block',
+                                        cursor: filePath ? 'pointer' : 'default'
+                                      }}
+                                    />
+                                  ) : (
+                                    <span
+                                      onClick={() => handlePreviewScreenshot(event)}
+                                      title={filePath ? 'Click để xem ảnh screenshot' : undefined}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                        color: '#888',
+                                        cursor: filePath ? 'pointer' : 'default'
+                                      }}
+                                    >
+                                      <Camera size={14} /> PNG
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
                 )
               )}
 

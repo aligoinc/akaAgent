@@ -399,6 +399,15 @@ const electronAPI = {
     }
   },
 
+  readBlockScreenshotDataUrl: (filePath: string): Promise<{ filePath: string; dataUrl: string; sizeBytes: number }> =>
+    ipcRenderer.invoke(IPC_EVENTS.APP_READ_BLOCK_SCREENSHOT, filePath),
+
+  openBlockScreenshot: (filePath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_EVENTS.APP_OPEN_BLOCK_SCREENSHOT, filePath),
+
+  showBlockScreenshotInFolder: (filePath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_EVENTS.APP_SHOW_BLOCK_SCREENSHOT_IN_FOLDER, filePath),
+
   // Auto-update
   checkForUpdate: (): Promise<{
     hasUpdate: boolean
