@@ -7,6 +7,7 @@ import * as runV2Repo from '../../data/repositories/runV2Repository'
 import { PageControllerRegistry } from '../../v2/runtime/pageController'
 import { WorkflowEngineV2 } from '../../v2/runtime/workflowEngine'
 import { BlockExecutor } from '../../v2/runtime/blockExecutor'
+import { callAiUsing } from '../../services/aiRuntimeService'
 
 const _activeAborts = new Map<string, AbortController>()
 
@@ -72,6 +73,9 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
           accountId: args.accountId,
           signal: abort.signal,
           persist: true,
+          runtimeHelpers: {
+            callAIUsing: (code, payload, metadata) => callAiUsing(code, payload, metadata)
+          },
           onStepProgress: (step: RunStepV2) => {
             mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: args.runKey, step })
           },
@@ -118,6 +122,14 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
           page,
           vars: args.variables ?? {},
           signal: abort.signal,
+          runtimeHelpers: {
+            callAIUsing: (usingCode, payload, metadata) => callAiUsing(usingCode, payload, metadata)
+          },
+          runtimeMetadata: {
+            accountId: args.accountId,
+            blockId: args.blockId,
+            blockName
+          },
           onLog: (line: string) => {
             mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: args.runKey, nodeId: 'standalone', line })
           }
