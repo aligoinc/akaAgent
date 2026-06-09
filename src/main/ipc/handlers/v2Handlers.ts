@@ -80,6 +80,30 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
           },
           onBlockScreenshot: async (request, screenshotPage) => {
             try {
+              const output = request.output || {}
+              const rawMessage = String(
+                request.error ||
+                output.error ||
+                output.message ||
+                output.reason ||
+                (request.stepStatus === 'error' ? 'Lỗi không xác định' : 'Thao tác thất bại')
+              ).trim()
+              const runResultStatus = request.captureReason === 'success'
+                ? 'success'
+                : request.stepStatus === 'error'
+                  ? 'error'
+                  : 'failure'
+              const runResultMessage = runResultStatus === 'success' ? 'Thành công' : rawMessage
+              const runResultDisplay = runResultStatus === 'success'
+                ? 'Hành động thành công'
+                : runResultStatus === 'error'
+                  ? `Lỗi: ${runResultMessage}`
+                  : `Thất bại: ${runResultMessage}`
+              const eventStatus = runResultStatus === 'success'
+                ? 'success'
+                : runResultStatus === 'error'
+                  ? 'error'
+                  : 'failed'
               const screenshot = await captureBlockScreenshot({
                 page: screenshotPage,
                 accountId: request.accountId ?? args.accountId,
@@ -103,17 +127,22 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
                 eventType: 'browser_screenshot',
                 eventName: 'block_screenshot',
                 targetType: 'browser',
-                status: request.captureReason === 'failure' ? 'failed' : 'success',
+                status: eventStatus,
                 isUserVisible: true,
                 targetUrl: screenshot.browserUrl,
-                message: request.captureReason === 'failure'
-                  ? 'Đã chụp màn hình khi block lỗi/thất bại'
-                  : 'Đã chụp màn hình khi block thành công',
+                message: runResultDisplay,
                 debugData: {
                   screenshotPath: screenshot.filePath,
                   screenshotFileName: screenshot.fileName,
                   screenshotSizeBytes: screenshot.sizeBytes,
                   browserUrl: screenshot.browserUrl,
+                  runResultStatus,
+                  runResultStatusLabel: runResultStatus === 'success' ? 'Thành công' : runResultStatus === 'error' ? 'Lỗi' : 'Thất bại',
+                  runResultMessage,
+                  runResultDisplay,
+                  actionName: 'Hành động',
+                  targetName: '',
+                  errorCode: null,
                   captureTiming: request.captureTiming,
                   captureOn: request.captureOn,
                   captureReason: request.captureReason,

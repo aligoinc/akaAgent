@@ -69,13 +69,15 @@ function toPayload(event: CampaignRunEventInput): Record<string, unknown> {
   }
 }
 
-export async function createCampaignRunEvents(events: CampaignRunEventInput[]): Promise<void> {
-  if (events.length === 0) return
-  const { error } = await client()
+export async function createCampaignRunEvents(events: CampaignRunEventInput[]): Promise<CampaignRunEvent[]> {
+  if (events.length === 0) return []
+  const { data, error } = await client()
     .from('auto_campaign_run_events')
     .insert(events.map(toPayload))
+    .select('*')
 
   if (error) throw new Error(`Failed to create campaign run events: ${error.message}`)
+  return (data || []).map(mapRunEventFromDB)
 }
 
 export async function listCampaignRunEventsByCampaign(

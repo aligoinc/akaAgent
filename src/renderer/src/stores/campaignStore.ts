@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions } from '../../../shared/types'
+import { AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -81,8 +81,8 @@ interface CampaignStore {
   loadCampaignRelationSummaries: (campaignIds: number[]) => Promise<void>
 
   // Logs
-  logs: { timestamp: string; message: string }[]
-  addLog: (log: { timestamp: string; message: string }) => void
+  logs: CampaignLogEntry[]
+  addLog: (log: CampaignLogEntry) => void
   clearLogs: () => void
 
 }

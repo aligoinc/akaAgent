@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignRunEventInput } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignRunEventInput } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -69,6 +69,26 @@ interface MilestoneSummary {
   hasError: boolean
   failureReasons: string[]
   errorReasons: string[]
+}
+
+interface BlockScreenshotRunResult {
+  status: 'success' | 'failure' | 'error'
+  statusLabel: string
+  actionName: string
+  targetName: string
+  message: string
+  displayMessage: string
+  errorCode?: string
+}
+
+interface BlockScreenshotProgressLog {
+  runStepId?: number | null
+  nodeId?: string | null
+  blockId?: number | null
+  blockName?: string | null
+  storedMessage: string
+  realtimeMessage: string
+  action: CampaignLogAction
 }
 
 interface SuggestedFriendProfile {
@@ -1055,6 +1075,7 @@ export class CampaignScheduler {
       if (automationPage.source === 'background') {
         this.startBackgroundPreview(account.id, campaign.id, page)
       }
+      const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
       try {
         const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page)
         const result = await this.engineV2.run(workflowId, variables, page, {
@@ -1066,8 +1087,9 @@ export class CampaignScheduler {
           signal: abort.signal,
           persist: true,
           runtimeHelpers,
-          onBlockScreenshot: (request, screenshotPage) => {
-            return this.recordBlockScreenshotEvent(account, campaign, detail, request, screenshotPage)
+          onBlockScreenshot: async (request, screenshotPage) => {
+            const progressLog = await this.recordBlockScreenshotEvent(account, campaign, detail, request, screenshotPage)
+            if (progressLog) screenshotProgressLogs.push(progressLog)
           },
           onStepProgress: (step: RunStepV2) => {
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
@@ -1081,7 +1103,7 @@ export class CampaignScheduler {
         })
 
         // Per-milestone logging — scan steps theo block_name
-        const milestoneSummary = await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed')
+        const milestoneSummary = await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed', screenshotProgressLogs)
 
         const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
         const pauseCancelledRun = campaignPauseRequested && !accountStopReason && result.status === 'cancelled'
@@ -1195,6 +1217,14 @@ export class CampaignScheduler {
         }
         if (!pauseAbortTriggered) {
           await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
+          while (screenshotProgressLogs.length > 0) {
+            const progressLog = screenshotProgressLogs.shift()
+            if (!progressLog) continue
+            await this.logCampaignProgress(campaign.id, progressLog.storedMessage, {
+              realtimeMessage: progressLog.realtimeMessage,
+              realtimeAction: progressLog.action
+            })
+          }
         }
         if (campaignPauseRequested && !pauseAbortTriggered) {
           if (!accountStopReason && !runtimeStopTriggered) {
@@ -1757,9 +1787,11 @@ export class CampaignScheduler {
 
     if (count < threshold) {
       const message = `${notice} (${count}/${threshold})`
-      await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
       return { triggered: false, message, policy, count, threshold }
     }
+
+    const thresholdReason = String(policyReplacements.message || notice || 'Lỗi không xác định').trim() || 'Lỗi không xác định'
+    await this.logCampaignProgress(campaign.id, `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`)
 
     const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
     return { ...handled, count, threshold }
@@ -2054,7 +2086,8 @@ export class CampaignScheduler {
     detail: CampaignInputData | null,
     accountId: number,
     steps: RunStepV2[],
-    overallSuccess: boolean
+    overallSuccess: boolean,
+    screenshotProgressLogs: BlockScreenshotProgressLog[] = []
   ): Promise<MilestoneSummary> {
     void overallSuccess
     const summary = this.createMilestoneSummary()
@@ -2064,6 +2097,38 @@ export class CampaignScheduler {
       return created
     }
     const inputDataName = detail?.name || detail?.uid || ''
+    const pendingScreenshotLogs = screenshotProgressLogs
+    const matchesScreenshotStep = (log: BlockScreenshotProgressLog, step: RunStepV2): boolean => {
+      if (log.runStepId != null && step.id != null) return Number(log.runStepId) === Number(step.id)
+      const nodeMatches = !!log.nodeId && !!step.nodeId && log.nodeId === step.nodeId
+      const blockNameMatches = !!log.blockName && !!step.blockName && log.blockName === step.blockName
+      const blockIdMatches = log.blockId != null && step.blockId != null && Number(log.blockId) === Number(step.blockId)
+      return nodeMatches && (blockNameMatches || blockIdMatches)
+    }
+    const flushScreenshotLog = async (log: BlockScreenshotProgressLog) => {
+      await this.logCampaignProgress(campaign.id, log.storedMessage, {
+        realtimeMessage: log.realtimeMessage,
+        realtimeAction: log.action
+      })
+    }
+    const flushScreenshotLogsForStep = async (step?: RunStepV2 | null) => {
+      if (!step) return
+      for (let index = 0; index < pendingScreenshotLogs.length;) {
+        const log = pendingScreenshotLogs[index]
+        if (!matchesScreenshotStep(log, step)) {
+          index += 1
+          continue
+        }
+        pendingScreenshotLogs.splice(index, 1)
+        await flushScreenshotLog(log)
+      }
+    }
+    const flushRemainingScreenshotLogs = async () => {
+      while (pendingScreenshotLogs.length > 0) {
+        const log = pendingScreenshotLogs.shift()
+        if (log) await flushScreenshotLog(log)
+      }
+    }
 
     // Tìm kiếm data — 1 milestone tổng kết, dữ liệu chi tiết nằm trong JSONB data.
     if (campaign.actionId === FIND_DATA_GROUP_ACTION_ID || campaign.actionId === FIND_DATA_SEARCH_ACTION_ID) {
@@ -2245,6 +2310,7 @@ export class CampaignScheduler {
         })
         if (isSuccess) await this.logCampaignProgress(campaign.id, `✅ ${successLog}`)
         else await this.logCampaignProgress(campaign.id, `❌ Lỗi tìm data ${isFindDataSearch ? 'bằng search' : 'trong group'} "${targetName}": ${errMsg}`)
+        await flushScreenshotLogsForStep(summaryStep || errorStep)
       } catch (err) { console.error('Failed log find data:', err) }
 
       if (isSuccess) {
@@ -2307,6 +2373,7 @@ export class CampaignScheduler {
         await this.pushFoundPhonesToAkaBizDesktopCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
         await this.pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(campaign, newZaloGroupLinksForExternal)
       }
+      await flushRemainingScreenshotLogs()
       return summary
     }
 
@@ -2320,6 +2387,7 @@ export class CampaignScheduler {
         )
       })
       if (hasNewsfeedSuccess) this.recordMilestoneSummary(summary, 'thành công', 'Tương tác newsfeed thành công')
+      await flushRemainingScreenshotLogs()
       return summary
     }
 
@@ -2400,6 +2468,7 @@ export class CampaignScheduler {
         } else {
           await this.logCampaignProgress(campaign.id, `❌ Lỗi đăng fanpage "${pageName}": ${failureMessage}`)
         }
+        await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log page post:', err) }
     }
 
@@ -2437,6 +2506,7 @@ export class CampaignScheduler {
             }
           })
           await this.logCampaignProgress(campaign.id, `❌ Không chuyển được sang fanpage "${pageName}": ${failureMessage}`)
+          await flushScreenshotLogsForStep(switchToPageStep)
         }
       } catch (err) { console.error('Failed log page switch:', err) }
     }
@@ -2516,10 +2586,13 @@ export class CampaignScheduler {
           await this.logCampaignProgress(campaign.id, pendingApprovalLog)
           if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)
           await this.enqueuePostBumpAfterGroupPost(campaign, postUrl, isPending)
+          await flushScreenshotLogsForStep(s)
         } else if (status === 'lỗi') {
           await this.logCampaignProgress(campaign.id, `❌ Lỗi đăng bài${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
+          await flushScreenshotLogsForStep(s)
         } else {
           await this.logCampaignProgress(campaign.id, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
+          await flushScreenshotLogsForStep(s)
         }
       } catch (err) { console.error('Failed log group post:', err) }
     }
@@ -2553,6 +2626,7 @@ export class CampaignScheduler {
         if (campaign.actionId === 'facebook_group_post') {
           await this.logCampaignProgress(campaign.id, this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive))
         }
+        await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log post:', err) }
       void s
     }
@@ -2573,6 +2647,7 @@ export class CampaignScheduler {
       const reason = String(groupPostCommentAdjustOutput.skipReason || 'Bỏ qua comment vì group không khớp điều kiện comment')
       try {
         await this.logCampaignProgress(campaign.id, `⚠️ ${reason}${detail ? ` tại "${inputDataName}"` : ''}`)
+        await flushScreenshotLogsForStep(groupPostCommentAdjustStep)
       } catch (err) { console.error('Failed append group comment skip log:', err) }
     }
 
@@ -2627,6 +2702,7 @@ export class CampaignScheduler {
             }
           })
           await this.logCampaignProgress(campaign.id, `⚠️ Không comment được ${target}${detail ? ` tại "${inputDataName}"` : ''}: ${errMsg}`)
+          await flushScreenshotLogsForStep(s)
         } catch (err) { console.error('Failed log failed comment:', err) }
         continue
       }
@@ -2647,6 +2723,7 @@ export class CampaignScheduler {
           data: { commentPosition: position, iteration: loggedCommentCount, commentType: commentType || undefined, commentContent: text, commentImageCount: imageCount }
         })
         await this.logCampaignProgress(campaign.id, `💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
+        await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log comment:', err) }
     }
 
@@ -2665,6 +2742,7 @@ export class CampaignScheduler {
             : `Không tìm thấy bài nào để lọc từ khoá "${keyword}" trong ${targetName}`)
           : `Không tìm thấy bài phù hợp để comment trong ${targetName}`
         await this.logCampaignProgress(campaign.id, `ℹ️ ${reason}`)
+        await flushScreenshotLogsForStep(prepareStep)
       }
     }
 
@@ -2696,6 +2774,7 @@ export class CampaignScheduler {
         })
         if (status === 'thành công') await this.logCampaignProgress(campaign.id, `💬 ${actionName} thành công đến "${inputDataName}"`)
         else await this.logCampaignProgress(campaign.id, `❌ Lỗi ${actionName.toLowerCase()} "${inputDataName}": ${errMsg}`)
+        await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log message:', err) }
     }
 
@@ -2724,6 +2803,7 @@ export class CampaignScheduler {
             data: { alreadyFriend: true }
           })
           await this.logCampaignProgress(campaign.id, `ℹ️ Bỏ qua kết bạn với "${inputDataName}" (đã là bạn hoặc nút bị ẩn)`)
+          await flushScreenshotLogsForStep(s)
         } else if (clicked) {
           await createCampaignDetail({
             inputDataId: detail?.id,
@@ -2735,6 +2815,7 @@ export class CampaignScheduler {
             log: `Kết bạn thành công với ${inputDataName}`
           })
           await this.logCampaignProgress(campaign.id, `🤝 Kết bạn thành công với "${inputDataName}"`)
+          await flushScreenshotLogsForStep(s)
         } else {
           // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
           const status: 'thất bại' | 'lỗi' = s.status === 'error' ? 'lỗi' : 'thất bại'
@@ -2750,10 +2831,12 @@ export class CampaignScheduler {
             log: `Lỗi kết bạn với ${inputDataName}: ${errMsg}`
           })
           await this.logCampaignProgress(campaign.id, `❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
+          await flushScreenshotLogsForStep(s)
         }
       } catch (err) { console.error('Failed log friend:', err) }
     }
 
+    await flushRemainingScreenshotLogs()
     return summary
   }
 
@@ -3996,11 +4079,12 @@ export class CampaignScheduler {
     }
   }
 
-  private sendLog(message: string): void {
+  private sendLog(message: string, action?: CampaignLogAction): void {
     try {
       this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_LOG, {
         timestamp: new Date().toISOString(),
-        message
+        message,
+        ...(action ? { action } : {})
       })
     } catch {
       // Window may be closed
@@ -4010,7 +4094,7 @@ export class CampaignScheduler {
   private async logCampaignProgress(
     campaignId: number,
     message: string,
-    options: { emitRealtime?: boolean } = {}
+    options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } = {}
   ): Promise<void> {
     try {
       const updated = await this.supabase.appendCampaignLog(campaignId, message)
@@ -4019,7 +4103,7 @@ export class CampaignScheduler {
       console.error('Failed append campaign progress log:', err)
     }
     if (options.emitRealtime !== false) {
-      this.sendLog(message)
+      this.sendLog(options.realtimeMessage ?? message, options.realtimeAction)
     }
   }
 
@@ -4114,14 +4198,145 @@ export class CampaignScheduler {
     }
   }
 
+  private createScreenshotRunStep(request: BlockScreenshotCaptureRequest): RunStepV2 {
+    return {
+      id: request.runStepId ?? undefined,
+      runId: request.runId ?? undefined,
+      nodeId: request.nodeId,
+      blockId: request.blockId,
+      blockName: request.blockName,
+      status: request.stepStatus,
+      input: {},
+      output: request.output || {},
+      error: request.error,
+      startedAt: request.startedAt,
+      completedAt: request.completedAt
+    }
+  }
+
+  private getScreenshotOutputMessage(
+    request: BlockScreenshotCaptureRequest,
+    fallback: string
+  ): string {
+    const output = request.output || {}
+    const raw = [
+      request.error,
+      output.error,
+      output.message,
+      output.reason,
+      output.failureReason,
+      output.failure_message
+    ].find(value => typeof value === 'string' && value.trim().length > 0)
+    return String(raw || fallback).trim() || fallback
+  }
+
+  private async getScreenshotPolicyMessage(errorCode: string | undefined, fallback: string): Promise<string> {
+    const normalizedFallback = String(fallback || '').trim() || 'Lỗi không xác định'
+    if (!errorCode || errorCode === 'err_undefined') return normalizedFallback
+
+    try {
+      const policy = await this.supabase.getErrorPolicy(errorCode)
+      const policyMessage = String(
+        policy?.notiRunningProcess ||
+        policy?.errorName ||
+        policy?.errorDesc ||
+        ''
+      ).trim()
+      return policyMessage || normalizedFallback
+    } catch (err) {
+      console.warn('[campaignScheduler] failed to resolve screenshot error policy:', err)
+      return normalizedFallback
+    }
+  }
+
+  private getScreenshotActionName(campaign: Campaign, request: BlockScreenshotCaptureRequest): string {
+    const blockName = String(request.blockName || '')
+    if (blockName === 'fb_verify_group_post_form_closed' || blockName === 'fb_click_post_button') return 'Đăng bài'
+    if (
+      blockName === 'fb_page_post_api' ||
+      blockName === 'fb_post_current_identity_ui' ||
+      blockName === 'fb_switch_identity_by_name' ||
+      blockName === 'fb_get_current_identity_name'
+    ) return 'Đăng bài fanpage'
+    if (blockName === 'fb_comment_at_position' || blockName === 'fb_comment_current_post' || blockName.startsWith('fb_newsfeed_comment')) return 'Comment'
+    if (blockName === 'fb_send_message' || blockName === 'fb_send_page_inbox_message') return 'Nhắn tin'
+    if (blockName === 'fb_add_friend') return 'Kết bạn'
+    if (blockName === 'fb_click_like_current_post' || blockName === 'fb_newsfeed_like_post') return 'Like bài viết'
+    return this.getCampaignActionDescriptors(campaign)[0]?.name || 'Hành động'
+  }
+
+  private getScreenshotTargetSuffix(actionName: string, targetName: string): string {
+    const target = String(targetName || '').trim()
+    if (!target) return ''
+    if (actionName === 'Nhắn tin') return ` đến "${target}"`
+    if (actionName === 'Kết bạn') return ` với "${target}"`
+    if (actionName === 'Like bài viết') return ` của "${target}"`
+    return ` vào "${target}"`
+  }
+
+  private formatScreenshotDisplayMessage(result: Omit<BlockScreenshotRunResult, 'displayMessage'>): string {
+    const actionText = String(result.actionName || 'Hành động').trim() || 'Hành động'
+    const targetSuffix = this.getScreenshotTargetSuffix(actionText, result.targetName)
+    if (result.status === 'success') return `${actionText} thành công${targetSuffix}`
+    if (result.status === 'error') return `Lỗi ${actionText.toLowerCase()}${targetSuffix}: ${result.message}`
+    return `${actionText} thất bại${targetSuffix}: ${result.message}`
+  }
+
+  private async resolveBlockScreenshotRunResult(
+    campaign: Campaign,
+    detail: CampaignInputData | null,
+    request: BlockScreenshotCaptureRequest
+  ): Promise<BlockScreenshotRunResult> {
+    const actionName = this.getScreenshotActionName(campaign, request)
+    const targetName = String(detail?.name || detail?.uid || '').trim()
+    const output = request.output || {}
+    const isPosted = request.stepStatus === 'success' && (output.posted === true || output.ok === true)
+
+    if (request.captureReason === 'success' || isPosted) {
+      const base = {
+        status: 'success' as const,
+        statusLabel: 'Thành công',
+        actionName,
+        targetName,
+        message: 'Thành công'
+      }
+      return { ...base, displayMessage: this.formatScreenshotDisplayMessage(base) }
+    }
+
+    const status: BlockScreenshotRunResult['status'] = request.stepStatus === 'error' ? 'error' : 'failure'
+    const fallbackMessage = request.blockName === 'fb_verify_group_post_form_closed'
+      ? 'Form đăng bài chưa đóng sau 60 giây'
+      : (status === 'error' ? 'Lỗi không xác định' : 'Thao tác thất bại')
+    const rawMessage = this.getScreenshotOutputMessage(request, fallbackMessage)
+    let errorCode: string | undefined
+    let message = rawMessage
+
+    if (status === 'error') {
+      const runtimeError = this.normalizeRuntimeError(campaign, [this.createScreenshotRunStep(request)], rawMessage)
+      errorCode = runtimeError.errorCode
+      message = await this.getScreenshotPolicyMessage(runtimeError.errorCode, runtimeError.message)
+    }
+
+    const base = {
+      status,
+      statusLabel: status === 'error' ? 'Lỗi' : 'Thất bại',
+      actionName,
+      targetName,
+      message,
+      errorCode
+    }
+    return { ...base, displayMessage: this.formatScreenshotDisplayMessage(base) }
+  }
+
   private async recordBlockScreenshotEvent(
     account: AutoAccount,
     campaign: Campaign,
     detail: CampaignInputData | null,
     request: BlockScreenshotCaptureRequest,
     page: PageController
-  ): Promise<void> {
+  ): Promise<BlockScreenshotProgressLog | null> {
     try {
+      const runResult = await this.resolveBlockScreenshotRunResult(campaign, detail, request)
       const screenshot = await captureBlockScreenshot({
         page,
         accountId: request.accountId ?? account.id,
@@ -4132,7 +4347,12 @@ export class CampaignScheduler {
         blockName: request.blockName,
         captureReason: request.captureReason
       })
-      await campaignRunEventRepo.createCampaignRunEvents([{
+      const eventStatus = runResult.status === 'success'
+        ? 'success'
+        : runResult.status === 'error'
+          ? 'error'
+          : 'failed'
+      const createdEvents = await campaignRunEventRepo.createCampaignRunEvents([{
         campaignId: request.campaignId ?? campaign.id,
         campaignActionId: campaign.actionId,
         campaignInputId: request.campaignInputId ?? detail?.inputId ?? null,
@@ -4146,17 +4366,22 @@ export class CampaignScheduler {
         eventType: 'browser_screenshot',
         eventName: 'block_screenshot',
         targetType: 'browser',
-        status: request.captureReason === 'failure' ? 'failed' : 'success',
+        status: eventStatus,
         isUserVisible: true,
         targetUrl: screenshot.browserUrl,
-        message: request.captureReason === 'failure'
-          ? 'Đã chụp màn hình khi block lỗi/thất bại'
-          : 'Đã chụp màn hình khi block thành công',
+        message: runResult.displayMessage,
         debugData: {
           screenshotPath: screenshot.filePath,
           screenshotFileName: screenshot.fileName,
           screenshotSizeBytes: screenshot.sizeBytes,
           browserUrl: screenshot.browserUrl,
+          runResultStatus: runResult.status,
+          runResultStatusLabel: runResult.statusLabel,
+          runResultMessage: runResult.message,
+          runResultDisplay: runResult.displayMessage,
+          actionName: runResult.actionName,
+          targetName: runResult.targetName,
+          errorCode: runResult.errorCode ?? null,
           captureTiming: request.captureTiming,
           captureOn: request.captureOn,
           captureReason: request.captureReason,
@@ -4167,9 +4392,28 @@ export class CampaignScheduler {
           blockCompletedAt: request.completedAt ?? null
         }
       }])
+      const createdEventId = createdEvents[0]?.id
+      const cleanLogMessage = '📸 Ảnh chụp màn hình trạng thái trình duyệt'
+      const storedLogMessage = createdEventId
+        ? `${cleanLogMessage} <!-- screenshotEventId:${createdEventId} -->`
+        : cleanLogMessage
+      return {
+        runStepId: request.runStepId ?? null,
+        nodeId: request.nodeId ?? null,
+        blockId: request.blockId ?? null,
+        blockName: request.blockName ?? null,
+        storedMessage: storedLogMessage,
+        realtimeMessage: cleanLogMessage,
+        action: {
+          type: 'block_screenshot_preview',
+          filePath: screenshot.filePath,
+          title: runResult.displayMessage
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.warn('[campaignScheduler] block screenshot capture failed:', message)
+      return null
     }
   }
 
