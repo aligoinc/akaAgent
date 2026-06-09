@@ -500,6 +500,18 @@ export interface CampaignRunEventListOptions {
   limit?: number
 }
 
+export interface CampaignLogAction {
+  type: 'block_screenshot_preview'
+  filePath: string
+  title?: string
+}
+
+export interface CampaignLogEntry {
+  timestamp: string
+  message: string
+  action?: CampaignLogAction
+}
+
 export interface CampaignRelationActionBreakdown {
   actionName: string
   status: CampaignDetailStatus
@@ -898,8 +910,6 @@ export const IPC_EVENTS = {
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',
   APP_SET_STARTUP_SETTING: 'app:set-startup-setting',
   APP_READ_BLOCK_SCREENSHOT: 'app:read-block-screenshot',
-  APP_OPEN_BLOCK_SCREENSHOT: 'app:open-block-screenshot',
-  APP_SHOW_BLOCK_SCREENSHOT_IN_FOLDER: 'app:show-block-screenshot-in-folder',
 
   // AI content tools
   AI_REWRITE_CONTENT: 'ai:rewrite-content',

@@ -1,4 +1,4 @@
-import { app, shell } from 'electron'
+import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { isAbsolute, join, relative, resolve } from 'path'
 import { PageController } from '../v2/runtime/pageController'
@@ -75,26 +75,6 @@ export function readBlockScreenshotDataUrl(filePath: string): ScreenshotFileRead
     filePath,
     dataUrl: `data:image/png;base64,${imageBuffer.toString('base64')}`,
     sizeBytes: imageBuffer.length
-  }
-}
-
-export async function openBlockScreenshot(filePath: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    assertSafeScreenshotPath(filePath)
-    const error = await shell.openPath(filePath)
-    return error ? { success: false, error } : { success: true }
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) }
-  }
-}
-
-export function showBlockScreenshotInFolder(filePath: string): { success: boolean; error?: string } {
-  try {
-    assertSafeScreenshotPath(filePath)
-    shell.showItemInFolder(filePath)
-    return { success: true }
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
 

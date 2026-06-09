@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Camera } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -61,6 +61,7 @@ interface RunLogEntry {
   key: string
   timestamp: string | undefined
   message: string
+  screenshotEventId?: number
 }
 
 interface FoundDataPayload {
@@ -436,18 +437,31 @@ const getScreenshotPath = (event: CampaignRunEvent): string => (
 )
 
 const getScreenshotResultLabel = (event: CampaignRunEvent): string => {
-  const reason = getStringValue(getJsonObject(event.debugData).captureReason)
+  const debug = getJsonObject(event.debugData)
+  const display = getStringValue(debug.runResultDisplay) || getStringValue(event.message)
+  if (display) return display
+
+  const reason = getStringValue(debug.captureReason)
   switch (reason || String(event.status || '').toLowerCase()) {
     case 'success': return 'Thành công'
     case 'failure': return 'Lỗi/thất bại'
     case 'failed': return 'Lỗi/thất bại'
+    case 'error': return 'Lỗi'
     default: return '-'
   }
 }
 
-const getScreenshotResultColor = (event: CampaignRunEvent): string => {
-  const reason = getStringValue(getJsonObject(event.debugData).captureReason)
-  return reason === 'failure' || event.status === 'failed' ? '#ef4444' : '#22c55e'
+const SCREENSHOT_EVENT_MARKER_RE = /\s*<!--\s*screenshotEventId:(\d+)\s*-->\s*$/i
+
+const stripScreenshotEventMarker = (message: string): { message: string; screenshotEventId?: number } => {
+  const text = String(message || '')
+  const match = text.match(SCREENSHOT_EVENT_MARKER_RE)
+  if (!match) return { message: text }
+  const id = Number(match[1])
+  return {
+    message: text.replace(SCREENSHOT_EVENT_MARKER_RE, '').trimEnd(),
+    screenshotEventId: Number.isFinite(id) && id > 0 ? id : undefined
+  }
 }
 
 const getStringArrayValue = (value: unknown): string[] => {
@@ -878,22 +892,28 @@ const parseCampaignRunLog = (log: string): RunLogEntry[] => {
     }
     const match = text.match(/^\[([^\]]+)\]\s*(.*)$/)
     if (match) {
+      const parsedMessage = stripScreenshotEventMarker(match[2])
       entries.push({
         key: `${index}-${text}`,
         timestamp: match[1],
-        message: match[2]
+        message: parsedMessage.message,
+        screenshotEventId: parsedMessage.screenshotEventId
       })
       continue
     }
 
     const lastEntry = entries[entries.length - 1]
     if (lastEntry) {
-      lastEntry.message = `${lastEntry.message}\n${text.trimEnd()}`
+      const parsedMessage = stripScreenshotEventMarker(`${lastEntry.message}\n${text.trimEnd()}`)
+      lastEntry.message = parsedMessage.message
+      if (parsedMessage.screenshotEventId) lastEntry.screenshotEventId = parsedMessage.screenshotEventId
     } else {
+      const parsedMessage = stripScreenshotEventMarker(text.trim())
       entries.push({
         key: `${index}-${text}`,
         timestamp: undefined,
-        message: text.trim()
+        message: parsedMessage.message,
+        screenshotEventId: parsedMessage.screenshotEventId
       })
     }
   }
@@ -1208,7 +1228,6 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [inputDataFilters, setInputDataFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
   const [actionDetailFilters, setActionDetailFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
   const [findDataLogScope, setFindDataLogScope] = useState<FindDataLogScope>('visible')
-  const [screenshotDataUrls, setScreenshotDataUrls] = useState<Record<number, string>>({})
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
   const [openDetailDropdown, setOpenDetailDropdown] = useState<DetailFilterDropdown | null>(null)
@@ -1274,7 +1293,6 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     setInputDataFilters(createDefaultDetailFilters())
     setActionDetailFilters(createDefaultDetailFilters())
     setFindDataLogScope('visible')
-    setScreenshotDataUrls({})
     setScreenshotPreview(null)
     setOpenDetailDropdown(null)
     setDetailPopoverPosition(null)
@@ -1820,38 +1838,13 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       : [],
     [campaignRunEvents, detailTab]
   )
-
-  useEffect(() => {
-    if (detailTab !== 'runLog' || runLogScreenshotEvents.length === 0) {
-      setScreenshotDataUrls({})
-      return
+  const screenshotEventById = useMemo(() => {
+    const map = new Map<number, CampaignRunEvent>()
+    for (const event of runLogScreenshotEvents) {
+      map.set(event.id, event)
     }
-
-    let cancelled = false
-    const loadScreenshots = async () => {
-      const entries = await Promise.all(runLogScreenshotEvents.map(async event => {
-        const filePath = getScreenshotPath(event)
-        if (!filePath || !window.electronAPI?.readBlockScreenshotDataUrl) return null
-        try {
-          const result = await window.electronAPI.readBlockScreenshotDataUrl(filePath)
-          return [event.id, result.dataUrl] as const
-        } catch {
-          return null
-        }
-      }))
-      if (cancelled) return
-      const next: Record<number, string> = {}
-      for (const entry of entries) {
-        if (entry) next[entry[0]] = entry[1]
-      }
-      setScreenshotDataUrls(next)
-    }
-
-    void loadScreenshots()
-    return () => {
-      cancelled = true
-    }
-  }, [detailTab, runLogScreenshotEvents])
+    return map
+  }, [runLogScreenshotEvents])
 
   const foundDataItems = useMemo<FoundDataItem[]>(() => {
     return campaignDetails.flatMap(detail => {
@@ -2345,18 +2338,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     })
   }
 
-  const handlePreviewScreenshot = async (event: CampaignRunEvent, cachedDataUrl?: string) => {
-    const title = `${formatDisplayDateTime(event.createdAt)} - ${event.blockName || event.nodeId || 'Screenshot'}`
-    if (cachedDataUrl) {
-      setScreenshotPreview({ dataUrl: cachedDataUrl, title })
-      return
-    }
-
+  const handlePreviewScreenshot = async (event: CampaignRunEvent) => {
+    const title = `${formatDisplayDateTime(event.createdAt)} - ${getScreenshotResultLabel(event) || 'Ảnh chụp màn hình'}`
     const filePath = getScreenshotPath(event)
     if (!filePath || !window.electronAPI?.readBlockScreenshotDataUrl) return
     try {
       const result = await window.electronAPI.readBlockScreenshotDataUrl(filePath)
-      setScreenshotDataUrls(prev => ({ ...prev, [event.id]: result.dataUrl }))
       setScreenshotPreview({ dataUrl: result.dataUrl, title })
     } catch {
       showAlert('Không thể tải ảnh screenshot.', 'error')
@@ -3134,7 +3121,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                   className={`detail-dock-tab ${detailTab === 'runLog' ? 'active' : ''}`}
                   onClick={() => setDetailTab('runLog')}
                 >
-                  Lịch sử chạy ({runLogEntries.length + runLogScreenshotEvents.length})
+                  Lịch sử chạy ({runLogEntries.length})
                 </button>
                 {isSelectedFindDataCampaign && (
                   <button
@@ -3521,7 +3508,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
               {/* Tab: Campaign run log from auto_campaigns.log */}
               {detailTab === 'runLog' && (
-                runLogEntries.length === 0 && runLogScreenshotEvents.length === 0 && !loadingCampaignRunEvents ? (
+                runLogEntries.length === 0 && !loadingCampaignRunEvents ? (
                   <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có lịch sử chạy</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -3534,81 +3521,26 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                           </tr>
                         </thead>
                         <tbody>
-                          {runLogEntries.map(entry => (
-                            <tr key={entry.key}>
-                              <td title={entry.timestamp || '-'} style={{ whiteSpace: 'nowrap' }}>{entry.timestamp || '-'}</td>
-                              <td className="campaign-detail-log-cell" title={entry.message || '-'}>{entry.message}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-
-                    {loadingCampaignRunEvents && (
-                      <div className="text-center text-secondary" style={{ padding: 12, fontSize: 12 }}>Đang tải screenshot...</div>
-                    )}
-
-                    {runLogScreenshotEvents.length > 0 && (
-                      <table className="campaign-grid" style={{ fontSize: 12 }}>
-                        <thead>
-                          <tr>
-                            <th>Thời gian</th>
-                            <th>Block</th>
-                            <th>Kết quả chạy</th>
-                            <th>Ảnh</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {runLogScreenshotEvents.map(event => {
-                            const filePath = getScreenshotPath(event)
-                            const resultLabel = getScreenshotResultLabel(event)
-                            const resultColor = getScreenshotResultColor(event)
-                            const imageDataUrl = screenshotDataUrls[event.id]
+                          {runLogEntries.map(entry => {
+                            const screenshotEvent = entry.screenshotEventId
+                              ? screenshotEventById.get(entry.screenshotEventId)
+                              : undefined
+                            const canPreviewScreenshot = !!screenshotEvent && !!getScreenshotPath(screenshotEvent)
                             return (
-                              <tr key={event.id}>
-                                <td title={formatDisplayDateTime(event.createdAt)} style={{ whiteSpace: 'nowrap' }}>
-                                  {formatDisplayDateTime(event.createdAt)}
-                                </td>
-                                <td title={event.blockName || event.nodeId || '-'}>
-                                  <strong>{event.blockName || event.nodeId || '-'}</strong>
-                                  {event.nodeId && <div style={{ color: '#888', fontSize: 11 }}>{event.nodeId}</div>}
-                                </td>
-                                <td title={resultLabel}>
-                                  <span style={{ color: resultColor }}>
-                                    {resultLabel}
-                                  </span>
-                                </td>
-                                <td>
-                                  {imageDataUrl ? (
-                                    <img
-                                      src={imageDataUrl}
-                                      alt="Browser screenshot"
-                                      onClick={() => handlePreviewScreenshot(event, imageDataUrl)}
-                                      title="Click để xem ảnh screenshot"
-                                      style={{
-                                        width: 96,
-                                        height: 54,
-                                        objectFit: 'cover',
-                                        borderRadius: 4,
-                                        border: '1px solid var(--border, #2a2a35)',
-                                        display: 'block',
-                                        cursor: filePath ? 'pointer' : 'default'
-                                      }}
-                                    />
-                                  ) : (
-                                    <span
-                                      onClick={() => handlePreviewScreenshot(event)}
-                                      title={filePath ? 'Click để xem ảnh screenshot' : undefined}
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 6,
-                                        color: '#888',
-                                        cursor: filePath ? 'pointer' : 'default'
-                                      }}
+                              <tr key={entry.key}>
+                                <td title={entry.timestamp || '-'} style={{ whiteSpace: 'nowrap' }}>{entry.timestamp || '-'}</td>
+                                <td className="campaign-detail-log-cell" title={entry.message || '-'}>
+                                  <span>{entry.message}</span>
+                                  {screenshotEvent && (
+                                    <button
+                                      type="button"
+                                      className="run-log-screenshot-button"
+                                      onClick={() => handlePreviewScreenshot(screenshotEvent)}
+                                      disabled={!canPreviewScreenshot}
+                                      title={canPreviewScreenshot ? 'Xem ảnh screenshot' : 'Không tìm thấy file ảnh'}
                                     >
-                                      <Camera size={14} /> PNG
-                                    </span>
+                                      Xem
+                                    </button>
                                   )}
                                 </td>
                               </tr>
@@ -3616,6 +3548,10 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                           })}
                         </tbody>
                       </table>
+                    )}
+
+                    {loadingCampaignRunEvents && (
+                      <div className="text-center text-secondary" style={{ padding: 12, fontSize: 12 }}>Đang tải screenshot...</div>
                     )}
                   </div>
                 )

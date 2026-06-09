@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -256,8 +256,8 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_EVENTS.REPORT_ACCOUNT_ACTION_DETAILS, query),
 
   // Campaign Log (real-time)
-  onCampaignLog: (callback: (log: { timestamp: string; message: string }) => void): () => void => {
-    const handler = (_event: Electron.IpcRendererEvent, log: { timestamp: string; message: string }) => callback(log)
+  onCampaignLog: (callback: (log: CampaignLogEntry) => void): () => void => {
+    const handler = (_event: Electron.IpcRendererEvent, log: CampaignLogEntry) => callback(log)
     ipcRenderer.on(IPC_EVENTS.CAMPAIGN_LOG, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_LOG, handler)
   },
@@ -401,12 +401,6 @@ const electronAPI = {
 
   readBlockScreenshotDataUrl: (filePath: string): Promise<{ filePath: string; dataUrl: string; sizeBytes: number }> =>
     ipcRenderer.invoke(IPC_EVENTS.APP_READ_BLOCK_SCREENSHOT, filePath),
-
-  openBlockScreenshot: (filePath: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_EVENTS.APP_OPEN_BLOCK_SCREENSHOT, filePath),
-
-  showBlockScreenshotInFolder: (filePath: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_EVENTS.APP_SHOW_BLOCK_SCREENSHOT_IN_FOLDER, filePath),
 
   // Auto-update
   checkForUpdate: (): Promise<{
