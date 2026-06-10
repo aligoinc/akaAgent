@@ -262,6 +262,7 @@ DECLARE
   tag_block_id bigint;
   alias_block_id bigint;
   workflow_id bigint;
+  test_workflow_id bigint;
 BEGIN
   SELECT id INTO find_block_id FROM public.auto_blocks WHERE name = 'zalo_find_phone_user';
   SELECT id INTO message_block_id FROM public.auto_blocks WHERE name = 'zalo_send_phone_message';
@@ -326,12 +327,44 @@ BEGIN
     updated_at = now()
   RETURNING id INTO workflow_id;
 
+  INSERT INTO public.auto_workflows (
+    name,
+    description,
+    nodes,
+    edges,
+    variables_schema,
+    default_variables,
+    is_builtin,
+    staff_id,
+    organization_id,
+    updated_at
+  )
+  SELECT
+    'zalo_message_phone__test__zalo_message_phone',
+    description,
+    nodes,
+    edges,
+    variables_schema,
+    default_variables,
+    false,
+    staff_id,
+    organization_id,
+    now()
+  FROM public.auto_workflows
+  WHERE id = workflow_id
+  ON CONFLICT (name) DO NOTHING;
+
+  SELECT id INTO test_workflow_id
+  FROM public.auto_workflows
+  WHERE name = 'zalo_message_phone__test__zalo_message_phone';
+
   INSERT INTO public.auto_campaign_actions (
     id,
     name,
     flatform_type,
     is_active,
     workflow_id,
+    test_workflow_id,
     limit_check_action_codes,
     is_delete,
     created_at
@@ -342,6 +375,7 @@ BEGIN
     'zalo',
     true,
     workflow_id,
+    test_workflow_id,
     ARRAY['zalo_find_phone_user','zalo_message_stranger','zalo_add_friend']::text[],
     false,
     now()
@@ -351,6 +385,7 @@ BEGIN
     flatform_type = EXCLUDED.flatform_type,
     is_active = true,
     workflow_id = EXCLUDED.workflow_id,
+    test_workflow_id = COALESCE(auto_campaign_actions.test_workflow_id, EXCLUDED.test_workflow_id),
     limit_check_action_codes = EXCLUDED.limit_check_action_codes,
     is_delete = false;
 END $$;
