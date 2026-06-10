@@ -1,4 +1,4 @@
-import { AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate } from '../../shared/types'
+import { AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ZaloAccount } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   return {
@@ -17,9 +17,32 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
     proxyProtocol: ((row as any).auto_proxies?.protocol as AutoAccount['proxyProtocol']) ?? null,
     proxyHost: ((row as any).auto_proxies?.host as string | null | undefined) ?? null,
     proxyPort: ((row as any).auto_proxies?.port as number | null | undefined) ?? null,
+    zaloAccountId: (row.zalo_account_id as number | null | undefined) ?? null,
+    zaloUid: ((row as any).zalo_accounts?.zalo_uid as string | null | undefined) ?? null,
+    zaloDisplayName: ((row as any).zalo_accounts?.display_name as string | null | undefined) ?? null,
+    zaloPhone: ((row as any).zalo_accounts?.phone as string | null | undefined) ?? null,
+    zaloAvatarUrl: ((row as any).zalo_accounts?.avatar_url as string | null | undefined) ?? null,
+    hasZaloSession: !!row.zalo_session_updated_at,
+    zaloSessionUpdatedAt: (row.zalo_session_updated_at as string | null | undefined) ?? null,
+    zaloSessionLastVerifiedAt: (row.zalo_session_last_verified_at as string | null | undefined) ?? null,
+    zaloSessionLastError: (row.zalo_session_last_error as string | null | undefined) ?? null,
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapZaloAccountFromDB(row: Record<string, unknown>): ZaloAccount {
+  return {
+    id: row.id as number,
+    zaloUid: row.zalo_uid as string,
+    displayName: (row.display_name as string | null | undefined) ?? null,
+    phone: (row.phone as string | null | undefined) ?? null,
+    avatarUrl: (row.avatar_url as string | null | undefined) ?? null,
+    metadata: (row.metadata as Record<string, unknown> | null | undefined) ?? {},
+    lastSeenAt: (row.last_seen_at as string | null | undefined) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }

@@ -7,7 +7,7 @@ interface CampaignStore {
   loadingAccounts: boolean
   loadAccounts: () => Promise<void>
   createAccount: (data: Partial<AutoAccount>) => Promise<AutoAccount>
-  updateAccount: (id: number, updates: Partial<AutoAccount>) => Promise<void>
+  updateAccount: (id: number, updates: Partial<AutoAccount>) => Promise<AutoAccount>
   deleteAccount: (id: number) => Promise<void>
   accountGroups: AutoAccountGroup[]
   loadingAccountGroups: boolean
@@ -117,9 +117,10 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   },
 
   updateAccount: async (id, updates) => {
-    if (!window.electronAPI) return
-    await window.electronAPI.updateAccount(id, updates)
+    if (!window.electronAPI) throw new Error('API not available')
+    const account = await window.electronAPI.updateAccount(id, updates)
     await get().loadAccounts()
+    return account
   },
 
   deleteAccount: async (id) => {

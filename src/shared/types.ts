@@ -18,11 +18,64 @@ export interface AutoAccount {
   proxyProtocol?: ProxyProtocol | null
   proxyHost?: string | null
   proxyPort?: number | null
+  zaloAccountId?: number | null
+  zaloUid?: string | null
+  zaloDisplayName?: string | null
+  zaloPhone?: string | null
+  zaloAvatarUrl?: string | null
+  hasZaloSession?: boolean
+  zaloSessionUpdatedAt?: string | null
+  zaloSessionLastVerifiedAt?: string | null
+  zaloSessionLastError?: string | null
   isDelete: boolean
   staffId?: number
   organizationId?: number
   createdAt?: string
   updatedAt?: string
+}
+
+export interface ZaloAccount {
+  id: number
+  zaloUid: string
+  displayName?: string | null
+  phone?: string | null
+  avatarUrl?: string | null
+  metadata?: Record<string, unknown>
+  lastSeenAt?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ZaloSessionCredentials {
+  cookie: unknown
+  imei: string
+  userAgent: string
+  language?: string
+}
+
+export interface ZaloLoginQrStartResult {
+  success: boolean
+  accountId: number
+  reason?: string
+}
+
+export interface ZaloLoginQrEvent {
+  accountId: number
+  status: 'qr' | 'expired' | 'scanned' | 'declined' | 'success' | 'cancelled' | 'error'
+  message?: string
+  qrImage?: string
+  displayName?: string
+  avatarUrl?: string
+  zaloAccountId?: number
+  zaloUid?: string
+}
+
+export interface ZaloSessionCheckResult {
+  success: boolean
+  loggedIn: boolean
+  status: string
+  reason?: string
+  account?: AutoAccount
 }
 
 export interface AccountGroupSettings {
@@ -1012,6 +1065,11 @@ export const IPC_EVENTS = {
   ACCOUNT_RELOAD_PAGE: 'account:reload-page',
   ACCOUNT_STATUS_UPDATED: 'account:status-updated',
   ACCOUNT_ACTION_OVERVIEW: 'account:action-overview',
+  ZALO_LOGIN_QR_START: 'zalo:login-qr-start',
+  ZALO_LOGIN_QR_CANCEL: 'zalo:login-qr-cancel',
+  ZALO_LOGIN_QR_EVENT: 'zalo:login-qr-event',
+  ZALO_CHECK_SESSION: 'zalo:check-session',
+  ZALO_LOGOUT: 'zalo:logout',
 
   // Contacts (Load data)
   CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',

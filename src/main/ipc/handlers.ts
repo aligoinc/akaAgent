@@ -6,6 +6,7 @@ import { SupabaseService } from '../services/supabase'
 import { CampaignScheduler } from '../services/campaignScheduler'
 import { ContactLoader } from '../services/contactLoader'
 import { ProxyRuntimeService } from '../services/proxyRuntimeService'
+import { ZaloRuntimeService } from '../services/zaloRuntimeService'
 import { startAccountPoller } from '../domain/accounts/accountPoller'
 
 import { registerBrowserHandlers } from './handlers/browserHandlers'
@@ -40,6 +41,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
   const proxyRuntime = new ProxyRuntimeService((id) => supabase.getProxy(id))
+  const zaloRuntime = new ZaloRuntimeService(
+    supabase,
+    (id) => supabase.getProxy(id),
+    (event) => {
+      try {
+        mainWindow.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, event)
+        if (event.status === 'success' || event.status === 'error' || event.status === 'cancelled') {
+          mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+        }
+      } catch {
+        // Window may be closed
+      }
+    }
+  )
   const campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow, proxyRuntime)
   campaignScheduler.setPageRegistry(pageRegistry)
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime)
@@ -52,6 +67,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     } catch (err) {
       console.error(`[Recovery] ${reason}: failed to reset running statuses:`, err)
     }
+  }
+
+  const warmZaloSessions = (): void => {
+    void zaloRuntime.warmStoredSessions()
+      .then(() => {
+        try {
+          mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+        } catch {
+          // Window may be closed
+        }
+      })
+      .catch((err) => {
+        console.error('[ZaloRuntime] Failed to warm stored sessions:', err)
+      })
   }
 
   let lastScheduleMaintenanceDay = getVietnamDateKey()
@@ -110,6 +139,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       try {
         contactLoader.stopAll()
         campaignScheduler.stop()
+        zaloRuntime.clearAll()
         await supabase.resetRunningStatuses(user.staffId)
       } catch (err) {
         console.error('[Recovery] quit: failed to reset running statuses:', err)
@@ -154,12 +184,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         await runScopedRecovery('login')
         await runScheduleMaintenance('login')
       } finally {
+        warmZaloSessions()
         campaignScheduler.start()
       }
     },
     beforeLogout: async () => {
       contactLoader.stopAll()
       campaignScheduler.stop()
+      zaloRuntime.clearAll()
       await runScopedRecovery('logout')
     }
   })
@@ -171,10 +203,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerReportHandlers(supabase)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase, campaignScheduler)
-  registerAccountHandlers(supabase, webviewRegistry, proxyRuntime)
+  registerAccountHandlers(supabase, webviewRegistry, proxyRuntime, zaloRuntime, mainWindow)
   registerAccountContactHandlers(supabase, contactLoader)
   registerV2Handlers(mainWindow, pageRegistry)
 
   // Start account login poller
-  startAccountPoller(webviewRegistry, mainWindow)
+  startAccountPoller(webviewRegistry, mainWindow, zaloRuntime)
 }

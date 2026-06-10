@@ -1,21 +1,25 @@
-import { ipcMain, webContents } from 'electron'
+import { ipcMain, webContents, BrowserWindow } from 'electron'
 import { AutoProxy, IPC_EVENTS, ProxyTestRequest } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
+import { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
-  zalo: 'https://chat.zalo.me',
   tiktok: 'https://www.tiktok.com',
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com'
 }
+const BROWSERLESS_PLATFORMS = new Set(['zalo'])
+const BROWSERLESS_ACCOUNT_REASON = 'Tài khoản Zalo không dùng trình duyệt trong phiên bản này'
 
 export function registerAccountHandlers(
   supabase: SupabaseService,
   webviewRegistry: WebviewRegistry,
-  proxyRuntime: ProxyRuntimeService
+  proxyRuntime: ProxyRuntimeService,
+  zaloRuntime?: ZaloRuntimeService,
+  mainWindow?: BrowserWindow
 ): void {
   const resolveProxyForTest = async (request: ProxyTestRequest): Promise<Partial<AutoProxy>> => {
     const existing = request.proxyId ? await supabase.getProxy(request.proxyId) : null
@@ -39,13 +43,42 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
-    return supabase.updateAccount(id, updates || {})
+    const normalizedUpdates = updates || {}
+    const currentAccount = normalizedUpdates.proxyId !== undefined
+      ? await supabase.getAccount(id)
+      : null
+    const proxyChanged = Boolean(
+      currentAccount &&
+      normalizedUpdates.proxyId !== undefined &&
+      (currentAccount.proxyId ?? null) !== (normalizedUpdates.proxyId ?? null)
+    )
+    const targetPlatform = normalizedUpdates.flatformType ?? currentAccount?.flatformType
+    if (proxyChanged && targetPlatform === 'zalo' && currentAccount?.status === 'đang chạy') {
+      throw new Error('Không thể đổi proxy khi tài khoản Zalo đang chạy')
+    }
+
+    const account = await supabase.updateAccount(id, normalizedUpdates)
+    if (normalizedUpdates.proxyId !== undefined || normalizedUpdates.flatformType !== undefined) {
+      zaloRuntime?.invalidateAccount(id)
+    }
+    if (proxyChanged && account.flatformType === 'zalo' && account.hasZaloSession && zaloRuntime) {
+      void zaloRuntime.checkSession(id)
+        .catch((err) => {
+          console.warn('[ZaloRuntime] Failed to verify Zalo session after proxy change:', {
+            accountId: id,
+            err
+          })
+        })
+        .finally(() => sendAccountStatusUpdated(mainWindow))
+    }
+    return account
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_ACCOUNT, async (_, id: number) => {
     if (webviewRegistry.isRegistered(id)) {
       webviewRegistry.unregister(id)
     }
+    zaloRuntime?.invalidateAccount(id)
     return supabase.deleteAccount(id)
   })
 
@@ -74,7 +107,9 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_PROXY, async (_, id: number, updates) => {
-    return supabase.updateProxy(id, updates)
+    const proxy = await supabase.updateProxy(id, updates)
+    await invalidateZaloAccountsUsingProxy(supabase, zaloRuntime, id)
+    return proxy
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_PROXY, async (_, id: number) => {
@@ -89,6 +124,9 @@ export function registerAccountHandlers(
   ipcMain.handle(IPC_EVENTS.ACCOUNT_PREPARE_BROWSER_SESSION, async (_, accountId: number) => {
     const account = await supabase.getAccount(accountId)
     if (!account) return { success: false, reason: 'Không tìm thấy tài khoản' }
+    if (BROWSERLESS_PLATFORMS.has(account.flatformType)) {
+      return { success: false, reason: BROWSERLESS_ACCOUNT_REASON }
+    }
     await proxyRuntime.prepareAccountSession(account)
     return { success: true }
   })
@@ -101,7 +139,36 @@ export function registerAccountHandlers(
     return supabase.listAccountActionOverview(accountId)
   })
 
+  ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_START, async (_, accountId: number) => {
+    if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
+    return zaloRuntime.startLoginQr(accountId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_CANCEL, async (_, accountId: number) => {
+    if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
+    zaloRuntime.cancelLoginQr(accountId)
+    return { success: true, accountId }
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_CHECK_SESSION, async (_, accountId: number) => {
+    if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
+    const result = await zaloRuntime.checkSession(accountId)
+    sendAccountStatusUpdated(mainWindow)
+    return result
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_LOGOUT, async (_, accountId: number) => {
+    if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
+    const result = await zaloRuntime.logout(accountId)
+    sendAccountStatusUpdated(mainWindow)
+    return result
+  })
+
   ipcMain.handle(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, async (_, accountId: number, flatformType: string) => {
+    const account = await supabase.getAccount(accountId)
+    if (flatformType === 'zalo' || account?.flatformType === 'zalo') {
+      return { success: false, reason: BROWSERLESS_ACCOUNT_REASON }
+    }
     const wcId = webviewRegistry.getWebContentsId(accountId)
     if (!wcId) {
       return { success: false, reason: 'Tab trình duyệt chưa được mở' }
@@ -112,7 +179,6 @@ export function registerAccountHandlers(
         return { success: false, reason: 'Tab trình duyệt không khả dụng' }
       }
       const url = PLATFORM_URLS[flatformType] || 'about:blank'
-      const account = await supabase.getAccount(accountId)
       if (account) await proxyRuntime.prepareAccountSession(account)
       wc.loadURL(url)
       return { success: true }
@@ -161,4 +227,30 @@ export function registerAccountHandlers(
       return { loggedIn: false, status: 'chưa đăng nhập', reason: err.message }
     }
   })
+}
+
+function sendAccountStatusUpdated(mainWindow?: BrowserWindow): void {
+  try {
+    mainWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+  } catch {
+    // Window may be closed
+  }
+}
+
+async function invalidateZaloAccountsUsingProxy(
+  supabase: SupabaseService,
+  zaloRuntime: ZaloRuntimeService | undefined,
+  proxyId: number
+): Promise<void> {
+  if (!zaloRuntime) return
+  try {
+    const accounts = await supabase.listAccounts()
+    for (const account of accounts) {
+      if (account.flatformType === 'zalo' && account.proxyId === proxyId) {
+        zaloRuntime.invalidateAccount(account.id)
+      }
+    }
+  } catch (err) {
+    console.warn('[ZaloRuntime] Failed to invalidate Zalo accounts after proxy update:', err)
+  }
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
-  Info, FolderCog
+  Info, FolderCog, QrCode, LogOut
 } from 'lucide-react'
 import { AutoAccount } from '../../../../shared/types'
 
@@ -21,6 +21,9 @@ interface AccountContextMenuProps {
   onViewBrowser: (accountId: number) => void
   onReloadPage: (account: AutoAccount) => void
   onCheckLogin: (account: AutoAccount) => void
+  onZaloLoginQr: (account: AutoAccount) => void
+  onCheckZaloSession: (account: AutoAccount) => void
+  onLogoutZalo: (account: AutoAccount) => void
   onResume: (account: AutoAccount) => void
   onPause: (account: AutoAccount) => void
   onEnable: (account: AutoAccount) => void
@@ -39,6 +42,9 @@ export default function AccountContextMenu({
   onViewBrowser,
   onReloadPage,
   onCheckLogin,
+  onZaloLoginQr,
+  onCheckZaloSession,
+  onLogoutZalo,
   onResume,
   onPause,
   onEnable,
@@ -90,6 +96,7 @@ export default function AccountContextMenu({
 
   const isPaused = account.status === 'tạm dừng'
   const isDisabled = !account.isActive
+  const isZalo = account.flatformType === 'zalo'
 
   return (
     <div
@@ -109,7 +116,7 @@ export default function AccountContextMenu({
 
       {/* Browser Group */}
       <div className="context-menu-group">
-        {!isDisabled && (
+        {!isDisabled && !isZalo && (
           <>
             <button
               className="context-menu-item"
@@ -135,6 +142,33 @@ export default function AccountContextMenu({
             <Shield size={14} />
             <span>Kiểm tra đăng nhập</span>
           </button>
+        )}
+        {!isDisabled && isZalo && (
+          <>
+            <button
+              className="context-menu-item"
+              onClick={() => handleAction(() => onZaloLoginQr(account))}
+            >
+              <QrCode size={14} />
+              <span>{account.hasZaloSession ? 'Đăng nhập lại Zalo' : 'Đăng nhập Zalo QR'}</span>
+            </button>
+            <button
+              className="context-menu-item"
+              onClick={() => handleAction(() => onCheckZaloSession(account))}
+            >
+              <Shield size={14} />
+              <span>Kiểm tra đăng nhập Zalo</span>
+            </button>
+            {account.hasZaloSession && (
+              <button
+                className="context-menu-item accent-warning"
+                onClick={() => handleAction(() => onLogoutZalo(account))}
+              >
+                <LogOut size={14} />
+                <span>Đăng xuất Zalo</span>
+              </button>
+            )}
+          </>
         )}
       </div>
 
