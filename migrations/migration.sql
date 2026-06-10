@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS public.auto_campaign_details (
   note text,
   schedule timestamptz,
   date_action timestamptz,
+  counts_toward_limit boolean,
   is_delete boolean DEFAULT false,
   created_at timestamptz DEFAULT now(),
   CONSTRAINT auto_campaign_details_pkey PRIMARY KEY (id)

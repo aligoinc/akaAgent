@@ -56,6 +56,9 @@ CREATE TABLE IF NOT EXISTS public.auto_account_action_status (
   count_date date NOT NULL DEFAULT (timezone('Asia/Ho_Chi_Minh', now())::date),
   is_disable boolean NOT NULL DEFAULT false,
   date_enable timestamptz,
+  disabled_error_code text,
+  disabled_reason text,
+  disabled_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT auto_account_action_status_unique UNIQUE (account_id, action_code)
@@ -102,6 +105,14 @@ BEGIN
     ALTER TABLE public.auto_campaign_details
       ADD CONSTRAINT auto_campaign_details_error_code_fkey
       FOREIGN KEY (error_code) REFERENCES public.auto_error(error_code);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'auto_account_action_status_disabled_error_code_fkey'
+  ) THEN
+    ALTER TABLE public.auto_account_action_status
+      ADD CONSTRAINT auto_account_action_status_disabled_error_code_fkey
+      FOREIGN KEY (disabled_error_code) REFERENCES public.auto_error(error_code);
   END IF;
 END $$;
 
@@ -291,6 +302,9 @@ AS $$
   UPDATE public.auto_account_action_status
   SET is_disable = false,
       date_enable = NULL,
+      disabled_error_code = NULL,
+      disabled_reason = NULL,
+      disabled_at = NULL,
       updated_at = now()
   WHERE is_disable = true
     AND date_enable IS NOT NULL

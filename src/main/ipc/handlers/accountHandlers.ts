@@ -1,5 +1,5 @@
 import { ipcMain, webContents, BrowserWindow } from 'electron'
-import { AutoProxy, IPC_EVENTS, ProxyTestRequest } from '../../../shared/types'
+import { AutoAccountContact, AutoProxy, IPC_EVENTS, ProxyTestRequest, ZaloLabelOption } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
@@ -13,6 +13,31 @@ const PLATFORM_URLS: Record<string, string> = {
 }
 const BROWSERLESS_PLATFORMS = new Set(['zalo'])
 const BROWSERLESS_ACCOUNT_REASON = 'Tài khoản Zalo không dùng trình duyệt trong phiên bản này'
+
+function mapZaloLabelContact(contact: AutoAccountContact): ZaloLabelOption {
+  const extra = contact.extraData || {}
+  return {
+    id: Number(contact.uid),
+    text: contact.name,
+    textKey: typeof extra.textKey === 'string' ? extra.textKey : undefined,
+    color: typeof extra.color === 'string' ? extra.color : undefined,
+    emoji: typeof extra.emoji === 'string' ? extra.emoji : undefined
+  }
+}
+
+function mapZaloLabelToContact(accountId: number, label: ZaloLabelOption): Partial<AutoAccountContact> {
+  return {
+    accountId,
+    contactType: 'zalo_tag',
+    uid: String(label.id),
+    name: label.text,
+    extraData: {
+      textKey: label.textKey || undefined,
+      color: label.color || undefined,
+      emoji: label.emoji || undefined
+    }
+  }
+}
 
 export function registerAccountHandlers(
   supabase: SupabaseService,
@@ -139,6 +164,12 @@ export function registerAccountHandlers(
     return supabase.listAccountActionOverview(accountId)
   })
 
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, async (_, accountId: number, actionCode: string) => {
+    const status = await supabase.enableAccountActionNow(accountId, actionCode)
+    sendAccountStatusUpdated(mainWindow)
+    return status
+  })
+
   ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_START, async (_, accountId: number) => {
     if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
     return zaloRuntime.startLoginQr(accountId)
@@ -162,6 +193,30 @@ export function registerAccountHandlers(
     const result = await zaloRuntime.logout(accountId)
     sendAccountStatusUpdated(mainWindow)
     return result
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_LIST_LABELS, async (_, accountId: number) => {
+    const contacts = await supabase.listContacts(accountId, 'zalo_tag')
+    return contacts
+      .map(mapZaloLabelContact)
+      .filter(label => Number.isFinite(label.id) && label.id > 0 && label.text)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_SYNC_LABELS, async (_, accountId: number) => {
+    if (!zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const account = await supabase.getAccount(accountId)
+    if (!account || account.flatformType !== 'zalo') {
+      throw new Error('Tài khoản không phải Zalo')
+    }
+    const labels = await zaloRuntime.listLabels(accountId)
+    if (labels.length === 0) {
+      await supabase.deleteContacts(accountId, 'zalo_tag')
+    } else {
+      await supabase.upsertContacts(labels.map(label => mapZaloLabelToContact(accountId, label)), {
+        markMissingDeleted: true
+      })
+    }
+    return labels
   })
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, async (_, accountId: number, flatformType: string) => {

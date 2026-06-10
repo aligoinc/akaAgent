@@ -26,6 +26,7 @@ import { loadLoginSettingsForCurrentDevice, updateStartupSettingForCurrentDevice
 import { readBlockScreenshotDataUrl } from '../services/blockScreenshotService'
 
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+const CAMPAIGN_SCHEDULER_START_DELAY_MS = 30 * 1000
 
 function getVietnamDateKey(date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -55,7 +56,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       }
     }
   )
-  const campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow, proxyRuntime)
+  const campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow, proxyRuntime, zaloRuntime)
   campaignScheduler.setPageRegistry(pageRegistry)
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime)
 
@@ -185,7 +186,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         await runScheduleMaintenance('login')
       } finally {
         warmZaloSessions()
-        campaignScheduler.start()
+        campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
       }
     },
     beforeLogout: async () => {

@@ -164,6 +164,9 @@ export interface AutoAccountActionStatus {
   countDate: string
   isDisable: boolean
   dateEnable?: string | null
+  disabledErrorCode?: string | null
+  disabledReason?: string | null
+  disabledAt?: string | null
   createdAt?: string
   updatedAt?: string
 }
@@ -182,6 +185,11 @@ export interface AutoErrorPolicy {
   disableActionCodes: string[]
   timeDisableActions?: number | null
   countConsecutiveErrors?: number | null
+  zaloErrorCodes: string[]
+  detailStatus?: string | null
+  countsTowardLimit: boolean
+  countsTowardBadTarget: boolean
+  updateLoginStatus?: string | null
   isActive: boolean
   isDelete: boolean
   createdAt?: string
@@ -194,10 +202,12 @@ export interface AccountActionLimitStatus {
   actionName?: string
   errorCode?: string
   reason?: string
+  isActionDisabled?: boolean
   isDailyLimit?: boolean
   retryAfterMs?: number
   currentCount?: number
   limit?: number
+  disabledReason?: string | null
 }
 
 export interface AccountActionOverview {
@@ -262,9 +272,16 @@ export interface CampaignExtraSettings {
   postBumpRotationIndex?: number           // Con trỏ chia đều target qua nhiều bài post
   // Nhắn tin bạn bè / nhắn tin UID & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
-  enableAddFriend?: boolean                // Kết bạn (chỉ dùng cho facebook_message_uid)
+  enableAddFriend?: boolean                // Kết bạn (facebook_message_uid, zalo_message_phone)
   useSuggestedFriends?: boolean            // facebook_message_uid: lấy UID từ đề xuất bạn bè Facebook
   suggestedFriendsCount?: number           // Số lượng đề xuất bạn bè cần lấy
+  // Zalo - Nhắn tin, kết bạn đến SĐT
+  friendRequestMessage?: string
+  enableZaloTag?: boolean
+  zaloTagId?: number | string | null
+  zaloTagName?: string | null
+  enableZaloAlias?: boolean
+  zaloAliasTemplate?: string
   pageInboxPageUid?: string                // facebook_page_to_message: Page ID dùng để mở Business Inbox
   pageInboxPageName?: string               // facebook_page_to_message: tên page hiển thị/log
   // Đăng bài lên trang cá nhân — tuỳ chọn nguồn
@@ -399,6 +416,11 @@ export interface CampaignInputData {
   phone?: string
   uid?: string
   email?: string
+  info1?: string
+  info2?: string
+  info3?: string
+  info4?: string
+  info5?: string
   status: CampaignInputStatus
   note?: string
   schedule?: string
@@ -423,7 +445,8 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   facebook_find_data_group: { field: 'uid', label: 'group URL' },
   facebook_find_data_search: { field: 'uid', label: 'từ khóa' },
   facebook_comment_seeding: { field: 'uid', label: 'group/page/profile' },
-  facebook_comment_seeding_post: { field: 'uid', label: 'link bài post' }
+  facebook_comment_seeding_post: { field: 'uid', label: 'link bài post' },
+  zalo_message_phone: { field: 'phone', label: 'SĐT Zalo' }
 }
 
 export const getCampaignInputDataRequirement = (actionId?: string | null): CampaignInputDataRequirement | null => {
@@ -469,11 +492,10 @@ export interface AddCampaignInputDataToCampaignResult {
   targets: AddCampaignInputDataToCampaignTargetResult[]
 }
 
-// Status enum cho campaign_details (per-milestone log):
-//   - 'thành công': action OK (đã post, đã comment, đã kết bạn)
-//   - 'thất bại': nghiệp vụ FB từ chối (FB block message, post pending, kết bạn không gửi được)
-//   - 'lỗi': exception/crash code (selector not found, timeout, network)
-export type CampaignDetailStatus = 'thành công' | 'thất bại' | 'lỗi'
+// Status cho campaign_details là open-ended để Zalo có thể lưu trạng thái như
+// 'không tồn tại', 'đã là bạn bè'. Facebook hiện vẫn dùng 'thành công' |
+// 'thất bại' | 'lỗi'.
+export type CampaignDetailStatus = string
 
 export interface CampaignDetail {
   id: number
@@ -486,9 +508,18 @@ export interface CampaignDetail {
   errorCode?: string | null
   log?: string
   data?: Record<string, unknown>
+  countsTowardLimit?: boolean | null
   postUrl?: string               // URL of the post this action is related to (e.g. just-published post, commented post)
   isDelete: boolean
   createdAt?: string
+}
+
+export type CreateCampaignDetailInput = Partial<CampaignDetail> & {
+  /**
+   * Optional counter override for platforms with open-ended detail statuses.
+   * Omit to keep the legacy Facebook rule: count 'thành công' and 'thất bại'.
+   */
+  shouldCountAction?: boolean
 }
 
 export interface CampaignRunEvent {
@@ -675,11 +706,19 @@ export interface AccountActionReportDetailResult {
   statusLabel: string
 }
 
+export interface ZaloLabelOption {
+  id: number
+  text: string
+  textKey?: string
+  color?: string
+  emoji?: string
+}
+
 // ============================================
 // Account Contact Types
 // ============================================
 
-export type ContactType = 'person' | 'group' | 'page' | 'page_inbox_customer'
+export type ContactType = 'person' | 'group' | 'page' | 'page_inbox_customer' | 'zalo_tag'
 
 export type PageInboxPhoneFilter = 'all' | 'has_phone' | 'no_phone'
 export type PageInboxMessageFilterMode = 'all' | 'contain_all' | 'contain_any' | 'not_contain_all' | 'not_contain_any'
@@ -1065,11 +1104,14 @@ export const IPC_EVENTS = {
   ACCOUNT_RELOAD_PAGE: 'account:reload-page',
   ACCOUNT_STATUS_UPDATED: 'account:status-updated',
   ACCOUNT_ACTION_OVERVIEW: 'account:action-overview',
+  ACCOUNT_ACTION_ENABLE_NOW: 'account:action-enable-now',
   ZALO_LOGIN_QR_START: 'zalo:login-qr-start',
   ZALO_LOGIN_QR_CANCEL: 'zalo:login-qr-cancel',
   ZALO_LOGIN_QR_EVENT: 'zalo:login-qr-event',
   ZALO_CHECK_SESSION: 'zalo:check-session',
   ZALO_LOGOUT: 'zalo:logout',
+  ZALO_LIST_LABELS: 'zalo:list-labels',
+  ZALO_SYNC_LABELS: 'zalo:sync-labels',
 
   // Contacts (Load data)
   CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',

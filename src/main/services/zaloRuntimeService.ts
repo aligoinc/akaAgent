@@ -1,6 +1,7 @@
-import { Zalo, LoginQRCallbackEventType, ZaloApiError } from 'zca-js'
-import type { API, Credentials, LoginQRCallbackEvent } from 'zca-js'
-import { AutoAccount, AutoProxy, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, ZaloSessionCredentials } from '../../shared/types'
+import { promises as fs } from 'node:fs'
+import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError } from 'zca-js'
+import type { API, AttachmentSource, Credentials, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, MessageContent, Options as ZaloOptions, UserBasic } from 'zca-js'
+import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, ZaloSessionCredentials } from '../../shared/types'
 import { SupabaseService } from './supabase'
 
 const DEFAULT_ZALO_USER_AGENT =
@@ -33,6 +34,151 @@ type ZaloProfile = {
   display_name?: unknown
   avatar?: unknown
   phoneNumber?: unknown
+}
+
+type ImageDimensions = {
+  width: number
+  height: number
+}
+
+async function getZaloImageMetadata(filePath: string): Promise<ImageMetadataGetterResponse> {
+  const data = await fs.readFile(filePath)
+  const dimensions = getImageDimensions(data)
+  if (!dimensions) return null
+  return {
+    width: dimensions.width,
+    height: dimensions.height,
+    size: data.length
+  }
+}
+
+function getImageDimensions(data: Buffer): ImageDimensions | null {
+  return getPngDimensions(data)
+    || getJpegDimensions(data)
+    || getGifDimensions(data)
+    || getWebpDimensions(data)
+}
+
+function getPngDimensions(data: Buffer): ImageDimensions | null {
+  if (data.length < 24) return null
+  if (
+    data[0] !== 0x89
+    || data[1] !== 0x50
+    || data[2] !== 0x4e
+    || data[3] !== 0x47
+    || data[4] !== 0x0d
+    || data[5] !== 0x0a
+    || data[6] !== 0x1a
+    || data[7] !== 0x0a
+  ) {
+    return null
+  }
+  return normalizeImageDimensions(data.readUInt32BE(16), data.readUInt32BE(20))
+}
+
+function getGifDimensions(data: Buffer): ImageDimensions | null {
+  if (data.length < 10) return null
+  const signature = data.subarray(0, 6).toString('ascii')
+  if (signature !== 'GIF87a' && signature !== 'GIF89a') return null
+  return normalizeImageDimensions(data.readUInt16LE(6), data.readUInt16LE(8))
+}
+
+function getJpegDimensions(data: Buffer): ImageDimensions | null {
+  if (data.length < 4 || data[0] !== 0xff || data[1] !== 0xd8) return null
+
+  let offset = 2
+  while (offset < data.length) {
+    if (data[offset] !== 0xff) {
+      offset += 1
+      continue
+    }
+
+    while (offset < data.length && data[offset] === 0xff) offset += 1
+    const marker = data[offset]
+    offset += 1
+
+    if (marker === 0xd9 || marker === 0xda) break
+    if (offset + 2 > data.length) break
+
+    const segmentLength = data.readUInt16BE(offset)
+    if (segmentLength < 2 || offset + segmentLength > data.length) break
+
+    if (isJpegStartOfFrameMarker(marker)) {
+      const segmentStart = offset + 2
+      if (segmentStart + 5 > data.length) break
+      return normalizeImageDimensions(
+        data.readUInt16BE(segmentStart + 3),
+        data.readUInt16BE(segmentStart + 1)
+      )
+    }
+
+    offset += segmentLength
+  }
+
+  return null
+}
+
+function isJpegStartOfFrameMarker(marker: number): boolean {
+  return marker >= 0xc0
+    && marker <= 0xcf
+    && marker !== 0xc4
+    && marker !== 0xc8
+    && marker !== 0xcc
+}
+
+function getWebpDimensions(data: Buffer): ImageDimensions | null {
+  if (data.length < 30) return null
+  if (data.subarray(0, 4).toString('ascii') !== 'RIFF') return null
+  if (data.subarray(8, 12).toString('ascii') !== 'WEBP') return null
+
+  const chunkType = data.subarray(12, 16).toString('ascii')
+  if (chunkType === 'VP8X') {
+    return normalizeImageDimensions(readUInt24LE(data, 24) + 1, readUInt24LE(data, 27) + 1)
+  }
+
+  if (chunkType === 'VP8 ' && data[23] === 0x9d && data[24] === 0x01 && data[25] === 0x2a) {
+    return normalizeImageDimensions(data.readUInt16LE(26) & 0x3fff, data.readUInt16LE(28) & 0x3fff)
+  }
+
+  if (chunkType === 'VP8L' && data.length >= 25 && data[20] === 0x2f) {
+    const b0 = data[21]
+    const b1 = data[22]
+    const b2 = data[23]
+    const b3 = data[24]
+    return normalizeImageDimensions(
+      1 + (((b1 & 0x3f) << 8) | b0),
+      1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6))
+    )
+  }
+
+  return null
+}
+
+function readUInt24LE(data: Buffer, offset: number): number {
+  return data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16)
+}
+
+function normalizeImageDimensions(width: number, height: number): ImageDimensions | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null
+  if (width <= 0 || height <= 0) return null
+  return { width, height }
+}
+
+export interface ZaloFoundUser {
+  uid: string
+  displayName?: string
+  originalName?: string
+  gender?: number | string | null
+  avatar?: string
+  raw: Record<string, unknown>
+}
+
+export interface ZaloFriendRequestStatus {
+  isFriend: boolean
+  isRequested: boolean
+  isRequesting: boolean
+  addFriendPrivacy?: number
+  raw: Record<string, unknown>
 }
 
 export class ZaloRuntimeService {
@@ -201,6 +347,79 @@ export class ZaloRuntimeService {
       status: account.loginStatus,
       account
     }
+  }
+
+  async listLabels(accountId: number): Promise<ZaloLabelOption[]> {
+    const api = await this.ensureApi(accountId)
+    const response = await api.getLabels()
+    return (Array.isArray(response?.labelData) ? response.labelData : [])
+      .map(label => ({
+        id: Number(label.id),
+        text: String(label.text || '').trim(),
+        textKey: String(label.textKey || '').trim() || undefined,
+        color: String(label.color || '').trim() || undefined,
+        emoji: String(label.emoji || '').trim() || undefined
+      }))
+      .filter(label => Number.isFinite(label.id) && label.id > 0 && label.text)
+  }
+
+  async findUserByPhone(accountId: number, phone: string): Promise<ZaloFoundUser | null> {
+    const api = await this.ensureApi(accountId)
+    const user = await api.findUser(phone)
+    return normalizeFoundUser(user)
+  }
+
+  async getFriendRequestStatus(accountId: number, uid: string): Promise<ZaloFriendRequestStatus> {
+    const api = await this.ensureApi(accountId)
+    const status = await api.getFriendRequestStatus(uid)
+    const raw = normalizeRecord(status)
+    return {
+      isFriend: Number(status?.is_friend || 0) === 1,
+      isRequested: Number(status?.is_requested || 0) === 1,
+      isRequesting: Number(status?.is_requesting || 0) === 1,
+      addFriendPrivacy: Number.isFinite(Number(status?.addFriendPrivacy)) ? Number(status?.addFriendPrivacy) : undefined,
+      raw
+    }
+  }
+
+  async sendMessageToUser(
+    accountId: number,
+    uid: string,
+    message: string,
+    attachments: string[] = []
+  ): Promise<unknown> {
+    const api = await this.ensureApi(accountId)
+    const safeAttachments = attachments.map(item => String(item || '').trim()).filter(Boolean) as AttachmentSource[]
+    const payload: MessageContent = safeAttachments.length > 0
+      ? { msg: String(message || ''), attachments: safeAttachments }
+      : { msg: String(message || '') }
+    return api.sendMessage(payload, uid, ThreadType.User)
+  }
+
+  async sendFriendRequestToUser(accountId: number, uid: string, message: string): Promise<unknown> {
+    const api = await this.ensureApi(accountId)
+    return api.sendFriendRequest(String(message || ''), uid)
+  }
+
+  async applyLabelToUser(accountId: number, uid: string, labelId: number | string): Promise<LabelData> {
+    const api = await this.ensureApi(accountId)
+    const id = Number(labelId)
+    if (!Number.isFinite(id) || id <= 0) throw new Error('Tag Zalo không hợp lệ')
+    const response = await api.getLabels()
+    const labels = Array.isArray(response?.labelData) ? response.labelData : []
+    const label = labels.find(item => Number(item.id) === id)
+    if (!label) throw new Error('Tag Zalo không tồn tại')
+    if (!Array.isArray(label.conversations)) label.conversations = []
+    if (!label.conversations.includes(uid)) {
+      label.conversations.push(uid)
+      await api.updateLabels({ labelData: labels, version: response.version })
+    }
+    return label
+  }
+
+  async changeUserAlias(accountId: number, uid: string, alias: string): Promise<unknown> {
+    const api = await this.ensureApi(accountId)
+    return api.changeFriendAlias(String(alias || ''), uid)
   }
 
   private async runLoginQr(account: AutoAccount, active: ActiveQrLogin): Promise<void> {
@@ -384,14 +603,10 @@ export class ZaloRuntimeService {
     const agent = proxy && proxy.isActive !== false
       ? await this.createProxyAgent(proxy)
       : undefined
-    const options: {
-      checkUpdate: boolean
-      logging: boolean
-      agent?: any
-      polyfill?: typeof globalThis.fetch
-    } = {
+    const options: Partial<ZaloOptions> = {
       checkUpdate: false,
-      logging: false
+      logging: false,
+      imageMetadataGetter: getZaloImageMetadata
     }
 
     if (agent) {
@@ -526,4 +741,24 @@ function sanitizeProfileMetadata(profile: ZaloProfile): Record<string, unknown> 
   const metadata = { ...(profile as Record<string, unknown>) }
   delete metadata.phoneNumber
   return metadata
+}
+
+function normalizeFoundUser(user: UserBasic | null | undefined): ZaloFoundUser | null {
+  if (!user || typeof user !== 'object') return null
+  const raw = normalizeRecord(user)
+  const uid = firstString((user as any).uid, (user as any).userId, (user as any).globalId)
+  if (!uid) return null
+  return {
+    uid,
+    displayName: firstString((user as any).display_name, (user as any).displayName, (user as any).zalo_name, (user as any).zaloName) || undefined,
+    originalName: firstString((user as any).zalo_name, (user as any).zaloName, (user as any).display_name, (user as any).displayName) || undefined,
+    gender: (user as any).gender ?? null,
+    avatar: firstString((user as any).avatar) || undefined,
+    raw
+  }
+}
+
+function normalizeRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') return {}
+  return { ...(value as Record<string, unknown>) }
 }

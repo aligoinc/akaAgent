@@ -46,6 +46,23 @@ export async function getErrorPolicy(errorCode: string): Promise<AutoErrorPolicy
   return data ? mapAutoErrorPolicyFromDB(data) : null
 }
 
+export async function getZaloErrorPolicyByCode(code: string | number): Promise<AutoErrorPolicy | null> {
+  const normalizedCode = String(code || '').trim()
+  if (!normalizedCode) return null
+
+  const { data, error } = await client()
+    .from('auto_error')
+    .select('*')
+    .contains('zalo_error_codes', [normalizedCode])
+    .eq('is_active', true)
+    .eq('is_delete', false)
+    .limit(1)
+
+  if (error) throw new Error(`Failed to get Zalo error policy: ${error.message}`)
+  const row = Array.isArray(data) ? data[0] : null
+  return row ? mapAutoErrorPolicyFromDB(row) : null
+}
+
 export async function listErrorPolicies(): Promise<AutoErrorPolicy[]> {
   const { data, error } = await client()
     .from('auto_error')

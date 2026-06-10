@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -317,6 +317,9 @@ const electronAPI = {
   getAccountActionOverview: (accountId: number): Promise<AccountActionOverview[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, accountId),
 
+  enableAccountActionNow: (accountId: number, actionCode: string) =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, accountId, actionCode),
+
   startZaloLoginQr: (accountId: number): Promise<ZaloLoginQrStartResult> =>
     ipcRenderer.invoke(IPC_EVENTS.ZALO_LOGIN_QR_START, accountId),
 
@@ -328,6 +331,12 @@ const electronAPI = {
 
   logoutZalo: (accountId: number): Promise<ZaloSessionCheckResult> =>
     ipcRenderer.invoke(IPC_EVENTS.ZALO_LOGOUT, accountId),
+
+  listZaloLabels: (accountId: number): Promise<ZaloLabelOption[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_LIST_LABELS, accountId),
+
+  syncZaloLabels: (accountId: number): Promise<ZaloLabelOption[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_SYNC_LABELS, accountId),
 
   onZaloLoginQrEvent: (callback: (event: ZaloLoginQrEvent) => void): () => void => {
     const handler = (_: unknown, event: ZaloLoginQrEvent) => callback(event)

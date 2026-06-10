@@ -1852,6 +1852,10 @@ button.btn-icon:not(.btn):disabled {
   font-size: 12px;
 }
 
+.account-info-run-now-btn {
+  white-space: nowrap;
+}
+
 .account-info-code {
   color: var(--text-tertiary);
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
@@ -5688,6 +5692,12 @@ td.report-account-col span {
   border-color: var(--accent-primary);
   color: var(--text-primary);
   background: var(--bg-elevated);
+}
+
+.message-template-token-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .message-template-control-row {

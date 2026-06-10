@@ -8,6 +8,11 @@ const DEFAULT_RATE_LIMIT_MINUTES = 65
 const RATED_ACTION_STATUSES = ['thành công', 'thất bại']
 const TRANSIENT_RETRY_DELAY_MS = 300
 
+export interface DisableAccountActionContext {
+  errorCode?: string | null
+  reason?: string | null
+}
+
 function normalizeRateLimitMinutes(value: unknown): number {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
@@ -223,17 +228,30 @@ async function loadWindowActionCounts(
   const counts = new Map<string, number>()
   for (const [actionCode, windowMinutes] of actionWindowMinutes.entries()) {
     const timeFrameStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
-    const { count } = await runOverviewQuery(
-      'Failed to count account action window',
-      () => client()
-        .from('auto_campaign_details')
-        .select('*', { count: 'exact', head: true })
-        .eq('account_id', accountId)
-        .eq('action_code', actionCode)
-        .in('status', RATED_ACTION_STATUSES)
-        .gte('created_at', timeFrameStart)
-    )
-    counts.set(actionCode, count || 0)
+    const [explicitResult, legacyResult] = await Promise.all([
+      runOverviewQuery(
+        'Failed to count explicit account action window',
+        () => client()
+          .from('auto_campaign_details')
+          .select('*', { count: 'exact', head: true })
+          .eq('account_id', accountId)
+          .eq('action_code', actionCode)
+          .eq('counts_toward_limit', true)
+          .gte('created_at', timeFrameStart)
+      ),
+      runOverviewQuery(
+        'Failed to count legacy account action window',
+        () => client()
+          .from('auto_campaign_details')
+          .select('*', { count: 'exact', head: true })
+          .eq('account_id', accountId)
+          .eq('action_code', actionCode)
+          .is('counts_toward_limit', null)
+          .in('status', RATED_ACTION_STATUSES)
+          .gte('created_at', timeFrameStart)
+      )
+    ])
+    counts.set(actionCode, (explicitResult.count || 0) + (legacyResult.count || 0))
   }
 
   return counts
@@ -305,7 +323,8 @@ export async function incrementAccountActionCount(
 export async function disableAccountActions(
   accountId: number,
   actionCodes: string[],
-  minutes?: number | null
+  minutes?: number | null,
+  context?: DisableAccountActionContext
 ): Promise<void> {
   const codes = Array.from(new Set(actionCodes.map(code => code.trim()).filter(Boolean)))
   if (codes.length === 0) return
@@ -313,6 +332,7 @@ export async function disableAccountActions(
   const dateEnable = minutes && minutes > 0
     ? new Date(Date.now() + minutes * 60 * 1000).toISOString()
     : null
+  const disabledAt = new Date().toISOString()
 
   for (const actionCode of codes) {
     await getAccountActionStatus(accountId, actionCode)
@@ -322,6 +342,9 @@ export async function disableAccountActions(
       .update({
         is_disable: true,
         date_enable: dateEnable,
+        disabled_error_code: context?.errorCode || null,
+        disabled_reason: context?.reason || null,
+        disabled_at: disabledAt,
         updated_at: new Date().toISOString()
       })
       .eq('account_id', accountId)
@@ -329,6 +352,34 @@ export async function disableAccountActions(
 
     if (error) throw new Error(`Failed to disable account action "${actionCode}": ${error.message}`)
   }
+}
+
+export async function enableAccountActionNow(
+  accountId: number,
+  actionCode: string
+): Promise<AutoAccountActionStatus> {
+  const normalizedCode = actionCode.trim()
+  if (!normalizedCode) throw new Error('Mã hành động không hợp lệ')
+
+  await getAccountActionStatus(accountId, normalizedCode)
+
+  const { data, error } = await client()
+    .from('auto_account_action_status')
+    .update({
+      is_disable: false,
+      date_enable: null,
+      disabled_error_code: null,
+      disabled_reason: null,
+      disabled_at: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('account_id', accountId)
+    .eq('action_code', normalizedCode)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to enable account action "${normalizedCode}": ${error.message}`)
+  return mapAutoAccountActionStatusFromDB(data as Record<string, unknown>)
 }
 
 export async function enableDueAccountActions(): Promise<void> {

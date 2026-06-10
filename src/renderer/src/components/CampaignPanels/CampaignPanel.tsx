@@ -141,7 +141,7 @@ interface FindDataLogRow {
 }
 
 const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
-const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email']
+const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
 const BLOCK_SCREENSHOT_EVENT_TYPE = 'browser_screenshot'
 const FIND_DATA_LOG_EXPORT_HEADERS = [
   'Thời gian',
@@ -2367,7 +2367,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           item.name || '',
           item.uid || '',
           item.phone || '',
-          item.email || ''
+          item.email || '',
+          item.info1 || '',
+          item.info2 || '',
+          item.info3 || '',
+          item.info4 || '',
+          item.info5 || ''
         ])
       ]
       const sheet = utils.aoa_to_sheet(rows)
@@ -2375,7 +2380,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
         { wch: 24 },
         { wch: 48 },
         { wch: 18 },
-        { wch: 28 }
+        { wch: 28 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 }
       ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Sheet1')
