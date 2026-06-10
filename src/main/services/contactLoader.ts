@@ -986,6 +986,7 @@ export class ContactLoader {
       case 'group': return 'group'
       case 'page': return 'page'
       case 'page_inbox_customer': return 'người từng nhắn tin với page'
+      case 'zalo_tag': return 'tag Zalo'
     }
   }
 
@@ -993,6 +994,7 @@ export class ContactLoader {
     if (contactType === 'person') return 'Đang quét bạn bè nền'
     if (contactType === 'group') return 'Đang quét group nền'
     if (contactType === 'page_inbox_customer') return 'Đang quét người nhắn tin với page'
+    if (contactType === 'zalo_tag') return 'Đang tải tag Zalo'
     return 'Đang quét page nền'
   }
 

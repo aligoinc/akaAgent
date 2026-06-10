@@ -5,7 +5,7 @@ import { BlockHelpers, BlockRuntimeHelpers, BlockRuntimeMetadata, createBlockHel
 
 export interface BlockExecuteContext {
   input: Record<string, unknown>
-  page: PageController
+  page: PageController | null
   vars: Record<string, unknown>
   signal: AbortSignal
   runtimeHelpers?: BlockRuntimeHelpers

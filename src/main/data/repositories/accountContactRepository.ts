@@ -78,6 +78,7 @@ function normalizeContactUrl(uid: string, url: string | undefined, contactType: 
   const rawUrl = String(url || '').trim()
   if (rawUrl) return rawUrl
   if (!uid) return null
+  if (contactType === 'zalo_tag') return null
   if (contactType === 'group') return `https://www.facebook.com/groups/${uid}`
   if (contactType === 'page') return `https://www.facebook.com/${uid}`
   if (/^\d+$/.test(uid)) return `https://www.facebook.com/profile.php?id=${uid}`

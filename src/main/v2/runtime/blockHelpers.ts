@@ -28,6 +28,12 @@ export interface BlockHelpers {
   logRunEvents?(events: Record<string, unknown>[]): Promise<OptionalHelperUnsupportedResult | unknown>
   /** Optional helper: call a centralized AI configuration by ai_using.code. */
   callAIUsing?(code: string, payload?: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
+  /** Zalo browserless helpers. Implemented only by campaign runtime. */
+  zaloFindPhoneUser(options: ZaloFindPhoneUserOptions): Promise<ZaloActionHelperResult>
+  zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult>
+  zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult>
+  zaloApplyContactTag(options: ZaloApplyContactTagOptions): Promise<ZaloActionHelperResult>
+  zaloChangeContactAlias(options: ZaloChangeContactAliasOptions): Promise<ZaloActionHelperResult>
 }
 
 export interface OptionalHelperUnsupportedResult {
@@ -70,6 +76,79 @@ export interface BlockRuntimeHelpers {
   logRunEvent?: (event: CampaignRunEventInput, metadata: BlockRuntimeMetadata) => Promise<unknown>
   logRunEvents?: (events: CampaignRunEventInput[], metadata: BlockRuntimeMetadata) => Promise<unknown>
   callAIUsing?: (code: string, payload: Record<string, unknown>, metadata: BlockRuntimeMetadata) => Promise<unknown>
+  zaloFindPhoneUser?: (options: ZaloFindPhoneUserOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloSendPhoneMessage?: (options: ZaloSendPhoneMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloSendPhoneFriendRequest?: (options: ZaloSendPhoneFriendRequestOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloApplyContactTag?: (options: ZaloApplyContactTagOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloChangeContactAlias?: (options: ZaloChangeContactAliasOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+}
+
+export interface ZaloResolvedTarget {
+  uid: string
+  phone: string
+  displayName?: string
+  originalName?: string
+  gender?: number | string | null
+  isFriend?: boolean
+  raw?: Record<string, unknown>
+}
+
+export interface ZaloActionDetailOutput {
+  createDetail?: boolean
+  actionCode?: string | null
+  actionName?: string
+  status?: string
+  log?: string
+  errorCode?: string | null
+  data?: Record<string, unknown>
+  countsTowardLimit?: boolean
+  countsTowardBadTarget?: boolean
+  resetInputToPending?: boolean
+  pendingNote?: string
+  stopAfterTarget?: boolean
+}
+
+export interface ZaloActionHelperResult {
+  ok: boolean
+  skipped?: boolean
+  message?: string
+  zaloTarget?: ZaloResolvedTarget | null
+  detail?: ZaloActionDetailOutput | null
+}
+
+export interface ZaloFindPhoneUserOptions {
+  phone?: string
+  inputData?: Record<string, unknown>
+  targetName?: string
+}
+
+export interface ZaloSendPhoneMessageOptions {
+  enabled?: boolean
+  target?: ZaloResolvedTarget | null
+  message?: string
+  attachments?: unknown[]
+  inputData?: Record<string, unknown>
+}
+
+export interface ZaloSendPhoneFriendRequestOptions {
+  enabled?: boolean
+  target?: ZaloResolvedTarget | null
+  message?: string
+  inputData?: Record<string, unknown>
+}
+
+export interface ZaloApplyContactTagOptions {
+  enabled?: boolean
+  target?: ZaloResolvedTarget | null
+  labelId?: number | string | null
+  labelName?: string | null
+}
+
+export interface ZaloChangeContactAliasOptions {
+  enabled?: boolean
+  target?: ZaloResolvedTarget | null
+  alias?: string
+  inputData?: Record<string, unknown>
 }
 
 const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents', 'callAIUsing'])
@@ -191,6 +270,31 @@ export function createBlockHelpers(
         links: [],
         error: 'Runtime hiện tại không hỗ trợ page phụ để kiểm tra pending content'
       }
+    },
+
+    async zaloFindPhoneUser(options: ZaloFindPhoneUserOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloFindPhoneUser) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloFindPhoneUser(options, runtimeMetadata)
+    },
+
+    async zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloSendPhoneMessage) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloSendPhoneMessage(options, runtimeMetadata)
+    },
+
+    async zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloSendPhoneFriendRequest) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloSendPhoneFriendRequest(options, runtimeMetadata)
+    },
+
+    async zaloApplyContactTag(options: ZaloApplyContactTagOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloApplyContactTag) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloApplyContactTag(options, runtimeMetadata)
+    },
+
+    async zaloChangeContactAlias(options: ZaloChangeContactAliasOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloChangeContactAlias) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloChangeContactAlias(options, runtimeMetadata)
     }
   }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, RotateCcw, RefreshCw, X } from 'lucide-react'
 import { AccountActionOverview, AutoAccount } from '../../../../shared/types'
 
 type AccountInfoViewMode = 'modal' | 'dock'
@@ -24,6 +24,7 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
   const [rows, setRows] = useState<AccountActionOverview[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [enablingActionCode, setEnablingActionCode] = useState<string | null>(null)
   const isModal = mode === 'modal'
 
   const loadOverview = useCallback(async () => {
@@ -47,6 +48,20 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
   const refreshCurrentView = useCallback(() => {
     loadOverview()
   }, [loadOverview])
+
+  const handleEnableActionNow = useCallback(async (actionCode: string) => {
+    if (!window.electronAPI?.enableAccountActionNow || enablingActionCode) return
+    setEnablingActionCode(actionCode)
+    setError(null)
+    try {
+      await window.electronAPI.enableAccountActionNow(account.id, actionCode)
+      await loadOverview()
+    } catch (err: any) {
+      setError(err?.message || 'Không thể chạy lại hành động ngay')
+    } finally {
+      setEnablingActionCode(null)
+    }
+  }, [account.id, enablingActionCode, loadOverview])
 
   const limitedCount = useMemo(() => rows.filter(row => row.status.isDisable).length, [rows])
   const totalToday = useMemo(() => rows.reduce((sum, row) => sum + (row.status.countActionInDay || 0), 0), [rows])
@@ -128,11 +143,13 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
                 <th>Trong giờ</th>
                 <th>Trạng thái</th>
                 <th>Mở lại lúc</th>
+                <th>Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(row => {
                 const remainingMinutes = getRemainingMinutes(row.status.dateEnable)
+                const isEnabling = enablingActionCode === row.action.code
                 return (
                   <tr key={row.action.code}>
                     <td>
@@ -154,6 +171,22 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
                       )}
                     </td>
                     <td>{formatDateTime(row.status.dateEnable)}</td>
+                    <td>
+                      {row.status.isDisable ? (
+                        <button
+                          className="btn btn-secondary btn-sm account-info-run-now-btn"
+                          type="button"
+                          disabled={Boolean(enablingActionCode)}
+                          onClick={() => handleEnableActionNow(row.action.code)}
+                          title="Bật lại hành động này ngay"
+                        >
+                          <RotateCcw size={13} className={isEnabling ? 'spin' : ''} />
+                          <span>{isEnabling ? 'Đang mở...' : 'Chạy lại ngay'}</span>
+                        </button>
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
+                    </td>
                   </tr>
                 )
               })}

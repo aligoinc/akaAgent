@@ -103,7 +103,7 @@ export class WorkflowEngineV2 {
   async run(
     workflowOrId: number | WorkflowDef,
     variables: Record<string, unknown>,
-    page: PageController,
+    page: PageController | null,
     ctx: RunContext = {}
   ): Promise<RunResult> {
     // Resolve workflow
@@ -235,7 +235,7 @@ export class WorkflowEngineV2 {
     graph: Graph
     nodeStates: Map<string, NodeState>
     variables: Record<string, unknown>
-    page: PageController
+    page: PageController | null
     signal: AbortSignal
     runId?: number
     ctx: RunContext
@@ -347,7 +347,7 @@ export class WorkflowEngineV2 {
     }
 
     const screenshotCapture = this.resolveAfterScreenshotCapture(node, result)
-    if (screenshotCapture && ctx.onBlockScreenshot) {
+    if (screenshotCapture && ctx.onBlockScreenshot && page) {
       try {
         await ctx.onBlockScreenshot({
           organizationId: ctx.organizationId,
@@ -461,7 +461,7 @@ export class WorkflowEngineV2 {
     graph: Graph,
     nodeStates: Map<string, NodeState>,
     blockMap: Map<number, BlockDef>,
-    page: PageController,
+    page: PageController | null,
     signal: AbortSignal,
     runId: number | undefined,
     ctx: RunContext,

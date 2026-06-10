@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS public.auto_campaign_result_actions (
   status text NOT NULL DEFAULT 'thành công',
   log text,
   data jsonb,
+  counts_toward_limit boolean,
   post_url text,
   is_delete boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),

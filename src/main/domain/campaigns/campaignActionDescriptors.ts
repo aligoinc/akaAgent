@@ -12,6 +12,7 @@ const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 
 export function isCommentSeedingCampaign(actionId: string): boolean {
   return actionId === COMMENT_SEEDING_FEED_ACTION_ID || actionId === COMMENT_SEEDING_POST_ACTION_ID
@@ -40,6 +41,12 @@ export function getAccountActionName(actionCode: string): string {
     case 'fb_message_page_inbox_customer': return 'Nhắn tin khách inbox page'
     case 'fb_add_friend': return 'Kết bạn'
     case 'fb_like_post': return 'Like post'
+    case 'zalo_find_phone_user': return 'Tìm SĐT'
+    case 'zalo_message_friend': return 'Nhắn tin bạn bè'
+    case 'zalo_message_stranger': return 'Nhắn tin người lạ'
+    case 'zalo_add_friend': return 'Kết bạn'
+    case 'zalo_tag_contact': return 'Gắn tag Zalo'
+    case 'zalo_change_alias': return 'Đổi tên Zalo'
     default: return actionCode
   }
 }
@@ -80,6 +87,17 @@ function isActionCheckEnabledForCampaign(campaign: Campaign, actionCode: string)
         return isNewsfeedLikeConfigured(extra)
       }
       return extra.enablePostLike === true
+    case 'zalo_find_phone_user':
+      return campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
+    case 'zalo_message_friend':
+      return false
+    case 'zalo_message_stranger':
+      return campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID && extra.enableMessage === true
+    case 'zalo_add_friend':
+      return campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID && extra.enableAddFriend === true
+    case 'zalo_tag_contact':
+    case 'zalo_change_alias':
+      return false
     default:
       return true
   }
@@ -166,6 +184,13 @@ export function getCampaignActionDescriptors(
       if (isNewsfeedLikeConfigured(extra)) {
         actions.push({ code: 'fb_like_post', name: 'Like post' })
       }
+      break
+    case ZALO_MESSAGE_PHONE_ACTION_ID:
+      actions.push({ code: 'zalo_find_phone_user', name: 'Tìm SĐT' })
+      if (extra.enableMessage) {
+        actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
+      }
+      if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
       break
   }
 

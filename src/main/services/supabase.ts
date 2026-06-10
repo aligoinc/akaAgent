@@ -1,4 +1,4 @@
-import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloSessionCredentials } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloSessionCredentials } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -11,6 +11,7 @@ import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
 import * as contentTemplateRepo from '../data/repositories/contentTemplateRepository'
 import * as emailNotificationRepo from '../data/repositories/emailNotificationRepository'
 import * as reportRepo from '../data/repositories/reportRepository'
+import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -97,7 +98,7 @@ export class SupabaseService {
   // =========== CAMPAIGN DETAILS (per-milestone log) ===========
   listCampaignDetailsByInputData(inputDataId: number) { return campaignRepo.listCampaignDetailsByInputData(inputDataId) }
   listCampaignDetailsByCampaign(campaignId: number) { return campaignRepo.listCampaignDetailsByCampaign(campaignId) }
-  createCampaignDetail(action: Partial<CampaignDetail>) { return campaignRepo.createCampaignDetail(action) }
+  createCampaignDetail(action: CreateCampaignDetailInput) { return campaignRepo.createCampaignDetail(action) }
   deleteCampaignDetail(id: number) { return campaignRepo.deleteCampaignDetail(id) }
   listCampaignRunEventsByCampaign(campaignId: number, options?: CampaignRunEventListOptions) {
     return campaignRunEventRepo.listCampaignRunEventsByCampaign(campaignId, options)
@@ -133,9 +134,14 @@ export class SupabaseService {
   listAccountActions(flatformType?: string) { return accountActionRepo.listAccountActions(flatformType) }
   listAccountActionOverview(accountId: number) { return accountActionRepo.listAccountActionOverview(accountId) }
   getAccountActionStatus(accountId: number, actionCode: string) { return accountActionRepo.getAccountActionStatus(accountId, actionCode) }
-  disableAccountActions(accountId: number, actionCodes: string[], minutes?: number | null) { return accountActionRepo.disableAccountActions(accountId, actionCodes, minutes) }
+  disableAccountActions(accountId: number, actionCodes: string[], minutes?: number | null, context?: accountActionRepo.DisableAccountActionContext) {
+    return accountActionRepo.disableAccountActions(accountId, actionCodes, minutes, context)
+  }
+  enableAccountActionNow(accountId: number, actionCode: string) { return accountActionRepo.enableAccountActionNow(accountId, actionCode) }
   enableDueAccountActions() { return accountActionRepo.enableDueAccountActions() }
   getErrorPolicy(errorCode: string) { return errorPolicyRepo.getErrorPolicy(errorCode) }
+  getZaloErrorPolicyByCode(code: string | number) { return errorPolicyRepo.getZaloErrorPolicyByCode(code) }
+  createZaloApiErrorLog(input: zaloApiErrorLogRepo.ZaloApiErrorLogInput) { return zaloApiErrorLogRepo.createZaloApiErrorLog(input) }
   listErrorPolicies() { return errorPolicyRepo.listErrorPolicies() }
   incrementConsecutiveError(accountId: number, actionCode: string | null | undefined, errorCode: string) {
     return errorPolicyRepo.incrementConsecutiveError(accountId, actionCode, errorCode)

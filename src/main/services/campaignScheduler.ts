@@ -35,12 +35,24 @@ import {
   type CampaignActionDescriptor
 } from '../domain/campaigns/campaignActionDescriptors'
 import { ProxyRuntimeService } from './proxyRuntimeService'
+import { ZaloApiError } from 'zca-js'
+import { ZaloRuntimeService, type ZaloFoundUser } from './zaloRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import { callAiUsing } from './aiRuntimeService'
 import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
+import type {
+  ZaloActionDetailOutput,
+  ZaloActionHelperResult,
+  ZaloApplyContactTagOptions,
+  ZaloChangeContactAliasOptions,
+  ZaloFindPhoneUserOptions,
+  ZaloResolvedTarget,
+  ZaloSendPhoneFriendRequestOptions,
+  ZaloSendPhoneMessageOptions
+} from '../v2/runtime/blockHelpers'
 
 interface AutomationPageRef {
-  page: PageController
+  page: PageController | null
   source: 'visible' | 'background'
 }
 
@@ -48,6 +60,10 @@ interface BackgroundPreviewOverride {
   page: PageController
   title?: string
   context?: string
+}
+
+interface SchedulerStartOptions {
+  initialDelayMs?: number
 }
 
 interface RuntimeErrorResult {
@@ -70,6 +86,9 @@ interface MilestoneSummary {
   errorReasons: string[]
   failureRootReasons: string[]
   errorRootReasons: string[]
+  resetInputToPending?: boolean
+  pendingNote?: string
+  stopAfterTarget?: boolean
 }
 
 interface BlockScreenshotRunResult {
@@ -196,6 +215,11 @@ const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
+const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
+const ZALO_FIND_PHONE_DEFAULT_LIMIT = 1000
+const ZALO_API_BUSINESS_FAILED_ERROR_CODE = 'err_zalo_api_business_failed'
+const ZALO_USER_NOT_FOUND_ERROR_CODE = 'err_zalo_user_not_found'
 const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_diagnosis'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
@@ -254,6 +278,7 @@ export class CampaignScheduler {
   private engineV2 = new WorkflowEngineV2()
   private mainWindow: BrowserWindow
   private intervalId: ReturnType<typeof setInterval> | null = null
+  private startDelayTimeoutId: ReturnType<typeof setTimeout> | null = null
   private running = false
   private dispatching = false
   private activeAccountRuns = new Set<number>()
@@ -265,17 +290,20 @@ export class CampaignScheduler {
   private backgroundPreviewCapturing = new Set<string>()
   private backgroundPreviewOverrides = new Map<string, BackgroundPreviewOverride>()
   private proxyRuntime?: ProxyRuntimeService
+  private zaloRuntime?: ZaloRuntimeService
 
   constructor(
     supabase: SupabaseService,
     webviewRegistry: WebviewRegistry,
     mainWindow: BrowserWindow,
-    proxyRuntime?: ProxyRuntimeService
+    proxyRuntime?: ProxyRuntimeService,
+    zaloRuntime?: ZaloRuntimeService
   ) {
     this.supabase = supabase
     this.webviewRegistry = webviewRegistry
     this.mainWindow = mainWindow
     this.proxyRuntime = proxyRuntime
+    this.zaloRuntime = zaloRuntime
   }
 
   setPageRegistry(reg: PageControllerRegistry): void {
@@ -318,17 +346,29 @@ export class CampaignScheduler {
     return sourceCampaign.extraSettings?.isFindFacebookGroup === true
   }
 
-  start(): void {
+  start(options: SchedulerStartOptions = {}): void {
     if (this.running) return
     this.running = true
-    this.intervalId = setInterval(() => this.tick(), 30000)
-    this.sendLog('📋 Scheduler đã bắt đầu. Kiểm tra mỗi 30 giây.')
-    // Run immediately on start
-    this.tick()
+    const initialDelayMs = Math.max(0, options.initialDelayMs ?? 0)
+    if (initialDelayMs > 0) {
+      const seconds = Math.ceil(initialDelayMs / 1000)
+      this.sendLog(`📋 Scheduler sẽ bắt đầu sau ${seconds} giây. Kiểm tra mỗi 30 giây.`)
+      this.startDelayTimeoutId = setTimeout(() => {
+        this.startDelayTimeoutId = null
+        this.startPolling()
+      }, initialDelayMs)
+      return
+    }
+
+    this.startPolling()
   }
 
   stop(): void {
     this.running = false
+    if (this.startDelayTimeoutId) {
+      clearTimeout(this.startDelayTimeoutId)
+      this.startDelayTimeoutId = null
+    }
     if (this.intervalId) {
       clearInterval(this.intervalId)
       this.intervalId = null
@@ -341,6 +381,13 @@ export class CampaignScheduler {
     this.stopAllBackgroundPreviews()
     this.backgroundPages.destroyAll()
     this.sendLog('⏹ Scheduler đã dừng.')
+  }
+
+  private startPolling(): void {
+    if (!this.running || this.intervalId) return
+    this.intervalId = setInterval(() => this.tick(), 30000)
+    this.sendLog('📋 Scheduler đã bắt đầu. Kiểm tra mỗi 30 giây.')
+    this.tick()
   }
 
   destroyBackgroundPage(accountId: number): void {
@@ -422,8 +469,9 @@ export class CampaignScheduler {
         const campaigns = await this.supabase.getPendingCampaigns(account.id)
         if (campaigns.length === 0) continue
 
-        // Check browser webview is registered for this account
-        if (!this.webviewRegistry.isRegistered(account.id)) {
+        // Browserless campaigns such as Zalo API flows do not mount a webview tab.
+        const hasBrowserCampaigns = campaigns.some(campaign => !this.isBrowserlessCampaign(campaign))
+        if (hasBrowserCampaigns && !this.webviewRegistry.isRegistered(account.id)) {
           this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở tab trình duyệt. Bỏ qua.`)
           continue
         }
@@ -855,6 +903,10 @@ export class CampaignScheduler {
         return
       }
 
+      if (!(await this.ensureZaloSessionReadyForCampaign(account, campaign))) {
+        return
+      }
+
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy', note: null })
       await this.logCampaignProgress(campaign.id, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
@@ -1014,7 +1066,10 @@ export class CampaignScheduler {
         console.error('Rate limit check error:', err)
       }
 
-      const automationPage = await this.getAutomationPage(account, campaign.id)
+      const browserlessRun = this.isBrowserlessCampaign(campaign)
+      const automationPage = browserlessRun
+        ? { page: null, source: 'background' as const }
+        : await this.getAutomationPage(account, campaign.id)
       const page = automationPage.page
 
       let currentSourceLink = ''
@@ -1027,7 +1082,7 @@ export class CampaignScheduler {
             extraSettings: { ...extra, sourceLinkIndex: sourceLinkRotationIndex }
           })
         } catch {}
-        const targetLabel = detail ? ` cho "${detail.name || detail.uid || 'N/A'}"` : ''
+        const targetLabel = detail ? ` cho "${this.getInputDataDisplayName(campaign, detail)}"` : ''
         await this.logCampaignProgress(campaign.id, `🔗 Link nguồn #${sourceIdx + 1}/${sourceLinks.length}${targetLabel}: ${currentSourceLink}`)
       }
 
@@ -1048,7 +1103,7 @@ export class CampaignScheduler {
           status: 'đang chạy',
           dateAction: new Date().toISOString()
         })
-        const inputDataName = detail.name || detail.uid || 'N/A'
+        const inputDataName = this.getInputDataDisplayName(campaign, detail)
         await this.logCampaignProgress(campaign.id, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
         if (groupPostApproval.skipPostByKnownApproval) {
           const message = `Bỏ qua đăng bài vào "${inputDataName}" vì group đã biết cần duyệt bài`
@@ -1074,7 +1129,7 @@ export class CampaignScheduler {
         })
       }, 5000)
       this.activeV2Aborts.set(campaign.id, abort)
-      if (automationPage.source === 'background') {
+      if (automationPage.source === 'background' && page) {
         this.startBackgroundPreview(account.id, campaign.id, page)
       }
       const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
@@ -1121,15 +1176,22 @@ export class CampaignScheduler {
 
         if (detail && !accountStopReason) {
           if (result.status === 'completed') {
-            await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
-            await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${detail.name || detail.uid || 'N/A'}"`)
+            if (milestoneSummary.resetInputToPending) {
+              await this.supabase.updateCampaignInputData(detail.id, {
+                status: 'chờ xử lý',
+                note: milestoneSummary.pendingNote || ''
+              })
+            } else {
+              await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
+              await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
+            }
           } else if (pauseCancelledRun) {
             await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: CAMPAIGN_PAUSE_PENDING_NOTE })
           } else {
             // campaign_input_data enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở campaign_details)
             const errMsg = result.error || 'Lỗi không xác định'
             await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
-            await this.logCampaignProgress(campaign.id, `❌ Lỗi "${detail.name || detail.uid || 'N/A'}": ${errMsg}`)
+            await this.logCampaignProgress(campaign.id, `❌ Lỗi "${this.getInputDataDisplayName(campaign, detail)}": ${errMsg}`)
           }
         }
 
@@ -1178,6 +1240,17 @@ export class CampaignScheduler {
           } else if (milestoneSummary.hasSuccess) {
             await this.resetCampaignBadTargetCount(campaign)
           }
+        }
+
+        if (milestoneSummary.stopAfterTarget) {
+          const latestCampaign = await this.supabase.getCampaign(campaign.id).catch(() => null)
+          if (!latestCampaign || latestCampaign.status === 'đang chạy') {
+            await this.updateCampaignAndBroadcast(campaign.id, {
+              status: 'chờ xử lý',
+              note: milestoneSummary.pendingNote || 'Tài khoản Zalo cần kiểm tra lại trước khi chạy tiếp'
+            })
+          }
+          shouldStopAfterTarget = true
         }
 
         if (campaignPauseRequested) {
@@ -1245,7 +1318,7 @@ export class CampaignScheduler {
         }
       } finally {
         clearInterval(accountGuard)
-        if (automationPage.source === 'background') {
+        if (automationPage.source === 'background' && page) {
           this.stopBackgroundPreview(account.id, campaign.id)
         }
         this.activeV2Aborts.delete(campaign.id)
@@ -1289,6 +1362,22 @@ export class CampaignScheduler {
 
   private shouldUseSuggestedFriends(campaign: Campaign): boolean {
     return campaign.actionId === MESSAGE_UID_ACTION_ID && campaign.extraSettings?.useSuggestedFriends === true
+  }
+
+  private isBrowserlessCampaign(campaign: Campaign): boolean {
+    return campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
+  }
+
+  private getInputDataDisplayName(campaign: Campaign, detail: CampaignInputData | null | undefined, fallback = 'N/A'): string {
+    if (!detail) return fallback
+    const values = campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
+      ? [detail.phone, detail.name, detail.uid]
+      : [detail.name, detail.uid, detail.phone]
+    for (const value of values) {
+      const text = String(value || '').trim()
+      if (text) return text
+    }
+    return fallback
   }
 
   private async resolveGroupPostApprovalForTarget(
@@ -1336,6 +1425,7 @@ export class CampaignScheduler {
 
     const automationPage = await this.getAutomationPage(account, campaign.id)
     const page = automationPage.page
+    if (!page) throw new Error('Không khởi tạo được trình duyệt cho Facebook')
     const abort = new AbortController()
     this.activeV2Aborts.set(campaign.id, abort)
     if (automationPage.source === 'background') {
@@ -1517,6 +1607,13 @@ export class CampaignScheduler {
     actionCode: string,
     limitConfig?: CampaignActionLimitSettings
   ): ActionLimitConfig | undefined {
+    if (actionCode === ZALO_FIND_PHONE_ACTION_CODE) {
+      return {
+        dailyLimit: ZALO_FIND_PHONE_DEFAULT_LIMIT,
+        rateLimitCount: ZALO_FIND_PHONE_DEFAULT_LIMIT,
+        rateLimitMinutes: limitConfig?.byActionCode?.[actionCode]?.rateLimitMinutes ?? limitConfig?.rateLimitMinutes
+      }
+    }
     const byActionCode = limitConfig?.byActionCode?.[actionCode]
     if (byActionCode) return byActionCode
     if (!limitConfig) return undefined
@@ -1563,6 +1660,39 @@ export class CampaignScheduler {
     return null
   }
 
+  private async ensureZaloSessionReadyForCampaign(account: AutoAccount, campaign: Campaign): Promise<boolean> {
+    if (campaign.actionId !== ZALO_MESSAGE_PHONE_ACTION_ID || account.flatformType !== 'zalo') return true
+
+    if (!this.zaloRuntime) {
+      const message = 'Zalo runtime chưa sẵn sàng'
+      await this.updateCampaignPreflightNote(campaign, message)
+      await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+      return false
+    }
+
+    try {
+      const result = await this.zaloRuntime.checkSession(account.id)
+      try {
+        this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+      } catch {
+        // Window may be closed
+      }
+      if (result.loggedIn) return true
+    } catch (err) {
+      console.error('Failed to verify Zalo session before campaign run:', err)
+      try {
+        this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+      } catch {
+        // Window may be closed
+      }
+    }
+
+    const message = 'Tài khoản Zalo chưa đăng nhập hoặc phiên đăng nhập đã hết hạn'
+    await this.updateCampaignPreflightNote(campaign, message)
+    await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+    return false
+  }
+
   private async stopCampaignForAccountCondition(
     account: AutoAccount,
     campaign: Campaign,
@@ -1587,6 +1717,13 @@ export class CampaignScheduler {
       limitStatus.reason || `Hành động "${actionName}" đang tạm dừng`,
       replacements
     )
+
+    if (limitStatus.isActionDisabled) {
+      const note = await this.buildLimitPreflightNote(limitStatus)
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+      await this.logCampaignProgress(campaign.id, `⚠️ Tạm dừng "${campaign.name}": ${note}`)
+      return
+    }
 
     if (limitStatus.errorCode) {
       await this.handleRuntimeError(account, campaign, limitStatus.errorCode, limitStatus.actionCode, replacements)
@@ -1617,8 +1754,9 @@ export class CampaignScheduler {
   private buildLimitReplacements(limitStatus: AccountActionLimitStatus): Record<string, string | undefined> {
     const minutes = limitStatus.retryAfterMs ? Math.ceil(limitStatus.retryAfterMs / 60000) : undefined
     const actionName = this.getLimitActionName(limitStatus)
+    const countOrLimit = limitStatus.currentCount ?? limitStatus.limit
     return {
-      x: String(limitStatus.currentCount ?? limitStatus.limit ?? ''),
+      x: String(countOrLimit ?? minutes ?? ''),
       t: String(minutes ?? ''),
       actionName,
       action: actionName,
@@ -1874,7 +2012,10 @@ export class CampaignScheduler {
       await this.updateAccountAndBroadcast(account.id, { status: policy.updateStatusAccount })
     }
     if (policy.disableActionCodes.length > 0) {
-      await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions)
+      await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
+        errorCode: policy.errorCode,
+        reason: message
+      })
     }
 
     await this.updateCampaignAndBroadcast(campaign.id, { status: campaignStatus, note: message })
@@ -2127,12 +2268,36 @@ export class CampaignScheduler {
       // Detail-specific.
       // inputDataUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
       // `fb_resolve_url` sẽ verify/normalize tuỳ theo urlType (group/profile/messenger).
+      targetPhone: detail?.phone || '',
+      friendRequestMessage: extra.friendRequestMessage || '',
+      enableZaloTag: extra.enableZaloTag === true,
+      zaloTagId: extra.zaloTagId ?? null,
+      zaloTagName: extra.zaloTagName || '',
+      enableZaloAlias: extra.enableZaloAlias === true,
+      zaloAlias: extra.zaloAliasTemplate || '',
+      inputData: detail ? {
+        id: detail.id,
+        name: detail.name || '',
+        phone: detail.phone || '',
+        uid: detail.uid || '',
+        email: detail.email || '',
+        info1: detail.info1 || '',
+        info2: detail.info2 || '',
+        info3: detail.info3 || '',
+        info4: detail.info4 || '',
+        info5: detail.info5 || ''
+      } : {},
       ...(detail ? {
         inputDataId: detail.id,
         inputDataName: detail.name,
         inputDataUid: detail.uid,
         inputDataPhone: detail.phone,
-        inputDataEmail: detail.email
+        inputDataEmail: detail.email,
+        inputDataInfo1: detail.info1,
+        inputDataInfo2: detail.info2,
+        inputDataInfo3: detail.info3,
+        inputDataInfo4: detail.info4,
+        inputDataInfo5: detail.info5
       } : {})
     }
   }
@@ -2215,6 +2380,95 @@ export class CampaignScheduler {
     }
   }
 
+  private getZaloActionDetailFromStep(step: RunStepV2): ZaloActionDetailOutput | null {
+    const output = (step.output || {}) as Record<string, unknown>
+    const raw = output.detail || output.zaloDetail
+    if (!raw || typeof raw !== 'object') return null
+    return raw as ZaloActionDetailOutput
+  }
+
+  private formatZaloProgressLog(detail: Pick<ZaloActionDetailOutput, 'actionName' | 'log'>): string {
+    const actionName = String(detail.actionName || '').trim()
+    const log = String(detail.log || '').trim()
+    if (!actionName) return log
+    if (!log) return actionName
+    const lowerLog = log.toLocaleLowerCase('vi-VN')
+    const lowerAction = actionName.toLocaleLowerCase('vi-VN')
+    return lowerLog.startsWith(lowerAction)
+      ? log
+      : `${actionName}: ${log}`
+  }
+
+  private async logZaloMessagePhoneMilestones(
+    campaign: Campaign,
+    detail: CampaignInputData | null,
+    accountId: number,
+    steps: RunStepV2[]
+  ): Promise<MilestoneSummary> {
+    const summary = this.createMilestoneSummary()
+    const loggedBlocks = new Set<string>()
+
+    for (const step of steps) {
+      const blockName = step.blockName || ''
+      if (!blockName.startsWith('zalo_')) continue
+      if (loggedBlocks.has(`${step.nodeId || ''}:${blockName}:${step.startedAt || ''}`)) continue
+      loggedBlocks.add(`${step.nodeId || ''}:${blockName}:${step.startedAt || ''}`)
+
+      const actionDetail = this.getZaloActionDetailFromStep(step)
+      if (!actionDetail) continue
+
+      if (actionDetail.resetInputToPending) {
+        summary.resetInputToPending = true
+        summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
+      }
+      if (actionDetail.stopAfterTarget) {
+        summary.stopAfterTarget = true
+      }
+
+      if (actionDetail.createDetail === false || !actionDetail.status) {
+        if (actionDetail.log) {
+          await this.logCampaignProgress(campaign.id, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+        }
+        continue
+      }
+
+      const created = await this.supabase.createCampaignDetail({
+        inputDataId: detail?.id,
+        campaignId: campaign.id,
+        accountId,
+        actionCode: actionDetail.actionCode ?? null,
+        actionName: actionDetail.actionName || this.getAccountActionName(actionDetail.actionCode || ''),
+        status: actionDetail.status,
+        errorCode: actionDetail.errorCode ?? null,
+        log: actionDetail.log || undefined,
+        data: actionDetail.data || {},
+        shouldCountAction: actionDetail.countsTowardLimit === true
+      })
+
+      if (actionDetail.countsTowardBadTarget !== false) {
+        this.recordMilestoneSummary(
+          summary,
+          created.status,
+          created.log || actionDetail.log,
+          created.actionName || actionDetail.actionName,
+          this.getCampaignDetailRootReason(created) || this.getCampaignDetailRootReason(actionDetail as Partial<CampaignDetail>)
+        )
+      } else if (created.status === 'thành công') {
+        summary.hasSuccess = true
+      }
+
+      if (created.log) {
+        await this.logCampaignProgress(campaign.id, this.formatZaloProgressLog({
+          ...actionDetail,
+          actionName: created.actionName || actionDetail.actionName,
+          log: created.log
+        }))
+      }
+    }
+
+    return summary
+  }
+
   /**
    * Per-milestone logging cho engine v2.
    * Scan steps theo block_name (cố định) để biết bước nào succeeded:
@@ -2248,7 +2502,7 @@ export class CampaignScheduler {
       )
       return created
     }
-    const inputDataName = detail?.name || detail?.uid || ''
+    const inputDataName = this.getInputDataDisplayName(campaign, detail, '')
     const pendingScreenshotLogs = screenshotProgressLogs
     const matchesScreenshotStep = (log: BlockScreenshotProgressLog, step: RunStepV2): boolean => {
       if (log.runStepId != null && step.id != null) return Number(log.runStepId) === Number(step.id)
@@ -2280,6 +2534,11 @@ export class CampaignScheduler {
         const log = pendingScreenshotLogs.shift()
         if (log) await flushScreenshotLog(log)
       }
+    }
+
+    if (campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID) {
+      await flushRemainingScreenshotLogs()
+      return this.logZaloMessagePhoneMilestones(campaign, detail, accountId, steps)
     }
 
     // Tìm kiếm data — 1 milestone tổng kết, dữ liệu chi tiết nằm trong JSONB data.
@@ -4271,11 +4530,660 @@ export class CampaignScheduler {
     }
   }
 
+  private normalizeZaloTarget(phone: string, user: ZaloFoundUser, isFriend?: boolean): ZaloResolvedTarget {
+    return {
+      uid: user.uid,
+      phone,
+      displayName: user.displayName || user.originalName || '',
+      originalName: user.originalName || user.displayName || '',
+      gender: user.gender ?? null,
+      isFriend,
+      raw: user.raw
+    }
+  }
+
+  private getZaloErrorMessage(err: unknown): string {
+    if (err instanceof Error) return String(err.message || '').trim()
+    const message = (err as any)?.message
+    if (message !== undefined && message !== null) return String(message).trim()
+    return String(err || '').trim()
+  }
+
+  private getZaloErrorCode(err: unknown): string | null {
+    if (err instanceof ZaloApiError && err.code !== null && err.code !== undefined) {
+      return String(err.code)
+    }
+    const code = (err as any)?.code
+    return code === null || code === undefined || String(code).trim() === ''
+      ? null
+      : String(code).trim()
+  }
+
+  private buildZaloFallbackErrorLog(actionName: string, rawMessage: string, zaloCode: string | null): string {
+    const message = String(rawMessage || '').trim() || 'Lỗi Zalo chưa xác định'
+    const suffix = zaloCode ? ` (mã Zalo: ${zaloCode})` : ''
+    return `${actionName || 'Thao tác Zalo'} thất bại: ${message}${suffix}`
+  }
+
+  private normalizeZaloDetailStatus(value: string | null | undefined): string | null {
+    const trimmed = String(value || '').trim()
+    if (!trimmed) return null
+    const lower = trimmed.toLocaleLowerCase('vi-VN')
+    if (lower === 'thất bại') return 'thất bại'
+    if (lower === 'lỗi') return 'lỗi'
+    if (lower === 'thành công') return 'thành công'
+    return trimmed
+  }
+
+  private async getZaloPolicyByErrorCode(errorCode: string | null): Promise<AutoErrorPolicy | null> {
+    if (errorCode) {
+      const mapped = await this.supabase.getZaloErrorPolicyByCode(errorCode)
+      if (mapped) return mapped
+    }
+    return this.supabase.getErrorPolicy(ZALO_API_BUSINESS_FAILED_ERROR_CODE)
+  }
+
+  private async getZaloNotFoundPolicy(): Promise<AutoErrorPolicy | null> {
+    return this.supabase.getErrorPolicy(ZALO_USER_NOT_FOUND_ERROR_CODE)
+  }
+
+  private renderZaloPolicyLog(
+    policy: AutoErrorPolicy | null,
+    rawMessage: string,
+    replacements: Record<string, string | undefined>,
+    zaloCode: string | null = null
+  ): string {
+    if (policy?.errorCode === ZALO_API_BUSINESS_FAILED_ERROR_CODE) {
+      return this.buildZaloFallbackErrorLog(replacements.actionName || replacements.action || '', rawMessage, zaloCode)
+    }
+
+    const rendered = policy
+      ? this.renderPolicyMessage(policy.notiRunningProcess || policy.notiCampaign, {
+        ...replacements,
+        message: rawMessage,
+        x: rawMessage
+      })
+      : ''
+    return rendered || rawMessage || policy?.errorName || this.buildZaloFallbackErrorLog(replacements.actionName || replacements.action || '', '', zaloCode)
+  }
+
+  private async applyZaloPolicySideEffects(
+    account: AutoAccount,
+    campaign: Campaign,
+    policy: AutoErrorPolicy | null,
+    message: string
+  ): Promise<{ stopAfterTarget: boolean }> {
+    let stopAfterTarget = false
+    if (!policy) return { stopAfterTarget }
+
+    if (policy.updateLoginStatus) {
+      await this.updateAccountAndBroadcast(account.id, { loginStatus: policy.updateLoginStatus })
+      this.zaloRuntime?.invalidateAccount(account.id)
+      stopAfterTarget = true
+    }
+    if (policy.updateStatusAccount) {
+      await this.updateAccountAndBroadcast(account.id, { status: policy.updateStatusAccount })
+      stopAfterTarget = true
+    }
+    if (policy.disableActionCodes.length > 0) {
+      await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
+        errorCode: policy.errorCode,
+        reason: message
+      })
+      stopAfterTarget = true
+    }
+    if (policy.updateStatusCampaign) {
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: policy.updateStatusCampaign,
+        note: message
+      })
+      stopAfterTarget = true
+    }
+
+    return { stopAfterTarget }
+  }
+
+  private getZaloApiName(actionCode: string): string {
+    switch (actionCode) {
+      case 'zalo_find_phone_user':
+        return 'findUser'
+      case 'zalo_message_friend':
+      case 'zalo_message_stranger':
+        return 'sendMessage'
+      case 'zalo_add_friend':
+        return 'sendFriendRequest'
+      case 'zalo_tag_contact':
+        return 'updateLabels'
+      case 'zalo_change_alias':
+        return 'changeFriendAlias'
+      default:
+        return actionCode || 'unknown'
+    }
+  }
+
+  private getZaloTargetPayload(data: Record<string, unknown>): Record<string, unknown> {
+    const target = data.target
+    if (target && typeof target === 'object' && !Array.isArray(target)) {
+      return target as Record<string, unknown>
+    }
+    const phone = String(data.phone || '').trim()
+    return phone ? { phone } : {}
+  }
+
+  private getZaloRequestPayload(actionCode: string, data: Record<string, unknown>): Record<string, unknown> {
+    const { target: _target, ...rest } = data
+    return {
+      actionCode,
+      ...rest
+    }
+  }
+
+  private async logZaloApiError(input: {
+    account: AutoAccount
+    campaign: Campaign
+    err: unknown
+    actionCode: string
+    actionName: string
+    apiName?: string
+    data: Record<string, unknown>
+    zaloCode: string | null
+    rawMessage: string
+    policy: AutoErrorPolicy | null
+    detailStatus: string | null
+  }): Promise<void> {
+    try {
+      await this.supabase.createZaloApiErrorLog({
+        staffId: input.campaign.staffId ?? input.account.staffId ?? null,
+        organizationId: input.campaign.organizationId ?? input.account.organizationId ?? null,
+        accountId: input.account.id,
+        campaignId: input.campaign.id,
+        campaignInputDataId: Number((input.data.inputData as Record<string, unknown> | undefined)?.id) || undefined,
+        actionCode: input.actionCode,
+        actionName: input.actionName,
+        apiName: input.apiName || this.getZaloApiName(input.actionCode),
+        zaloErrorCode: input.zaloCode,
+        zaloErrorMessage: input.rawMessage || null,
+        normalizedErrorCode: input.policy?.errorCode || null,
+        detailStatus: input.detailStatus,
+        requestPayload: this.getZaloRequestPayload(input.actionCode, input.data),
+        targetPayload: this.getZaloTargetPayload(input.data),
+        rawError: input.err
+      })
+    } catch (err) {
+      console.warn('[ZaloRuntime] Failed to log raw Zalo API error:', {
+        accountId: input.account.id,
+        campaignId: input.campaign.id,
+        actionCode: input.actionCode,
+        message: err instanceof Error ? err.message : String(err)
+      })
+    }
+  }
+
+  private async logCaughtZaloApiError(input: {
+    account: AutoAccount
+    campaign: Campaign
+    err: unknown
+    actionCode: string
+    actionName: string
+    apiName?: string
+    data?: Record<string, unknown>
+    detailStatus?: string | null
+  }): Promise<void> {
+    const rawMessage = this.getZaloErrorMessage(input.err)
+    const zaloCode = this.getZaloErrorCode(input.err)
+    const policy = await this.getZaloPolicyByErrorCode(zaloCode)
+    await this.logZaloApiError({
+      account: input.account,
+      campaign: input.campaign,
+      err: input.err,
+      actionCode: input.actionCode,
+      actionName: input.actionName,
+      apiName: input.apiName,
+      data: input.data || {},
+      zaloCode,
+      rawMessage,
+      policy,
+      detailStatus: input.detailStatus ?? this.normalizeZaloDetailStatus(policy?.detailStatus)
+    })
+  }
+
+  private async createZaloErrorDetail(
+    account: AutoAccount,
+    campaign: Campaign,
+    err: unknown,
+    actionCode: string,
+    actionName: string,
+    data: Record<string, unknown> = {}
+  ): Promise<ZaloActionDetailOutput> {
+    const rawMessage = this.getZaloErrorMessage(err)
+    const zaloCode = this.getZaloErrorCode(err)
+    const policy = await this.getZaloPolicyByErrorCode(zaloCode)
+    const log = this.renderZaloPolicyLog(policy, rawMessage, {
+      actionName,
+      action: actionName,
+      actionCode
+    }, zaloCode)
+    const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, log)
+    const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
+    await this.logZaloApiError({
+      account,
+      campaign,
+      err,
+      actionCode,
+      actionName,
+      data,
+      zaloCode,
+      rawMessage,
+      policy,
+      detailStatus
+    })
+    const detail: ZaloActionDetailOutput = {
+      createDetail: Boolean(detailStatus),
+      actionCode,
+      actionName,
+      status: detailStatus || undefined,
+      errorCode: policy?.errorCode || null,
+      log,
+      countsTowardLimit: policy?.countsTowardLimit ?? true,
+      countsTowardBadTarget: policy?.countsTowardBadTarget ?? true,
+      resetInputToPending: !detailStatus,
+      pendingNote: log,
+      stopAfterTarget: sideEffects.stopAfterTarget,
+      data: {
+        ...data,
+        error: rawMessage || undefined,
+        zalo: {
+          code: zaloCode,
+          message: rawMessage,
+          policyErrorCode: policy?.errorCode || null
+        }
+      }
+    }
+    return detail
+  }
+
+  private async createZaloPolicyDetailFromCode(
+    account: AutoAccount,
+    campaign: Campaign,
+    policy: AutoErrorPolicy | null,
+    rawMessage: string,
+    actionCode: string,
+    actionName: string,
+    zaloCode: string | null,
+    data: Record<string, unknown> = {}
+  ): Promise<ZaloActionDetailOutput> {
+    const log = this.renderZaloPolicyLog(policy, rawMessage, {
+      actionName,
+      action: actionName,
+      actionCode
+    }, zaloCode)
+    const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, log)
+    const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
+    return {
+      createDetail: Boolean(detailStatus),
+      actionCode,
+      actionName,
+      status: detailStatus || undefined,
+      errorCode: policy?.errorCode || null,
+      log,
+      countsTowardLimit: policy?.countsTowardLimit ?? true,
+      countsTowardBadTarget: policy?.countsTowardBadTarget ?? true,
+      resetInputToPending: !detailStatus,
+      pendingNote: log,
+      stopAfterTarget: sideEffects.stopAfterTarget,
+      data: {
+        ...data,
+        error: rawMessage || undefined,
+        zalo: {
+          code: zaloCode,
+          message: rawMessage,
+          policyErrorCode: policy?.errorCode || null
+        }
+      }
+    }
+  }
+
+  private createZaloSuccessDetail(input: {
+    actionCode: string
+    actionName: string
+    status?: string
+    log: string
+    data?: Record<string, unknown>
+    countsTowardLimit?: boolean
+  }): ZaloActionDetailOutput {
+    return {
+      createDetail: true,
+      actionCode: input.actionCode,
+      actionName: input.actionName,
+      status: input.status || 'thành công',
+      log: input.log,
+      data: input.data || {},
+      countsTowardLimit: input.countsTowardLimit ?? true,
+      countsTowardBadTarget: false
+    }
+  }
+
+  private getZaloTargetLabel(target: ZaloResolvedTarget | null | undefined): string {
+    return target?.displayName || target?.originalName || target?.phone || target?.uid || 'target'
+  }
+
+  private renderZaloTemplate(
+    template: string | undefined | null,
+    inputData: Record<string, unknown> | undefined,
+    target?: ZaloResolvedTarget | null
+  ): string {
+    const raw = String(template || '')
+    if (!raw) return ''
+    const today = new Date()
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(today)
+    const dateMap = Object.fromEntries(parts.map(part => [part.type, part.value])) as Record<string, string>
+    const formatDate = (format: string): string => String(format || 'DD/MM/YYYY')
+      .replace(/DD/g, dateMap.day || '')
+      .replace(/MM/g, dateMap.month || '')
+      .replace(/YYYY/g, dateMap.year || '')
+      .replace(/YY/g, (dateMap.year || '').slice(-2))
+
+    const input = inputData || {}
+    const getInput = (key: string): string => String(input[key] ?? '').trim()
+    const renderSex = (body: string): string => {
+      const [male = '', female = '', unknown = ''] = String(body || '').split('-')
+      const gender = target?.gender
+      const normalized = String(gender ?? '').toLocaleLowerCase('vi-VN')
+      if (gender === 0 || normalized === '0' || normalized === 'male' || normalized === 'nam') return male
+      if (gender === 1 || normalized === '1' || normalized === 'female' || normalized === 'nữ' || normalized === 'nu') return female
+      return unknown || male || female
+    }
+
+    return raw
+      .replace(/#\{TODAY\(([^}]*)\)\}/g, (_, fmt) => formatDate(String(fmt || 'DD/MM/YYYY')))
+      .replace(/#\{SEX\{([^}]*)\}\}/g, (_, body) => renderSex(String(body || '')))
+      .replace(/#\{FULL_NAME\}/g, target?.displayName || '')
+      .replace(/#\{ORIGINAL_NAME\}/g, target?.originalName || target?.displayName || '')
+      .replace(/#\{INPUT_FULLNAME\}/g, getInput('name'))
+      .replace(/#\{UID\}/g, getInput('uid'))
+      .replace(/#\{PHONE\}/g, target?.phone || getInput('phone'))
+      .replace(/#\{MOBILE\}/g, target?.phone || getInput('phone'))
+      .replace(/#\{EMAIL\}/g, getInput('email'))
+      .replace(/#\{INFO1\}/g, getInput('info1'))
+      .replace(/#\{INFO2\}/g, getInput('info2'))
+      .replace(/#\{INFO3\}/g, getInput('info3'))
+      .replace(/#\{INFO4\}/g, getInput('info4'))
+      .replace(/#\{INFO5\}/g, getInput('info5'))
+  }
+
+  private async zaloFindPhoneUser(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloFindPhoneUserOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const phone = String(options.phone || '').trim()
+    if (!phone) {
+      const detail = await this.createZaloPolicyDetailFromCode(
+        account,
+        campaign,
+        await this.supabase.getZaloErrorPolicyByCode('114'),
+        'SĐT Zalo không hợp lệ',
+        'zalo_find_phone_user',
+        'Tìm SĐT',
+        '114',
+        { phone }
+      )
+      return { ok: false, detail }
+    }
+
+    try {
+      const user = await this.zaloRuntime.findUserByPhone(account.id, phone)
+      if (!user) {
+        const policy = await this.getZaloNotFoundPolicy()
+        const detail = await this.createZaloPolicyDetailFromCode(
+          account,
+          campaign,
+          policy,
+          'Không tồn tại',
+          'zalo_find_phone_user',
+          'Tìm SĐT',
+          '216',
+          { phone }
+        )
+        return { ok: true, zaloTarget: null, detail }
+      }
+
+      const target = this.normalizeZaloTarget(phone, user)
+      const inputDataId = Number((options.inputData as Record<string, unknown> | undefined)?.id)
+      if (Number.isFinite(inputDataId) && inputDataId > 0) {
+        const nextName = target.displayName || target.originalName || ''
+        await this.supabase.updateCampaignInputData(inputDataId, {
+          name: nextName || undefined,
+          uid: target.uid
+        })
+      }
+      const log = `Đã tìm thấy SĐT ${phone}: ${this.getZaloTargetLabel(target)}`
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode: 'zalo_find_phone_user',
+          actionName: 'Tìm SĐT',
+          log,
+          data: { phone, target }
+        })
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        detail: await this.createZaloErrorDetail(account, campaign, err, 'zalo_find_phone_user', 'Tìm SĐT', { phone, inputData: options.inputData })
+      }
+    }
+  }
+
+  private async zaloSendPhoneMessage(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloSendPhoneMessageOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!options.enabled) return { ok: true, skipped: true, zaloTarget: options.target ?? null }
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const target = options.target
+    if (!target?.uid) return { ok: true, skipped: true }
+    const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
+      .map(item => String(item || '').trim())
+      .filter(Boolean)
+    const message = this.renderZaloTemplate(options.message, options.inputData, target)
+    const actionCode = 'zalo_message_stranger'
+    const actionName = 'Nhắn tin người lạ'
+
+    try {
+      const response = await this.zaloRuntime.sendMessageToUser(account.id, target.uid, message, attachments)
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode,
+          actionName,
+          log: `Đã gửi tin nhắn đến ${this.getZaloTargetLabel(target)}`,
+          data: { target, message, attachments, response: response as Record<string, unknown> | undefined }
+        })
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        zaloTarget: target,
+        detail: await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { target, message, attachments, inputData: options.inputData })
+      }
+    }
+  }
+
+  private async zaloSendPhoneFriendRequest(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloSendPhoneFriendRequestOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!options.enabled) return { ok: true, skipped: true, zaloTarget: options.target ?? null }
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const target = options.target
+    if (!target?.uid) return { ok: true, skipped: true }
+    const actionCode = 'zalo_add_friend'
+    const actionName = 'Kết bạn'
+    const message = this.renderZaloTemplate(options.message, options.inputData, target).slice(0, 150)
+
+    try {
+      const response = await this.zaloRuntime.sendFriendRequestToUser(account.id, target.uid, message)
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode,
+          actionName,
+          status: 'thành công',
+          log: `Đã gửi lời mời kết bạn đến ${this.getZaloTargetLabel(target)}`,
+          data: { target, message, response: response as Record<string, unknown> | undefined }
+        })
+      }
+    } catch (err) {
+      const detail = await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { target, message, inputData: options.inputData })
+      const detailStatus = String(detail.status || '').toLocaleLowerCase('vi-VN')
+      return {
+        ok: Boolean(detail.status) && detailStatus !== 'thất bại' && detailStatus !== 'lỗi',
+        zaloTarget: target,
+        detail
+      }
+    }
+  }
+
+  private async zaloApplyContactTag(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloApplyContactTagOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!options.enabled) return { ok: true, skipped: true, zaloTarget: options.target ?? null }
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const target = options.target
+    if (!target?.uid) return { ok: true, skipped: true }
+    const labelId = options.labelId
+    if (!labelId) {
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode: 'zalo_tag_contact',
+          actionName: 'Gắn tag Zalo',
+          status: 'tag không tồn tại',
+          log: 'Tag Zalo không tồn tại',
+          countsTowardLimit: false,
+          data: { target, labelId }
+        })
+      }
+    }
+
+    try {
+      const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId)
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode: 'zalo_tag_contact',
+          actionName: 'Gắn tag Zalo',
+          log: `Đã gắn tag "${label.text || options.labelName || labelId}" cho ${this.getZaloTargetLabel(target)}`,
+          countsTowardLimit: false,
+          data: { target, labelId, labelName: label.text || options.labelName || '' }
+        })
+      }
+    } catch (err) {
+      const message = this.getZaloErrorMessage(err)
+      if (message.includes('Tag Zalo không tồn tại')) {
+        await this.logCaughtZaloApiError({
+          account,
+          campaign,
+          err,
+          actionCode: 'zalo_tag_contact',
+          actionName: 'Gắn tag Zalo',
+          apiName: 'updateLabels',
+          data: { target, labelId },
+          detailStatus: 'tag không tồn tại'
+        })
+        return {
+          ok: true,
+          zaloTarget: target,
+          detail: this.createZaloSuccessDetail({
+            actionCode: 'zalo_tag_contact',
+            actionName: 'Gắn tag Zalo',
+            status: 'tag không tồn tại',
+            log: 'Tag Zalo không tồn tại',
+            countsTowardLimit: false,
+            data: { target, labelId, error: message }
+          })
+        }
+      }
+      const detail = await this.createZaloErrorDetail(account, campaign, err, 'zalo_tag_contact', 'Gắn tag Zalo', { target, labelId })
+      detail.countsTowardLimit = false
+      return {
+        ok: false,
+        zaloTarget: target,
+        detail
+      }
+    }
+  }
+
+  private async zaloChangeContactAlias(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloChangeContactAliasOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!options.enabled) return { ok: true, skipped: true, zaloTarget: options.target ?? null }
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const target = options.target
+    if (!target?.uid) return { ok: true, skipped: true }
+    const alias = this.renderZaloTemplate(options.alias, options.inputData, target).trim()
+    if (!alias) {
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode: 'zalo_change_alias',
+          actionName: 'Đổi tên Zalo',
+          status: 'tham số không hợp lệ',
+          log: 'Tên Zalo mới không hợp lệ',
+          countsTowardLimit: false,
+          data: { target, alias }
+        })
+      }
+    }
+
+    try {
+      const response = await this.zaloRuntime.changeUserAlias(account.id, target.uid, alias)
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode: 'zalo_change_alias',
+          actionName: 'Đổi tên Zalo',
+          log: `Đã đổi tên ${this.getZaloTargetLabel(target)} thành "${alias}"`,
+          countsTowardLimit: false,
+          data: { target, alias, response: response as Record<string, unknown> | undefined }
+        })
+      }
+    } catch (err) {
+      const detail = await this.createZaloErrorDetail(account, campaign, err, 'zalo_change_alias', 'Đổi tên Zalo', { target, alias, inputData: options.inputData })
+      detail.countsTowardLimit = false
+      return {
+        ok: false,
+        zaloTarget: target,
+        detail
+      }
+    }
+  }
+
   private createBlockRuntimeHelpers(
     account: AutoAccount,
     campaign: Campaign,
     detail: CampaignInputData | null,
-    mainPage: PageController
+    mainPage: PageController | null
   ): BlockRuntimeHelpers {
     let sequenceNo = 0
     const normalizeEvent = (
@@ -4333,7 +5241,18 @@ export class CampaignScheduler {
     }
 
     return {
-      checkGroupPendingContent: (options) => this.checkGroupPendingContent(account, campaign, mainPage, options),
+      checkGroupPendingContent: (options) => {
+        if (!mainPage) {
+          return Promise.resolve({
+            ok: false,
+            conclusive: false,
+            url: String(options?.url || ''),
+            links: [],
+            error: 'Workflow này không dùng trình duyệt'
+          })
+        }
+        return this.checkGroupPendingContent(account, campaign, mainPage, options)
+      },
       logRunEvent: (event, metadata) => logRunEvents([event], metadata),
       logRunEvents,
       callAIUsing: (code, payload, metadata) => callAiUsing(code, payload, {
@@ -4348,7 +5267,12 @@ export class CampaignScheduler {
         nodeId: metadata.nodeId,
         blockId: metadata.blockId,
         blockName: metadata.blockName
-      })
+      }),
+      zaloFindPhoneUser: (options) => this.zaloFindPhoneUser(account, campaign, options),
+      zaloSendPhoneMessage: (options) => this.zaloSendPhoneMessage(account, campaign, options),
+      zaloSendPhoneFriendRequest: (options) => this.zaloSendPhoneFriendRequest(account, campaign, options),
+      zaloApplyContactTag: (options) => this.zaloApplyContactTag(account, campaign, options),
+      zaloChangeContactAlias: (options) => this.zaloChangeContactAlias(account, campaign, options)
     }
   }
 

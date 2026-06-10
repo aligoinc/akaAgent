@@ -7,6 +7,7 @@ import {
   CampaignInputStatus,
   CampaignDetail,
   CampaignDetailStatus,
+  CreateCampaignDetailInput,
   CampaignRelationSummary,
   AddCampaignInputDataToCampaignRequest,
   AddCampaignInputDataToCampaignResult,
@@ -25,6 +26,7 @@ const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE = 500
+const LIMIT_COUNT_STATUSES = ['thành công', 'thất bại']
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
@@ -67,6 +69,76 @@ interface VietnamDateTimeParts {
   hour: number
   minute: number
   second: number
+}
+
+async function countLimitDetailsInWindow(
+  accountId: number,
+  actionCode: string,
+  timeFrameStartIso: string
+): Promise<number> {
+  const [explicitResult, legacyResult] = await Promise.all([
+    client()
+      .from('auto_campaign_details')
+      .select('*', { count: 'exact', head: true })
+      .eq('account_id', accountId)
+      .eq('action_code', actionCode)
+      .eq('counts_toward_limit', true)
+      .gte('created_at', timeFrameStartIso),
+    client()
+      .from('auto_campaign_details')
+      .select('*', { count: 'exact', head: true })
+      .eq('account_id', accountId)
+      .eq('action_code', actionCode)
+      .is('counts_toward_limit', null)
+      .in('status', LIMIT_COUNT_STATUSES)
+      .gte('created_at', timeFrameStartIso)
+  ])
+
+  if (explicitResult.error) throw new Error(`Window explicit count query error: ${explicitResult.error.message}`)
+  if (legacyResult.error) throw new Error(`Window legacy count query error: ${legacyResult.error.message}`)
+
+  return (explicitResult.count ?? 0) + (legacyResult.count ?? 0)
+}
+
+async function getOldestLimitDetailCreatedAtInWindow(
+  accountId: number,
+  actionCode: string,
+  timeFrameStartIso: string
+): Promise<string | null> {
+  const [explicitResult, legacyResult] = await Promise.all([
+    client()
+      .from('auto_campaign_details')
+      .select('created_at')
+      .eq('account_id', accountId)
+      .eq('action_code', actionCode)
+      .eq('counts_toward_limit', true)
+      .gte('created_at', timeFrameStartIso)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    client()
+      .from('auto_campaign_details')
+      .select('created_at')
+      .eq('account_id', accountId)
+      .eq('action_code', actionCode)
+      .is('counts_toward_limit', null)
+      .in('status', LIMIT_COUNT_STATUSES)
+      .gte('created_at', timeFrameStartIso)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+  ])
+
+  if (explicitResult.error) throw new Error(`Window explicit oldest query error: ${explicitResult.error.message}`)
+  if (legacyResult.error) throw new Error(`Window legacy oldest query error: ${legacyResult.error.message}`)
+
+  const candidates = [
+    (explicitResult.data as { created_at?: string } | null)?.created_at,
+    (legacyResult.data as { created_at?: string } | null)?.created_at
+  ].filter((value): value is string => Boolean(value))
+
+  if (candidates.length === 0) return null
+  return candidates.sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0]
 }
 
 const vietnamDateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
@@ -425,6 +497,11 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       phone: d.phone,
       uid: d.uid,
       email: d.email,
+      info1: d.info1,
+      info2: d.info2,
+      info3: d.info3,
+      info4: d.info4,
+      info5: d.info5,
       note: d.note,
       status: 'chờ xử lý',
       schedule: d.schedule
@@ -899,6 +976,11 @@ export async function createCampaignInputData(action: Partial<CampaignInputData>
     phone: action.phone || null,
     uid: action.uid || null,
     email: action.email || null,
+    info1: action.info1 || null,
+    info2: action.info2 || null,
+    info3: action.info3 || null,
+    info4: action.info4 || null,
+    info5: action.info5 || null,
     status: action.status || 'chờ xử lý',
     note: action.note || null,
     schedule: action.schedule || null
@@ -921,6 +1003,11 @@ export async function updateCampaignInputData(id: number, updates: Partial<Campa
   if (updates.phone !== undefined) payload.phone = updates.phone
   if (updates.uid !== undefined) payload.uid = updates.uid
   if (updates.email !== undefined) payload.email = updates.email
+  if (updates.info1 !== undefined) payload.info1 = updates.info1
+  if (updates.info2 !== undefined) payload.info2 = updates.info2
+  if (updates.info3 !== undefined) payload.info3 = updates.info3
+  if (updates.info4 !== undefined) payload.info4 = updates.info4
+  if (updates.info5 !== undefined) payload.info5 = updates.info5
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.note !== undefined) payload.note = updates.note
   if (updates.schedule !== undefined) payload.schedule = updates.schedule
@@ -1098,6 +1185,11 @@ export async function addCampaignInputDataToCampaign(
       phone: row.phone || null,
       uid: row.uid || null,
       email: row.email || null,
+      info1: row.info1 || null,
+      info2: row.info2 || null,
+      info3: row.info3 || null,
+      info4: row.info4 || null,
+      info5: row.info5 || null,
       status: 'chờ xử lý',
       note: '',
       schedule: null
@@ -1325,8 +1417,8 @@ export async function listLatestCampaignErrorDetails(
   return (data || []).map(row => mapCampaignDetailFromDB(row))
 }
 
-export async function createCampaignDetail(action: Partial<CampaignDetail>): Promise<CampaignDetail> {
-  const payload = {
+export async function createCampaignDetail(action: CreateCampaignDetailInput): Promise<CampaignDetail> {
+  const payload: Record<string, unknown> = {
     input_data_id: action.inputDataId ?? null,
     campaign_id: action.campaignId,
     account_id: action.accountId,
@@ -1338,6 +1430,9 @@ export async function createCampaignDetail(action: Partial<CampaignDetail>): Pro
     data: action.data || null,
     post_url: action.postUrl || null
   }
+  if (action.shouldCountAction !== undefined) {
+    payload.counts_toward_limit = action.shouldCountAction
+  }
 
   const { data, error } = await client()
     .from('auto_campaign_details')
@@ -1348,7 +1443,9 @@ export async function createCampaignDetail(action: Partial<CampaignDetail>): Pro
   if (error) throw new Error(`Failed to create campaign detail: ${error.message}`)
   const detail = mapCampaignDetailFromDB(data)
   const shouldCountAction = detail.accountId && detail.actionCode && (
-    detail.status === 'thành công' || detail.status === 'thất bại'
+    action.shouldCountAction !== undefined
+      ? action.shouldCountAction
+      : (detail.status === 'thành công' || detail.status === 'thất bại')
   )
 
   if (shouldCountAction) {
@@ -1395,17 +1492,17 @@ export async function getAccountRateLimitStatus(
         ok: false,
         actionCode: normalizedActionCode,
         actionName,
+        errorCode: actionStatus.disabledErrorCode || undefined,
+        isActionDisabled: true,
+        disabledReason: actionStatus.disabledReason,
         retryAfterMs,
         reason: retryAfterMs
-          ? `Hành động "${actionName}" đang tạm dừng, còn khoảng ${Math.ceil(retryAfterMs / 60000)} phút`
-          : `Hành động "${actionName}" đang tạm dừng`
+          ? actionStatus.disabledReason || `Hành động "${actionName}" đang tạm dừng, còn khoảng ${Math.ceil(retryAfterMs / 60000)} phút`
+          : actionStatus.disabledReason || `Hành động "${actionName}" đang tạm dừng`
       }
     }
   }
 
-  // Chỉ đếm 'thành công' + 'thất bại' (action chạm tới FB).
-  // 'lỗi' = exception code → action chưa xảy ra với FB → không tốn rate limit.
-  const ratedStatuses = ['thành công', 'thất bại']
   const dailyActionCount = actionStatus.countActionInDay
 
   if (dailyActionCount >= dailyLimit) {
@@ -1425,32 +1522,16 @@ export async function getAccountRateLimitStatus(
   }
 
   const timeFrameStart = new Date(new Date().getTime() - rateLimitMinutes * 60 * 1000)
+  const timeFrameStartIso = timeFrameStart.toISOString()
 
-  const { count: windowActionCount, error: winErr } = await client()
-    .from('auto_campaign_details')
-    .select('*', { count: 'exact', head: true })
-    .eq('account_id', accountId)
-    .eq('action_code', normalizedActionCode)
-    .in('status', ratedStatuses)
-    .gte('created_at', timeFrameStart.toISOString())
+  const windowActionCount = await countLimitDetailsInWindow(accountId, normalizedActionCode, timeFrameStartIso)
 
-  if (winErr) throw new Error(`Window count query error: ${winErr.message}`)
-
-  if ((windowActionCount ?? 0) >= rateLimitCount) {
+  if (windowActionCount >= rateLimitCount) {
     // Hourly limit → đợi tới khi row cũ nhất trong window > rateLimitMinutes phút
-    const { data: oldestRow } = await client()
-      .from('auto_campaign_details')
-      .select('created_at')
-      .eq('account_id', accountId)
-      .eq('action_code', normalizedActionCode)
-      .in('status', ratedStatuses)
-      .gte('created_at', timeFrameStart.toISOString())
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
+    const oldestCreatedAt = await getOldestLimitDetailCreatedAtInWindow(accountId, normalizedActionCode, timeFrameStartIso)
     let retryAfterMs = rateLimitMinutes * 60 * 1000
-    if (oldestRow?.created_at) {
-      const oldestTime = new Date(oldestRow.created_at as string).getTime()
+    if (oldestCreatedAt) {
+      const oldestTime = new Date(oldestCreatedAt).getTime()
       retryAfterMs = Math.max(60 * 1000, (oldestTime + rateLimitMinutes * 60 * 1000) - Date.now())
     }
     return {
@@ -1460,7 +1541,7 @@ export async function getAccountRateLimitStatus(
       errorCode: 'error_limit_in_hour',
       isDailyLimit: false,
       retryAfterMs,
-      currentCount: windowActionCount ?? 0,
+      currentCount: windowActionCount,
       limit: rateLimitCount,
       reason: `Đạt tốc độ giới hạn hành động "${actionName}" (${windowActionCount}/${rateLimitCount} lần / ${rateLimitMinutes} phút)`
     }
