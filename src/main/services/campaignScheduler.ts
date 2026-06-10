@@ -36,7 +36,6 @@ import {
 } from '../domain/campaigns/campaignActionDescriptors'
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
-import { checkFindDataMeaningAI } from './findDataAiService'
 import { callAiUsing } from './aiRuntimeService'
 import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
 
@@ -4337,7 +4336,6 @@ export class CampaignScheduler {
       checkGroupPendingContent: (options) => this.checkGroupPendingContent(account, campaign, mainPage, options),
       logRunEvent: (event, metadata) => logRunEvents([event], metadata),
       logRunEvents,
-      checkFindDataMeaningAI: (options) => checkFindDataMeaningAI(options),
       callAIUsing: (code, payload, metadata) => callAiUsing(code, payload, {
         organizationId: campaign.organizationId ?? account.organizationId ?? metadata.organizationId ?? null,
         accountId: metadata.accountId,

@@ -26,8 +26,6 @@ export interface BlockHelpers {
   logRunEvent?(event: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
   /** Optional helper: log multiple structured execution events when the runtime supports it. */
   logRunEvents?(events: Record<string, unknown>[]): Promise<OptionalHelperUnsupportedResult | unknown>
-  /** Optional helper: check find-data content meaning with the app AI runtime. */
-  checkFindDataMeaningAI?(options: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
   /** Optional helper: call a centralized AI configuration by ai_using.code. */
   callAIUsing?(code: string, payload?: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
 }
@@ -71,11 +69,10 @@ export interface BlockRuntimeHelpers {
   checkGroupPendingContent?: (options: GroupPendingContentCheckOptions) => Promise<GroupPendingContentCheckResult>
   logRunEvent?: (event: CampaignRunEventInput, metadata: BlockRuntimeMetadata) => Promise<unknown>
   logRunEvents?: (events: CampaignRunEventInput[], metadata: BlockRuntimeMetadata) => Promise<unknown>
-  checkFindDataMeaningAI?: (options: Record<string, unknown>, metadata: BlockRuntimeMetadata) => Promise<unknown>
   callAIUsing?: (code: string, payload: Record<string, unknown>, metadata: BlockRuntimeMetadata) => Promise<unknown>
 }
 
-const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents', 'checkFindDataMeaningAI', 'callAIUsing'])
+const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents', 'callAIUsing'])
 
 function createUnsupportedOptionalHelper(helper: string) {
   return async (): Promise<OptionalHelperUnsupportedResult> => ({
@@ -217,18 +214,6 @@ export function createBlockHelpers(
         const message = err?.message ? String(err.message) : String(err)
         logCollector(`[warn] helper logRunEvents failed: ${message}`)
         return { ok: false, error: message }
-      }
-    }
-  }
-
-  if (runtimeHelpers.checkFindDataMeaningAI) {
-    baseHelpers.checkFindDataMeaningAI = async (options: Record<string, unknown>) => {
-      try {
-        return await runtimeHelpers.checkFindDataMeaningAI!(options, runtimeMetadata)
-      } catch (err: any) {
-        const message = err?.message ? String(err.message) : String(err)
-        logCollector(`[warn] helper checkFindDataMeaningAI failed: ${message}`)
-        return { ok: false, checkResult: 'error', error: message }
       }
     }
   }
