@@ -21,32 +21,21 @@ import * as runV2Repo from '../../data/repositories/runV2Repository'
 import { getSettingValue, listActiveSystemSettingsByKeys } from '../../data/repositories/systemSettingsRepository'
 import { callAiUsing } from '../../services/aiRuntimeService'
 
-const AI_REQUEST_TIMEOUT_MS = 120_000
 const VIETNAM_UTC_OFFSET = '+07:00'
 const MAX_CONTENT_CHARS = 8000
 const DEFAULT_MAX_MESSAGES = 30
 const DEFAULT_MAX_CONTEXT_ROWS = 30
 const MAX_CONTEXT_ROWS_CAP = 100
-const DEEPSEEK_PROVIDER = 'deepseek' as const
+const CAMPAIGN_ASSISTANT_AI_CODE = 'app_campaign_assistant_chat'
 
 const SYSTEM_SETTING_KEYS = {
-  deepseekApiKey: 'ai.deepseek.api_key',
-  deepseekEndpoint: 'ai.deepseek.endpoint',
-  deepseekModel: 'ai.deepseek.model',
-  deepseekDefaultBody: 'ai.deepseek.default_body',
-  facebookCampaignPrompt: 'assistant.facebook.campaign.system_prompt',
   facebookCampaignMaxMessages: 'assistant.facebook.campaign.max_messages',
   facebookCampaignMaxContextRows: 'assistant.facebook.campaign.max_context_rows'
 } as const
 
 const ALL_ASSISTANT_SETTING_KEYS = Object.values(SYSTEM_SETTING_KEYS)
 
-interface AssistantSettings {
-  apiKey: string
-  endpoint: string
-  model: string
-  defaultBody: Record<string, unknown>
-  systemPrompt: string
+interface AssistantContextSettings {
   maxMessages: number
   maxContextRows: number
 }
@@ -65,46 +54,16 @@ function requireContent(input: unknown): string {
   return content
 }
 
-function parseJsonObject(value: string, label: string): Record<string, unknown> {
-  const trimmed = value.trim()
-  if (!trimmed) return {}
-  try {
-    const parsed = JSON.parse(trimmed)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(`${label} phải là JSON object.`)
-    }
-    return parsed as Record<string, unknown>
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('JSON object')) throw err
-    throw new Error(`${label} không phải JSON hợp lệ.`)
-  }
-}
-
 function parsePositiveInt(value: string, fallback: number, cap: number): number {
   const parsed = Math.floor(Number(value))
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback
   return Math.min(cap, parsed)
 }
 
-async function loadAssistantSettings(): Promise<AssistantSettings> {
+async function loadAssistantContextSettings(): Promise<AssistantContextSettings> {
   const settings = await listActiveSystemSettingsByKeys(ALL_ASSISTANT_SETTING_KEYS)
-  const apiKey = getSettingValue(settings, SYSTEM_SETTING_KEYS.deepseekApiKey)
-  const endpoint = getSettingValue(settings, SYSTEM_SETTING_KEYS.deepseekEndpoint)
-  const model = getSettingValue(settings, SYSTEM_SETTING_KEYS.deepseekModel)
-  const defaultBodyText = getSettingValue(settings, SYSTEM_SETTING_KEYS.deepseekDefaultBody)
-  const systemPrompt = getSettingValue(settings, SYSTEM_SETTING_KEYS.facebookCampaignPrompt)
-
-  if (!apiKey) throw new Error('Chưa cấu hình DeepSeek API key cho trợ lý.')
-  if (!endpoint) throw new Error('Chưa cấu hình DeepSeek endpoint cho trợ lý.')
-  if (!model) throw new Error('Chưa cấu hình DeepSeek model cho trợ lý.')
-  if (!systemPrompt) throw new Error('Chưa cấu hình prompt trợ lý chiến dịch Facebook.')
 
   return {
-    apiKey,
-    endpoint,
-    model,
-    defaultBody: parseJsonObject(defaultBodyText, 'DeepSeek default body'),
-    systemPrompt,
     maxMessages: parsePositiveInt(
       getSettingValue(settings, SYSTEM_SETTING_KEYS.facebookCampaignMaxMessages),
       DEFAULT_MAX_MESSAGES,
@@ -284,7 +243,7 @@ function buildRuleDiagnosis(campaign: Campaign, account: Awaited<ReturnType<type
   return { reason: 'unknown', severity: 'info', message: 'Chưa xác định được nguyên nhân rõ ràng từ kiểm tra tự động.' }
 }
 
-async function buildCampaignAssistantContext(campaignId: number, settings: AssistantSettings): Promise<CampaignAssistantContextSnapshot> {
+async function buildCampaignAssistantContext(campaignId: number, settings: AssistantContextSettings): Promise<CampaignAssistantContextSnapshot> {
   requireCurrentUser()
   const campaign = await campaignRepo.getCampaign(campaignId)
   if (!campaign) throw new Error('Không tìm thấy chiến dịch.')
@@ -391,58 +350,12 @@ function sanitizeMessages(input: unknown, maxMessages: number): Array<{ role: 'u
   return cleaned.length > maxMessages ? cleaned.slice(cleaned.length - maxMessages) : cleaned
 }
 
-function buildAssistantSystemPrompt(systemPrompt: string, contextSnapshot: CampaignAssistantContextSnapshot): string {
+function buildAssistantContextMessage(contextSnapshot: CampaignAssistantContextSnapshot): string {
   const safeContext = stripInternalIdsForAssistant(contextSnapshot)
   return [
-    systemPrompt,
-    '',
     `THÔNG TIN NỘI BỘ (chỉ dùng để hiểu tình huống, không nhắc tên phần này trong câu trả lời; thời điểm ${contextSnapshot.snapshotAt}):`,
     JSON.stringify(safeContext, null, 2)
   ].join('\n')
-}
-
-async function callDeepSeek(settings: AssistantSettings, contextSnapshot: CampaignAssistantContextSnapshot, messages: Array<{ role: 'user' | 'assistant'; content: string }>): Promise<CampaignAssistantChatResponse> {
-  const payload = {
-    ...settings.defaultBody,
-    model: settings.model,
-    stream: false,
-    messages: [
-      { role: 'system', content: buildAssistantSystemPrompt(settings.systemPrompt, contextSnapshot) },
-      ...messages
-    ]
-  }
-
-  const response = await fetch(settings.endpoint, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      authorization: `Bearer ${settings.apiKey}`
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS)
-  })
-
-  if (!response.ok) {
-    throw new Error(`DeepSeek trả về lỗi ${response.status}.`)
-  }
-
-  const data = await response.json().catch(() => null) as {
-    choices?: Array<{ message?: { content?: unknown } }>
-    usage?: unknown
-  } | null
-  const content = typeof data?.choices?.[0]?.message?.content === 'string'
-    ? data.choices[0].message.content.trim()
-    : ''
-  if (!content) throw new Error('DeepSeek không trả về nội dung.')
-
-  return {
-    content,
-    provider: DEEPSEEK_PROVIDER,
-    model: settings.model,
-    generatedAt: new Date().toISOString(),
-    usage: data?.usage || null
-  }
 }
 
 export function registerAiHandlers(): void {
@@ -476,7 +389,7 @@ export function registerAiHandlers(): void {
     if (!Number.isFinite(normalizedCampaignId) || normalizedCampaignId <= 0) {
       throw new Error('campaignId không hợp lệ.')
     }
-    const settings = await loadAssistantSettings()
+    const settings = await loadAssistantContextSettings()
     return {
       contextSnapshot: await buildCampaignAssistantContext(normalizedCampaignId, settings)
     }
@@ -496,8 +409,25 @@ export function registerAiHandlers(): void {
       throw new Error('Dữ liệu chiến dịch của trợ lý không khớp. Vui lòng tạo mới hội thoại.')
     }
 
-    const settings = await loadAssistantSettings()
+    const settings = await loadAssistantContextSettings()
     const messages = sanitizeMessages(request?.messages, settings.maxMessages)
-    return callDeepSeek(settings, contextSnapshot, messages)
+    const result = await callAiUsing(CAMPAIGN_ASSISTANT_AI_CODE, {
+      messages: [
+        { role: 'system', content: buildAssistantContextMessage(contextSnapshot) },
+        ...messages
+      ]
+    }, {
+      organizationId: campaign.organizationId ?? null,
+      campaignId: campaign.id,
+      accountId: campaign.accountId
+    })
+    if (!result.ok) throw new Error(result.error || 'AI không thể xử lý nội dung lúc này.')
+    return {
+      content: result.content,
+      provider: result.provider,
+      model: result.model,
+      generatedAt: result.generatedAt,
+      usage: result.usage ?? null
+    }
   })
 }

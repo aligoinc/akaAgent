@@ -842,7 +842,7 @@ export interface CampaignAssistantChatRequest {
 
 export interface CampaignAssistantChatResponse {
   content: string
-  provider: 'deepseek'
+  provider: string
   model: string
   generatedAt: string
   usage?: unknown
