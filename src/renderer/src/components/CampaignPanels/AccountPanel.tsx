@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { FolderCog, Loader2, Plus, ServerCog } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
-import { AutoAccount } from '../../../../shared/types'
+import { AutoAccount, ZaloLoginQrEvent } from '../../../../shared/types'
 import AccountContextMenu from './AccountContextMenu'
 import AccountInfoModal from './AccountInfoModal'
 import AccountGroupAssignModal from './AccountGroupAssignModal'
@@ -12,6 +12,14 @@ import { useUiStore } from '../../stores/uiStore'
 interface AccountPanelProps {
   onNavigateToBrowser?: (accountId: number) => void
   onFilterCampaigns?: (accountId: number | null) => void
+}
+
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object' && err && 'message' in err) {
+    return String((err as { message?: unknown }).message || fallback)
+  }
+  return fallback
 }
 
 export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
@@ -41,6 +49,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [editingAccount, setEditingAccount] = useState<AutoAccount | null>(null)
   const [infoAccount, setInfoAccount] = useState<AutoAccount | null>(null)
   const [savingAccount, setSavingAccount] = useState(false)
+  const [zaloLoginAccount, setZaloLoginAccount] = useState<AutoAccount | null>(null)
+  const [zaloLoginEvent, setZaloLoginEvent] = useState<ZaloLoginQrEvent | null>(null)
+  const [zaloLoginStarting, setZaloLoginStarting] = useState(false)
   const [formData, setFormData] = useState({ 
     name: '',
     flatformType: 'facebook',
@@ -59,6 +70,27 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     loadAccountGroups()
     loadProxies()
   }, [loadAccounts, loadAccountGroups, loadProxies])
+
+  useEffect(() => {
+    if (!window.electronAPI?.onZaloLoginQrEvent) return
+    return window.electronAPI.onZaloLoginQrEvent((event) => {
+      const activeAccountId = zaloLoginAccount?.id
+      if (activeAccountId && event.accountId !== activeAccountId) return
+
+      setZaloLoginEvent(prev => {
+        return event
+      })
+      if (event.status === 'success') {
+        loadAccounts()
+        setZaloLoginAccount(null)
+        setZaloLoginEvent(null)
+        useUiStore.getState().showAlert(event.message || 'Đăng nhập Zalo thành công', 'success')
+      } else if (event.status === 'error') {
+        loadAccounts()
+        useUiStore.getState().showAlert(event.message || 'Đăng nhập Zalo thất bại', 'error')
+      }
+    })
+  }, [loadAccounts, zaloLoginAccount?.id])
 
   const resetForm = () => {
     setFormData({ name: '', flatformType: 'facebook', accountGroupId: null, proxyId: null })
@@ -88,6 +120,10 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setSavingAccount(true)
     try {
       const proxyChanged = Boolean(editingAccount && (editingAccount.proxyId ?? null) !== formData.proxyId)
+      if (proxyChanged && editingAccount?.flatformType === 'zalo' && editingAccount.status === 'đang chạy') {
+        useUiStore.getState().showAlert('Không thể đổi proxy khi tài khoản Zalo đang chạy', 'error')
+        return
+      }
       const payload = {
         name: formData.name,
         flatformType: formData.flatformType,
@@ -98,7 +134,11 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       if (editingAccount) {
         await updateAccount(editingAccount.id, payload)
         if (proxyChanged) {
-          useUiStore.getState().showAlert('Đã lưu proxy cho tài khoản. Nếu tab Trình duyệt đang mở, hãy tự tải lại trang để áp dụng proxy mới.', 'info')
+          if (editingAccount.flatformType === 'zalo') {
+            useUiStore.getState().showAlert('Đã lưu proxy thành công.', 'success')
+          } else {
+            useUiStore.getState().showAlert('Đã lưu proxy cho tài khoản. Nếu tab Trình duyệt đang mở, hãy tự tải lại trang để áp dụng proxy mới.', 'info')
+          }
         }
       } else {
         await createAccount(payload)
@@ -108,6 +148,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       resetForm()
     } catch (err) {
       console.error('Failed to save account:', err)
+      useUiStore.getState().showAlert(getErrorMessage(err, 'Không lưu được tài khoản'), 'error')
     } finally {
       setSavingAccount(false)
     }
@@ -172,6 +213,74 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     } catch (err: any) {
       useUiStore.getState().showAlert(`Lỗi kiểm tra: ${err.message}`, 'error')
     }
+  }
+
+  const handleZaloLoginQr = async (account: AutoAccount) => {
+    if (!window.electronAPI?.startZaloLoginQr) {
+      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
+      return
+    }
+    setZaloLoginAccount(account)
+    setZaloLoginEvent({ accountId: account.id, status: 'qr', message: 'Đang tạo mã QR...' })
+    setZaloLoginStarting(true)
+    try {
+      const result = await window.electronAPI.startZaloLoginQr(account.id)
+      if (!result.success) {
+        setZaloLoginAccount(null)
+        setZaloLoginEvent(null)
+        useUiStore.getState().showAlert(result.reason || 'Không thể bắt đầu đăng nhập Zalo', 'error')
+      }
+    } catch (err: any) {
+      setZaloLoginAccount(null)
+      setZaloLoginEvent(null)
+      useUiStore.getState().showAlert(`Lỗi đăng nhập Zalo: ${err.message}`, 'error')
+    } finally {
+      setZaloLoginStarting(false)
+    }
+  }
+
+  const handleCloseZaloLogin = async () => {
+    const accountId = zaloLoginAccount?.id
+    const shouldCancel = zaloLoginEvent?.status !== 'success' && zaloLoginEvent?.status !== 'error'
+    setZaloLoginAccount(null)
+    setZaloLoginEvent(null)
+    if (accountId && shouldCancel) {
+      await window.electronAPI?.cancelZaloLoginQr?.(accountId).catch(() => {})
+    }
+  }
+
+  const handleCheckZaloSession = async (account: AutoAccount) => {
+    if (!window.electronAPI?.checkZaloSession) {
+      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
+      return
+    }
+    try {
+      const result = await window.electronAPI.checkZaloSession(account.id)
+      await loadAccounts()
+      if (result.loggedIn) {
+        useUiStore.getState().showAlert(`${account.name}: Đã đăng nhập Zalo`, 'success')
+      } else {
+        useUiStore.getState().showAlert(`${account.name}: ${result.reason || 'Chưa đăng nhập Zalo'}`, 'error')
+      }
+    } catch (err: any) {
+      useUiStore.getState().showAlert(`Lỗi kiểm tra Zalo: ${err.message}`, 'error')
+    }
+  }
+
+  const handleLogoutZalo = async (account: AutoAccount) => {
+    if (!window.electronAPI?.logoutZalo) {
+      useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
+      return
+    }
+    useUiStore.getState().showConfirm(
+      `Đăng xuất Zalo khỏi tài khoản "${account.name}"?`,
+      async () => {
+        const result = await window.electronAPI.logoutZalo(account.id)
+        await loadAccounts()
+        useUiStore.getState().showAlert(result.reason || 'Đã xoá session Zalo khỏi tài khoản', 'success')
+      },
+      { title: 'Đăng xuất Zalo', confirmText: 'Đăng xuất', variant: 'danger' }
+    )
   }
 
   const handleResume = async (account: AutoAccount) => {
@@ -256,12 +365,10 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
             value={formData.flatformType}
             onChange={e => setFormData(prev => ({ ...prev, flatformType: e.target.value, accountGroupId: null }))}
             className="panel-input"
+            disabled={!!editingAccount}
           >
             <option value="facebook">Facebook</option>
             <option value="zalo">Zalo</option>
-            <option value="tiktok">TikTok</option>
-            <option value="instagram">Instagram</option>
-            <option value="other">Khác</option>
           </select>
 
           <div className="panel-input-row">
@@ -368,6 +475,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           onViewBrowser={handleViewBrowser}
           onReloadPage={handleReloadPage}
           onCheckLogin={handleCheckLogin}
+          onZaloLoginQr={handleZaloLoginQr}
+          onCheckZaloSession={handleCheckZaloSession}
+          onLogoutZalo={handleLogoutZalo}
           onResume={handleResume}
           onPause={handlePause}
           onEnable={handleEnable}
@@ -429,6 +539,113 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           }}
         />
       )}
+
+      {zaloLoginAccount && (
+        <div style={zaloOverlayStyle}>
+          <div style={zaloModalStyle}>
+            <div style={zaloModalHeaderStyle}>
+              <div>
+                <strong>Đăng nhập Zalo</strong>
+                <div style={zaloModalSubTextStyle}>{zaloLoginAccount.name}</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={handleCloseZaloLogin}>Đóng</button>
+            </div>
+            <div style={zaloQrBodyStyle}>
+              {zaloLoginEvent?.qrImage ? (
+                <img src={zaloLoginEvent.qrImage} alt="Zalo QR" style={zaloQrImageStyle} />
+              ) : (
+                <div style={zaloQrPlaceholderStyle}>
+                  {zaloLoginStarting && <Loader2 size={18} className="animate-spin" />}
+                </div>
+              )}
+              {zaloLoginEvent?.avatarUrl && (
+                <img src={zaloLoginEvent.avatarUrl} alt="" style={zaloAvatarStyle} />
+              )}
+              <div style={zaloModalMessageStyle}>
+                {zaloLoginEvent?.displayName && <strong>{zaloLoginEvent.displayName}</strong>}
+                <span>{zaloLoginEvent?.message || 'Đang chờ trạng thái đăng nhập Zalo...'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+const zaloOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0, 0, 0, 0.45)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1000
+}
+
+const zaloModalStyle: React.CSSProperties = {
+  width: 'min(360px, calc(100vw - 32px))',
+  background: 'var(--bg-primary)',
+  border: '1px solid var(--border-primary)',
+  borderRadius: 8,
+  boxShadow: 'var(--shadow-lg)',
+  padding: 16
+}
+
+const zaloModalHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  gap: 12,
+  marginBottom: 16
+}
+
+const zaloModalSubTextStyle: React.CSSProperties = {
+  color: 'var(--text-tertiary)',
+  fontSize: 12,
+  marginTop: 2
+}
+
+const zaloQrBodyStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 12
+}
+
+const zaloQrImageStyle: React.CSSProperties = {
+  width: 220,
+  height: 220,
+  objectFit: 'contain',
+  border: '1px solid var(--border-primary)',
+  borderRadius: 8,
+  background: '#fff'
+}
+
+const zaloQrPlaceholderStyle: React.CSSProperties = {
+  width: 220,
+  height: 220,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '1px solid var(--border-primary)',
+  borderRadius: 8,
+  background: 'var(--bg-secondary)'
+}
+
+const zaloAvatarStyle: React.CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  objectFit: 'cover'
+}
+
+const zaloModalMessageStyle: React.CSSProperties = {
+  minHeight: 40,
+  color: 'var(--text-secondary)',
+  fontSize: 13,
+  textAlign: 'center',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4
 }

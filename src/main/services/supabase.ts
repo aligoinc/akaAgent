@@ -1,4 +1,4 @@
-import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloSessionCredentials } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -35,6 +35,16 @@ export class SupabaseService {
   updateAccount(id: number, updates: Partial<AutoAccount>) { return accountRepo.updateAccount(id, updates) }
   deleteAccount(id: number) { return accountRepo.deleteAccount(id) }
   getEligibleAccounts() { return accountRepo.getEligibleAccounts() }
+  getAccountZaloSession(id: number) { return accountRepo.getAccountZaloSession(id) }
+  listZaloAccountsWithSession() { return accountRepo.listZaloAccountsWithSession() }
+  upsertZaloAccount(input: accountRepo.ZaloAccountUpsertInput) { return accountRepo.upsertZaloAccount(input) }
+  updateAccountZaloSession(id: number, input: { zaloAccountId: number; session: ZaloSessionCredentials; verified?: boolean; clearError?: boolean }) {
+    return accountRepo.updateAccountZaloSession(id, input)
+  }
+  markAccountZaloSessionCheck(id: number, result: { ok: boolean; error?: string | null }) {
+    return accountRepo.markAccountZaloSessionCheck(id, result)
+  }
+  clearAccountZaloSession(id: number) { return accountRepo.clearAccountZaloSession(id) }
   listAccountGroups(flatformType?: string) { return accountGroupRepo.listAccountGroups(flatformType) }
   createAccountGroup(group: Partial<AutoAccountGroup>) { return accountGroupRepo.createAccountGroup(group) }
   updateAccountGroup(id: number, updates: Partial<AutoAccountGroup>) { return accountGroupRepo.updateAccountGroup(id, updates) }

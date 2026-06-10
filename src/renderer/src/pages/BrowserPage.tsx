@@ -5,11 +5,11 @@ import { AutoAccount } from '../../../shared/types'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
-  zalo: 'https://chat.zalo.me',
   tiktok: 'https://www.tiktok.com',
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com',
 }
+const BROWSERLESS_PLATFORMS = new Set(['zalo'])
 
 interface BrowserPageProps {
   focusAccountId?: number | null
@@ -31,8 +31,8 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   const registeredIds = useRef<Set<number>>(new Set())
   const preparingSessionKeys = useRef<Set<string>>(new Set())
 
-  // Filter out disabled (isActive=false) accounts - they don't get browser tabs
-  const activeAccounts = accounts.filter(a => a.isActive)
+  // Filter out disabled and API-only platforms - they don't get browser tabs/profiles.
+  const browserAccounts = accounts.filter(a => a.isActive && !BROWSERLESS_PLATFORMS.has(a.flatformType))
 
   // Load accounts on mount
   useEffect(() => {
@@ -41,10 +41,16 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
 
   // Auto-select first account
   useEffect(() => {
-    if (activeAccounts.length > 0 && activeAccountId === null) {
-      setActiveAccountId(activeAccounts[0].id)
+    if (browserAccounts.length > 0 && activeAccountId === null) {
+      setActiveAccountId(browserAccounts[0].id)
     }
-  }, [activeAccounts, activeAccountId])
+  }, [browserAccounts, activeAccountId])
+
+  useEffect(() => {
+    if (activeAccountId !== null && !browserAccounts.some(account => account.id === activeAccountId)) {
+      setActiveAccountId(browserAccounts[0]?.id ?? null)
+    }
+  }, [browserAccounts, activeAccountId])
 
   const markAccountPrepared = useCallback((accountId: number, proxyId: number | null) => {
     setPreparedProxyByAccountId(prev => {
@@ -69,7 +75,7 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   useEffect(() => {
     let cancelled = false
 
-    activeAccounts.forEach(account => {
+    browserAccounts.forEach(account => {
       const proxyKey = account.proxyId ?? null
       if (webviewRefs.current.has(account.id)) return
       if (preparedProxyByAccountId.get(account.id) === proxyKey) return
@@ -91,15 +97,17 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
     return () => {
       cancelled = true
     }
-  }, [activeAccounts, preparedProxyByAccountId, prepareAccountSession, markAccountPrepared])
+  }, [browserAccounts, preparedProxyByAccountId, prepareAccountSession, markAccountPrepared])
 
   // Handle focus from external navigation (context menu)
   useEffect(() => {
     if (focusAccountId) {
-      setActiveAccountId(focusAccountId)
+      if (browserAccounts.some(account => account.id === focusAccountId)) {
+        setActiveAccountId(focusAccountId)
+      }
       onFocusHandled?.()
     }
-  }, [focusAccountId, onFocusHandled])
+  }, [browserAccounts, focusAccountId, onFocusHandled])
 
   // Background/offscreen campaign runs stream previews here so users can observe
   // without the app forcing focus or relying on minimized webview painting.
@@ -122,6 +130,18 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
     })
   }, [])
 
+  // Unregister webviews for accounts that are no longer browser-capable.
+  useEffect(() => {
+    const browserAccountIds = new Set(browserAccounts.map(account => account.id))
+    Array.from(registeredIds.current).forEach((accountId) => {
+      if (!browserAccountIds.has(accountId)) {
+        webviewRefs.current.delete(accountId)
+        window.electronAPI?.unregisterWebview(accountId).catch(() => {})
+        registeredIds.current.delete(accountId)
+      }
+    })
+  }, [browserAccounts])
+
   // Cleanup: unregister all webviews on unmount
   useEffect(() => {
     return () => {
@@ -129,6 +149,7 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
       })
       registeredIds.current.clear()
+      webviewRefs.current.clear()
     }
   }, [])
 
@@ -142,7 +163,7 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
 
   const handleReload = async () => {
     if (!activeAccountId) return
-    const account = activeAccounts.find(item => item.id === activeAccountId)
+    const account = browserAccounts.find(item => item.id === activeAccountId)
     if (account) {
       try {
         await prepareAccountSession(account)
@@ -158,8 +179,8 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   const isBrowserSessionPrepared = (account: AutoAccount) => (
     webviewRefs.current.has(account.id) || preparedProxyByAccountId.get(account.id) === (account.proxyId ?? null)
   )
-  const preparedActiveAccounts = activeAccounts.filter(isBrowserSessionPrepared)
-  const activeAccount = activeAccountId ? activeAccounts.find(account => account.id === activeAccountId) : null
+  const preparedBrowserAccounts = browserAccounts.filter(isBrowserSessionPrepared)
+  const activeAccount = activeAccountId ? browserAccounts.find(account => account.id === activeAccountId) : null
   const activeAccountPreparing = Boolean(activeAccount && !isBrowserSessionPrepared(activeAccount))
   const previewTitle = activeBackgroundPreview?.title || (activeBackgroundPreview?.context === 'contact-scan' ? 'Đang quét data nền' : 'Đang chạy nền')
   const previewDescription = activeBackgroundPreview?.context === 'contact-scan'
@@ -193,7 +214,7 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
       {/* Browser tabs */}
       <div className="browser-tabs-bar">
         <div className="browser-tabs">
-          {activeAccounts.map(account => (
+          {browserAccounts.map(account => (
             <div
               key={account.id}
               className={`browser-tab ${activeAccountId === account.id ? 'active' : ''} ${backgroundPreviews.get(account.id)?.active ? 'is-running' : ''}`}
@@ -215,12 +236,12 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
 
       {/* Webview container - all webviews are always rendered, stacked via z-index */}
       <div className="browser-webview-container" style={{ position: 'relative' }}>
-        {activeAccounts.length === 0 ? (
+        {browserAccounts.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-text">Chưa có tài khoản nào hoạt động. Hãy thêm tài khoản ở trang Chiến dịch.</div>
           </div>
         ) : (
-          preparedActiveAccounts.map(account => (
+          preparedBrowserAccounts.map(account => (
             <webview
               key={account.id}
               ref={(el: any) => handleWebviewRef(account, el)}
