@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignRunEventInput } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignRunEvent, CampaignRunEventInput } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -38,7 +38,7 @@ import { ProxyRuntimeService } from './proxyRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import { checkFindDataMeaningAI } from './findDataAiService'
 import { callAiUsing } from './aiRuntimeService'
-import { captureBlockScreenshot } from './blockScreenshotService'
+import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
 
 interface AutomationPageRef {
   page: PageController
@@ -69,6 +69,8 @@ interface MilestoneSummary {
   hasError: boolean
   failureReasons: string[]
   errorReasons: string[]
+  failureRootReasons: string[]
+  errorRootReasons: string[]
 }
 
 interface BlockScreenshotRunResult {
@@ -195,6 +197,7 @@ const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_diagnosis'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
@@ -1147,7 +1150,10 @@ export class CampaignScheduler {
               detail?.id,
               runtimeError.errorCode,
               runtimeError.actionCode,
-              { message: runtimeError.message }
+              {
+                message: runtimeError.message,
+                runId: result.runId ? String(result.runId) : undefined
+              }
             )
             runtimeStopTriggered = handled.triggered
             shouldStopAfterTarget = handled.triggered
@@ -1162,7 +1168,11 @@ export class CampaignScheduler {
               detail?.id,
               'err_undefined',
               targetActionDescriptors[0]?.code,
-              { message: this.getMilestoneBadReason(milestoneSummary) }
+              {
+                message: this.getMilestoneBadReason(milestoneSummary),
+                thresholdReason: this.getMilestoneBadRootReason(milestoneSummary),
+                runId: result.runId ? String(result.runId) : undefined
+              }
             )
             runtimeStopTriggered = handled.triggered
             shouldStopAfterTarget = handled.triggered
@@ -1679,7 +1689,9 @@ export class CampaignScheduler {
       hasHardFailure: false,
       hasError: false,
       failureReasons: [],
-      errorReasons: []
+      errorReasons: [],
+      failureRootReasons: [],
+      errorRootReasons: []
     }
   }
 
@@ -1687,18 +1699,22 @@ export class CampaignScheduler {
     summary: MilestoneSummary,
     status: CampaignDetailStatus | undefined,
     reason?: string | null,
-    actionName?: string | null
+    actionName?: string | null,
+    rootReason?: string | null
   ): void {
     const message = String(reason || '').trim()
+    const rootMessage = String(rootReason || '').trim()
     if (status === 'thành công') {
       summary.hasSuccess = true
     } else if (status === 'thất bại') {
       summary.hasFailure = true
       if (String(actionName || '').trim() !== 'Comment') summary.hasHardFailure = true
       if (message) summary.failureReasons.push(message)
+      if (rootMessage) summary.failureRootReasons.push(rootMessage)
     } else if (status === 'lỗi') {
       summary.hasError = true
       if (message) summary.errorReasons.push(message)
+      if (rootMessage) summary.errorRootReasons.push(rootMessage)
     }
   }
 
@@ -1706,10 +1722,125 @@ export class CampaignScheduler {
     return summary.errorReasons[0] || summary.failureReasons[0] || 'Target có lỗi hoặc thất bại'
   }
 
+  private getMilestoneBadRootReason(summary: MilestoneSummary): string {
+    return summary.errorRootReasons[0] || summary.failureRootReasons[0] || this.getMilestoneBadReason(summary)
+  }
+
+  private getCampaignDetailRootReason(detail: Partial<CampaignDetail>): string | undefined {
+    const data = detail.data
+    if (!data || typeof data !== 'object') return undefined
+    const error = data.error
+    return typeof error === 'string' && error.trim().length > 0
+      ? error.trim()
+      : undefined
+  }
+
   private getPolicyThreshold(policy: AutoErrorPolicy | null | undefined): number | null {
     return policy?.countConsecutiveErrors && policy.countConsecutiveErrors > 0
       ? policy.countConsecutiveErrors
       : null
+  }
+
+  private getRunIdFromPolicyReplacements(replacements: Record<string, string | undefined>): number | null {
+    const runId = Number(replacements.runId)
+    return Number.isFinite(runId) && runId > 0 ? runId : null
+  }
+
+  private getScreenshotPathFromEvent(event: CampaignRunEvent): string {
+    const screenshotPath = event.debugData?.screenshotPath
+    return typeof screenshotPath === 'string' ? screenshotPath.trim() : ''
+  }
+
+  private getBrowserUrlFromEvent(event: CampaignRunEvent): string {
+    const browserUrl = event.debugData?.browserUrl || event.targetUrl
+    return typeof browserUrl === 'string' ? browserUrl.trim() : ''
+  }
+
+  private async findLatestScreenshotEventForDiagnosis(
+    campaignId: number,
+    inputDataId: number | null | undefined,
+    runId: number | null
+  ): Promise<CampaignRunEvent | null> {
+    if (inputDataId) {
+      const inputScreenshot = await campaignRunEventRepo.findLatestBrowserScreenshotEvent({
+        campaignId,
+        campaignInputDataId: inputDataId
+      })
+      if (inputScreenshot) return inputScreenshot
+    }
+
+    if (!runId) return null
+
+    return campaignRunEventRepo.findLatestBrowserScreenshotEvent({
+      campaignId,
+      runId
+    })
+  }
+
+  private normalizeAiDiagnosisText(value: string): string {
+    return String(value || '')
+      .replace(/^```[a-z]*\s*/i, '')
+      .replace(/```$/i, '')
+      .replace(/^["'`]+|["'`]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 500)
+  }
+
+  private async diagnoseUndefinedErrorWithScreenshot(
+    account: AutoAccount,
+    campaign: Campaign,
+    inputDataId: number | null | undefined,
+    policyReplacements: Record<string, string | undefined>,
+    fallbackReason: string
+  ): Promise<string | null> {
+    try {
+      const runId = this.getRunIdFromPolicyReplacements(policyReplacements)
+      const screenshotEvent = await this.findLatestScreenshotEventForDiagnosis(campaign.id, inputDataId, runId)
+      if (!screenshotEvent) return null
+
+      const screenshotPath = this.getScreenshotPathFromEvent(screenshotEvent)
+      if (!screenshotPath) return null
+
+      const image = readBlockScreenshotDataUrl(screenshotPath)
+      const descriptors = this.getCampaignActionDescriptors(campaign)
+      const actionName = descriptors[0]?.name || policyReplacements.actionName || policyReplacements.action || ''
+      const browserUrl = this.getBrowserUrlFromEvent(screenshotEvent)
+      const result = await callAiUsing(CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE, {
+        source: 'aka_agent',
+        campaignName: campaign.name,
+        campaignActionId: campaign.actionId,
+        actionCode: policyReplacements.actionCode || policyReplacements.action_code || '',
+        actionName,
+        errorMessage: fallbackReason,
+        fullLog: policyReplacements.message || fallbackReason,
+        browserUrl,
+        screenshotEventId: screenshotEvent.id,
+        imageDataUrl: image.dataUrl
+      }, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? null,
+        accountId: account.id,
+        campaignId: campaign.id,
+        campaignInputId: screenshotEvent.campaignInputId ?? null,
+        campaignInputDataId: screenshotEvent.campaignInputDataId ?? inputDataId ?? undefined,
+        runId: screenshotEvent.runId ?? runId ?? undefined,
+        runStepId: screenshotEvent.runStepId ?? undefined,
+        nodeId: screenshotEvent.nodeId ?? undefined,
+        blockId: screenshotEvent.blockId ?? undefined,
+        blockName: screenshotEvent.blockName ?? undefined
+      })
+      if (!result.ok) {
+        console.warn('[campaignScheduler] AI screenshot diagnosis failed:', result.error || 'unknown error')
+        return null
+      }
+
+      const diagnosis = this.normalizeAiDiagnosisText(result.content)
+      return diagnosis || null
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn('[campaignScheduler] AI screenshot diagnosis failed:', message)
+      return null
+    }
   }
 
   private async applyRuntimeErrorPolicy(
@@ -1766,7 +1897,9 @@ export class CampaignScheduler {
       actionCode: replacements.actionCode || actionCode,
       action_code: replacements.action_code || actionCode
     }
-    const policy = await this.supabase.getErrorPolicy(errorCode) || await this.supabase.getErrorPolicy('err_undefined')
+    const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
+    const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
+    const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
     const threshold = this.getPolicyThreshold(policy)
     if (!policy || !threshold) {
       return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
@@ -1790,7 +1923,21 @@ export class CampaignScheduler {
       return { triggered: false, message, policy, count, threshold }
     }
 
-    const thresholdReason = String(policyReplacements.message || notice || 'Lỗi không xác định').trim() || 'Lỗi không xác định'
+    let thresholdReason = String(
+      policyReplacements.thresholdReason ||
+      policyReplacements.message ||
+      notice ||
+      'Lỗi không xác định'
+    ).trim() || 'Lỗi không xác định'
+    if (isUndefinedErrorPolicy) {
+      thresholdReason = await this.diagnoseUndefinedErrorWithScreenshot(
+        account,
+        campaign,
+        inputDataId,
+        policyReplacements,
+        thresholdReason
+      ) || thresholdReason
+    }
     await this.logCampaignProgress(campaign.id, `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`)
 
     const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
@@ -2093,7 +2240,13 @@ export class CampaignScheduler {
     const summary = this.createMilestoneSummary()
     const createCampaignDetail = async (action: Partial<CampaignDetail>) => {
       const created = await this.supabase.createCampaignDetail(action)
-      this.recordMilestoneSummary(summary, created.status, created.log || action.log, created.actionName || action.actionName)
+      this.recordMilestoneSummary(
+        summary,
+        created.status,
+        created.log || action.log,
+        created.actionName || action.actionName,
+        this.getCampaignDetailRootReason(created) || this.getCampaignDetailRootReason(action)
+      )
       return created
     }
     const inputDataName = detail?.name || detail?.uid || ''
@@ -2305,6 +2458,7 @@ export class CampaignScheduler {
             findZaloGroupLinkWebTargetCampaignIds,
             findPhoneAkaBizDesktopTargetCampaignIds,
             findZaloGroupLinkAkaBizDesktopTargetCampaignIds,
+            error: isSuccess ? undefined : errMsg,
             errorBlock: errorStep?.blockName
           }
         })
@@ -2770,7 +2924,8 @@ export class CampaignScheduler {
           actionName,
           status,
           errorCode,
-          log: status === 'thành công' ? `${actionName} thành công đến ${inputDataName}` : `Lỗi ${actionName.toLowerCase()} đến ${inputDataName}: ${errMsg}`
+          log: status === 'thành công' ? `${actionName} thành công đến ${inputDataName}` : `Lỗi ${actionName.toLowerCase()} đến ${inputDataName}: ${errMsg}`,
+          data: status === 'thành công' ? undefined : { error: errMsg }
         })
         if (status === 'thành công') await this.logCampaignProgress(campaign.id, `💬 ${actionName} thành công đến "${inputDataName}"`)
         else await this.logCampaignProgress(campaign.id, `❌ Lỗi ${actionName.toLowerCase()} "${inputDataName}": ${errMsg}`)
@@ -2828,7 +2983,8 @@ export class CampaignScheduler {
             actionName: 'Kết bạn',
             status,
             errorCode,
-            log: `Lỗi kết bạn với ${inputDataName}: ${errMsg}`
+            log: `Lỗi kết bạn với ${inputDataName}: ${errMsg}`,
+            data: { error: errMsg }
           })
           await this.logCampaignProgress(campaign.id, `❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
           await flushScreenshotLogsForStep(s)

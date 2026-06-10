@@ -4,6 +4,7 @@ import * as aiRepo from '../data/repositories/aiRepository'
 const DEFAULT_AI_TIMEOUT_MS = 120_000
 
 type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+type AiChatMessage = { role: 'system' | 'user' | 'assistant'; content: unknown }
 
 interface PreparedRequest {
   systemPrompt: string
@@ -116,13 +117,42 @@ function extractUsage(raw: unknown): { usage?: unknown; tokenInput?: number | nu
 }
 
 const SECRET_FIELD_PATTERN = /(password|cookie|token|secret|keyapi|api[_-]?key|authorization|auth(code)?|session)/i
+const MAX_IMAGE_DATA_URLS = 3
 
 function sanitizeText(value: string, maxLength = 6000): string {
   const masked = String(value || '')
+    .replace(/data:[^;\s]+;base64,[A-Za-z0-9+/=]+/g, '[masked_file]')
     .replace(/Bearer\s+[^\s,;"']+/gi, 'Bearer [masked]')
     .replace(/sk-[A-Za-z0-9_-]{12,}/g, '[masked_api_key]')
     .replace(/\b[A-Za-z0-9+/]{160,}={0,2}\b/g, '[masked_long_token]')
   return masked.length > maxLength ? `${masked.slice(0, maxLength)}...` : masked
+}
+
+function getImageDataUrls(payload: Record<string, unknown>): string[] {
+  const values: unknown[] = []
+  if (typeof payload.imageDataUrl === 'string') values.push(payload.imageDataUrl)
+  if (Array.isArray(payload.imageDataUrls)) values.push(...payload.imageDataUrls)
+
+  return values
+    .map(value => typeof value === 'string' ? value.trim() : '')
+    .filter(value => /^data:image\/[a-z0-9.+-]+;base64,/i.test(value))
+    .slice(0, MAX_IMAGE_DATA_URLS)
+}
+
+function buildOpenAiInputContent(text: string, payload: Record<string, unknown>): Record<string, unknown>[] {
+  return [
+    { type: 'input_text', text },
+    ...getImageDataUrls(payload).map(imageUrl => ({ type: 'input_image', image_url: imageUrl }))
+  ]
+}
+
+function buildChatUserContent(text: string, payload: Record<string, unknown>): unknown {
+  const imageUrls = getImageDataUrls(payload)
+  if (imageUrls.length === 0) return text
+  return [
+    { type: 'text', text },
+    ...imageUrls.map(url => ({ type: 'image_url', image_url: { url } }))
+  ]
 }
 
 function sanitize(value: unknown, key = '', depth = 0): unknown {
@@ -169,14 +199,20 @@ function buildOpenAiResponsesBody(config: AiUsingConfig, prepared: PreparedReque
 
   const nonSystemMessages = prepared.messages.filter(message => message.role !== 'system')
   if (nonSystemMessages.length > 0) {
-    body.input = nonSystemMessages.map(message => ({
+    let lastUserIndex = -1
+    for (let i = 0; i < nonSystemMessages.length; i += 1) {
+      if (nonSystemMessages[i].role !== 'assistant') lastUserIndex = i
+    }
+    body.input = nonSystemMessages.map((message, index) => ({
       role: message.role === 'assistant' ? 'assistant' : 'user',
-      content: [{ type: 'input_text', text: message.content }]
+      content: message.role !== 'assistant' && index === lastUserIndex
+        ? buildOpenAiInputContent(message.content, payload)
+        : [{ type: 'input_text', text: message.content }]
     }))
   } else {
     body.input = [{
       role: 'user',
-      content: [{ type: 'input_text', text: prepared.userPrompt }]
+      content: buildOpenAiInputContent(prepared.userPrompt, payload)
     }]
   }
 
@@ -185,15 +221,24 @@ function buildOpenAiResponsesBody(config: AiUsingConfig, prepared: PreparedReque
 
 function buildChatCompletionsBody(config: AiUsingConfig, prepared: PreparedRequest, payload: Record<string, unknown>): Record<string, unknown> {
   const bodyOverrides = toRecord(payload.bodyOverrides)
-  const messages: AiMessage[] = []
+  const messages: AiChatMessage[] = []
   const explicitSystemMessages = prepared.messages.filter(message => message.role === 'system')
   if (prepared.systemPrompt) messages.push({ role: 'system', content: prepared.systemPrompt })
   messages.push(...explicitSystemMessages)
   const nonSystemMessages = prepared.messages.filter(message => message.role !== 'system')
   if (nonSystemMessages.length > 0) {
-    messages.push(...nonSystemMessages)
+    let lastUserIndex = -1
+    for (let i = 0; i < nonSystemMessages.length; i += 1) {
+      if (nonSystemMessages[i].role !== 'assistant') lastUserIndex = i
+    }
+    messages.push(...nonSystemMessages.map((message, index) => ({
+      role: message.role,
+      content: message.role !== 'assistant' && index === lastUserIndex
+        ? buildChatUserContent(message.content, payload)
+        : message.content
+    })))
   } else {
-    messages.push({ role: 'user', content: prepared.userPrompt })
+    messages.push({ role: 'user', content: buildChatUserContent(prepared.userPrompt, payload) })
   }
 
   return {

@@ -122,3 +122,34 @@ export async function listCampaignRunEventsByInputData(inputDataId: number, limi
   if (error) throw new Error(`Failed to list campaign run events by input data: ${error.message}`)
   return (data || []).map(mapRunEventFromDB)
 }
+
+export async function findLatestBrowserScreenshotEvent(options: {
+  campaignId: number
+  campaignInputDataId?: number | null
+  runId?: number | null
+}): Promise<CampaignRunEvent | null> {
+  let query = client()
+    .from('auto_campaign_run_events')
+    .select('*')
+    .eq('campaign_id', options.campaignId)
+    .eq('event_type', 'browser_screenshot')
+
+  if (options.campaignInputDataId) {
+    query = query.eq('campaign_input_data_id', options.campaignInputDataId)
+  }
+  if (options.runId) {
+    query = query.eq('run_id', options.runId)
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(20)
+
+  if (error) throw new Error(`Failed to find latest browser screenshot event: ${error.message}`)
+  const rows = (data || []).map(mapRunEventFromDB)
+  return rows.find(row => {
+    const screenshotPath = row.debugData?.screenshotPath
+    return typeof screenshotPath === 'string' && screenshotPath.trim().length > 0
+  }) || null
+}
