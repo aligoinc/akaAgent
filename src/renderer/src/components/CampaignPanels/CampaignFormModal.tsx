@@ -1065,6 +1065,7 @@ export default function CampaignFormModal({
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
+  const canUseRerunAfterCompletion = isFindDataCampaign || isCommentSeedingFeedCampaign
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const isSuggestedFriendsUidCampaign = isMessageUidCampaign && formData.useSuggestedFriends
   const hideDetailsSection = isSuggestedFriendsUidCampaign && !isEditingSavedCampaign
@@ -1192,10 +1193,9 @@ export default function CampaignFormModal({
   ]
   const applyVisibleScheduleFields = (steps: StepDef[]) => steps.map(step => {
     if (step.id !== 'schedule') return step
-    const hasFindDataRerun = step.fields.some(field => field.key === 'findDataRerun')
     return {
       ...step,
-      fields: hasFindDataRerun
+      fields: canUseRerunAfterCompletion
         ? [...visibleScheduleFields, { key: 'findDataRerun', label: 'Chạy lại sau mỗi' }]
         : visibleScheduleFields
     }
@@ -2411,8 +2411,8 @@ export default function CampaignFormModal({
             searchGroupMineOnly: isFindDataSearchCampaign ? formData.searchGroupMineOnly : false,
             minSearchGroupMembers: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupMembers) || 0) : 0,
             minSearchGroupPostsPerDay: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupPostsPerDay) || 0) : 0,
-            findDataRerunEnabled: isFindDataCampaign ? formData.findDataRerunEnabled : false,
-            findDataRerunAfterHours: isFindDataCampaign
+            findDataRerunEnabled: canUseRerunAfterCompletion ? formData.findDataRerunEnabled : false,
+            findDataRerunAfterHours: canUseRerunAfterCompletion
               ? normalizeHourValue(formData.findDataRerunAfterHours)
               : DEFAULT_FIND_DATA_RERUN_AFTER_HOURS,
             multiDailyTimeSlotsEnabled: isMultiDailyTimeSlotsCampaign ? formData.multiDailyTimeSlotsEnabled : false,
@@ -2558,6 +2558,11 @@ export default function CampaignFormModal({
       }
     }
     const validDetails = isEditingSavedCampaign ? details : normalizeCampaignInputDataForSave(details)
+    const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
+    if (canUseRerunAfterCompletion && formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
+      showAlert('Vui lòng nhập số giờ chạy lại lớn hơn hoặc bằng 1.', 'error')
+      return
+    }
     if (isFindDataCampaign) {
       if (!formData.isFindPhone && !formData.isFindLinkGroupZalo && !formData.isFindUid && !formData.isFindPostLink && !formData.isFindFacebookGroup) {
         showAlert('Vui lòng chọn ít nhất một loại data cần tìm.', 'error')
@@ -2571,11 +2576,6 @@ export default function CampaignFormModal({
             : 'Vui lòng chọn ít nhất một nơi tìm: Bài post, Comment, Những người tương tác mới hoặc Thành viên group mới.',
           'error'
         )
-        return
-      }
-      const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
-      if (formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
-        showAlert('Vui lòng nhập số giờ chạy lại lớn hơn hoặc bằng 1.', 'error')
         return
       }
       if (formData.isFindUid && handleFoundUidData && formData.findUidTargetCampaignIds.length === 0 && !isDraftAutoLinkedFindUid) {
@@ -6440,7 +6440,7 @@ export default function CampaignFormModal({
                     />
                   </div>
 
-                  {isFindDataCampaign && (
+                  {canUseRerunAfterCompletion && (
                     <div className="stepper-form-group" style={{ maxWidth: 360 }}>
                       <label className="schedule-checkbox-label">
                         <input
@@ -6467,7 +6467,7 @@ export default function CampaignFormModal({
                         disabled={!formData.findDataRerunEnabled}
                       />
                       <span className="schedule-hint">
-                        Khi chạy hết data, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.
+                        Khi chạy hết danh sách, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.
                       </span>
                     </div>
                   )}

@@ -318,6 +318,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || getFindDataSourceLabels(extra).length > 0
     || !!extra.findDataGoalModeEnabled
     || linkedSourceCampaigns.length > 0
+  const supportsRerunAfterCompletion = ['facebook_find_data_group', 'facebook_find_data_search', 'facebook_comment_seeding'].includes(actionId)
   const hasPostBump = actionId === 'facebook_group_post' || !!extra.enablePostBump
   const hasNewsfeedSettings = actionId === NEWSFEED_INTERACTION_ACTION_ID
 
@@ -412,7 +413,6 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Chỉ group của tôi', value: onOff(extra.searchGroupMineOnly), hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
     { label: 'Thành viên tối thiểu', value: extra.minSearchGroupMembers ?? 0, hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
     { label: 'Bài đăng tối thiểu/ngày', value: extra.minSearchGroupPostsPerDay ?? 0, hidden: actionId !== 'facebook_find_data_search' || !extra.isFindFacebookGroup },
-    { label: 'Chạy lại sau mỗi', value: extra.findDataRerunEnabled ? `${extra.findDataRerunAfterHours || 1} giờ` : 'Tắt', hidden: !['facebook_find_data_group', 'facebook_find_data_search'].includes(actionId) && !extra.findDataRerunEnabled },
     { label: 'Lọc từ khóa bài viết', value: extra.isFindPostByKeywords ? textOrDash(extra.postKeywords) : 'Tắt', fullWidth: true, hidden: !extra.isFindPostByKeywords && !extra.postKeywords },
     { label: 'Lọc AI bài viết', value: extra.isFindPostByContentAI ? textOrDash(extra.postContentAI) : 'Tắt', fullWidth: true, hidden: !extra.isFindPostByContentAI && !extra.postContentAI },
     { label: 'Lọc từ khóa comment', value: extra.isFindCommentByKeywords ? textOrDash(extra.commentKeywords) : 'Tắt', fullWidth: true, hidden: !extra.isFindCommentByKeywords && !extra.commentKeywords },
@@ -466,6 +466,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
             value: textOrDash(String(extra.multiDailyTimeSlots || '').split(',').map(item => item.trim()).filter(Boolean).join(', ')),
             hidden: !extra.multiDailyTimeSlotsEnabled && !extra.multiDailyTimeSlots
           },
+          { label: 'Chạy lại sau mỗi', value: extra.findDataRerunEnabled ? `${extra.findDataRerunAfterHours || 1} giờ` : 'Tắt', hidden: !supportsRerunAfterCompletion && !extra.findDataRerunEnabled },
           { label: 'Lặp cùng giờ ngày mới', value: onOff(campaign.continueNextDay), hidden: scheduleType !== 'daily' },
           { label: 'Reset data chu kỳ mới', value: onOff(campaign.refreshData), hidden: scheduleType === 'daily' }
         ])}
