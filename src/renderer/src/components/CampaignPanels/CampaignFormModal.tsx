@@ -749,6 +749,12 @@ const FIND_DATA_CONDITIONS_STEP: StepDef = {
   ]
 }
 
+const COMMENT_POST_SEARCH_STEP: StepDef = {
+  id: 'commentPostSearch',
+  title: 'Điều kiện tìm kiếm bài post',
+  fields: [{ key: 'commentPostSearchConditions', label: 'Điều kiện bài viết' }]
+}
+
 const FOUND_DATA_HANDLING_STEP: StepDef = {
   id: 'foundDataHandling',
   title: 'Xử lý data tìm được',
@@ -875,7 +881,6 @@ export default function CampaignFormModal({
     rewriteCommentContentEachRun: campaign?.extraSettings?.rewriteCommentContentEachRun ?? false,
     enablePostLike: campaign?.extraSettings?.enablePostLike ?? false,
     postsPerTarget: campaign?.extraSettings?.postsPerTarget ?? campaign?.extraSettings?.commentCount ?? 3,
-    postKeywordFilter: campaign?.extraSettings?.postKeywordFilter ?? campaign?.extraSettings?.keywordFilter ?? '',
     newsfeedTimeMinutes: campaign?.extraSettings?.newsfeedTimeMinutes ?? 20,
     newsfeedLikeKind: campaign?.extraSettings?.newsfeedLikeKind || '',
     newsfeedLikeLimit: campaign?.extraSettings?.newsfeedLikeLimit ?? 10,
@@ -1267,9 +1272,12 @@ export default function CampaignFormModal({
           }
           return s
         })
-      return showFindDataSourceSection
-        ? steps.flatMap(s => s.id === 'details' ? [FIND_DATA_SOURCE_STEP, s] : [s])
+      const withPostSearch = isCommentSeedingFeedCampaign
+        ? steps.flatMap(s => s.id === 'limits' ? [s, COMMENT_POST_SEARCH_STEP] : [s])
         : steps
+      return showFindDataSourceSection
+        ? withPostSearch.flatMap(s => s.id === 'details' ? [FIND_DATA_SOURCE_STEP, s] : [s])
+        : withPostSearch
     }
     if (isFindDataCampaign) {
       const generalStep = ALL_STEPS.find(s => s.id === 'general')!
@@ -1869,7 +1877,7 @@ export default function CampaignFormModal({
       case 'content': return !requiresMainContentOrMedia || hasMainContentText || hasSelectedMainMedia
       case 'commentContent': return formData.commentContent.trim().length > 0 || hasSelectedCommentMedia
       case 'postsPerTarget': return formData.postsPerTarget > 0
-      case 'postKeywordFilter': return true
+      case 'commentPostSearchConditions': return true
       case 'enablePostLike': return true
       case 'sharePost': return true  // optional, always "complete"
       case 'pagePostMode': return true
@@ -2248,7 +2256,6 @@ export default function CampaignFormModal({
       )
 
       const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
-      const effectivePostKeywordFilter = isCommentSeedingCampaign ? '' : formData.postKeywordFilter
       const effectiveEnableMessage = (isMessageFriendCampaign || isPageInboxMessageCampaign) ? true : formData.enableMessage
       const effectiveEnableAddFriend = (isMessageFriendCampaign || isPageInboxMessageCampaign) ? false : formData.enableAddFriend
       const effectiveUseSuggestedFriends = isMessageUidCampaign
@@ -2273,6 +2280,7 @@ export default function CampaignFormModal({
       const normalizedScheduleWeekDays = formData.scheduleType === 'weekly' ? formData.scheduleWeekDays : ''
       const normalizedFindData = normalizeFindDataFlagState(formData, { isSearchCampaign: isFindDataSearchCampaign })
       const canUseFindDataPostContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment || normalizedFindData.isFindPostLink
+      const canUsePostContentConditionsForSave = isCommentSeedingFeedCampaign || canUseFindDataPostContentConditionsForSave
       const canUseFindDataCommentContentConditionsForSave = normalizedFindData.isFindInComment
       const saveFindDataPostSort = normalizedFindData.isFindNewInteractors ? 'recent_activity' : formData.sortTypePost
       const saveFindDataCommentSort = normalizedFindData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
@@ -2308,8 +2316,6 @@ export default function CampaignFormModal({
             rewriteCommentContentEachRun: formData.rewriteCommentContentEachRun,
             enablePostLike: formData.enablePostLike,
             postsPerTarget: effectivePostsPerTarget,
-            postKeywordFilter: effectivePostKeywordFilter,
-            keywordFilter: effectivePostKeywordFilter,
             newsfeedTimeMinutes: isNewsfeedInteractionCampaign ? Math.max(1, Number(formData.newsfeedTimeMinutes) || 20) : undefined,
             newsfeedLikeKind: isNewsfeedInteractionCampaign ? formData.newsfeedLikeKind.trim() : '',
             newsfeedLikeLimit: isNewsfeedInteractionCampaign ? Math.max(0, Number(formData.newsfeedLikeLimit) || 0) : 0,
@@ -2413,10 +2419,10 @@ export default function CampaignFormModal({
             multiDailyTimeSlots: isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled
               ? normalizedMultiDailySlots.join(',')
               : '',
-            isFindPostByKeywords: canUseFindDataPostContentConditionsForSave ? formData.isFindPostByKeywords : false,
-            postKeywords: canUseFindDataPostContentConditionsForSave ? formData.postKeywords : '',
-            isFindPostByContentAI: canUseFindDataPostContentConditionsForSave ? formData.isFindPostByContentAI : false,
-            postContentAI: canUseFindDataPostContentConditionsForSave ? formData.postContentAI : '',
+            isFindPostByKeywords: canUsePostContentConditionsForSave ? formData.isFindPostByKeywords : false,
+            postKeywords: canUsePostContentConditionsForSave ? formData.postKeywords : '',
+            isFindPostByContentAI: canUsePostContentConditionsForSave ? formData.isFindPostByContentAI : false,
+            postContentAI: canUsePostContentConditionsForSave ? formData.postContentAI : '',
             isFindCommentByKeywords: canUseFindDataCommentContentConditionsForSave ? formData.isFindCommentByKeywords : false,
             commentKeywords: canUseFindDataCommentContentConditionsForSave ? formData.commentKeywords : '',
             isFindCommentByContentAI: canUseFindDataCommentContentConditionsForSave ? formData.isFindCommentByContentAI : false,
@@ -6531,6 +6537,30 @@ export default function CampaignFormModal({
                 </div>
               )}
             </div>
+
+            {isCommentSeedingFeedCampaign && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['commentPostSearch'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('commentPostSearch')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('commentPostSearch')}</span>
+                    <span className="stepper-section-title">Điều kiện tìm kiếm bài post</span>
+                  </div>
+                  {collapsedSections['commentPostSearch'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['commentPostSearch'] && (
+                  <div className="stepper-section-body">
+                    {renderFindDataPostContentConditions()}
+                  </div>
+                )}
+              </div>
+            )}
 
             {isPagePostCampaign && (
               <div

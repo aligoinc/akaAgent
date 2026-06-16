@@ -243,8 +243,6 @@ export interface CampaignExtraSettings {
   commentImages?: string[]        // tối đa 1 ảnh cho mỗi comment
   enablePostLike?: boolean
   postsPerTarget?: number
-  postKeywordFilter?: string
-  keywordFilter?: string
   // Lướt newsfeed và tương tác
   newsfeedTimeMinutes?: number
   newsfeedLikeKind?: string
