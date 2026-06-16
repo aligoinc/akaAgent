@@ -267,6 +267,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
 const canPauseCampaign = (status: string) => status === 'chờ xử lý' || status === 'đang chạy'
 const canResumeCampaign = (status: string) => status === 'tạm dừng'
+const canDeleteCampaign = (status: string) => status !== 'đang chạy'
 
 const formatIpcErrorMessage = (err: unknown, fallback: string): string => {
   const message = err instanceof Error
@@ -1429,12 +1430,20 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }
 
   const handleDelete = (campaign: Campaign) => {
+    if (!canDeleteCampaign(campaign.status)) {
+      showAlert('Không thể xoá chiến dịch đang chạy.', 'info')
+      return
+    }
     useUiStore.getState().showConfirm(
       `Xoá chiến dịch "${campaign.name}"?`,
       async () => {
-        await deleteCampaign(campaign.id)
-        if (selectedCampaignId === campaign.id) {
-          setSelectedCampaignId(null)
+        try {
+          await deleteCampaign(campaign.id)
+          if (selectedCampaignId === campaign.id) {
+            setSelectedCampaignId(null)
+          }
+        } catch (err) {
+          showAlert(formatIpcErrorMessage(err, 'Không thể xoá chiến dịch.'), 'error')
         }
       },
       { title: 'Xoá chiến dịch', confirmText: 'Xoá', variant: 'danger' }
@@ -1600,10 +1609,21 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }
 
   const handleBulkDelete = () => {
-    const ids = Array.from(selectedIds)
-    if (ids.length === 0) return
+    const allIds = Array.from(selectedIds)
+    const blockedRunningCount = allIds.filter(id => {
+      const campaign = campaigns.find(item => item.id === id)
+      return campaign && !canDeleteCampaign(campaign.status)
+    }).length
+    const ids = allIds.filter(id => {
+      const campaign = campaigns.find(item => item.id === id)
+      return !campaign || canDeleteCampaign(campaign.status)
+    })
+    if (ids.length === 0) {
+      showAlert('Không có chiến dịch nào có thể xoá. Chiến dịch đang chạy không được xoá.', 'info')
+      return
+    }
     useUiStore.getState().showConfirm(
-      `Xoá ${ids.length} chiến dịch đã chọn?`,
+      `Xoá ${ids.length} chiến dịch đã chọn${blockedRunningCount > 0 ? `, bỏ qua ${blockedRunningCount} chiến dịch đang chạy` : ''}?`,
       async () => {
         setBulkActionLoading(true)
         try {
@@ -1611,6 +1631,9 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           if (selectedCampaignId && ids.includes(selectedCampaignId)) {
             setSelectedCampaignId(null)
           }
+        } catch (err) {
+          showAlert(formatIpcErrorMessage(err, 'Không thể xoá các chiến dịch đã chọn.'), 'error')
+          await loadCampaigns()
         } finally {
           setBulkActionLoading(false)
           setSelectedIds(new Set())
@@ -3141,7 +3164,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                       <button className="btn-icon" onClick={() => handleEdit(campaign)} title="Sửa">
                         <Edit3 size={12} />
                       </button>
-                      <button className="btn-icon" onClick={() => handleDelete(campaign)} title="Xoá">
+                      <button
+                        className="btn-icon"
+                        onClick={() => handleDelete(campaign)}
+                        disabled={!canDeleteCampaign(campaign.status)}
+                        title={canDeleteCampaign(campaign.status) ? 'Xoá' : 'Không thể xoá chiến dịch đang chạy'}
+                      >
                         <Trash2 size={12} />
                       </button>
                     </div>

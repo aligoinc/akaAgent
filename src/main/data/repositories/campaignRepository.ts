@@ -27,6 +27,12 @@ const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE = 500
 const LIMIT_COUNT_STATUSES = ['thành công', 'thất bại']
+const FIND_DATA_TARGET_FIELDS = [
+  'findUidTargetCampaignIds',
+  'findPostLinkTargetCampaignIds',
+  'findFacebookGroupPostTargetCampaignIds',
+  'findFacebookGroupCommentTargetCampaignIds'
+] as const
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
@@ -36,6 +42,17 @@ const uniquePositiveIds = (ids: number[]): number[] => Array.from(new Set(
     .map(id => Number(id))
     .filter(id => Number.isFinite(id) && id > 0)
 ))
+
+const getLinkedFindDataTargetIds = (extraSettings: unknown): number[] => {
+  const extra = (extraSettings && typeof extraSettings === 'object')
+    ? extraSettings as Record<string, unknown>
+    : {}
+
+  return uniquePositiveIds(FIND_DATA_TARGET_FIELDS.flatMap(field => {
+    const value = extra[field]
+    return Array.isArray(value) ? value.map(id => Number(id)) : []
+  }))
+}
 
 const chunkArray = <T>(items: T[], size: number): T[][] => {
   const chunks: T[][] = []
@@ -397,6 +414,25 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
 
 export async function deleteCampaign(id: number): Promise<void> {
   const u = requireCurrentUser()
+  const { data: campaign, error: fetchError } = await client()
+    .from('auto_campaigns')
+    .select('id, status, extra_settings')
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (fetchError) throw new Error(`Failed to load campaign before delete: ${fetchError.message}`)
+  if (!campaign) throw new Error('Không tìm thấy chiến dịch cần xoá.')
+  if (campaign.status === 'đang chạy') {
+    throw new Error('Không thể xoá chiến dịch đang chạy.')
+  }
+
+  const linkedTargetIds = getLinkedFindDataTargetIds((campaign as { extra_settings?: unknown }).extra_settings)
+  if (linkedTargetIds.length > 0) {
+    throw new Error(`Không thể xoá chiến dịch nguồn đang gắn với chiến dịch khác (#${linkedTargetIds.join(', #')}).`)
+  }
+
   const { error } = await client()
     .from('auto_campaigns')
     .update({ is_delete: true, updated_at: new Date().toISOString() })
