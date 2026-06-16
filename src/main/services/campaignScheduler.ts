@@ -527,7 +527,7 @@ export class CampaignScheduler {
       return
     }
 
-    if (await this.handleFindDataRerunAfterCompletion(campaign, now)) {
+    if (await this.handleRerunAfterCompletion(campaign, now)) {
       return
     }
 
@@ -611,9 +611,13 @@ export class CampaignScheduler {
     return true
   }
 
-  private async handleFindDataRerunAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+  private async handleRerunAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+    const supportsRerunAfterCompletion =
+      campaign.actionId === FIND_DATA_GROUP_ACTION_ID ||
+      campaign.actionId === FIND_DATA_SEARCH_ACTION_ID ||
+      campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID
     if (
-      (campaign.actionId !== FIND_DATA_GROUP_ACTION_ID && campaign.actionId !== FIND_DATA_SEARCH_ACTION_ID) ||
+      !supportsRerunAfterCompletion ||
       campaign.extraSettings?.findDataRerunEnabled !== true
     ) {
       return false
