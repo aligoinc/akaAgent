@@ -2130,6 +2130,8 @@ export class CampaignScheduler {
     const canUseFindDataPostContentConditions =
       extra.isFindInPost === true || extra.isFindInComment === true || extra.isFindPostLink === true
     const canUseFindDataCommentContentConditions = extra.isFindInComment === true
+    const canUseCommentSeedingPostContentConditions = campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID
+    const canUsePostContentConditions = canUseFindDataPostContentConditions || canUseCommentSeedingPostContentConditions
     const validImages = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
     const validCommentImages = (extra.commentImages || []).filter(fp => this.isUsableImagePath(fp)).slice(0, 1)
     const pagePostMode = extra.pagePostMode || 'api'
@@ -2190,7 +2192,10 @@ export class CampaignScheduler {
       commentImageOption,
       enablePostLike: extra.enablePostLike ?? false,
       postsPerTarget: extra.postsPerTarget ?? commentCount,
-      keywordFilter: extra.postKeywordFilter ?? extra.keywordFilter ?? '',
+      isFindPostByKeywords: canUsePostContentConditions ? (extra.isFindPostByKeywords ?? false) : false,
+      postKeywords: canUsePostContentConditions ? (extra.postKeywords ?? '') : '',
+      isFindPostByContentAI: canUsePostContentConditions ? (extra.isFindPostByContentAI ?? false) : false,
+      postContentAI: canUsePostContentConditions ? (extra.postContentAI ?? '') : '',
       // Newsfeed interaction extras
       newsfeedTimeMinutes: extra.newsfeedTimeMinutes ?? 20,
       newsfeedLikeKind: extra.newsfeedLikeKind || '',
@@ -2257,10 +2262,6 @@ export class CampaignScheduler {
       searchGroupMineOnly: extra.searchGroupMineOnly ?? false,
       minSearchGroupMembers: extra.minSearchGroupMembers ?? 0,
       minSearchGroupPostsPerDay: extra.minSearchGroupPostsPerDay ?? 0,
-      isFindPostByKeywords: canUseFindDataPostContentConditions ? (extra.isFindPostByKeywords ?? false) : false,
-      postKeywords: canUseFindDataPostContentConditions ? (extra.postKeywords ?? '') : '',
-      isFindPostByContentAI: canUseFindDataPostContentConditions ? (extra.isFindPostByContentAI ?? false) : false,
-      postContentAI: canUseFindDataPostContentConditions ? (extra.postContentAI ?? '') : '',
       isFindCommentByKeywords: canUseFindDataCommentContentConditions ? (extra.isFindCommentByKeywords ?? false) : false,
       commentKeywords: canUseFindDataCommentContentConditions ? (extra.commentKeywords ?? '') : '',
       isFindCommentByContentAI: canUseFindDataCommentContentConditions ? (extra.isFindCommentByContentAI ?? false) : false,
@@ -3146,12 +3147,18 @@ export class CampaignScheduler {
       const matchedCount = Number(out.matchedCount ?? 0)
       if (prepareStep?.status === 'success' && matchedCount === 0) {
         const totalCount = Number(out.totalCount ?? 0)
-        const keyword = String(campaign.extraSettings?.postKeywordFilter ?? campaign.extraSettings?.keywordFilter ?? '').trim()
+        const extra = campaign.extraSettings || {}
+        const keyword = extra.isFindPostByKeywords === true ? String(extra.postKeywords || '').trim() : ''
+        const aiPrompt = extra.isFindPostByContentAI === true ? String(extra.postContentAI || '').trim() : ''
+        const enabledConditions = [
+          keyword ? `từ khoá "${keyword}"` : '',
+          aiPrompt ? 'ý nghĩa AI' : ''
+        ].filter(Boolean).join(' và ')
         const targetName = inputDataName || 'mục tiêu'
-        const reason = keyword
+        const reason = enabledConditions
           ? (totalCount > 0
-            ? `Không tìm thấy bài phù hợp với từ khoá "${keyword}" trong ${targetName}`
-            : `Không tìm thấy bài nào để lọc từ khoá "${keyword}" trong ${targetName}`)
+            ? `Không tìm thấy bài phù hợp với điều kiện ${enabledConditions} trong ${targetName}`
+            : `Không tìm thấy bài nào để kiểm tra điều kiện ${enabledConditions} trong ${targetName}`)
           : `Không tìm thấy bài phù hợp để comment trong ${targetName}`
         await this.logCampaignProgress(campaign.id, `ℹ️ ${reason}`)
         await flushScreenshotLogsForStep(prepareStep)
