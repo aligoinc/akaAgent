@@ -4965,6 +4965,31 @@ td.report-account-col span {
   font-weight: 700;
 }
 
+.source-campaign-kind-list {
+  gap: 14px;
+  width: 100%;
+}
+
+.source-campaign-kind-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.source-campaign-kind-block + .source-campaign-kind-block {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.source-campaign-kind-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .campaign-picker-confirm-button {
   min-width: 92px;
 }
@@ -5015,7 +5040,7 @@ td.report-account-col span {
 }
 
 .source-campaign-table {
-  min-width: 980px;
+  min-width: 1120px;
 }
 
 .source-campaign-actions-col {
