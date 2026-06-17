@@ -569,6 +569,29 @@ const normalizeEmailAddress = (value: unknown): string => getExcelCellText(value
 
 const isValidEmailAddress = (value: unknown): boolean => isValidEmailInputDataValue(normalizeEmailAddress(value))
 
+const parseFindDataSearchKeywordsText = (value: string): string[] =>
+  value.split(',').map(item => item.trim()).filter(Boolean)
+
+const formatFindDataSearchKeywordList = (keywords: string[]): string =>
+  keywords.join(', ')
+
+const formatFindDataSearchKeywordsText = (rows: Partial<CampaignInputData>[] = []): string =>
+  formatFindDataSearchKeywordList(
+    rows
+      .map(row => String(row.uid || '').trim())
+      .filter(Boolean)
+  )
+
+const buildFindDataSearchKeywordRows = (value: string): Partial<CampaignInputData>[] =>
+  parseFindDataSearchKeywordsText(value).map(keyword => ({
+    name: '',
+    phone: '',
+    uid: keyword,
+    email: '',
+    note: '',
+    status: 'chờ xử lý'
+  }))
+
 const normalizeVietnamMobilePhone = (value: unknown): string | null => {
   let digits = getExcelCellText(value).replace(/\D+/g, '')
   if (!digits) return null
@@ -1562,6 +1585,16 @@ export default function CampaignFormModal({
     status: 'chờ xử lý'
   }))
   const [details, setDetails] = useState<Partial<CampaignInputData>[]>(() => normalizeInitialDetails(initialDetails))
+  const [findDataSearchKeywordsText, setFindDataSearchKeywordsText] = useState(() =>
+    initialIsFindDataSearchCampaign ? formatFindDataSearchKeywordsText(normalizeInitialDetails(initialDetails)) : ''
+  )
+  const findDataSearchKeywordRows = useMemo(
+    () => buildFindDataSearchKeywordRows(findDataSearchKeywordsText),
+    [findDataSearchKeywordsText]
+  )
+  const detailEntryCount = isFindDataSearchCampaign && !isEditingSavedCampaign
+    ? findDataSearchKeywordRows.length
+    : details.length
   const [deletedIds, setDeletedIds] = useState<number[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [akabizIntegrations, setAkaBizIntegrations] = useState<AkaBizIntegrations | null>(null)
@@ -1927,7 +1960,11 @@ export default function CampaignFormModal({
     async function fetchDetails() {
       const loadId = cloneFromId || (campaign && campaign.id ? campaign.id : null)
       if (!loadId) {
-        setDetails(normalizeInitialDetails(initialDetails))
+        const normalizedDetails = normalizeInitialDetails(initialDetails)
+        setDetails(normalizedDetails)
+        if (FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)) {
+          setFindDataSearchKeywordsText(formatFindDataSearchKeywordsText(normalizedDetails))
+        }
         setDeletedIds([])
         return
       }
@@ -1937,9 +1974,16 @@ export default function CampaignFormModal({
           const existingDetails = await window.electronAPI.listCampaignInputData(loadId)
           if (cloneFromId) {
             // Clone: strip IDs and reset status, ALSO clear note
-            setDetails(existingDetails.map(d => ({ ...d, id: undefined, status: 'chờ xử lý', note: '' })))
+            const clonedDetails: Partial<CampaignInputData>[] = existingDetails.map(d => ({ ...d, id: undefined, status: 'chờ xử lý', note: '' }))
+            setDetails(clonedDetails)
+            if (FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)) {
+              setFindDataSearchKeywordsText(formatFindDataSearchKeywordsText(clonedDetails))
+            }
           } else {
             setDetails(existingDetails)
+            if (FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)) {
+              setFindDataSearchKeywordsText(formatFindDataSearchKeywordsText(existingDetails))
+            }
             setDeletedIds([])
           }
         } catch (err) {
@@ -2004,7 +2048,7 @@ export default function CampaignFormModal({
       case 'foundDataHandling': return true
       case 'findDataSources': return true
       case 'messageActions': return isMessageFriendCampaign || formData.enableMessage || formData.enableAddFriend
-      case 'details': return hideDetailsSection || details.length > 0 || hasSelectedFindDataSourceCampaign
+      case 'details': return hideDetailsSection || detailEntryCount > 0 || hasSelectedFindDataSourceCampaign
       default: return false
     }
   }
@@ -2680,7 +2724,10 @@ export default function CampaignFormModal({
         return
       }
     }
-    const validDetails = isEditingSavedCampaign ? details : normalizeCampaignInputDataForSave(details)
+    const detailRowsForSave = isFindDataSearchCampaign && !isEditingSavedCampaign
+      ? findDataSearchKeywordRows
+      : details
+    const validDetails = isEditingSavedCampaign ? details : normalizeCampaignInputDataForSave(detailRowsForSave)
     const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
     if (canUseRerunAfterCompletion && formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
       showAlert('Vui lòng nhập số giờ chạy lại lớn hơn hoặc bằng 1.', 'error')
@@ -3054,12 +3101,29 @@ export default function CampaignFormModal({
     })
   }
 
+  const appendFindDataSearchKeywords = (values: Array<string | undefined>): number => {
+    const keywords = values.map(value => String(value || '').trim()).filter(Boolean)
+    if (keywords.length === 0) return 0
+
+    setFindDataSearchKeywordsText(prev => {
+      const currentKeywords = parseFindDataSearchKeywordsText(prev)
+      return formatFindDataSearchKeywordList([...currentKeywords, ...keywords])
+    })
+    return keywords.length
+  }
+
   const removeAllDetailRows = () => {
-    if (details.length === 0) return
+    const count = isFindDataSearchCampaign && !isEditingSavedCampaign ? findDataSearchKeywordRows.length : details.length
+    if (count === 0) return
 
     showConfirm(
-      `Xoá hết ${details.length} dòng data trong danh sách?`,
+      `Xoá hết ${count} dòng data trong danh sách?`,
       () => {
+        if (isFindDataSearchCampaign && !isEditingSavedCampaign) {
+          setFindDataSearchKeywordsText('')
+          return
+        }
+
         const ids = details
           .map(item => item.id)
           .filter((id): id is number => typeof id === 'number')
@@ -3228,6 +3292,16 @@ export default function CampaignFormModal({
           return
         }
 
+        if (isFindDataSearchCampaign) {
+          const addedCount = appendFindDataSearchKeywords(newRows.map(row => row.uid))
+          if (addedCount > 0) {
+            showAlert(`Đã thêm ${addedCount} từ khóa từ file Excel.`, 'success')
+          } else {
+            showAlert('File Excel trống hoặc không có từ khóa hợp lệ.', 'error')
+          }
+          return
+        }
+
         setDetails(prev => [...prev, ...newRows])
       } catch (err) {
         console.error('Lỗi khi đọc file Excel:', err)
@@ -3286,6 +3360,17 @@ export default function CampaignFormModal({
         }
 
         if (newRows.length > 0) {
+          if (isFindDataSearchCampaign) {
+            const addedCount = appendFindDataSearchKeywords(newRows.map(row => row.uid))
+            showAlert(
+              addedCount > 0
+                ? `Đã thêm ${addedCount} từ khóa từ file TXT.`
+                : 'File TXT trống hoặc không có từ khóa hợp lệ.',
+              addedCount > 0 ? 'success' : 'error'
+            )
+            return
+          }
+
           setDetails(prev => [...prev, ...newRows])
           showAlert(
             isEmailCampaign
@@ -7548,8 +7633,8 @@ export default function CampaignFormModal({
                                 ? 'Danh sách UID'
                                 : 'Danh sách data'}
                   </span>
-                  {details.length > 0 && (
-                    <span className="stepper-section-badge">{details.length}</span>
+                  {detailEntryCount > 0 && (
+                    <span className="stepper-section-badge">{detailEntryCount}</span>
                   )}
                 </div>
                 {collapsedSections['details'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -7576,9 +7661,9 @@ export default function CampaignFormModal({
                   )}
                   {!isEditingSavedCampaign && (
                     <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
-                      {!isPagePostCampaign && !isPageInboxMessageCampaign && (
+                      {!isFindDataSearchCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && (
                         <button className="btn btn-secondary" onClick={addDetailRow}>
-                          <Plus size={14} /> {isFindDataSearchCampaign ? 'Thêm từ khóa' : isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
+                          <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
                         </button>
                       )}
                       {canUploadData && (
@@ -7701,7 +7786,7 @@ export default function CampaignFormModal({
                         type="button"
                         className="btn btn-danger"
                         onClick={removeAllDetailRows}
-                        disabled={loadingDetails || details.length === 0}
+                        disabled={loadingDetails || detailEntryCount === 0}
                         title="Xoá hết data trong danh sách"
                       >
                         <Trash2 size={14} /> Xoá hết
@@ -7731,88 +7816,101 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  <div className="stepper-grid-container">
-                    <table className="campaign-grid">
-                      <thead>
-                        {isCommentSeedingPostCampaign || isFindDataSearchCampaign ? (
-                          <tr>
-                            <th>{isFindDataSearchCampaign ? 'Từ khóa' : 'Link bài post'}</th>
-                            {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
-                          </tr>
-                        ) : isPagePostCampaign ? (
-                          <tr>
-                            <th>Tên fanpage</th>
-                            <th>Page ID</th>
-                            <th>Link</th>
-                            {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
-                          </tr>
-                        ) : (
-                          <tr>
-                            <th>Tên</th>
-                            <th>Số điện thoại</th>
-                            <th>Uid</th>
-                            <th>Email</th>
-                            {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
-                          </tr>
-                        )}
-                      </thead>
-                      <tbody>
-                        {loadingDetails ? (
-                          <tr><td colSpan={detailsColumnCount} className="text-center">Đang tải data...</td></tr>
-                        ) : details.length === 0 ? (
-                          <tr><td colSpan={detailsColumnCount} className="text-center text-muted">Chưa có data nào.</td></tr>
-                        ) : (
-                          details.map((d, i) => (
-                            <tr key={d.id || `new-${i}`}>
-                              {isCommentSeedingPostCampaign || isFindDataSearchCampaign ? (
-                                <td>
-                                  <input
-                                    type="text"
-                                    value={d.uid || ''}
-                                    onChange={e => updateDetailRow(i, 'uid', e.target.value)}
-                                    placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : 'Dán link bài post...'}
-                                    disabled={isEditingSavedCampaign}
-                                  />
-                                </td>
-                              ) : isPagePostCampaign ? (
-                                <>
-                                  <td title={d.name || '-'}>
-                                    <span>{d.name || '-'}</span>
-                                  </td>
-                                  <td title={d.uid || '-'}>
-                                    <span>{d.uid || '-'}</span>
-                                  </td>
-                                  <td title={d.email || '-'}>
-                                    <span>{d.email || '-'}</span>
-                                  </td>
-                                </>
-                              ) : (
-                                <>
-                                  <td>
-                                    <input type="text" value={d.name || ''} onChange={e => updateDetailRow(i, 'name', e.target.value)} placeholder="Tên..." disabled={isEditingSavedCampaign} />
-                                  </td>
-                                  <td>
-                                    <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." disabled={isEditingSavedCampaign} />
-                                  </td>
-                                  <td>
-                                    <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder="UID hoặc link..." disabled={isEditingSavedCampaign} />
-                                  </td>
-                                  <td>
-                                    <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />
-                                  </td>
-                                </>
-                              )}
-                              {!isEditingSavedCampaign && (
-                                <td>
-                                  <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
-                                </td>
-                              )}
+                  {isFindDataSearchCampaign && !isEditingSavedCampaign ? (
+                    <div className="stepper-form-group">
+                      <label>Từ khóa search</label>
+                      <textarea
+                        className="stepper-textarea"
+                        value={findDataSearchKeywordsText}
+                        onChange={e => setFindDataSearchKeywordsText(e.target.value)}
+                        placeholder="spa Hà Nội, thẩm mỹ viện, chăm sóc da"
+                        rows={5}
+                      />
+                    </div>
+                  ) : (
+                    <div className="stepper-grid-container">
+                      <table className="campaign-grid">
+                        <thead>
+                          {isCommentSeedingPostCampaign || isFindDataSearchCampaign ? (
+                            <tr>
+                              <th>{isFindDataSearchCampaign ? 'Từ khóa' : 'Link bài post'}</th>
+                              {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          ) : isPagePostCampaign ? (
+                            <tr>
+                              <th>Tên fanpage</th>
+                              <th>Page ID</th>
+                              <th>Link</th>
+                              {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
+                            </tr>
+                          ) : (
+                            <tr>
+                              <th>Tên</th>
+                              <th>Số điện thoại</th>
+                              <th>Uid</th>
+                              <th>Email</th>
+                              {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
+                            </tr>
+                          )}
+                        </thead>
+                        <tbody>
+                          {loadingDetails ? (
+                            <tr><td colSpan={detailsColumnCount} className="text-center">Đang tải data...</td></tr>
+                          ) : details.length === 0 ? (
+                            <tr><td colSpan={detailsColumnCount} className="text-center text-muted">Chưa có data nào.</td></tr>
+                          ) : (
+                            details.map((d, i) => (
+                              <tr key={d.id || `new-${i}`}>
+                                {isCommentSeedingPostCampaign || isFindDataSearchCampaign ? (
+                                  <td>
+                                    <input
+                                      type="text"
+                                      value={d.uid || ''}
+                                      onChange={e => updateDetailRow(i, 'uid', e.target.value)}
+                                      placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : 'Dán link bài post...'}
+                                      disabled={isEditingSavedCampaign}
+                                    />
+                                  </td>
+                                ) : isPagePostCampaign ? (
+                                  <>
+                                    <td title={d.name || '-'}>
+                                      <span>{d.name || '-'}</span>
+                                    </td>
+                                    <td title={d.uid || '-'}>
+                                      <span>{d.uid || '-'}</span>
+                                    </td>
+                                    <td title={d.email || '-'}>
+                                      <span>{d.email || '-'}</span>
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td>
+                                      <input type="text" value={d.name || ''} onChange={e => updateDetailRow(i, 'name', e.target.value)} placeholder="Tên..." disabled={isEditingSavedCampaign} />
+                                    </td>
+                                    <td>
+                                      <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." disabled={isEditingSavedCampaign} />
+                                    </td>
+                                    <td>
+                                      <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder="UID hoặc link..." disabled={isEditingSavedCampaign} />
+                                    </td>
+                                    <td>
+                                      <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />
+                                    </td>
+                                  </>
+                                )}
+                                {!isEditingSavedCampaign && (
+                                  <td>
+                                    <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
+                                  </td>
+                                )}
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>}
