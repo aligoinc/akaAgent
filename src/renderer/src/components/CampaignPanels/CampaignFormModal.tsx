@@ -29,9 +29,10 @@ const FIND_DATA_TARGET_FIELDS = [
   'findFacebookGroupCommentTargetCampaignIds'
 ] as const
 type FindDataTargetCampaignField = typeof FIND_DATA_TARGET_FIELDS[number]
-type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'dataTypes' | 'sourceTypes'
+type FindDataSourceKind = 'group' | 'search'
+type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'updatedAt' | 'dataTypes' | 'sourceTypes'
 type CampaignPickerSource =
-  | { type: 'findDataSource' }
+  | { type: 'findDataSource'; sourceKind?: FindDataSourceKind }
   | { type: 'messageUidTarget' }
   | { type: 'postLinkTarget' }
   | { type: 'groupPostTarget' }
@@ -45,6 +46,7 @@ interface CampaignPickerRow {
   accountName?: string
   status?: string
   scheduleLabel?: string
+  updatedAtLabel?: string
   dataTypes?: string[]
   sourceTypes?: string[]
   searchText: string
@@ -296,6 +298,13 @@ const FIND_DATA_GROUP_ACTIONS = new Set([
 const FIND_DATA_SEARCH_ACTIONS = new Set([
   FIND_DATA_SEARCH_ACTION_ID
 ])
+
+const getFindDataSourceKindForActionId = (actionId?: string | null): FindDataSourceKind | null => {
+  if (!actionId) return null
+  if (FIND_DATA_GROUP_ACTIONS.has(actionId)) return 'group'
+  if (FIND_DATA_SEARCH_ACTIONS.has(actionId)) return 'search'
+  return null
+}
 
 const COMMENT_SEEDING_FEED_ACTIONS = new Set([
   COMMENT_SEEDING_FEED_ACTION_ID
@@ -663,11 +672,6 @@ const getIncomingFindDataSourceCampaignIds = (
     .map(source => source.id)
 }
 
-const getFindDataLinkedTargetCampaignIds = (extra: CampaignExtraSettings | undefined): number[] =>
-  Array.from(new Set(
-    FIND_DATA_TARGET_FIELDS.flatMap(field => getCampaignIdList(extra?.[field]))
-  ))
-
 const removeFindDataTargetCampaignId = (
   extra: CampaignExtraSettings | undefined,
   targetCampaignId: number | null
@@ -839,7 +843,7 @@ export default function CampaignFormModal({
 }: CampaignFormModalProps) {
   const {
     accounts, campaignActions, campaigns, loadCampaigns,
-    createCampaign, updateCampaign, deleteCampaign,
+    createCampaign, updateCampaign,
     createCampaignInputData
   } = useCampaignStore()
   const canUseEmailFeature = useAuthStore(state => !!state.user?.entitlements?.email)
@@ -1517,7 +1521,12 @@ export default function CampaignFormModal({
     }
     return false
   })
-  const findDataSourceCampaignOptions = allFindDataSourceCampaignOptions.filter(isEditableFindDataSourceCampaign)
+  const getFindDataSourceCampaignOptions = (source: Extract<CampaignPickerSource, { type: 'findDataSource' }>, editableOnly = false): Campaign[] => {
+    const sourceKind = source.sourceKind
+    return allFindDataSourceCampaignOptions
+      .filter(campaign => !sourceKind || getFindDataSourceKindForActionId(campaign.actionId) === sourceKind)
+      .filter(campaign => !editableOnly || isEditableFindDataSourceCampaign(campaign))
+  }
   const allFindDataSourceCampaignOptionsKey = allFindDataSourceCampaignOptions
     .map(c => [
       c.id,
@@ -1528,7 +1537,7 @@ export default function CampaignFormModal({
     ].join(':'))
     .join('|')
   const sourceSelectionTargetCampaignId = cloneFromId || (isEditingSavedCampaign && campaign?.id ? campaign.id : null)
-  const sourceDeletionCurrentTargetCampaignId = isEditingSavedCampaign && campaign?.id ? campaign.id : null
+  const sourceDetachCurrentTargetCampaignId = isEditingSavedCampaign && campaign?.id ? campaign.id : null
   const sourceSelectionScopeKey = `${sourceSelectionTargetCampaignId || 'new'}:${formData.actionId}`
   const getAccountRateLimitMinutes = (accountId: number) =>
     normalizeRateLimitMinutes(accounts.find(account => account.id === accountId)?.rateLimitMinutes)
@@ -4587,6 +4596,7 @@ export default function CampaignFormModal({
   const toFindDataSourcePickerRow = (item: Campaign): CampaignPickerRow => {
     const accountName = item.accountName || `Tài khoản #${item.accountId}`
     const scheduleLabel = getCampaignScheduleLabel(item)
+    const updatedAtLabel = formatPickerDateTime(item.updatedAt)
     const dataTypes = getFindDataTypeLabels(item.extraSettings)
     const sourceTypes = getFindDataSourceLabels(item.extraSettings)
     return {
@@ -4595,9 +4605,10 @@ export default function CampaignFormModal({
       accountName,
       status: item.status || 'Không rõ',
       scheduleLabel,
+      updatedAtLabel,
       dataTypes,
       sourceTypes,
-      searchText: buildCampaignPickerSearchText([item.name, accountName, item.status, scheduleLabel, dataTypes, sourceTypes])
+      searchText: buildCampaignPickerSearchText([item.name, accountName, item.status, scheduleLabel, updatedAtLabel, dataTypes, sourceTypes])
     }
   }
 
@@ -4616,13 +4627,50 @@ export default function CampaignFormModal({
     }
   }
 
+  const getFindDataSourceKindForDraft = (draft: InternalCampaignDraft): FindDataSourceKind | null => {
+    const firstActionId = String(draft.items[0]?.campaignPayload.actionId || draft.actionId || '')
+    return getFindDataSourceKindForActionId(firstActionId)
+  }
+
+  const getFindDataSourceKindForSelectedId = (id: number): FindDataSourceKind | null => {
+    const draft = internalCampaignDrafts.find(item => item.tempId === id)
+    if (draft) return getFindDataSourceKindForDraft(draft)
+
+    const sourceCampaign = allFindDataSourceCampaignOptions.find(item => item.id === id) || campaigns.find(item => item.id === id)
+    return getFindDataSourceKindForActionId(sourceCampaign?.actionId)
+  }
+
   const draftMatchesCampaignPickerSource = (draft: InternalCampaignDraft, source: CampaignPickerSource): boolean => {
     if (source.type === 'external') return false
     if (draft.sourceType !== source.type) return false
     if (source.type === 'findDataSource') {
-      return !draft.requiredTargetField || draft.requiredTargetField === targetFindDataField
+      const matchesTargetField = !draft.requiredTargetField || draft.requiredTargetField === targetFindDataField
+      const matchesSourceKind = !source.sourceKind || getFindDataSourceKindForDraft(draft) === source.sourceKind
+      return matchesTargetField && matchesSourceKind
     }
     return true
+  }
+
+  const getSelectedFindDataSourceCampaignIdsForSource = (source: Extract<CampaignPickerSource, { type: 'findDataSource' }>): number[] => {
+    if (!source.sourceKind) return selectedFindDataSourceCampaignIds
+    return selectedFindDataSourceCampaignIds.filter(id => getFindDataSourceKindForSelectedId(id) === source.sourceKind)
+  }
+
+  const setSelectedFindDataSourceCampaignIdsForSource = (
+    source: Extract<CampaignPickerSource, { type: 'findDataSource' }>,
+    ids: number[]
+  ) => {
+    findDataSourceSelectionTouchedRef.current = true
+    const nextIds = getPickerCampaignIdList(ids)
+    if (!source.sourceKind) {
+      setSelectedFindDataSourceCampaignIds(nextIds)
+      return
+    }
+
+    setSelectedFindDataSourceCampaignIds(prev => {
+      const preservedIds = prev.filter(id => getFindDataSourceKindForSelectedId(id) !== source.sourceKind)
+      return getPickerCampaignIdList([...preservedIds, ...nextIds])
+    })
   }
 
   const toDraftCampaignPickerRow = (draft: InternalCampaignDraft): CampaignPickerRow => {
@@ -4640,6 +4688,7 @@ export default function CampaignFormModal({
     const dataTypes = draft.sourceType === 'findDataSource' ? getFindDataTypeLabels(extraSettings) : undefined
     const sourceTypes = draft.sourceType === 'findDataSource' ? getFindDataSourceLabels(extraSettings) : undefined
     const scheduleLabel = getCampaignScheduleLabel(payload as Pick<Campaign, 'schedule' | 'scheduleType' | 'scheduleDays' | 'scheduleWeekDays'>)
+    const updatedAtLabel = draft.sourceType === 'findDataSource' ? formatPickerDateTime(payload.updatedAt) : undefined
 
     return {
       id: draft.tempId,
@@ -4647,9 +4696,10 @@ export default function CampaignFormModal({
       accountName: accountNames.join(', '),
       status: 'Tạm',
       scheduleLabel,
+      updatedAtLabel,
       dataTypes,
       sourceTypes,
-      searchText: buildCampaignPickerSearchText([displayName, accountNames, 'Tạm', scheduleLabel, dataTypes, sourceTypes])
+      searchText: buildCampaignPickerSearchText([displayName, accountNames, 'Tạm', scheduleLabel, updatedAtLabel, dataTypes, sourceTypes])
     }
   }
 
@@ -4704,7 +4754,12 @@ export default function CampaignFormModal({
     const draftRows = internalCampaignDrafts
       .filter(draft => draftMatchesCampaignPickerSource(draft, source))
       .map(toDraftCampaignPickerRow)
-    if (source.type === 'findDataSource') return [...findDataSourceCampaignOptions.map(toFindDataSourcePickerRow), ...draftRows]
+    if (source.type === 'findDataSource') {
+      return [
+        ...getFindDataSourceCampaignOptions(source, true).map(toFindDataSourcePickerRow),
+        ...draftRows
+      ]
+    }
     if (source.type === 'messageUidTarget') return [...messageUidCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
     if (source.type === 'postLinkTarget') return [...postLinkCommentCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
     if (source.type === 'groupPostTarget') return groupPostCampaignOptions.map(toInternalCampaignPickerRow)
@@ -4784,6 +4839,8 @@ export default function CampaignFormModal({
     if (source.type === 'messageUidTarget') return MESSAGE_UID_ACTION_ID
     if (source.type === 'postLinkTarget') return COMMENT_SEEDING_POST_ACTION_ID
     if (source.type === 'findDataSource') {
+      if (source.sourceKind === 'group') return FIND_DATA_GROUP_ACTION_ID
+      if (source.sourceKind === 'search') return FIND_DATA_SEARCH_ACTION_ID
       return targetFindDataField === 'findFacebookGroupPostTargetCampaignIds' || targetFindDataField === 'findFacebookGroupCommentTargetCampaignIds'
         ? FIND_DATA_SEARCH_ACTION_ID
         : FIND_DATA_GROUP_ACTION_ID
@@ -4847,13 +4904,14 @@ export default function CampaignFormModal({
       searchText: String(id)
     })
     const columns: CampaignPickerColumn[] = source.type === 'findDataSource'
-      ? ['name', 'account', 'status', 'schedule', 'dataTypes', 'sourceTypes']
+      ? ['name', 'account', 'status', 'schedule', 'updatedAt', 'dataTypes', 'sourceTypes']
       : ['name', 'account', 'status', 'schedule']
     const columnLabels: Record<CampaignPickerColumn, string> = {
       name: 'Tên chiến dịch',
       account: source.type === 'external' ? 'Tài khoản/Shop' : 'Tài khoản',
       status: 'Trạng thái',
       schedule: 'Lịch chạy',
+      updatedAt: 'Ngày update',
       dataTypes: 'Data tìm',
       sourceTypes: 'Nguồn tìm'
     }
@@ -4863,6 +4921,9 @@ export default function CampaignFormModal({
       if (column === 'status') return row.status || <span className="campaign-picker-muted">Không rõ</span>
       if (column === 'schedule') return row.scheduleLabel
         ? <span className="campaign-picker-table-schedule">{row.scheduleLabel}</span>
+        : <span className="campaign-picker-muted">Chưa có</span>
+      if (column === 'updatedAt') return row.updatedAtLabel
+        ? <span className="campaign-picker-table-schedule">{row.updatedAtLabel}</span>
         : <span className="campaign-picker-muted">Chưa có</span>
       if (column === 'dataTypes') return renderTextList(row.dataTypes)
       return renderTextList(row.sourceTypes)
@@ -4896,37 +4957,22 @@ export default function CampaignFormModal({
     <div className="campaign-picker-readonly-note">{text}</div>
   )
 
-  const getLinkedCampaignNames = (ids: number[]): string => {
-    const names = ids.slice(0, 3).map(id => {
-      const linked = campaigns.find(item => item.id === id)
-      return linked ? `${linked.name} (#${id})` : `#${id}`
-    })
-    const suffix = ids.length > names.length ? ` và ${ids.length - names.length} chiến dịch khác` : ''
-    return `${names.join(', ')}${suffix}`
-  }
+  const getFindDataSourceDetachBlockReason = (sourceCampaign: Campaign): string =>
+    isEditableFindDataSourceCampaign(sourceCampaign)
+      ? ''
+      : 'Chỉ có thể gỡ chiến dịch nguồn khi trạng thái là "chờ xử lý" hoặc "tạm dừng".'
 
-  const getFindDataSourceDeleteBlockReason = (sourceCampaign: Campaign): string => {
-    if (sourceCampaign.status === 'đang chạy') {
-      return 'Không thể xoá chiến dịch đang chạy.'
-    }
-
-    const linkedTargetIds = getFindDataLinkedTargetCampaignIds(sourceCampaign.extraSettings)
-    const otherTargetIds = linkedTargetIds.filter(id => id !== sourceDeletionCurrentTargetCampaignId)
-    if (otherTargetIds.length > 0) {
-      return `Không thể xoá vì chiến dịch nguồn đang gắn với chiến dịch khác: ${getLinkedCampaignNames(otherTargetIds)}.`
-    }
-
-    return ''
-  }
-
-  const getFindDataSourceListItems = () => {
-    const sourceById = new Map(allFindDataSourceCampaignOptions.map(item => [item.id, item]))
+  const getFindDataSourceListItems = (
+    source: Extract<CampaignPickerSource, { type: 'findDataSource' }>,
+    selectedIds = selectedFindDataSourceCampaignIds
+  ) => {
+    const sourceById = new Map(getFindDataSourceCampaignOptions(source).map(item => [item.id, item]))
     const draftById = new Map(internalCampaignDrafts
-      .filter(draft => draftMatchesCampaignPickerSource(draft, { type: 'findDataSource' }))
+      .filter(draft => draftMatchesCampaignPickerSource(draft, source))
       .map(draft => [draft.tempId, draft])
     )
 
-    return selectedFindDataSourceCampaignIds.map(id => {
+    return selectedIds.map(id => {
       const draft = draftById.get(id)
       if (draft) {
         return {
@@ -4983,14 +5029,14 @@ export default function CampaignFormModal({
     setEditingSourceCampaign(sourceCampaign)
   }
 
-  const deleteFindDataSourceCampaign = (sourceId: number) => {
+  const detachFindDataSourceCampaign = (sourceId: number) => {
     const draft = internalCampaignDrafts.find(item => item.tempId === sourceId)
     if (draft) {
       const row = toDraftCampaignPickerRow(draft)
       showConfirm(
-        `Xoá chiến dịch nguồn tạm "${row.name}" khỏi danh sách?`,
+        `Gỡ chiến dịch nguồn tạm "${row.name}" khỏi danh sách?`,
         () => removeFindDataSourceSelection(sourceId),
-        { title: 'Xoá chiến dịch nguồn tạm', confirmText: 'Xoá', variant: 'danger' }
+        { title: 'Gỡ chiến dịch nguồn tạm', confirmText: 'Gỡ' }
       )
       return
     }
@@ -5001,34 +5047,37 @@ export default function CampaignFormModal({
       return
     }
 
-    const blockReason = getFindDataSourceDeleteBlockReason(sourceCampaign)
+    const blockReason = getFindDataSourceDetachBlockReason(sourceCampaign)
     if (blockReason) {
       showAlert(blockReason, 'info')
       return
     }
 
     showConfirm(
-      `Xoá chiến dịch nguồn "${sourceCampaign.name}"?`,
+      `Gỡ chiến dịch nguồn "${sourceCampaign.name}" khỏi chiến dịch hiện tại?`,
       async () => {
         try {
-          if (sourceDeletionCurrentTargetCampaignId) {
+          if (sourceDetachCurrentTargetCampaignId) {
             await updateCampaign(sourceCampaign.id, {
-              extraSettings: removeFindDataTargetCampaignId(sourceCampaign.extraSettings, sourceDeletionCurrentTargetCampaignId)
+              extraSettings: removeFindDataTargetCampaignId(sourceCampaign.extraSettings, sourceDetachCurrentTargetCampaignId)
             })
           }
-          await deleteCampaign(sourceCampaign.id)
           removeFindDataSourceSelection(sourceCampaign.id)
-          showAlert('Đã xoá chiến dịch nguồn.', 'success')
+          showAlert('Đã gỡ chiến dịch nguồn.', 'success')
         } catch (err) {
-          showAlert(formatIpcErrorMessage(err, 'Không thể xoá chiến dịch nguồn.'), 'error')
+          showAlert(formatIpcErrorMessage(err, 'Không thể gỡ chiến dịch nguồn.'), 'error')
         }
       },
-      { title: 'Xoá chiến dịch nguồn', confirmText: 'Xoá', variant: 'danger' }
+      { title: 'Gỡ chiến dịch nguồn', confirmText: 'Gỡ' }
     )
   }
 
-  const renderFindDataSourceCampaignList = (emptyText: string) => {
-    const items = getFindDataSourceListItems()
+  const renderFindDataSourceCampaignList = (
+    emptyText: string,
+    source: Extract<CampaignPickerSource, { type: 'findDataSource' }> = { type: 'findDataSource' },
+    selectedIds = selectedFindDataSourceCampaignIds
+  ) => {
+    const items = getFindDataSourceListItems(source, selectedIds)
     if (items.length === 0) {
       return <div className="campaign-picker-empty-summary">{emptyText}</div>
     }
@@ -5043,6 +5092,7 @@ export default function CampaignFormModal({
               <th>Tài khoản</th>
               <th>Trạng thái</th>
               <th>Lịch chạy</th>
+              <th>Ngày update</th>
               <th>Data tìm</th>
               <th>Nguồn tìm</th>
             </tr>
@@ -5050,9 +5100,9 @@ export default function CampaignFormModal({
           <tbody>
             {items.map(item => {
               const { row, campaign: sourceCampaign } = item
-              const deleteBlockReason = sourceCampaign ? getFindDataSourceDeleteBlockReason(sourceCampaign) : ''
+              const detachBlockReason = sourceCampaign ? getFindDataSourceDetachBlockReason(sourceCampaign) : ''
               const editDisabled = sourceCampaign ? !isEditableFindDataSourceCampaign(sourceCampaign) : !item.draft
-              const deleteDisabled = !!deleteBlockReason
+              const detachDisabled = !!detachBlockReason
               return (
                 <tr key={item.id} title={getCampaignPickerRowLabel(row)}>
                   <td className="source-campaign-actions-col">
@@ -5071,10 +5121,10 @@ export default function CampaignFormModal({
                       </button>
                       <button
                         type="button"
-                        className="btn-icon danger"
-                        onClick={() => deleteFindDataSourceCampaign(item.id)}
-                        disabled={deleteDisabled}
-                        title={deleteBlockReason || 'Xoá'}
+                        className="btn-icon"
+                        onClick={() => detachFindDataSourceCampaign(item.id)}
+                        disabled={detachDisabled}
+                        title={detachBlockReason || 'Gỡ'}
                       >
                         <Trash2 size={13} />
                       </button>
@@ -5085,6 +5135,9 @@ export default function CampaignFormModal({
                   <td>{row.status || <span className="campaign-picker-muted">Không rõ</span>}</td>
                   <td>{row.scheduleLabel
                     ? <span className="campaign-picker-table-schedule">{row.scheduleLabel}</span>
+                    : <span className="campaign-picker-muted">Chưa có</span>}</td>
+                  <td>{row.updatedAtLabel
+                    ? <span className="campaign-picker-table-schedule">{row.updatedAtLabel}</span>
                     : <span className="campaign-picker-muted">Chưa có</span>}</td>
                   <td>{renderTextList(row.dataTypes)}</td>
                   <td>{renderTextList(row.sourceTypes)}</td>
@@ -5147,6 +5200,46 @@ export default function CampaignFormModal({
   }
 
   const renderFindDataSourceCampaignPicker = () => {
+    const renderFindDataSourceKindBlock = (
+      sourceKind: FindDataSourceKind,
+      title: string,
+      emptyPickerText: string,
+      emptyListText: string
+    ) => {
+      const source: Extract<CampaignPickerSource, { type: 'findDataSource' }> = { type: 'findDataSource', sourceKind }
+      const selectedIds = getSelectedFindDataSourceCampaignIdsForSource(source)
+      return (
+        <div className="source-campaign-kind-block">
+          <div className="source-campaign-kind-title">{title}</div>
+          <div className="source-campaign-toolbar">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm campaign-picker-select-button"
+              onClick={() => openCampaignPicker({
+                title: `Chọn nguồn chiến dịch: ${title}`,
+                source,
+                columns: ['name', 'account', 'status', 'schedule', 'updatedAt', 'dataTypes', 'sourceTypes'],
+                emptyText: emptyPickerText,
+                selectedIds,
+                onConfirm: ids => setSelectedFindDataSourceCampaignIdsForSource(source, ids)
+              })}
+            >
+              Chọn chiến dịch
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm source-campaign-add-button"
+              onClick={() => openDraftCampaignForm(source, undefined, 'Thêm')}
+            >
+              <Plus size={15} /> Thêm chiến dịch
+            </button>
+          </div>
+          <div className="source-campaign-list-title">Danh sách chiến dịch</div>
+          {renderFindDataSourceCampaignList(emptyListText, source, selectedIds)}
+        </div>
+      )
+    }
+
     const emptyMessage =
       targetFindDataField === 'findUidTargetCampaignIds'
         ? 'Chưa có chiến dịch tìm data phù hợp để làm nguồn UID.'
@@ -5163,6 +5256,29 @@ export default function CampaignFormModal({
       )
     }
 
+    if (targetFindDataField === 'findUidTargetCampaignIds') {
+      return (
+        <div className="stepper-form-group">
+          <label>Chiến dịch nguồn</label>
+          <div className="campaign-picker-field source-campaign-kind-list">
+            {renderFindDataSourceKindBlock(
+              'group',
+              'Tìm trong group',
+              'Chưa có chiến dịch tìm trong group phù hợp để làm nguồn UID.',
+              'Chưa chọn chiến dịch nguồn tìm trong group nào.'
+            )}
+            {renderFindDataSourceKindBlock(
+              'search',
+              'Tìm bằng search',
+              'Chưa có chiến dịch tìm bằng search phù hợp để làm nguồn UID.',
+              'Chưa chọn chiến dịch nguồn tìm bằng search nào.'
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    const source: Extract<CampaignPickerSource, { type: 'findDataSource' }> = { type: 'findDataSource' }
     return (
       <div className="stepper-form-group">
         <label>Chiến dịch nguồn</label>
@@ -5173,14 +5289,11 @@ export default function CampaignFormModal({
               className="btn btn-secondary btn-sm campaign-picker-select-button"
               onClick={() => openCampaignPicker({
                 title: 'Chọn nguồn chiến dịch tìm kiếm data',
-                source: { type: 'findDataSource' },
-                columns: ['name', 'account', 'status', 'schedule', 'dataTypes', 'sourceTypes'],
+                source,
+                columns: ['name', 'account', 'status', 'schedule', 'updatedAt', 'dataTypes', 'sourceTypes'],
                 emptyText: emptyMessage,
                 selectedIds: selectedFindDataSourceCampaignIds,
-                onConfirm: ids => {
-                  findDataSourceSelectionTouchedRef.current = true
-                  setSelectedFindDataSourceCampaignIds(ids)
-                }
+                onConfirm: ids => setSelectedFindDataSourceCampaignIdsForSource(source, ids)
               })}
             >
               Chọn chiến dịch
@@ -5188,7 +5301,7 @@ export default function CampaignFormModal({
             <button
               type="button"
               className="btn btn-secondary btn-sm source-campaign-add-button"
-              onClick={() => openDraftCampaignForm({ type: 'findDataSource' }, undefined, 'Thêm')}
+              onClick={() => openDraftCampaignForm(source, undefined, 'Thêm')}
             >
               <Plus size={15} /> Thêm chiến dịch
             </button>
@@ -6293,6 +6406,9 @@ export default function CampaignFormModal({
       if (column === 'schedule') return row.scheduleLabel
         ? <span className="campaign-picker-table-schedule">{row.scheduleLabel}</span>
         : <span className="campaign-picker-muted">Chưa có</span>
+      if (column === 'updatedAt') return row.updatedAtLabel
+        ? <span className="campaign-picker-table-schedule">{row.updatedAtLabel}</span>
+        : <span className="campaign-picker-muted">Chưa có</span>
       if (column === 'dataTypes') return renderTextList(row.dataTypes)
       return renderTextList(row.sourceTypes)
     }
@@ -6302,6 +6418,7 @@ export default function CampaignFormModal({
       account: campaignPickerModal.source.type === 'external' ? 'Tài khoản/Shop' : 'Tài khoản',
       status: 'Trạng thái',
       schedule: 'Lịch chạy',
+      updatedAt: 'Ngày update',
       dataTypes: 'Data tìm',
       sourceTypes: 'Nguồn tìm'
     }
