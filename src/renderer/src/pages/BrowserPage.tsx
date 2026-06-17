@@ -9,7 +9,7 @@ const PLATFORM_URLS: Record<string, string> = {
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com',
 }
-const BROWSERLESS_PLATFORMS = new Set(['zalo'])
+const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email'])
 
 interface BrowserPageProps {
   focusAccountId?: number | null

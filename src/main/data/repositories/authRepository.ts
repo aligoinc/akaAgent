@@ -7,11 +7,13 @@ import {
 } from '../../../shared/types'
 import { getCurrentDeviceIdentity } from '../../services/deviceIdentity'
 import { getSupabaseClient } from '../supabaseClient'
+import {
+  ACCOUNT_EXPIRED_MESSAGE,
+  ensureAkaAgentSubscriptionActive,
+  loadOrganizationEntitlements
+} from './entitlementRepository'
 
 const client = () => getSupabaseClient()
-
-const AKA_AGENT_PRODUCT_ID = 3
-const ACCOUNT_EXPIRED_MESSAGE = 'Tài khoản của bạn đã hết hạn'
 
 export const DEFAULT_LOGIN_PREFERENCES: LoginPreferences = {
   rememberLogin: true,
@@ -53,10 +55,6 @@ interface DeviceLoginSettingsRow {
   is_delete?: boolean | null
   created_at?: string
   updated_at?: string
-}
-
-interface OrganizationProductRow {
-  expiration_date?: string | null
 }
 
 const STAFF_SELECT = [
@@ -114,33 +112,7 @@ function throwAuthTechnicalError(context: string, userMessage: string, error: un
 }
 
 async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'organization_id'>): Promise<void> {
-  const { data, error } = await client()
-    .from('org_organization_product')
-    .select('expiration_date')
-    .eq('organization_id', staff.organization_id)
-    .eq('product_id', AKA_AGENT_PRODUCT_ID)
-    .eq('is_deleted', false)
-    .order('expiration_date', { ascending: false, nullsFirst: false })
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) {
-    throwAuthTechnicalError(
-      'check staff subscription',
-      'Không thể kiểm tra hạn sử dụng. Vui lòng thử lại sau.',
-      error
-    )
-  }
-
-  const row = data as unknown as OrganizationProductRow | null
-  const expirationTime = row?.expiration_date ? Date.parse(row.expiration_date) : NaN
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-
-  if (!Number.isFinite(expirationTime) || expirationTime < todayStart.getTime()) {
-    throw new Error(ACCOUNT_EXPIRED_MESSAGE)
-  }
+  await ensureAkaAgentSubscriptionActive(staff.organization_id)
 }
 
 async function loadStaffDevice(staffId: number): Promise<StaffDeviceColumns | null> {
@@ -193,6 +165,8 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     )
   }
 
+  const entitlements = await loadOrganizationEntitlements(staffRow.organization_id)
+
   return {
     staffId: staffRow.id,
     organizationId: staffRow.organization_id,
@@ -201,6 +175,7 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     organizationName: (org?.name as string) || '',
     isAdminAkabiz: !!staffRow.is_admin_akabiz,
     useTestWorkflow: !!staffRow.use_test_workflow,
+    entitlements,
     deviceLabel: deviceRecord.device_label || null,
     devicePlatform: deviceRecord.device_platform || null,
     deviceBoundAt: deviceRecord.device_bound_at || null,

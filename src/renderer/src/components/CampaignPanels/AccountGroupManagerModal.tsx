@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from
 import { Plus, Save, Trash2, UserMinus, UserPlus, X } from 'lucide-react'
 import { AccountGroupSettings, AutoAccount, AutoAccountAction, AutoAccountGroup } from '../../../../shared/types'
 import { useUiStore } from '../../stores/uiStore'
+import { useAuthStore } from '../../stores/authStore'
 
 interface AccountGroupManagerModalProps {
   groups: AutoAccountGroup[]
@@ -22,6 +23,7 @@ type ActionLimitDraft = {
 const PLATFORM_OPTIONS = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'zalo', label: 'Zalo' },
+  { value: 'email', label: 'Email' },
   { value: 'tiktok', label: 'TikTok' },
   { value: 'instagram', label: 'Instagram' },
   { value: 'other', label: 'Khác' }
@@ -71,6 +73,7 @@ export default function AccountGroupManagerModal({
   onDeleteGroup,
   onAssignAccounts
 }: AccountGroupManagerModalProps) {
+  const canUseEmailFeature = useAuthStore(state => !!state.user?.entitlements?.email)
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [flatformType, setFlatformType] = useState(initialPlatform)
@@ -83,6 +86,10 @@ export default function AccountGroupManagerModal({
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<number>>(new Set())
   const [selectedAddIds, setSelectedAddIds] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  const platformOptions = useMemo(
+    () => PLATFORM_OPTIONS.filter(option => option.value !== 'email' || canUseEmailFeature),
+    [canUseEmailFeature]
+  )
 
   const selectedGroup = useMemo(
     () => groups.find(group => group.id === selectedGroupId) || null,
@@ -187,6 +194,12 @@ export default function AccountGroupManagerModal({
     setError(null)
   }
 
+  useEffect(() => {
+    if (canUseEmailFeature || flatformType !== 'email') return
+    setFlatformType('facebook')
+    startNew()
+  }, [canUseEmailFeature, flatformType])
+
   const buildSettings = (): AccountGroupSettings => {
     const byActionCode: NonNullable<AccountGroupSettings['byActionCode']> = {}
     for (const [code, draft] of Object.entries(limits)) {
@@ -226,6 +239,10 @@ export default function AccountGroupManagerModal({
     setSaving(true)
     setError(null)
     try {
+      if (flatformType === 'email' && !canUseEmailFeature) {
+        setError('Tính năng Email chưa được kích hoạt hoặc đã hết hạn.')
+        return
+      }
       const payload = {
         name: name.trim(),
         flatformType,
@@ -327,7 +344,7 @@ export default function AccountGroupManagerModal({
                 }}
                 disabled={!!selectedGroup}
               >
-                {PLATFORM_OPTIONS.map(option => (
+                {platformOptions.map(option => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>

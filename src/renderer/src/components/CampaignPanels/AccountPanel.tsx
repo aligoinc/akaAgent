@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react'
 import { FolderCog, Loader2, Plus, ServerCog } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
-import { AutoAccount, ZaloLoginQrEvent } from '../../../../shared/types'
+import { useAuthStore } from '../../stores/authStore'
+import { AutoAccount, ZaloLoginQrEvent, EmailAccountConfig } from '../../../../shared/types'
+
+const EMPTY_EMAIL_CONFIG: EmailAccountConfig = {
+  brandName: '', host: 'smtp.gmail.com', port: 587, secure: false, user: '', pass: '', fromEmail: '', replyTo: '', cc: ''
+}
 import AccountContextMenu from './AccountContextMenu'
 import AccountInfoModal from './AccountInfoModal'
 import AccountGroupAssignModal from './AccountGroupAssignModal'
@@ -22,6 +27,43 @@ const getErrorMessage = (err: unknown, fallback: string) => {
   return fallback
 }
 
+const normalizeEmailConfig = (config?: Partial<EmailAccountConfig> | null): EmailAccountConfig => {
+  const merged = { ...EMPTY_EMAIL_CONFIG, ...(config || {}) }
+  const secure = merged.secure === true
+  const port = Math.floor(Number(merged.port))
+  return {
+    brandName: String(merged.brandName || '').trim(),
+    host: String(merged.host || '').trim(),
+    port: Number.isFinite(port) && port > 0 ? port : (secure ? 465 : 587),
+    secure,
+    user: String(merged.user || '').trim(),
+    pass: String(merged.pass ?? ''),
+    fromEmail: String(merged.fromEmail || '').trim(),
+    replyTo: String(merged.replyTo || '').trim(),
+    cc: String(merged.cc || '').trim()
+  }
+}
+
+const areEmailConfigsEqual = (
+  left: EmailAccountConfig | null,
+  right: EmailAccountConfig | null
+): boolean => {
+  if (!left || !right) return false
+  const a = normalizeEmailConfig(left)
+  const b = normalizeEmailConfig(right)
+  return (
+    a.brandName === b.brandName &&
+    a.host === b.host &&
+    a.port === b.port &&
+    a.secure === b.secure &&
+    a.user === b.user &&
+    a.pass === b.pass &&
+    a.fromEmail === b.fromEmail &&
+    a.replyTo === b.replyTo &&
+    a.cc === b.cc
+  )
+}
+
 export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
   const {
     accounts,
@@ -40,6 +82,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     updateProxy,
     deleteProxy
   } = useCampaignStore()
+  const canUseEmailFeature = useAuthStore(state => !!state.user?.entitlements?.email)
   const [showForm, setShowForm] = useState(false)
   const [showGroupManager, setShowGroupManager] = useState(false)
   const [showProxyManager, setShowProxyManager] = useState(false)
@@ -52,12 +95,15 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [zaloLoginAccount, setZaloLoginAccount] = useState<AutoAccount | null>(null)
   const [zaloLoginEvent, setZaloLoginEvent] = useState<ZaloLoginQrEvent | null>(null)
   const [zaloLoginStarting, setZaloLoginStarting] = useState(false)
-  const [formData, setFormData] = useState({ 
+  const [formData, setFormData] = useState({
     name: '',
     flatformType: 'facebook',
     accountGroupId: null as number | null,
     proxyId: null as number | null
   })
+  const [emailConfig, setEmailConfig] = useState<EmailAccountConfig>({ ...EMPTY_EMAIL_CONFIG })
+  const [originalEmailConfig, setOriginalEmailConfig] = useState<EmailAccountConfig | null>(null)
+  const [verifyingEmail, setVerifyingEmail] = useState(false)
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -70,6 +116,13 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     loadAccountGroups()
     loadProxies()
   }, [loadAccounts, loadAccountGroups, loadProxies])
+
+  useEffect(() => {
+    if (canUseEmailFeature || formData.flatformType !== 'email') return
+    setFormData(prev => ({ ...prev, flatformType: 'facebook', accountGroupId: null }))
+    setEmailConfig({ ...EMPTY_EMAIL_CONFIG })
+    setOriginalEmailConfig(null)
+  }, [canUseEmailFeature, formData.flatformType])
 
   useEffect(() => {
     if (!window.electronAPI?.onZaloLoginQrEvent) return
@@ -94,6 +147,35 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   const resetForm = () => {
     setFormData({ name: '', flatformType: 'facebook', accountGroupId: null, proxyId: null })
+    setEmailConfig({ ...EMPTY_EMAIL_CONFIG })
+    setOriginalEmailConfig(null)
+  }
+
+  const handleVerifyEmail = async () => {
+    if (verifyingEmail) return
+    if (!canUseEmailFeature) {
+      useUiStore.getState().showAlert('Tính năng Email chưa được kích hoạt hoặc đã hết hạn.', 'error')
+      return
+    }
+    const normalizedEmailConfig = normalizeEmailConfig(emailConfig)
+    setEmailConfig(normalizedEmailConfig)
+    if (!normalizedEmailConfig.host || !normalizedEmailConfig.fromEmail) {
+      useUiStore.getState().showAlert('Vui lòng nhập Server name và Email gửi', 'error')
+      return
+    }
+    setVerifyingEmail(true)
+    try {
+      const result = await window.electronAPI.verifyEmailConfig(normalizedEmailConfig)
+      if (result.ok) {
+        useUiStore.getState().showAlert('Kết nối SMTP thành công', 'success')
+      } else {
+        useUiStore.getState().showAlert(`Kết nối SMTP thất bại: ${result.error || ''}`, 'error')
+      }
+    } catch (err: any) {
+      useUiStore.getState().showAlert(`Lỗi kiểm tra SMTP: ${err.message}`, 'error')
+    } finally {
+      setVerifyingEmail(false)
+    }
   }
 
   const openCreateForm = () => {
@@ -103,7 +185,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const openGroupManager = (platform = formData.flatformType) => {
-    setGroupManagerPlatform(platform)
+    setGroupManagerPlatform(platform === 'email' && !canUseEmailFeature ? 'facebook' : platform)
     setShowGroupManager(true)
   }
 
@@ -124,6 +206,19 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         useUiStore.getState().showAlert('Không thể đổi proxy khi tài khoản Zalo đang chạy', 'error')
         return
       }
+      const normalizedEmailConfig = normalizeEmailConfig(emailConfig)
+      if (formData.flatformType === 'email') {
+        if (!canUseEmailFeature) {
+          useUiStore.getState().showAlert('Tính năng Email chưa được kích hoạt hoặc đã hết hạn.', 'error')
+          return
+        }
+        setEmailConfig(normalizedEmailConfig)
+        if (!normalizedEmailConfig.host || !normalizedEmailConfig.fromEmail || !normalizedEmailConfig.user || !normalizedEmailConfig.pass) {
+          useUiStore.getState().showAlert('Vui lòng nhập đủ Server name, Email gửi, Username, Password', 'error')
+          return
+        }
+      }
+
       const payload = {
         name: formData.name,
         flatformType: formData.flatformType,
@@ -131,8 +226,10 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         proxyId: formData.proxyId
       }
 
+      let accountId: number
       if (editingAccount) {
         await updateAccount(editingAccount.id, payload)
+        accountId = editingAccount.id
         if (proxyChanged) {
           if (editingAccount.flatformType === 'zalo') {
             useUiStore.getState().showAlert('Đã lưu proxy thành công.', 'success')
@@ -141,8 +238,23 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           }
         }
       } else {
-        await createAccount(payload)
+        const created = await createAccount(payload)
+        accountId = created.id
       }
+
+      if (formData.flatformType === 'email') {
+        const emailConfigChanged = !editingAccount || !areEmailConfigsEqual(normalizedEmailConfig, originalEmailConfig)
+        if (emailConfigChanged) {
+          const result = await window.electronAPI.saveEmailConfig(accountId, normalizedEmailConfig)
+          await loadAccounts()
+          if (result.verified) {
+            useUiStore.getState().showAlert('Đã lưu cấu hình & kết nối SMTP thành công', 'success')
+          } else {
+            useUiStore.getState().showAlert(`Đã lưu cấu hình. Kết nối SMTP thất bại: ${result.error || ''}`, 'error')
+          }
+        }
+      }
+
       setShowForm(false)
       setEditingAccount(null)
       resetForm()
@@ -171,6 +283,18 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       accountGroupId: account.accountGroupId ?? null,
       proxyId: account.proxyId ?? null
     })
+    setEmailConfig({ ...EMPTY_EMAIL_CONFIG })
+    setOriginalEmailConfig(null)
+    if (account.flatformType === 'email') {
+      window.electronAPI?.getEmailConfig?.(account.id)
+        .then(cfg => {
+          if (!cfg) return
+          const normalizedEmailConfig = normalizeEmailConfig(cfg)
+          setEmailConfig(normalizedEmailConfig)
+          setOriginalEmailConfig(normalizedEmailConfig)
+        })
+        .catch(() => {})
+    }
     setShowForm(true)
   }
 
@@ -369,7 +493,31 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           >
             <option value="facebook">Facebook</option>
             <option value="zalo">Zalo</option>
+            {canUseEmailFeature && <option value="email">Email</option>}
           </select>
+
+          {canUseEmailFeature && formData.flatformType === 'email' && (
+            <div className="panel-email-config" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input className="panel-input" placeholder="Thương hiệu (tên người gửi)" value={emailConfig.brandName || ''} onChange={e => setEmailConfig(p => ({ ...p, brandName: e.target.value }))} />
+              <input className="panel-input" placeholder="Server name (SMTP host)" value={emailConfig.host} onChange={e => setEmailConfig(p => ({ ...p, host: e.target.value }))} />
+              <input className="panel-input" placeholder="Email gửi" value={emailConfig.fromEmail} onChange={e => setEmailConfig(p => ({ ...p, fromEmail: e.target.value }))} />
+              <input className="panel-input" placeholder="Email nhận phản hồi (Reply-To)" value={emailConfig.replyTo || ''} onChange={e => setEmailConfig(p => ({ ...p, replyTo: e.target.value }))} />
+              <input className="panel-input" placeholder="Email CC" value={emailConfig.cc || ''} onChange={e => setEmailConfig(p => ({ ...p, cc: e.target.value }))} />
+              <input className="panel-input" placeholder="Username" value={emailConfig.user} onChange={e => setEmailConfig(p => ({ ...p, user: e.target.value }))} />
+              <input className="panel-input" type="password" placeholder="Password" value={emailConfig.pass} onChange={e => setEmailConfig(p => ({ ...p, pass: e.target.value }))} />
+              <div className="panel-input-row" style={{ alignItems: 'center', gap: 12 }}>
+                <input className="panel-input" type="number" placeholder="Port" value={emailConfig.port} onChange={e => setEmailConfig(p => ({ ...p, port: Number(e.target.value) || 0 }))} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                  <input type="checkbox" checked={emailConfig.secure} onChange={e => setEmailConfig(p => ({ ...p, secure: e.target.checked, port: e.target.checked ? 465 : 587 }))} />
+                  <span>SSL</span>
+                </label>
+              </div>
+              <button className="btn btn-secondary" onClick={handleVerifyEmail} disabled={verifyingEmail}>
+                {verifyingEmail && <Loader2 size={14} className="animate-spin" />}
+                {verifyingEmail ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+              </button>
+            </div>
+          )}
 
           <div className="panel-input-row">
             <select

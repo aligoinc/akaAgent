@@ -1,4 +1,4 @@
-import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloSessionCredentials } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloSessionCredentials, EmailAccountConfig } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -46,6 +46,14 @@ export class SupabaseService {
     return accountRepo.markAccountZaloSessionCheck(id, result)
   }
   clearAccountZaloSession(id: number) { return accountRepo.clearAccountZaloSession(id) }
+  getAccountEmailSession(id: number) { return accountRepo.getAccountEmailSession(id) }
+  updateAccountEmailSession(id: number, input: { session: EmailAccountConfig; verified?: boolean; clearError?: boolean }) {
+    return accountRepo.updateAccountEmailSession(id, input)
+  }
+  markAccountEmailSessionCheck(id: number, result: { ok: boolean; error?: string | null }) {
+    return accountRepo.markAccountEmailSessionCheck(id, result)
+  }
+  clearAccountEmailSession(id: number) { return accountRepo.clearAccountEmailSession(id) }
   listAccountGroups(flatformType?: string) { return accountGroupRepo.listAccountGroups(flatformType) }
   createAccountGroup(group: Partial<AutoAccountGroup>) { return accountGroupRepo.createAccountGroup(group) }
   updateAccountGroup(id: number, updates: Partial<AutoAccountGroup>) { return accountGroupRepo.updateAccountGroup(id, updates) }
@@ -131,7 +139,9 @@ export class SupabaseService {
   getAccountActionReportDetails(query: AccountActionReportDetailQuery) { return reportRepo.getAccountActionReportDetails(query) }
 
   // =========== ACCOUNT ACTION LIMITS / ERRORS ===========
-  listAccountActions(flatformType?: string) { return accountActionRepo.listAccountActions(flatformType) }
+  listAccountActions(flatformType?: string, includeRestricted?: boolean) {
+    return accountActionRepo.listAccountActions(flatformType, includeRestricted)
+  }
   listAccountActionOverview(accountId: number) { return accountActionRepo.listAccountActionOverview(accountId) }
   getAccountActionStatus(accountId: number, actionCode: string) { return accountActionRepo.getAccountActionStatus(accountId, actionCode) }
   disableAccountActions(accountId: number, actionCodes: string[], minutes?: number | null, context?: accountActionRepo.DisableAccountActionContext) {

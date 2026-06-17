@@ -256,7 +256,8 @@ const CAMPAIGN_STATUS_SORT_ORDER = new Map<string, number>([
 ])
 
 const CAMPAIGN_PLATFORM_OPTIONS: CampaignFilterOption[] = [
-  { value: 'facebook', label: 'Facebook' }
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'email', label: 'Email' }
 ]
 
 const DETAIL_DOCK_MIN_HEIGHT = 220
@@ -828,6 +829,7 @@ const inferCampaignPlatformFromActionId = (actionId: string) => {
   if (normalized.startsWith('facebook_')) return 'facebook'
   if (normalized.startsWith('zalo_')) return 'zalo'
   if (normalized.startsWith('sms_')) return 'sms'
+  if (normalized.startsWith('email_')) return 'email'
   return ''
 }
 
@@ -1210,6 +1212,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     loadCampaignInputData, loadCampaignDetails, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
+  const canUseEmailFeature = useAuthStore(s => !!s.user?.entitlements?.email)
   const canManageCampaignActions = isAdminAkabiz
   const canViewAllFindDataLogs = isAdminAkabiz
   const showAlert = useUiStore(s => s.showAlert)
@@ -1250,6 +1253,10 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [detailPopoverPosition, setDetailPopoverPosition] = useState<DetailPopoverPosition | null>(null)
   const [showInitialCampaignLoading, setShowInitialCampaignLoading] = useState(true)
   const [showManualCampaignLoading, setShowManualCampaignLoading] = useState(false)
+  const campaignPlatformOptions = useMemo(
+    () => CAMPAIGN_PLATFORM_OPTIONS.filter(option => option.value !== 'email' || canUseEmailFeature),
+    [canUseEmailFeature]
+  )
   const workAreaRef = useRef<HTMLDivElement>(null)
   const detailDockRef = useRef<HTMLDivElement>(null)
   const findDataLogTableWrapRef = useRef<HTMLDivElement>(null)
@@ -1403,6 +1410,11 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   useEffect(() => {
     setSelectedIds(new Set())
   }, [filterAccountId, timePreset, dateFrom, dateTo, campaignNameSearch, statusFilters, platformFilters, actionFilters])
+
+  useEffect(() => {
+    if (canUseEmailFeature || !platformFilters.includes('email')) return
+    setPlatformFilters(prev => prev.filter(value => value !== 'email'))
+  }, [canUseEmailFeature, platformFilters])
 
   useEffect(() => {
     setSelectedInputDataIds(new Set())
@@ -2990,7 +3002,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
             {renderMultiSelectFilter(
               'platform',
               'Nền tảng',
-              CAMPAIGN_PLATFORM_OPTIONS,
+              campaignPlatformOptions,
               platformFilters,
               value => setPlatformFilters(prev => toggleStringValue(prev, value)),
               () => setPlatformFilters([])

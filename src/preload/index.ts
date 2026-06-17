@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -133,8 +133,8 @@ const electronAPI = {
   prepareAccountBrowserSession: (accountId: number): Promise<{ success: boolean; reason?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_PREPARE_BROWSER_SESSION, accountId),
 
-  listAccountActions: (flatformType?: string): Promise<AutoAccountAction[]> =>
-    ipcRenderer.invoke(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, flatformType),
+  listAccountActions: (flatformType?: string, includeRestricted?: boolean): Promise<AutoAccountAction[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, flatformType, includeRestricted),
 
   // Campaign Actions
   listCampaignActions: (): Promise<CampaignAction[]> =>
@@ -337,6 +337,18 @@ const electronAPI = {
 
   syncZaloLabels: (accountId: number): Promise<ZaloLabelOption[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ZALO_SYNC_LABELS, accountId),
+
+  getEmailConfig: (accountId: number): Promise<EmailAccountConfig | null> =>
+    ipcRenderer.invoke(IPC_EVENTS.EMAIL_GET_CONFIG, accountId),
+
+  verifyEmailConfig: (config: EmailAccountConfig): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_EVENTS.EMAIL_VERIFY, config),
+
+  saveEmailConfig: (accountId: number, config: EmailAccountConfig): Promise<{ success: boolean; verified: boolean; error?: string; account: AutoAccount }> =>
+    ipcRenderer.invoke(IPC_EVENTS.EMAIL_SAVE_CONFIG, accountId, config),
+
+  logoutEmail: (accountId: number): Promise<{ success: boolean; account: AutoAccount }> =>
+    ipcRenderer.invoke(IPC_EVENTS.EMAIL_LOGOUT, accountId),
 
   onZaloLoginQrEvent: (callback: (event: ZaloLoginQrEvent) => void): () => void => {
     const handler = (_: unknown, event: ZaloLoginQrEvent) => callback(event)

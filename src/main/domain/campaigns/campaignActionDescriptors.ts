@@ -13,6 +13,7 @@ const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
+const EMAIL_SEND_ACTION_ID = 'email_send'
 
 export function isCommentSeedingCampaign(actionId: string): boolean {
   return actionId === COMMENT_SEEDING_FEED_ACTION_ID || actionId === COMMENT_SEEDING_POST_ACTION_ID
@@ -47,6 +48,7 @@ export function getAccountActionName(actionCode: string): string {
     case 'zalo_add_friend': return 'Kết bạn'
     case 'zalo_tag_contact': return 'Gắn tag Zalo'
     case 'zalo_change_alias': return 'Đổi tên Zalo'
+    case 'email_send': return 'Gửi email'
     default: return actionCode
   }
 }
@@ -191,6 +193,9 @@ export function getCampaignActionDescriptors(
         actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
       }
       if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
+      break
+    case EMAIL_SEND_ACTION_ID:
+      actions.push({ code: 'email_send', name: 'Gửi email' })
       break
   }
 

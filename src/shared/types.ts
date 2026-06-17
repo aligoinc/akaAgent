@@ -27,6 +27,10 @@ export interface AutoAccount {
   zaloSessionUpdatedAt?: string | null
   zaloSessionLastVerifiedAt?: string | null
   zaloSessionLastError?: string | null
+  hasEmailSession?: boolean
+  emailSessionUpdatedAt?: string | null
+  emailSessionLastVerifiedAt?: string | null
+  emailSessionLastError?: string | null
   isDelete: boolean
   staffId?: number
   organizationId?: number
@@ -51,6 +55,27 @@ export interface ZaloSessionCredentials {
   imei: string
   userAgent: string
   language?: string
+}
+
+/** SMTP config cho 1 tài khoản email (lưu trong auto_accounts.email_session jsonb). */
+export interface EmailAccountConfig {
+  brandName?: string   // Thương hiệu — tên hiển thị người gửi
+  host: string         // Server name
+  port: number         // mặc định 587 (STARTTLS); 465 khi secure
+  secure: boolean      // ô SSL
+  user: string         // Username (auth)
+  pass: string         // Password (auth)
+  fromEmail: string    // Email gửi (địa chỉ From, có thể khác user)
+  replyTo?: string     // Email nhận phản hồi
+  cc?: string          // Email CC
+}
+
+export interface EmailSessionCheckResult {
+  success: boolean
+  loggedIn: boolean
+  status: string
+  reason?: string
+  account?: AutoAccount
 }
 
 export interface ZaloLoginQrStartResult {
@@ -252,6 +277,8 @@ export interface CampaignExtraSettings {
   newsfeedCommentContent?: string
   newsfeedCommentUseAI?: boolean
   actionLimits?: CampaignActionLimitSettings // giới hạn gửi theo action_code; top-level là fallback cho campaign cũ
+  emailSubject?: string          // Tiêu đề email (chiến dịch email_send)
+  emailBodyIsHtml?: boolean      // Nội dung email là HTML (chiến dịch email_send)
   imageOption?: 'none' | 'all' | 'random'
   randomImageCount?: number
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
@@ -444,7 +471,28 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   facebook_find_data_search: { field: 'uid', label: 'từ khóa' },
   facebook_comment_seeding: { field: 'uid', label: 'group/page/profile' },
   facebook_comment_seeding_post: { field: 'uid', label: 'link bài post' },
-  zalo_message_phone: { field: 'phone', label: 'SĐT Zalo' }
+  zalo_message_phone: { field: 'phone', label: 'SĐT Zalo' },
+  email_send: { field: 'email', label: 'email người nhận' }
+}
+
+export const normalizeEmailInputDataValue = (value: unknown): string => String(value ?? '').trim()
+
+export const isValidEmailInputDataValue = (value: unknown): boolean => {
+  const email = normalizeEmailInputDataValue(value)
+  if (!email || email.length > 254 || /\s/.test(email)) return false
+  const parts = email.split('@')
+  if (parts.length !== 2) return false
+  const [local, domain] = parts
+  if (!local || !domain || local.length > 64 || domain.length > 253) return false
+  if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(local)) return false
+  if (local.startsWith('.') || local.endsWith('.') || local.includes('..')) return false
+  const labels = domain.split('.')
+  if (labels.length < 2) return false
+  return labels.every(label => (
+    label.length > 0 &&
+    label.length <= 63 &&
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)
+  ))
 }
 
 export const getCampaignInputDataRequirement = (actionId?: string | null): CampaignInputDataRequirement | null => {
@@ -458,7 +506,9 @@ export const isCampaignInputDataValidForAction = (
 ): boolean => {
   const requirement = getCampaignInputDataRequirement(actionId)
   if (!requirement) return false
-  return String(row[requirement.field] || '').trim().length > 0
+  const value = String(row[requirement.field] || '').trim()
+  if (actionId === 'email_send') return isValidEmailInputDataValue(value)
+  return value.length > 0
 }
 
 export interface BulkUpdateCampaignInputDataStatusResult {
@@ -829,6 +879,10 @@ export interface EmailNotificationSettings {
 // Auth Types
 // ============================================
 
+export interface AuthEntitlements {
+  email: boolean
+}
+
 export interface AuthUser {
   staffId: number
   organizationId: number
@@ -837,6 +891,7 @@ export interface AuthUser {
   organizationName: string
   isAdminAkabiz: boolean
   useTestWorkflow: boolean
+  entitlements: AuthEntitlements
   deviceLabel?: string | null
   devicePlatform?: string | null
   deviceBoundAt?: string | null
@@ -1110,6 +1165,10 @@ export const IPC_EVENTS = {
   ZALO_LOGOUT: 'zalo:logout',
   ZALO_LIST_LABELS: 'zalo:list-labels',
   ZALO_SYNC_LABELS: 'zalo:sync-labels',
+  EMAIL_GET_CONFIG: 'email:get-config',
+  EMAIL_SAVE_CONFIG: 'email:save-config',
+  EMAIL_VERIFY: 'email:verify',
+  EMAIL_LOGOUT: 'email:logout',
 
   // Contacts (Load data)
   CONTACTS_LOAD_FRIENDS: 'contacts:load-friends',

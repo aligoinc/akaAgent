@@ -2,8 +2,13 @@ import { AccountGroupSettings, AutoAccountGroup } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountGroupFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
+import {
+  canCurrentUserUseEmailFeature,
+  ensureCurrentUserEmailFeatureActive,
+} from './entitlementRepository'
 
 const client = () => getSupabaseClient()
+const EMAIL_PLATFORM = 'email'
 
 function normalizePositiveInteger(value: unknown): number | undefined {
   const parsed = Math.floor(Number(value))
@@ -43,6 +48,7 @@ function normalizeSettings(settings?: AccountGroupSettings | null): AccountGroup
 
 export async function listAccountGroups(flatformType?: string): Promise<AutoAccountGroup[]> {
   const u = requireCurrentUser()
+  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
   let query = client()
     .from('auto_account_groups')
     .select('*')
@@ -51,7 +57,12 @@ export async function listAccountGroups(flatformType?: string): Promise<AutoAcco
     .order('created_at', { ascending: false })
 
   if (flatformType) {
+    if (flatformType === EMAIL_PLATFORM && !canUseEmailFeature) {
+      return []
+    }
     query = query.eq('flatform_type', flatformType)
+  } else if (!canUseEmailFeature) {
+    query = query.neq('flatform_type', EMAIL_PLATFORM)
   }
 
   const { data, error } = await query
@@ -77,10 +88,14 @@ export async function createAccountGroup(group: Partial<AutoAccountGroup>): Prom
   const u = requireCurrentUser()
   const name = String(group.name || '').trim()
   if (!name) throw new Error('Tên nhóm không được để trống')
+  const flatformType = group.flatformType || 'facebook'
+  if (flatformType === EMAIL_PLATFORM) {
+    await ensureCurrentUserEmailFeatureActive()
+  }
 
   const payload = {
     name,
-    flatform_type: group.flatformType || 'facebook',
+    flatform_type: flatformType,
     settings: normalizeSettings(group.settings),
     is_active: group.isActive ?? true,
     staff_id: u.staffId,
@@ -100,14 +115,18 @@ export async function createAccountGroup(group: Partial<AutoAccountGroup>): Prom
 export async function updateAccountGroup(id: number, updates: Partial<AutoAccountGroup>): Promise<AutoAccountGroup> {
   const u = requireCurrentUser()
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  const existing = await getAccountGroup(id)
+  if (!existing) throw new Error('Không tìm thấy nhóm account')
+  const targetFlatformType = updates.flatformType ?? existing.flatformType
+  if (targetFlatformType === EMAIL_PLATFORM || existing.flatformType === EMAIL_PLATFORM) {
+    await ensureCurrentUserEmailFeatureActive()
+  }
   if (updates.name !== undefined) {
     const name = String(updates.name || '').trim()
     if (!name) throw new Error('Tên nhóm không được để trống')
     payload.name = name
   }
   if (updates.flatformType !== undefined) {
-    const existing = await getAccountGroup(id)
-    if (!existing) throw new Error('Không tìm thấy nhóm account')
     if (existing.flatformType !== updates.flatformType) {
       const { count, error: countError } = await client()
         .from('auto_accounts')
@@ -166,6 +185,9 @@ export async function validateAccountGroupForAccount(
   flatformType: string
 ): Promise<number | null> {
   if (groupId === undefined || groupId === null) return null
+  if (flatformType === EMAIL_PLATFORM) {
+    await ensureCurrentUserEmailFeatureActive()
+  }
 
   const group = await getAccountGroup(groupId)
   if (!group || !group.isActive) throw new Error('Không tìm thấy nhóm account')

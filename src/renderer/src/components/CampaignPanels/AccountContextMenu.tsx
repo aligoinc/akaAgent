@@ -13,6 +13,7 @@ const PLATFORM_URLS: Record<string, string> = {
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com',
 }
+const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email'])
 
 interface AccountContextMenuProps {
   account: AutoAccount
@@ -97,6 +98,7 @@ export default function AccountContextMenu({
   const isPaused = account.status === 'tạm dừng'
   const isDisabled = !account.isActive
   const isZalo = account.flatformType === 'zalo'
+  const isBrowserless = BROWSERLESS_PLATFORMS.has(account.flatformType)
 
   return (
     <div
@@ -116,7 +118,7 @@ export default function AccountContextMenu({
 
       {/* Browser Group */}
       <div className="context-menu-group">
-        {!isDisabled && !isZalo && (
+        {!isDisabled && !isBrowserless && (
           <>
             <button
               className="context-menu-item"
