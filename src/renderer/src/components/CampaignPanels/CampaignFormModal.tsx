@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3 } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
@@ -6731,8 +6732,8 @@ export default function CampaignFormModal({
     )
   }
 
-  return (
-    <div className="modal-overlay" style={modalZIndex ? { zIndex: modalZIndex } : undefined}>
+  return createPortal(
+    <div className="modal-overlay campaign-form-modal-overlay" style={modalZIndex ? { zIndex: modalZIndex } : undefined}>
       <div className="campaign-full-modal stepper-modal">
         {/* Header */}
         <div className="modal-header">
@@ -7986,6 +7987,7 @@ export default function CampaignFormModal({
           onClose={() => setDraftFormConfig(null)}
         />
       )}
-    </div>
+    </div>,
+    document.body
   )
 }

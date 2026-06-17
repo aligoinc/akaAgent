@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import TopBar from './components/TopBar/TopBar'
 import CampaignPage from './pages/CampaignPage'
 import BrowserPage from './pages/BrowserPage'
@@ -8,6 +8,7 @@ import WorkflowEditorV2 from './components/v2/WorkflowEditorV2'
 import { useThemeStore } from './stores/themeStore'
 import { useCampaignStore } from './stores/campaignStore'
 import { useAuthStore } from './stores/authStore'
+import { useUiStore } from './stores/uiStore'
 import AlertModal from './components/CampaignPanels/AlertModal'
 import ConfirmModal from './components/CampaignPanels/ConfirmModal'
 import UpdateModal from './components/UpdateModal/UpdateModal'
@@ -25,6 +26,8 @@ export default function App() {
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [localVersion, setLocalVersion] = useState('')
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
 
   // Bootstrap auth from DB-backed device login settings (or land on LoginPage).
   useEffect(() => {
@@ -43,6 +46,52 @@ export default function App() {
 
   const [updateInfo, setUpdateInfo] = useState<{ localVersion: string; remoteVersion: string } | null>(null)
 
+  useEffect(() => {
+    if (!window.electronAPI?.getAppVersion) return
+    let cancelled = false
+    window.electronAPI.getAppVersion()
+      .then(version => {
+        if (!cancelled) setLocalVersion(version)
+      })
+      .catch(err => console.warn('Get app version failed:', err))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleCheckForUpdate = useCallback(async (manual = true) => {
+    if (!window.electronAPI?.checkForUpdate) {
+      if (manual) useUiStore.getState().showAlert('Chức năng cập nhật chưa sẵn sàng.', 'error')
+      return
+    }
+
+    setCheckingUpdate(true)
+    try {
+      const res = await window.electronAPI.checkForUpdate()
+      setLocalVersion(res.localVersion)
+      if (res.hasUpdate) {
+        setUpdateInfo({ localVersion: res.localVersion, remoteVersion: res.remoteVersion })
+      } else if (manual) {
+        if (res.error) {
+          useUiStore.getState().showAlert(`Không kiểm tra được cập nhật: ${res.error}`, 'error')
+        } else {
+          useUiStore.getState().showAlert(`Bạn đang dùng phiên bản mới nhất (${res.localVersion}).`, 'success')
+        }
+      } else if (res.error) {
+        console.warn('Update check error:', res.error)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (manual) {
+        useUiStore.getState().showAlert(`Không kiểm tra được cập nhật: ${message}`, 'error')
+      } else {
+        console.warn('Update check failed:', err)
+      }
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }, [])
+
   const openGeneralSettings = (menu: GeneralSettingsMenu = 'akabiz') => {
     setGeneralSettingsInitialMenu(menu)
     setShowGeneralSettings(true)
@@ -50,21 +99,11 @@ export default function App() {
 
   // Auto-check for updates once on app start (non-blocking).
   useEffect(() => {
-    if (!window.electronAPI?.checkForUpdate) return
     const timer = setTimeout(async () => {
-      try {
-        const res = await window.electronAPI.checkForUpdate()
-        if (res.hasUpdate) {
-          setUpdateInfo({ localVersion: res.localVersion, remoteVersion: res.remoteVersion })
-        } else if (res.error) {
-          console.warn('Update check error:', res.error)
-        }
-      } catch (err) {
-        console.warn('Update check failed:', err)
-      }
+      await handleCheckForUpdate(false)
     }, 3000)
     return () => clearTimeout(timer)
-  }, [])
+  }, [handleCheckForUpdate])
 
   // Listen for auto-check login status updates from main process
   useEffect(() => {
@@ -139,6 +178,9 @@ export default function App() {
         onOpenDataScan={() => setShowDataScan(true)}
         onOpenGeneralSettings={() => openGeneralSettings()}
         onOpenChangePassword={() => setShowChangePassword(true)}
+        currentVersion={localVersion}
+        checkingUpdate={checkingUpdate}
+        onCheckUpdate={() => { void handleCheckForUpdate(true) }}
       />
 
       <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>

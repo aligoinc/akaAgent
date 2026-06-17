@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal, KeyRound, BarChart3 } from 'lucide-react'
+import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal, KeyRound, BarChart3, RefreshCw } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -10,9 +10,21 @@ interface TopBarProps {
   onOpenDataScan: () => void
   onOpenGeneralSettings: () => void
   onOpenChangePassword: () => void
+  currentVersion: string
+  checkingUpdate: boolean
+  onCheckUpdate: () => void
 }
 
-export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpenGeneralSettings, onOpenChangePassword }: TopBarProps) {
+export default function TopBar({
+  activePage,
+  onPageChange,
+  onOpenDataScan,
+  onOpenGeneralSettings,
+  onOpenChangePassword,
+  currentVersion,
+  checkingUpdate,
+  onCheckUpdate
+}: TopBarProps) {
   const { theme, toggleTheme } = useThemeStore()
   const { user, logout, resetDeviceLock } = useAuthStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -130,6 +142,21 @@ export default function TopBar({ activePage, onPageChange, onOpenDataScan, onOpe
       </nav>
 
       <div className="topbar-right">
+        <div className="topbar-version-group">
+          <span className="topbar-version-chip" title={`Phiên bản hiện tại: ${currentVersion || 'đang tải'}`}>
+            v{currentVersion || '...'}
+          </span>
+          <button
+            className="btn btn-ghost topbar-update-button"
+            onClick={onCheckUpdate}
+            disabled={checkingUpdate}
+            title="Kiểm tra cập nhật"
+          >
+            <RefreshCw size={13} className={checkingUpdate ? 'animate-spin' : undefined} />
+            <span>{checkingUpdate ? 'Đang kiểm tra' : 'Cập nhật'}</span>
+          </button>
+        </div>
+
         {user && (
           <div
             title={`${user.organizationName}${isAdminAkabiz ? ' · admin akaBiz' : ''}`}

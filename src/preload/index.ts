@@ -442,6 +442,9 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_EVENTS.APP_READ_BLOCK_SCREENSHOT, filePath),
 
   // Auto-update
+  getAppVersion: (): Promise<string> =>
+    ipcRenderer.invoke(IPC_EVENTS.APP_GET_VERSION),
+
   checkForUpdate: (): Promise<{
     hasUpdate: boolean
     localVersion: string

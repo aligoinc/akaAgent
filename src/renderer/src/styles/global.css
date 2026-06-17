@@ -2882,6 +2882,44 @@ button.btn-icon:not(.btn):disabled {
   color: var(--text-topbar);
 }
 
+.topbar-version-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.topbar-version-chip,
+.topbar-update-button {
+  height: 30px;
+  border: 1px solid var(--border-topbar);
+  border-radius: var(--radius-sm);
+}
+
+.topbar-version-chip {
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  color: var(--text-topbar-muted);
+  background: var(--bg-primary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.topbar-update-button {
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.topbar-update-button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
 .topbar-settings-menu-wrap {
   position: relative;
   display: flex;

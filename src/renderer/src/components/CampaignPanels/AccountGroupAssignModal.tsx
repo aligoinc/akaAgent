@@ -47,8 +47,8 @@ export default function AccountGroupAssignModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal account-group-assign-modal" onClick={event => event.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal account-group-assign-modal">
         <div className="modal-header">
           <div>
             <div className="modal-title">{account.accountGroupId ? 'Đổi nhóm tài khoản' : 'Thêm vào nhóm tài khoản'}</div>
