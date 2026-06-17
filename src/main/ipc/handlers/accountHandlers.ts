@@ -1,9 +1,10 @@
 import { ipcMain, webContents, BrowserWindow } from 'electron'
-import { AutoAccountContact, AutoProxy, IPC_EVENTS, ProxyTestRequest, ZaloLabelOption } from '../../../shared/types'
+import { AutoAccountContact, AutoProxy, IPC_EVENTS, ProxyTestRequest, ZaloLabelOption, EmailAccountConfig } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
 import { ZaloRuntimeService } from '../../services/zaloRuntimeService'
+import { EmailRuntimeService } from '../../services/emailRuntimeService'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -11,8 +12,8 @@ const PLATFORM_URLS: Record<string, string> = {
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com'
 }
-const BROWSERLESS_PLATFORMS = new Set(['zalo'])
-const BROWSERLESS_ACCOUNT_REASON = 'Tài khoản Zalo không dùng trình duyệt trong phiên bản này'
+const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email'])
+const BROWSERLESS_ACCOUNT_REASON = 'Tài khoản này không dùng trình duyệt trong phiên bản này'
 
 function mapZaloLabelContact(contact: AutoAccountContact): ZaloLabelOption {
   const extra = contact.extraData || {}
@@ -44,6 +45,7 @@ export function registerAccountHandlers(
   webviewRegistry: WebviewRegistry,
   proxyRuntime: ProxyRuntimeService,
   zaloRuntime?: ZaloRuntimeService,
+  emailRuntime?: EmailRuntimeService,
   mainWindow?: BrowserWindow
 ): void {
   const resolveProxyForTest = async (request: ProxyTestRequest): Promise<Partial<AutoProxy>> => {
@@ -156,8 +158,8 @@ export function registerAccountHandlers(
     return { success: true }
   })
 
-  ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, async (_, flatformType?: string) => {
-    return supabase.listAccountActions(flatformType)
+  ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, async (_, flatformType?: string, includeRestricted?: boolean) => {
+    return supabase.listAccountActions(flatformType, includeRestricted)
   })
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, async (_, accountId: number) => {
@@ -219,9 +221,38 @@ export function registerAccountHandlers(
     return labels
   })
 
+  ipcMain.handle(IPC_EVENTS.EMAIL_GET_CONFIG, async (_, accountId: number) => {
+    const entry = await supabase.getAccountEmailSession(accountId)
+    return entry?.session ?? null
+  })
+
+  ipcMain.handle(IPC_EVENTS.EMAIL_VERIFY, async (_, config: EmailAccountConfig) => {
+    if (!emailRuntime) return { ok: false, error: 'Email runtime chưa sẵn sàng' }
+    return emailRuntime.verifyConfig(config)
+  })
+
+  ipcMain.handle(IPC_EVENTS.EMAIL_SAVE_CONFIG, async (_, accountId: number, config: EmailAccountConfig) => {
+    if (!emailRuntime) throw new Error('Email runtime chưa sẵn sàng')
+    const verify = await emailRuntime.verifyConfig(config)
+    const account = await supabase.updateAccountEmailSession(accountId, { session: config, verified: verify.ok })
+    if (!verify.ok) {
+      await supabase.markAccountEmailSessionCheck(accountId, { ok: false, error: verify.error })
+    }
+    emailRuntime.invalidateAccount(accountId)
+    sendAccountStatusUpdated(mainWindow)
+    return { success: true, verified: verify.ok, error: verify.ok ? undefined : verify.error, account }
+  })
+
+  ipcMain.handle(IPC_EVENTS.EMAIL_LOGOUT, async (_, accountId: number) => {
+    const account = await supabase.clearAccountEmailSession(accountId)
+    emailRuntime?.invalidateAccount(accountId)
+    sendAccountStatusUpdated(mainWindow)
+    return { success: true, account }
+  })
+
   ipcMain.handle(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, async (_, accountId: number, flatformType: string) => {
     const account = await supabase.getAccount(accountId)
-    if (flatformType === 'zalo' || account?.flatformType === 'zalo') {
+    if (BROWSERLESS_PLATFORMS.has(flatformType) || (account && BROWSERLESS_PLATFORMS.has(account.flatformType))) {
       return { success: false, reason: BROWSERLESS_ACCOUNT_REASON }
     }
     const wcId = webviewRegistry.getWebContentsId(accountId)

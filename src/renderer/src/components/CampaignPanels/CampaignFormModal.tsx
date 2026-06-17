@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3 } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
@@ -11,13 +11,16 @@ import {
   CampaignInputData,
   CampaignExtraSettings,
   ContentTemplate,
+  isValidEmailInputDataValue,
   ZaloLabelOption
 } from '../../../../shared/types'
 import { read, utils } from 'xlsx'
 import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import { useUiStore } from '../../stores/uiStore'
+import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
+import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
 
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
@@ -265,11 +268,13 @@ const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const GROUP_POST_ACTION_ID = 'facebook_group_post'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
+const EMAIL_SEND_ACTION_ID = 'email_send'
 const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   MESSAGE_FRIEND_ACTION_ID,
   MESSAGE_UID_ACTION_ID,
   PAGE_INBOX_MESSAGE_ACTION_ID,
-  ZALO_MESSAGE_PHONE_ACTION_ID
+  ZALO_MESSAGE_PHONE_ACTION_ID,
+  EMAIL_SEND_ACTION_ID
 ])
 
 // Campaign action IDs for "Đăng bài vào group" type — show "Chọn nhóm" picker in data list
@@ -550,6 +555,10 @@ const getExcelCellText = (value: unknown): string => {
   }
   return text
 }
+
+const normalizeEmailAddress = (value: unknown): string => getExcelCellText(value).trim()
+
+const isValidEmailAddress = (value: unknown): boolean => isValidEmailInputDataValue(normalizeEmailAddress(value))
 
 const normalizeVietnamMobilePhone = (value: unknown): string | null => {
   let digits = getExcelCellText(value).replace(/\D+/g, '')
@@ -833,9 +842,11 @@ export default function CampaignFormModal({
     createCampaign, updateCampaign, deleteCampaign,
     createCampaignInputData
   } = useCampaignStore()
+  const canUseEmailFeature = useAuthStore(state => !!state.user?.entitlements?.email)
 
   const contentRef = useRef<HTMLDivElement>(null)
   const campaignContentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const emailHtmlEditorRef = useRef<EmailHtmlEditorHandle | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const txtFileInputRef = useRef<HTMLInputElement>(null)
@@ -869,7 +880,8 @@ export default function CampaignFormModal({
       ? 'all'
       : 'none'
   const savedDailyStopTime = normalizeTimeInput(campaign?.dailyStopTime)
-  const initialActionId = lockedActionId || campaign?.actionId || ''
+  const rawInitialActionId = lockedActionId || campaign?.actionId || ''
+  const initialActionId = rawInitialActionId === EMAIL_SEND_ACTION_ID && !canUseEmailFeature ? '' : rawInitialActionId
   const initialIsFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(initialActionId)
   const initialIsDraftFacebookGroupSource =
     draftRequiredTargetField === 'findFacebookGroupPostTargetCampaignIds' ||
@@ -907,6 +919,9 @@ export default function CampaignFormModal({
     multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
     multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
     content: campaign?.content || '',
+    // Email
+    emailSubject: campaign?.extraSettings?.emailSubject || '',
+    emailBodyIsHtml: campaign?.extraSettings?.emailBodyIsHtml ?? false,
     // Extra settings
     sharePost: campaign?.extraSettings?.sharePost ?? false,
     postWithBackground: campaign?.extraSettings?.postWithBackground ?? false,
@@ -1096,6 +1111,7 @@ export default function CampaignFormModal({
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isMessageCampaign = MESSAGE_CAMPAIGN_ACTIONS.has(formData.actionId)
+  const isEmailCampaign = formData.actionId === EMAIL_SEND_ACTION_ID
   const isMessageFriendCampaign = formData.actionId === MESSAGE_FRIEND_ACTION_ID
   const isMessageUidCampaign = formData.actionId === MESSAGE_UID_ACTION_ID
   const isZaloMessagePhoneCampaign = formData.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
@@ -1195,13 +1211,28 @@ export default function CampaignFormModal({
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 3 : 4)
       : (isEditingSavedCampaign ? 4 : 5)
-  const selectedCampaignAction = campaignActions.find(action => action.id === formData.actionId)
+  const availableCampaignActions = useMemo(
+    () => campaignActions.filter(action => canUseEmailFeature || (action.id !== EMAIL_SEND_ACTION_ID && action.flatformType !== 'email')),
+    [campaignActions, canUseEmailFeature]
+  )
+  const selectedCampaignAction = availableCampaignActions.find(action => action.id === formData.actionId)
   const selectedActionPlatform = selectedCampaignAction?.flatformType || ''
   const selectableAccounts = selectedActionPlatform
     ? accounts.filter(account => account.flatformType === selectedActionPlatform)
     : accounts
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
+
+  useEffect(() => {
+    if (canUseEmailFeature || formData.actionId !== EMAIL_SEND_ACTION_ID) return
+    setFormData(prev => ({
+      ...prev,
+      actionId: '',
+      accountIds: [],
+      emailSubject: '',
+      emailBodyIsHtml: false
+    }))
+  }, [canUseEmailFeature, formData.actionId])
   const isLimitActionVisible = (actionCode: string) => {
     if (isMessageUidCampaign) {
       if (actionCode === 'fb_message_stranger') return formData.enableMessage
@@ -1377,11 +1408,17 @@ export default function CampaignFormModal({
           if (s.id === 'content') {
             return {
               ...s,
-              title: 'Nội dung tin nhắn',
-              fields: [
-                { key: 'content', label: 'Nội dung tin nhắn' },
-                { key: 'images', label: 'Media' }
-              ]
+              title: isEmailCampaign ? 'Nội dung email' : 'Nội dung tin nhắn',
+              fields: isEmailCampaign
+                ? [
+                  { key: 'emailSubject', label: 'Tiêu đề email' },
+                  { key: 'content', label: 'Nội dung email' },
+                  { key: 'images', label: 'Tệp đính kèm' }
+                ]
+                : [
+                  { key: 'content', label: 'Nội dung tin nhắn' },
+                  { key: 'images', label: 'Media' }
+                ]
             }
           }
           if (s.id === 'extra') {
@@ -1400,6 +1437,8 @@ export default function CampaignFormModal({
                   ? 'Danh sách khách inbox Page'
                 : isZaloMessagePhoneCampaign
                   ? 'Danh sách SĐT'
+                : isEmailCampaign
+                  ? 'Danh sách email'
                   : 'Danh sách UID',
               fields: [{
                 key: 'details',
@@ -1409,6 +1448,8 @@ export default function CampaignFormModal({
                     ? 'Khách inbox Page'
                   : isZaloMessagePhoneCampaign
                     ? 'SĐT'
+                  : isEmailCampaign
+                    ? 'Email'
                     : 'UID'
               }]
             }
@@ -1931,6 +1972,7 @@ export default function CampaignFormModal({
       case 'rateLimitCount': return formData.rateLimitCount >= 0
       case 'rateLimitMinutes': return formData.rateLimitMinutes >= 0
       case 'content': return !requiresMainContentOrMedia || hasMainContentText || hasSelectedMainMedia
+      case 'emailSubject': return formData.emailSubject.trim().length > 0
       case 'commentContent': return formData.commentContent.trim().length > 0 || hasSelectedCommentMedia
       case 'postsPerTarget': return formData.postsPerTarget > 0
       case 'commentPostSearchConditions': return true
@@ -2243,7 +2285,7 @@ export default function CampaignFormModal({
     if (missingImages.length === 0) return true
 
     const names = missingImages.slice(0, 3).map(getImageDisplayName).join(', ')
-    const suffix = missingImages.length > 3 ? ` và ${missingImages.length - 3} ảnh khác` : ''
+    const suffix = missingImages.length > 3 ? ` và ${missingImages.length - 3} file khác` : ''
     showAlert(`${label} có file không còn tồn tại hoặc đã bị xoá: ${names}${suffix}. Vui lòng xoá file lỗi hoặc chọn lại.`, 'error')
     return false
   }
@@ -2257,7 +2299,7 @@ export default function CampaignFormModal({
           ? (normalizeVietnamMobilePhone(row.phone) || '')
           : String(row.phone || '').trim(),
         uid: String(row.uid || '').trim(),
-        email: String(row.email || '').trim(),
+        email: normalizeEmailAddress(row.email),
         info1: String(row.info1 || '').trim(),
         info2: String(row.info2 || '').trim(),
         info3: String(row.info3 || '').trim(),
@@ -2265,7 +2307,11 @@ export default function CampaignFormModal({
         info5: String(row.info5 || '').trim(),
         note: String(row.note || '').trim()
       }))
-      .filter(row => isZaloMessagePhoneCampaign ? row.phone.length > 0 : row.uid.length > 0)
+      .filter(row => isZaloMessagePhoneCampaign
+        ? row.phone.length > 0
+        : isEmailCampaign
+          ? isValidEmailAddress(row.email)
+          : row.uid.length > 0)
   }
 
   const buildCampaignSaveBundleItems = (detailRows: Partial<CampaignInputData>[] = details): CampaignSaveBundleItem[] => {
@@ -2417,6 +2463,8 @@ export default function CampaignFormModal({
             enableAddFriend: effectiveEnableAddFriend,
             useSuggestedFriends: effectiveUseSuggestedFriends,
             suggestedFriendsCount: effectiveSuggestedFriendsCount,
+            emailSubject: isEmailCampaign ? formData.emailSubject.trim() : '',
+            emailBodyIsHtml: isEmailCampaign ? formData.emailBodyIsHtml : false,
             friendRequestMessage: isZaloMessagePhoneCampaign ? formData.friendRequestMessage.trim() : '',
             enableZaloTag: isZaloMessagePhoneCampaign ? formData.enableZaloTag : false,
             zaloTagId: isZaloMessagePhoneCampaign && formData.enableZaloTag ? formData.zaloTagId : null,
@@ -2510,6 +2558,10 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
     }
+    if (isEmailCampaign && !canUseEmailFeature) {
+      showAlert('Tính năng Email chưa được kích hoạt hoặc đã hết hạn.', 'error')
+      return
+    }
     if (requiresSingleAccount && formData.accountIds.length !== 1) {
       showAlert('Chiến dịch gửi tin khách inbox Page chỉ hỗ trợ chọn 1 tài khoản.', 'error')
       return
@@ -2541,7 +2593,7 @@ export default function CampaignFormModal({
         return
       }
     }
-    if (showContentSection && !validateSelectedImages('Media', formData.imageOption, formData.images)) {
+    if (showContentSection && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
       return
     }
     if (!validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
@@ -2588,9 +2640,15 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập lời nhắc AI để edit nội dung nguồn.', 'error')
       return
     }
+    if (isEmailCampaign && !formData.emailSubject.trim()) {
+      showAlert('Vui lòng nhập tiêu đề email.', 'error')
+      return
+    }
     if (requiresMainContentOrMedia && !hasMainContentText && !hasSelectedMainMedia) {
       showAlert(
-        isMessageCampaign
+        isEmailCampaign
+          ? 'Vui lòng nhập nội dung email hoặc chọn ít nhất một tệp đính kèm.'
+        : isMessageCampaign
           ? `Vui lòng nhập nội dung tin nhắn hoặc chọn ít nhất một ${isZaloMessagePhoneCampaign ? 'file' : 'ảnh'}.`
           : 'Vui lòng nhập nội dung chiến dịch hoặc chọn ít nhất một ảnh.',
         'error'
@@ -2725,6 +2783,8 @@ export default function CampaignFormModal({
             ? 'Vui lòng chọn ít nhất một khách inbox Page.'
           : isZaloMessagePhoneCampaign
             ? 'Vui lòng thêm ít nhất một SĐT hợp lệ vào danh sách data.'
+          : isEmailCampaign
+            ? 'Vui lòng thêm ít nhất một email hợp lệ vào danh sách data.'
           : 'Vui lòng thêm ít nhất một bạn bè vào danh sách data.',
         'error'
       )
@@ -3088,28 +3148,51 @@ export default function CampaignFormModal({
 
         // Find index of first data row (skip header if 'Tên', 'Uid', etc. is in A1)
         let startIndex = 0
-        const firstRow = Array.isArray(data[0]) ? data[0].map(cell => String(cell || '').toLowerCase()) : []
+        const firstRow = Array.isArray(data[0]) ? data[0].map(cell => getExcelCellText(cell).trim().toLowerCase()) : []
+        const firstCell = firstRow[0] || ''
         if (
           data.length > 0 &&
-          (String(data[0][0] || '').toLowerCase().includes('tên') ||
+          (firstCell.includes('tên') ||
+            (isEmailCampaign && firstRow.some(cell => cell.includes('email') || cell.includes('e-mail'))) ||
             (isCommentSeedingPostCampaign && firstRow.some(cell => cell.includes('link') || cell.includes('url') || cell.includes('bài'))))
         ) {
           startIndex = 1
         }
 
         const newRows: Partial<CampaignInputData>[] = []
+        let invalidEmailImportCount = 0
         for (let i = startIndex; i < data.length; i++) {
           const row = data[i]
-          if (!row || row.length === 0 || row.every((c: any) => !c)) continue // skip empty rows
+          if (!row || row.length === 0 || row.every((c: any) => !getExcelCellText(c))) continue // skip empty rows
 
           // A: Tên (0), B: Uid (1), C: Sđt (2), D: Email (3)
-          const cells = row.map((cell: any) => String(cell || '').trim())
+          const cells = row.map((cell: any) => getExcelCellText(cell).trim())
+          if (isEmailCampaign) {
+            const preferredEmail = normalizeEmailAddress(row[3])
+            const email = isValidEmailAddress(preferredEmail)
+              ? preferredEmail
+              : (cells.find(cell => isValidEmailAddress(cell)) || '')
+            if (!email) {
+              invalidEmailImportCount += 1
+              continue
+            }
+            const emailColumnIndex = cells.findIndex(cell => normalizeEmailAddress(cell) === email)
+            newRows.push({
+              name: emailColumnIndex === 0 ? '' : (cells[0] || ''),
+              uid: '',
+              phone: '',
+              email,
+              note: '',
+              status: 'chờ xử lý'
+            })
+            continue
+          }
           const postLink = cells.find(cell => /^https?:\/\//i.test(cell) || /facebook\.com|fb\.watch/i.test(cell)) || cells[1] || cells[0] || ''
           const searchKeyword = cells[0] || cells[1] || ''
-          const name = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : String(row[0] || '').trim()
-          const uid = isFindDataSearchCampaign ? searchKeyword : isCommentSeedingPostCampaign ? postLink : String(row[1] || '').trim()
-          const phone = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : String(row[2] || '').trim()
-          const email = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : String(row[3] || '').trim()
+          const name = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : (cells[0] || '')
+          const uid = isFindDataSearchCampaign ? searchKeyword : isCommentSeedingPostCampaign ? postLink : (cells[1] || '')
+          const phone = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : (cells[2] || '')
+          const email = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : (cells[3] || '')
 
           newRows.push({
             name,
@@ -3119,6 +3202,21 @@ export default function CampaignFormModal({
             note: '',
             status: 'chờ xử lý'
           })
+        }
+
+        if (isEmailCampaign) {
+          if (newRows.length === 0) {
+            showAlert(
+              invalidEmailImportCount > 0
+                ? `Không có email hợp lệ để thêm. Đã loại ${invalidEmailImportCount} dòng không hợp lệ.`
+                : 'File Excel trống hoặc không có email hợp lệ.',
+              'error'
+            )
+            return
+          }
+          setDetails(prev => [...prev, ...newRows])
+          showAlert(`Đã thêm ${newRows.length} email${invalidEmailImportCount > 0 ? `, bỏ qua ${invalidEmailImportCount} dòng không hợp lệ` : ''}.`, 'success')
+          return
         }
 
         setDetails(prev => [...prev, ...newRows])
@@ -3146,13 +3244,31 @@ export default function CampaignFormModal({
         const tokens = text.split(/[\r\n,]+/)
 
         const newRows: Partial<CampaignInputData>[] = []
+        let invalidEmailImportCount = 0
         for (const token of tokens) {
-          const uid = token.trim()
-          if (!uid) continue
+          const value = token.trim()
+          if (!value) continue
+
+          if (isEmailCampaign) {
+            const email = normalizeEmailAddress(value)
+            if (!isValidEmailAddress(email)) {
+              invalidEmailImportCount += 1
+              continue
+            }
+            newRows.push({
+              name: '',
+              uid: '',
+              phone: '',
+              email,
+              note: '',
+              status: 'chờ xử lý'
+            })
+            continue
+          }
 
           newRows.push({
             name: '',
-            uid: uid,
+            uid: value,
             phone: '',
             email: '',
             note: '',
@@ -3162,10 +3278,19 @@ export default function CampaignFormModal({
 
         if (newRows.length > 0) {
           setDetails(prev => [...prev, ...newRows])
-          showAlert(`Đã thêm ${newRows.length} ${isFindDataSearchCampaign ? 'từ khóa' : isCommentSeedingPostCampaign ? 'link bài post' : 'UID'} từ file TXT.`, 'success')
+          showAlert(
+            isEmailCampaign
+              ? `Đã thêm ${newRows.length} email từ file TXT${invalidEmailImportCount > 0 ? `, bỏ qua ${invalidEmailImportCount} email không hợp lệ` : ''}.`
+              : `Đã thêm ${newRows.length} ${isFindDataSearchCampaign ? 'từ khóa' : isCommentSeedingPostCampaign ? 'link bài post' : 'UID'} từ file TXT.`,
+            'success'
+          )
         } else {
           showAlert(
-            isFindDataSearchCampaign
+            isEmailCampaign
+              ? invalidEmailImportCount > 0
+                ? `File TXT không có email hợp lệ. Đã loại ${invalidEmailImportCount} email không hợp lệ.`
+                : 'File TXT trống hoặc không có email hợp lệ.'
+            : isFindDataSearchCampaign
               ? 'File TXT trống hoặc không có từ khóa hợp lệ.'
               : isCommentSeedingPostCampaign
                 ? 'File TXT trống hoặc không có link bài post hợp lệ.'
@@ -3563,6 +3688,11 @@ export default function CampaignFormModal({
   )
 
   const insertCampaignContentToken = (token: string) => {
+    if (isEmailCampaign && formData.emailBodyIsHtml && emailHtmlEditorRef.current) {
+      emailHtmlEditorRef.current.chain().focus().insertContent(token).run()
+      return
+    }
+
     const textarea = campaignContentTextareaRef.current
     const start = textarea?.selectionStart ?? formData.content.length
     const end = textarea?.selectionEnd ?? start
@@ -3589,28 +3719,46 @@ export default function CampaignFormModal({
       ? 'TODAY'
       : (MESSAGE_DATE_OPTIONS.find(opt => opt.value === messageDateOption)?.token || 'TODAY')
     const dateToken = `#{${dateTokenName}(${messageDateFormat})}`
+    const excelTokens = ['INPUT_FULLNAME', 'PHONE', 'EMAIL', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
+    const showCustomerTokens = !isEmailCampaign
+    const showExcelTokens = isZaloMessagePhoneCampaign || isEmailCampaign
+    const renderExcelTokens = () => (
+      <div className="message-template-token-row">
+        {excelTokens.map(token => (
+          <button
+            key={token}
+            type="button"
+            className="message-template-token"
+            onClick={() => insertCampaignContentToken(`#{${token}}`)}
+          >
+            {`#{${token}}`}
+          </button>
+        ))}
+      </div>
+    )
 
     return (
       <aside className="message-template-panel" aria-label="Chèn thông tin">
         <div className="message-template-title">Chèn thông tin</div>
 
-        <div className="message-template-section">
-          <div className="message-template-section-title">
-            <Users size={16} />
-            <span>Khách hàng</span>
-          </div>
-          <label>Tên hiển thị{isZaloMessagePhoneCampaign ? ' Zalo' : ''}</label>
-          <button
-            type="button"
-            className="message-template-token"
-            onClick={() => insertCampaignContentToken(MESSAGE_FULL_NAME_TOKEN)}
-          >
-            {MESSAGE_FULL_NAME_TOKEN}
-          </button>
-          {isZaloMessagePhoneCampaign && (
-          <>
-            <label>Tên gốc Zalo</label>
+        {showCustomerTokens && (
+          <div className="message-template-section">
+            <div className="message-template-section-title">
+              <Users size={16} />
+              <span>Khách hàng</span>
+            </div>
+            <label>Tên hiển thị{isZaloMessagePhoneCampaign ? ' Zalo' : ''}</label>
             <button
+              type="button"
+              className="message-template-token"
+              onClick={() => insertCampaignContentToken(MESSAGE_FULL_NAME_TOKEN)}
+            >
+              {MESSAGE_FULL_NAME_TOKEN}
+            </button>
+            {isZaloMessagePhoneCampaign && (
+            <>
+              <label>Tên gốc Zalo</label>
+              <button
                 type="button"
                 className="message-template-token"
                 onClick={() => insertCampaignContentToken('#{ORIGINAL_NAME}')}
@@ -3618,29 +3766,33 @@ export default function CampaignFormModal({
                 {'#{ORIGINAL_NAME}'}
               </button>
               <label>Giới tính</label>
-            <button
-              type="button"
-              className="message-template-token"
-              onClick={() => insertCampaignContentToken('#{SEX{anh-chị-anh/chị}}')}
-            >
-              {'#{SEX{anh-chị-anh/chị}}'}
-            </button>
-            <label>Thông tin Excel</label>
-            <div className="message-template-token-row">
-              {['INPUT_FULLNAME', 'PHONE', 'EMAIL', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5'].map(token => (
-                <button
-                  key={token}
-                  type="button"
-                  className="message-template-token"
-                  onClick={() => insertCampaignContentToken(`#{${token}}`)}
-                >
-                  {`#{${token}}`}
-                </button>
-              ))}
-            </div>
+              <button
+                type="button"
+                className="message-template-token"
+                onClick={() => insertCampaignContentToken('#{SEX{anh-chị-anh/chị}}')}
+              >
+                {'#{SEX{anh-chị-anh/chị}}'}
+              </button>
+              {showExcelTokens && (
+                <>
+                  <label>Thông tin Excel</label>
+                  {renderExcelTokens()}
+                </>
+              )}
             </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
+
+        {isEmailCampaign && (
+          <div className="message-template-section">
+            <div className="message-template-section-title">
+              <Users size={16} />
+              <span>Thông tin Excel</span>
+            </div>
+            {renderExcelTokens()}
+          </div>
+        )}
 
         <div className="message-template-section">
           <div className="message-template-section-title">
@@ -3689,6 +3841,8 @@ export default function CampaignFormModal({
   const renderImagePicker = (target: 'post' | 'comment', title: string) => {
     const isComment = target === 'comment'
     const isZaloMedia = isZaloMessagePhoneCampaign && !isComment
+    const isEmailAttachment = isEmailCampaign && !isComment
+    const isFileMedia = isZaloMedia || isEmailAttachment
     const option = isComment ? formData.commentImageOption : formData.imageOption
     const randomCount = formData.randomImageCount
     const images = isComment ? formData.commentImages : formData.images
@@ -3737,13 +3891,13 @@ export default function CampaignFormModal({
               style={{ width: 'fit-content', opacity: option === 'none' ? 0.6 : 1 }}
               disabled={option === 'none'}
             >
-              {isZaloMedia ? 'Tải hoặc chọn file' : 'Tải hoặc chọn ảnh'}
+              {isEmailAttachment ? 'Tải hoặc chọn tệp đính kèm' : isZaloMedia ? 'Tải hoặc chọn file' : 'Tải hoặc chọn ảnh'}
             </button>
             <input
               type="file"
               ref={inputRef}
               style={{ display: 'none' }}
-              accept={isZaloMedia ? undefined : 'image/*'}
+              accept={isFileMedia ? undefined : 'image/*'}
               multiple={!isComment}
               onChange={e => handleImagePickerChange(e, target)}
             />
@@ -3756,7 +3910,7 @@ export default function CampaignFormModal({
                   checked={option === 'none'}
                   onChange={() => setOption('none')}
                 />
-                <span>{isZaloMedia ? 'Không gửi file' : 'Không gửi ảnh'}</span>
+                <span>{isEmailAttachment ? 'Không đính kèm file' : isZaloMedia ? 'Không gửi file' : 'Không gửi ảnh'}</span>
               </label>
               <label className="schedule-radio-label">
                 <input
@@ -3765,7 +3919,7 @@ export default function CampaignFormModal({
                   checked={option === 'all'}
                   onChange={() => setOption('all')}
                 />
-                <span>{isZaloMedia ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
+                <span>{isEmailAttachment ? 'Đính kèm file đã chọn' : isZaloMedia ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
               </label>
               {!isComment && <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <label className="schedule-radio-label">
@@ -3775,7 +3929,7 @@ export default function CampaignFormModal({
                     checked={option === 'random'}
                     onChange={() => setOption('random')}
                   />
-                  <span>{isZaloMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
+                  <span>{isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
                 </label>
                 <input
                   type="number"
@@ -3792,7 +3946,7 @@ export default function CampaignFormModal({
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
-              {isZaloMedia ? 'File đã chọn' : 'Ảnh đã chọn'}
+              {isEmailAttachment ? 'Tệp đính kèm đã chọn' : isZaloMedia ? 'File đã chọn' : 'Ảnh đã chọn'}
             </div>
             <div className="stepper-grid-container" style={{ margin: 0, maxHeight: 300, overflowY: 'auto' }}>
               <table className="campaign-grid">
@@ -3807,7 +3961,7 @@ export default function CampaignFormModal({
                   {images.length === 0 ? (
                     <tr>
                       <td colSpan={3} className="text-center text-muted" style={{ padding: '24px 0' }}>
-                        {isZaloMedia ? 'Chưa có file nào được chọn' : 'Chưa có ảnh nào được chọn'}
+                        {isFileMedia ? 'Chưa có file nào được chọn' : 'Chưa có ảnh nào được chọn'}
                       </td>
                     </tr>
                   ) : (
@@ -6053,21 +6207,44 @@ export default function CampaignFormModal({
     </label>
   )
 
+  const getCampaignContentLabel = (): string => {
+    if (isEmailCampaign) return formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email'
+    if (isMessageCampaign) return 'Nội dung tin nhắn'
+    return 'Nội dung chiến dịch'
+  }
+
+  const getCampaignContentPlaceholder = (): string => {
+    if (supportsSourceContent && formData.copyContentFromSource) {
+      return 'Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)...'
+    }
+    if (isEmailCampaign) {
+      return 'Nhập nội dung email. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở email 1, nội dung 2 ở email 2...'
+    }
+    if (isMessageCampaign) {
+      return 'Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2...'
+    }
+    return 'Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2...'
+  }
+
   const renderCampaignContentTextarea = (showHint = true) => (
     <>
-      <textarea
-        ref={campaignContentTextareaRef}
-        className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
-        placeholder={supportsSourceContent && formData.copyContentFromSource
-          ? "Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)..."
-          : isMessageCampaign
-            ? "Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."
-            : "Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2..."}
-        value={formData.content}
-        onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
-        rows={8}
-      />
-      {showHint && renderCampaignContentHint()}
+      {isEmailCampaign && formData.emailBodyIsHtml ? (
+        <EmailHtmlEditor
+          value={formData.content}
+          onChange={html => setFormData(p => ({ ...p, content: html }))}
+          editorRef={emailHtmlEditorRef}
+        />
+      ) : (
+        <textarea
+          ref={campaignContentTextareaRef}
+          className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
+          placeholder={getCampaignContentPlaceholder()}
+          value={formData.content}
+          onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
+          rows={8}
+        />
+      )}
+      {showHint && !(isEmailCampaign && formData.emailBodyIsHtml) && renderCampaignContentHint()}
       {showHint && renderRewriteContentEachRunOption()}
     </>
   )
@@ -6427,7 +6604,7 @@ export default function CampaignFormModal({
                       disabled={draftMode && !!lockedActionId}
                     >
                       <option value="">-- Chọn hành động --</option>
-                      {campaignActions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      {availableCampaignActions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
                   </div>
 
@@ -6992,7 +7169,7 @@ export default function CampaignFormModal({
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('content')}</span>
                   <span className="stepper-section-title">
-                    {isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung'}
+                    {isEmailCampaign ? 'Nội dung email' : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung'}
                   </span>
                 </div>
                 {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -7001,12 +7178,36 @@ export default function CampaignFormModal({
               {!collapsedSections['content'] && (
                 <div className="stepper-section-body">
                   {renderPostBackgroundOption()}
+                  {isEmailCampaign && (
+                    <>
+                      <div className="stepper-form-group">
+                        <label>Tiêu đề email <span className="required">*</span></label>
+                        <input
+                          type="text"
+                          className="stepper-input"
+                          placeholder="Nhập tiêu đề email..."
+                          value={formData.emailSubject}
+                          onChange={e => setFormData(p => ({ ...p, emailSubject: e.target.value }))}
+                        />
+                      </div>
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.emailBodyIsHtml}
+                            onChange={e => setFormData(p => ({ ...p, emailBodyIsHtml: e.target.checked }))}
+                          />
+                          <span>Nội dung dạng HTML</span>
+                        </label>
+                      </div>
+                    </>
+                  )}
 	                  {isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
 	                    <>
 	                  {isMessageCampaign ? (
 	                    <div className="campaign-message-content-layout">
                       <div className="stepper-form-group campaign-message-content-tools">
-                        <label>Nội dung tin nhắn</label>
+                        <label>{getCampaignContentLabel()}</label>
                         {renderContentToolsRow('content')}
                       </div>
                       <div className="campaign-content-template-layout">

@@ -1,17 +1,28 @@
 import { CampaignAction } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignActionFromDB } from '../mappers'
+import {
+  canCurrentUserUseEmailFeature,
+} from './entitlementRepository'
 
 const client = () => getSupabaseClient()
+const EMAIL_PLATFORM = 'email'
+const EMAIL_SEND_ACTION_ID = 'email_send'
 
 export async function listCampaignActions(): Promise<CampaignAction[]> {
-  const { data, error } = await client()
+  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
+  let query = client()
     .from('auto_campaign_actions')
     .select('*')
     .eq('is_active', true)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
+  if (!canUseEmailFeature) {
+    query = query.neq('flatform_type', EMAIL_PLATFORM)
+  }
+
+  const { data, error } = await query
   if (error) throw new Error(`Failed to list campaign actions: ${error.message}`)
   return (data || []).map(row => mapCampaignActionFromDB(row))
 }
@@ -28,6 +39,9 @@ export async function getAllCampaignActions(): Promise<CampaignAction[]> {
 }
 
 export async function getCampaignAction(actionId: string): Promise<CampaignAction | null> {
+  if (actionId === EMAIL_SEND_ACTION_ID && !(await canCurrentUserUseEmailFeature())) {
+    return null
+  }
   const { data, error } = await client()
     .from('auto_campaign_actions')
     .select('*')

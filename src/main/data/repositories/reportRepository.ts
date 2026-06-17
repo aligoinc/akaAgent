@@ -16,11 +16,13 @@ import { getCampaignActionDescriptors } from '../../domain/campaigns/campaignAct
 import { requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 import * as accountActionRepo from './accountActionRepository'
+import { canCurrentUserUseEmailFeature } from './entitlementRepository'
 
 const client = () => getSupabaseClient()
 const PAGE_SIZE = 1000
 const DETAIL_PAGE_SIZE = 100
 const MAX_DETAIL_PAGE_SIZE = 500
+const EMAIL_PLATFORM = 'email'
 
 interface ReportDetailRow {
   account_id: number | null
@@ -287,6 +289,10 @@ async function loadInputDataInfoMap(inputDataIds: number[]): Promise<Map<number,
 }
 
 async function loadReportAccount(query: AccountActionReportDetailQuery, staffId: number): Promise<AccountActionReportAccount> {
+  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
+  if (query.flatformType === EMAIL_PLATFORM && !canUseEmailFeature) {
+    throw new Error('Không tìm thấy tài khoản trong báo cáo.')
+  }
   let request = client()
     .from('auto_accounts')
     .select('id, name, flatform_type, account_group_id, auto_account_groups(name)')
@@ -295,6 +301,7 @@ async function loadReportAccount(query: AccountActionReportDetailQuery, staffId:
     .eq('id', query.accountId)
 
   if (query.flatformType) request = request.eq('flatform_type', query.flatformType)
+  else if (!canUseEmailFeature) request = request.neq('flatform_type', EMAIL_PLATFORM)
 
   const { data, error } = await request.maybeSingle()
   if (error) throw new Error(`Failed to get report account: ${error.message}`)
@@ -406,6 +413,10 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
   if (explicitAccountFilter && requestedAccountIds.length === 0) {
     return { query, actions, rows: [], generatedAt: new Date().toISOString() }
   }
+  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
+  if (query.flatformType === EMAIL_PLATFORM && !canUseEmailFeature) {
+    return { query, actions: [], rows: [], generatedAt: new Date().toISOString() }
+  }
 
   let accountQuery = client()
     .from('auto_accounts')
@@ -415,6 +426,7 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
     .order('name', { ascending: true })
 
   if (query.flatformType) accountQuery = accountQuery.eq('flatform_type', query.flatformType)
+  else if (!canUseEmailFeature) accountQuery = accountQuery.neq('flatform_type', EMAIL_PLATFORM)
   if (explicitAccountFilter) accountQuery = accountQuery.in('id', requestedAccountIds)
 
   const { data: accountRows, error: accountError } = await accountQuery

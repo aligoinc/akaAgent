@@ -34,6 +34,8 @@ export interface BlockHelpers {
   zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult>
   zaloApplyContactTag(options: ZaloApplyContactTagOptions): Promise<ZaloActionHelperResult>
   zaloChangeContactAlias(options: ZaloChangeContactAliasOptions): Promise<ZaloActionHelperResult>
+  /** Email browserless helper. Implemented only by campaign runtime. */
+  emailSendMessage(options: EmailSendMessageOptions): Promise<EmailActionHelperResult>
 }
 
 export interface OptionalHelperUnsupportedResult {
@@ -81,6 +83,7 @@ export interface BlockRuntimeHelpers {
   zaloSendPhoneFriendRequest?: (options: ZaloSendPhoneFriendRequestOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloApplyContactTag?: (options: ZaloApplyContactTagOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloChangeContactAlias?: (options: ZaloChangeContactAliasOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  emailSendMessage?: (options: EmailSendMessageOptions, metadata: BlockRuntimeMetadata) => Promise<EmailActionHelperResult>
 }
 
 export interface ZaloResolvedTarget {
@@ -149,6 +152,24 @@ export interface ZaloChangeContactAliasOptions {
   target?: ZaloResolvedTarget | null
   alias?: string
   inputData?: Record<string, unknown>
+}
+
+export interface EmailSendMessageOptions {
+  to?: string
+  subject?: string
+  body?: string
+  isHtml?: boolean
+  attachments?: unknown[]
+  inputData?: Record<string, unknown>
+  targetName?: string
+}
+
+export interface EmailActionHelperResult {
+  ok: boolean
+  skipped?: boolean
+  message?: string
+  // Reuse the generic action-detail shape consumed by the run-step processor.
+  detail?: ZaloActionDetailOutput | null
 }
 
 const OPTIONAL_HELPER_NAMES = new Set(['logRunEvent', 'logRunEvents', 'callAIUsing'])
@@ -295,6 +316,11 @@ export function createBlockHelpers(
     async zaloChangeContactAlias(options: ZaloChangeContactAliasOptions): Promise<ZaloActionHelperResult> {
       if (!runtimeHelpers.zaloChangeContactAlias) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
       return runtimeHelpers.zaloChangeContactAlias(options, runtimeMetadata)
+    },
+
+    async emailSendMessage(options: EmailSendMessageOptions): Promise<EmailActionHelperResult> {
+      if (!runtimeHelpers.emailSendMessage) throw new Error('Runtime hiện tại không hỗ trợ Email API')
+      return runtimeHelpers.emailSendMessage(options, runtimeMetadata)
     }
   }
 

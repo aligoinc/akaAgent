@@ -5769,6 +5769,112 @@ td.report-account-col span {
   min-width: 0;
 }
 
+.email-html-editor-shell {
+  width: 100%;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.email-html-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+}
+
+.email-html-toolbar-select {
+  min-width: 108px;
+  height: 32px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 0 8px;
+  font-size: 13px;
+  outline: none;
+}
+
+.email-html-toolbar-button {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.email-html-toolbar-button:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.email-html-toolbar-button.active {
+  background: rgba(124, 92, 252, 0.16);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.email-html-toolbar-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.email-html-toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-default);
+  margin: 0 2px;
+}
+
+.email-html-editor-content {
+  min-height: 300px;
+  padding: 16px;
+  color: var(--text-primary);
+  outline: none;
+  background: var(--bg-primary);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.email-html-editor-content p {
+  margin: 0 0 10px;
+}
+
+.email-html-editor-content h1,
+.email-html-editor-content h2,
+.email-html-editor-content h3 {
+  margin: 12px 0 8px;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.email-html-editor-content ul,
+.email-html-editor-content ol {
+  margin: 8px 0 12px 22px;
+  padding: 0;
+}
+
+.email-html-editor-content blockquote {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-primary);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
 @media (max-width: 980px) {
   .campaign-content-template-layout {
     grid-template-columns: 1fr;

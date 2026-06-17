@@ -30,6 +30,15 @@ const emptyForm: ActionFormData = {
   isActive: true
 }
 
+const PLATFORM_OPTIONS = [
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'zalo', label: 'Zalo' },
+  { value: 'email', label: 'Email' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'shopee', label: 'Shopee' },
+  { value: 'other', label: 'Khác' }
+]
+
 const formatActionCodes = (codes?: string[]) => {
   return codes && codes.length > 0 ? codes.join(', ') : '-'
 }
@@ -59,7 +68,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       window.electronAPI.v2.listWorkflows().then(setWorkflows).catch(console.error)
     }
     if (window.electronAPI?.listAccountActions) {
-      window.electronAPI.listAccountActions().then(setAccountActions).catch(console.error)
+      window.electronAPI.listAccountActions(undefined, true).then(setAccountActions).catch(console.error)
     }
   }, [loadAllCampaignActions])
 
@@ -304,11 +313,9 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                         onChange={e => handlePlatformChange(e.target.value)}
                         className="panel-input"
                       >
-                        <option value="facebook">Facebook</option>
-                        <option value="zalo">Zalo</option>
-                        <option value="tiktok">TikTok</option>
-                        <option value="shopee">Shopee</option>
-                        <option value="other">Khác</option>
+                        {PLATFORM_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
                       </select>
                     </div>
 

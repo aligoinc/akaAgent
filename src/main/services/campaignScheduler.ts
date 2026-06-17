@@ -25,6 +25,10 @@ import {
 import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
 import { getCurrentUser } from '../data/currentUser'
 import {
+  EMAIL_FEATURE_UNAVAILABLE_MESSAGE,
+  isCurrentUserEmailFeatureActive
+} from '../data/repositories/entitlementRepository'
+import {
   getAccountActionName as resolveAccountActionName,
   getCampaignActionDescriptors as resolveCampaignActionDescriptors,
   getMessageActionCode as resolveMessageActionCode,
@@ -37,6 +41,7 @@ import {
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import { ZaloApiError } from 'zca-js'
 import { ZaloRuntimeService, type ZaloFoundUser } from './zaloRuntimeService'
+import { EmailRuntimeService } from './emailRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import { callAiUsing } from './aiRuntimeService'
 import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
@@ -48,7 +53,9 @@ import type {
   ZaloFindPhoneUserOptions,
   ZaloResolvedTarget,
   ZaloSendPhoneFriendRequestOptions,
-  ZaloSendPhoneMessageOptions
+  ZaloSendPhoneMessageOptions,
+  EmailSendMessageOptions,
+  EmailActionHelperResult
 } from '../v2/runtime/blockHelpers'
 
 interface AutomationPageRef {
@@ -216,6 +223,7 @@ const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
+const EMAIL_SEND_ACTION_ID = 'email_send'
 const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
 const ZALO_FIND_PHONE_DEFAULT_LIMIT = 1000
 const ZALO_API_BUSINESS_FAILED_ERROR_CODE = 'err_zalo_api_business_failed'
@@ -291,19 +299,22 @@ export class CampaignScheduler {
   private backgroundPreviewOverrides = new Map<string, BackgroundPreviewOverride>()
   private proxyRuntime?: ProxyRuntimeService
   private zaloRuntime?: ZaloRuntimeService
+  private emailRuntime?: EmailRuntimeService
 
   constructor(
     supabase: SupabaseService,
     webviewRegistry: WebviewRegistry,
     mainWindow: BrowserWindow,
     proxyRuntime?: ProxyRuntimeService,
-    zaloRuntime?: ZaloRuntimeService
+    zaloRuntime?: ZaloRuntimeService,
+    emailRuntime?: EmailRuntimeService
   ) {
     this.supabase = supabase
     this.webviewRegistry = webviewRegistry
     this.mainWindow = mainWindow
     this.proxyRuntime = proxyRuntime
     this.zaloRuntime = zaloRuntime
+    this.emailRuntime = emailRuntime
   }
 
   setPageRegistry(reg: PageControllerRegistry): void {
@@ -878,6 +889,20 @@ export class CampaignScheduler {
         return
       }
 
+      if (campaign.actionId === EMAIL_SEND_ACTION_ID) {
+        let emailFeatureActive = false
+        try {
+          emailFeatureActive = await isCurrentUserEmailFeatureActive()
+        } catch (err) {
+          await this.updateCampaignPreflightNote(campaign, err instanceof Error ? err.message : String(err))
+          return
+        }
+        if (!emailFeatureActive) {
+          await this.updateCampaignPreflightNote(campaign, EMAIL_FEATURE_UNAVAILABLE_MESSAGE)
+          return
+        }
+      }
+
       const action = await this.supabase.getCampaignAction(campaign.actionId)
       if (!action) {
         await this.updateCampaignPreflightNote(campaign, 'Không tìm thấy loại chiến dịch')
@@ -1370,13 +1395,16 @@ export class CampaignScheduler {
 
   private isBrowserlessCampaign(campaign: Campaign): boolean {
     return campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
+      || campaign.actionId === EMAIL_SEND_ACTION_ID
   }
 
   private getInputDataDisplayName(campaign: Campaign, detail: CampaignInputData | null | undefined, fallback = 'N/A'): string {
     if (!detail) return fallback
     const values = campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
       ? [detail.phone, detail.name, detail.uid]
-      : [detail.name, detail.uid, detail.phone]
+      : campaign.actionId === EMAIL_SEND_ACTION_ID
+        ? [detail.email, detail.name, detail.uid]
+        : [detail.name, detail.uid, detail.phone]
     for (const value of values) {
       const text = String(value || '').trim()
       if (text) return text
@@ -2274,6 +2302,10 @@ export class CampaignScheduler {
       // inputDataUid pass nguyên dạng raw (UID thuần hoặc link) — workflow block
       // `fb_resolve_url` sẽ verify/normalize tuỳ theo urlType (group/profile/messenger).
       targetPhone: detail?.phone || '',
+      // Email
+      targetEmail: detail?.email || '',
+      emailSubject: extra.emailSubject || '',
+      emailBodyIsHtml: extra.emailBodyIsHtml === true,
       friendRequestMessage: extra.friendRequestMessage || '',
       enableZaloTag: extra.enableZaloTag === true,
       zaloTagId: extra.zaloTagId ?? null,
@@ -2402,6 +2434,68 @@ export class CampaignScheduler {
     return lowerLog.startsWith(lowerAction)
       ? log
       : `${actionName}: ${log}`
+  }
+
+  private async logEmailSendMilestones(
+    campaign: Campaign,
+    detail: CampaignInputData | null,
+    accountId: number,
+    steps: RunStepV2[]
+  ): Promise<MilestoneSummary> {
+    const summary = this.createMilestoneSummary()
+    const loggedBlocks = new Set<string>()
+
+    for (const step of steps) {
+      const blockName = step.blockName || ''
+      if (!blockName.startsWith('email_')) continue
+      if (loggedBlocks.has(`${step.nodeId || ''}:${blockName}:${step.startedAt || ''}`)) continue
+      loggedBlocks.add(`${step.nodeId || ''}:${blockName}:${step.startedAt || ''}`)
+
+      const actionDetail = this.getZaloActionDetailFromStep(step)
+      if (!actionDetail) continue
+
+      if (actionDetail.createDetail === false || !actionDetail.status) {
+        if (actionDetail.log) {
+          await this.logCampaignProgress(campaign.id, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+        }
+        continue
+      }
+
+      const created = await this.supabase.createCampaignDetail({
+        inputDataId: detail?.id,
+        campaignId: campaign.id,
+        accountId,
+        actionCode: actionDetail.actionCode ?? null,
+        actionName: actionDetail.actionName || this.getAccountActionName(actionDetail.actionCode || ''),
+        status: actionDetail.status,
+        errorCode: actionDetail.errorCode ?? null,
+        log: actionDetail.log || undefined,
+        data: actionDetail.data || {},
+        shouldCountAction: actionDetail.countsTowardLimit === true
+      })
+
+      if (actionDetail.countsTowardBadTarget !== false) {
+        this.recordMilestoneSummary(
+          summary,
+          created.status,
+          created.log || actionDetail.log,
+          created.actionName || actionDetail.actionName,
+          this.getCampaignDetailRootReason(created) || this.getCampaignDetailRootReason(actionDetail as Partial<CampaignDetail>)
+        )
+      } else if (created.status === 'thành công') {
+        summary.hasSuccess = true
+      }
+
+      if (created.log) {
+        await this.logCampaignProgress(campaign.id, this.formatZaloProgressLog({
+          ...actionDetail,
+          actionName: created.actionName || actionDetail.actionName,
+          log: created.log
+        }))
+      }
+    }
+
+    return summary
   }
 
   private async logZaloMessagePhoneMilestones(
@@ -2544,6 +2638,11 @@ export class CampaignScheduler {
     if (campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID) {
       await flushRemainingScreenshotLogs()
       return this.logZaloMessagePhoneMilestones(campaign, detail, accountId, steps)
+    }
+
+    if (campaign.actionId === EMAIL_SEND_ACTION_ID) {
+      await flushRemainingScreenshotLogs()
+      return this.logEmailSendMilestones(campaign, detail, accountId, steps)
     }
 
     // Tìm kiếm data — 1 milestone tổng kết, dữ liệu chi tiết nằm trong JSONB data.
@@ -4885,19 +4984,22 @@ export class CampaignScheduler {
   ): string {
     const raw = String(template || '')
     if (!raw) return ''
-    const today = new Date()
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Ho_Chi_Minh',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).formatToParts(today)
-    const dateMap = Object.fromEntries(parts.map(part => [part.type, part.value])) as Record<string, string>
-    const formatDate = (format: string): string => String(format || 'DD/MM/YYYY')
-      .replace(/DD/g, dateMap.day || '')
-      .replace(/MM/g, dateMap.month || '')
-      .replace(/YYYY/g, dateMap.year || '')
-      .replace(/YY/g, (dateMap.year || '').slice(-2))
+    const now = new Date()
+    const formatDate = (format: string, offsetDays = 0): string => {
+      const date = new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000)
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(date)
+      const dateMap = Object.fromEntries(parts.map(part => [part.type, part.value])) as Record<string, string>
+      return String(format || 'DD/MM/YYYY')
+        .replace(/DD/g, dateMap.day || '')
+        .replace(/MM/g, dateMap.month || '')
+        .replace(/YYYY/g, dateMap.year || '')
+        .replace(/YY/g, (dateMap.year || '').slice(-2))
+    }
 
     const input = inputData || {}
     const getInput = (key: string): string => String(input[key] ?? '').trim()
@@ -4911,7 +5013,10 @@ export class CampaignScheduler {
     }
 
     return raw
-      .replace(/#\{TODAY\(([^}]*)\)\}/g, (_, fmt) => formatDate(String(fmt || 'DD/MM/YYYY')))
+      .replace(/#\{(TODAY|TOMORROW|YESTERDAY)\(([^}]*)\)\}/g, (_, token, fmt) => {
+        const offsetDays = token === 'TOMORROW' ? 1 : token === 'YESTERDAY' ? -1 : 0
+        return formatDate(String(fmt || 'DD/MM/YYYY'), offsetDays)
+      })
       .replace(/#\{SEX\{([^}]*)\}\}/g, (_, body) => renderSex(String(body || '')))
       .replace(/#\{FULL_NAME\}/g, target?.displayName || '')
       .replace(/#\{ORIGINAL_NAME\}/g, target?.originalName || target?.displayName || '')
@@ -5283,7 +5388,77 @@ export class CampaignScheduler {
       zaloSendPhoneMessage: (options) => this.zaloSendPhoneMessage(account, campaign, options),
       zaloSendPhoneFriendRequest: (options) => this.zaloSendPhoneFriendRequest(account, campaign, options),
       zaloApplyContactTag: (options) => this.zaloApplyContactTag(account, campaign, options),
-      zaloChangeContactAlias: (options) => this.zaloChangeContactAlias(account, campaign, options)
+      zaloChangeContactAlias: (options) => this.zaloChangeContactAlias(account, campaign, options),
+      emailSendMessage: (options) => this.emailSendMessage(account, campaign, options)
+    }
+  }
+
+  private async emailSendMessage(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: EmailSendMessageOptions
+  ): Promise<EmailActionHelperResult> {
+    if (!this.emailRuntime) throw new Error('Email runtime chưa sẵn sàng')
+    const actionCode = 'email_send'
+    const actionName = 'Gửi email'
+    const to = String(options.to || '').trim()
+    if (!to) {
+      return {
+        ok: false,
+        detail: {
+          createDetail: true,
+          actionCode,
+          actionName,
+          status: 'thất bại',
+          log: 'Thiếu email người nhận',
+          countsTowardLimit: false,
+          countsTowardBadTarget: true
+        }
+      }
+    }
+
+    const subject = this.renderZaloTemplate(options.subject, options.inputData).trim()
+    const body = this.renderZaloTemplate(options.body, options.inputData)
+    const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
+      .map(item => String(item || '').trim())
+      .filter(Boolean)
+
+    try {
+      const result = await this.emailRuntime.sendEmail(account.id, {
+        to,
+        subject,
+        body,
+        isHtml: options.isHtml === true,
+        attachments
+      })
+      return {
+        ok: true,
+        detail: {
+          createDetail: true,
+          actionCode,
+          actionName,
+          status: 'thành công',
+          log: `Đã gửi email đến ${to}`,
+          data: { to, subject, messageId: result.messageId },
+          countsTowardLimit: true,
+          countsTowardBadTarget: false
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return {
+        ok: false,
+        detail: {
+          createDetail: true,
+          actionCode,
+          actionName,
+          status: 'thất bại',
+          log: `Gửi email thất bại đến ${to}: ${message}`,
+          data: { to, error: message },
+          countsTowardLimit: true,
+          countsTowardBadTarget: true
+        }
+      }
     }
   }
 

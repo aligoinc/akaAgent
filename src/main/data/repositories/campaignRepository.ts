@@ -20,11 +20,16 @@ import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, 
 import { requireCurrentUser } from '../currentUser'
 import * as accountActionRepo from './accountActionRepository'
 import * as errorPolicyRepo from './errorPolicyRepository'
+import {
+  canCurrentUserUseEmailFeature,
+  ensureCurrentUserEmailFeatureActive,
+} from './entitlementRepository'
 
 const client = () => getSupabaseClient()
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const EMAIL_SEND_ACTION_ID = 'email_send'
 const CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE = 500
 const LIMIT_COUNT_STATUSES = ['thành công', 'thất bại']
 const FIND_DATA_TARGET_FIELDS = [
@@ -33,6 +38,20 @@ const FIND_DATA_TARGET_FIELDS = [
   'findFacebookGroupPostTargetCampaignIds',
   'findFacebookGroupCommentTargetCampaignIds'
 ] as const
+const EMAIL_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
+  'name',
+  'accountId',
+  'scheduleType',
+  'scheduleEndDate',
+  'dailyStopTime',
+  'scheduleDays',
+  'scheduleWeekDays',
+  'continueNextDay',
+  'refreshData',
+  'content',
+  'extraSettings',
+  'images'
+])
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
@@ -60,6 +79,23 @@ const chunkArray = <T>(items: T[], size: number): T[][] => {
     chunks.push(items.slice(index, index + size))
   }
   return chunks
+}
+
+const touchesEmailCampaignConfig = (updates: Partial<Campaign>): boolean => (
+  Object.keys(updates).some(key => EMAIL_CAMPAIGN_CONFIG_UPDATE_KEYS.has(key as keyof Campaign))
+)
+
+async function getCampaignActionIdForCurrentUser(campaignId: number, staffId: number): Promise<string | null> {
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('action_id')
+    .eq('id', campaignId)
+    .eq('staff_id', staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to load campaign action for entitlement check: ${error.message}`)
+  return data ? String((data as Record<string, unknown>).action_id || '') : null
 }
 
 interface CampaignRelationDetailRow {
@@ -319,12 +355,18 @@ function isPastScheduleEnd(campaign: Campaign, schedule: Date): boolean {
 
 export async function getCampaign(id: number): Promise<Campaign | null> {
   const u = requireCurrentUser()
-  const { data, error } = await client()
+  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
+  let query = client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .eq('id', id)
     .eq('staff_id', u.staffId)
-    .single()
+
+  if (!canUseEmailFeature) {
+    query = query.neq('action_id', EMAIL_SEND_ACTION_ID)
+  }
+
+  const { data, error } = await query.single()
 
   if (error) return null
   return mapCampaignFromDB(data)
@@ -332,19 +374,28 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
 
 export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
-  const { data, error } = await client()
+  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
+  let query = client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
+  if (!canUseEmailFeature) {
+    query = query.neq('action_id', EMAIL_SEND_ACTION_ID)
+  }
+
+  const { data, error } = await query
   if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
   return (data || []).map(row => mapCampaignFromDB(row))
 }
 
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
+  if (campaign.actionId === EMAIL_SEND_ACTION_ID) {
+    await ensureCurrentUserEmailFeatureActive()
+  }
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
@@ -380,6 +431,14 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
 
 export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
+  if (updates.actionId === EMAIL_SEND_ACTION_ID) {
+    await ensureCurrentUserEmailFeatureActive()
+  } else if (touchesEmailCampaignConfig(updates)) {
+    const currentActionId = await getCampaignActionIdForCurrentUser(id, u.staffId)
+    if (currentActionId === EMAIL_SEND_ACTION_ID) {
+      await ensureCurrentUserEmailFeatureActive()
+    }
+  }
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.actionId !== undefined) payload.action_id = updates.actionId
@@ -452,6 +511,9 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
     .single()
 
   if (errC || !origCamp) throw new Error(`Campaign not found: ${errC?.message}`)
+  if (origCamp.action_id === EMAIL_SEND_ACTION_ID) {
+    await ensureCurrentUserEmailFeatureActive()
+  }
 
   const { data: newCamp, error: errInsert } = await client()
     .from('auto_campaigns')
@@ -579,9 +641,10 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
 
 export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {
   const u = requireCurrentUser()
+  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
   const now = new Date()
   const currentVietnamTime = formatVietnamTimeForQuery(now)
-  const { data, error } = await client()
+  let query = client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .eq('account_id', accountId)
@@ -591,6 +654,11 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
     .lte('schedule', now.toISOString())
     .or(`daily_stop_time.is.null,daily_stop_time.gte.${currentVietnamTime}`)
 
+  if (!canUseEmailFeature) {
+    query = query.neq('action_id', EMAIL_SEND_ACTION_ID)
+  }
+
+  const { data, error } = await query
   if (error) throw new Error(`Failed to get pending campaigns: ${error.message}`)
   return (data || []).map(row => mapCampaignFromDB(row))
 }
@@ -1005,6 +1073,14 @@ export async function listCampaignRelationSummaries(campaignIds: number[]): Prom
 }
 
 export async function createCampaignInputData(action: Partial<CampaignInputData>): Promise<CampaignInputData> {
+  const u = requireCurrentUser()
+  const campaignId = Number(action.campaignId)
+  const actionId = Number.isFinite(campaignId) && campaignId > 0
+    ? await getCampaignActionIdForCurrentUser(campaignId, u.staffId)
+    : null
+  if (actionId === EMAIL_SEND_ACTION_ID) {
+    await ensureCurrentUserEmailFeatureActive()
+  }
   const payload = {
     campaign_id: action.campaignId,
     input_id: action.inputId ?? null,
@@ -1170,6 +1246,23 @@ export async function addCampaignInputDataToCampaign(
         error: 'Không tìm thấy chiến dịch đích.'
       })
       continue
+    }
+
+    if (target.actionId === EMAIL_SEND_ACTION_ID) {
+      try {
+        await ensureCurrentUserEmailFeatureActive()
+      } catch (err) {
+        results.push({
+          campaignId: target.id,
+          campaignName: target.name,
+          actionId: target.actionId,
+          insertedCount: 0,
+          skippedInvalidCount: selectedRows.length,
+          skippedRunning: false,
+          error: err instanceof Error ? err.message : String(err)
+        })
+        continue
+      }
     }
 
     if (target.status === 'đang chạy') {
