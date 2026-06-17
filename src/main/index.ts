@@ -25,6 +25,7 @@ function createWindow(): BrowserWindow {
     height: 900,
     minWidth: 1000,
     minHeight: 700,
+    fullscreen: true,
     show: false,
     frame: false,
     titleBarStyle: 'hidden',

@@ -1054,6 +1054,7 @@ export const IPC_EVENTS = {
   // App
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',
   APP_SET_STARTUP_SETTING: 'app:set-startup-setting',
+  APP_GET_VERSION: 'app:get-version',
   APP_READ_BLOCK_SCREENSHOT: 'app:read-block-screenshot',
 
   // AI content tools

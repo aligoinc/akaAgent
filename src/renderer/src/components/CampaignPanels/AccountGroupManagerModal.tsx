@@ -320,8 +320,8 @@ export default function AccountGroupManagerModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal account-group-modal" onClick={event => event.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal account-group-modal">
         <div className="modal-header">
           <div>
             <div className="modal-title">Nhóm tài khoản</div>
