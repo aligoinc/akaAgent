@@ -30,6 +30,7 @@ export interface BlockHelpers {
   callAIUsing?(code: string, payload?: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
   /** Zalo browserless helpers. Implemented only by campaign runtime. */
   zaloFindPhoneUser(options: ZaloFindPhoneUserOptions): Promise<ZaloActionHelperResult>
+  zaloResolveGroupMemberTarget(options: ZaloResolveGroupMemberTargetOptions): Promise<ZaloActionHelperResult>
   zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult>
   zaloSendFriendMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
   zaloSendGroupMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
@@ -81,6 +82,7 @@ export interface BlockRuntimeHelpers {
   logRunEvents?: (events: CampaignRunEventInput[], metadata: BlockRuntimeMetadata) => Promise<unknown>
   callAIUsing?: (code: string, payload: Record<string, unknown>, metadata: BlockRuntimeMetadata) => Promise<unknown>
   zaloFindPhoneUser?: (options: ZaloFindPhoneUserOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloResolveGroupMemberTarget?: (options: ZaloResolveGroupMemberTargetOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendPhoneMessage?: (options: ZaloSendPhoneMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendFriendMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendGroupMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
@@ -127,6 +129,12 @@ export interface ZaloFindPhoneUserOptions {
   phone?: string
   inputData?: Record<string, unknown>
   targetName?: string
+}
+
+export interface ZaloResolveGroupMemberTargetOptions {
+  targetUid?: string
+  targetName?: string
+  inputData?: Record<string, unknown>
 }
 
 export interface ZaloSendPhoneMessageOptions {
@@ -308,6 +316,11 @@ export function createBlockHelpers(
     async zaloFindPhoneUser(options: ZaloFindPhoneUserOptions): Promise<ZaloActionHelperResult> {
       if (!runtimeHelpers.zaloFindPhoneUser) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
       return runtimeHelpers.zaloFindPhoneUser(options, runtimeMetadata)
+    },
+
+    async zaloResolveGroupMemberTarget(options: ZaloResolveGroupMemberTargetOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloResolveGroupMemberTarget) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloResolveGroupMemberTarget(options, runtimeMetadata)
     },
 
     async zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult> {
