@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Zap, Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal, KeyRound, BarChart3, RefreshCw } from 'lucide-react'
+import { Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal, KeyRound, BarChart3, RefreshCw } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
+
+const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
 interface TopBarProps {
   activePage: 'campaigns' | 'workflow-editor' | 'browsers' | 'reports'
@@ -96,7 +98,7 @@ export default function TopBar({
     <div className="topbar">
       <div className="topbar-left">
         <div className="topbar-logo">
-          <Zap size={16} color="white" />
+          <img src={appIconUrl} alt="" />
         </div>
         <span className="topbar-brand">akaBizAuto</span>
       </div>

@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Zap, LogIn, Loader2 } from 'lucide-react'
+import { LogIn, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+
+const appIconUrl = new URL('../assets/app-icon.png', import.meta.url).href
 
 export default function LoginPage() {
   const {
@@ -78,10 +80,11 @@ export default function LoginPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 8,
-            background: '#7c3aed',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
+            background: 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden'
           }}>
-            <Zap size={20} color="white" />
+            <img src={appIconUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           </div>
           <div>
             <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary, #fff)' }}>akaBizAuto</div>

@@ -11,6 +11,12 @@ if (!gotSingleInstanceLock) {
   app.quit()
 }
 
+function getAppIconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(__dirname, '../../build/icon.png')
+}
+
 function focusMainWindow(): void {
   const win = mainWindow || BrowserWindow.getAllWindows()[0]
   if (!win || win.isDestroyed()) return
@@ -26,6 +32,7 @@ function createWindow(): BrowserWindow {
     minWidth: 1000,
     minHeight: 700,
     show: false,
+    icon: getAppIconPath(),
     frame: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -72,6 +79,9 @@ if (gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     electronApp.setAppUserModelId('com.akabiz.auto')
+    if (process.platform === 'darwin') {
+      app.dock.setIcon(getAppIconPath())
+    }
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)

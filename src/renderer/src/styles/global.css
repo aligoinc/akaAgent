@@ -918,6 +918,10 @@ button.btn-icon:not(.btn):disabled {
   z-index: 1000;
 }
 
+.general-settings-modal-overlay {
+  z-index: 3400;
+}
+
 .modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
@@ -2810,13 +2814,19 @@ button.btn-icon:not(.btn):disabled {
 .topbar-logo {
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  overflow: hidden;
   transition: filter var(--transition-fast), transform var(--transition-fast);
+}
+
+.topbar-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .topbar-logo:hover {
