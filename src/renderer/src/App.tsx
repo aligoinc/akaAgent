@@ -17,7 +17,7 @@ import GeneralSettingsModal, { type GeneralSettingsMenu } from './components/Set
 import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 
 export default function App() {
-  const { user, initializing, rehydrateFromStorage } = useAuthStore()
+  const { user, initializing, rehydrateFromStorage, handleSessionExpired } = useAuthStore()
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
@@ -33,6 +33,13 @@ export default function App() {
   useEffect(() => {
     rehydrateFromStorage()
   }, [rehydrateFromStorage])
+
+  useEffect(() => {
+    if (!window.electronAPI?.onAuthSessionExpired) return
+    return window.electronAPI.onAuthSessionExpired((payload) => {
+      handleSessionExpired(payload?.message)
+    })
+  }, [handleSessionExpired])
 
   // Snap workflow-editor -> campaigns if user loses workflow access (e.g. after switching account).
   useEffect(() => {

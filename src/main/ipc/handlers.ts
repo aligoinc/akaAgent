@@ -1,5 +1,5 @@
 import { app, ipcMain, BrowserWindow } from 'electron'
-import { IPC_EVENTS } from '../../shared/types'
+import { AuthEntitlements, IPC_EVENTS } from '../../shared/types'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { PageControllerRegistry } from '../v2/runtime/pageController'
 import { SupabaseService } from '../services/supabase'
@@ -22,12 +22,17 @@ import { registerAkaBizIntegrationHandlers } from './handlers/akaBizIntegrationH
 import { registerContentTemplateHandlers } from './handlers/contentTemplateHandlers'
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
-import { getCurrentUser } from '../data/currentUser'
+import { getCurrentUser, setCurrentUser } from '../data/currentUser'
 import { loadLoginSettingsForCurrentDevice, updateStartupSettingForCurrentDevice } from '../data/repositories/authRepository'
+import { ACCOUNT_EXPIRED_MESSAGE, loadOrganizationEntitlements } from '../data/repositories/entitlementRepository'
 import { readBlockScreenshotDataUrl } from '../services/blockScreenshotService'
 
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+const VIETNAM_UTC_OFFSET_MS = 7 * 60 * 60 * 1000
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
 const CAMPAIGN_SCHEDULER_START_DELAY_MS = 30 * 1000
+const SESSION_EXPIRY_DAILY_CHECK_HOUR = 0
+const SESSION_EXPIRY_DAILY_CHECK_MINUTE = 5
 
 function getVietnamDateKey(date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -36,6 +41,33 @@ function getVietnamDateKey(date = new Date()): string {
     month: '2-digit',
     day: '2-digit'
   }).format(date)
+}
+
+function getNextVietnamSessionExpiryCheckDelayMs(now = new Date()): number {
+  const vietnamNowMs = now.getTime() + VIETNAM_UTC_OFFSET_MS
+  const vietnamNow = new Date(vietnamNowMs)
+  const todayCheckVietnamMs = Date.UTC(
+    vietnamNow.getUTCFullYear(),
+    vietnamNow.getUTCMonth(),
+    vietnamNow.getUTCDate(),
+    SESSION_EXPIRY_DAILY_CHECK_HOUR,
+    SESSION_EXPIRY_DAILY_CHECK_MINUTE,
+    0,
+    0
+  )
+  const nextCheckVietnamMs = todayCheckVietnamMs > vietnamNowMs
+    ? todayCheckVietnamMs
+    : todayCheckVietnamMs + ONE_DAY_MS
+  return Math.max(1000, nextCheckVietnamMs - vietnamNowMs)
+}
+
+function hasAnyEntitlement(entitlements: Partial<AuthEntitlements> | null | undefined): boolean {
+  return !!(
+    entitlements?.facebookCore ||
+    entitlements?.facebookFanpage ||
+    entitlements?.email ||
+    entitlements?.zalo
+  )
 }
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
@@ -70,6 +102,81 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     } catch (err) {
       console.error(`[Recovery] ${reason}: failed to reset running statuses:`, err)
     }
+  }
+
+  let sessionExpiryTimer: ReturnType<typeof setTimeout> | null = null
+  let sessionExpiryCheckRunning = false
+
+  const clearSessionExpiryTimer = (): void => {
+    if (!sessionExpiryTimer) return
+    clearTimeout(sessionExpiryTimer)
+    sessionExpiryTimer = null
+  }
+
+  const notifyRendererSessionExpired = (): void => {
+    try {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_EVENTS.AUTH_SESSION_EXPIRED, { message: ACCOUNT_EXPIRED_MESSAGE })
+      }
+    } catch {
+      // Window may be closed
+    }
+  }
+
+  const expireCurrentSession = async (reason: 'login' | 'daily'): Promise<void> => {
+    const user = getCurrentUser()
+    if (!user) return
+
+    clearSessionExpiryTimer()
+    try {
+      contactLoader.stopAll()
+      campaignScheduler.stop()
+      zaloRuntime.clearAll()
+      emailRuntime.clearAll()
+      await supabase.resetRunningStatuses(user.staffId)
+    } catch (err) {
+      console.error(`[AuthSessionExpiry] ${reason}: failed to clean up expired session:`, err)
+    } finally {
+      setCurrentUser(null)
+      notifyRendererSessionExpired()
+    }
+  }
+
+  const runSessionExpiryCheck = async (reason: 'login' | 'daily'): Promise<void> => {
+    if (sessionExpiryCheckRunning) return
+
+    const checkedUser = getCurrentUser()
+    if (!checkedUser) return
+
+    sessionExpiryCheckRunning = true
+    try {
+      const liveEntitlements = await loadOrganizationEntitlements(checkedUser.organizationId)
+      const currentUser = getCurrentUser()
+      if (!currentUser || currentUser.staffId !== checkedUser.staffId) return
+
+      if (!hasAnyEntitlement(liveEntitlements)) {
+        await expireCurrentSession(reason)
+        return
+      }
+
+      setCurrentUser({ ...currentUser, entitlements: liveEntitlements })
+    } catch (err) {
+      console.error(`[AuthSessionExpiry] ${reason}: failed to refresh entitlements:`, err)
+    } finally {
+      sessionExpiryCheckRunning = false
+      if (getCurrentUser()) scheduleSessionExpiryCheck()
+    }
+  }
+
+  function scheduleSessionExpiryCheck(): void {
+    clearSessionExpiryTimer()
+    if (!getCurrentUser()) return
+
+    const delayMs = getNextVietnamSessionExpiryCheckDelayMs()
+    sessionExpiryTimer = setTimeout(() => {
+      sessionExpiryTimer = null
+      void runSessionExpiryCheck('daily')
+    }, delayMs)
   }
 
   const warmZaloSessions = (): void => {
@@ -132,6 +239,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     const user = getCurrentUser()
     if (!user) {
+      clearSessionExpiryTimer()
       quitCleanupCompleted = true
       return
     }
@@ -140,6 +248,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     quitCleanupStarted = true
     void (async () => {
       try {
+        clearSessionExpiryTimer()
         contactLoader.stopAll()
         campaignScheduler.stop()
         zaloRuntime.clearAll()
@@ -188,11 +297,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         await runScopedRecovery('login')
         await runScheduleMaintenance('login')
       } finally {
+        await runSessionExpiryCheck('login')
+        if (!getCurrentUser()) return
         warmZaloSessions()
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
       }
     },
     beforeLogout: async () => {
+      clearSessionExpiryTimer()
       contactLoader.stopAll()
       campaignScheduler.stop()
       zaloRuntime.clearAll()
