@@ -241,6 +241,8 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     uid: row.uid as string | undefined,
     url: row.url as string | undefined,
     extraData: row.extra_data as Record<string, unknown> | undefined,
+    zaloUserId: (row.zalo_user_id as number | null | undefined) ?? null,
+    zaloGroupId: (row.zalo_group_id as number | null | undefined) ?? null,
     isFriend: (row.is_friend as boolean | null) ?? false,
     requiresPostApproval: (row.requires_post_approval as boolean | null) ?? null,
     isJoined: (row.is_joined as boolean | null) ?? false,

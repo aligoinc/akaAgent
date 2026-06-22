@@ -822,6 +822,8 @@ export interface AutoAccountContact {
   uid?: string
   url?: string
   extraData?: Record<string, unknown>
+  zaloUserId?: number | null
+  zaloGroupId?: number | null
   isFriend?: boolean
   requiresPostApproval?: boolean | null
   isJoined?: boolean

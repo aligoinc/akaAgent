@@ -181,6 +181,12 @@ export interface ZaloFriendRequestStatus {
   raw: Record<string, unknown>
 }
 
+export interface ZaloGroupInfoBatch {
+  gridInfoMap: Record<string, Record<string, unknown>>
+  removedsGroup: string[]
+  unchangedsGroup: string[]
+}
+
 export class ZaloRuntimeService {
   private activeQrLogins = new Map<number, ActiveQrLogin>()
   private apiCache = new Map<number, CachedZaloApi>()
@@ -361,6 +367,51 @@ export class ZaloRuntimeService {
         emoji: String(label.emoji || '').trim() || undefined
       }))
       .filter(label => Number.isFinite(label.id) && label.id > 0 && label.text)
+  }
+
+  async getAllFriendsPage(accountId: number, count = 500, page = 1): Promise<Record<string, unknown>[]> {
+    const api = await this.ensureApi(accountId)
+    const response = await api.getAllFriends(count, page)
+    return Array.isArray(response) ? response.map(item => normalizeRecord(item)) : []
+  }
+
+  async getAllGroups(accountId: number): Promise<Record<string, string>> {
+    const api = await this.ensureApi(accountId)
+    const response = await api.getAllGroups()
+    const gridVerMap = normalizeRecord((response as any)?.gridVerMap)
+    const groups: Record<string, string> = {}
+    for (const [groupId, version] of Object.entries(gridVerMap)) {
+      const normalizedGroupId = String(groupId || '').trim()
+      if (!normalizedGroupId) continue
+      groups[normalizedGroupId] = String(version || '').trim()
+    }
+    return groups
+  }
+
+  async getGroupInfoBatch(accountId: number, groupIds: string[]): Promise<ZaloGroupInfoBatch> {
+    const safeGroupIds = Array.from(new Set(
+      groupIds.map(groupId => String(groupId || '').trim()).filter(Boolean)
+    ))
+    if (safeGroupIds.length === 0) {
+      return { gridInfoMap: {}, removedsGroup: [], unchangedsGroup: [] }
+    }
+
+    const api = await this.ensureApi(accountId)
+    const response = await api.getGroupInfo(safeGroupIds)
+    const gridInfoMap = normalizeRecord((response as any)?.gridInfoMap)
+    const normalizedInfoMap: Record<string, Record<string, unknown>> = {}
+
+    for (const [groupId, info] of Object.entries(gridInfoMap)) {
+      const normalizedGroupId = String(groupId || '').trim()
+      if (!normalizedGroupId) continue
+      normalizedInfoMap[normalizedGroupId] = normalizeRecord(info)
+    }
+
+    return {
+      gridInfoMap: normalizedInfoMap,
+      removedsGroup: toStringArray((response as any)?.removedsGroup),
+      unchangedsGroup: toStringArray((response as any)?.unchangedsGroup)
+    }
   }
 
   async findUserByPhone(accountId: number, phone: string): Promise<ZaloFoundUser | null> {
@@ -756,6 +807,12 @@ function normalizeFoundUser(user: UserBasic | null | undefined): ZaloFoundUser |
     avatar: firstString((user as any).avatar) || undefined,
     raw
   }
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map(item => String(item || '').trim()).filter(Boolean)
+    : []
 }
 
 function normalizeRecord(value: unknown): Record<string, unknown> {
