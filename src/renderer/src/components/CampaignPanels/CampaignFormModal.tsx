@@ -9,6 +9,7 @@ import {
   AkaBizIntegrations,
   AutoAccountContact,
   Campaign,
+  CampaignAction,
   CampaignInputData,
   CampaignExtraSettings,
   ContentTemplate,
@@ -46,6 +47,26 @@ type CampaignPickerSource =
   | { type: 'groupPostTarget' }
   | { type: 'groupCommentTarget' }
   | { type: 'external'; kind: AkaBizCampaignListKind }
+
+const CAMPAIGN_ACTION_PLATFORM_ORDER: Record<string, number> = {
+  facebook: 0,
+  zalo: 1,
+  email: 2
+}
+
+const compareCampaignActionsByPlatform = (left: CampaignAction, right: CampaignAction): number => {
+  const leftPlatform = String(left.flatformType || '').toLowerCase()
+  const rightPlatform = String(right.flatformType || '').toLowerCase()
+  const leftOrder = CAMPAIGN_ACTION_PLATFORM_ORDER[leftPlatform] ?? Number.MAX_SAFE_INTEGER
+  const rightOrder = CAMPAIGN_ACTION_PLATFORM_ORDER[rightPlatform] ?? Number.MAX_SAFE_INTEGER
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder
+
+  const platformCompare = leftPlatform.localeCompare(rightPlatform, 'vi')
+  if (platformCompare !== 0) return platformCompare
+
+  const nameCompare = left.name.localeCompare(right.name, 'vi', { sensitivity: 'base' })
+  return nameCompare !== 0 ? nameCompare : left.id.localeCompare(right.id, 'vi')
+}
 type InternalCampaignPickerSourceType = Exclude<CampaignPickerSource['type'], 'external'>
 
 interface CampaignPickerRow {
@@ -450,7 +471,18 @@ const normalizeFindDataGoalPriority = (
 
 const MESSAGE_FULL_NAME_TOKEN = '#{FULL_NAME}'
 const MESSAGE_PHONE_TOKEN = '#{PHONE}'
-const DEFAULT_ZALO_ALIAS_TEMPLATE = `${MESSAGE_FULL_NAME_TOKEN} - ${MESSAGE_PHONE_TOKEN}`
+const DEFAULT_ZALO_PHONE_ALIAS_TEMPLATE = `${MESSAGE_FULL_NAME_TOKEN} - ${MESSAGE_PHONE_TOKEN}`
+const DEFAULT_ZALO_PROFILE_ALIAS_TEMPLATE = MESSAGE_FULL_NAME_TOKEN
+const DEFAULT_ZALO_ALIAS_TEMPLATES = new Set([
+  DEFAULT_ZALO_PHONE_ALIAS_TEMPLATE,
+  DEFAULT_ZALO_PROFILE_ALIAS_TEMPLATE
+])
+const getDefaultZaloAliasTemplate = (actionId?: string | null): string =>
+  actionId === ZALO_MESSAGE_PHONE_ACTION_ID
+    ? DEFAULT_ZALO_PHONE_ALIAS_TEMPLATE
+    : DEFAULT_ZALO_PROFILE_ALIAS_TEMPLATE
+const isDefaultZaloAliasTemplate = (value?: string | null): boolean =>
+  DEFAULT_ZALO_ALIAS_TEMPLATES.has(String(value || '').trim())
 const MESSAGE_DATE_OPTIONS: { value: MessageDateOption; label: string; token: string }[] = [
   { value: 'today', label: 'Hôm nay', token: 'TODAY' },
   { value: 'tomorrow', label: 'Ngày mai', token: 'TOMORROW' },
@@ -1072,7 +1104,7 @@ export default function CampaignFormModal({
     zaloTagId: campaign?.extraSettings?.zaloTagId ?? '',
     zaloTagName: campaign?.extraSettings?.zaloTagName || '',
     enableZaloAlias: campaign?.extraSettings?.enableZaloAlias ?? false,
-    zaloAliasTemplate: campaign?.extraSettings?.zaloAliasTemplate || DEFAULT_ZALO_ALIAS_TEMPLATE,
+    zaloAliasTemplate: campaign?.extraSettings?.zaloAliasTemplate || getDefaultZaloAliasTemplate(initialActionId),
     zaloFriendTargetMode: (campaign?.extraSettings?.zaloFriendTargetMode || 'selected') as ZaloFriendTargetMode,
     zaloFriendSourceTagIds: normalizeZaloTagIdList(campaign?.extraSettings?.zaloFriendSourceTagIds),
     zaloFriendSourceTagNames: normalizeZaloTagNameList(campaign?.extraSettings?.zaloFriendSourceTagNames),
@@ -1188,6 +1220,7 @@ export default function CampaignFormModal({
   const [viewingSourceCampaign, setViewingSourceCampaign] = useState<Campaign | null>(null)
   const [editingSourceCampaign, setEditingSourceCampaign] = useState<Campaign | null>(null)
   const nextDraftCampaignTempIdRef = useRef(-1)
+  const previousZaloAliasActionIdRef = useRef(initialActionId)
 
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
@@ -1201,6 +1234,7 @@ export default function CampaignFormModal({
   const isZaloMessageGroupMemberCampaign = formData.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
   const isZaloMessageGroupCampaign = formData.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
   const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupCampaign
+  const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
   const isPageInboxMessageCampaign = formData.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
   const isFacebookGroupPostCampaign = formData.actionId === 'facebook_group_post'
@@ -1304,7 +1338,9 @@ export default function CampaignFormModal({
       ? (isEditingSavedCampaign ? 3 : 4)
       : (isEditingSavedCampaign ? 4 : 5)
   const availableCampaignActions = useMemo(
-    () => campaignActions.filter(action => canUseCampaignAction(action, entitlements)),
+    () => campaignActions
+      .filter(action => canUseCampaignAction(action, entitlements))
+      .sort(compareCampaignActionsByPlatform),
     [campaignActions, entitlements]
   )
   const selectedCampaignAction = availableCampaignActions.find(action => action.id === formData.actionId)
@@ -1794,6 +1830,20 @@ export default function CampaignFormModal({
       setMessageDateOption('today')
     }
   }, [isZaloMessagePhoneCampaign, messageDateOption])
+
+  useEffect(() => {
+    if (previousZaloAliasActionIdRef.current === formData.actionId) return
+    previousZaloAliasActionIdRef.current = formData.actionId
+    setFormData(prev => {
+      const currentTemplate = prev.zaloAliasTemplate.trim()
+      if (currentTemplate && !isDefaultZaloAliasTemplate(currentTemplate)) return prev
+
+      const nextTemplate = getDefaultZaloAliasTemplate(prev.actionId)
+      return prev.zaloAliasTemplate === nextTemplate
+        ? prev
+        : { ...prev, zaloAliasTemplate: nextTemplate }
+    })
+  }, [formData.actionId])
 
   useEffect(() => {
     if (campaigns.length === 0) {
@@ -4546,7 +4596,7 @@ export default function CampaignFormModal({
               ...p,
               enableZaloAlias: e.target.checked,
               zaloAliasTemplate: e.target.checked && !p.zaloAliasTemplate.trim()
-                ? DEFAULT_ZALO_ALIAS_TEMPLATE
+                ? getDefaultZaloAliasTemplate(p.actionId)
                 : p.zaloAliasTemplate
             }))}
           />
@@ -4560,7 +4610,7 @@ export default function CampaignFormModal({
             className="stepper-input"
             value={formData.zaloAliasTemplate}
             onChange={e => setFormData(p => ({ ...p, zaloAliasTemplate: e.target.value }))}
-            placeholder={DEFAULT_ZALO_ALIAS_TEMPLATE}
+            placeholder={defaultZaloAliasTemplate}
           />
         </div>
       )}
@@ -4634,7 +4684,7 @@ export default function CampaignFormModal({
               ...p,
               enableZaloAlias: e.target.checked,
               zaloAliasTemplate: e.target.checked && !p.zaloAliasTemplate.trim()
-                ? DEFAULT_ZALO_ALIAS_TEMPLATE
+                ? getDefaultZaloAliasTemplate(p.actionId)
                 : p.zaloAliasTemplate
             }))}
           />
@@ -4648,7 +4698,7 @@ export default function CampaignFormModal({
             className="stepper-input"
             value={formData.zaloAliasTemplate}
             onChange={e => setFormData(p => ({ ...p, zaloAliasTemplate: e.target.value }))}
-            placeholder={DEFAULT_ZALO_ALIAS_TEMPLATE}
+            placeholder={defaultZaloAliasTemplate}
           />
         </div>
       )}
