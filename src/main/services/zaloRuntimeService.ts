@@ -187,6 +187,35 @@ export interface ZaloGroupInfoBatch {
   unchangedsGroup: string[]
 }
 
+export type ZaloGroupMemberRole = 'owner' | 'admin' | 'member'
+
+export interface ZaloGroupMemberInfo {
+  zaloGroupId: string
+  zaloUid: string
+  displayName?: string | null
+  zaloName?: string | null
+  avatar?: string | null
+  accountStatus?: number | null
+  type?: number | null
+  lastUpdateTime?: number | null
+  globalId?: string | null
+  role: ZaloGroupMemberRole
+  roleRank: 1 | 2 | 3
+  isCreator: boolean
+  isAdmin: boolean
+  rawPayload: Record<string, unknown>
+}
+
+export interface ZaloGroupMembersResult {
+  group: Record<string, unknown>
+  members: ZaloGroupMemberInfo[]
+  usedProxy?: boolean
+}
+
+const ZALO_GROUP_MEMBER_PROFILE_BATCH_SIZE = 300
+const ZALO_GROUP_LINK_MAX_MEMBER_PAGES = 500
+const ZALO_GROUP_LINK_GINFO_PROXY_SETTING_KEY = 'zalo.group_link.ginfo_proxy_url'
+
 export class ZaloRuntimeService {
   private activeQrLogins = new Map<number, ActiveQrLogin>()
   private apiCache = new Map<number, CachedZaloApi>()
@@ -412,6 +441,86 @@ export class ZaloRuntimeService {
       removedsGroup: toStringArray((response as any)?.removedsGroup),
       unchangedsGroup: toStringArray((response as any)?.unchangedsGroup)
     }
+  }
+
+  async getJoinedGroupMembers(accountId: number, groupId: string): Promise<ZaloGroupMembersResult> {
+    const api = await this.ensureApi(accountId)
+    const normalizedGroupId = normalizeZaloGroupId(groupId)
+    if (!normalizedGroupId) throw new Error('Group Zalo không hợp lệ')
+
+    const response = await this.getGroupInfoLegacy(api, normalizedGroupId)
+    const gridInfoMap = normalizeRecord(response.gridInfoMap)
+    const dataMap = normalizeRecord(response.data)
+    const groups = Array.isArray(response.groups) ? response.groups : []
+    const groupFromList = groups
+      .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
+      .find(item => normalizeZaloGroupId(item.groupId) === normalizedGroupId)
+    const group = normalizeRecord(
+      response[normalizedGroupId]
+      || gridInfoMap[normalizedGroupId]
+      || dataMap[normalizedGroupId]
+      || groupFromList
+      || (normalizeZaloGroupId(response.groupId) === normalizedGroupId ? response : null)
+    )
+    if (!group.groupId && !group.name && !Array.isArray(group.memberIds)) {
+      throw new Error('Không lấy được thông tin group Zalo.')
+    }
+
+    const memberIds = uniqueStrings([
+      ...toStringArray(group.memberIds),
+      ...this.getCurrentMembersFromGroupLinkPage(group).map(member => normalizeZaloMemberId(member.id))
+    ].map(normalizeZaloMemberId))
+
+    if (memberIds.length === 0) {
+      return { group, members: [] }
+    }
+
+    const profiles: Record<string, Record<string, unknown>> = {}
+    for (let i = 0; i < memberIds.length; i += ZALO_GROUP_MEMBER_PROFILE_BATCH_SIZE) {
+      const chunk = memberIds.slice(i, i + ZALO_GROUP_MEMBER_PROFILE_BATCH_SIZE)
+      const responseProfiles = await this.getGroupMembersInfoBatch(api, chunk)
+      for (const [uid, profile] of Object.entries(responseProfiles)) {
+        const normalizedUid = normalizeZaloMemberId(uid)
+        if (!normalizedUid) continue
+        profiles[normalizedUid] = normalizeRecord(profile)
+      }
+    }
+
+    const members = memberIds.map(memberId => {
+      const profile = profiles[memberId] || { id: memberId }
+      return this.mapZaloGroupMember(normalizedGroupId, group, profile, 'profile')
+    })
+
+    return { group, members }
+  }
+
+  async getGroupMembersByLink(accountId: number, link: string): Promise<ZaloGroupMembersResult> {
+    const api = await this.ensureApi(accountId)
+    const normalizedLink = normalizeZaloGroupLink(link)
+    if (!normalizedLink) throw new Error('Link group Zalo không hợp lệ')
+
+    const directFirstPage = await api.getGroupLinkInfo({ link: normalizedLink, memberPage: 1 })
+    const firstGroup = normalizeRecord(directFirstPage)
+    const firstMembers = this.getCurrentMembersFromGroupLinkPage(firstGroup)
+    const totalMember = Number(firstGroup.totalMember || 0)
+
+    if (totalMember > 0 && firstMembers.length === 0) {
+      const proxyUrl = await this.getGroupLinkGinfoProxyUrl()
+      if (!proxyUrl) {
+        throw new Error('Zalo trả về group có thành viên nhưng không trả danh sách member. Vui lòng cấu hình proxy fallback cho quét link group Zalo.')
+      }
+      return this.getGroupMembersByLinkWithProxy(api, normalizedLink, proxyUrl)
+    }
+
+    const collected = await this.collectGroupLinkMemberPages(api, normalizedLink, async (page) => (
+      page === 1
+        ? firstGroup
+        : normalizeRecord(await api.getGroupLinkInfo({ link: normalizedLink, memberPage: page }))
+    ))
+    if (collected.members.length === 0 && Number(collected.group.totalMember || 0) > 0) {
+      throw new Error('Zalo không trả danh sách member cho link group này.')
+    }
+    return collected
   }
 
   async findUserByPhone(accountId: number, phone: string): Promise<ZaloFoundUser | null> {
@@ -668,6 +777,233 @@ export class ZaloRuntimeService {
     return new Zalo(options)
   }
 
+  private async getGroupInfoLegacy(api: API, groupId: string): Promise<Record<string, unknown>> {
+    const customApi = api as API & {
+      akaGetGroupInfoLegacy?: (payload: { groupId: string }) => Promise<unknown>
+    }
+
+    if (typeof customApi.akaGetGroupInfoLegacy !== 'function') {
+      api.custom<Promise<unknown>, { groupId: string }>('akaGetGroupInfoLegacy', async ({ ctx, utils, props }) => {
+        const serviceURL = utils.makeURL(`${api.zpwServiceMap.group[0]}/api/group/getmg`)
+        const params = {
+          grids: [props.groupId],
+          avatar_size: 120,
+          member_avatar_size: 120,
+          imei: ctx.imei
+        }
+        const encryptedParams = utils.encodeAES(JSON.stringify(params))
+        if (!encryptedParams) throw new ZaloApiError('Không chuẩn bị được yêu cầu lấy thông tin group Zalo')
+        const response = await utils.request(serviceURL, {
+          method: 'POST',
+          body: new URLSearchParams({ params: encryptedParams })
+        })
+        return utils.resolve(response)
+      })
+    }
+
+    const requestLegacyGetmg = customApi.akaGetGroupInfoLegacy
+    if (typeof requestLegacyGetmg !== 'function') {
+      throw new Error('Không khởi tạo được tác vụ lấy thông tin group Zalo')
+    }
+    return normalizeRecord(await requestLegacyGetmg({ groupId }))
+  }
+
+  private async getGroupMembersInfoBatch(
+    api: API,
+    memberIds: string[]
+  ): Promise<Record<string, Record<string, unknown>>> {
+    const customApi = api as API & {
+      akaGetGroupMembersInfoPost?: (payload: { memberIds: string[] }) => Promise<unknown>
+    }
+
+    if (typeof customApi.akaGetGroupMembersInfoPost !== 'function') {
+      api.custom<Promise<unknown>, { memberIds: string[] }>('akaGetGroupMembersInfoPost', async ({ utils, props }) => {
+        const serviceURL = utils.makeURL(`${api.zpwServiceMap.profile[0]}/api/social/group/members`)
+        const params = {
+          friend_pversion_map: props.memberIds.map(id => id.endsWith('_0') ? id : `${id}_0`)
+        }
+        const encryptedParams = utils.encodeAES(JSON.stringify(params))
+        if (!encryptedParams) throw new ZaloApiError('Failed to encrypt group member profile params')
+        const response = await utils.request(serviceURL, {
+          method: 'POST',
+          body: new URLSearchParams({ params: encryptedParams })
+        })
+        return utils.resolve(response)
+      })
+    }
+
+    const requestMemberProfiles = customApi.akaGetGroupMembersInfoPost
+    if (typeof requestMemberProfiles !== 'function') {
+      throw new Error('Không khởi tạo được API lấy thông tin thành viên Zalo')
+    }
+    const response = normalizeRecord(await requestMemberProfiles({ memberIds }))
+    return Object.fromEntries(
+      Object.entries(normalizeRecord(response.profiles))
+        .map(([uid, profile]) => [uid, normalizeRecord(profile)])
+    )
+  }
+
+  private async collectGroupLinkMemberPages(
+    api: API,
+    link: string,
+    loadPage: (memberPage: number) => Promise<Record<string, unknown>>
+  ): Promise<ZaloGroupMembersResult> {
+    const rawMembers: Record<string, unknown>[] = []
+    const seenUids = new Set<string>()
+    let group: Record<string, unknown> = {}
+
+    for (let memberPage = 1; memberPage <= ZALO_GROUP_LINK_MAX_MEMBER_PAGES; memberPage += 1) {
+      const pageGroup = normalizeRecord(await loadPage(memberPage))
+      group = mergeGroupLinkPage(group, pageGroup)
+
+      const pageMembers = this.getCurrentMembersFromGroupLinkPage(pageGroup)
+      let newUidCount = 0
+      for (const member of pageMembers) {
+        const uid = normalizeZaloMemberId(member.id)
+        if (!uid || seenUids.has(uid)) continue
+        seenUids.add(uid)
+        rawMembers.push(member)
+        newUidCount += 1
+      }
+
+      if (newUidCount === 0) break
+    }
+
+    group.currentMems = rawMembers
+    if (!group.link) group.link = link
+    const zaloGroupId = normalizeZaloGroupId(group.groupId)
+    const members = rawMembers
+      .map(member => this.mapZaloGroupMember(zaloGroupId, group, member, 'link'))
+      .filter((member): member is ZaloGroupMemberInfo => !!member.zaloUid)
+
+    return { group, members }
+  }
+
+  private async getGroupMembersByLinkWithProxy(
+    api: API,
+    link: string,
+    proxyUrl: string
+  ): Promise<ZaloGroupMembersResult> {
+    const collected = await this.collectGroupLinkMemberPages(api, link, async (memberPage) => (
+      this.getGroupLinkInfoWithProxyPage(api, link, memberPage, proxyUrl)
+    ))
+    return { ...collected, usedProxy: true }
+  }
+
+  private async getGroupLinkInfoWithProxyPage(
+    api: API,
+    link: string,
+    memberPage: number,
+    proxyUrl: string
+  ): Promise<Record<string, unknown>> {
+    const customApi = api as API & {
+      akaGetGroupLinkInfoWithProxy?: (payload: {
+        link: string
+        memberPage: number
+        proxyUrl: string
+      }) => Promise<unknown>
+    }
+
+    if (typeof customApi.akaGetGroupLinkInfoWithProxy !== 'function') {
+      api.custom<Promise<unknown>, { link: string; memberPage: number; proxyUrl: string }>(
+        'akaGetGroupLinkInfoWithProxy',
+        async ({ ctx, utils, props }) => {
+          const serviceURL = utils.makeURL(`${api.zpwServiceMap.group[0]}/api/group/link/ginfo`)
+          const encryptedParams = utils.encodeAES(JSON.stringify({
+            link: props.link,
+            avatar_size: 120,
+            member_avatar_size: 120,
+            mpage: props.memberPage
+          }))
+          if (!encryptedParams) throw new ZaloApiError('Không chuẩn bị được yêu cầu lấy thông tin link group Zalo')
+
+          const url = utils.makeURL(serviceURL, { params: encryptedParams })
+          const [{ default: nodeFetch }, proxyAgentMod] = await Promise.all([
+            import('node-fetch'),
+            import('proxy-agent')
+          ])
+          const agent = new proxyAgentMod.ProxyAgent({ getProxyForUrl: () => props.proxyUrl })
+          const origin = new URL(url).origin
+          const response = await nodeFetch(url, {
+            method: 'GET',
+            agent,
+            headers: {
+              Accept: 'application/json, text/plain, */*',
+              'Accept-Encoding': 'gzip, deflate, br, zstd',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'content-type': 'application/x-www-form-urlencoded',
+              Cookie: await ctx.cookie.getCookieString(origin),
+              Origin: 'https://chat.zalo.me',
+              Referer: 'https://chat.zalo.me/',
+              'User-Agent': ctx.userAgent
+            }
+          })
+          return utils.resolve(response as unknown as Response)
+        }
+      )
+    }
+
+    const requestGinfoWithProxy = customApi.akaGetGroupLinkInfoWithProxy
+    if (typeof requestGinfoWithProxy !== 'function') {
+      throw new Error('Không khởi tạo được tác vụ lấy thông tin link group Zalo qua proxy')
+    }
+    return normalizeRecord(await requestGinfoWithProxy({ link, memberPage, proxyUrl }))
+  }
+
+  private getCurrentMembersFromGroupLinkPage(group: Record<string, unknown>): Record<string, unknown>[] {
+    const members = Array.isArray(group.currentMems) ? group.currentMems : []
+    return members
+      .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
+      .map(member => normalizeRecord(member))
+  }
+
+  private async getGroupLinkGinfoProxyUrl(): Promise<string | null> {
+    const rawValue = await this.supabase
+      .getSystemSettingValue(ZALO_GROUP_LINK_GINFO_PROXY_SETTING_KEY)
+      .catch(() => '')
+    return normalizeProxyUrl(rawValue)
+  }
+
+  private mapZaloGroupMember(
+    zaloGroupId: string,
+    group: Record<string, unknown>,
+    rawMember: Record<string, unknown>,
+    source: 'profile' | 'link'
+  ): ZaloGroupMemberInfo {
+    const uid = normalizeZaloMemberId(firstString(
+      rawMember.id,
+      rawMember.uid,
+      rawMember.userId,
+      rawMember.globalId
+    ))
+    const creatorId = normalizeZaloMemberId(group.creatorId)
+    const adminIds = new Set(toStringArray(group.adminIds).map(normalizeZaloMemberId).filter(Boolean))
+    const isCreator = !!uid && uid === creatorId
+    const isAdmin = !!uid && adminIds.has(uid)
+    const role: ZaloGroupMemberRole = isCreator ? 'owner' : isAdmin ? 'admin' : 'member'
+
+    return {
+      zaloGroupId,
+      zaloUid: uid,
+      displayName: firstString(rawMember.displayName, rawMember.dName, rawMember.name),
+      zaloName: firstString(rawMember.zaloName, rawMember.zalo_name),
+      avatar: firstString(rawMember.avatar),
+      accountStatus: nullableNumber(rawMember.accountStatus),
+      type: nullableNumber(rawMember.type),
+      lastUpdateTime: nullableNumber(rawMember.lastUpdateTime),
+      globalId: firstString(rawMember.globalId),
+      role,
+      roleRank: role === 'owner' ? 1 : role === 'admin' ? 2 : 3,
+      isCreator,
+      isAdmin,
+      rawPayload: {
+        ...rawMember,
+        source,
+        zaloGroupId
+      }
+    }
+  }
+
   private async loadFetchPolyfillWithSetCookieSupport(): Promise<typeof globalThis.fetch> {
     const mod = await import('node-fetch')
     const nodeFetch = mod.default
@@ -818,4 +1154,85 @@ function toStringArray(value: unknown): string[] {
 function normalizeRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object') return {}
   return { ...(value as Record<string, unknown>) }
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeZaloGroupId(value: unknown): string {
+  return String(value || '').trim()
+}
+
+function normalizeZaloMemberId(value: unknown): string {
+  return String(value || '')
+    .trim()
+    .replace(/_0$/i, '')
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.map(item => String(item || '').trim()).filter(Boolean)))
+}
+
+function normalizeZaloGroupLink(value: unknown): string {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(withProtocol)
+    const hostname = url.hostname.replace(/^www\./i, '').toLowerCase()
+    const parts = url.pathname.split('/').filter(Boolean)
+    let groupCode = ''
+    if (hostname === 'zalo.me' || hostname.endsWith('.zalo.me')) {
+      if (parts[0]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[1] || ''
+    } else if (hostname === 'zaloapp.com' || hostname.endsWith('.zaloapp.com')) {
+      if (parts[0]?.toLowerCase() !== 'qr' || parts[1]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[2] || ''
+    } else {
+      return ''
+    }
+    return groupCode ? `https://zalo.me/g/${groupCode}` : ''
+  } catch {
+    return ''
+  }
+}
+
+function normalizeProxyUrl(value: unknown): string | null {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return raw
+
+  const parts = raw.split(':')
+  if (parts.length >= 4) {
+    const [host, port, username, ...passwordParts] = parts
+    const password = passwordParts.join(':')
+    if (host && port && username) {
+      return `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`
+    }
+  }
+
+  return `http://${raw}`
+}
+
+function mergeGroupLinkPage(
+  current: Record<string, unknown>,
+  next: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = { ...current }
+  for (const [key, value] of Object.entries(next)) {
+    if (value === null || value === undefined || value === '') continue
+    if (Array.isArray(value) && value.length === 0) continue
+    if (isEmptyGroupValue(merged[key])) merged[key] = value
+  }
+  return merged
+}
+
+function isEmptyGroupValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === '') return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0
+  return false
 }

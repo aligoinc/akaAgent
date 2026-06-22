@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig } from '../shared/types'
+import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, ZaloGroupMemberScanRequest, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -378,6 +378,9 @@ const electronAPI = {
   loadPageInboxCustomers: (accountId: number, pageUid: string, pageName?: string): Promise<ContactLoadResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS, accountId, pageUid, pageName),
 
+  loadZaloGroupMembers: (accountId: number, request: ZaloGroupMemberScanRequest): Promise<ContactLoadResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_ZALO_GROUP_MEMBERS, accountId, request),
+
   cancelContactLoad: (accountId: number): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_CANCEL_LOAD, accountId),
 
@@ -386,6 +389,9 @@ const electronAPI = {
 
   listPageInboxContacts: (accountId: number, query?: PageInboxContactListQuery): Promise<ContactListResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_PAGE_INBOX, accountId, query),
+
+  listZaloGroupMemberContacts: (accountId: number, zaloGroupId: string): Promise<AutoAccountContact[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_ZALO_GROUP_MEMBERS, accountId, zaloGroupId),
 
   exportPageInboxContacts: (accountId: number, query?: PageInboxContactListQuery): Promise<AutoAccountContact[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_EXPORT_PAGE_INBOX, accountId, query),

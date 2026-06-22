@@ -12,6 +12,7 @@ import * as contentTemplateRepo from '../data/repositories/contentTemplateReposi
 import * as emailNotificationRepo from '../data/repositories/emailNotificationRepository'
 import * as reportRepo from '../data/repositories/reportRepository'
 import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogRepository'
+import * as systemSettingsRepo from '../data/repositories/systemSettingsRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -177,6 +178,12 @@ export class SupabaseService {
     contacts: accountContactRepo.ZaloGroupContactInput[],
     options?: Parameters<typeof accountContactRepo.upsertZaloGroupContacts>[1]
   ) { return accountContactRepo.upsertZaloGroupContacts(contacts, options) }
+  upsertZaloGroupMemberContacts(
+    input: accountContactRepo.ZaloGroupMemberUpsertInput
+  ) { return accountContactRepo.upsertZaloGroupMemberContacts(input) }
+  listZaloGroupMemberContacts(accountId: number, zaloGroupId: string) {
+    return accountContactRepo.listZaloGroupMemberContacts(accountId, zaloGroupId)
+  }
   upsertGroupPostContactStatus(
     input: Parameters<typeof accountContactRepo.upsertGroupPostContactStatus>[0]
   ) { return accountContactRepo.upsertGroupPostContactStatus(input) }
@@ -201,5 +208,11 @@ export class SupabaseService {
   }
   removeContactsFromGroup(groupId: number, contactIds: number[]) {
     return accountContactRepo.removeContactsFromGroup(groupId, contactIds)
+  }
+
+  // =========== SYSTEM SETTINGS ===========
+  async getSystemSettingValue(key: string): Promise<string> {
+    const settings = await systemSettingsRepo.listActiveSystemSettingsByKeys([key])
+    return systemSettingsRepo.getSettingValue(settings, key)
   }
 }

@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Download, Folder, Info, Maximize2, Minimize2, Plus, RefreshCw, Search, Square, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent } from 'react'
+import jsQR from 'jsqr'
+import { Check, ChevronLeft, ChevronRight, Download, Folder, Info, Link2, Maximize2, Minimize2, Plus, QrCode, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
-import { AutoAccountContact, AutoAccountContactGroup, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter } from '../../../../shared/types'
+import { AutoAccountContact, AutoAccountContactGroup, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberScanMode } from '../../../../shared/types'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
 import DataScanGroupManagementModal from './DataScanGroupManagementModal'
 import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 
-export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups'
+export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members'
 type DataScanPlatform = 'facebook' | 'zalo'
 type ContactStatusFilter = 'active' | 'inactive' | 'all'
 type PageInboxTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
@@ -28,6 +29,7 @@ interface PageInboxSelectedRange {
 
 const POST_COMMENTERS_ACTION_ID: DataScanAction = 'facebook_post_commenters'
 const PAGE_INBOX_CUSTOMERS_ACTION_ID: DataScanAction = 'facebook_page_inbox_customers'
+const ZALO_GROUP_MEMBERS_ACTION_ID: DataScanAction = 'zalo_group_members'
 const DEFAULT_POST_COMMENTER_LIMIT = 100
 const PAGE_INBOX_PAGE_SIZE = 100
 const DEFAULT_PAGE_INBOX_TIME_PRESET: PageInboxTimePreset = '30_days'
@@ -120,6 +122,14 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
     contactType: 'group',
     emptyText: 'Chưa có dữ liệu group Zalo',
     loadingText: 'Đang tải danh sách group Zalo...'
+  },
+  {
+    id: ZALO_GROUP_MEMBERS_ACTION_ID,
+    label: 'Zalo - Lấy thành viên group',
+    platform: 'zalo',
+    contactType: 'person',
+    emptyText: 'Chọn group hoặc nhập link rồi tải data',
+    loadingText: 'Đang tải thành viên group Zalo...'
   }
 ]
 
@@ -287,6 +297,38 @@ const normalizePositiveNumber = (value: unknown, fallback = DEFAULT_POST_COMMENT
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
+const normalizeZaloGroupLink = (value: unknown) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(withProtocol)
+    const hostname = url.hostname.replace(/^www\./i, '').toLowerCase()
+    const parts = url.pathname.split('/').filter(Boolean)
+    let groupCode = ''
+    if (hostname === 'zalo.me' || hostname.endsWith('.zalo.me')) {
+      if (parts[0]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[1] || ''
+    } else if (hostname === 'zaloapp.com' || hostname.endsWith('.zaloapp.com')) {
+      if (parts[0]?.toLowerCase() !== 'qr' || parts[1]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[2] || ''
+    } else {
+      return ''
+    }
+    return groupCode ? `https://zalo.me/g/${groupCode}` : ''
+  } catch {
+    return ''
+  }
+}
+
+const extractZaloGroupLink = (value: unknown) => {
+  const raw = String(value || '').trim()
+  const direct = normalizeZaloGroupLink(raw)
+  if (direct) return direct
+  const match = raw.match(/(?:https?:\/\/)?(?:[\w-]+\.)?(?:zalo\.me\/g\/|zaloapp\.com\/qr\/g\/)[^\s"'<>]+/i)
+  return match ? normalizeZaloGroupLink(match[0]) : ''
+}
+
 const getContactInfo = (contact: AutoAccountContact) => {
   const extra = contact.extraData || {}
   if (contact.contactType === 'page_inbox_customer') {
@@ -299,6 +341,84 @@ const getContactInfo = (contact: AutoAccountContact) => {
   const category = typeof extra.category === 'string' ? extra.category : ''
   const lastActivityText = typeof extra.lastActivityText === 'string' ? extra.lastActivityText : ''
   return category || lastActivityText || ''
+}
+
+const getZaloGroupMemberRoleLabel = (contact: AutoAccountContact) => {
+  const label = contact.extraData?.zaloGroupRoleLabel
+  return typeof label === 'string' && label.trim() ? label.trim() : 'Thành viên'
+}
+
+const getZaloGroupTotalMember = (contact: AutoAccountContact) => {
+  const parsed = Number(contact.extraData?.totalMember)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+const getZaloGroupOptionLabel = (group: AutoAccountContact) => {
+  const name = group.name || group.uid || '-'
+  const totalMember = getZaloGroupTotalMember(group)
+  return totalMember === null
+    ? name
+    : `${name} (${formatCount(totalMember)})`
+}
+
+const getZaloGroupContactLink = (group: AutoAccountContact) => normalizeZaloGroupLink(group.url)
+
+const readFileAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.onerror = () => reject(reader.error || new Error('Không thể đọc ảnh QR.'))
+  reader.readAsDataURL(file)
+})
+
+const loadImageFromDataUrl = (dataUrl: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const image = new Image()
+  image.onload = () => resolve(image)
+  image.onerror = () => reject(new Error('Không thể mở ảnh QR.'))
+  image.src = dataUrl
+})
+
+const decodeQrDataFromImage = (image: HTMLImageElement) => {
+  const width = image.naturalWidth || image.width
+  const height = image.naturalHeight || image.height
+  if (width <= 0 || height <= 0) return ''
+
+  const minSide = Math.min(width, height)
+  const attempts = [
+    { sx: 0, sy: 0, sw: width, sh: height },
+    ...[0.78, 0.68, 0.58, 0.48].map(ratio => {
+      const side = Math.round(minSide * ratio)
+      return {
+        sx: Math.max(0, Math.round((width - side) / 2)),
+        sy: Math.max(0, Math.round((height - side) / 2)),
+        sw: side,
+        sh: side
+      }
+    })
+  ]
+
+  for (const attempt of attempts) {
+    const canvas = document.createElement('canvas')
+    canvas.width = attempt.sw
+    canvas.height = attempt.sh
+    const ctx = canvas.getContext('2d')
+    if (!ctx) continue
+    ctx.drawImage(
+      image,
+      attempt.sx,
+      attempt.sy,
+      attempt.sw,
+      attempt.sh,
+      0,
+      0,
+      attempt.sw,
+      attempt.sh
+    )
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const qr = jsQR(imageData.data, imageData.width, imageData.height)
+    if (qr?.data) return qr.data
+  }
+
+  return ''
 }
 
 const getPageInboxPhone = (contact: AutoAccountContact) => {
@@ -421,6 +541,7 @@ export default function DataScanModal({
   const contactsLoadIdRef = useRef(0)
   const pageInboxOptionsAccountRef = useRef<number | ''>('')
   const pageInboxPageUidRef = useRef('')
+  const zaloQrFileInputRef = useRef<HTMLInputElement | null>(null)
   const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions))
   const [accountId, setAccountId] = useState<number | ''>(initialAccountId || '')
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
@@ -449,6 +570,11 @@ export default function DataScanModal({
   const [pageInboxSelectAllMatching, setPageInboxSelectAllMatching] = useState(false)
   const [pageInboxSelectedRange, setPageInboxSelectedRange] = useState<PageInboxSelectedRange | null>(null)
   const [pageInboxExcludedIds, setPageInboxExcludedIds] = useState<Set<number>>(new Set())
+  const [zaloGroupMemberMode, setZaloGroupMemberMode] = useState<ZaloGroupMemberScanMode>('joined_group')
+  const [zaloGroupMemberGroupId, setZaloGroupMemberGroupId] = useState('')
+  const [zaloGroupMemberLink, setZaloGroupMemberLink] = useState('')
+  const [zaloGroupOptions, setZaloGroupOptions] = useState<AutoAccountContact[]>([])
+  const [zaloQrReading, setZaloQrReading] = useState(false)
   const [progressMessages, setProgressMessages] = useState<string[]>([])
   const [minimized, setMinimized] = useState(false)
   const [contactGroups, setContactGroups] = useState<AutoAccountContactGroup[]>([])
@@ -477,6 +603,7 @@ export default function DataScanModal({
   const canSwitchLockedAction = !!allowedActions?.length && availableActions.length > 1
   const isPostCommentersAction = action === POST_COMMENTERS_ACTION_ID
   const isPageInboxAction = action === PAGE_INBOX_CUSTOMERS_ACTION_ID
+  const isZaloGroupMembersAction = action === ZALO_GROUP_MEMBERS_ACTION_ID
   const supportsContactGroups = !isPageInboxAction
   const normalizedPostCommentersUrl = useMemo(
     () => normalizeFacebookPostUrlForCompare(postCommentersUrl),
@@ -494,16 +621,26 @@ export default function DataScanModal({
   const showGroupApprovalColumn = actionDef.contactType === 'group' && actionDef.platform === 'facebook'
   const showAvatarColumn = actionDef.platform === 'zalo'
   const showLinkColumn = !isPageInboxAction && (actionDef.platform === 'facebook' || actionDef.id === 'zalo_groups')
+  const showGroupMemberRoleColumn = isZaloGroupMembersAction
+  const showFriendStatusColumn = actionDef.contactType === 'person' && !isZaloGroupMembersAction
   const statusFilterOptions = useMemo(
     () => getStatusFilterOptions(actionDef.contactType),
     [actionDef.contactType]
   )
-  const hasStatusFilter = actionDef.contactType === 'person' || actionDef.contactType === 'group'
+  const hasStatusFilter = !isZaloGroupMembersAction && (actionDef.contactType === 'person' || actionDef.contactType === 'group')
   const selectedPageInboxPage = useMemo(
     () => pageInboxPages.find(page => page.uid === pageInboxPageUid) || null,
     [pageInboxPageUid, pageInboxPages]
   )
   const pageInboxPageCount = Math.max(1, Math.ceil(pageInboxTotal / PAGE_INBOX_PAGE_SIZE))
+  const joinedZaloGroupOptions = useMemo(
+    () => zaloGroupOptions.filter(group => group.isJoined === true),
+    [zaloGroupOptions]
+  )
+  const linkedZaloGroupOptions = useMemo(
+    () => zaloGroupOptions.filter(group => !!getZaloGroupContactLink(group)),
+    [zaloGroupOptions]
+  )
 
   useEffect(() => {
     loadAccounts()
@@ -538,6 +675,82 @@ export default function DataScanModal({
     }
   }, [action, availableActions])
 
+  const loadZaloGroupMemberContactsForGroup = useCallback(async (groupId: string) => {
+    if (!window.electronAPI || !accountId || !groupId) {
+      setContacts([])
+      setPageInboxTotal(0)
+      return
+    }
+    setLoading(true)
+    try {
+      const data = await window.electronAPI.listZaloGroupMemberContacts(accountId, groupId)
+      if (!mountedRef.current) return
+      setContacts(data)
+      setPageInboxTotal(0)
+      setGroupContactCache({})
+    } catch (err: any) {
+      console.error('Failed to load Zalo group members:', err)
+      if (mountedRef.current) {
+        showAlert(err?.message || 'Không thể tải danh sách thành viên group Zalo.', 'error')
+      }
+    } finally {
+      if (mountedRef.current) setLoading(false)
+    }
+  }, [accountId, showAlert])
+
+  const findLinkedZaloGroupByLink = useCallback((link: string) => {
+    const normalized = normalizeZaloGroupLink(link)
+    if (!normalized) return null
+    return linkedZaloGroupOptions.find(group => getZaloGroupContactLink(group) === normalized) || null
+  }, [linkedZaloGroupOptions])
+
+  const applyZaloGroupMemberLink = useCallback((value: unknown) => {
+    const normalizedLink = extractZaloGroupLink(value)
+    if (!normalizedLink) return ''
+    const matchedGroup = findLinkedZaloGroupByLink(normalizedLink)
+    setZaloGroupMemberMode('group_link')
+    setZaloGroupMemberLink(normalizedLink)
+    setZaloGroupMemberGroupId(matchedGroup?.uid || '')
+    setSelectedIds(new Set())
+    return normalizedLink
+  }, [findLinkedZaloGroupByLink])
+
+  const decodeZaloQrImage = useCallback(async (file: File | null | undefined) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      showAlert('Vui lòng chọn ảnh QR hợp lệ.', 'error')
+      return
+    }
+    setZaloQrReading(true)
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      const image = await loadImageFromDataUrl(dataUrl)
+      const link = applyZaloGroupMemberLink(decodeQrDataFromImage(image))
+      if (!link) {
+        showAlert('Ảnh QR không chứa link group Zalo hợp lệ.', 'error')
+        return
+      }
+      showAlert('Đã nhận link group từ QR.', 'success')
+    } catch (err: any) {
+      showAlert(err?.message || 'Không thể đọc ảnh QR.', 'error')
+    } finally {
+      if (mountedRef.current) setZaloQrReading(false)
+    }
+  }, [applyZaloGroupMemberLink, showAlert])
+
+  const handleZaloQrFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    void decodeZaloQrImage(file)
+  }, [decodeZaloQrImage])
+
+  const handleZaloGroupLinkPaste = useCallback((event: ClipboardEvent<HTMLInputElement>) => {
+    const item = Array.from(event.clipboardData.items).find(clipboardItem => clipboardItem.type.startsWith('image/'))
+    if (!item) return
+    event.preventDefault()
+    void decodeZaloQrImage(item.getAsFile())
+  }, [decodeZaloQrImage])
+
   const loadCachedContacts = useCallback(async () => {
     if (!window.electronAPI || !accountId) {
       contactsLoadIdRef.current += 1
@@ -571,6 +784,17 @@ export default function DataScanModal({
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
+      } else if (isZaloGroupMembersAction) {
+        if (!zaloGroupMemberGroupId) {
+          if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
+          setContacts([])
+          setPageInboxTotal(0)
+          return
+        }
+        const data = await window.electronAPI.listZaloGroupMemberContacts(accountId, zaloGroupMemberGroupId)
+        if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
+        setContacts(data)
+        setPageInboxTotal(0)
       } else {
         const data = await window.electronAPI.listContacts(accountId, actionDef.contactType)
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
@@ -592,9 +816,11 @@ export default function DataScanModal({
     accountId,
     actionDef.contactType,
     isPageInboxAction,
+    isZaloGroupMembersAction,
     pageInboxAppliedFilters,
     pageInboxPage,
-    showAlert
+    showAlert,
+    zaloGroupMemberGroupId
   ])
 
   const loadContactGroups = useCallback(async () => {
@@ -774,6 +1000,55 @@ export default function DataScanModal({
     }
   }, [accountId, isPageInboxAction, showAlert])
 
+  const loadZaloGroupOptions = useCallback(async () => {
+    if (!window.electronAPI || !accountId || !isZaloGroupMembersAction) {
+      setZaloGroupOptions([])
+      setZaloGroupMemberGroupId('')
+      return
+    }
+    try {
+      const groups = await window.electronAPI.listContacts(accountId, 'group')
+      const zaloGroups = groups.filter(group => group.extraData?.platform === 'zalo')
+      setZaloGroupOptions(zaloGroups)
+    } catch (err: any) {
+      console.error('Failed to load Zalo group options:', err)
+      showAlert(err?.message || 'Không thể tải danh sách group Zalo.', 'error')
+    }
+  }, [accountId, isZaloGroupMembersAction, showAlert])
+
+  useEffect(() => {
+    void loadZaloGroupOptions()
+  }, [loadZaloGroupOptions])
+
+  useEffect(() => {
+    if (!isZaloGroupMembersAction) return
+    if (zaloGroupMemberMode === 'joined_group') {
+      setZaloGroupMemberGroupId(prev => (
+        prev && joinedZaloGroupOptions.some(group => group.uid === prev)
+          ? prev
+          : joinedZaloGroupOptions[0]?.uid || ''
+      ))
+      return
+    }
+
+    const normalizedLink = normalizeZaloGroupLink(zaloGroupMemberLink)
+    const matchedGroup = normalizedLink
+      ? linkedZaloGroupOptions.find(group => getZaloGroupContactLink(group) === normalizedLink)
+      : null
+
+    setZaloGroupMemberGroupId(prev => {
+      if (prev && linkedZaloGroupOptions.some(group => group.uid === prev)) return prev
+      if (matchedGroup?.uid) return matchedGroup.uid
+      return normalizedLink ? prev : ''
+    })
+  }, [
+    isZaloGroupMembersAction,
+    joinedZaloGroupOptions,
+    linkedZaloGroupOptions,
+    zaloGroupMemberLink,
+    zaloGroupMemberMode
+  ])
+
   useEffect(() => {
     let cancelled = false
     async function loadActiveGroupContacts() {
@@ -826,8 +1101,14 @@ export default function DataScanModal({
       if (isPostCommentersAction && result.sourcePostUrl) {
         setPostCommentersUrl(String(result.sourcePostUrl))
       }
+      if (isZaloGroupMembersAction && result.zaloGroupId) {
+        setZaloGroupMemberGroupId(String(result.zaloGroupId))
+      }
       if (isPageInboxAction) {
         applyPageInboxDraftFilters()
+      } else if (isZaloGroupMembersAction && result.zaloGroupId) {
+        loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
+        void loadZaloGroupOptions()
       } else {
         loadCachedContacts()
       }
@@ -846,12 +1127,16 @@ export default function DataScanModal({
     applyPageInboxDraftFilters,
     isPageInboxAction,
     isPostCommentersAction,
+    isZaloGroupMembersAction,
     loadCachedContacts,
     loadContactGroups,
+    loadZaloGroupMemberContactsForGroup,
+    loadZaloGroupOptions,
     showAlert
   ])
 
   const matchesStatusFilter = useCallback((contact: AutoAccountContact) => {
+    if (isZaloGroupMembersAction) return true
     if (statusFilter === 'all') return true
     if (actionDef.contactType === 'person') {
       return statusFilter === 'active' ? contact.isFriend === true : contact.isFriend !== true
@@ -860,7 +1145,7 @@ export default function DataScanModal({
       return statusFilter === 'active' ? contact.isJoined === true : contact.isJoined !== true
     }
     return true
-  }, [actionDef.contactType, statusFilter])
+  }, [actionDef.contactType, isZaloGroupMembersAction, statusFilter])
 
   const actionContacts = useMemo(() => {
     if (!isPostCommentersAction) return contacts
@@ -882,9 +1167,10 @@ export default function DataScanModal({
       contact.url,
       getContactInfo(contact),
       getContactStatusLabel(contact),
+      isZaloGroupMembersAction ? getZaloGroupMemberRoleLabel(contact) : '',
       showGroupApprovalColumn ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [isPageInboxAction, search, showGroupApprovalColumn, visibleContacts])
+  }, [isPageInboxAction, isZaloGroupMembersAction, search, showGroupApprovalColumn, visibleContacts])
 
   const getContactRowNumber = useCallback((index: number) => (
     isPageInboxAction ? (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE + index + 1 : index + 1
@@ -961,9 +1247,10 @@ export default function DataScanModal({
     ? 7
     : 4
       + (showAvatarColumn ? 1 : 0)
-      + (actionDef.contactType === 'person' ? 1 : 0)
+      + (showFriendStatusColumn ? 1 : 0)
       + (actionDef.contactType === 'group' ? 1 : 0)
       + (showGroupApprovalColumn ? 1 : 0)
+      + (showGroupMemberRoleColumn ? 1 : 0)
       + (showLinkColumn ? 1 : 0)
   const groupTableColSpan = 4
     + (activeGroupShowAvatarColumn ? 1 : 0)
@@ -1334,6 +1621,47 @@ export default function DataScanModal({
     )
   }
 
+  const handleZaloGroupMemberModeChange = (mode: ZaloGroupMemberScanMode) => {
+    setZaloGroupMemberMode(mode)
+    setSelectedIds(new Set())
+    if (mode === 'joined_group') {
+      setZaloGroupMemberGroupId(prev => (
+        prev && joinedZaloGroupOptions.some(group => group.uid === prev)
+          ? prev
+          : joinedZaloGroupOptions[0]?.uid || ''
+      ))
+      return
+    }
+
+    const normalizedLink = normalizeZaloGroupLink(zaloGroupMemberLink)
+    const matchedGroup = normalizedLink ? findLinkedZaloGroupByLink(normalizedLink) : null
+    const fallbackGroup = matchedGroup || linkedZaloGroupOptions[0] || null
+    setZaloGroupMemberGroupId(fallbackGroup?.uid || '')
+    if (!normalizedLink && fallbackGroup) {
+      setZaloGroupMemberLink(getZaloGroupContactLink(fallbackGroup))
+    }
+  }
+
+  const handleJoinedZaloGroupChange = (groupId: string) => {
+    setZaloGroupMemberGroupId(groupId)
+    setSelectedIds(new Set())
+  }
+
+  const handleLinkedZaloGroupChange = (groupId: string) => {
+    setZaloGroupMemberGroupId(groupId)
+    setSelectedIds(new Set())
+    const group = linkedZaloGroupOptions.find(item => item.uid === groupId)
+    setZaloGroupMemberLink(group ? getZaloGroupContactLink(group) : '')
+  }
+
+  const handleZaloGroupMemberLinkChange = (value: string) => {
+    setZaloGroupMemberLink(value)
+    setSelectedIds(new Set())
+    const normalizedLink = normalizeZaloGroupLink(value)
+    const matchedGroup = normalizedLink ? findLinkedZaloGroupByLink(normalizedLink) : null
+    setZaloGroupMemberGroupId(matchedGroup?.uid || '')
+  }
+
   const handleLoadData = async () => {
     if (!window.electronAPI || !accountId) {
       showAlert('Vui lòng chọn tài khoản trước.', 'error')
@@ -1361,6 +1689,16 @@ export default function DataScanModal({
       showAlert('Vui lòng chọn page cần quét.', 'error')
       return
     }
+    if (isZaloGroupMembersAction) {
+      if (zaloGroupMemberMode === 'joined_group' && !zaloGroupMemberGroupId) {
+        showAlert('Vui lòng chọn group Zalo đã tham gia.', 'error')
+        return
+      }
+      if (zaloGroupMemberMode === 'group_link' && !normalizeZaloGroupLink(zaloGroupMemberLink)) {
+        showAlert('Link group Zalo không hợp lệ.', 'error')
+        return
+      }
+    }
 
     setScanLoading(true)
     setProgressMessages([])
@@ -1373,6 +1711,12 @@ export default function DataScanModal({
         ? await window.electronAPI.loadPostCommenters(accountId, postCommentersUrl, postCommentersLimit)
         : isPageInboxAction
           ? await window.electronAPI.loadPageInboxCustomers(accountId, pageInboxPageUid, selectedPageInboxPage?.name)
+          : isZaloGroupMembersAction
+            ? await window.electronAPI.loadZaloGroupMembers(accountId, {
+              mode: zaloGroupMemberMode,
+              zaloGroupId: zaloGroupMemberMode === 'joined_group' ? zaloGroupMemberGroupId : undefined,
+              link: zaloGroupMemberMode === 'group_link' ? normalizeZaloGroupLink(zaloGroupMemberLink) : undefined
+            })
           : await (actionDef.contactType === 'person'
           ? window.electronAPI.loadFriends
           : actionDef.contactType === 'group'
@@ -1388,6 +1732,9 @@ export default function DataScanModal({
       if (isPostCommentersAction && result.sourcePostUrl) {
         setPostCommentersUrl(String(result.sourcePostUrl))
       }
+      if (isZaloGroupMembersAction && result.zaloGroupId) {
+        setZaloGroupMemberGroupId(String(result.zaloGroupId))
+      }
 
       if (!result.success) {
         if (wasStopped) return
@@ -1396,6 +1743,9 @@ export default function DataScanModal({
       }
       if (isPageInboxAction) {
         applyPageInboxDraftFilters()
+      } else if (isZaloGroupMembersAction && result.zaloGroupId) {
+        await loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
+        await loadZaloGroupOptions()
       } else {
         await loadCachedContacts()
       }
@@ -1754,6 +2104,96 @@ export default function DataScanModal({
             </>
           )}
 
+          {isZaloGroupMembersAction && (
+            <div className="data-scan-zalo-group-member-controls">
+              <div className="stepper-form-group data-scan-zalo-member-mode">
+                <label>Tuỳ chọn</label>
+                <select
+                  className="stepper-input"
+                  value={zaloGroupMemberMode}
+                  onChange={event => handleZaloGroupMemberModeChange(event.target.value as ZaloGroupMemberScanMode)}
+                  disabled={scanLoading}
+                >
+                  <option value="joined_group">Group đã tham gia</option>
+                  <option value="group_link">Link group</option>
+                </select>
+              </div>
+
+              {zaloGroupMemberMode === 'joined_group' ? (
+                <div className="stepper-form-group data-scan-zalo-member-group">
+                  <label>Group Zalo</label>
+                  <select
+                    className="stepper-input"
+                    value={zaloGroupMemberGroupId}
+                    onChange={event => handleJoinedZaloGroupChange(event.target.value)}
+                    disabled={scanLoading || joinedZaloGroupOptions.length === 0}
+                  >
+                    {joinedZaloGroupOptions.length === 0 ? (
+                      <option value="">Chưa có group Zalo đã tham gia</option>
+                    ) : (
+                      joinedZaloGroupOptions.map(group => (
+                        <option key={group.id} value={group.uid || ''}>
+                          {getZaloGroupOptionLabel(group)}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              ) : (
+                <div className="data-scan-zalo-member-link-row">
+                  <div className="stepper-form-group data-scan-zalo-member-linked-group">
+                    <label>Link group</label>
+                    <select
+                      className="stepper-input"
+                      value={zaloGroupMemberGroupId}
+                      onChange={event => handleLinkedZaloGroupChange(event.target.value)}
+                      disabled={scanLoading}
+                    >
+                      <option value="">Nhập link mới</option>
+                      {linkedZaloGroupOptions.map(group => (
+                        <option key={group.id} value={group.uid || ''}>
+                          {getZaloGroupOptionLabel(group)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="stepper-form-group data-scan-zalo-member-link">
+                    <label>Link group</label>
+                    <div className={`data-scan-zalo-link-input-wrap${scanLoading ? ' is-disabled' : ''}`}>
+                      <Link2 size={16} className="data-scan-zalo-link-icon" />
+                      <input
+                        className="data-scan-zalo-link-input"
+                        value={zaloGroupMemberLink}
+                        onChange={event => handleZaloGroupMemberLinkChange(event.target.value)}
+                        onPaste={handleZaloGroupLinkPaste}
+                        placeholder="https://zalo.me/g/..."
+                        disabled={scanLoading}
+                      />
+                      <button
+                        type="button"
+                        className="data-scan-zalo-qr-button"
+                        onClick={() => zaloQrFileInputRef.current?.click()}
+                        disabled={scanLoading || zaloQrReading}
+                        title="Đọc link group từ ảnh QR"
+                      >
+                        <QrCode size={15} />
+                        {zaloQrReading ? 'Đang đọc' : 'Từ QR'}
+                      </button>
+                      <input
+                        ref={zaloQrFileInputRef}
+                        className="data-scan-hidden-file-input"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleZaloQrFileChange}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="data-scan-toolbar">
             <div className="data-scan-range">
               <span>Chọn từ STT</span>
@@ -1804,7 +2244,13 @@ export default function DataScanModal({
                 <button
                   className="btn btn-primary data-scan-load-button"
                   onClick={handleLoadData}
-                  disabled={!accountId || (isPostCommentersAction && !postCommentersUrl.trim()) || (isPageInboxAction && !pageInboxPageUid)}
+                  disabled={
+                    !accountId
+                    || (isPostCommentersAction && !postCommentersUrl.trim())
+                    || (isPageInboxAction && !pageInboxPageUid)
+                    || (isZaloGroupMembersAction && zaloGroupMemberMode === 'joined_group' && !zaloGroupMemberGroupId)
+                    || (isZaloGroupMembersAction && zaloGroupMemberMode === 'group_link' && !normalizeZaloGroupLink(zaloGroupMemberLink))
+                  }
                 >
                   <RefreshCw size={14} />
                   Tải data
@@ -1878,7 +2324,7 @@ export default function DataScanModal({
                     />
                   </th>
                   <th style={{ width: 64 }}>STT</th>
-                  {showAvatarColumn && <th style={{ width: 72 }}>Ảnh đại diện</th>}
+                  {showAvatarColumn && <th className="data-scan-avatar-col">Ảnh đại diện</th>}
                   <th>Tên</th>
                   <th>{isPageInboxAction ? 'PSID' : 'UID'}</th>
                   {isPageInboxAction ? (
@@ -1889,7 +2335,8 @@ export default function DataScanModal({
                     </>
                   ) : null}
                   {showLinkColumn && <th>Link</th>}
-                  {actionDef.contactType === 'person' && <th>Bạn bè</th>}
+                  {showGroupMemberRoleColumn && <th>Vai trò</th>}
+                  {showFriendStatusColumn && <th>Bạn bè</th>}
                   {actionDef.contactType === 'group' && <th>Tham gia</th>}
                   {showGroupApprovalColumn && <th>Duyệt bài</th>}
                 </tr>
@@ -1925,7 +2372,7 @@ export default function DataScanModal({
                         />
                       </td>
                       <td>{rowNumber}</td>
-                      {showAvatarColumn && <td>{renderContactAvatar(contact)}</td>}
+                      {showAvatarColumn && <td className="data-scan-avatar-col">{renderContactAvatar(contact)}</td>}
                       <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
                         {contact.name || '-'}
                       </td>
@@ -1950,7 +2397,14 @@ export default function DataScanModal({
                           {contact.url || '-'}
                         </td>
                       )}
-                      {actionDef.contactType === 'person' && (
+                      {showGroupMemberRoleColumn && (
+                        <td>
+                          <span className="data-scan-status-badge">
+                            {getZaloGroupMemberRoleLabel(contact)}
+                          </span>
+                        </td>
+                      )}
+                      {showFriendStatusColumn && (
                         <td>
                           <span className={`data-scan-status-badge ${contact.isFriend ? 'is-active' : 'is-muted'}`}>
                             {getContactStatusLabel(contact)}
