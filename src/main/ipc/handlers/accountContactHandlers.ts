@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { IPC_EVENTS } from '../../../shared/types'
+import { IPC_EVENTS, ZaloGroupMemberScanRequest } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import * as localContactRepo from '../../data/repositories/localAccountContactRepository'
@@ -25,6 +25,10 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
     return contactLoader.loadPageInboxCustomers(accountId, pageUid, pageName)
   })
 
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_ZALO_GROUP_MEMBERS, async (_, accountId: number, request: ZaloGroupMemberScanRequest) => {
+    return contactLoader.loadZaloGroupMembers(accountId, request)
+  })
+
   ipcMain.handle(IPC_EVENTS.CONTACTS_CANCEL_LOAD, async (_, accountId: number) => {
     contactLoader.cancelLoad(accountId)
     return { success: true }
@@ -36,6 +40,10 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_PAGE_INBOX, async (_, accountId: number, query = {}) => {
     return localContactRepo.listPageInboxContacts(accountId, query as any)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_ZALO_GROUP_MEMBERS, async (_, accountId: number, zaloGroupId: string) => {
+    return supabase.listZaloGroupMemberContacts(accountId, zaloGroupId)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_EXPORT_PAGE_INBOX, async (_, accountId: number, query = {}) => {

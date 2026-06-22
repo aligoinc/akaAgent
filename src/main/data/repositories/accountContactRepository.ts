@@ -75,10 +75,35 @@ export interface ZaloGroupContactInput {
   visibility?: number | null
   globalId?: string | null
   e2ee?: number | null
+  status?: number | null
   extraInfo?: unknown
   memVerList?: string[]
   pendingApprove?: unknown
   rawPayload?: Record<string, unknown>
+}
+
+export interface ZaloGroupMemberContactInput {
+  zaloGroupId: string
+  zaloUid: string
+  displayName?: string | null
+  zaloName?: string | null
+  avatar?: string | null
+  accountStatus?: number | null
+  type?: number | null
+  lastUpdateTime?: number | null
+  globalId?: string | null
+  role: 'owner' | 'admin' | 'member'
+  roleRank: 1 | 2 | 3
+  isCreator: boolean
+  isAdmin: boolean
+  rawPayload?: Record<string, unknown>
+}
+
+export interface ZaloGroupMemberUpsertInput {
+  accountId: number
+  zaloGroupId: string
+  group?: ZaloGroupContactInput | null
+  members: ZaloGroupMemberContactInput[]
 }
 
 const client = () => getSupabaseClient()
@@ -217,8 +242,20 @@ function normalizeNullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function firstNullableNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = normalizeNullableNumber(value)
+    if (parsed !== null) return parsed
+  }
+  return null
+}
+
 function normalizeJsonValue(value: unknown): unknown {
   return value === undefined ? null : value
+}
+
+function isNonEmptyRecord(value: unknown): boolean {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0
 }
 
 function zaloMetaKey(accountId: unknown, uid: unknown): string {
@@ -393,7 +430,56 @@ export async function listContacts(accountId: number, contactType?: ContactType)
 
   const { data, error } = await query
   if (error) throw new Error(`Failed to list contacts: ${error.message}`)
-  return (data || []).map(row => mapAccountContactFromDB(row))
+  const contacts = (data || []).map(row => mapAccountContactFromDB(row))
+  return contactType === 'group' || !contactType
+    ? enrichZaloGroupContactCounts(contacts, accountId, u.staffId)
+    : contacts
+}
+
+async function enrichZaloGroupContactCounts(
+  contacts: AutoAccountContact[],
+  accountId: number,
+  staffId: number
+): Promise<AutoAccountContact[]> {
+  const zaloGroupUids = Array.from(new Set(
+    contacts
+      .filter(contact => contact.contactType === 'group' && contact.extraData?.platform === 'zalo')
+      .map(contact => String(contact.uid || '').trim())
+      .filter(Boolean)
+  ))
+  if (zaloGroupUids.length === 0) return contacts
+
+  const totalMemberByGroupId = new Map<string, number | null>()
+  const chunkSize = 100
+  for (let i = 0; i < zaloGroupUids.length; i += chunkSize) {
+    const chunk = zaloGroupUids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('zalo_groups')
+      .select('zalo_group_id, total_member')
+      .eq('account_id', accountId)
+      .eq('staff_id', staffId)
+      .in('zalo_group_id', chunk)
+
+    if (error) throw new Error(`Failed to enrich Zalo group contacts: ${error.message}`)
+    for (const row of data || []) {
+      totalMemberByGroupId.set(
+        String(row.zalo_group_id || '').trim(),
+        normalizeNullableNumber(row.total_member)
+      )
+    }
+  }
+
+  return contacts.map(contact => {
+    const totalMember = totalMemberByGroupId.get(String(contact.uid || '').trim())
+    if (totalMember === undefined) return contact
+    return {
+      ...contact,
+      extraData: {
+        ...(contact.extraData || {}),
+        totalMember
+      }
+    }
+  })
 }
 
 export async function getGroupContactByTarget(
@@ -619,6 +705,7 @@ export async function upsertZaloGroupContacts(
       visibility: normalizeNullableNumber(group.visibility),
       global_id: normalizeNullableString(group.globalId),
       e2ee: normalizeNullableNumber(group.e2ee),
+      status: normalizeNullableNumber(group.status),
       extra_info: normalizeJsonValue(group.extraInfo),
       mem_ver_list: toStringArray(group.memVerList),
       pending_approve: normalizeJsonValue(group.pendingApprove),
@@ -655,7 +742,8 @@ export async function upsertZaloGroupContacts(
           platform: 'zalo',
           source: 'zalo_get_all_groups',
           avatarUrl: normalizeNullableString(group.avatar),
-          fullAvatar: normalizeNullableString(group.fullAvatar)
+          fullAvatar: normalizeNullableString(group.fullAvatar),
+          totalMember: normalizeNullableNumber(group.totalMember)
         },
         isJoined: true,
         zaloGroupId: meta.id
@@ -664,6 +752,509 @@ export async function upsertZaloGroupContacts(
     .filter((contact): contact is Partial<AutoAccountContact> => !!contact)
 
   return upsertContacts(accountContacts, options)
+}
+
+function normalizeZaloGroupMemberInput(input: ZaloGroupMemberUpsertInput): ZaloGroupMemberUpsertInput {
+  const accountId = Number(input.accountId)
+  const zaloGroupId = String(input.zaloGroupId || '').trim()
+  const byUid = new Map<string, ZaloGroupMemberContactInput>()
+  for (const member of input.members || []) {
+    const zaloUid = String(member.zaloUid || '').trim()
+    if (!zaloUid) continue
+    byUid.set(zaloUid, {
+      ...member,
+      zaloGroupId,
+      zaloUid,
+      role: member.role || 'member',
+      roleRank: member.roleRank || 3,
+      isCreator: member.isCreator === true,
+      isAdmin: member.isAdmin === true
+    })
+  }
+  return {
+    ...input,
+    accountId,
+    zaloGroupId,
+    members: Array.from(byUid.values())
+  }
+}
+
+async function getExistingZaloUsers(
+  accountId: number,
+  zaloUids: string[],
+  staffId: number
+): Promise<Map<string, Record<string, unknown>>> {
+  const existing = new Map<string, Record<string, unknown>>()
+  const chunkSize = 100
+  for (let i = 0; i < zaloUids.length; i += chunkSize) {
+    const chunk = zaloUids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('zalo_users')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('staff_id', staffId)
+      .in('zalo_uid', chunk)
+
+    if (error) throw new Error(`Failed to list existing Zalo users: ${error.message}`)
+    for (const row of data || []) existing.set(String(row.zalo_uid || '').trim(), row)
+  }
+  return existing
+}
+
+async function getExistingPersonContacts(
+  accountId: number,
+  zaloUids: string[],
+  staffId: number
+): Promise<Map<string, AutoAccountContact>> {
+  const existing = new Map<string, AutoAccountContact>()
+  const chunkSize = 100
+  for (let i = 0; i < zaloUids.length; i += chunkSize) {
+    const chunk = zaloUids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('auto_account_contacts')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('staff_id', staffId)
+      .eq('contact_type', 'person')
+      .in('uid', chunk)
+
+    if (error) throw new Error(`Failed to list existing Zalo member contacts: ${error.message}`)
+    for (const row of data || []) {
+      const contact = mapAccountContactFromDB(row)
+      existing.set(String(contact.uid || '').trim(), contact)
+    }
+  }
+  return existing
+}
+
+async function upsertZaloUsersForGroupMembers(
+  accountId: number,
+  members: ZaloGroupMemberContactInput[],
+  staffId: number,
+  organizationId: number
+): Promise<Map<string, number>> {
+  const now = new Date().toISOString()
+  const zaloUids = members.map(member => member.zaloUid)
+  const existing = await getExistingZaloUsers(accountId, zaloUids, staffId)
+  const idByUid = new Map<string, number>()
+  const chunkSize = 100
+
+  for (let i = 0; i < members.length; i += chunkSize) {
+    const chunk = members.slice(i, i + chunkSize)
+    const payloads = chunk.map(member => {
+      const row = existing.get(member.zaloUid) || {}
+      const rawPayload = isNonEmptyRecord(row.raw_payload)
+        ? row.raw_payload
+        : (member.rawPayload || {})
+      return {
+        account_id: accountId,
+        zalo_uid: member.zaloUid,
+        user_id: normalizeNullableString(row.user_id),
+        username: normalizeNullableString(row.username),
+        display_name: normalizeNullableString(member.displayName) || normalizeNullableString(row.display_name),
+        zalo_name: normalizeNullableString(member.zaloName) || normalizeNullableString(row.zalo_name),
+        avatar: normalizeNullableString(member.avatar) || normalizeNullableString(row.avatar),
+        bgavatar: normalizeNullableString(row.bgavatar),
+        cover: normalizeNullableString(row.cover),
+        gender: normalizeNullableNumber(row.gender),
+        dob: normalizeNullableNumber(row.dob),
+        sdob: normalizeNullableString(row.sdob),
+        status: normalizeNullableString(row.status),
+        phone_number: normalizeNullableString(row.phone_number),
+        is_fr: normalizeNullableNumber(row.is_fr),
+        is_blocked: normalizeNullableNumber(row.is_blocked),
+        last_action_time: normalizeNullableNumber(row.last_action_time),
+        last_update_time: firstNullableNumber(member.lastUpdateTime, row.last_update_time),
+        is_active: normalizeNullableNumber(row.is_active),
+        key: normalizeNullableNumber(row.key),
+        type: firstNullableNumber(member.type, row.type),
+        is_active_pc: normalizeNullableNumber(row.is_active_pc),
+        is_active_web: normalizeNullableNumber(row.is_active_web),
+        is_valid: normalizeNullableNumber(row.is_valid),
+        user_key: normalizeNullableString(row.user_key),
+        account_status: firstNullableNumber(member.accountStatus, row.account_status),
+        oa_info: normalizeJsonValue(row.oa_info),
+        user_mode: normalizeNullableNumber(row.user_mode),
+        global_id: normalizeNullableString(member.globalId) || normalizeNullableString(row.global_id),
+        biz_pkg: normalizeJsonValue(row.biz_pkg),
+        created_ts: normalizeNullableNumber(row.created_ts),
+        oa_status: normalizeJsonValue(row.oa_status),
+        raw_payload: rawPayload,
+        last_seen_at: now,
+        staff_id: staffId,
+        organization_id: organizationId,
+        updated_at: now
+      }
+    })
+
+    const { data, error } = await client()
+      .from('zalo_users')
+      .upsert(payloads, { onConflict: 'account_id,zalo_uid' })
+      .select('id, zalo_uid')
+
+    if (error) throw new Error(`Failed to upsert Zalo group member users: ${error.message}`)
+    for (const row of data || []) idByUid.set(String(row.zalo_uid || '').trim(), row.id as number)
+  }
+
+  return idByUid
+}
+
+async function upsertZaloGroupMetaOnly(
+  group: ZaloGroupContactInput,
+  staffId: number,
+  organizationId: number
+): Promise<{ id: number; groupType?: number | null }> {
+  const accountId = Number(group.accountId)
+  const zaloGroupId = String(group.zaloGroupId || '').trim()
+  if (!Number.isFinite(accountId) || accountId <= 0 || !zaloGroupId) {
+    throw new Error('Thông tin group Zalo không hợp lệ')
+  }
+
+  const now = new Date().toISOString()
+  const { data: existing, error: existingError } = await client()
+    .from('zalo_groups')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('staff_id', staffId)
+    .eq('zalo_group_id', zaloGroupId)
+    .maybeSingle()
+
+  if (existingError) throw new Error(`Failed to get existing Zalo group: ${existingError.message}`)
+
+  const payload = {
+    account_id: accountId,
+    zalo_group_id: zaloGroupId,
+    name: normalizeNullableString(group.name) || normalizeNullableString(existing?.name),
+    description: normalizeNullableString(group.description) || normalizeNullableString(existing?.description),
+    link: normalizeNullableString(group.link) || normalizeNullableString(existing?.link),
+    group_type: firstNullableNumber(group.groupType, existing?.group_type),
+    creator_uid: normalizeNullableString(group.creatorUid) || normalizeNullableString(existing?.creator_uid),
+    version: normalizeNullableString(group.version) || normalizeNullableString(existing?.version),
+    avatar: normalizeNullableString(group.avatar) || normalizeNullableString(existing?.avatar),
+    full_avatar: normalizeNullableString(group.fullAvatar) || normalizeNullableString(existing?.full_avatar),
+    member_ids: group.memberIds !== undefined ? toStringArray(group.memberIds) : toStringArray(existing?.member_ids),
+    admin_ids: group.adminIds !== undefined ? toStringArray(group.adminIds) : toStringArray(existing?.admin_ids),
+    current_mems: group.currentMems !== undefined ? normalizeJsonValue(group.currentMems) : normalizeJsonValue(existing?.current_mems),
+    update_mems: group.updateMems !== undefined ? normalizeJsonValue(group.updateMems) : normalizeJsonValue(existing?.update_mems),
+    admins: group.admins !== undefined ? normalizeJsonValue(group.admins) : normalizeJsonValue(existing?.admins),
+    has_more_member: firstNullableNumber(group.hasMoreMember, existing?.has_more_member),
+    sub_type: firstNullableNumber(group.subType, existing?.sub_type),
+    total_member: firstNullableNumber(group.totalMember, existing?.total_member),
+    max_member: firstNullableNumber(group.maxMember, existing?.max_member),
+    setting: group.setting !== undefined ? normalizeJsonValue(group.setting) : normalizeJsonValue(existing?.setting),
+    created_time: firstNullableNumber(group.createdTime, existing?.created_time),
+    visibility: firstNullableNumber(group.visibility, existing?.visibility),
+    global_id: normalizeNullableString(group.globalId) || normalizeNullableString(existing?.global_id),
+    e2ee: firstNullableNumber(group.e2ee, existing?.e2ee),
+    status: firstNullableNumber(group.status, existing?.status),
+    extra_info: group.extraInfo !== undefined ? normalizeJsonValue(group.extraInfo) : normalizeJsonValue(existing?.extra_info),
+    mem_ver_list: group.memVerList !== undefined ? toStringArray(group.memVerList) : toStringArray(existing?.mem_ver_list),
+    pending_approve: group.pendingApprove !== undefined ? normalizeJsonValue(group.pendingApprove) : normalizeJsonValue(existing?.pending_approve),
+    raw_payload: isNonEmptyRecord(existing?.raw_payload) ? existing?.raw_payload : (group.rawPayload || {}),
+    last_seen_at: now,
+    staff_id: staffId,
+    organization_id: organizationId,
+    updated_at: now
+  }
+
+  const { data, error } = await client()
+    .from('zalo_groups')
+    .upsert(payload, { onConflict: 'account_id,zalo_group_id' })
+    .select('id, group_type')
+    .single()
+
+  if (error) throw new Error(`Failed to upsert Zalo group meta: ${error.message}`)
+  return { id: data.id as number, groupType: normalizeNullableNumber(data.group_type) }
+}
+
+async function getExistingZaloGroupAccountContact(
+  accountId: number,
+  zaloGroupId: string,
+  staffId: number
+): Promise<AutoAccountContact | null> {
+  const { data, error } = await client()
+    .from('auto_account_contacts')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('staff_id', staffId)
+    .eq('contact_type', 'group')
+    .eq('uid', zaloGroupId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to get existing Zalo group contact: ${error.message}`)
+  return data ? mapAccountContactFromDB(data) : null
+}
+
+async function upsertZaloGroupLinkContact(
+  group: ZaloGroupContactInput,
+  zaloGroupMetaId: number,
+  staffId: number
+): Promise<void> {
+  const accountId = Number(group.accountId)
+  const zaloGroupId = String(group.zaloGroupId || '').trim()
+  if (!Number.isFinite(accountId) || accountId <= 0 || !zaloGroupId) return
+
+  const existing = await getExistingZaloGroupAccountContact(accountId, zaloGroupId, staffId)
+  await upsertContacts([{
+    accountId,
+    contactType: 'group',
+    uid: zaloGroupId,
+    url: normalizeNullableString(group.link) || existing?.url || undefined,
+    name: normalizeNullableString(group.name) || existing?.name || zaloGroupId,
+    extraData: {
+      platform: 'zalo',
+      source: 'zalo_group_link_members',
+      avatarUrl: normalizeNullableString(group.avatar),
+      fullAvatar: normalizeNullableString(group.fullAvatar),
+      totalMember: normalizeNullableNumber(group.totalMember)
+    },
+    isJoined: existing?.isJoined === true,
+    zaloGroupId: zaloGroupMetaId
+  }], { markMissingDeleted: false })
+}
+
+async function getZaloGroupMetaForMembers(
+  accountId: number,
+  zaloGroupId: string,
+  staffId: number
+): Promise<{ id: number; groupType?: number | null } | null> {
+  const { data, error } = await client()
+    .from('zalo_groups')
+    .select('id, group_type')
+    .eq('account_id', accountId)
+    .eq('staff_id', staffId)
+    .eq('zalo_group_id', zaloGroupId)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to get Zalo group meta: ${error.message}`)
+  return data ? { id: data.id as number, groupType: normalizeNullableNumber(data.group_type) } : null
+}
+
+function getZaloGroupRoleLabel(role: unknown, groupType?: number | null): string {
+  const isCommunity = Number(groupType) === 2
+  if (role === 'owner') return isCommunity ? 'Trưởng cộng đồng' : 'Trưởng nhóm'
+  if (role === 'admin') return isCommunity ? 'Phó cộng đồng' : 'Phó nhóm'
+  return 'Thành viên'
+}
+
+async function markMissingZaloGroupMembers(
+  accountId: number,
+  zaloGroupId: string,
+  seenUids: Set<string>,
+  staffId: number
+): Promise<void> {
+  const { data, error } = await client()
+    .from('zalo_group_members')
+    .select('id, zalo_uid')
+    .eq('account_id', accountId)
+    .eq('staff_id', staffId)
+    .eq('zalo_group_id', zaloGroupId)
+    .eq('is_current', true)
+
+  if (error) throw new Error(`Failed to list existing Zalo group members: ${error.message}`)
+  const idsToMark = (data || [])
+    .filter(row => !seenUids.has(String(row.zalo_uid || '').trim()))
+    .map(row => row.id as number)
+
+  const chunkSize = 100
+  for (let i = 0; i < idsToMark.length; i += chunkSize) {
+    const chunk = idsToMark.slice(i, i + chunkSize)
+    const { error: updateError } = await client()
+      .from('zalo_group_members')
+      .update({ is_current: false, updated_at: new Date().toISOString() })
+      .in('id', chunk)
+
+    if (updateError) throw new Error(`Failed to mark missing Zalo group members: ${updateError.message}`)
+  }
+}
+
+export async function upsertZaloGroupMemberContacts(input: ZaloGroupMemberUpsertInput): Promise<number> {
+  const u = requireCurrentUser()
+  const normalized = normalizeZaloGroupMemberInput(input)
+  if (!Number.isFinite(normalized.accountId) || normalized.accountId <= 0 || !normalized.zaloGroupId) {
+    throw new Error('Thông tin quét thành viên group Zalo không hợp lệ')
+  }
+
+  const members = normalized.members
+  const normalizedGroup = normalized.group
+    ? { ...normalized.group, accountId: normalized.accountId, zaloGroupId: normalized.zaloGroupId }
+    : null
+  const groupMeta = normalizedGroup
+    ? await upsertZaloGroupMetaOnly(
+      normalizedGroup,
+      u.staffId,
+      u.organizationId
+    )
+    : await getZaloGroupMetaForMembers(normalized.accountId, normalized.zaloGroupId, u.staffId)
+
+  if (!groupMeta) {
+    throw new Error('Vui lòng quét danh sách group Zalo trước khi quét thành viên group đã tham gia.')
+  }
+
+  if (normalizedGroup) {
+    await upsertZaloGroupLinkContact(normalizedGroup, groupMeta.id, u.staffId)
+  }
+
+  if (members.length === 0) {
+    await markMissingZaloGroupMembers(normalized.accountId, normalized.zaloGroupId, new Set(), u.staffId)
+    return 0
+  }
+
+  const userIdByUid = await upsertZaloUsersForGroupMembers(
+    normalized.accountId,
+    members,
+    u.staffId,
+    u.organizationId
+  )
+
+  const existingContacts = await getExistingPersonContacts(
+    normalized.accountId,
+    members.map(member => member.zaloUid),
+    u.staffId
+  )
+  const roleLabelByUid = new Map(members.map(member => [
+    member.zaloUid,
+    getZaloGroupRoleLabel(member.role, groupMeta.groupType)
+  ]))
+  const contactsToSave = members.map<Partial<AutoAccountContact>>(member => {
+    const existing = existingContacts.get(member.zaloUid)
+    return {
+      accountId: normalized.accountId,
+      contactType: 'person',
+      uid: member.zaloUid,
+      name: normalizeNullableString(member.displayName)
+        || normalizeNullableString(member.zaloName)
+        || member.zaloUid,
+      extraData: {
+        platform: 'zalo',
+        source: 'zalo_group_members',
+        avatarUrl: normalizeNullableString(member.avatar),
+        zaloGroupId: normalized.zaloGroupId,
+        zaloGroupRole: member.role,
+        zaloGroupRoleRank: member.roleRank,
+        zaloGroupRoleLabel: roleLabelByUid.get(member.zaloUid)
+      },
+      isFriend: existing?.isFriend === true,
+      zaloUserId: userIdByUid.get(member.zaloUid) || undefined
+    }
+  })
+
+  await upsertContacts(contactsToSave, { markMissingDeleted: false })
+
+  const seenUids = new Set(members.map(member => member.zaloUid))
+  await markMissingZaloGroupMembers(normalized.accountId, normalized.zaloGroupId, seenUids, u.staffId)
+
+  const now = new Date().toISOString()
+  const chunkSize = 100
+  let totalSaved = 0
+  for (let i = 0; i < members.length; i += chunkSize) {
+    const chunk = members.slice(i, i + chunkSize)
+    const payloads = chunk.map(member => ({
+      account_id: normalized.accountId,
+      user_id: userIdByUid.get(member.zaloUid) || null,
+      group_id: groupMeta.id,
+      zalo_uid: member.zaloUid,
+      zalo_group_id: normalized.zaloGroupId,
+      role: member.role,
+      role_rank: member.roleRank,
+      is_creator: member.isCreator,
+      is_admin: member.isAdmin,
+      is_current: true,
+      raw_payload: member.rawPayload || {},
+      last_seen_at: now,
+      staff_id: u.staffId,
+      organization_id: u.organizationId,
+      updated_at: now
+    }))
+
+    const { data, error } = await client()
+      .from('zalo_group_members')
+      .upsert(payloads, { onConflict: 'account_id,zalo_group_id,zalo_uid' })
+      .select('id')
+
+    if (error) throw new Error(`Failed to upsert Zalo group members: ${error.message}`)
+    totalSaved += data?.length || 0
+  }
+
+  return totalSaved
+}
+
+export async function listZaloGroupMemberContacts(
+  accountId: number,
+  zaloGroupId: string
+): Promise<AutoAccountContact[]> {
+  const u = requireCurrentUser()
+  const normalizedGroupId = String(zaloGroupId || '').trim()
+  if (!normalizedGroupId) return []
+
+  const { data: groupRow, error: groupError } = await client()
+    .from('zalo_groups')
+    .select('group_type')
+    .eq('account_id', accountId)
+    .eq('staff_id', u.staffId)
+    .eq('zalo_group_id', normalizedGroupId)
+    .maybeSingle()
+
+  if (groupError) throw new Error(`Failed to get Zalo group for members: ${groupError.message}`)
+  const groupType = normalizeNullableNumber(groupRow?.group_type)
+
+  const { data: members, error: memberError } = await client()
+    .from('zalo_group_members')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('staff_id', u.staffId)
+    .eq('zalo_group_id', normalizedGroupId)
+    .eq('is_current', true)
+    .order('role_rank', { ascending: true })
+    .order('updated_at', { ascending: false })
+
+  if (memberError) throw new Error(`Failed to list Zalo group members: ${memberError.message}`)
+  if (!members || members.length === 0) return []
+
+  const memberByUid = new Map<string, Record<string, unknown>>()
+  for (const member of members) memberByUid.set(String(member.zalo_uid || '').trim(), member)
+  const uids = Array.from(memberByUid.keys())
+  const contactsByUid = new Map<string, AutoAccountContact>()
+  const chunkSize = 100
+  for (let i = 0; i < uids.length; i += chunkSize) {
+    const chunk = uids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('auto_account_contacts')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('staff_id', u.staffId)
+      .eq('contact_type', 'person')
+      .eq('is_delete', false)
+      .in('uid', chunk)
+
+    if (error) throw new Error(`Failed to list Zalo group member contacts: ${error.message}`)
+    for (const row of data || []) {
+      const contact = mapAccountContactFromDB(row)
+      contactsByUid.set(String(contact.uid || '').trim(), contact)
+    }
+  }
+
+  const result: AutoAccountContact[] = []
+  for (const uid of uids) {
+    const contact = contactsByUid.get(uid)
+    const member = memberByUid.get(uid)
+    if (!contact || !member) continue
+    result.push({
+      ...contact,
+      extraData: {
+        ...(contact.extraData || {}),
+        zaloGroupId: normalizedGroupId,
+        zaloGroupRole: member.role,
+        zaloGroupRoleRank: member.role_rank,
+        zaloGroupRoleLabel: getZaloGroupRoleLabel(member.role, groupType),
+        isCreator: member.is_creator,
+        isAdmin: member.is_admin
+      }
+    })
+  }
+
+  return result
 }
 
 export async function deleteContacts(accountId: number, contactType: ContactType): Promise<void> {

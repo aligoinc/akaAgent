@@ -798,6 +798,18 @@ export interface ContactLoadResult {
   runKey?: string
   sourcePostUrl?: string
   maxCommenters?: number
+  zaloGroupId?: string
+  zaloGroupName?: string
+  usedProxy?: boolean
+}
+
+export type ZaloGroupMemberScanMode = 'joined_group' | 'group_link'
+
+export interface ZaloGroupMemberScanRequest {
+  mode: ZaloGroupMemberScanMode
+  zaloGroupId?: string
+  groupName?: string
+  link?: string
 }
 
 export interface ContactLoadCompleted {
@@ -1179,7 +1191,9 @@ export const IPC_EVENTS = {
   CONTACTS_LOAD_PAGES: 'contacts:load-pages',
   CONTACTS_LOAD_POST_COMMENTERS: 'contacts:load-post-commenters',
   CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS: 'contacts:load-page-inbox-customers',
+  CONTACTS_LOAD_ZALO_GROUP_MEMBERS: 'contacts:load-zalo-group-members',
   CONTACTS_LIST_PAGE_INBOX: 'contacts:list-page-inbox',
+  CONTACTS_LIST_ZALO_GROUP_MEMBERS: 'contacts:list-zalo-group-members',
   CONTACTS_EXPORT_PAGE_INBOX: 'contacts:export-page-inbox',
   CONTACTS_CANCEL_LOAD: 'contacts:cancel-load',
   CONTACTS_LIST: 'contacts:list',

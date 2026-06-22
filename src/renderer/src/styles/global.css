@@ -6315,6 +6315,113 @@ td.report-account-col span {
   align-items: end;
 }
 
+.data-scan-zalo-group-member-controls {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.data-scan-zalo-member-mode {
+  min-width: 0;
+}
+
+.data-scan-zalo-member-group,
+.data-scan-zalo-member-linked-group,
+.data-scan-zalo-member-link {
+  min-width: 0;
+}
+
+.data-scan-zalo-member-link-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(360px, 1.25fr);
+  gap: 12px;
+  align-items: end;
+  min-width: 0;
+}
+
+.data-scan-zalo-link-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.data-scan-zalo-link-input-wrap:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.1);
+}
+
+.data-scan-zalo-link-input-wrap.is-disabled {
+  opacity: 0.55;
+}
+
+.data-scan-zalo-link-icon {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.data-scan-zalo-link-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 13px;
+}
+
+.data-scan-zalo-link-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.data-scan-zalo-qr-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(124, 92, 252, 0.45);
+  border-radius: var(--radius-sm);
+  background: rgba(124, 92, 252, 0.12);
+  color: var(--accent-primary-hover);
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.data-scan-zalo-qr-button:not(:disabled):hover {
+  border-color: var(--accent-primary);
+  background: rgba(124, 92, 252, 0.2);
+  color: var(--text-primary);
+}
+
+.data-scan-zalo-qr-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.data-scan-hidden-file-input {
+  display: none;
+}
+
+.data-scan-zalo-member-link-row .stepper-form-group {
+  min-width: 0;
+}
+
 .data-scan-page-inbox-controls {
   display: grid;
   grid-template-columns: minmax(220px, 1.2fr) minmax(130px, 0.65fr) minmax(180px, 0.85fr) minmax(130px, 0.65fr) minmax(130px, 0.65fr);
@@ -6513,6 +6620,13 @@ td.report-account-col span {
 .data-scan-table td {
   height: 34px;
   vertical-align: middle;
+}
+
+.data-scan-table .data-scan-avatar-col {
+  width: 112px;
+  min-width: 112px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .data-scan-table input[type="checkbox"] {
@@ -6915,6 +7029,14 @@ td.report-account-col span {
   }
 
   .data-scan-post-commenters-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .data-scan-zalo-group-member-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .data-scan-zalo-member-link-row {
     grid-template-columns: 1fr;
   }
 
