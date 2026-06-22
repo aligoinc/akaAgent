@@ -915,6 +915,10 @@ export interface AuthEntitlements {
   dailySendLimits: AuthDailySendLimits
 }
 
+export interface AuthSessionExpiredPayload {
+  message: string
+}
+
 export interface AuthUser {
   staffId: number
   organizationId: number
@@ -1082,6 +1086,7 @@ export const IPC_EVENTS = {
   AUTH_RESET_DEVICE_LOCK: 'auth:reset-device-lock',
   AUTH_CHANGE_PASSWORD: 'auth:change-password',
   AUTH_UPDATE_USE_TEST_WORKFLOW: 'auth:update-use-test-workflow',
+  AUTH_SESSION_EXPIRED: 'auth:session-expired',
 
   // App
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',

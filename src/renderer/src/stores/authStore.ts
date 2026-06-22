@@ -18,6 +18,7 @@ interface AuthState {
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
   updateUseTestWorkflow: (useTestWorkflow: boolean) => Promise<void>
   rehydrateFromStorage: () => Promise<void>
+  handleSessionExpired: (message?: string | null) => void
   clearError: () => void
 }
 
@@ -263,6 +264,13 @@ export const useAuthStore = create<AuthState>()((set) => ({
       })
     }
   },
+
+  handleSessionExpired: (message) => set({
+    user: null,
+    loggingIn: false,
+    initializing: false,
+    errorMessage: formatAuthErrorMessage(message || 'Tài khoản của bạn đã hết hạn', 'Tài khoản của bạn đã hết hạn')
+  }),
 
   clearError: () => set({ errorMessage: null })
 }))
