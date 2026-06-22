@@ -5,13 +5,15 @@ import { requireCurrentUser } from '../currentUser'
 import * as accountGroupRepo from './accountGroupRepository'
 import * as proxyRepo from './proxyRepository'
 import {
-  canCurrentUserUseEmailFeature,
+  canUseAccountPlatformWithEntitlements,
+  ensureCurrentUserCanUseAccountPlatform,
   ensureCurrentUserEmailFeatureActive,
+  ensureCurrentUserFeatureActive,
+  loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
 
 const client = () => getSupabaseClient()
 const DEFAULT_RATE_LIMIT_MINUTES = 65
-const EMAIL_PLATFORM = 'email'
 const ACCOUNT_SELECT = [
   'id',
   'name',
@@ -79,6 +81,7 @@ export async function getAccount(id: number): Promise<AutoAccount | null> {
 }
 
 export async function getAccountZaloSession(id: number): Promise<AccountZaloSession | null> {
+  await ensureCurrentUserFeatureActive('zalo')
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -97,6 +100,7 @@ export async function getAccountZaloSession(id: number): Promise<AccountZaloSess
 }
 
 export async function listZaloAccountsWithSession(): Promise<AccountZaloSession[]> {
+  await ensureCurrentUserFeatureActive('zalo')
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -118,28 +122,24 @@ export async function listZaloAccountsWithSession(): Promise<AccountZaloSession[
 
 export async function listAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
-  let query = client()
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const { data, error } = await client()
     .from('auto_accounts')
     .select(ACCOUNT_SELECT)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
-  if (!(await canCurrentUserUseEmailFeature())) {
-    query = query.neq('flatform_type', EMAIL_PLATFORM)
-  }
-
-  const { data, error } = await query
   if (error) throw new Error(`Failed to list accounts: ${error.message}`)
-  return (data || []).map(row => mapAccountFromDB(toDbRow(row)))
+  return (data || [])
+    .map(row => mapAccountFromDB(toDbRow(row)))
+    .filter(account => canUseAccountPlatformWithEntitlements(account.flatformType, entitlements))
 }
 
 export async function createAccount(account: Partial<AutoAccount>): Promise<AutoAccount> {
   const u = requireCurrentUser()
   const flatformType = account.flatformType || 'facebook'
-  if (flatformType === EMAIL_PLATFORM) {
-    await ensureCurrentUserEmailFeatureActive()
-  }
+  await ensureCurrentUserCanUseAccountPlatform(flatformType)
   const accountGroupId = await accountGroupRepo.validateAccountGroupForAccount(account.accountGroupId, flatformType)
   const proxyId = await proxyRepo.validateProxyForAccount(account.proxyId)
   const payload = {
@@ -171,9 +171,8 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
   const current = await getAccount(id)
   if (!current) throw new Error('Không tìm thấy tài khoản')
   const targetFlatformType = updates.flatformType ?? current.flatformType
-  if (targetFlatformType === EMAIL_PLATFORM || current.flatformType === EMAIL_PLATFORM) {
-    await ensureCurrentUserEmailFeatureActive()
-  }
+  await ensureCurrentUserCanUseAccountPlatform(targetFlatformType)
+  await ensureCurrentUserCanUseAccountPlatform(current.flatformType)
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.flatformType !== undefined) payload.flatform_type = updates.flatformType
   if (updates.loginStatus !== undefined) payload.login_status = updates.loginStatus
@@ -206,6 +205,7 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
 }
 
 export async function upsertZaloAccount(input: ZaloAccountUpsertInput): Promise<ZaloAccount> {
+  await ensureCurrentUserFeatureActive('zalo')
   const zaloUid = String(input.zaloUid || '').trim()
   if (!zaloUid) throw new Error('Thiếu Zalo UID')
 
@@ -238,6 +238,7 @@ export async function updateAccountZaloSession(
     clearError?: boolean
   }
 ): Promise<AutoAccount> {
+  await ensureCurrentUserFeatureActive('zalo')
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const payload = {
@@ -266,6 +267,7 @@ export async function markAccountZaloSessionCheck(
   id: number,
   result: { ok: boolean; error?: string | null }
 ): Promise<AutoAccount> {
+  await ensureCurrentUserFeatureActive('zalo')
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const payload = {
@@ -288,6 +290,7 @@ export async function markAccountZaloSessionCheck(
 }
 
 export async function clearAccountZaloSession(id: number): Promise<AutoAccount> {
+  await ensureCurrentUserFeatureActive('zalo')
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -420,20 +423,18 @@ export async function deleteAccount(id: number): Promise<void> {
 
 export async function getEligibleAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
-  let query = client()
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const { data, error } = await client()
     .from('auto_accounts')
     .select(ACCOUNT_SELECT)
     .eq('staff_id', u.staffId)
     .eq('is_active', true)
     .eq('is_delete', false)
 
-  if (!(await canCurrentUserUseEmailFeature())) {
-    query = query.neq('flatform_type', EMAIL_PLATFORM)
-  }
-
-  const { data, error } = await query
   if (error) throw new Error(`Failed to get eligible accounts: ${error.message}`)
-  return (data || []).map(row => mapAccountFromDB(toDbRow(row)))
+  return (data || [])
+    .map(row => mapAccountFromDB(toDbRow(row)))
+    .filter(account => canUseAccountPlatformWithEntitlements(account.flatformType, entitlements))
 }
 
 export async function resetRunningAccountStatuses(staffId: number): Promise<void> {

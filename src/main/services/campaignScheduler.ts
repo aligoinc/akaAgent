@@ -25,8 +25,9 @@ import {
 import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
 import { getCurrentUser } from '../data/currentUser'
 import {
-  EMAIL_FEATURE_UNAVAILABLE_MESSAGE,
-  isCurrentUserEmailFeatureActive
+  ensureCurrentUserCanUseCampaignAction,
+  getAccountActionDailySendLimit,
+  loadCurrentUserEffectiveEntitlements
 } from '../data/repositories/entitlementRepository'
 import {
   getAccountActionName as resolveAccountActionName,
@@ -956,18 +957,11 @@ export class CampaignScheduler {
         return
       }
 
-      if (campaign.actionId === EMAIL_SEND_ACTION_ID) {
-        let emailFeatureActive = false
-        try {
-          emailFeatureActive = await isCurrentUserEmailFeatureActive()
-        } catch (err) {
-          await this.updateCampaignPreflightNote(campaign, err instanceof Error ? err.message : String(err))
-          return
-        }
-        if (!emailFeatureActive) {
-          await this.updateCampaignPreflightNote(campaign, EMAIL_FEATURE_UNAVAILABLE_MESSAGE)
-          return
-        }
+      try {
+        await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
+      } catch (err) {
+        await this.updateCampaignPreflightNote(campaign, err instanceof Error ? err.message : String(err))
+        return
       }
 
       const action = await this.supabase.getCampaignAction(campaign.actionId)
@@ -1928,12 +1922,13 @@ export class CampaignScheduler {
     limitConfig?: CampaignActionLimitSettings
   ): Promise<AccountActionLimitStatus | null> {
     void campaign
+    const entitlements = await loadCurrentUserEffectiveEntitlements()
     for (const action of actionDescriptors) {
       const limitStatus = await this.supabase.getAccountRateLimitStatus(
         account.id,
         action.code,
         action.name,
-        this.getActionLimitConfig(action.code, limitConfig, account)
+        this.getActionLimitConfig(action.code, limitConfig, account, entitlements)
       )
       if (!limitStatus.ok) return limitStatus
     }
@@ -1949,6 +1944,7 @@ export class CampaignScheduler {
     const extra = campaign.extraSettings || {}
     const likeConfigured = this.isNewsfeedLikeConfigured(extra)
     const commentConfigured = this.isNewsfeedCommentConfigured(extra)
+    const entitlements = await loadCurrentUserEffectiveEntitlements()
     let allowLike = likeConfigured
     let allowComment = commentConfigured
     const blockedReasons: string[] = []
@@ -1959,7 +1955,7 @@ export class CampaignScheduler {
         account.id,
         code,
         name,
-        this.getActionLimitConfig(code, limitConfig, account)
+        this.getActionLimitConfig(code, limitConfig, account, entitlements)
       )
       if (limitStatus.ok) return true
       blockedReasons.push(await this.buildLimitPreflightNote(limitStatus))
@@ -2016,16 +2012,35 @@ export class CampaignScheduler {
   private getActionLimitConfig(
     actionCode: string,
     limitConfig?: CampaignActionLimitSettings,
-    account?: AutoAccount
+    account?: AutoAccount,
+    entitlements?: Parameters<typeof getAccountActionDailySendLimit>[2]
   ): ActionLimitConfig | undefined {
     const campaignLimit = this.getCampaignActionLimitConfig(actionCode, limitConfig)
     const groupLimit = account?.accountGroupSettings?.byActionCode?.[actionCode]
-    if (!groupLimit) return campaignLimit
+    if (!groupLimit) return this.applyDailySendLimitToActionConfig(actionCode, campaignLimit, entitlements)
 
-    return {
+    const mergedLimit = {
       dailyLimit: this.normalizePositiveLimitValue(groupLimit.dailyLimit) ?? campaignLimit?.dailyLimit,
       rateLimitCount: this.normalizePositiveLimitValue(groupLimit.rateLimitCount) ?? campaignLimit?.rateLimitCount,
       rateLimitMinutes: this.normalizePositiveLimitValue(groupLimit.rateLimitMinutes) ?? campaignLimit?.rateLimitMinutes
+    }
+
+    return this.applyDailySendLimitToActionConfig(actionCode, mergedLimit, entitlements)
+  }
+
+  private applyDailySendLimitToActionConfig(
+    actionCode: string,
+    config?: ActionLimitConfig,
+    entitlements?: Parameters<typeof getAccountActionDailySendLimit>[2]
+  ): ActionLimitConfig | undefined {
+    const cap = getAccountActionDailySendLimit(actionCode, null, entitlements)
+    const normalizedCap = this.normalizePositiveLimitValue(cap)
+    if (!normalizedCap) return config
+
+    const dailyLimit = Math.min(this.normalizePositiveLimitValue(config?.dailyLimit) ?? 30, normalizedCap)
+    return {
+      ...(config || {}),
+      dailyLimit
     }
   }
 

@@ -3,29 +3,65 @@ import { IPC_EVENTS, ZaloGroupMemberScanRequest } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import * as localContactRepo from '../../data/repositories/localAccountContactRepository'
+import {
+  ensureCurrentUserCanUseAccountPlatform,
+  ensureCurrentUserFeatureActive
+} from '../../data/repositories/entitlementRepository'
+
+async function ensureContactAccess(
+  supabase: SupabaseService,
+  accountId: number,
+  contactType?: string | null
+): Promise<void> {
+  if (contactType === 'page' || contactType === 'page_inbox_customer') {
+    await ensureCurrentUserFeatureActive('facebookFanpage')
+    return
+  }
+  if (contactType === 'zalo_tag') {
+    await ensureCurrentUserFeatureActive('zalo')
+    return
+  }
+
+  const account = await supabase.getAccount(accountId)
+  if (account?.flatformType === 'zalo') {
+    await ensureCurrentUserFeatureActive('zalo')
+    return
+  }
+  if (contactType === 'person' || contactType === 'group') {
+    await ensureCurrentUserFeatureActive('facebookCore')
+    return
+  }
+  await ensureCurrentUserCanUseAccountPlatform(account?.flatformType || 'facebook')
+}
 
 export function registerAccountContactHandlers(supabase: SupabaseService, contactLoader: ContactLoader): void {
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_FRIENDS, async (_, accountId: number) => {
+    await ensureContactAccess(supabase, accountId, 'person')
     return contactLoader.loadFriends(accountId)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_GROUPS, async (_, accountId: number) => {
+    await ensureContactAccess(supabase, accountId, 'group')
     return contactLoader.loadGroups(accountId)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_PAGES, async (_, accountId: number) => {
+    await ensureContactAccess(supabase, accountId, 'page')
     return contactLoader.loadPages(accountId)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_POST_COMMENTERS, async (_, accountId: number, postUrl: string, maxCommenters: number) => {
+    await ensureContactAccess(supabase, accountId, 'person')
     return contactLoader.loadPostCommenters(accountId, postUrl, maxCommenters)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS, async (_, accountId: number, pageUid: string, pageName?: string) => {
+    await ensureContactAccess(supabase, accountId, 'page_inbox_customer')
     return contactLoader.loadPageInboxCustomers(accountId, pageUid, pageName)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_ZALO_GROUP_MEMBERS, async (_, accountId: number, request: ZaloGroupMemberScanRequest) => {
+    await ensureContactAccess(supabase, accountId, 'zalo_tag')
     return contactLoader.loadZaloGroupMembers(accountId, request)
   })
 
@@ -35,22 +71,27 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST, async (_, accountId: number, contactType?: string) => {
+    await ensureContactAccess(supabase, accountId, contactType)
     return supabase.listContacts(accountId, contactType as any)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_PAGE_INBOX, async (_, accountId: number, query = {}) => {
+    await ensureContactAccess(supabase, accountId, 'page_inbox_customer')
     return localContactRepo.listPageInboxContacts(accountId, query as any)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_ZALO_GROUP_MEMBERS, async (_, accountId: number, zaloGroupId: string) => {
+    await ensureContactAccess(supabase, accountId, 'zalo_tag')
     return supabase.listZaloGroupMemberContacts(accountId, zaloGroupId)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_EXPORT_PAGE_INBOX, async (_, accountId: number, query = {}) => {
+    await ensureContactAccess(supabase, accountId, 'page_inbox_customer')
     return localContactRepo.exportPageInboxContacts(accountId, query as any)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_DELETE, async (_, accountId: number, contactType: string) => {
+    await ensureContactAccess(supabase, accountId, contactType)
     if (contactType === 'page_inbox_customer') {
       return localContactRepo.deletePageInboxContacts(accountId)
     }
@@ -58,10 +99,12 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_LIST, async (_, accountId: number, contactType?: string) => {
+    await ensureContactAccess(supabase, accountId, contactType)
     return supabase.listContactGroups(accountId, contactType as any)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_CREATE, async (_, accountId: number, contactType: string, name: string) => {
+    await ensureContactAccess(supabase, accountId, contactType)
     return supabase.createContactGroup(accountId, contactType as any, name)
   })
 
