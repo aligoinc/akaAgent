@@ -6675,6 +6675,12 @@ td.report-account-col span {
   max-width: 360px;
 }
 
+.data-scan-number-cell {
+  min-width: 104px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .data-scan-phone-cell {
   max-width: 120px;
 }

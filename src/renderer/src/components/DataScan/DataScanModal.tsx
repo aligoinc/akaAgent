@@ -353,6 +353,11 @@ const getZaloGroupTotalMember = (contact: AutoAccountContact) => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
 
+const formatZaloGroupTotalMember = (contact: AutoAccountContact) => {
+  const totalMember = getZaloGroupTotalMember(contact)
+  return totalMember === null ? '-' : formatCount(totalMember)
+}
+
 const getZaloGroupOptionLabel = (group: AutoAccountContact) => {
   const name = group.name || group.uid || '-'
   const totalMember = getZaloGroupTotalMember(group)
@@ -621,6 +626,7 @@ export default function DataScanModal({
   const showGroupApprovalColumn = actionDef.contactType === 'group' && actionDef.platform === 'facebook'
   const showAvatarColumn = actionDef.platform === 'zalo'
   const showLinkColumn = !isPageInboxAction && (actionDef.platform === 'facebook' || actionDef.id === 'zalo_groups')
+  const showZaloGroupMemberCountColumn = actionDef.id === 'zalo_groups'
   const showGroupMemberRoleColumn = isZaloGroupMembersAction
   const showFriendStatusColumn = actionDef.contactType === 'person' && !isZaloGroupMembersAction
   const statusFilterOptions = useMemo(
@@ -1240,9 +1246,10 @@ export default function DataScanModal({
       contact.url,
       getContactInfo(contact),
       getContactStatusLabel(contact),
+      showZaloGroupMemberCountColumn ? formatZaloGroupTotalMember(contact) : '',
       contact.contactType === 'group' && selectedPlatform === 'facebook' ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [groupContactsByStatus, search, selectedPlatform])
+  }, [groupContactsByStatus, search, selectedPlatform, showZaloGroupMemberCountColumn])
   const tableColSpan = isPageInboxAction
     ? 7
     : 4
@@ -1252,6 +1259,7 @@ export default function DataScanModal({
       + (showGroupApprovalColumn ? 1 : 0)
       + (showGroupMemberRoleColumn ? 1 : 0)
       + (showLinkColumn ? 1 : 0)
+      + (showZaloGroupMemberCountColumn ? 1 : 0)
   const groupTableColSpan = 4
     + (activeGroupShowAvatarColumn ? 1 : 0)
     + (activeGroupContactType === 'person' ? 1 : 0)
@@ -2335,6 +2343,7 @@ export default function DataScanModal({
                     </>
                   ) : null}
                   {showLinkColumn && <th>Link</th>}
+                  {showZaloGroupMemberCountColumn && <th>Số thành viên</th>}
                   {showGroupMemberRoleColumn && <th>Vai trò</th>}
                   {showFriendStatusColumn && <th>Bạn bè</th>}
                   {actionDef.contactType === 'group' && <th>Tham gia</th>}
@@ -2395,6 +2404,11 @@ export default function DataScanModal({
                       {showLinkColumn && (
                         <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
                           {contact.url || '-'}
+                        </td>
+                      )}
+                      {showZaloGroupMemberCountColumn && (
+                        <td className="data-scan-text-cell data-scan-number-cell" title={formatZaloGroupTotalMember(contact)}>
+                          {formatZaloGroupTotalMember(contact)}
                         </td>
                       )}
                       {showGroupMemberRoleColumn && (

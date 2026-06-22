@@ -31,6 +31,7 @@ const FIND_DATA_TARGET_FIELDS = [
 ] as const
 type FindDataTargetCampaignField = typeof FIND_DATA_TARGET_FIELDS[number]
 type FindDataSourceKind = 'group' | 'search'
+type ZaloFriendTargetMode = NonNullable<CampaignExtraSettings['zaloFriendTargetMode']>
 type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'updatedAt' | 'dataTypes' | 'sourceTypes'
 type CampaignPickerSource =
   | { type: 'findDataSource'; sourceKind?: FindDataSourceKind }
@@ -186,6 +187,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   fb_like_post: 'Like post',
   zalo_find_phone_user: 'Tìm SĐT',
   zalo_message_friend: 'Nhắn tin bạn bè',
+  zalo_message_group: 'Nhắn tin group',
   zalo_message_stranger: 'Nhắn tin người lạ',
   zalo_add_friend: 'Kết bạn',
   zalo_tag_contact: 'Gắn tag Zalo',
@@ -271,12 +273,39 @@ const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const GROUP_POST_ACTION_ID = 'facebook_group_post'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
+const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
+const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
+const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const EMAIL_SEND_ACTION_ID = 'email_send'
+const ZALO_FRIEND_TARGET_MODES: Array<{ value: ZaloFriendTargetMode; label: string }> = [
+  { value: 'selected', label: 'Chọn bạn bè để gửi' },
+  { value: 'all_friends', label: 'Gửi cho tất cả bạn bè' },
+  { value: 'tagged_friends', label: 'Gửi cho bạn bè thuộc danh sách tag' }
+]
+const normalizeZaloTagIdList = (value: unknown): string[] => {
+  const rawItems = Array.isArray(value) ? value : []
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const item of rawItems) {
+    const id = String(item ?? '').trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
+const normalizeZaloTagNameList = (value: unknown): string[] => {
+  const rawItems = Array.isArray(value) ? value : []
+  return rawItems.map(item => String(item ?? '').trim())
+}
 const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   MESSAGE_FRIEND_ACTION_ID,
   MESSAGE_UID_ACTION_ID,
   PAGE_INBOX_MESSAGE_ACTION_ID,
   ZALO_MESSAGE_PHONE_ACTION_ID,
+  ZALO_MESSAGE_FRIEND_ACTION_ID,
+  ZALO_MESSAGE_BIRTHDAY_ACTION_ID,
+  ZALO_MESSAGE_GROUP_ACTION_ID,
   EMAIL_SEND_ACTION_ID
 ])
 
@@ -941,7 +970,9 @@ export default function CampaignFormModal({
     dailyStopTime: savedDailyStopTime || DEFAULT_DAILY_STOP_TIME,
     scheduleDays: campaign?.scheduleDays || '',
     scheduleWeekDays: campaign?.scheduleWeekDays || '',
-    continueNextDay: (lockedActionId || campaign?.actionId) === NEWSFEED_INTERACTION_ACTION_ID ? false : (campaign?.continueNextDay ?? true),
+    continueNextDay: [NEWSFEED_INTERACTION_ACTION_ID, ZALO_MESSAGE_BIRTHDAY_ACTION_ID].includes(lockedActionId || campaign?.actionId || '')
+      ? false
+      : (campaign?.continueNextDay ?? true),
     refreshData: campaign?.refreshData ?? true,
     sleepBetweenActions: campaign?.extraSettings?.actionLimits?.sleepBetweenActions ?? 30,
     multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
@@ -1023,6 +1054,9 @@ export default function CampaignFormModal({
     zaloTagName: campaign?.extraSettings?.zaloTagName || '',
     enableZaloAlias: campaign?.extraSettings?.enableZaloAlias ?? false,
     zaloAliasTemplate: campaign?.extraSettings?.zaloAliasTemplate || DEFAULT_ZALO_ALIAS_TEMPLATE,
+    zaloFriendTargetMode: (campaign?.extraSettings?.zaloFriendTargetMode || 'selected') as ZaloFriendTargetMode,
+    zaloFriendSourceTagIds: normalizeZaloTagIdList(campaign?.extraSettings?.zaloFriendSourceTagIds),
+    zaloFriendSourceTagNames: normalizeZaloTagNameList(campaign?.extraSettings?.zaloFriendSourceTagNames),
     pageInboxPageUid: campaign?.extraSettings?.pageInboxPageUid || '',
     pageInboxPageName: campaign?.extraSettings?.pageInboxPageName || '',
     // Nguồn đăng bài (timeline post)
@@ -1143,6 +1177,10 @@ export default function CampaignFormModal({
   const isMessageFriendCampaign = formData.actionId === MESSAGE_FRIEND_ACTION_ID
   const isMessageUidCampaign = formData.actionId === MESSAGE_UID_ACTION_ID
   const isZaloMessagePhoneCampaign = formData.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
+  const isZaloMessageFriendCampaign = formData.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID
+  const isZaloMessageBirthdayCampaign = formData.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID
+  const isZaloMessageGroupCampaign = formData.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+  const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupCampaign
   const isPageInboxMessageCampaign = formData.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
   const isFacebookGroupPostCampaign = formData.actionId === 'facebook_group_post'
@@ -1158,7 +1196,8 @@ export default function CampaignFormModal({
   const canUseRerunAfterCompletion = isFindDataCampaign || isCommentSeedingFeedCampaign
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const isSuggestedFriendsUidCampaign = isMessageUidCampaign && formData.useSuggestedFriends
-  const hideDetailsSection = isSuggestedFriendsUidCampaign && !isEditingSavedCampaign
+  const isZaloFriendAutoDataMode = isZaloMessageFriendCampaign && formData.zaloFriendTargetMode !== 'selected'
+  const hideDetailsSection = (isSuggestedFriendsUidCampaign && !isEditingSavedCampaign) || isZaloFriendAutoDataMode || isZaloMessageBirthdayCampaign
   const targetFindDataField = getFindDataTargetCampaignField(formData.actionId)
   const findDataSourceSectionLabel = getFindDataSourceSectionLabel(formData.actionId)
   const findDataSourceStep = getFindDataSourceStep(findDataSourceSectionLabel)
@@ -1170,14 +1209,17 @@ export default function CampaignFormModal({
   const isDraftAutoLinkedFacebookGroupComment = isDraftSourceForTarget && draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds'
   const isDraftAutoLinkedFacebookGroup = isDraftAutoLinkedFacebookGroupPost || isDraftAutoLinkedFacebookGroupComment
   const hasSelectedCampaignAction = !!formData.actionId
-  const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign
+  const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign || isZaloMessageGroupCampaign
   const canPickPages = isPagePostCampaign
-  const canPickFriends = isMessageFriendCampaign
+  const canPickFriends = isMessageFriendCampaign || (isZaloMessageFriendCampaign && formData.zaloFriendTargetMode === 'selected')
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
-  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign
-  const requiresSingleAccount = isPageInboxMessageCampaign
-  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign
+  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupCampaign
+  const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupCampaign
+  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign
+  const needsZaloLabels =
+    (isZaloMessagePhoneCampaign && formData.enableZaloTag) ||
+    (isZaloMessageFriendCampaign && (formData.enableZaloTag || formData.zaloFriendTargetMode === 'tagged_friends'))
   const showFoundDataHandlingSection = isFindDataGroupCampaign && (
     formData.isFindPhone ||
     formData.isFindLinkGroupZalo ||
@@ -1272,6 +1314,17 @@ export default function CampaignFormModal({
       if (actionCode === 'zalo_message_stranger') return formData.enableMessage
       if (actionCode === 'zalo_add_friend') return formData.enableAddFriend
       if (actionCode === 'zalo_tag_contact' || actionCode === 'zalo_change_alias') return false
+    }
+    if (isZaloMessageFriendCampaign) {
+      if (actionCode === 'zalo_message_friend') return true
+      if (actionCode === 'zalo_tag_contact' || actionCode === 'zalo_change_alias') return false
+    }
+    if (isZaloMessageBirthdayCampaign) {
+      if (actionCode === 'zalo_message_friend') return true
+      if (actionCode === 'zalo_tag_contact' || actionCode === 'zalo_change_alias') return false
+    }
+    if (isZaloMessageGroupCampaign) {
+      if (actionCode === 'zalo_message_group') return true
     }
     if (isFacebookGroupPostCampaign && actionCode === 'fb_comment') return formData.enableComment
     if (isCommentSeedingCampaign) {
@@ -1459,32 +1512,40 @@ export default function CampaignFormModal({
           if (s.id === 'details') {
             return {
               ...s,
-              title: isMessageFriendCampaign
-                ? 'Danh sách bạn bè'
-                : isPageInboxMessageCampaign
-                  ? 'Danh sách khách inbox Page'
+              title: isZaloMessageFriendCampaign
+                ? 'Danh sách bạn bè Zalo'
+                : isZaloMessageGroupCampaign
+                  ? 'Danh sách group Zalo'
+                : isMessageFriendCampaign
+                  ? 'Danh sách bạn bè'
+                  : isPageInboxMessageCampaign
+                    ? 'Danh sách khách inbox Page'
                 : isZaloMessagePhoneCampaign
-                  ? 'Danh sách SĐT'
+                    ? 'Danh sách SĐT'
                 : isEmailCampaign
-                  ? 'Danh sách email'
-                  : 'Danh sách UID',
+                    ? 'Danh sách email'
+                    : 'Danh sách UID',
               fields: [{
                 key: 'details',
-                label: isMessageFriendCampaign
-                  ? 'Bạn bè'
-                  : isPageInboxMessageCampaign
-                    ? 'Khách inbox Page'
+                label: isZaloMessageFriendCampaign
+                  ? 'Bạn bè Zalo'
+                  : isZaloMessageGroupCampaign
+                    ? 'Group Zalo'
+                  : isMessageFriendCampaign
+                    ? 'Bạn bè'
+                    : isPageInboxMessageCampaign
+                      ? 'Khách inbox Page'
                   : isZaloMessagePhoneCampaign
-                    ? 'SĐT'
+                      ? 'SĐT'
                   : isEmailCampaign
-                    ? 'Email'
-                    : 'UID'
+                      ? 'Email'
+                      : 'UID'
               }]
             }
           }
           return s
         })
-      const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign
+      const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign
         ? steps.flatMap(s => s.id === 'general' ? [s, ACTION_OPTIONS_STEP] : [s])
         : steps
       return showFindDataSourceSection
@@ -1721,7 +1782,7 @@ export default function CampaignFormModal({
   }, [selectedActionPlatform, selectableAccounts.map(account => account.id).join(',')])
 
   useEffect(() => {
-    if (!isZaloMessagePhoneCampaign || !formData.enableZaloTag || formData.accountIds.length === 0) {
+    if (!needsZaloLabels || formData.accountIds.length === 0) {
       setZaloLabels([])
       setZaloLabelsError('')
       return
@@ -1739,6 +1800,17 @@ export default function CampaignFormModal({
         if (selectedId && !labels.some(label => String(label.id) === selectedId)) {
           setFormData(prev => ({ ...prev, zaloTagId: '', zaloTagName: '' }))
         }
+        const labelById = new Map(labels.map(label => [String(label.id), label]))
+        const sourceTagIds = formData.zaloFriendSourceTagIds.map(id => String(id || '').trim()).filter(Boolean)
+        const nextSourceTagIds = sourceTagIds.filter(id => labelById.has(id))
+        if (sourceTagIds.length !== nextSourceTagIds.length) {
+          const nextSourceTagNames = nextSourceTagIds.map(id => labelById.get(id)?.text || '')
+          setFormData(prev => ({
+            ...prev,
+            zaloFriendSourceTagIds: nextSourceTagIds,
+            zaloFriendSourceTagNames: nextSourceTagNames
+          }))
+        }
       })
       .catch(err => {
         if (cancelled) return
@@ -1751,8 +1823,7 @@ export default function CampaignFormModal({
 
     return () => { cancelled = true }
   }, [
-    isZaloMessagePhoneCampaign,
-    formData.enableZaloTag,
+    needsZaloLabels,
     formData.accountIds.join(',')
   ])
 
@@ -1825,6 +1896,17 @@ export default function CampaignFormModal({
       const selectedId = String(formData.zaloTagId || '')
       if (selectedId && !labels.some(label => String(label.id) === selectedId)) {
         setFormData(prev => ({ ...prev, zaloTagId: '', zaloTagName: '' }))
+      }
+      const labelById = new Map(labels.map(label => [String(label.id), label]))
+      const sourceTagIds = formData.zaloFriendSourceTagIds.map(id => String(id || '').trim()).filter(Boolean)
+      const nextSourceTagIds = sourceTagIds.filter(id => labelById.has(id))
+      if (sourceTagIds.length !== nextSourceTagIds.length) {
+        const nextSourceTagNames = nextSourceTagIds.map(id => labelById.get(id)?.text || '')
+        setFormData(prev => ({
+          ...prev,
+          zaloFriendSourceTagIds: nextSourceTagIds,
+          zaloFriendSourceTagNames: nextSourceTagNames
+        }))
       }
       showAlert(`Đã tải ${labels.length} tag Zalo.`, 'success')
     } catch (err) {
@@ -2412,8 +2494,20 @@ export default function CampaignFormModal({
       )
 
       const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
-      const effectiveEnableMessage = (isMessageFriendCampaign || isPageInboxMessageCampaign) ? true : formData.enableMessage
-      const effectiveEnableAddFriend = (isMessageFriendCampaign || isPageInboxMessageCampaign) ? false : formData.enableAddFriend
+      const effectiveEnableMessage = (
+        isMessageFriendCampaign ||
+        isPageInboxMessageCampaign ||
+        isZaloMessageFriendCampaign ||
+        isZaloMessageBirthdayCampaign ||
+        isZaloMessageGroupCampaign
+      ) ? true : formData.enableMessage
+      const effectiveEnableAddFriend = (
+        isMessageFriendCampaign ||
+        isPageInboxMessageCampaign ||
+        isZaloMessageFriendCampaign ||
+        isZaloMessageBirthdayCampaign ||
+        isZaloMessageGroupCampaign
+      ) ? false : formData.enableAddFriend
       const effectiveUseSuggestedFriends = isMessageUidCampaign
         ? (isEditingSavedCampaign ? campaign?.extraSettings?.useSuggestedFriends === true : formData.useSuggestedFriends)
         : false
@@ -2443,6 +2537,16 @@ export default function CampaignFormModal({
       const saveFindDataGoalPriority = formData.findDataGoalModeEnabled
         ? normalizeFindDataGoalPriority(normalizedFindData, formData.findDataGoalPriority) || undefined
         : undefined
+      const useZaloFriendSourceTags = isZaloMessageFriendCampaign && formData.zaloFriendTargetMode === 'tagged_friends'
+      const selectedZaloFriendSourceTagIds = useZaloFriendSourceTags
+        ? normalizeZaloTagIdList(formData.zaloFriendSourceTagIds)
+        : []
+      const selectedZaloFriendSourceTagNames = useZaloFriendSourceTags
+        ? selectedZaloFriendSourceTagIds.map((id, tagIndex) => {
+          const label = zaloLabels.find(item => String(item.id) === id)
+          return label?.text || formData.zaloFriendSourceTagNames[tagIndex] || ''
+        })
+        : []
 
       return {
         campaignPayload: {
@@ -2457,8 +2561,8 @@ export default function CampaignFormModal({
           dailyStopTime: formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null,
           scheduleDays: normalizedScheduleDays,
           scheduleWeekDays: normalizedScheduleWeekDays,
-          continueNextDay: isNewsfeedInteractionCampaign ? false : formData.continueNextDay,
-          refreshData: formData.refreshData,
+          continueNextDay: (isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign) ? false : formData.continueNextDay,
+          refreshData: isZaloMessageBirthdayCampaign ? true : formData.refreshData,
           content: formData.content,
           extraSettings: {
             sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
@@ -2520,11 +2624,26 @@ export default function CampaignFormModal({
             emailSubject: isEmailCampaign ? formData.emailSubject.trim() : '',
             emailBodyIsHtml: isEmailCampaign ? formData.emailBodyIsHtml : false,
             friendRequestMessage: isZaloMessagePhoneCampaign ? formData.friendRequestMessage.trim() : '',
-            enableZaloTag: isZaloMessagePhoneCampaign ? formData.enableZaloTag : false,
-            zaloTagId: isZaloMessagePhoneCampaign && formData.enableZaloTag ? formData.zaloTagId : null,
-            zaloTagName: isZaloMessagePhoneCampaign && formData.enableZaloTag ? formData.zaloTagName : '',
-            enableZaloAlias: isZaloMessagePhoneCampaign ? formData.enableZaloAlias : false,
-            zaloAliasTemplate: isZaloMessagePhoneCampaign && formData.enableZaloAlias ? formData.zaloAliasTemplate.trim() : '',
+            enableZaloTag: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign) ? formData.enableZaloTag : false,
+            zaloTagId: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
+            zaloTagName: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign) && formData.enableZaloTag ? formData.zaloTagName : '',
+            enableZaloAlias: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign) ? formData.enableZaloAlias : false,
+            zaloAliasTemplate: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign) && formData.enableZaloAlias ? formData.zaloAliasTemplate.trim() : '',
+            zaloFriendTargetMode: isZaloMessageFriendCampaign ? formData.zaloFriendTargetMode : 'selected',
+            zaloFriendSourceTagIds: selectedZaloFriendSourceTagIds,
+            zaloFriendSourceTagNames: selectedZaloFriendSourceTagNames,
+            zaloFriendDataMaterializedAt: isZaloMessageFriendCampaign && isZaloFriendAutoDataMode && !cloneFromId
+              ? (campaign?.extraSettings?.zaloFriendDataMaterializedAt ?? null)
+              : null,
+            zaloFriendMaterializedCount: isZaloMessageFriendCampaign && isZaloFriendAutoDataMode && !cloneFromId
+              ? (campaign?.extraSettings?.zaloFriendMaterializedCount ?? 0)
+              : 0,
+            zaloBirthdayDataMaterializedDate: isZaloMessageBirthdayCampaign && !cloneFromId
+              ? (campaign?.extraSettings?.zaloBirthdayDataMaterializedDate ?? null)
+              : null,
+            zaloBirthdayMaterializedCount: isZaloMessageBirthdayCampaign && !cloneFromId
+              ? (campaign?.extraSettings?.zaloBirthdayMaterializedCount ?? 0)
+              : 0,
             pageInboxPageUid: isPageInboxMessageCampaign ? formData.pageInboxPageUid : '',
             pageInboxPageName: isPageInboxMessageCampaign ? formData.pageInboxPageName : '',
             copyContentFromSource: isPostBackgroundActive ? false : formData.copyContentFromSource,
@@ -2617,7 +2736,12 @@ export default function CampaignFormModal({
       return
     }
     if (requiresSingleAccount && formData.accountIds.length !== 1) {
-      showAlert('Chiến dịch gửi tin khách inbox Page chỉ hỗ trợ chọn 1 tài khoản.', 'error')
+      showAlert(
+        isPageInboxMessageCampaign
+          ? 'Chiến dịch gửi tin khách inbox Page chỉ hỗ trợ chọn 1 tài khoản.'
+          : 'Chiến dịch Zalo này chỉ hỗ trợ chọn 1 tài khoản.',
+        'error'
+      )
       return
     }
     if (selectedActionPlatform) {
@@ -2636,6 +2760,20 @@ export default function CampaignFormModal({
       }
       if (formData.friendRequestMessage.length > 150) {
         showAlert('Nội dung kết bạn không được quá 150 ký tự.', 'error')
+        return
+      }
+      if (formData.enableZaloTag && !formData.zaloTagId) {
+        showAlert('Vui lòng chọn tag Zalo cần gắn.', 'error')
+        return
+      }
+      if (formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
+        showAlert('Vui lòng nhập template đổi tên Zalo.', 'error')
+        return
+      }
+    }
+    if (isZaloMessageFriendCampaign) {
+      if (formData.zaloFriendTargetMode === 'tagged_friends' && normalizeZaloTagIdList(formData.zaloFriendSourceTagIds).length === 0) {
+        showAlert('Vui lòng chọn tag nguồn Zalo để lấy danh sách bạn bè.', 'error')
         return
       }
       if (formData.enableZaloTag && !formData.zaloTagId) {
@@ -2703,7 +2841,7 @@ export default function CampaignFormModal({
         isEmailCampaign
           ? 'Vui lòng nhập nội dung email hoặc chọn ít nhất một tệp đính kèm.'
         : isMessageCampaign
-          ? `Vui lòng nhập nội dung tin nhắn hoặc chọn ít nhất một ${isZaloMessagePhoneCampaign ? 'file' : 'ảnh'}.`
+          ? `Vui lòng nhập nội dung tin nhắn hoặc chọn ít nhất một ${isZaloMessageCampaign ? 'file' : 'ảnh'}.`
           : 'Vui lòng nhập nội dung chiến dịch hoặc chọn ít nhất một ảnh.',
         'error'
       )
@@ -2840,6 +2978,10 @@ export default function CampaignFormModal({
             ? 'Vui lòng chọn ít nhất một khách inbox Page.'
           : isZaloMessagePhoneCampaign
             ? 'Vui lòng thêm ít nhất một SĐT hợp lệ vào danh sách data.'
+          : isZaloMessageFriendCampaign
+            ? 'Vui lòng chọn ít nhất một bạn bè Zalo.'
+          : isZaloMessageGroupCampaign
+            ? 'Vui lòng chọn ít nhất một group Zalo.'
           : isEmailCampaign
             ? 'Vui lòng thêm ít nhất một email hợp lệ vào danh sách data.'
           : 'Vui lòng thêm ít nhất một bạn bè vào danh sách data.',
@@ -3478,7 +3620,9 @@ export default function CampaignFormModal({
   const onGroupsSelected = (contacts: AutoAccountContact[]) => {
     const newRows: Partial<CampaignInputData>[] = contacts.map(c => ({
       name: c.name,
-      uid: c.url || (c.uid ? `https://www.facebook.com/groups/${c.uid}` : ''),
+      uid: isZaloMessageGroupCampaign
+        ? (c.uid || c.url || '')
+        : (c.url || (c.uid ? `https://www.facebook.com/groups/${c.uid}` : '')),
       phone: '',
       email: '',
       note: '',
@@ -3817,6 +3961,7 @@ export default function CampaignFormModal({
     const excelTokens = ['INPUT_FULLNAME', 'PHONE', 'EMAIL', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
     const showCustomerTokens = !isEmailCampaign
     const showExcelTokens = isZaloMessagePhoneCampaign || isEmailCampaign
+    const showZaloProfileTokens = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign
     const renderExcelTokens = () => (
       <div className="message-template-token-row">
         {excelTokens.map(token => (
@@ -3842,7 +3987,7 @@ export default function CampaignFormModal({
               <Users size={16} />
               <span>Khách hàng</span>
             </div>
-            <label>Tên hiển thị{isZaloMessagePhoneCampaign ? ' Zalo' : ''}</label>
+            <label>Tên hiển thị{showZaloProfileTokens ? ' Zalo' : ''}</label>
             <button
               type="button"
               className="message-template-token"
@@ -3850,31 +3995,31 @@ export default function CampaignFormModal({
             >
               {MESSAGE_FULL_NAME_TOKEN}
             </button>
-            {isZaloMessagePhoneCampaign && (
-            <>
-              <label>Tên gốc Zalo</label>
-              <button
-                type="button"
-                className="message-template-token"
-                onClick={() => insertCampaignContentToken('#{ORIGINAL_NAME}')}
-              >
-                {'#{ORIGINAL_NAME}'}
-              </button>
-              <label>Giới tính</label>
-              <button
-                type="button"
-                className="message-template-token"
-                onClick={() => insertCampaignContentToken('#{SEX{anh-chị-anh/chị}}')}
-              >
-                {'#{SEX{anh-chị-anh/chị}}'}
-              </button>
-              {showExcelTokens && (
-                <>
-                  <label>Thông tin Excel</label>
-                  {renderExcelTokens()}
-                </>
-              )}
-            </>
+            {showZaloProfileTokens && (
+              <>
+                <label>Tên gốc Zalo</label>
+                <button
+                  type="button"
+                  className="message-template-token"
+                  onClick={() => insertCampaignContentToken('#{ORIGINAL_NAME}')}
+                >
+                  {'#{ORIGINAL_NAME}'}
+                </button>
+                <label>Giới tính</label>
+                <button
+                  type="button"
+                  className="message-template-token"
+                  onClick={() => insertCampaignContentToken('#{SEX{anh-chị-anh/chị}}')}
+                >
+                  {'#{SEX{anh-chị-anh/chị}}'}
+                </button>
+                {showExcelTokens && (
+                  <>
+                    <label>Thông tin Excel</label>
+                    {renderExcelTokens()}
+                  </>
+                )}
+              </>
             )}
           </div>
         )}
@@ -3935,7 +4080,7 @@ export default function CampaignFormModal({
 
   const renderImagePicker = (target: 'post' | 'comment', title: string) => {
     const isComment = target === 'comment'
-    const isZaloMedia = isZaloMessagePhoneCampaign && !isComment
+    const isZaloMedia = isZaloMessageCampaign && !isComment
     const isEmailAttachment = isEmailCampaign && !isComment
     const isFileMedia = isZaloMedia || isEmailAttachment
     const option = isComment ? formData.commentImageOption : formData.imageOption
@@ -4145,6 +4290,128 @@ export default function CampaignFormModal({
     </>
   )
 
+  const renderZaloTagSelector = ({
+    label,
+    value,
+    onChange,
+    emptyHint = 'Bấm “Tải tag” để lấy tag từ Zalo và lưu vào danh sách.'
+  }: {
+    label: string
+    value: number | string | null | undefined
+    onChange: (id: string, name: string) => void
+    emptyHint?: string
+  }) => (
+    <div className="stepper-form-group" style={{ maxWidth: 360 }}>
+      <label>{label}</label>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <select
+          className="stepper-input"
+          value={String(value || '')}
+          disabled={zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0}
+          onChange={e => {
+            const item = zaloLabels.find(labelItem => String(labelItem.id) === e.target.value)
+            onChange(e.target.value, item?.text || '')
+          }}
+        >
+          <option value="">{zaloLabelsLoading ? 'Đang tải tag đã lưu...' : '-- Chọn tag --'}</option>
+          {zaloLabels.map(labelItem => (
+            <option key={labelItem.id} value={labelItem.id}>{labelItem.text}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+          disabled={zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0}
+          onClick={handleSyncZaloLabels}
+        >
+          {zaloLabelsSyncing ? <Loader2 size={14} /> : <RefreshCw size={14} />}
+          {zaloLabelsSyncing ? 'Đang tải' : 'Tải tag'}
+        </button>
+      </div>
+      {zaloLabelsError && <div className="schedule-hint" style={{ color: 'var(--text-error)' }}>{zaloLabelsError}</div>}
+      {!zaloLabelsLoading && !zaloLabelsError && zaloLabels.length === 0 && (
+        <div className="schedule-hint">{emptyHint}</div>
+      )}
+    </div>
+  )
+
+  const renderZaloTagMultiSelector = ({
+    label,
+    values,
+    onChange,
+    emptyHint = 'Bấm “Tải tag” để lấy tag từ Zalo.'
+  }: {
+    label: string
+    values: string[]
+    onChange: (ids: string[], names: string[]) => void
+    emptyHint?: string
+  }) => {
+    const selected = new Set(values.map(id => String(id || '').trim()).filter(Boolean))
+    const disabled = zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0
+    const updateSelection = (id: string, checked: boolean) => {
+      const next = new Set(selected)
+      if (checked) next.add(id)
+      else next.delete(id)
+      const ids = zaloLabels
+        .map(item => String(item.id))
+        .filter(itemId => next.has(itemId))
+      const names = ids.map(idValue => zaloLabels.find(item => String(item.id) === idValue)?.text || '')
+      onChange(ids, names)
+    }
+
+    return (
+      <div className="stepper-form-group" style={{ maxWidth: 420 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <label style={{ marginBottom: 0 }}>{label}</label>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+            disabled={disabled}
+            onClick={handleSyncZaloLabels}
+          >
+            {zaloLabelsSyncing ? <Loader2 size={14} /> : <RefreshCw size={14} />}
+            {zaloLabelsSyncing ? 'Đang tải' : 'Tải tag'}
+          </button>
+        </div>
+        {zaloLabelsError && <div className="schedule-hint" style={{ color: 'var(--text-error)' }}>{zaloLabelsError}</div>}
+        {!zaloLabelsLoading && !zaloLabelsError && zaloLabels.length === 0 && (
+          <div className="schedule-hint">{emptyHint}</div>
+        )}
+        {zaloLabels.length > 0 && (
+          <div
+            style={{
+              display: 'grid',
+              gap: 8,
+              marginTop: 8,
+              padding: 10,
+              border: '1px solid var(--border-default)',
+              borderRadius: 6,
+              maxHeight: 180,
+              overflowY: 'auto'
+            }}
+          >
+            {zaloLabels.map(labelItem => {
+              const id = String(labelItem.id)
+              return (
+                <label key={id} className="schedule-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(id)}
+                    disabled={disabled}
+                    onChange={e => updateSelection(id, e.target.checked)}
+                  />
+                  <span>{labelItem.text}</span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const renderZaloMessagePhoneActionOptions = () => (
     <>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Chọn hành động</div>
@@ -4209,44 +4476,100 @@ export default function CampaignFormModal({
         </label>
       </div>
       {formData.enableZaloTag && (
-        <div className="stepper-form-group" style={{ maxWidth: 360 }}>
-          <label>Tag Zalo</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select
-              className="stepper-input"
-              value={String(formData.zaloTagId || '')}
-              disabled={zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0}
-              onChange={e => {
-                const label = zaloLabels.find(item => String(item.id) === e.target.value)
-                setFormData(p => ({
-                  ...p,
-                  zaloTagId: e.target.value,
-                  zaloTagName: label?.text || ''
-                }))
-              }}
-            >
-              <option value="">{zaloLabelsLoading ? 'Đang tải tag đã lưu...' : '-- Chọn tag --'}</option>
-              {zaloLabels.map(label => (
-                <option key={label.id} value={label.id}>{label.text}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
-              disabled={zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0}
-              onClick={handleSyncZaloLabels}
-            >
-              {zaloLabelsSyncing ? <Loader2 size={14} /> : <RefreshCw size={14} />}
-              {zaloLabelsSyncing ? 'Đang tải' : 'Tải tag'}
-            </button>
-          </div>
-          {zaloLabelsError && <div className="schedule-hint" style={{ color: 'var(--text-error)' }}>{zaloLabelsError}</div>}
-          {!zaloLabelsLoading && !zaloLabelsError && zaloLabels.length === 0 && (
-            <div className="schedule-hint">Bấm “Tải tag” để lấy tag từ Zalo và lưu vào danh sách.</div>
-          )}
+        renderZaloTagSelector({
+          label: 'Tag Zalo',
+          value: formData.zaloTagId,
+          onChange: (id, name) => setFormData(p => ({ ...p, zaloTagId: id, zaloTagName: name }))
+        })
+      )}
+
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.enableZaloAlias}
+            onChange={e => setFormData(p => ({
+              ...p,
+              enableZaloAlias: e.target.checked,
+              zaloAliasTemplate: e.target.checked && !p.zaloAliasTemplate.trim()
+                ? DEFAULT_ZALO_ALIAS_TEMPLATE
+                : p.zaloAliasTemplate
+            }))}
+          />
+          <span>Kiêm đổi tên</span>
+        </label>
+      </div>
+      {formData.enableZaloAlias && (
+        <div className="stepper-form-group">
+          <input
+            type="text"
+            className="stepper-input"
+            value={formData.zaloAliasTemplate}
+            onChange={e => setFormData(p => ({ ...p, zaloAliasTemplate: e.target.value }))}
+            placeholder={DEFAULT_ZALO_ALIAS_TEMPLATE}
+          />
         </div>
       )}
+    </>
+  )
+
+  const renderZaloMessageFriendActionOptions = () => (
+    <>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Nguồn bạn bè</div>
+      <div className="stepper-form-group">
+        <div style={{ display: 'grid', gap: 8 }}>
+          {ZALO_FRIEND_TARGET_MODES.map(mode => (
+            <label key={mode.value} className="schedule-checkbox-label">
+              <input
+                type="radio"
+                name="zalo-friend-target-mode"
+                checked={formData.zaloFriendTargetMode === mode.value}
+                onChange={() => setFormData(p => ({
+                  ...p,
+                  zaloFriendTargetMode: mode.value,
+                  zaloFriendSourceTagIds: mode.value === 'tagged_friends' ? p.zaloFriendSourceTagIds : [],
+                  zaloFriendSourceTagNames: mode.value === 'tagged_friends' ? p.zaloFriendSourceTagNames : []
+                }))}
+              />
+              <span>{mode.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {formData.zaloFriendTargetMode === 'tagged_friends' && renderZaloTagMultiSelector({
+        label: 'Tag nguồn',
+        values: formData.zaloFriendSourceTagIds,
+        onChange: (ids, names) => setFormData(p => ({
+          ...p,
+          zaloFriendSourceTagIds: ids,
+          zaloFriendSourceTagNames: names
+        })),
+        emptyHint: 'Bấm “Tải tag” để lấy tag từ Zalo.'
+      })}
+
+      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.enableZaloTag}
+            onChange={e => setFormData(p => ({
+              ...p,
+              enableZaloTag: e.target.checked,
+              zaloTagId: e.target.checked ? p.zaloTagId : '',
+              zaloTagName: e.target.checked ? p.zaloTagName : ''
+            }))}
+          />
+          <span>Kiêm gắn tag</span>
+        </label>
+      </div>
+      {formData.enableZaloTag && renderZaloTagSelector({
+        label: 'Tag Zalo',
+        value: formData.zaloTagId,
+        onChange: (id, name) => setFormData(p => ({ ...p, zaloTagId: id, zaloTagName: name }))
+      })}
 
       <div className="stepper-form-group">
         <label className="schedule-checkbox-label">
@@ -6928,7 +7251,9 @@ export default function CampaignFormModal({
                   <div className="stepper-section-body">
                     {isZaloMessagePhoneCampaign
                       ? renderZaloMessagePhoneActionOptions()
-                      : renderMessageUidActionOptions()}
+                      : isZaloMessageFriendCampaign
+                        ? renderZaloMessageFriendActionOptions()
+                        : renderMessageUidActionOptions()}
                   </div>
                 )}
               </div>
@@ -7141,7 +7466,7 @@ export default function CampaignFormModal({
                   )}
 
                   {/* Conditional checkbox based on schedule type */}
-                  {formData.scheduleType === 'daily' && !isNewsfeedInteractionCampaign && (
+                  {formData.scheduleType === 'daily' && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
@@ -7154,7 +7479,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && (
+                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isZaloMessageBirthdayCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
@@ -7622,10 +7947,14 @@ export default function CampaignFormModal({
                         ? 'Danh sách bài post'
                         : isPagePostCampaign
                           ? 'Danh sách fanpage'
-                          : isCommentSeedingCampaign
-                            ? 'Danh sách group/page/profile'
-                            : isMessageFriendCampaign
-                              ? 'Danh sách bạn bè'
+	                      : isCommentSeedingCampaign
+	                            ? 'Danh sách group/page/profile'
+	                            : isZaloMessageFriendCampaign
+	                              ? 'Danh sách bạn bè Zalo'
+	                              : isZaloMessageGroupCampaign
+	                                ? 'Danh sách group Zalo'
+	                            : isMessageFriendCampaign
+	                              ? 'Danh sách bạn bè'
                               : isPageInboxMessageCampaign
                                 ? 'Danh sách khách inbox Page'
                               : isZaloMessagePhoneCampaign
@@ -7662,7 +7991,7 @@ export default function CampaignFormModal({
                   )}
                   {!isEditingSavedCampaign && (
                     <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
-                      {!isFindDataSearchCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && (
+                      {!isFindDataSearchCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageGroupCampaign && (
                         <button className="btn btn-secondary" onClick={addDetailRow}>
                           <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
                         </button>
@@ -7693,11 +8022,18 @@ export default function CampaignFormModal({
                               showAlert('Vui lòng chọn tài khoản trước.', 'error')
                               return
                             }
-                            setDataScanPicker({ action: 'facebook_friends', mode: 'friends' })
+                            setDataScanPicker(isZaloMessageFriendCampaign
+                              ? {
+                                action: 'zalo_friends',
+                                mode: 'friends',
+                                initialStatusFilter: 'active',
+                                allowedActions: ['zalo_friends']
+                              }
+                              : { action: 'facebook_friends', mode: 'friends' })
                           }}
                           title="Chọn bạn bè từ danh sách liên hệ"
                         >
-                          <Users size={14} /> Chọn bạn bè
+                          <Users size={14} /> {isZaloMessageFriendCampaign ? 'Chọn bạn bè Zalo' : 'Chọn bạn bè'}
                         </button>
                       )}
                       {canPickUidData && (
@@ -7752,15 +8088,22 @@ export default function CampaignFormModal({
                               showAlert('Vui lòng chọn tài khoản trước.', 'error')
                               return
                             }
-                            setDataScanPicker({
-                              action: 'facebook_groups',
-                              mode: 'groups',
-                              initialStatusFilter: 'all'
-                            })
+                            setDataScanPicker(isZaloMessageGroupCampaign
+                              ? {
+                                action: 'zalo_groups',
+                                mode: 'groups',
+                                initialStatusFilter: 'active',
+                                allowedActions: ['zalo_groups']
+                              }
+                              : {
+                                action: 'facebook_groups',
+                                mode: 'groups',
+                                initialStatusFilter: 'all'
+                              })
                           }}
-                          title={isCommentSeedingFeedCampaign ? 'Chọn group để comment seeding' : 'Chọn group từ danh sách data'}
+                          title={isZaloMessageGroupCampaign ? 'Chọn group Zalo từ danh sách data' : isCommentSeedingFeedCampaign ? 'Chọn group để comment seeding' : 'Chọn group từ danh sách data'}
                         >
-                          <Users size={14} /> Chọn nhóm
+                          <Users size={14} /> {isZaloMessageGroupCampaign ? 'Chọn group Zalo' : 'Chọn nhóm'}
                         </button>
                       )}
                       {canPickPages && (
