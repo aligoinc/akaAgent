@@ -31,6 +31,8 @@ export interface BlockHelpers {
   /** Zalo browserless helpers. Implemented only by campaign runtime. */
   zaloFindPhoneUser(options: ZaloFindPhoneUserOptions): Promise<ZaloActionHelperResult>
   zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult>
+  zaloSendFriendMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
+  zaloSendGroupMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
   zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult>
   zaloApplyContactTag(options: ZaloApplyContactTagOptions): Promise<ZaloActionHelperResult>
   zaloChangeContactAlias(options: ZaloChangeContactAliasOptions): Promise<ZaloActionHelperResult>
@@ -80,6 +82,8 @@ export interface BlockRuntimeHelpers {
   callAIUsing?: (code: string, payload: Record<string, unknown>, metadata: BlockRuntimeMetadata) => Promise<unknown>
   zaloFindPhoneUser?: (options: ZaloFindPhoneUserOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendPhoneMessage?: (options: ZaloSendPhoneMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloSendFriendMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloSendGroupMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendPhoneFriendRequest?: (options: ZaloSendPhoneFriendRequestOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloApplyContactTag?: (options: ZaloApplyContactTagOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloChangeContactAlias?: (options: ZaloChangeContactAliasOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
@@ -128,6 +132,14 @@ export interface ZaloFindPhoneUserOptions {
 export interface ZaloSendPhoneMessageOptions {
   enabled?: boolean
   target?: ZaloResolvedTarget | null
+  message?: string
+  attachments?: unknown[]
+  inputData?: Record<string, unknown>
+}
+
+export interface ZaloSendDirectMessageOptions {
+  targetUid?: string
+  targetName?: string
   message?: string
   attachments?: unknown[]
   inputData?: Record<string, unknown>
@@ -301,6 +313,16 @@ export function createBlockHelpers(
     async zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult> {
       if (!runtimeHelpers.zaloSendPhoneMessage) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
       return runtimeHelpers.zaloSendPhoneMessage(options, runtimeMetadata)
+    },
+
+    async zaloSendFriendMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloSendFriendMessage) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloSendFriendMessage(options, runtimeMetadata)
+    },
+
+    async zaloSendGroupMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloSendGroupMessage) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloSendGroupMessage(options, runtimeMetadata)
     },
 
     async zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult> {

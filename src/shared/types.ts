@@ -307,6 +307,13 @@ export interface CampaignExtraSettings {
   zaloTagName?: string | null
   enableZaloAlias?: boolean
   zaloAliasTemplate?: string
+  zaloFriendTargetMode?: 'selected' | 'all_friends' | 'tagged_friends'
+  zaloFriendSourceTagIds?: Array<number | string>
+  zaloFriendSourceTagNames?: string[]
+  zaloFriendDataMaterializedAt?: string | null
+  zaloFriendMaterializedCount?: number
+  zaloBirthdayDataMaterializedDate?: string | null
+  zaloBirthdayMaterializedCount?: number
   pageInboxPageUid?: string                // facebook_page_to_message: Page ID dùng để mở Business Inbox
   pageInboxPageName?: string               // facebook_page_to_message: tên page hiển thị/log
   // Đăng bài lên trang cá nhân — tuỳ chọn nguồn
@@ -472,6 +479,8 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   facebook_comment_seeding: { field: 'uid', label: 'group/page/profile' },
   facebook_comment_seeding_post: { field: 'uid', label: 'link bài post' },
   zalo_message_phone: { field: 'phone', label: 'SĐT Zalo' },
+  zalo_message_friend: { field: 'uid', label: 'UID bạn bè Zalo' },
+  zalo_message_group: { field: 'uid', label: 'ID group Zalo' },
   email_send: { field: 'email', label: 'email người nhận' }
 }
 

@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError } from 'zca-js'
-import type { API, AttachmentSource, Credentials, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, MessageContent, Options as ZaloOptions, UserBasic } from 'zca-js'
+import type { API, AttachmentSource, Credentials, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, MessageContent, Options as ZaloOptions, ProfileInfo, UserBasic } from 'zca-js'
 import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, ZaloSessionCredentials } from '../../shared/types'
 import { SupabaseService } from './supabase'
 
@@ -23,6 +23,20 @@ interface CachedZaloApi {
   lastError?: string | null
 }
 
+type ZaloListenerStatus = 'idle' | 'starting' | 'running' | 'disconnected' | 'closed' | 'error' | 'stopped'
+
+interface ZaloListenerState {
+  accountId: number
+  api: API
+  status: ZaloListenerStatus
+  ready: boolean
+  handlersAttached: boolean
+  startPromise?: Promise<void>
+  readyAt?: number
+  lastEventAt?: number
+  lastError?: string | null
+}
+
 type ZaloProfile = {
   userId?: unknown
   uid?: unknown
@@ -32,6 +46,7 @@ type ZaloProfile = {
   zaloName?: unknown
   zalo_name?: unknown
   display_name?: unknown
+  gender?: unknown
   avatar?: unknown
   phoneNumber?: unknown
 }
@@ -166,6 +181,7 @@ function normalizeImageDimensions(width: number, height: number): ImageDimension
 
 export interface ZaloFoundUser {
   uid: string
+  phone?: string
   displayName?: string
   originalName?: string
   gender?: number | string | null
@@ -215,12 +231,18 @@ export interface ZaloGroupMembersResult {
 const ZALO_GROUP_MEMBER_PROFILE_BATCH_SIZE = 300
 const ZALO_GROUP_LINK_MAX_MEMBER_PAGES = 500
 const ZALO_GROUP_LINK_GINFO_PROXY_SETTING_KEY = 'zalo.group_link.ginfo_proxy_url'
+const ZALO_LISTENER_READY_TIMEOUT_MS = 20_000
+const ZALO_LISTENER_REFRESH_AFTER_MS = 30 * 60 * 1000
+const ZALO_MESSAGE_SEND_TIMEOUT_MS = 90_000
+const ZALO_FILE_MESSAGE_SEND_TIMEOUT_MS = 180_000
+const ZALO_ATTACHMENT_EXTENSIONS_WITHOUT_UPLOAD_CALLBACK = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
 
 export class ZaloRuntimeService {
   private activeQrLogins = new Map<number, ActiveQrLogin>()
   private apiCache = new Map<number, CachedZaloApi>()
   private apiLoginInflight = new Map<number, Promise<API>>()
   private verifyInflight = new Map<number, Promise<void>>()
+  private listenerStates = new Map<number, ZaloListenerState>()
   private accountCacheVersions = new Map<number, number>()
   private cacheVersion = 0
 
@@ -329,6 +351,7 @@ export class ZaloRuntimeService {
 
   invalidateAccount(accountId: number): void {
     this.accountCacheVersions.set(accountId, this.getAccountCacheVersion(accountId) + 1)
+    this.stopZaloListener(accountId)
     this.apiCache.delete(accountId)
     this.apiLoginInflight.delete(accountId)
   }
@@ -340,6 +363,7 @@ export class ZaloRuntimeService {
       try { active.abort?.() } catch {}
     }
     this.activeQrLogins.clear()
+    this.stopAllZaloListeners()
     this.apiCache.clear()
     this.apiLoginInflight.clear()
     this.verifyInflight.clear()
@@ -396,6 +420,21 @@ export class ZaloRuntimeService {
         emoji: String(label.emoji || '').trim() || undefined
       }))
       .filter(label => Number.isFinite(label.id) && label.id > 0 && label.text)
+  }
+
+  async getLabelConversationUids(accountId: number, labelId: number | string): Promise<string[]> {
+    const api = await this.ensureApi(accountId)
+    const id = Number(labelId)
+    if (!Number.isFinite(id) || id <= 0) throw new Error('Tag Zalo không hợp lệ')
+    const response = await api.getLabels()
+    const labels = Array.isArray(response?.labelData) ? response.labelData : []
+    const label = labels.find(item => Number(item.id) === id)
+    if (!label) throw new Error('Tag Zalo không tồn tại')
+    return Array.from(new Set(
+      (Array.isArray(label.conversations) ? label.conversations : [])
+        .map(item => String(item || '').trim())
+        .filter(Boolean)
+    ))
   }
 
   async getAllFriendsPage(accountId: number, count = 500, page = 1): Promise<Record<string, unknown>[]> {
@@ -529,6 +568,31 @@ export class ZaloRuntimeService {
     return normalizeFoundUser(user)
   }
 
+  async getUserProfile(accountId: number, uid: string): Promise<ZaloFoundUser | null> {
+    const requestedUid = String(uid || '').trim()
+    const normalizedUid = normalizeZaloMemberId(requestedUid)
+    if (!normalizedUid) return null
+
+    const api = await this.ensureApi(accountId)
+    const response = await api.getUserInfo(normalizedUid)
+    const profiles = normalizeRecord(response?.changed_profiles)
+    const profileEntry = Object.entries(profiles).find(([key]) => normalizeZaloMemberId(key) === normalizedUid)
+      || Object.entries(profiles)[0]
+    const profile = profileEntry?.[1]
+    const user = normalizeFoundUser(profile as ProfileInfo | ZaloProfile | UserBasic | null | undefined)
+    if (!user) return null
+
+    return {
+      ...user,
+      uid: normalizedUid,
+      raw: {
+        ...user.raw,
+        requestedUid,
+        getUserInfoKey: profileEntry?.[0] || null
+      }
+    }
+  }
+
   async getFriendRequestStatus(accountId: number, uid: string): Promise<ZaloFriendRequestStatus> {
     const api = await this.ensureApi(accountId)
     const status = await api.getFriendRequestStatus(uid)
@@ -548,12 +612,58 @@ export class ZaloRuntimeService {
     message: string,
     attachments: string[] = []
   ): Promise<unknown> {
+    return this.sendMessage(accountId, uid, ThreadType.User, message, attachments)
+  }
+
+  async sendMessageToGroup(
+    accountId: number,
+    groupId: string,
+    message: string,
+    attachments: string[] = []
+  ): Promise<unknown> {
+    return this.sendMessage(accountId, groupId, ThreadType.Group, message, attachments)
+  }
+
+  private async sendMessage(
+    accountId: number,
+    threadId: string,
+    type: ThreadType,
+    message: string,
+    attachments: string[] = []
+  ): Promise<unknown> {
     const api = await this.ensureApi(accountId)
     const safeAttachments = attachments.map(item => String(item || '').trim()).filter(Boolean) as AttachmentSource[]
     const payload: MessageContent = safeAttachments.length > 0
       ? { msg: String(message || ''), attachments: safeAttachments }
       : { msg: String(message || '') }
-    return api.sendMessage(payload, uid, ThreadType.User)
+    const needsUploadCallback = safeAttachments.some(item => requiresZaloUploadCallback(String(item || '')))
+    const listenerPromise = this.ensureZaloListenerReady(accountId, api, {
+      refreshIfOlderThanMs: needsUploadCallback ? ZALO_LISTENER_REFRESH_AFTER_MS : undefined
+    })
+
+    if (needsUploadCallback) {
+      await listenerPromise
+    } else {
+      void listenerPromise.catch((err) => {
+        console.warn('[ZaloRuntime] Failed to prepare Zalo listener for message send', {
+          accountId,
+          message: this.getErrorMessage(err)
+        })
+      })
+    }
+
+    const timeoutMs = needsUploadCallback
+      ? ZALO_FILE_MESSAGE_SEND_TIMEOUT_MS
+      : ZALO_MESSAGE_SEND_TIMEOUT_MS
+    const targetLabel = type === ThreadType.Group ? 'group' : 'người dùng'
+    return this.withTimeout(
+      api.sendMessage(payload, threadId, type),
+      timeoutMs,
+      `Gửi tin nhắn Zalo đến ${targetLabel} quá thời gian chờ (${Math.round(timeoutMs / 1000)} giây)`,
+      () => {
+        if (needsUploadCallback) this.invalidateAccount(accountId)
+      }
+    )
   }
 
   async sendFriendRequestToUser(accountId: number, uid: string, message: string): Promise<unknown> {
@@ -563,15 +673,39 @@ export class ZaloRuntimeService {
 
   async applyLabelToUser(accountId: number, uid: string, labelId: number | string): Promise<LabelData> {
     const api = await this.ensureApi(accountId)
+    const targetUid = String(uid || '').trim()
+    if (!targetUid) throw new Error('UID Zalo không hợp lệ')
     const id = Number(labelId)
     if (!Number.isFinite(id) || id <= 0) throw new Error('Tag Zalo không hợp lệ')
     const response = await api.getLabels()
     const labels = Array.isArray(response?.labelData) ? response.labelData : []
     const label = labels.find(item => Number(item.id) === id)
     if (!label) throw new Error('Tag Zalo không tồn tại')
-    if (!Array.isArray(label.conversations)) label.conversations = []
-    if (!label.conversations.includes(uid)) {
-      label.conversations.push(uid)
+
+    let changed = false
+    for (const item of labels) {
+      const conversations = Array.isArray(item.conversations) ? item.conversations : []
+      const isTargetLabel = Number(item.id) === id
+      const hasTargetUid = conversations.includes(targetUid)
+
+      if (isTargetLabel) {
+        if (!Array.isArray(item.conversations)) item.conversations = conversations
+        if (!hasTargetUid) {
+          item.conversations = [...conversations, targetUid]
+          changed = true
+        }
+        continue
+      }
+
+      if (hasTargetUid) {
+        item.conversations = conversations.filter(conversationUid => conversationUid !== targetUid)
+        changed = true
+      } else if (!Array.isArray(item.conversations)) {
+        item.conversations = conversations
+      }
+    }
+
+    if (changed) {
       await api.updateLabels({ labelData: labels, version: response.version })
     }
     return label
@@ -713,6 +847,251 @@ export class ZaloRuntimeService {
 
   private getAccountCacheVersion(accountId: number): number {
     return this.accountCacheVersions.get(accountId) ?? 0
+  }
+
+  private async ensureZaloListenerReady(
+    accountId: number,
+    api: API,
+    options: { refreshIfOlderThanMs?: number } = {}
+  ): Promise<void> {
+    let state = this.listenerStates.get(accountId)
+    if (state && state.api !== api) {
+      this.stopZaloListener(accountId)
+      state = undefined
+    }
+
+    const now = Date.now()
+    if (
+      state
+      && !state.ready
+      && (
+        state.status === 'disconnected'
+        || (state.status === 'error' && state.lastEventAt && now - state.lastEventAt < 5_000)
+      )
+    ) {
+      if (state.startPromise) return state.startPromise
+      return this.waitForZaloListenerReady(accountId, state, ZALO_LISTENER_READY_TIMEOUT_MS)
+    }
+
+    if (state?.status === 'error' && !state.ready) {
+      this.stopZaloListener(accountId)
+      state = undefined
+    }
+
+    if (
+      state?.status === 'running'
+      && state.ready
+      && (!options.refreshIfOlderThanMs || !state.readyAt || now - state.readyAt <= options.refreshIfOlderThanMs)
+    ) {
+      return
+    }
+
+    if (
+      state?.status === 'running'
+      && state.ready
+      && options.refreshIfOlderThanMs
+      && state.readyAt
+      && now - state.readyAt > options.refreshIfOlderThanMs
+    ) {
+      this.stopZaloListener(accountId)
+      state = undefined
+    }
+
+    if (!state) {
+      state = {
+        accountId,
+        api,
+        status: 'idle',
+        ready: false,
+        handlersAttached: false,
+        lastError: null
+      }
+      this.listenerStates.set(accountId, state)
+    }
+
+    this.attachZaloListenerHandlers(state)
+
+    if (state.startPromise) return state.startPromise
+
+    let promise!: Promise<void>
+    promise = (async () => {
+      state.status = 'starting'
+      state.ready = false
+      state.lastEventAt = Date.now()
+      try {
+        api.listener.start({ retryOnClose: true })
+      } catch (err) {
+        if (this.isZaloListenerAlreadyStartedError(err)) {
+          await this.waitForZaloListenerReady(accountId, state, ZALO_LISTENER_READY_TIMEOUT_MS)
+          return
+        }
+        state.status = 'error'
+        state.ready = false
+        state.lastError = this.getErrorMessage(err)
+        state.lastEventAt = Date.now()
+        throw err
+      }
+
+      await this.waitForZaloListenerReady(accountId, state, ZALO_LISTENER_READY_TIMEOUT_MS)
+    })().finally(() => {
+      if (state?.startPromise === promise) {
+        state.startPromise = undefined
+      }
+    })
+
+    state.startPromise = promise
+    return promise
+  }
+
+  private attachZaloListenerHandlers(state: ZaloListenerState): void {
+    if (state.handlersAttached) return
+    state.handlersAttached = true
+
+    const { accountId, api } = state
+    api.listener.on('connected', () => {
+      const current = this.listenerStates.get(accountId)
+      if (current !== state) return
+      state.status = 'starting'
+      state.ready = false
+      state.lastEventAt = Date.now()
+    })
+    api.listener.on('cipher_key', () => {
+      const current = this.listenerStates.get(accountId)
+      if (current !== state) return
+      state.status = 'running'
+      state.ready = true
+      state.readyAt = Date.now()
+      state.lastEventAt = state.readyAt
+      state.lastError = null
+    })
+    api.listener.on('disconnected', (code, reason) => {
+      const current = this.listenerStates.get(accountId)
+      if (current !== state) return
+      state.status = 'disconnected'
+      state.ready = false
+      state.lastEventAt = Date.now()
+      state.lastError = `Listener Zalo bị ngắt (${code}${reason ? `: ${reason}` : ''})`
+    })
+    api.listener.on('closed', (code, reason) => {
+      const current = this.listenerStates.get(accountId)
+      if (current !== state) return
+      state.status = 'closed'
+      state.ready = false
+      state.lastEventAt = Date.now()
+      state.lastError = `Listener Zalo đã đóng (${code}${reason ? `: ${reason}` : ''})`
+    })
+    api.listener.on('error', (err) => {
+      const current = this.listenerStates.get(accountId)
+      if (current !== state) return
+      state.lastError = this.getErrorMessage(err)
+      state.lastEventAt = Date.now()
+      if (!state.ready) {
+        state.status = 'error'
+      }
+    })
+  }
+
+  private async waitForZaloListenerReady(
+    accountId: number,
+    state: ZaloListenerState,
+    timeoutMs: number
+  ): Promise<void> {
+    if (state.status === 'running' && state.ready) return
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      let interval: ReturnType<typeof setInterval> | undefined
+      let timeout: ReturnType<typeof setTimeout> | undefined
+
+      const finish = (err?: Error) => {
+        if (settled) return
+        settled = true
+        if (interval) clearInterval(interval)
+        if (timeout) clearTimeout(timeout)
+        if (err) reject(err)
+        else resolve()
+      }
+
+      const check = () => {
+        const current = this.listenerStates.get(accountId)
+        if (current !== state) {
+          finish(new Error('Listener Zalo đã được reset trong lúc khởi động'))
+          return
+        }
+        if (state.status === 'running' && state.ready) {
+          finish()
+          return
+        }
+        if (state.status === 'closed') {
+          finish(new Error(state.lastError || 'Listener Zalo đã đóng trước khi sẵn sàng'))
+        }
+      }
+
+      interval = setInterval(check, 100)
+      timeout = setTimeout(() => {
+        finish(new Error(`Listener Zalo chưa sẵn sàng sau ${Math.round(timeoutMs / 1000)} giây`))
+      }, timeoutMs)
+      check()
+    })
+  }
+
+  private stopZaloListener(accountId: number): void {
+    const state = this.listenerStates.get(accountId)
+    if (!state) return
+    this.listenerStates.delete(accountId)
+    state.status = 'stopped'
+    state.ready = false
+    state.startPromise = undefined
+    try {
+      state.api.listener.stop()
+    } catch (err) {
+      console.warn('[ZaloRuntime] Failed to stop Zalo listener', {
+        accountId,
+        message: this.getErrorMessage(err)
+      })
+    }
+  }
+
+  private stopAllZaloListeners(): void {
+    for (const accountId of Array.from(this.listenerStates.keys())) {
+      this.stopZaloListener(accountId)
+    }
+  }
+
+  private async withTimeout<T>(
+    operation: Promise<T>,
+    timeoutMs: number,
+    timeoutMessage: string,
+    onTimeout?: () => void
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      let settled = false
+      const timeout = setTimeout(() => {
+        if (settled) return
+        settled = true
+        try { onTimeout?.() } catch {}
+        reject(new Error(timeoutMessage))
+      }, timeoutMs)
+
+      operation.then(
+        (value) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timeout)
+          resolve(value)
+        },
+        (err) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timeout)
+          reject(err)
+        }
+      )
+    })
+  }
+
+  private isZaloListenerAlreadyStartedError(err: unknown): boolean {
+    return this.getErrorMessage(err).toLowerCase().includes('already started')
   }
 
   private async verifyAccountSession(accountId: number): Promise<void> {
@@ -1124,19 +1503,37 @@ function firstString(...values: unknown[]): string | null {
   return null
 }
 
+function requiresZaloUploadCallback(source: string): boolean {
+  const trimmed = String(source || '').trim()
+  if (!trimmed) return false
+  if (/^data:image\//i.test(trimmed)) return false
+  const ext = getAttachmentExtension(trimmed)
+  if (!ext) return true
+  return !ZALO_ATTACHMENT_EXTENSIONS_WITHOUT_UPLOAD_CALLBACK.has(ext)
+}
+
+function getAttachmentExtension(source: string): string {
+  const withoutQuery = source.split(/[?#]/, 1)[0]
+  const fileName = withoutQuery.split(/[\\/]/).pop() || withoutQuery
+  const dotIndex = fileName.lastIndexOf('.')
+  if (dotIndex < 0 || dotIndex === fileName.length - 1) return ''
+  return fileName.slice(dotIndex + 1).toLowerCase()
+}
+
 function sanitizeProfileMetadata(profile: ZaloProfile): Record<string, unknown> {
   const metadata = { ...(profile as Record<string, unknown>) }
   delete metadata.phoneNumber
   return metadata
 }
 
-function normalizeFoundUser(user: UserBasic | null | undefined): ZaloFoundUser | null {
+function normalizeFoundUser(user: UserBasic | ProfileInfo | ZaloProfile | null | undefined): ZaloFoundUser | null {
   if (!user || typeof user !== 'object') return null
   const raw = normalizeRecord(user)
   const uid = firstString((user as any).uid, (user as any).userId, (user as any).globalId)
   if (!uid) return null
   return {
     uid,
+    phone: firstString((user as any).phoneNumber, (user as any).phone) || undefined,
     displayName: firstString((user as any).display_name, (user as any).displayName, (user as any).zalo_name, (user as any).zaloName) || undefined,
     originalName: firstString((user as any).zalo_name, (user as any).zaloName, (user as any).display_name, (user as any).displayName) || undefined,
     gender: (user as any).gender ?? null,

@@ -30,6 +30,9 @@ const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const EMAIL_SEND_ACTION_ID = 'email_send'
+const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
+const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
+const ZALO_FRIEND_AUTO_TARGET_MODES = new Set(['all_friends', 'tagged_friends'])
 const CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE = 500
 const LIMIT_COUNT_STATUSES = ['thành công', 'thất bại']
 const FIND_DATA_TARGET_FIELDS = [
@@ -84,6 +87,34 @@ const chunkArray = <T>(items: T[], size: number): T[][] => {
 const touchesEmailCampaignConfig = (updates: Partial<Campaign>): boolean => (
   Object.keys(updates).some(key => EMAIL_CAMPAIGN_CONFIG_UPDATE_KEYS.has(key as keyof Campaign))
 )
+
+const shouldSkipCloneCampaignInputData = (actionId: string, extraSettings: unknown): boolean => {
+  if (actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) return true
+  if (actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID) return false
+  const extra = extraSettings && typeof extraSettings === 'object'
+    ? extraSettings as Record<string, unknown>
+    : {}
+  return ZALO_FRIEND_AUTO_TARGET_MODES.has(String(extra.zaloFriendTargetMode || 'selected'))
+}
+
+const sanitizeClonedCampaignExtraSettings = (actionId: string, extraSettings: unknown): unknown => {
+  if (!shouldSkipCloneCampaignInputData(actionId, extraSettings)) return extraSettings
+  const extra = extraSettings && typeof extraSettings === 'object'
+    ? { ...(extraSettings as Record<string, unknown>) }
+    : {}
+  delete extra.zaloFriendDataMaterializedAt
+  delete extra.zaloFriendMaterializedCount
+  delete extra.zaloBirthdayDataMaterializedDate
+  delete extra.zaloBirthdayMaterializedCount
+  return extra
+}
+
+function clearZaloBirthdayMaterializedExtra(extraSettings: Campaign['extraSettings']): Campaign['extraSettings'] {
+  const nextExtra = { ...(extraSettings || {}) }
+  delete nextExtra.zaloBirthdayDataMaterializedDate
+  delete nextExtra.zaloBirthdayMaterializedCount
+  return nextExtra
+}
 
 async function getCampaignActionIdForCurrentUser(campaignId: number, staffId: number): Promise<string | null> {
   const { data, error } = await client()
@@ -514,6 +545,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
   if (origCamp.action_id === EMAIL_SEND_ACTION_ID) {
     await ensureCurrentUserEmailFeatureActive()
   }
+  const skipCloningInputData = shouldSkipCloneCampaignInputData(origCamp.action_id, origCamp.extra_settings)
 
   const { data: newCamp, error: errInsert } = await client()
     .from('auto_campaigns')
@@ -532,7 +564,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       continue_next_day: origCamp.continue_next_day,
       refresh_data: origCamp.refresh_data,
       content: origCamp.content,
-      extra_settings: origCamp.extra_settings,
+      extra_settings: sanitizeClonedCampaignExtraSettings(origCamp.action_id, origCamp.extra_settings),
       images: origCamp.images,
       log: '',
       note: null,
@@ -546,11 +578,13 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
 
   // Clone campaign_inputs trước (để build map oldInputId → newInputId cho input_data tham chiếu)
   const inputIdMap = new Map<number, number>()
-  const { data: origInputs, error: errInputs } = await client()
-    .from('auto_campaign_inputs')
-    .select('*')
-    .eq('campaign_id', id)
-    .eq('is_delete', false)
+  const { data: origInputs, error: errInputs } = skipCloningInputData
+    ? { data: [], error: null }
+    : await client()
+      .from('auto_campaign_inputs')
+      .select('*')
+      .eq('campaign_id', id)
+      .eq('is_delete', false)
 
   if (errInputs) throw new Error(`Failed to fetch original campaign inputs: ${errInputs.message}`)
 
@@ -579,11 +613,13 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
   }
 
   // Clone campaign_input_data, map input_id qua inputIdMap
-  const { data: origActions, error: errActions } = await client()
-    .from('auto_campaign_input_data')
-    .select('*')
-    .eq('campaign_id', id)
-    .eq('is_delete', false)
+  const { data: origActions, error: errActions } = skipCloningInputData
+    ? { data: [], error: null }
+    : await client()
+      .from('auto_campaign_input_data')
+      .select('*')
+      .eq('campaign_id', id)
+      .eq('is_delete', false)
 
   if (errActions) throw new Error(`Failed to fetch original campaign input data: ${errActions.message}`)
 
@@ -701,6 +737,17 @@ export async function maintainCampaignSchedules(): Promise<Campaign[]> {
       }
 
       if (scheduleType === 'daily') {
+        if (campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) {
+          if (campaign.status !== 'hoàn thành') {
+            const updated = await updateCampaign(campaign.id, {
+              status: 'hoàn thành',
+              note: 'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày'
+            })
+            updatedCampaigns.push(updated)
+          }
+          continue
+        }
+
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
           if (campaign.status !== 'hoàn thành') {
             const updated = await updateCampaign(campaign.id, {
@@ -726,6 +773,27 @@ export async function maintainCampaignSchedules(): Promise<Campaign[]> {
       const details = await listCampaignInputData(campaign.id)
       const allDataDone = details.length > 0 && details.every(detail => detail.status === 'hoàn thành')
       const shouldRefreshData = campaign.refreshData && (allDataDone || details.length === 0)
+
+      if (campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) {
+        if (details.length > 0) {
+          const { error: deleteError } = await client()
+            .from('auto_campaign_input_data')
+            .update({ is_delete: true })
+            .eq('campaign_id', campaign.id)
+            .eq('is_delete', false)
+
+          if (deleteError) throw new Error(`Failed to clear birthday campaign input data: ${deleteError.message}`)
+        }
+
+        const updated = await updateCampaign(campaign.id, {
+          status: 'chờ xử lý',
+          schedule: nextSchedule.toISOString(),
+          note: null,
+          extraSettings: clearZaloBirthdayMaterializedExtra(campaign.extraSettings)
+        })
+        updatedCampaigns.push(updated)
+        continue
+      }
 
       if (shouldRefreshData) {
         if (details.length > 0) {

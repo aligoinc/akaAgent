@@ -13,6 +13,9 @@ const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
+const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
+const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
+const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 
 export function isCommentSeedingCampaign(actionId: string): boolean {
@@ -44,6 +47,7 @@ export function getAccountActionName(actionCode: string): string {
     case 'fb_like_post': return 'Like post'
     case 'zalo_find_phone_user': return 'Tìm SĐT'
     case 'zalo_message_friend': return 'Nhắn tin bạn bè'
+    case 'zalo_message_group': return 'Nhắn tin group'
     case 'zalo_message_stranger': return 'Nhắn tin người lạ'
     case 'zalo_add_friend': return 'Kết bạn'
     case 'zalo_tag_contact': return 'Gắn tag Zalo'
@@ -92,7 +96,9 @@ function isActionCheckEnabledForCampaign(campaign: Campaign, actionCode: string)
     case 'zalo_find_phone_user':
       return campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
     case 'zalo_message_friend':
-      return false
+      return campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID || campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID
+    case 'zalo_message_group':
+      return campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
     case 'zalo_message_stranger':
       return campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID && extra.enableMessage === true
     case 'zalo_add_friend':
@@ -193,6 +199,15 @@ export function getCampaignActionDescriptors(
         actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
       }
       if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
+      break
+    case ZALO_MESSAGE_FRIEND_ACTION_ID:
+      actions.push({ code: 'zalo_message_friend', name: 'Nhắn tin bạn bè' })
+      break
+    case ZALO_MESSAGE_BIRTHDAY_ACTION_ID:
+      actions.push({ code: 'zalo_message_friend', name: 'Nhắn tin bạn bè' })
+      break
+    case ZALO_MESSAGE_GROUP_ACTION_ID:
+      actions.push({ code: 'zalo_message_group', name: 'Nhắn tin group' })
       break
     case EMAIL_SEND_ACTION_ID:
       actions.push({ code: 'email_send', name: 'Gửi email' })
