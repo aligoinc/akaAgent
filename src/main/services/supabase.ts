@@ -169,6 +169,14 @@ export class SupabaseService {
     contacts: Partial<AutoAccountContact>[],
     options?: Parameters<typeof accountContactRepo.upsertContacts>[1]
   ) { return accountContactRepo.upsertContacts(contacts, options) }
+  upsertZaloUserContacts(
+    contacts: accountContactRepo.ZaloUserContactInput[],
+    options?: Parameters<typeof accountContactRepo.upsertZaloUserContacts>[1]
+  ) { return accountContactRepo.upsertZaloUserContacts(contacts, options) }
+  upsertZaloGroupContacts(
+    contacts: accountContactRepo.ZaloGroupContactInput[],
+    options?: Parameters<typeof accountContactRepo.upsertZaloGroupContacts>[1]
+  ) { return accountContactRepo.upsertZaloGroupContacts(contacts, options) }
   upsertGroupPostContactStatus(
     input: Parameters<typeof accountContactRepo.upsertGroupPostContactStatus>[0]
   ) { return accountContactRepo.upsertGroupPostContactStatus(input) }

@@ -4,6 +4,7 @@ import { AutoAccountContact, AutoAccountContactGroup, ContactType } from '../../
 
 interface DataScanGroupManagementModalProps {
   activeContactType: ContactType
+  platform?: string
   groupsLoading: boolean
   contactGroups: AutoAccountContactGroup[]
   activeGroupId: number | null
@@ -30,14 +31,45 @@ const getGroupApprovalStatus = (contact: AutoAccountContact) => {
   return 'Chưa biết'
 }
 
-const getContactTypeLabel = (contactType: ContactType) => {
-  if (contactType === 'person') return 'User Facebook'
-  if (contactType === 'group') return 'Group Facebook'
+const getContactTypeLabel = (contactType: ContactType, platform: string = 'facebook') => {
+  const isZalo = platform === 'zalo'
+  if (contactType === 'person') return isZalo ? 'User Zalo' : 'User Facebook'
+  if (contactType === 'group') return isZalo ? 'Group Zalo' : 'Group Facebook'
   return 'Page Facebook'
+}
+
+const getContactAvatarUrl = (contact: AutoAccountContact) => {
+  const extra = contact.extraData || {}
+  return String(
+    extra.avatarUrl ||
+    extra.avatar ||
+    extra.avatar_url ||
+    extra.fullAvatar ||
+    extra.full_avatar ||
+    ''
+  ).trim()
+}
+
+const getContactInitial = (contact: AutoAccountContact) => {
+  return String(contact.name || contact.uid || '?').trim().charAt(0).toLocaleUpperCase('vi-VN') || '?'
+}
+
+const renderContactAvatar = (contact: AutoAccountContact) => {
+  const avatarUrl = getContactAvatarUrl(contact)
+  return (
+    <div className="data-scan-avatar" title={contact.name || contact.uid || undefined}>
+      {avatarUrl ? (
+        <img src={avatarUrl} alt="" loading="lazy" />
+      ) : (
+        <span>{getContactInitial(contact)}</span>
+      )}
+    </div>
+  )
 }
 
 export default function DataScanGroupManagementModal({
   activeContactType,
+  platform = 'facebook',
   groupsLoading,
   contactGroups,
   activeGroupId,
@@ -65,6 +97,9 @@ export default function DataScanGroupManagementModal({
     () => filteredGroupContacts.filter(contact => selectedContactIds.has(contact.id)),
     [filteredGroupContacts, selectedContactIds]
   )
+  const showGroupApprovalColumn = activeContactType === 'group' && platform === 'facebook'
+  const showAvatarColumn = platform === 'zalo'
+  const showLinkColumn = platform === 'facebook' || (activeContactType === 'group' && platform === 'zalo')
 
   useEffect(() => {
     setSelectedContactIds(new Set())
@@ -179,7 +214,7 @@ export default function DataScanGroupManagementModal({
                           <>
                             <div className="data-scan-group-name">{group.name}</div>
                             <div className="data-scan-group-count">
-                              {group.contactCount || 0} data · {getContactTypeLabel(group.contactType)}
+                              {group.contactCount || 0} data · {getContactTypeLabel(group.contactType, platform)}
                             </div>
                           </>
                         )}
@@ -269,12 +304,13 @@ export default function DataScanGroupManagementModal({
                             disabled={!activeGroupId || filteredGroupContacts.length === 0}
                           />
                         </th>
+                        {showAvatarColumn && <th style={{ width: 72 }}>Ảnh đại diện</th>}
                         <th>Tên</th>
                         <th>UID</th>
-                        <th>Link</th>
+                        {showLinkColumn && <th>Link</th>}
                         {activeContactType === 'person' && <th>Bạn bè</th>}
                         {activeContactType === 'group' && <th>Tham gia</th>}
-                        {activeContactType === 'group' && <th>Duyệt bài</th>}
+                        {showGroupApprovalColumn && <th>Duyệt bài</th>}
                         <th style={{ width: 44 }}></th>
                       </tr>
                     </thead>
@@ -295,15 +331,18 @@ export default function DataScanGroupManagementModal({
                                 onChange={() => toggleContact(contact.id)}
                               />
                             </td>
+                            {showAvatarColumn && <td>{renderContactAvatar(contact)}</td>}
                             <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
                               {contact.name || '-'}
                             </td>
                             <td className="data-scan-text-cell data-scan-uid-cell" title={contact.uid || undefined}>
                               {contact.uid || '-'}
                             </td>
-                            <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
-                              {contact.url || '-'}
-                            </td>
+                            {showLinkColumn && (
+                              <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
+                                {contact.url || '-'}
+                              </td>
+                            )}
                             {activeContactType === 'person' && (
                               <td>
                                 <span className={`data-scan-status-badge ${contact.isFriend ? 'is-active' : 'is-muted'}`}>
@@ -318,7 +357,7 @@ export default function DataScanGroupManagementModal({
                                 </span>
                               </td>
                             )}
-                            {activeContactType === 'group' && (
+                            {showGroupApprovalColumn && (
                               <td>
                                 <span className="data-scan-status-badge">{getGroupApprovalStatus(contact)}</span>
                               </td>

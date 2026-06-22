@@ -7,7 +7,8 @@ import { useUiStore } from '../../stores/uiStore'
 import DataScanGroupManagementModal from './DataScanGroupManagementModal'
 import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 
-export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers'
+export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups'
+type DataScanPlatform = 'facebook' | 'zalo'
 type ContactStatusFilter = 'active' | 'inactive' | 'all'
 type PageInboxTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 interface PageInboxAppliedFilters {
@@ -46,6 +47,7 @@ const PAGE_INBOX_TIME_PRESETS: Array<{ value: PageInboxTimePreset; label: string
 interface DataScanActionDef {
   id: DataScanAction
   label: string
+  platform: DataScanPlatform
   contactType: ContactType
   emptyText: string
   loadingText: string
@@ -66,6 +68,7 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
   {
     id: 'facebook_friends',
     label: 'Facebook - Lấy danh sách bạn bè',
+    platform: 'facebook',
     contactType: 'person',
     emptyText: 'Chưa có dữ liệu bạn bè',
     loadingText: 'Đang tải danh sách bạn bè...'
@@ -73,6 +76,7 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
   {
     id: 'facebook_groups',
     label: 'Facebook - Lấy danh sách group',
+    platform: 'facebook',
     contactType: 'group',
     emptyText: 'Chưa có dữ liệu group',
     loadingText: 'Đang tải danh sách group...'
@@ -80,6 +84,7 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
   {
     id: 'facebook_pages',
     label: 'Facebook - Lấy danh sách page',
+    platform: 'facebook',
     contactType: 'page',
     emptyText: 'Chưa có dữ liệu page',
     loadingText: 'Đang tải danh sách page...'
@@ -87,6 +92,7 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
   {
     id: POST_COMMENTERS_ACTION_ID,
     label: 'Facebook - Lấy người comment bài post',
+    platform: 'facebook',
     contactType: 'person',
     emptyText: 'Nhập link bài post rồi tải data',
     loadingText: 'Đang tải người comment bài post...'
@@ -94,9 +100,26 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
   {
     id: PAGE_INBOX_CUSTOMERS_ACTION_ID,
     label: 'Facebook - Lấy người từng nhắn tin với page',
+    platform: 'facebook',
     contactType: 'page_inbox_customer',
     emptyText: 'Chọn page rồi tải data',
     loadingText: 'Đang tải người nhắn tin với page...'
+  },
+  {
+    id: 'zalo_friends',
+    label: 'Zalo - Lấy danh sách bạn bè',
+    platform: 'zalo',
+    contactType: 'person',
+    emptyText: 'Chưa có dữ liệu bạn bè Zalo',
+    loadingText: 'Đang tải danh sách bạn bè Zalo...'
+  },
+  {
+    id: 'zalo_groups',
+    label: 'Zalo - Lấy danh sách group',
+    platform: 'zalo',
+    contactType: 'group',
+    emptyText: 'Chưa có dữ liệu group Zalo',
+    loadingText: 'Đang tải danh sách group Zalo...'
   }
 ]
 
@@ -203,6 +226,35 @@ const sanitizeFileSegment = (value: string) => {
 
 const getContactValue = (contact: AutoAccountContact) => contact.url || contact.uid || ''
 
+const getContactAvatarUrl = (contact: AutoAccountContact) => {
+  const extra = contact.extraData || {}
+  return String(
+    extra.avatarUrl ||
+    extra.avatar ||
+    extra.avatar_url ||
+    extra.fullAvatar ||
+    extra.full_avatar ||
+    ''
+  ).trim()
+}
+
+const getContactInitial = (contact: AutoAccountContact) => {
+  return String(contact.name || contact.uid || '?').trim().charAt(0).toLocaleUpperCase('vi-VN') || '?'
+}
+
+const renderContactAvatar = (contact: AutoAccountContact) => {
+  const avatarUrl = getContactAvatarUrl(contact)
+  return (
+    <div className="data-scan-avatar" title={contact.name || contact.uid || undefined}>
+      {avatarUrl ? (
+        <img src={avatarUrl} alt="" loading="lazy" />
+      ) : (
+        <span>{getContactInitial(contact)}</span>
+      )}
+    </div>
+  )
+}
+
 const normalizeFacebookPostUrlForCompare = (value: unknown) => {
   const raw = String(value || '').trim()
   if (!raw) return ''
@@ -295,12 +347,15 @@ const getContactStatusLabel = (contact: AutoAccountContact) => {
   return ''
 }
 
-const getContactTypeLabel = (contactType: ContactType) => {
-  if (contactType === 'person') return 'User Facebook'
-  if (contactType === 'group') return 'Group Facebook'
+const getContactTypeLabel = (contactType: ContactType, platform: string = 'facebook') => {
+  const isZalo = platform === 'zalo'
+  if (contactType === 'person') return isZalo ? 'User Zalo' : 'User Facebook'
+  if (contactType === 'group') return isZalo ? 'Group Zalo' : 'Group Facebook'
   if (contactType === 'page_inbox_customer') return 'Khách inbox Page'
   return 'Page Facebook'
 }
+
+const getPlatformLabel = (platform: DataScanPlatform) => platform === 'zalo' ? 'Zalo' : 'Facebook'
 
 const getStatusFilterOptions = (contactType: ContactType): Array<{ value: ContactStatusFilter; label: string }> => {
   if (contactType === 'person') {
@@ -431,6 +486,14 @@ export default function DataScanModal({
     () => accounts.find(account => account.id === accountId),
     [accounts, accountId]
   )
+  const platformAccounts = useMemo(
+    () => accounts.filter(account => account.flatformType === actionDef.platform),
+    [accounts, actionDef.platform]
+  )
+  const selectedPlatform = (selectedAccount?.flatformType || actionDef.platform) as DataScanPlatform
+  const showGroupApprovalColumn = actionDef.contactType === 'group' && actionDef.platform === 'facebook'
+  const showAvatarColumn = actionDef.platform === 'zalo'
+  const showLinkColumn = !isPageInboxAction && (actionDef.platform === 'facebook' || actionDef.id === 'zalo_groups')
   const statusFilterOptions = useMemo(
     () => getStatusFilterOptions(actionDef.contactType),
     [actionDef.contactType]
@@ -456,10 +519,18 @@ export default function DataScanModal({
   useEffect(() => {
     if (accountId !== '') return
     const preferred = initialAccountId
-      ? accounts.find(account => account.id === initialAccountId)
-      : accounts.find(account => account.flatformType === 'facebook') || accounts[0]
+      ? accounts.find(account => account.id === initialAccountId && account.flatformType === actionDef.platform)
+      : accounts.find(account => account.flatformType === actionDef.platform)
     if (preferred) setAccountId(preferred.id)
-  }, [accountId, accounts, initialAccountId])
+  }, [accountId, accounts, actionDef.platform, initialAccountId])
+
+  useEffect(() => {
+    if (accountId === '') return
+    const current = accounts.find(account => account.id === accountId)
+    if (!current || current.flatformType === actionDef.platform) return
+    const preferred = accounts.find(account => account.flatformType === actionDef.platform)
+    setAccountId(preferred?.id || '')
+  }, [accountId, accounts, actionDef.platform])
 
   useEffect(() => {
     if (!availableActions.some(item => item.id === action)) {
@@ -811,9 +882,9 @@ export default function DataScanModal({
       contact.url,
       getContactInfo(contact),
       getContactStatusLabel(contact),
-      actionDef.contactType === 'group' ? getGroupApprovalStatus(contact) : ''
+      showGroupApprovalColumn ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [actionDef.contactType, isPageInboxAction, search, visibleContacts])
+  }, [isPageInboxAction, search, showGroupApprovalColumn, visibleContacts])
 
   const getContactRowNumber = useCallback((index: number) => (
     isPageInboxAction ? (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE + index + 1 : index + 1
@@ -867,6 +938,9 @@ export default function DataScanModal({
     [activeGroupId, allContactGroups]
   )
   const activeGroupContactType = activeContactGroup?.contactType || actionDef.contactType
+  const activeGroupShowApprovalColumn = activeGroupContactType === 'group' && selectedPlatform === 'facebook'
+  const activeGroupShowAvatarColumn = selectedPlatform === 'zalo'
+  const activeGroupShowLinkColumn = selectedPlatform === 'facebook' || (activeGroupContactType === 'group' && selectedPlatform === 'zalo')
   const groupContactsByStatus = useMemo(
     () => activeGroupContactType === actionDef.contactType ? groupContacts.filter(matchesStatusFilter) : groupContacts,
     [activeGroupContactType, actionDef.contactType, groupContacts, matchesStatusFilter]
@@ -880,11 +954,23 @@ export default function DataScanModal({
       contact.url,
       getContactInfo(contact),
       getContactStatusLabel(contact),
-      contact.contactType === 'group' ? getGroupApprovalStatus(contact) : ''
+      contact.contactType === 'group' && selectedPlatform === 'facebook' ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [groupContactsByStatus, search])
-  const tableColSpan = isPageInboxAction ? 7 : actionDef.contactType === 'group' ? 7 : actionDef.contactType === 'person' ? 6 : 5
-  const groupTableColSpan = activeGroupContactType === 'group' ? 7 : activeGroupContactType === 'person' ? 6 : 5
+  }, [groupContactsByStatus, search, selectedPlatform])
+  const tableColSpan = isPageInboxAction
+    ? 7
+    : 4
+      + (showAvatarColumn ? 1 : 0)
+      + (actionDef.contactType === 'person' ? 1 : 0)
+      + (actionDef.contactType === 'group' ? 1 : 0)
+      + (showGroupApprovalColumn ? 1 : 0)
+      + (showLinkColumn ? 1 : 0)
+  const groupTableColSpan = 4
+    + (activeGroupShowAvatarColumn ? 1 : 0)
+    + (activeGroupContactType === 'person' ? 1 : 0)
+    + (activeGroupContactType === 'group' ? 1 : 0)
+    + (activeGroupShowApprovalColumn ? 1 : 0)
+    + (activeGroupShowLinkColumn ? 1 : 0)
   const currentRenderStart = currentTotalCount > 0 && filteredContacts.length > 0
     ? getContactRowNumber(0)
     : 0
@@ -1253,8 +1339,8 @@ export default function DataScanModal({
       showAlert('Vui lòng chọn tài khoản trước.', 'error')
       return
     }
-    if (selectedAccount?.flatformType !== 'facebook') {
-      showAlert('Hành động này chỉ hỗ trợ tài khoản Facebook.', 'error')
+    if (selectedAccount?.flatformType !== actionDef.platform) {
+      showAlert(`Hành động này chỉ hỗ trợ tài khoản ${getPlatformLabel(actionDef.platform)}.`, 'error')
       return
     }
     if (isPostCommentersAction) {
@@ -1498,7 +1584,7 @@ export default function DataScanModal({
                 disabled={scanLoading}
               >
                 <option value="">Chọn tài khoản</option>
-                {accounts.map(account => (
+                {platformAccounts.map(account => (
                   <option key={account.id} value={account.id}>{account.name}</option>
                 ))}
               </select>
@@ -1697,7 +1783,13 @@ export default function DataScanModal({
                 <input
                   value={search}
                   onChange={event => setSearch(event.target.value)}
-                  placeholder={isPageInboxAction ? 'Tìm theo tên, PSID hoặc SĐT...' : 'Tìm theo tên, UID hoặc link...'}
+                  placeholder={
+                    isPageInboxAction
+                      ? 'Tìm theo tên, PSID hoặc SĐT...'
+                      : showLinkColumn
+                        ? 'Tìm theo tên, UID hoặc link...'
+                        : 'Tìm theo tên hoặc UID...'
+                  }
                 />
               </label>
               {scanLoading ? (
@@ -1786,6 +1878,7 @@ export default function DataScanModal({
                     />
                   </th>
                   <th style={{ width: 64 }}>STT</th>
+                  {showAvatarColumn && <th style={{ width: 72 }}>Ảnh đại diện</th>}
                   <th>Tên</th>
                   <th>{isPageInboxAction ? 'PSID' : 'UID'}</th>
                   {isPageInboxAction ? (
@@ -1794,12 +1887,11 @@ export default function DataScanModal({
                       <th>Tin nhắn cuối</th>
                       <th>Thời gian nhắn gần nhất</th>
                     </>
-                  ) : (
-                    <th>Link</th>
-                  )}
+                  ) : null}
+                  {showLinkColumn && <th>Link</th>}
                   {actionDef.contactType === 'person' && <th>Bạn bè</th>}
                   {actionDef.contactType === 'group' && <th>Tham gia</th>}
-                  {actionDef.contactType === 'group' && <th>Duyệt bài</th>}
+                  {showGroupApprovalColumn && <th>Duyệt bài</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1833,6 +1925,7 @@ export default function DataScanModal({
                         />
                       </td>
                       <td>{rowNumber}</td>
+                      {showAvatarColumn && <td>{renderContactAvatar(contact)}</td>}
                       <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
                         {contact.name || '-'}
                       </td>
@@ -1851,7 +1944,8 @@ export default function DataScanModal({
                             {getPageInboxLastMessageAt(contact) || '-'}
                           </td>
                         </>
-                      ) : (
+                      ) : null}
+                      {showLinkColumn && (
                         <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
                           {contact.url || '-'}
                         </td>
@@ -1870,7 +1964,7 @@ export default function DataScanModal({
                           </span>
                         </td>
                       )}
-                      {actionDef.contactType === 'group' && (
+                      {showGroupApprovalColumn && (
                         <td>
                           <span className="data-scan-status-badge">{getGroupApprovalStatus(contact)}</span>
                         </td>
@@ -1908,6 +2002,7 @@ export default function DataScanModal({
         {supportsContactGroups && showGroupPanel && (
           <DataScanGroupManagementModal
             activeContactType={activeGroupContactType}
+            platform={selectedPlatform}
             groupsLoading={groupsLoading}
             contactGroups={allContactGroups}
             activeGroupId={activeGroupId}
@@ -1926,6 +2021,7 @@ export default function DataScanModal({
         {supportsContactGroups && showGroupSelectionModal && (
           <DataScanGroupSelectionModal
             contactType={actionDef.contactType}
+            platform={selectedPlatform}
             groupsLoading={groupsLoading}
             contactGroups={allContactGroups}
             selectedGroupIds={selectedGroupIds}
@@ -1981,7 +2077,7 @@ export default function DataScanModal({
                         />
                         <span className="data-scan-group-modal-option-main">
                           <span className="data-scan-group-modal-option-name">{group.name}</span>
-                          <span className="data-scan-contact-type-badge">{getContactTypeLabel(group.contactType)}</span>
+                          <span className="data-scan-contact-type-badge">{getContactTypeLabel(group.contactType, selectedPlatform)}</span>
                         </span>
                         <span className="data-scan-group-count">
                           {isCompatible ? `${group.contactCount || 0} data` : 'Không đúng loại'}

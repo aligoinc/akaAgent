@@ -60,7 +60,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const emailRuntime = new EmailRuntimeService(supabase)
   const campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow, proxyRuntime, zaloRuntime, emailRuntime)
   campaignScheduler.setPageRegistry(pageRegistry)
-  const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime)
+  const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime, zaloRuntime)
 
   const runScopedRecovery = async (reason: 'login' | 'logout' | 'quit'): Promise<void> => {
     const user = getCurrentUser()

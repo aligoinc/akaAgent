@@ -14,6 +14,73 @@ interface UpsertGroupPostContactStatusInput {
   requiresPostApproval?: boolean
 }
 
+export interface ZaloUserContactInput {
+  accountId: number
+  zaloUid: string
+  userId?: string | null
+  username?: string | null
+  displayName?: string | null
+  zaloName?: string | null
+  avatar?: string | null
+  bgavatar?: string | null
+  cover?: string | null
+  gender?: number | null
+  dob?: number | null
+  sdob?: string | null
+  status?: string | null
+  phoneNumber?: string | null
+  isFr?: number | null
+  isBlocked?: number | null
+  lastActionTime?: number | null
+  lastUpdateTime?: number | null
+  isActive?: number | null
+  key?: number | null
+  type?: number | null
+  isActivePC?: number | null
+  isActiveWeb?: number | null
+  isValid?: number | null
+  userKey?: string | null
+  accountStatus?: number | null
+  oaInfo?: unknown
+  userMode?: number | null
+  globalId?: string | null
+  bizPkg?: unknown
+  createdTs?: number | null
+  oaStatus?: unknown
+  rawPayload?: Record<string, unknown>
+}
+
+export interface ZaloGroupContactInput {
+  accountId: number
+  zaloGroupId: string
+  name?: string | null
+  description?: string | null
+  link?: string | null
+  groupType?: number | null
+  creatorUid?: string | null
+  version?: string | null
+  avatar?: string | null
+  fullAvatar?: string | null
+  memberIds?: string[]
+  adminIds?: string[]
+  currentMems?: unknown
+  updateMems?: unknown
+  admins?: unknown
+  hasMoreMember?: number | null
+  subType?: number | null
+  totalMember?: number | null
+  maxMember?: number | null
+  setting?: unknown
+  createdTime?: number | null
+  visibility?: number | null
+  globalId?: string | null
+  e2ee?: number | null
+  extraInfo?: unknown
+  memVerList?: string[]
+  pendingApprove?: unknown
+  rawPayload?: Record<string, unknown>
+}
+
 const client = () => getSupabaseClient()
 const GROUP_ACTIVITY_RE = /\s*(Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity)[:：]?.*$/i
 
@@ -74,10 +141,11 @@ function extractGroupUidForStatus(value: string | undefined | null): string {
   return /^[a-zA-Z0-9._-]+$/.test(cleaned) ? cleaned : ''
 }
 
-function normalizeContactUrl(uid: string, url: string | undefined, contactType: ContactType): string | null {
+function normalizeContactUrl(uid: string, url: string | undefined, contactType: ContactType, platform?: string): string | null {
   const rawUrl = String(url || '').trim()
   if (rawUrl) return rawUrl
   if (!uid) return null
+  if (platform === 'zalo') return null
   if (contactType === 'zalo_tag') return null
   if (contactType === 'group') return `https://www.facebook.com/groups/${uid}`
   if (contactType === 'page') return `https://www.facebook.com/${uid}`
@@ -90,6 +158,8 @@ function normalizeContact(contact: Partial<AutoAccountContact>): Partial<AutoAcc
   const uid = extractUid(contact.uid || contact.url, contactType)
   let name = String(contact.name || '').replace(/\s+/g, ' ').trim()
   let lastActivityText = ''
+  const extraData = toRecord(contact.extraData)
+  const platform = String(extraData.platform || '').trim()
 
   if (contactType === 'group') {
     const activityMatch = name.match(/(Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity)[:：]?.*$/i)
@@ -101,9 +171,9 @@ function normalizeContact(contact: Partial<AutoAccountContact>): Partial<AutoAcc
     ...contact,
     uid,
     name,
-    url: normalizeContactUrl(uid, contact.url, contactType) || undefined,
+    url: normalizeContactUrl(uid, contact.url, contactType, platform) || undefined,
     extraData: lastActivityText
-      ? { ...(contact.extraData || {}), lastActivityText }
+      ? { ...extraData, lastActivityText }
       : contact.extraData
   }
 }
@@ -134,6 +204,55 @@ function toStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map(item => String(item || '').trim()).filter(Boolean)
     : []
+}
+
+function normalizeNullableString(value: unknown): string | null {
+  const trimmed = String(value || '').trim()
+  return trimmed || null
+}
+
+function normalizeNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeJsonValue(value: unknown): unknown {
+  return value === undefined ? null : value
+}
+
+function zaloMetaKey(accountId: unknown, uid: unknown): string {
+  return `${String(accountId)}:${String(uid || '').trim()}`
+}
+
+function dedupeZaloUserContacts(contacts: ZaloUserContactInput[]): ZaloUserContactInput[] {
+  const byKey = new Map<string, ZaloUserContactInput>()
+  for (const contact of contacts) {
+    const accountId = Number(contact.accountId)
+    const zaloUid = String(contact.zaloUid || '').trim()
+    if (!Number.isFinite(accountId) || accountId <= 0 || !zaloUid) continue
+    byKey.set(zaloMetaKey(accountId, zaloUid), {
+      ...contact,
+      accountId,
+      zaloUid
+    })
+  }
+  return Array.from(byKey.values())
+}
+
+function dedupeZaloGroupContacts(groups: ZaloGroupContactInput[]): ZaloGroupContactInput[] {
+  const byKey = new Map<string, ZaloGroupContactInput>()
+  for (const group of groups) {
+    const accountId = Number(group.accountId)
+    const zaloGroupId = String(group.zaloGroupId || '').trim()
+    if (!Number.isFinite(accountId) || accountId <= 0 || !zaloGroupId) continue
+    byKey.set(zaloMetaKey(accountId, zaloGroupId), {
+      ...group,
+      accountId,
+      zaloGroupId
+    })
+  }
+  return Array.from(byKey.values())
 }
 
 function mergeContactExtraData(
@@ -342,6 +461,12 @@ export async function upsertContacts(
       if (c.requiresPostApproval !== undefined) {
         payload.requires_post_approval = c.requiresPostApproval
       }
+      if (c.zaloUserId !== undefined) {
+        payload.zalo_user_id = c.zaloUserId
+      }
+      if (c.zaloGroupId !== undefined) {
+        payload.zalo_group_id = c.zaloGroupId
+      }
       return payload
     })
 
@@ -359,6 +484,186 @@ export async function upsertContacts(
   }
 
   return totalSaved
+}
+
+export async function upsertZaloUserContacts(
+  contacts: ZaloUserContactInput[],
+  options: UpsertContactsOptions = {}
+): Promise<number> {
+  const u = requireCurrentUser()
+  const normalized = dedupeZaloUserContacts(contacts)
+  if (normalized.length === 0) return 0
+
+  const now = new Date().toISOString()
+  const metaByKey = new Map<string, { id: number }>()
+  const chunkSize = 100
+
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize)
+    const payloads = chunk.map(contact => ({
+      account_id: contact.accountId,
+      zalo_uid: contact.zaloUid,
+      user_id: normalizeNullableString(contact.userId),
+      username: normalizeNullableString(contact.username),
+      display_name: normalizeNullableString(contact.displayName),
+      zalo_name: normalizeNullableString(contact.zaloName),
+      avatar: normalizeNullableString(contact.avatar),
+      bgavatar: normalizeNullableString(contact.bgavatar),
+      cover: normalizeNullableString(contact.cover),
+      gender: normalizeNullableNumber(contact.gender),
+      dob: normalizeNullableNumber(contact.dob),
+      sdob: normalizeNullableString(contact.sdob),
+      status: normalizeNullableString(contact.status),
+      phone_number: normalizeNullableString(contact.phoneNumber),
+      is_fr: normalizeNullableNumber(contact.isFr),
+      is_blocked: normalizeNullableNumber(contact.isBlocked),
+      last_action_time: normalizeNullableNumber(contact.lastActionTime),
+      last_update_time: normalizeNullableNumber(contact.lastUpdateTime),
+      is_active: normalizeNullableNumber(contact.isActive),
+      key: normalizeNullableNumber(contact.key),
+      type: normalizeNullableNumber(contact.type),
+      is_active_pc: normalizeNullableNumber(contact.isActivePC),
+      is_active_web: normalizeNullableNumber(contact.isActiveWeb),
+      is_valid: normalizeNullableNumber(contact.isValid),
+      user_key: normalizeNullableString(contact.userKey),
+      account_status: normalizeNullableNumber(contact.accountStatus),
+      oa_info: normalizeJsonValue(contact.oaInfo),
+      user_mode: normalizeNullableNumber(contact.userMode),
+      global_id: normalizeNullableString(contact.globalId),
+      biz_pkg: normalizeJsonValue(contact.bizPkg),
+      created_ts: normalizeNullableNumber(contact.createdTs),
+      oa_status: normalizeJsonValue(contact.oaStatus),
+      raw_payload: contact.rawPayload || {},
+      last_seen_at: now,
+      staff_id: u.staffId,
+      organization_id: u.organizationId,
+      updated_at: now
+    }))
+
+    const { data, error } = await client()
+      .from('zalo_users')
+      .upsert(payloads, { onConflict: 'account_id,zalo_uid' })
+      .select('id, account_id, zalo_uid')
+
+    if (error) throw new Error(`Failed to upsert Zalo users: ${error.message}`)
+
+    for (const row of data || []) {
+      metaByKey.set(zaloMetaKey(row.account_id, row.zalo_uid), { id: row.id as number })
+    }
+  }
+
+  const accountContacts = normalized
+    .map<Partial<AutoAccountContact> | null>(contact => {
+      const meta = metaByKey.get(zaloMetaKey(contact.accountId, contact.zaloUid))
+      if (!meta) return null
+      return {
+        accountId: contact.accountId,
+        contactType: 'person' as ContactType,
+        uid: contact.zaloUid,
+        name: normalizeNullableString(contact.displayName)
+          || normalizeNullableString(contact.zaloName)
+          || normalizeNullableString(contact.username)
+          || contact.zaloUid,
+        extraData: {
+          platform: 'zalo',
+          source: 'zalo_get_all_friends',
+          avatarUrl: normalizeNullableString(contact.avatar),
+          bgavatar: normalizeNullableString(contact.bgavatar),
+          cover: normalizeNullableString(contact.cover)
+        },
+        isFriend: true,
+        zaloUserId: meta.id
+      }
+    })
+    .filter((contact): contact is Partial<AutoAccountContact> => !!contact)
+
+  return upsertContacts(accountContacts, options)
+}
+
+export async function upsertZaloGroupContacts(
+  groups: ZaloGroupContactInput[],
+  options: UpsertContactsOptions = {}
+): Promise<number> {
+  const u = requireCurrentUser()
+  const normalized = dedupeZaloGroupContacts(groups)
+  if (normalized.length === 0) return 0
+
+  const now = new Date().toISOString()
+  const metaByKey = new Map<string, { id: number }>()
+  const chunkSize = 100
+
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize)
+    const payloads = chunk.map(group => ({
+      account_id: group.accountId,
+      zalo_group_id: group.zaloGroupId,
+      name: normalizeNullableString(group.name),
+      description: normalizeNullableString(group.description),
+      link: normalizeNullableString(group.link),
+      group_type: normalizeNullableNumber(group.groupType),
+      creator_uid: normalizeNullableString(group.creatorUid),
+      version: normalizeNullableString(group.version),
+      avatar: normalizeNullableString(group.avatar),
+      full_avatar: normalizeNullableString(group.fullAvatar),
+      member_ids: toStringArray(group.memberIds),
+      admin_ids: toStringArray(group.adminIds),
+      current_mems: normalizeJsonValue(group.currentMems),
+      update_mems: normalizeJsonValue(group.updateMems),
+      admins: normalizeJsonValue(group.admins),
+      has_more_member: normalizeNullableNumber(group.hasMoreMember),
+      sub_type: normalizeNullableNumber(group.subType),
+      total_member: normalizeNullableNumber(group.totalMember),
+      max_member: normalizeNullableNumber(group.maxMember),
+      setting: normalizeJsonValue(group.setting),
+      created_time: normalizeNullableNumber(group.createdTime),
+      visibility: normalizeNullableNumber(group.visibility),
+      global_id: normalizeNullableString(group.globalId),
+      e2ee: normalizeNullableNumber(group.e2ee),
+      extra_info: normalizeJsonValue(group.extraInfo),
+      mem_ver_list: toStringArray(group.memVerList),
+      pending_approve: normalizeJsonValue(group.pendingApprove),
+      raw_payload: group.rawPayload || {},
+      last_seen_at: now,
+      staff_id: u.staffId,
+      organization_id: u.organizationId,
+      updated_at: now
+    }))
+
+    const { data, error } = await client()
+      .from('zalo_groups')
+      .upsert(payloads, { onConflict: 'account_id,zalo_group_id' })
+      .select('id, account_id, zalo_group_id')
+
+    if (error) throw new Error(`Failed to upsert Zalo groups: ${error.message}`)
+
+    for (const row of data || []) {
+      metaByKey.set(zaloMetaKey(row.account_id, row.zalo_group_id), { id: row.id as number })
+    }
+  }
+
+  const accountContacts = normalized
+    .map<Partial<AutoAccountContact> | null>(group => {
+      const meta = metaByKey.get(zaloMetaKey(group.accountId, group.zaloGroupId))
+      if (!meta) return null
+      return {
+        accountId: group.accountId,
+        contactType: 'group' as ContactType,
+        uid: group.zaloGroupId,
+        url: normalizeNullableString(group.link) || undefined,
+        name: normalizeNullableString(group.name) || group.zaloGroupId,
+        extraData: {
+          platform: 'zalo',
+          source: 'zalo_get_all_groups',
+          avatarUrl: normalizeNullableString(group.avatar),
+          fullAvatar: normalizeNullableString(group.fullAvatar)
+        },
+        isJoined: true,
+        zaloGroupId: meta.id
+      }
+    })
+    .filter((contact): contact is Partial<AutoAccountContact> => !!contact)
+
+  return upsertContacts(accountContacts, options)
 }
 
 export async function deleteContacts(accountId: number, contactType: ContactType): Promise<void> {

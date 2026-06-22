@@ -3,6 +3,7 @@ import { AutoAccountContactGroup, ContactType } from '../../../../shared/types'
 
 interface DataScanGroupSelectionModalProps {
   contactType: ContactType
+  platform?: string
   groupsLoading: boolean
   contactGroups: AutoAccountContactGroup[]
   selectedGroupIds: Set<number>
@@ -11,14 +12,16 @@ interface DataScanGroupSelectionModalProps {
   onConfirm: () => void
 }
 
-const getContactTypeLabel = (contactType: ContactType) => {
-  if (contactType === 'person') return 'User Facebook'
-  if (contactType === 'group') return 'Group Facebook'
+const getContactTypeLabel = (contactType: ContactType, platform: string = 'facebook') => {
+  const isZalo = platform === 'zalo'
+  if (contactType === 'person') return isZalo ? 'User Zalo' : 'User Facebook'
+  if (contactType === 'group') return isZalo ? 'Group Zalo' : 'Group Facebook'
   return 'Page Facebook'
 }
 
 export default function DataScanGroupSelectionModal({
   contactType,
+  platform = 'facebook',
   groupsLoading,
   contactGroups,
   selectedGroupIds,
@@ -64,7 +67,7 @@ export default function DataScanGroupSelectionModal({
                     />
                     <span className="data-scan-group-modal-option-main">
                       <span className="data-scan-group-modal-option-name">{group.name}</span>
-                      <span className="data-scan-contact-type-badge">{getContactTypeLabel(group.contactType)}</span>
+                      <span className="data-scan-contact-type-badge">{getContactTypeLabel(group.contactType, platform)}</span>
                     </span>
                     <span className="data-scan-group-count">
                       {isCompatible ? `${group.contactCount || 0} data` : 'Không đúng loại'}

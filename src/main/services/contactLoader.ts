@@ -8,7 +8,9 @@ import { PageController } from '../v2/runtime/pageController'
 import { WorkflowEngineV2, RunResult } from '../v2/runtime/workflowEngine'
 import * as workflowV2Repo from '../data/repositories/workflowV2Repository'
 import * as localContactRepo from '../data/repositories/localAccountContactRepository'
+import type { ZaloGroupContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
 import { ProxyRuntimeService } from './proxyRuntimeService'
+import { ZaloRuntimeService } from './zaloRuntimeService'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -41,6 +43,8 @@ const FACEBOOK_GRAPH_API_BASE = 'https://graph.facebook.com/v25.0'
 const PAGE_INBOX_BATCH_SIZE = 500
 const PAGE_INBOX_MAX_CONTACTS = 100000
 const PAGE_INBOX_MAX_FETCH_FAILURES = 3
+const ZALO_FRIEND_PAGE_SIZE = 500
+const ZALO_GROUP_INFO_BATCH_SIZE = 50
 const PHONE_RE = /((\+?84|0)[\s.-]?)?(3[2-9]|5[689]|7[06-9]|8[1-689]|9[0-46-9])[0-9\s.-]{7,}/g
 
 const CONTACT_SCAN_TARGET_URLS: Partial<Record<ContactType, string>> = {
@@ -110,7 +114,8 @@ export class ContactLoader {
     supabase: SupabaseService,
     _webviewRegistry: WebviewRegistry,
     mainWindow: BrowserWindow,
-    proxyRuntime?: ProxyRuntimeService
+    proxyRuntime?: ProxyRuntimeService,
+    private readonly zaloRuntime?: ZaloRuntimeService
   ) {
     this.supabase = supabase
     this.mainWindow = mainWindow
@@ -122,10 +127,18 @@ export class ContactLoader {
   }
 
   async loadFriends(accountId: number): Promise<ContactLoadResult> {
+    const account = await this.supabase.getAccount(accountId).catch(() => null)
+    if (account?.flatformType === 'zalo') {
+      return this.loadZaloFriends(account)
+    }
     return this.loadContacts(accountId, 'person')
   }
 
   async loadGroups(accountId: number): Promise<ContactLoadResult> {
+    const account = await this.supabase.getAccount(accountId).catch(() => null)
+    if (account?.flatformType === 'zalo') {
+      return this.loadZaloGroups(account)
+    }
     return this.loadContacts(accountId, 'group')
   }
 
@@ -419,6 +432,315 @@ export class ContactLoader {
     this.backgroundPages.destroyAll()
   }
 
+  private async loadZaloFriends(account: AutoAccount): Promise<ContactLoadResult> {
+    const accountId = account.id
+    const contactType: ContactType = 'person'
+    const typeName = 'bạn bè Zalo'
+    const preflightError = this.getZaloPreflightError(account)
+    if (preflightError) {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: preflightError
+      })
+    }
+
+    const latestAccount = await this.supabase.getAccount(accountId)
+    const latestPreflightError = this.getZaloPreflightError(latestAccount)
+    if (latestPreflightError) {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: latestPreflightError
+      })
+    }
+
+    const loadState = this.startLoad(accountId, contactType, {}, {
+      runKeyLabel: 'zalo-friends',
+      targetUrl: 'zalo://friends'
+    })
+    const previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
+    const variables = loadState.variables
+    let claimedAccount = false
+
+    try {
+      await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
+      claimedAccount = true
+
+      if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+      this.sendProgress('🔄 Đang kiểm tra session Zalo...', {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      const session = await this.zaloRuntime.checkSession(accountId)
+      if (!session.loggedIn) {
+        throw new Error(session.reason || 'Tài khoản chưa đăng nhập Zalo')
+      }
+
+      const contacts: ZaloUserContactInput[] = []
+      let page = 1
+      while (!this.isLoadCancelled(accountId, variables) && !loadState.controller.signal.aborted) {
+        this.sendProgress(`🔄 Đang lấy trang ${page} danh sách ${typeName}...`, {
+          accountId,
+          contactType,
+          runKey: loadState.runKey
+        })
+        const rows = await this.zaloRuntime.getAllFriendsPage(accountId, ZALO_FRIEND_PAGE_SIZE, page)
+        for (const row of rows) {
+          const contact = this.mapZaloUserContact(accountId, row)
+          if (contact) contacts.push(contact)
+        }
+        this.sendProgress(`Đã đọc ${contacts.length} ${typeName}.`, {
+          accountId,
+          contactType,
+          runKey: loadState.runKey
+        })
+        if (rows.length < ZALO_FRIEND_PAGE_SIZE) break
+        page += 1
+      }
+
+      const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+      if (contacts.length === 0) {
+        if (stopped) {
+          await this.supabase.deleteContacts(accountId, contactType)
+          this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu 0 data cho lần quét này.`, {
+            accountId,
+            contactType,
+            runKey: loadState.runKey
+          })
+          return this.completeLoad(accountId, contactType, {
+            success: true,
+            count: 0,
+            stopped: true
+          }, loadState.runKey)
+        }
+        return this.completeLoad(accountId, contactType, {
+          success: false,
+          count: 0,
+          error: `Không tìm thấy ${typeName} nào`
+        }, loadState.runKey)
+      }
+
+      this.sendProgress(`💾 Đang lưu ${contacts.length} ${typeName}...`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      const saved = await this.supabase.upsertZaloUserContacts(contacts)
+
+      if (stopped) {
+        this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu ${saved} data cho lần quét này.`, {
+          accountId,
+          contactType,
+          runKey: loadState.runKey
+        })
+        return this.completeLoad(accountId, contactType, {
+          success: true,
+          count: saved,
+          stopped: true
+        }, loadState.runKey)
+      }
+
+      this.sendProgress(`✅ Đã load ${saved} ${typeName} thành công!`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      return this.completeLoad(accountId, contactType, { success: true, count: saved }, loadState.runKey)
+    } catch (err: any) {
+      const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+      const errMsg = err?.message || String(err)
+      if (stopped) {
+        this.sendProgress(`Đã dừng quét ${typeName}.`, {
+          accountId,
+          contactType,
+          runKey: loadState.runKey
+        })
+        return this.completeLoad(accountId, contactType, {
+          success: true,
+          count: 0,
+          stopped: true
+        }, loadState.runKey)
+      }
+
+      this.sendProgress(`❌ Lỗi load ${typeName}: ${errMsg}`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: errMsg
+      }, loadState.runKey)
+    } finally {
+      if (this.activeLoads.get(accountId) === loadState) {
+        this.activeLoads.delete(accountId)
+        this.cancelledLoads.delete(accountId)
+        if (claimedAccount) {
+          await this.restoreAccountStatus(accountId, previousStatus)
+        }
+      }
+    }
+  }
+
+  private async loadZaloGroups(account: AutoAccount): Promise<ContactLoadResult> {
+    const accountId = account.id
+    const contactType: ContactType = 'group'
+    const typeName = 'group Zalo'
+    const preflightError = this.getZaloPreflightError(account)
+    if (preflightError) {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: preflightError
+      })
+    }
+
+    const latestAccount = await this.supabase.getAccount(accountId)
+    const latestPreflightError = this.getZaloPreflightError(latestAccount)
+    if (latestPreflightError) {
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: latestPreflightError
+      })
+    }
+
+    const loadState = this.startLoad(accountId, contactType, {}, {
+      runKeyLabel: 'zalo-groups',
+      targetUrl: 'zalo://groups'
+    })
+    const previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
+    const variables = loadState.variables
+    let claimedAccount = false
+
+    try {
+      await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
+      claimedAccount = true
+
+      if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+      this.sendProgress('🔄 Đang kiểm tra session Zalo...', {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      const session = await this.zaloRuntime.checkSession(accountId)
+      if (!session.loggedIn) {
+        throw new Error(session.reason || 'Tài khoản chưa đăng nhập Zalo')
+      }
+
+      this.sendProgress(`🔄 Đang lấy danh sách ${typeName}...`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      const groupVersions = await this.zaloRuntime.getAllGroups(accountId)
+      const groupIds = Object.keys(groupVersions)
+      const groups: ZaloGroupContactInput[] = []
+
+      for (let i = 0; i < groupIds.length; i += ZALO_GROUP_INFO_BATCH_SIZE) {
+        if (this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted) break
+        const chunk = groupIds.slice(i, i + ZALO_GROUP_INFO_BATCH_SIZE)
+        this.sendProgress(`🔄 Đang lấy thông tin ${typeName} ${i + 1}-${i + chunk.length}/${groupIds.length}...`, {
+          accountId,
+          contactType,
+          runKey: loadState.runKey
+        })
+        const batch = await this.zaloRuntime.getGroupInfoBatch(accountId, chunk)
+        for (const groupId of chunk) {
+          const raw = batch.gridInfoMap[groupId] || { groupId, version: groupVersions[groupId] }
+          const group = this.mapZaloGroupContact(accountId, raw, groupVersions[groupId])
+          if (group) groups.push(group)
+        }
+      }
+
+      const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+      if (groups.length === 0) {
+        if (stopped) {
+          await this.supabase.deleteContacts(accountId, contactType)
+          this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu 0 data cho lần quét này.`, {
+            accountId,
+            contactType,
+            runKey: loadState.runKey
+          })
+          return this.completeLoad(accountId, contactType, {
+            success: true,
+            count: 0,
+            stopped: true
+          }, loadState.runKey)
+        }
+        return this.completeLoad(accountId, contactType, {
+          success: false,
+          count: 0,
+          error: `Không tìm thấy ${typeName} nào`
+        }, loadState.runKey)
+      }
+
+      this.sendProgress(`💾 Đang lưu ${groups.length} ${typeName}...`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      const saved = await this.supabase.upsertZaloGroupContacts(groups)
+
+      if (stopped) {
+        this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu ${saved} data cho lần quét này.`, {
+          accountId,
+          contactType,
+          runKey: loadState.runKey
+        })
+        return this.completeLoad(accountId, contactType, {
+          success: true,
+          count: saved,
+          stopped: true
+        }, loadState.runKey)
+      }
+
+      this.sendProgress(`✅ Đã load ${saved} ${typeName} thành công!`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      return this.completeLoad(accountId, contactType, { success: true, count: saved }, loadState.runKey)
+    } catch (err: any) {
+      const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+      const errMsg = err?.message || String(err)
+      if (stopped) {
+        this.sendProgress(`Đã dừng quét ${typeName}.`, {
+          accountId,
+          contactType,
+          runKey: loadState.runKey
+        })
+        return this.completeLoad(accountId, contactType, {
+          success: true,
+          count: 0,
+          stopped: true
+        }, loadState.runKey)
+      }
+
+      this.sendProgress(`❌ Lỗi load ${typeName}: ${errMsg}`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      return this.completeLoad(accountId, contactType, {
+        success: false,
+        count: 0,
+        error: errMsg
+      }, loadState.runKey)
+    } finally {
+      if (this.activeLoads.get(accountId) === loadState) {
+        this.activeLoads.delete(accountId)
+        this.cancelledLoads.delete(accountId)
+        if (claimedAccount) {
+          await this.restoreAccountStatus(accountId, previousStatus)
+        }
+      }
+    }
+  }
+
   private async loadContacts(accountId: number, contactType: ContactType, options: ContactLoadOptions = {}): Promise<ContactLoadResult> {
     const typeName = options.typeName || (contactType === 'person' ? 'bạn bè' : this.getContactTypeName(contactType))
     const resultMeta = options.resultMeta || {}
@@ -649,6 +971,122 @@ export class ContactLoader {
     }
     if (account.flatformType !== 'facebook') return 'Hành động này chỉ hỗ trợ tài khoản Facebook'
     return null
+  }
+
+  private getZaloPreflightError(account: AutoAccount | null): string | null {
+    if (!account) return 'Không tìm thấy tài khoản'
+    if (!account.isActive) return 'Tài khoản đang bị tắt, không thể quét data'
+    if (account.flatformType !== 'zalo') return 'Hành động này chỉ hỗ trợ tài khoản Zalo'
+    if (account.loginStatus !== 'đã đăng nhập') return 'Tài khoản chưa đăng nhập Zalo'
+    if (account.status === 'đang chạy') {
+      return 'Tài khoản đang chạy chiến dịch hoặc quét data, vui lòng đợi hoàn tất hoặc tạm dừng tác vụ hiện tại.'
+    }
+    if (account.status !== 'chờ xử lý' && account.status !== 'tạm dừng') {
+      return `tài khoản ${account.status || 'không xác định'} không thể quét data`
+    }
+    return null
+  }
+
+  private mapZaloUserContact(accountId: number, raw: Record<string, unknown>): ZaloUserContactInput | null {
+    const zaloUid = this.firstString(raw.userId, raw.uid)
+    if (!zaloUid) return null
+
+    return {
+      accountId,
+      zaloUid,
+      userId: this.stringValue(raw.userId),
+      username: this.stringValue(raw.username),
+      displayName: this.stringValue(raw.displayName),
+      zaloName: this.stringValue(raw.zaloName),
+      avatar: this.stringValue(raw.avatar),
+      bgavatar: this.stringValue(raw.bgavatar),
+      cover: this.stringValue(raw.cover),
+      gender: this.numberValue(raw.gender),
+      dob: this.numberValue(raw.dob),
+      sdob: this.stringValue(raw.sdob),
+      status: this.stringValue(raw.status),
+      phoneNumber: this.stringValue(raw.phoneNumber),
+      isFr: this.numberValue(raw.isFr),
+      isBlocked: this.numberValue(raw.isBlocked),
+      lastActionTime: this.numberValue(raw.lastActionTime),
+      lastUpdateTime: this.numberValue(raw.lastUpdateTime),
+      isActive: this.numberValue(raw.isActive),
+      key: this.numberValue(raw.key),
+      type: this.numberValue(raw.type),
+      isActivePC: this.numberValue(raw.isActivePC),
+      isActiveWeb: this.numberValue(raw.isActiveWeb),
+      isValid: this.numberValue(raw.isValid),
+      userKey: this.stringValue(raw.userKey),
+      accountStatus: this.numberValue(raw.accountStatus),
+      oaInfo: raw.oaInfo,
+      userMode: this.numberValue(raw.user_mode),
+      globalId: this.stringValue(raw.globalId),
+      bizPkg: raw.bizPkg,
+      createdTs: this.numberValue(raw.createdTs),
+      oaStatus: raw.oa_status,
+      rawPayload: raw
+    }
+  }
+
+  private mapZaloGroupContact(
+    accountId: number,
+    raw: Record<string, unknown>,
+    fallbackVersion?: string
+  ): ZaloGroupContactInput | null {
+    const zaloGroupId = this.firstString(raw.groupId)
+    if (!zaloGroupId) return null
+    const rawPayload = { ...raw }
+    if (fallbackVersion && !rawPayload.gridVersion) rawPayload.gridVersion = fallbackVersion
+
+    return {
+      accountId,
+      zaloGroupId,
+      name: this.stringValue(raw.name),
+      description: this.stringValue(raw.desc),
+      link: this.stringValue(raw.link),
+      groupType: this.numberValue(raw.type),
+      creatorUid: this.stringValue(raw.creatorId),
+      version: this.stringValue(raw.version) || this.stringValue(fallbackVersion),
+      avatar: this.stringValue(raw.avt),
+      fullAvatar: this.stringValue(raw.fullAvt),
+      memberIds: this.toStringArray(raw.memberIds),
+      adminIds: this.toStringArray(raw.adminIds),
+      currentMems: raw.currentMems,
+      updateMems: raw.updateMems,
+      admins: raw.admins,
+      hasMoreMember: this.numberValue(raw.hasMoreMember),
+      subType: this.numberValue(raw.subType),
+      totalMember: this.numberValue(raw.totalMember),
+      maxMember: this.numberValue(raw.maxMember),
+      setting: raw.setting,
+      createdTime: this.numberValue(raw.createdTime),
+      visibility: this.numberValue(raw.visibility),
+      globalId: this.stringValue(raw.globalId),
+      e2ee: this.numberValue(raw.e2ee),
+      extraInfo: raw.extraInfo,
+      memVerList: this.toStringArray(raw.memVerList),
+      pendingApprove: raw.pendingApprove,
+      rawPayload
+    }
+  }
+
+  private firstString(...values: unknown[]): string | null {
+    for (const value of values) {
+      const trimmed = this.stringValue(value)
+      if (trimmed) return trimmed
+    }
+    return null
+  }
+
+  private stringValue(value: unknown): string | null {
+    const trimmed = String(value || '').trim()
+    return trimmed || null
+  }
+
+  private numberValue(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
   }
 
   private sleep(ms: number): Promise<void> {
