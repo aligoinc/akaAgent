@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { CheckCircle2, Edit3, FileText, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, Save, Search, Trash2, X } from 'lucide-react'
 import {
   AkaBizIntegrationInfo,
@@ -552,8 +553,8 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
     </div>
   )
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
+  return createPortal(
+    <div className="modal-overlay general-settings-modal-overlay" onClick={onClose}>
       <div className="general-settings-modal" onClick={event => event.stopPropagation()}>
         <div className="general-settings-header">
           <div>
@@ -702,6 +703,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
           </section>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
