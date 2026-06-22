@@ -7,6 +7,9 @@ import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
 import DataScanGroupManagementModal from './DataScanGroupManagementModal'
 import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
+import { useAuthStore } from '../../stores/authStore'
+import { normalizeEntitlements } from '../../utils/entitlements'
+import type { AuthEntitlements } from '../../../../shared/types'
 
 export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members'
 type DataScanPlatform = 'facebook' | 'zalo'
@@ -133,15 +136,35 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
   }
 ]
 
-const getAvailableDataScanActions = (allowedActions?: DataScanAction[]) => {
-  if (!allowedActions || allowedActions.length === 0) return DATA_SCAN_ACTIONS
-  const allowed = new Set(allowedActions)
-  const available = DATA_SCAN_ACTIONS.filter(item => allowed.has(item.id))
-  return available.length > 0 ? available : DATA_SCAN_ACTIONS
+const canUseDataScanAction = (
+  actionId: DataScanAction,
+  entitlements?: Partial<AuthEntitlements> | null
+): boolean => {
+  const normalized = normalizeEntitlements(entitlements)
+  if (actionId === 'facebook_pages' || actionId === PAGE_INBOX_CUSTOMERS_ACTION_ID) {
+    return normalized.facebookFanpage
+  }
+  if (actionId.startsWith('zalo_')) return normalized.zalo
+  return normalized.facebookCore
 }
 
-const getInitialDataScanAction = (initialAction: DataScanAction, allowedActions?: DataScanAction[]) => {
-  const available = getAvailableDataScanActions(allowedActions)
+const getAvailableDataScanActions = (
+  allowedActions?: DataScanAction[],
+  entitlements?: Partial<AuthEntitlements> | null
+) => {
+  const entitlementAllowed = DATA_SCAN_ACTIONS.filter(item => canUseDataScanAction(item.id, entitlements))
+  if (!allowedActions || allowedActions.length === 0) return entitlementAllowed
+  const allowed = new Set(allowedActions)
+  return entitlementAllowed.filter(item => allowed.has(item.id))
+}
+
+const getInitialDataScanAction = (
+  initialAction: DataScanAction,
+  allowedActions?: DataScanAction[],
+  entitlements?: Partial<AuthEntitlements> | null
+) => {
+  const available = getAvailableDataScanActions(allowedActions, entitlements)
+  if (available.length === 0) return initialAction
   return available.some(item => item.id === initialAction) ? initialAction : available[0].id
 }
 
@@ -537,6 +560,7 @@ export default function DataScanModal({
   onSelect
 }: DataScanModalProps) {
   const { accounts, loadAccounts } = useCampaignStore()
+  const entitlements = useAuthStore(state => state.user?.entitlements)
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
   const mountedRef = useRef(true)
@@ -547,7 +571,7 @@ export default function DataScanModal({
   const pageInboxOptionsAccountRef = useRef<number | ''>('')
   const pageInboxPageUidRef = useRef('')
   const zaloQrFileInputRef = useRef<HTMLInputElement | null>(null)
-  const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions))
+  const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions, entitlements))
   const [accountId, setAccountId] = useState<number | ''>(initialAccountId || '')
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
   const [loading, setLoading] = useState(false)
@@ -598,8 +622,8 @@ export default function DataScanModal({
   const [groupContactCache, setGroupContactCache] = useState<Record<number, AutoAccountContact[]>>({})
 
   const availableActions = useMemo(
-    () => getAvailableDataScanActions(allowedActions),
-    [allowedActions]
+    () => getAvailableDataScanActions(allowedActions, entitlements),
+    [allowedActions, entitlements]
   )
   const actionDef = useMemo(
     () => DATA_SCAN_ACTIONS.find(item => item.id === action) || DATA_SCAN_ACTIONS[0],
@@ -676,6 +700,7 @@ export default function DataScanModal({
   }, [accountId, accounts, actionDef.platform])
 
   useEffect(() => {
+    if (availableActions.length === 0) return
     if (!availableActions.some(item => item.id === action)) {
       setAction(availableActions[0].id)
     }
@@ -1671,6 +1696,10 @@ export default function DataScanModal({
   }
 
   const handleLoadData = async () => {
+    if (!canUseDataScanAction(action, entitlements)) {
+      showAlert('Tính năng này chưa được kích hoạt hoặc đã hết hạn.', 'error')
+      return
+    }
     if (!window.electronAPI || !accountId) {
       showAlert('Vui lòng chọn tài khoản trước.', 'error')
       return

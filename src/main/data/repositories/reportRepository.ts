@@ -16,13 +16,15 @@ import { getCampaignActionDescriptors } from '../../domain/campaigns/campaignAct
 import { requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 import * as accountActionRepo from './accountActionRepository'
-import { canCurrentUserUseEmailFeature } from './entitlementRepository'
+import {
+  canUseAccountPlatformWithEntitlements,
+  loadCurrentUserEffectiveEntitlements
+} from './entitlementRepository'
 
 const client = () => getSupabaseClient()
 const PAGE_SIZE = 1000
 const DETAIL_PAGE_SIZE = 100
 const MAX_DETAIL_PAGE_SIZE = 500
-const EMAIL_PLATFORM = 'email'
 
 interface ReportDetailRow {
   account_id: number | null
@@ -289,24 +291,28 @@ async function loadInputDataInfoMap(inputDataIds: number[]): Promise<Map<number,
 }
 
 async function loadReportAccount(query: AccountActionReportDetailQuery, staffId: number): Promise<AccountActionReportAccount> {
-  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
-  if (query.flatformType === EMAIL_PLATFORM && !canUseEmailFeature) {
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  if (query.flatformType && !canUseAccountPlatformWithEntitlements(query.flatformType, entitlements)) {
     throw new Error('Không tìm thấy tài khoản trong báo cáo.')
   }
-  let request = client()
+  const { data, error } = await client()
     .from('auto_accounts')
     .select('id, name, flatform_type, account_group_id, auto_account_groups(name)')
     .eq('staff_id', staffId)
     .eq('is_delete', false)
     .eq('id', query.accountId)
+    .maybeSingle()
 
-  if (query.flatformType) request = request.eq('flatform_type', query.flatformType)
-  else if (!canUseEmailFeature) request = request.neq('flatform_type', EMAIL_PLATFORM)
-
-  const { data, error } = await request.maybeSingle()
   if (error) throw new Error(`Failed to get report account: ${error.message}`)
   if (!data) throw new Error('Không tìm thấy tài khoản trong báo cáo.')
-  return mapAccountRow(data)
+  const account = mapAccountRow(data)
+  if (query.flatformType && account.flatformType !== query.flatformType) {
+    throw new Error('Không tìm thấy tài khoản trong báo cáo.')
+  }
+  if (!canUseAccountPlatformWithEntitlements(account.flatformType, entitlements)) {
+    throw new Error('Không tìm thấy tài khoản trong báo cáo.')
+  }
+  return account
 }
 
 async function loadReportAction(account: AccountActionReportAccount, actionCode: string): Promise<AccountActionReportAction> {
@@ -413,8 +419,8 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
   if (explicitAccountFilter && requestedAccountIds.length === 0) {
     return { query, actions, rows: [], generatedAt: new Date().toISOString() }
   }
-  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
-  if (query.flatformType === EMAIL_PLATFORM && !canUseEmailFeature) {
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  if (query.flatformType && !canUseAccountPlatformWithEntitlements(query.flatformType, entitlements)) {
     return { query, actions: [], rows: [], generatedAt: new Date().toISOString() }
   }
 
@@ -426,13 +432,14 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
     .order('name', { ascending: true })
 
   if (query.flatformType) accountQuery = accountQuery.eq('flatform_type', query.flatformType)
-  else if (!canUseEmailFeature) accountQuery = accountQuery.neq('flatform_type', EMAIL_PLATFORM)
   if (explicitAccountFilter) accountQuery = accountQuery.in('id', requestedAccountIds)
 
   const { data: accountRows, error: accountError } = await accountQuery
   if (accountError) throw new Error(`Failed to list report accounts: ${accountError.message}`)
 
-  const accounts = (accountRows || []).map(row => mapAccountRow(row))
+  const accounts = (accountRows || [])
+    .map(row => mapAccountRow(row))
+    .filter(account => canUseAccountPlatformWithEntitlements(account.flatformType, entitlements))
   const actionCodes = actions.map(action => action.code)
   const actionCodeSet = new Set(actionCodes)
   const rows = accounts.map(account => ({

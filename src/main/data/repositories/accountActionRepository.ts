@@ -2,13 +2,17 @@ import { AccountActionOverview, AccountGroupSettings, AutoAccountAction, AutoAcc
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAutoAccountActionFromDB, mapAutoAccountActionStatusFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
-import { canCurrentUserUseEmailFeature } from './entitlementRepository'
+import {
+  canUseAccountActionWithEntitlements,
+  canUseAccountPlatformWithEntitlements,
+  emptyAuthEntitlements,
+  loadCurrentUserEffectiveEntitlements
+} from './entitlementRepository'
 
 const client = () => getSupabaseClient()
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const RATED_ACTION_STATUSES = ['thành công', 'thất bại']
 const TRANSIENT_RETRY_DELAY_MS = 300
-const EMAIL_PLATFORM = 'email'
 
 export interface DisableAccountActionContext {
   errorCode?: string | null
@@ -137,7 +141,22 @@ export async function getAccountActionStatus(accountId: number, actionCode: stri
 }
 
 export async function listAccountActions(flatformType?: string, includeRestricted = false): Promise<AutoAccountAction[]> {
-  const canUseEmailFeature = includeRestricted || await canCurrentUserUseEmailFeature()
+  const entitlements = includeRestricted
+    ? {
+      facebookCore: true,
+      facebookFanpage: true,
+      email: true,
+      zalo: true,
+      dailySendLimits: {
+        facebookCore: null,
+        facebookFanpage: null,
+        email: null,
+        zalo: null
+      }
+    }
+    : await loadCurrentUserEffectiveEntitlements()
+  if (flatformType && !canUseAccountPlatformWithEntitlements(flatformType, entitlements)) return []
+
   let query = client()
     .from('auto_account_actions')
     .select('*')
@@ -146,17 +165,15 @@ export async function listAccountActions(flatformType?: string, includeRestricte
     .order('id', { ascending: true })
 
   if (flatformType) {
-    if (flatformType === EMAIL_PLATFORM && !canUseEmailFeature) {
-      return []
-    }
     query = query.eq('flatform_type', flatformType)
-  } else if (!canUseEmailFeature) {
-    query = query.neq('flatform_type', EMAIL_PLATFORM)
   }
 
   const { data, error } = await query
   if (error) throw new Error(`Failed to list account actions: ${error.message}`)
-  return (data || []).map(row => mapAutoAccountActionFromDB(row))
+  const effectiveEntitlements = includeRestricted ? entitlements : { ...emptyAuthEntitlements(), ...entitlements }
+  return (data || [])
+    .map(row => mapAutoAccountActionFromDB(row))
+    .filter(action => canUseAccountActionWithEntitlements(action.code, action.flatformType, effectiveEntitlements))
 }
 
 async function loadOverviewActionStatuses(

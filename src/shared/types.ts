@@ -903,8 +903,16 @@ export interface EmailNotificationSettings {
 // Auth Types
 // ============================================
 
+export type AuthEntitlementFeature = 'facebookCore' | 'facebookFanpage' | 'email' | 'zalo'
+
+export type AuthDailySendLimits = Record<AuthEntitlementFeature, number | null>
+
 export interface AuthEntitlements {
+  facebookCore: boolean
+  facebookFanpage: boolean
   email: boolean
+  zalo: boolean
+  dailySendLimits: AuthDailySendLimits
 }
 
 export interface AuthUser {

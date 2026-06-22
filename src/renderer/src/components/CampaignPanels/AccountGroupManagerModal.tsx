@@ -3,6 +3,12 @@ import { Plus, Save, Trash2, UserMinus, UserPlus, X } from 'lucide-react'
 import { AccountGroupSettings, AutoAccount, AutoAccountAction, AutoAccountGroup } from '../../../../shared/types'
 import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
+import {
+  canUsePlatform,
+  clampDailyLimitToEntitlement,
+  getAccountActionDailySendLimit,
+  getFirstAllowedPlatform
+} from '../../utils/entitlements'
 
 interface AccountGroupManagerModalProps {
   groups: AutoAccountGroup[]
@@ -73,10 +79,13 @@ export default function AccountGroupManagerModal({
   onDeleteGroup,
   onAssignAccounts
 }: AccountGroupManagerModalProps) {
-  const canUseEmailFeature = useAuthStore(state => !!state.user?.entitlements?.email)
+  const entitlements = useAuthStore(state => state.user?.entitlements)
+  const defaultPlatform = canUsePlatform(initialPlatform, entitlements)
+    ? initialPlatform
+    : getFirstAllowedPlatform(entitlements)
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null)
   const [name, setName] = useState('')
-  const [flatformType, setFlatformType] = useState(initialPlatform)
+  const [flatformType, setFlatformType] = useState(defaultPlatform)
   const [sleepBetweenActions, setSleepBetweenActions] = useState('')
   const [limits, setLimits] = useState<Record<string, ActionLimitDraft>>({})
   const [actions, setActions] = useState<AutoAccountAction[]>([])
@@ -87,9 +96,18 @@ export default function AccountGroupManagerModal({
   const [selectedAddIds, setSelectedAddIds] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const platformOptions = useMemo(
-    () => PLATFORM_OPTIONS.filter(option => option.value !== 'email' || canUseEmailFeature),
-    [canUseEmailFeature]
+    () => PLATFORM_OPTIONS.filter(option => canUsePlatform(option.value, entitlements)),
+    [entitlements]
   )
+  const getDailyLimitCap = (actionCode: string) => (
+    getAccountActionDailySendLimit(actionCode, flatformType, entitlements)
+  )
+  const clampDailyLimitDraftValue = (actionCode: string, value: string): string => {
+    if (value.trim() === '') return value
+    const parsed = parseOptionalNumber(value)
+    if (parsed === undefined) return value
+    return String(clampDailyLimitToEntitlement(parsed, getDailyLimitCap(actionCode)))
+  }
 
   const selectedGroup = useMemo(
     () => groups.find(group => group.id === selectedGroupId) || null,
@@ -163,13 +181,17 @@ export default function AccountGroupManagerModal({
     setSleepBetweenActions(toInputValue(settings.sleepBetweenActions))
     const nextLimits: Record<string, ActionLimitDraft> = {}
     for (const [code, limit] of Object.entries(settings.byActionCode || {})) {
+      const cap = getAccountActionDailySendLimit(code, selectedGroup.flatformType, entitlements)
+      const dailyLimit = limit.dailyLimit === undefined
+        ? undefined
+        : clampDailyLimitToEntitlement(limit.dailyLimit, cap)
       nextLimits[code] = {
-        dailyLimit: toInputValue(limit.dailyLimit),
+        dailyLimit: toInputValue(dailyLimit),
         rateLimitCount: toInputValue(limit.rateLimitCount)
       }
     }
     setLimits(nextLimits)
-  }, [selectedGroup])
+  }, [selectedGroup, entitlements])
 
   useEffect(() => {
     setSelectedMemberIds(new Set())
@@ -195,15 +217,18 @@ export default function AccountGroupManagerModal({
   }
 
   useEffect(() => {
-    if (canUseEmailFeature || flatformType !== 'email') return
-    setFlatformType('facebook')
+    if (canUsePlatform(flatformType, entitlements)) return
+    setFlatformType(getFirstAllowedPlatform(entitlements))
     startNew()
-  }, [canUseEmailFeature, flatformType])
+  }, [entitlements, flatformType])
 
   const buildSettings = (): AccountGroupSettings => {
     const byActionCode: NonNullable<AccountGroupSettings['byActionCode']> = {}
     for (const [code, draft] of Object.entries(limits)) {
-      const dailyLimit = parseOptionalNumber(draft.dailyLimit)
+      const rawDailyLimit = parseOptionalNumber(draft.dailyLimit)
+      const dailyLimit = rawDailyLimit === undefined
+        ? undefined
+        : clampDailyLimitToEntitlement(rawDailyLimit, getDailyLimitCap(code))
       const rateLimitCount = parseOptionalNumber(draft.rateLimitCount)
       if (dailyLimit !== undefined || rateLimitCount !== undefined) {
         byActionCode[code] = {
@@ -221,12 +246,13 @@ export default function AccountGroupManagerModal({
   }
 
   const updateLimit = (actionCode: string, key: keyof ActionLimitDraft, value: string) => {
+    const nextValue = key === 'dailyLimit' ? clampDailyLimitDraftValue(actionCode, value) : value
     setLimits(prev => ({
       ...prev,
       [actionCode]: {
         dailyLimit: prev[actionCode]?.dailyLimit || '',
         rateLimitCount: prev[actionCode]?.rateLimitCount || '',
-        [key]: value
+        [key]: nextValue
       }
     }))
   }
@@ -239,8 +265,8 @@ export default function AccountGroupManagerModal({
     setSaving(true)
     setError(null)
     try {
-      if (flatformType === 'email' && !canUseEmailFeature) {
-        setError('Tính năng Email chưa được kích hoạt hoặc đã hết hạn.')
+      if (!canUsePlatform(flatformType, entitlements)) {
+        setError('Tính năng này chưa được kích hoạt hoặc đã hết hạn.')
         return
       }
       const payload = {
@@ -554,12 +580,14 @@ export default function AccountGroupManagerModal({
                 </div>
                 {actions.map(action => {
                   const draft = limits[action.code] || { dailyLimit: '', rateLimitCount: '' }
+                  const dailyLimitCap = getDailyLimitCap(action.code)
                   return (
                     <div className="account-group-action-limit-row" key={action.code}>
                       <strong title={action.name}>{action.name}</strong>
                       <input
                         type="number"
                         min={1}
+                        max={dailyLimitCap ?? undefined}
                         className="stepper-input"
                         value={draft.dailyLimit}
                         onChange={event => updateLimit(action.code, 'dailyLimit', event.target.value)}

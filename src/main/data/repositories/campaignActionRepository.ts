@@ -2,29 +2,25 @@ import { CampaignAction } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignActionFromDB } from '../mappers'
 import {
-  canCurrentUserUseEmailFeature,
+  canUseCampaignActionWithEntitlements,
+  loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
 
 const client = () => getSupabaseClient()
-const EMAIL_PLATFORM = 'email'
-const EMAIL_SEND_ACTION_ID = 'email_send'
 
 export async function listCampaignActions(): Promise<CampaignAction[]> {
-  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
-  let query = client()
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const { data, error } = await client()
     .from('auto_campaign_actions')
     .select('*')
     .eq('is_active', true)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
-  if (!canUseEmailFeature) {
-    query = query.neq('flatform_type', EMAIL_PLATFORM)
-  }
-
-  const { data, error } = await query
   if (error) throw new Error(`Failed to list campaign actions: ${error.message}`)
-  return (data || []).map(row => mapCampaignActionFromDB(row))
+  return (data || [])
+    .map(row => mapCampaignActionFromDB(row))
+    .filter(action => canUseCampaignActionWithEntitlements(action.id, action.flatformType, entitlements))
 }
 
 export async function getAllCampaignActions(): Promise<CampaignAction[]> {
@@ -39,9 +35,6 @@ export async function getAllCampaignActions(): Promise<CampaignAction[]> {
 }
 
 export async function getCampaignAction(actionId: string): Promise<CampaignAction | null> {
-  if (actionId === EMAIL_SEND_ACTION_ID && !(await canCurrentUserUseEmailFeature())) {
-    return null
-  }
   const { data, error } = await client()
     .from('auto_campaign_actions')
     .select('*')
@@ -49,7 +42,9 @@ export async function getCampaignAction(actionId: string): Promise<CampaignActio
     .single()
 
   if (error) return null
-  return mapCampaignActionFromDB(data)
+  const action = mapCampaignActionFromDB(data)
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  return canUseCampaignActionWithEntitlements(action.id, action.flatformType, entitlements) ? action : null
 }
 
 export async function createCampaignAction(action: Partial<CampaignAction>): Promise<CampaignAction> {

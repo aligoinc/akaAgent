@@ -21,6 +21,7 @@ import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
 import CampaignInfoView from './CampaignInfoView'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
+import { canUsePlatform } from '../../utils/entitlements'
 
 interface CampaignPanelProps {
   filterAccountId?: number | null
@@ -257,6 +258,7 @@ const CAMPAIGN_STATUS_SORT_ORDER = new Map<string, number>([
 
 const CAMPAIGN_PLATFORM_OPTIONS: CampaignFilterOption[] = [
   { value: 'facebook', label: 'Facebook' },
+  { value: 'zalo', label: 'Zalo' },
   { value: 'email', label: 'Email' }
 ]
 
@@ -1212,7 +1214,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     loadCampaignInputData, loadCampaignDetails, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
-  const canUseEmailFeature = useAuthStore(s => !!s.user?.entitlements?.email)
+  const entitlements = useAuthStore(s => s.user?.entitlements)
   const canManageCampaignActions = isAdminAkabiz
   const canViewAllFindDataLogs = isAdminAkabiz
   const showAlert = useUiStore(s => s.showAlert)
@@ -1254,8 +1256,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [showInitialCampaignLoading, setShowInitialCampaignLoading] = useState(true)
   const [showManualCampaignLoading, setShowManualCampaignLoading] = useState(false)
   const campaignPlatformOptions = useMemo(
-    () => CAMPAIGN_PLATFORM_OPTIONS.filter(option => option.value !== 'email' || canUseEmailFeature),
-    [canUseEmailFeature]
+    () => CAMPAIGN_PLATFORM_OPTIONS.filter(option => canUsePlatform(option.value, entitlements)),
+    [entitlements]
   )
   const workAreaRef = useRef<HTMLDivElement>(null)
   const detailDockRef = useRef<HTMLDivElement>(null)
@@ -1412,9 +1414,12 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   }, [filterAccountId, timePreset, dateFrom, dateTo, campaignNameSearch, statusFilters, platformFilters, actionFilters])
 
   useEffect(() => {
-    if (canUseEmailFeature || !platformFilters.includes('email')) return
-    setPlatformFilters(prev => prev.filter(value => value !== 'email'))
-  }, [canUseEmailFeature, platformFilters])
+    const allowedPlatforms = new Set(campaignPlatformOptions.map(option => option.value))
+    setPlatformFilters(prev => {
+      const next = prev.filter(value => allowedPlatforms.has(value))
+      return next.length === prev.length ? prev : next
+    })
+  }, [campaignPlatformOptions, platformFilters])
 
   useEffect(() => {
     setSelectedInputDataIds(new Set())

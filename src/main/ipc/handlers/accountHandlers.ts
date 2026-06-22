@@ -5,6 +5,10 @@ import { WebviewRegistry } from '../../playwright/webviewController'
 import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
 import { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 import { EmailRuntimeService } from '../../services/emailRuntimeService'
+import {
+  ensureCurrentUserCanUseAccountPlatform,
+  ensureCurrentUserFeatureActive
+} from '../../data/repositories/entitlementRepository'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -151,6 +155,7 @@ export function registerAccountHandlers(
   ipcMain.handle(IPC_EVENTS.ACCOUNT_PREPARE_BROWSER_SESSION, async (_, accountId: number) => {
     const account = await supabase.getAccount(accountId)
     if (!account) return { success: false, reason: 'Không tìm thấy tài khoản' }
+    await ensureCurrentUserCanUseAccountPlatform(account.flatformType)
     if (BROWSERLESS_PLATFORMS.has(account.flatformType)) {
       return { success: false, reason: BROWSERLESS_ACCOUNT_REASON }
     }
@@ -173,17 +178,20 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_START, async (_, accountId: number) => {
+    await ensureCurrentUserFeatureActive('zalo')
     if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
     return zaloRuntime.startLoginQr(accountId)
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_CANCEL, async (_, accountId: number) => {
+    await ensureCurrentUserFeatureActive('zalo')
     if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
     zaloRuntime.cancelLoginQr(accountId)
     return { success: true, accountId }
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_CHECK_SESSION, async (_, accountId: number) => {
+    await ensureCurrentUserFeatureActive('zalo')
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
     const result = await zaloRuntime.checkSession(accountId)
     sendAccountStatusUpdated(mainWindow)
@@ -191,6 +199,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGOUT, async (_, accountId: number) => {
+    await ensureCurrentUserFeatureActive('zalo')
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
     const result = await zaloRuntime.logout(accountId)
     sendAccountStatusUpdated(mainWindow)
@@ -198,6 +207,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_LIST_LABELS, async (_, accountId: number) => {
+    await ensureCurrentUserFeatureActive('zalo')
     const contacts = await supabase.listContacts(accountId, 'zalo_tag')
     return contacts
       .map(mapZaloLabelContact)
@@ -205,6 +215,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_SYNC_LABELS, async (_, accountId: number) => {
+    await ensureCurrentUserFeatureActive('zalo')
     if (!zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const account = await supabase.getAccount(accountId)
     if (!account || account.flatformType !== 'zalo') {
@@ -227,6 +238,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.EMAIL_VERIFY, async (_, config: EmailAccountConfig) => {
+    await ensureCurrentUserFeatureActive('email')
     if (!emailRuntime) return { ok: false, error: 'Email runtime chưa sẵn sàng' }
     return emailRuntime.verifyConfig(config)
   })

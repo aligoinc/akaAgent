@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { FolderCog, Loader2, Plus, ServerCog } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -13,6 +13,7 @@ import AccountGroupAssignModal from './AccountGroupAssignModal'
 import AccountGroupManagerModal from './AccountGroupManagerModal'
 import ProxyManagerModal from './ProxyManagerModal'
 import { useUiStore } from '../../stores/uiStore'
+import { canUsePlatform, getFirstAllowedPlatform } from '../../utils/entitlements'
 
 interface AccountPanelProps {
   onNavigateToBrowser?: (accountId: number) => void
@@ -82,7 +83,15 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     updateProxy,
     deleteProxy
   } = useCampaignStore()
-  const canUseEmailFeature = useAuthStore(state => !!state.user?.entitlements?.email)
+  const entitlements = useAuthStore(state => state.user?.entitlements)
+  const canUseFacebookAccount = canUsePlatform('facebook', entitlements)
+  const canUseZaloFeature = canUsePlatform('zalo', entitlements)
+  const canUseEmailFeature = canUsePlatform('email', entitlements)
+  const allowedAccountPlatforms = useMemo(
+    () => ['facebook', 'zalo', 'email'].filter(platform => canUsePlatform(platform, entitlements)),
+    [entitlements]
+  )
+  const defaultAccountPlatform = getFirstAllowedPlatform(entitlements)
   const [showForm, setShowForm] = useState(false)
   const [showGroupManager, setShowGroupManager] = useState(false)
   const [showProxyManager, setShowProxyManager] = useState(false)
@@ -97,7 +106,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [zaloLoginStarting, setZaloLoginStarting] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
-    flatformType: 'facebook',
+    flatformType: defaultAccountPlatform,
     accountGroupId: null as number | null,
     proxyId: null as number | null
   })
@@ -118,11 +127,13 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }, [loadAccounts, loadAccountGroups, loadProxies])
 
   useEffect(() => {
-    if (canUseEmailFeature || formData.flatformType !== 'email') return
-    setFormData(prev => ({ ...prev, flatformType: 'facebook', accountGroupId: null }))
-    setEmailConfig({ ...EMPTY_EMAIL_CONFIG })
-    setOriginalEmailConfig(null)
-  }, [canUseEmailFeature, formData.flatformType])
+    if (!formData.flatformType || allowedAccountPlatforms.includes(formData.flatformType)) return
+    setFormData(prev => ({ ...prev, flatformType: defaultAccountPlatform, accountGroupId: null }))
+    if (formData.flatformType === 'email') {
+      setEmailConfig({ ...EMPTY_EMAIL_CONFIG })
+      setOriginalEmailConfig(null)
+    }
+  }, [allowedAccountPlatforms, defaultAccountPlatform, formData.flatformType])
 
   useEffect(() => {
     if (!window.electronAPI?.onZaloLoginQrEvent) return
@@ -146,7 +157,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }, [loadAccounts, zaloLoginAccount?.id])
 
   const resetForm = () => {
-    setFormData({ name: '', flatformType: 'facebook', accountGroupId: null, proxyId: null })
+    setFormData({ name: '', flatformType: defaultAccountPlatform, accountGroupId: null, proxyId: null })
     setEmailConfig({ ...EMPTY_EMAIL_CONFIG })
     setOriginalEmailConfig(null)
   }
@@ -185,12 +196,12 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const openGroupManager = (platform = formData.flatformType) => {
-    setGroupManagerPlatform(platform === 'email' && !canUseEmailFeature ? 'facebook' : platform)
+    setGroupManagerPlatform(canUsePlatform(platform, entitlements) ? platform : defaultAccountPlatform)
     setShowGroupManager(true)
   }
 
   const openProxyManager = (platform = formData.flatformType) => {
-    setProxyManagerPlatform(platform)
+    setProxyManagerPlatform(canUsePlatform(platform, entitlements) ? platform : defaultAccountPlatform || 'facebook')
     setShowProxyManager(true)
   }
 
@@ -217,6 +228,14 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           useUiStore.getState().showAlert('Vui lòng nhập đủ Server name, Email gửi, Username, Password', 'error')
           return
         }
+      }
+      if (formData.flatformType === 'zalo' && !canUseZaloFeature) {
+        useUiStore.getState().showAlert('Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.', 'error')
+        return
+      }
+      if (formData.flatformType === 'facebook' && !canUseFacebookAccount) {
+        useUiStore.getState().showAlert('Tính năng Facebook chưa được kích hoạt hoặc đã hết hạn.', 'error')
+        return
       }
 
       const payload = {
@@ -340,6 +359,10 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleZaloLoginQr = async (account: AutoAccount) => {
+    if (!canUseZaloFeature) {
+      useUiStore.getState().showAlert('Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.', 'error')
+      return
+    }
     if (!window.electronAPI?.startZaloLoginQr) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
@@ -491,8 +514,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
             className="panel-input"
             disabled={!!editingAccount}
           >
-            <option value="facebook">Facebook</option>
-            <option value="zalo">Zalo</option>
+            {canUseFacebookAccount && <option value="facebook">Facebook</option>}
+            {canUseZaloFeature && <option value="zalo">Zalo</option>}
             {canUseEmailFeature && <option value="email">Email</option>}
           </select>
 

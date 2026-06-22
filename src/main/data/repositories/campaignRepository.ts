@@ -1,7 +1,9 @@
 import {
   AccountActionLimitStatus,
   ActionLimitConfig,
+  AuthEntitlements,
   Campaign,
+  CampaignActionLimitSettings,
   CampaignInput,
   CampaignInputData,
   CampaignInputStatus,
@@ -21,15 +23,17 @@ import { requireCurrentUser } from '../currentUser'
 import * as accountActionRepo from './accountActionRepository'
 import * as errorPolicyRepo from './errorPolicyRepository'
 import {
-  canCurrentUserUseEmailFeature,
-  ensureCurrentUserEmailFeatureActive,
+  canUseCampaignActionWithEntitlements,
+  ensureCurrentUserCanUseCampaignAction,
+  getAccountActionDailySendLimit,
+  getCampaignActionDailySendLimit,
+  loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
 
 const client = () => getSupabaseClient()
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
-const EMAIL_SEND_ACTION_ID = 'email_send'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_FRIEND_AUTO_TARGET_MODES = new Set(['all_friends', 'tagged_friends'])
@@ -41,7 +45,7 @@ const FIND_DATA_TARGET_FIELDS = [
   'findFacebookGroupPostTargetCampaignIds',
   'findFacebookGroupCommentTargetCampaignIds'
 ] as const
-const EMAIL_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
+const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
   'name',
   'accountId',
   'scheduleType',
@@ -84,9 +88,76 @@ const chunkArray = <T>(items: T[], size: number): T[][] => {
   return chunks
 }
 
-const touchesEmailCampaignConfig = (updates: Partial<Campaign>): boolean => (
-  Object.keys(updates).some(key => EMAIL_CAMPAIGN_CONFIG_UPDATE_KEYS.has(key as keyof Campaign))
+const touchesRestrictedCampaignConfig = (updates: Partial<Campaign>): boolean => (
+  Object.keys(updates).some(key => RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS.has(key as keyof Campaign))
 )
+
+function filterCampaignsByEntitlements<T extends { actionId?: string | null; action_id?: string | null; flatformType?: string | null; flatform_type?: string | null }>(
+  campaigns: T[],
+  entitlements: Parameters<typeof canUseCampaignActionWithEntitlements>[2]
+): T[] {
+  return campaigns.filter(campaign => canUseCampaignActionWithEntitlements(
+    campaign.actionId ?? campaign.action_id,
+    campaign.flatformType ?? campaign.flatform_type,
+    entitlements
+  ))
+}
+
+function normalizePositiveInteger(value: unknown): number | null {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function clampDailyLimitValue(value: unknown, cap: number | null): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed)) return undefined
+  if (parsed <= 0) return parsed
+  const normalizedCap = normalizePositiveInteger(cap)
+  return normalizedCap ? Math.min(parsed, normalizedCap) : parsed
+}
+
+function clampActionLimitConfigDailyLimit<T extends ActionLimitConfig>(
+  config: T,
+  cap: number | null
+): T {
+  const next = { ...config }
+  const dailyLimit = clampDailyLimitValue(config.dailyLimit, cap)
+  if (dailyLimit !== undefined) next.dailyLimit = dailyLimit
+  return next
+}
+
+function clampCampaignExtraSettingsDailyLimits(
+  extraSettings: Campaign['extraSettings'] | undefined,
+  actionId: string | null | undefined,
+  entitlements: Partial<AuthEntitlements> | null | undefined
+): Campaign['extraSettings'] {
+  const extra = { ...(extraSettings || {}) }
+  const actionLimits = extra.actionLimits
+  if (!actionLimits) return extra
+
+  const nextActionLimits: CampaignActionLimitSettings = clampActionLimitConfigDailyLimit(
+    { ...actionLimits },
+    getCampaignActionDailySendLimit(actionId, null, entitlements)
+  )
+  const byActionCode = actionLimits.byActionCode || {}
+  const nextByActionCode: NonNullable<CampaignActionLimitSettings['byActionCode']> = {}
+
+  for (const [actionCode, limit] of Object.entries(byActionCode)) {
+    nextByActionCode[actionCode] = clampActionLimitConfigDailyLimit(
+      { ...limit },
+      getAccountActionDailySendLimit(actionCode, null, entitlements)
+    )
+  }
+
+  return {
+    ...extra,
+    actionLimits: {
+      ...nextActionLimits,
+      ...(Object.keys(nextByActionCode).length > 0 ? { byActionCode: nextByActionCode } : {})
+    }
+  }
+}
 
 const shouldSkipCloneCampaignInputData = (actionId: string, extraSettings: unknown): boolean => {
   if (actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) return true
@@ -386,18 +457,12 @@ function isPastScheduleEnd(campaign: Campaign, schedule: Date): boolean {
 
 export async function getCampaign(id: number): Promise<Campaign | null> {
   const u = requireCurrentUser()
-  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
-  let query = client()
+  const { data, error } = await client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .eq('id', id)
     .eq('staff_id', u.staffId)
-
-  if (!canUseEmailFeature) {
-    query = query.neq('action_id', EMAIL_SEND_ACTION_ID)
-  }
-
-  const { data, error } = await query.single()
+    .single()
 
   if (error) return null
   return mapCampaignFromDB(data)
@@ -405,28 +470,22 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
 
 export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
-  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
-  let query = client()
+  const { data, error } = await client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
-  if (!canUseEmailFeature) {
-    query = query.neq('action_id', EMAIL_SEND_ACTION_ID)
-  }
-
-  const { data, error } = await query
   if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
-  return (data || []).map(row => mapCampaignFromDB(row))
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  return filterCampaignsByEntitlements((data || []).map(row => mapCampaignFromDB(row)), entitlements)
 }
 
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
-  if (campaign.actionId === EMAIL_SEND_ACTION_ID) {
-    await ensureCurrentUserEmailFeatureActive()
-  }
+  await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
@@ -442,7 +501,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     continue_next_day: campaign.continueNextDay ?? false,
     refresh_data: campaign.refreshData ?? false,
     content: campaign.content || '',
-    extra_settings: campaign.extraSettings || {},
+    extra_settings: clampCampaignExtraSettingsDailyLimits(campaign.extraSettings, campaign.actionId, entitlements),
     images: campaign.images || [],
     log: '',
     note: campaign.note ?? null,
@@ -462,13 +521,13 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
 
 export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
-  if (updates.actionId === EMAIL_SEND_ACTION_ID) {
-    await ensureCurrentUserEmailFeatureActive()
-  } else if (touchesEmailCampaignConfig(updates)) {
+  let targetActionId: string | null | undefined = updates.actionId
+  if (updates.actionId !== undefined) {
+    await ensureCurrentUserCanUseCampaignAction(updates.actionId)
+  } else if (touchesRestrictedCampaignConfig(updates)) {
     const currentActionId = await getCampaignActionIdForCurrentUser(id, u.staffId)
-    if (currentActionId === EMAIL_SEND_ACTION_ID) {
-      await ensureCurrentUserEmailFeatureActive()
-    }
+    targetActionId = currentActionId
+    await ensureCurrentUserCanUseCampaignAction(currentActionId)
   }
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
@@ -485,7 +544,10 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   if (updates.continueNextDay !== undefined) payload.continue_next_day = updates.continueNextDay
   if (updates.refreshData !== undefined) payload.refresh_data = updates.refreshData
   if (updates.content !== undefined) payload.content = updates.content
-  if (updates.extraSettings !== undefined) payload.extra_settings = updates.extraSettings
+  if (updates.extraSettings !== undefined) {
+    const entitlements = await loadCurrentUserEffectiveEntitlements()
+    payload.extra_settings = clampCampaignExtraSettingsDailyLimits(updates.extraSettings, targetActionId, entitlements)
+  }
   if (updates.images !== undefined) payload.images = updates.images
   if (updates.log !== undefined) payload.log = updates.log
   if (updates.note !== undefined) payload.note = updates.note
@@ -542,9 +604,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
     .single()
 
   if (errC || !origCamp) throw new Error(`Campaign not found: ${errC?.message}`)
-  if (origCamp.action_id === EMAIL_SEND_ACTION_ID) {
-    await ensureCurrentUserEmailFeatureActive()
-  }
+  await ensureCurrentUserCanUseCampaignAction(origCamp.action_id)
   const skipCloningInputData = shouldSkipCloneCampaignInputData(origCamp.action_id, origCamp.extra_settings)
 
   const { data: newCamp, error: errInsert } = await client()
@@ -677,10 +737,9 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
 
 export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {
   const u = requireCurrentUser()
-  const canUseEmailFeature = await canCurrentUserUseEmailFeature()
   const now = new Date()
   const currentVietnamTime = formatVietnamTimeForQuery(now)
-  let query = client()
+  const { data, error } = await client()
     .from('auto_campaigns')
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .eq('account_id', accountId)
@@ -690,11 +749,6 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
     .lte('schedule', now.toISOString())
     .or(`daily_stop_time.is.null,daily_stop_time.gte.${currentVietnamTime}`)
 
-  if (!canUseEmailFeature) {
-    query = query.neq('action_id', EMAIL_SEND_ACTION_ID)
-  }
-
-  const { data, error } = await query
   if (error) throw new Error(`Failed to get pending campaigns: ${error.message}`)
   return (data || []).map(row => mapCampaignFromDB(row))
 }
@@ -1146,9 +1200,7 @@ export async function createCampaignInputData(action: Partial<CampaignInputData>
   const actionId = Number.isFinite(campaignId) && campaignId > 0
     ? await getCampaignActionIdForCurrentUser(campaignId, u.staffId)
     : null
-  if (actionId === EMAIL_SEND_ACTION_ID) {
-    await ensureCurrentUserEmailFeatureActive()
-  }
+  if (actionId) await ensureCurrentUserCanUseCampaignAction(actionId)
   const payload = {
     campaign_id: action.campaignId,
     input_id: action.inputId ?? null,
@@ -1316,21 +1368,19 @@ export async function addCampaignInputDataToCampaign(
       continue
     }
 
-    if (target.actionId === EMAIL_SEND_ACTION_ID) {
-      try {
-        await ensureCurrentUserEmailFeatureActive()
-      } catch (err) {
-        results.push({
-          campaignId: target.id,
-          campaignName: target.name,
-          actionId: target.actionId,
-          insertedCount: 0,
-          skippedInvalidCount: selectedRows.length,
-          skippedRunning: false,
-          error: err instanceof Error ? err.message : String(err)
-        })
-        continue
-      }
+    try {
+      await ensureCurrentUserCanUseCampaignAction(target.actionId)
+    } catch (err) {
+      results.push({
+        campaignId: target.id,
+        campaignName: target.name,
+        actionId: target.actionId,
+        insertedCount: 0,
+        skippedInvalidCount: selectedRows.length,
+        skippedRunning: false,
+        error: err instanceof Error ? err.message : String(err)
+      })
+      continue
     }
 
     if (target.status === 'đang chạy') {

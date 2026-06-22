@@ -22,6 +22,12 @@ import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
 import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
+import {
+  canUseCampaignAction,
+  clampDailyLimitToEntitlement,
+  getAccountActionDailySendLimit,
+  getCampaignActionDailySendLimit
+} from '../../utils/entitlements'
 
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
@@ -217,6 +223,14 @@ const toActionLimitForm = (
   rateLimitCount: config?.rateLimitCount ?? fallback.rateLimitCount,
   rateLimitMinutes: config?.rateLimitMinutes ?? fallback.rateLimitMinutes
 })
+
+const isSameActionLimitForm = (left?: ActionLimitForm, right?: ActionLimitForm): boolean => (
+  !!left &&
+  !!right &&
+  left.dailyLimit === right.dailyLimit &&
+  left.rateLimitCount === right.rateLimitCount &&
+  left.rateLimitMinutes === right.rateLimitMinutes
+)
 
 const isHiddenActionLimitConfig = (actionCode: string): boolean => (
   actionCode === ZALO_FIND_PHONE_ACTION_CODE
@@ -901,7 +915,8 @@ export default function CampaignFormModal({
     createCampaign, updateCampaign,
     createCampaignInputData
   } = useCampaignStore()
-  const canUseEmailFeature = useAuthStore(state => !!state.user?.entitlements?.email)
+  const entitlements = useAuthStore(state => state.user?.entitlements)
+  const canUseEmailFeature = !!entitlements?.email
 
   const contentRef = useRef<HTMLDivElement>(null)
   const campaignContentTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -940,7 +955,9 @@ export default function CampaignFormModal({
       : 'none'
   const savedDailyStopTime = normalizeTimeInput(campaign?.dailyStopTime)
   const rawInitialActionId = lockedActionId || campaign?.actionId || ''
-  const initialActionId = rawInitialActionId === EMAIL_SEND_ACTION_ID && !canUseEmailFeature ? '' : rawInitialActionId
+  const initialActionId = rawInitialActionId && !canUseCampaignAction({ id: rawInitialActionId, flatformType: '' }, entitlements)
+    ? ''
+    : rawInitialActionId
   const initialIsFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(initialActionId)
   const initialIsDraftFacebookGroupSource =
     draftRequiredTargetField === 'findFacebookGroupPostTargetCampaignIds' ||
@@ -1287,11 +1304,22 @@ export default function CampaignFormModal({
       ? (isEditingSavedCampaign ? 3 : 4)
       : (isEditingSavedCampaign ? 4 : 5)
   const availableCampaignActions = useMemo(
-    () => campaignActions.filter(action => canUseEmailFeature || (action.id !== EMAIL_SEND_ACTION_ID && action.flatformType !== 'email')),
-    [campaignActions, canUseEmailFeature]
+    () => campaignActions.filter(action => canUseCampaignAction(action, entitlements)),
+    [campaignActions, entitlements]
   )
   const selectedCampaignAction = availableCampaignActions.find(action => action.id === formData.actionId)
   const selectedActionPlatform = selectedCampaignAction?.flatformType || ''
+  const campaignDailyLimitCap = getCampaignActionDailySendLimit(
+    selectedCampaignAction || (formData.actionId ? { id: formData.actionId, flatformType: selectedActionPlatform } : null),
+    entitlements
+  )
+  const getActionDailyLimitCap = (actionCode: string) => (
+    getAccountActionDailySendLimit(actionCode, selectedActionPlatform, entitlements)
+  )
+  const clampActionLimitDailyLimit = (actionCode: string, limit: ActionLimitForm): ActionLimitForm => ({
+    ...limit,
+    dailyLimit: clampDailyLimitToEntitlement(limit.dailyLimit, getActionDailyLimitCap(actionCode))
+  })
   const selectableAccounts = selectedActionPlatform
     ? accounts.filter(account => account.flatformType === selectedActionPlatform)
     : accounts
@@ -1299,7 +1327,7 @@ export default function CampaignFormModal({
   const limitActionCodesKey = limitActionCodes.join(',')
 
   useEffect(() => {
-    if (canUseEmailFeature || formData.actionId !== EMAIL_SEND_ACTION_ID) return
+    if (!formData.actionId || canUseCampaignAction({ id: formData.actionId, flatformType: selectedActionPlatform }, entitlements)) return
     setFormData(prev => ({
       ...prev,
       actionId: '',
@@ -1307,7 +1335,7 @@ export default function CampaignFormModal({
       emailSubject: '',
       emailBodyIsHtml: false
     }))
-  }, [canUseEmailFeature, formData.actionId])
+  }, [entitlements, formData.actionId, selectedActionPlatform])
   const isLimitActionVisible = (actionCode: string) => {
     if (isMessageUidCampaign) {
       if (actionCode === 'fb_message_stranger') return formData.enableMessage
@@ -1869,28 +1897,30 @@ export default function CampaignFormModal({
     }
     setFormData(prev => {
       const fallback = {
-        dailyLimit: prev.dailyLimit,
+        dailyLimit: clampDailyLimitToEntitlement(prev.dailyLimit, campaignDailyLimitCap),
         rateLimitCount: prev.rateLimitCount,
         rateLimitMinutes: prev.rateLimitMinutes
       }
       const next: Record<string, ActionLimitForm> = {}
       for (const code of limitActionCodes) {
-        const defaultLimit = getDefaultActionLimitForCode(code, fallback)
+        const defaultLimit = clampActionLimitDailyLimit(code, getDefaultActionLimitForCode(code, fallback))
         next[code] = isHiddenActionLimitConfig(code)
           ? defaultLimit
-          : (prev.actionLimitsByCode[code] || defaultLimit)
+          : clampActionLimitDailyLimit(code, prev.actionLimitsByCode[code] || defaultLimit)
       }
+      const dailyLimit = clampDailyLimitToEntitlement(prev.dailyLimit, campaignDailyLimitCap)
       const prevKeys = Object.keys(prev.actionLimitsByCode).sort().join(',')
       const nextKeys = Object.keys(next).sort().join(',')
       if (
+        dailyLimit === prev.dailyLimit &&
         prevKeys === nextKeys &&
-        Object.keys(next).every(code => prev.actionLimitsByCode[code] === next[code])
+        Object.keys(next).every(code => isSameActionLimitForm(prev.actionLimitsByCode[code], next[code]))
       ) {
         return prev
       }
-      return { ...prev, actionLimitsByCode: next }
+      return { ...prev, dailyLimit, actionLimitsByCode: next }
     })
-  }, [formData.actionId, selectedCampaignAction?.id, limitActionCodesKey, checkedLimitActionCodesKey, visibleLimitActionCodesKey])
+  }, [formData.actionId, selectedCampaignAction?.id, selectedActionPlatform, limitActionCodesKey, checkedLimitActionCodesKey, visibleLimitActionCodesKey, entitlements])
 
   const { showAlert, showConfirm } = useUiStore()
   const hasSmsIntegration = !!akabizIntegrations?.sms?.staffId
@@ -2167,7 +2197,9 @@ export default function CampaignFormModal({
             rateLimitCount: prev.rateLimitCount,
             rateLimitMinutes: prev.rateLimitMinutes
           })),
-          [key]: value
+          [key]: key === 'dailyLimit'
+            ? clampDailyLimitToEntitlement(value, getActionDailyLimitCap(actionCode))
+            : value
         }
       }
     }))
@@ -2488,7 +2520,7 @@ export default function CampaignFormModal({
     return formData.accountIds.map((accountId, index) => {
       const accountRateLimitMinutes = getAccountRateLimitMinutes(accountId)
       const defaultLimit = {
-        dailyLimit: formData.dailyLimit,
+        dailyLimit: clampDailyLimitToEntitlement(formData.dailyLimit, campaignDailyLimitCap),
         rateLimitCount: formData.rateLimitCount,
         rateLimitMinutes: accountRateLimitMinutes
       }
@@ -2498,10 +2530,11 @@ export default function CampaignFormModal({
           const limit = isHiddenActionLimitConfig(code)
             ? getDefaultActionLimitForCode(code, defaultLimit)
             : (formData.actionLimitsByCode[code] || getDefaultActionLimitForCode(code, defaultLimit))
+          const clampedLimit = clampActionLimitDailyLimit(code, limit)
           return [
             code,
             {
-              ...limit,
+              ...clampedLimit,
               rateLimitMinutes: accountRateLimitMinutes
             }
           ]
@@ -2601,7 +2634,7 @@ export default function CampaignFormModal({
             actionLimits: {
               sleepBetweenActions: formData.sleepBetweenActions,
               enabledActionCodes,
-              dailyLimit: formData.dailyLimit,
+              dailyLimit: clampDailyLimitToEntitlement(formData.dailyLimit, campaignDailyLimitCap),
               rateLimitCount: formData.rateLimitCount,
               rateLimitMinutes: accountRateLimitMinutes,
               byActionCode
@@ -2748,6 +2781,10 @@ export default function CampaignFormModal({
     }
     if (isEmailCampaign && !canUseEmailFeature) {
       showAlert('Tính năng Email chưa được kích hoạt hoặc đã hết hạn.', 'error')
+      return
+    }
+    if (!canUseCampaignAction(selectedCampaignAction, entitlements)) {
+      showAlert('Tính năng này chưa được kích hoạt hoặc đã hết hạn.', 'error')
       return
     }
     if (requiresSingleAccount && formData.accountIds.length !== 1) {
@@ -6462,6 +6499,7 @@ export default function CampaignFormModal({
       rateLimitCount: formData.rateLimitCount,
       rateLimitMinutes: formData.rateLimitMinutes
     })
+    const dailyLimitCap = getActionDailyLimitCap(actionCode)
 
     return (
       <div className="action-limit-card" key={actionCode}>
@@ -6474,6 +6512,7 @@ export default function CampaignFormModal({
             <label>Giới hạn trong ngày (đến 24h)</label>
             <input
               type="number"
+              max={dailyLimitCap ?? undefined}
               value={limit.dailyLimit}
               onChange={e => updateActionLimit(actionCode, 'dailyLimit', parseInt(e.target.value) || 0)}
               className="stepper-input"
