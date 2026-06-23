@@ -254,6 +254,12 @@ const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_MESSAGE_SEND_MODE_SHARE = 'share'
 const ZALO_SHARE_MESSAGE_BATCH_SIZE = 50
 const ZALO_SHARE_MESSAGE_REWRITE_AI_CODE = 'fb_send_message_rewrite'
+const MULTI_DAILY_TIME_SLOT_ACTION_IDS = new Set([
+  'facebook_timeline_post',
+  PAGE_POST_ACTION_ID,
+  ZALO_MESSAGE_FRIEND_ACTION_ID,
+  ZALO_MESSAGE_GROUP_ACTION_ID
+])
 const ZALO_FRIEND_TARGET_MODE_SELECTED = 'selected'
 const ZALO_FRIEND_TARGET_MODE_ALL = 'all_friends'
 const ZALO_FRIEND_TARGET_MODE_TAGGED = 'tagged_friends'
@@ -611,7 +617,7 @@ export class CampaignScheduler {
 
   private async handleMultiDailyTimeSlotAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
     if (
-      !['facebook_timeline_post', PAGE_POST_ACTION_ID].includes(campaign.actionId) ||
+      !MULTI_DAILY_TIME_SLOT_ACTION_IDS.has(campaign.actionId) ||
       campaign.extraSettings?.multiDailyTimeSlotsEnabled !== true
     ) {
       return false
@@ -667,6 +673,14 @@ export class CampaignScheduler {
     if (campaign.actionId === PAGE_POST_ACTION_ID && details.length === 0) {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
       await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có page cần chạy lại ở khung giờ tiếp theo)`)
+      return true
+    }
+    if (
+      (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID) &&
+      details.length === 0
+    ) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
       return true
     }
 

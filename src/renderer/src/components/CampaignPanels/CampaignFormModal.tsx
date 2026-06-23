@@ -1316,7 +1316,11 @@ export default function CampaignFormModal({
   const supportsSourceSharePost = isTimelinePostCampaign && !isPagePostCampaign
   const supportsSourceReels = isTimelinePostCampaign && !isPagePostCampaign
   const isPostBackgroundCampaign = formData.actionId === 'facebook_timeline_post' || isPagePostCampaign
-  const isMultiDailyTimeSlotsCampaign = formData.actionId === 'facebook_timeline_post' || isPagePostCampaign
+  const isMultiDailyTimeSlotsCampaign =
+    formData.actionId === 'facebook_timeline_post' ||
+    isPagePostCampaign ||
+    isZaloMessageFriendCampaign ||
+    isZaloMessageGroupCampaign
   const isPostBackgroundApiModeDisabled = isPagePostCampaign && formData.pagePostMode === 'api'
   const hasSourceContentSelection = supportsSourceContent && (formData.copyContentFromSource || (supportsSourceSharePost && formData.sharePost))
   const isPostBackgroundSourceDisabled = isPostBackgroundCampaign && hasSourceContentSelection
