@@ -13,9 +13,12 @@ import {
   CampaignRelationSummary,
   AddCampaignInputDataToCampaignRequest,
   AddCampaignInputDataToCampaignResult,
+  AutoAccountContact,
   BulkUpdateCampaignInputDataStatusResult,
+  ContactListResult,
   getCampaignInputDataRequirement,
-  isCampaignInputDataValidForAction
+  isCampaignInputDataValidForAction,
+  ZaloRemarketingCustomerListQuery
 } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
@@ -34,9 +37,41 @@ const client = () => getSupabaseClient()
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
+const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_FRIEND_AUTO_TARGET_MODES = new Set(['all_friends', 'tagged_friends'])
+const ZALO_REMARKETING_SOURCE_ACTION_IDS = [
+  ZALO_MESSAGE_PHONE_ACTION_ID,
+  ZALO_MESSAGE_FRIEND_ACTION_ID,
+  ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
+]
+const ZALO_REMARKETING_MESSAGE_ACTION_CODES = ['zalo_message_stranger', 'zalo_message_friend']
+const ZALO_REMARKETING_DEFAULT_LIMIT = 5000
+const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
+  '0162': '032',
+  '0163': '033',
+  '0164': '034',
+  '0165': '035',
+  '0166': '036',
+  '0167': '037',
+  '0168': '038',
+  '0169': '039',
+  '0120': '070',
+  '0121': '079',
+  '0122': '077',
+  '0126': '076',
+  '0128': '078',
+  '0123': '083',
+  '0124': '084',
+  '0125': '085',
+  '0127': '081',
+  '0129': '082',
+  '0186': '056',
+  '0188': '058',
+  '0199': '059'
+}
 const CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE = 500
 const LIMIT_COUNT_STATUSES = ['thành công', 'thất bại']
 const FIND_DATA_TARGET_FIELDS = [
@@ -198,6 +233,164 @@ async function getCampaignActionIdForCurrentUser(campaignId: number, staffId: nu
 
   if (error) throw new Error(`Failed to load campaign action for entitlement check: ${error.message}`)
   return data ? String((data as Record<string, unknown>).action_id || '') : null
+}
+
+function normalizeRecord(value: unknown): Record<string, unknown> | null {
+  if (!value) return null
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : null
+    } catch {
+      return null
+    }
+  }
+  return typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function nestedRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return nestedRecord(value[0])
+  return normalizeRecord(value)
+}
+
+function textValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    const text = textValue(value)
+    if (text) return text
+  }
+  return ''
+}
+
+function phoneInputText(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.trunc(value).toString() : ''
+  }
+  const text = String(value).trim()
+  if (/^[+-]?\d+(?:\.\d+)?e[+-]?\d+$/i.test(text)) {
+    const parsed = Number(text)
+    return Number.isFinite(parsed) ? Math.trunc(parsed).toString() : text
+  }
+  return text
+}
+
+function normalizeVietnamMobilePhone(value: unknown): string {
+  let digits = phoneInputText(value).replace(/\D+/g, '')
+  if (!digits) return ''
+
+  if (digits.startsWith('0084') && digits.length >= 13) {
+    digits = `0${digits.slice(4)}`
+  } else if (digits.startsWith('84') && digits.length >= 11) {
+    digits = `0${digits.slice(2)}`
+  }
+  if (digits.length === 9 && /^[35789]/.test(digits)) {
+    digits = `0${digits}`
+  }
+  if (digits.length === 11) {
+    const mappedPrefix = OLD_VN_MOBILE_PREFIX_MAP[digits.slice(0, 4)]
+    if (mappedPrefix) digits = `${mappedPrefix}${digits.slice(4)}`
+  }
+
+  return /^0[35789]\d{8}$/.test(digits) ? digits : ''
+}
+
+function addDaysToDateInput(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00${VIETNAM_UTC_OFFSET}`)
+  if (Number.isNaN(date.getTime())) return ''
+  date.setUTCDate(date.getUTCDate() + days)
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date)
+  const map = Object.fromEntries(parts.map(part => [part.type, part.value])) as Record<string, string>
+  return `${map.year}-${map.month}-${map.day}`
+}
+
+function dateInputToVietnamIso(value: string, endExclusive = false): string | null {
+  const normalized = textValue(value)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null
+  const dateInput = endExclusive ? addDaysToDateInput(normalized, 1) : normalized
+  if (!dateInput) return null
+  const date = new Date(`${dateInput}T00:00:00${VIETNAM_UTC_OFFSET}`)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function formatVietnamDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date)
+}
+
+function getDaysSinceVietnam(value: string): number | null {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  const todayParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date())
+  const sentParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date)
+  const toUtcDay = (parts: Intl.DateTimeFormatPart[]) => {
+    const map = Object.fromEntries(parts.map(part => [part.type, part.value])) as Record<string, string>
+    return Date.UTC(Number(map.year), Number(map.month) - 1, Number(map.day))
+  }
+  return Math.max(0, Math.floor((toUtcDay(todayParts) - toUtcDay(sentParts)) / 86400000))
+}
+
+interface ZaloRemarketingCampaignInfo {
+  id: number
+  name: string
+  actionId: string
+  actionName: string
+}
+
+interface ZaloRemarketingInputInfo {
+  id: number
+  name?: string | null
+  uid?: string | null
+  phone?: string | null
+  email?: string | null
+  info1?: string | null
+  info2?: string | null
+  info3?: string | null
+  info4?: string | null
+  info5?: string | null
+}
+
+interface ZaloRemarketingDetailRecord {
+  id: number
+  input_data_id: number | null
+  campaign_id: number
+  account_id: number | null
+  action_code: string | null
+  action_name: string | null
+  status: CampaignDetailStatus
+  error_code: string | null
+  log: string | null
+  data: Record<string, unknown> | string | null
+  created_at: string
 }
 
 interface CampaignRelationDetailRow {
@@ -1064,6 +1257,466 @@ export async function getCampaignInputDataStatusCounts(campaignId: number): Prom
   }))
 
   return counts
+}
+
+async function loadZaloRemarketingCampaignMap(
+  accountId: number,
+  staffId: number,
+  actionIds: string[]
+): Promise<Map<number, ZaloRemarketingCampaignInfo>> {
+  if (actionIds.length === 0) return new Map()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('id, name, action_id, auto_campaign_actions(name)')
+    .eq('staff_id', staffId)
+    .eq('account_id', accountId)
+    .eq('is_delete', false)
+    .in('action_id', actionIds)
+
+  if (error) throw new Error(`Failed to list Zalo remarketing source campaigns: ${error.message}`)
+  return new Map((data || []).map(row => {
+    const record = row as Record<string, unknown>
+    const action = nestedRecord(record.auto_campaign_actions)
+    const id = Number(record.id)
+    return [
+      id,
+      {
+        id,
+        name: textValue(record.name),
+        actionId: textValue(record.action_id),
+        actionName: firstText(action?.name, record.action_id)
+      }
+    ] as const
+  }))
+}
+
+async function loadZaloRemarketingInputMap(inputDataIds: number[]): Promise<Map<number, ZaloRemarketingInputInfo>> {
+  const ids = uniquePositiveIds(inputDataIds)
+  if (ids.length === 0) return new Map()
+
+  const { data, error } = await client()
+    .from('auto_campaign_input_data')
+    .select('id, name, uid, phone, email, info1, info2, info3, info4, info5')
+    .in('id', ids)
+
+  if (error) throw new Error(`Failed to list Zalo remarketing input data: ${error.message}`)
+  return new Map((data || []).map(row => [
+    Number(row.id),
+    {
+      id: Number(row.id),
+      name: (row.name as string | null) ?? null,
+      uid: (row.uid as string | null) ?? null,
+      phone: (row.phone as string | null) ?? null,
+      email: (row.email as string | null) ?? null,
+      info1: (row.info1 as string | null) ?? null,
+      info2: (row.info2 as string | null) ?? null,
+      info3: (row.info3 as string | null) ?? null,
+      info4: (row.info4 as string | null) ?? null,
+      info5: (row.info5 as string | null) ?? null
+    }
+  ]))
+}
+
+function getZaloRemarketingContactPhone(extraData: unknown): string {
+  const extra = normalizeRecord(extraData) || {}
+  return normalizeVietnamMobilePhone(firstText(
+    extra.phone,
+    extra.phoneNumber,
+    extra.phone_number,
+    extra.mobilePhone,
+    extra.mobile_phone
+  ))
+}
+
+interface ZaloRemarketingLookup {
+  nameByUid: Map<string, string>
+  originalNameByUid: Map<string, string>
+  phoneByUid: Map<string, string>
+  groupNameByUid: Map<string, string>
+  recipientStatusByUid: Map<string, string>
+  isFriendByUid: Map<string, boolean>
+  genderByUid: Map<string, number | string | null>
+}
+
+async function loadZaloRemarketingLookup(
+  accountId: number,
+  staffId: number,
+  uids: string[]
+): Promise<ZaloRemarketingLookup> {
+  const normalizedUids = Array.from(new Set(
+    uids.map(uid => uid.trim()).filter(Boolean)
+  ))
+  const empty: ZaloRemarketingLookup = {
+    nameByUid: new Map<string, string>(),
+    originalNameByUid: new Map<string, string>(),
+    phoneByUid: new Map<string, string>(),
+    groupNameByUid: new Map<string, string>(),
+    recipientStatusByUid: new Map<string, string>(),
+    isFriendByUid: new Map<string, boolean>(),
+    genderByUid: new Map<string, number | string | null>()
+  }
+  if (normalizedUids.length === 0) return empty
+
+  const nameByUid = new Map<string, string>()
+  const originalNameByUid = new Map<string, string>()
+  const phoneByUid = new Map<string, string>()
+  const contactGroupIdByUid = new Map<string, string>()
+  const groupIdByUid = new Map<string, string>()
+  const recipientStatusByUid = new Map<string, string>()
+  const isFriendByUid = new Map<string, boolean>()
+  const genderByUid = new Map<string, number | string | null>()
+  const chunkSize = 100
+
+  for (let i = 0; i < normalizedUids.length; i += chunkSize) {
+    const chunk = normalizedUids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('zalo_users')
+      .select('zalo_uid, display_name, zalo_name, phone_number, is_fr, gender, raw_payload')
+      .eq('account_id', accountId)
+      .eq('staff_id', staffId)
+      .in('zalo_uid', chunk)
+
+    if (error) throw new Error(`Failed to list Zalo remarketing customer users: ${error.message}`)
+    for (const row of data || []) {
+      const record = row as Record<string, unknown>
+      const uid = textValue(record.zalo_uid)
+      const rawPayload = normalizeRecord(record.raw_payload) || {}
+      const name = firstText(record.display_name, record.zalo_name)
+      const originalName = firstText(record.zalo_name, record.display_name)
+      const phone = normalizeVietnamMobilePhone(firstText(record.phone_number, rawPayload.phoneNumber, rawPayload.phone_number, rawPayload.phone))
+      const isFr = Number(record.is_fr)
+      const gender = record.gender
+      if (uid && name && !nameByUid.has(uid)) nameByUid.set(uid, name)
+      if (uid && originalName && !originalNameByUid.has(uid)) originalNameByUid.set(uid, originalName)
+      if (uid && phone && !phoneByUid.has(uid)) phoneByUid.set(uid, phone)
+      if (uid && Number.isFinite(isFr)) {
+        if (isFr === 1) {
+          isFriendByUid.set(uid, true)
+          recipientStatusByUid.set(uid, 'Bạn bè')
+        } else if (isFr === 0 && !isFriendByUid.has(uid)) {
+          isFriendByUid.set(uid, false)
+          if (!recipientStatusByUid.has(uid)) recipientStatusByUid.set(uid, 'Chưa kết bạn')
+        }
+      }
+      if (uid && gender !== null && gender !== undefined && !genderByUid.has(uid)) {
+        genderByUid.set(uid, gender as number | string | null)
+      }
+    }
+  }
+
+  for (let i = 0; i < normalizedUids.length; i += chunkSize) {
+    const chunk = normalizedUids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('auto_account_contacts')
+      .select('uid, name, is_friend, extra_data')
+      .eq('account_id', accountId)
+      .eq('staff_id', staffId)
+      .eq('contact_type', 'person')
+      .eq('is_delete', false)
+      .in('uid', chunk)
+
+    if (error) throw new Error(`Failed to list Zalo remarketing customer contacts: ${error.message}`)
+    for (const row of data || []) {
+      const record = row as Record<string, unknown>
+      const uid = textValue(record.uid)
+      const name = textValue(record.name)
+      const extra = normalizeRecord(record.extra_data) || {}
+      const phone = getZaloRemarketingContactPhone(extra)
+      const groupId = firstText(extra.zaloGroupId, extra.zalo_group_id)
+      const isFriend = record.is_friend
+      if (uid && name) nameByUid.set(uid, name)
+      if (uid && phone && !phoneByUid.has(uid)) phoneByUid.set(uid, phone)
+      if (uid && groupId && !contactGroupIdByUid.has(uid)) contactGroupIdByUid.set(uid, groupId)
+      if (uid && typeof isFriend === 'boolean') {
+        if (isFriend) {
+          isFriendByUid.set(uid, true)
+          recipientStatusByUid.set(uid, 'Bạn bè')
+        } else if (!isFriendByUid.has(uid)) {
+          isFriendByUid.set(uid, false)
+          if (!recipientStatusByUid.has(uid)) recipientStatusByUid.set(uid, 'Chưa kết bạn')
+        }
+      }
+    }
+  }
+
+  for (const [uid, groupId] of contactGroupIdByUid.entries()) {
+    groupIdByUid.set(uid, groupId)
+  }
+
+  for (let i = 0; i < normalizedUids.length; i += chunkSize) {
+    const chunk = normalizedUids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('zalo_group_members')
+      .select('zalo_uid, zalo_group_id, is_current, last_seen_at, updated_at')
+      .eq('account_id', accountId)
+      .eq('staff_id', staffId)
+      .in('zalo_uid', chunk)
+      .order('is_current', { ascending: false })
+      .order('last_seen_at', { ascending: false })
+      .order('updated_at', { ascending: false })
+
+    if (error) throw new Error(`Failed to list Zalo remarketing customer group memberships: ${error.message}`)
+    for (const row of data || []) {
+      const uid = textValue((row as Record<string, unknown>).zalo_uid)
+      const groupId = textValue((row as Record<string, unknown>).zalo_group_id)
+      if (uid && groupId && !groupIdByUid.has(uid)) groupIdByUid.set(uid, groupId)
+    }
+  }
+
+  const groupIds = Array.from(new Set(Array.from(groupIdByUid.values()).filter(Boolean)))
+  if (groupIds.length === 0) return {
+    nameByUid,
+    originalNameByUid,
+    phoneByUid,
+    groupNameByUid: new Map(),
+    recipientStatusByUid,
+    isFriendByUid,
+    genderByUid
+  }
+
+  const groupNameById = new Map<string, string>()
+  for (let i = 0; i < groupIds.length; i += chunkSize) {
+    const chunk = groupIds.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('zalo_groups')
+      .select('zalo_group_id, name')
+      .eq('account_id', accountId)
+      .eq('staff_id', staffId)
+      .in('zalo_group_id', chunk)
+
+    if (error) throw new Error(`Failed to list Zalo remarketing customer groups: ${error.message}`)
+    for (const row of data || []) {
+      const groupId = textValue((row as Record<string, unknown>).zalo_group_id)
+      const groupName = textValue((row as Record<string, unknown>).name)
+      if (groupId && groupName) groupNameById.set(groupId, groupName)
+    }
+  }
+
+  const groupNameByUid = new Map<string, string>()
+  for (const [uid, groupId] of groupIdByUid.entries()) {
+    const groupName = groupNameById.get(groupId)
+    if (groupName) groupNameByUid.set(uid, groupName)
+  }
+  return {
+    nameByUid,
+    originalNameByUid,
+    phoneByUid,
+    groupNameByUid,
+    recipientStatusByUid,
+    isFriendByUid,
+    genderByUid
+  }
+}
+
+function getZaloRemarketingDetailContext(
+  detail: ZaloRemarketingDetailRecord,
+  input?: ZaloRemarketingInputInfo
+): {
+  data: Record<string, unknown>
+  target: Record<string, unknown>
+  targetInput: Record<string, unknown>
+  targetProfile: Record<string, unknown>
+  uid: string
+} {
+  const data = normalizeRecord(detail.data) || {}
+  const target = nestedRecord(data.target) || {}
+  const targetRaw = nestedRecord(target.raw) || {}
+  const targetInput = nestedRecord(targetRaw.inputData) || {}
+  const targetProfile = nestedRecord(targetRaw.profile) || {}
+  const uid = firstText(
+    input?.uid,
+    target.uid,
+    data.targetUid,
+    data.uid,
+    targetInput.uid,
+    targetProfile.uid
+  )
+
+  return {
+    data,
+    target,
+    targetInput,
+    targetProfile,
+    uid
+  }
+}
+
+export async function listZaloRemarketingCustomers(
+  accountId: number,
+  query: ZaloRemarketingCustomerListQuery = {}
+): Promise<ContactListResult> {
+  const u = requireCurrentUser()
+  const normalizedAccountId = Number(accountId)
+  if (!Number.isFinite(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Tài khoản Zalo không hợp lệ.')
+  }
+
+  const { data: account, error: accountError } = await client()
+    .from('auto_accounts')
+    .select('id, flatform_type')
+    .eq('id', normalizedAccountId)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (accountError) throw new Error(`Failed to verify Zalo account: ${accountError.message}`)
+  if (!account || String(account.flatform_type || '') !== 'zalo') {
+    throw new Error('Không tìm thấy tài khoản Zalo.')
+  }
+
+  const requestedActionIds = Array.isArray(query.campaignActionIds)
+    ? query.campaignActionIds.map(textValue).filter(Boolean)
+    : null
+  const legacyActionId = textValue(query.campaignActionId)
+  const actionIds = (requestedActionIds !== null
+    ? requestedActionIds
+    : legacyActionId && legacyActionId !== 'all'
+      ? [legacyActionId]
+      : ZALO_REMARKETING_SOURCE_ACTION_IDS
+  ).filter((actionId, index, arr) => (
+    ZALO_REMARKETING_SOURCE_ACTION_IDS.includes(actionId) && arr.indexOf(actionId) === index
+  ))
+  const campaignMap = await loadZaloRemarketingCampaignMap(normalizedAccountId, u.staffId, actionIds)
+  const campaignIds = Array.from(campaignMap.keys())
+  if (campaignIds.length === 0) return { contacts: [], total: 0 }
+
+  const startIso = dateInputToVietnamIso(textValue(query.dateFrom))
+  const endIso = dateInputToVietnamIso(textValue(query.dateTo), true)
+  const limit = Math.min(
+    20000,
+    Math.max(1, Math.floor(Number(query.limit || ZALO_REMARKETING_DEFAULT_LIMIT)))
+  )
+
+  let detailQuery = client()
+    .from('auto_campaign_details')
+    .select('id, input_data_id, campaign_id, account_id, action_code, action_name, status, error_code, log, data, created_at')
+    .eq('account_id', normalizedAccountId)
+    .eq('is_delete', false)
+    .in('campaign_id', campaignIds)
+    .in('action_code', ZALO_REMARKETING_MESSAGE_ACTION_CODES)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit)
+
+  if (startIso) detailQuery = detailQuery.gte('created_at', startIso)
+  if (endIso) detailQuery = detailQuery.lt('created_at', endIso)
+
+  const { data: detailRows, error: detailError } = await detailQuery
+  if (detailError) throw new Error(`Failed to list Zalo remarketing customers: ${detailError.message}`)
+
+  const details = (detailRows || []) as ZaloRemarketingDetailRecord[]
+  const inputMap = await loadZaloRemarketingInputMap(
+    details.map(row => Number(row.input_data_id)).filter(Number.isFinite)
+  )
+  const lookup = await loadZaloRemarketingLookup(
+    normalizedAccountId,
+    u.staffId,
+    details.map(detail => {
+      const input = detail.input_data_id ? inputMap.get(Number(detail.input_data_id)) : undefined
+      return getZaloRemarketingDetailContext(detail, input).uid
+    })
+  )
+  const rowsByUid = new Map<string, AutoAccountContact & { extraData: Record<string, unknown> }>()
+
+  for (const detail of details) {
+    const campaign = campaignMap.get(Number(detail.campaign_id))
+    if (!campaign) continue
+    const input = detail.input_data_id ? inputMap.get(Number(detail.input_data_id)) : undefined
+    const { target, targetInput, targetProfile, uid } = getZaloRemarketingDetailContext(detail, input)
+    if (!uid) continue
+    const key = `${normalizedAccountId}:${uid}`.toLowerCase()
+    const detailName = firstText(
+      target.displayName,
+      target.originalName,
+      targetProfile.displayName,
+      targetProfile.zaloName,
+      targetProfile.zalo_name,
+      targetInput.name
+    )
+    const name = firstText(
+      lookup.nameByUid.get(uid),
+      input?.name,
+      detailName,
+      uid
+    )
+    const originalName = firstText(
+      lookup.originalNameByUid.get(uid),
+      target.originalName,
+      targetProfile.zaloName,
+      targetProfile.zalo_name,
+      targetInput.originalName
+    )
+    const phone = firstText(
+      lookup.phoneByUid.get(uid),
+      normalizeVietnamMobilePhone(input?.phone)
+    )
+    const groupName = lookup.groupNameByUid.get(uid) || ''
+    const recipientStatus = lookup.recipientStatusByUid.get(uid) || ''
+    const isFriend = lookup.isFriendByUid.get(uid)
+    const gender = lookup.genderByUid.has(uid) ? lookup.genderByUid.get(uid) ?? null : null
+    const existing = rowsByUid.get(key)
+    if (existing) {
+      existing.extraData.sentCount = Number(existing.extraData.sentCount || 0) + 1
+      if ((!textValue(existing.name) || existing.name === existing.uid) && name && name !== existing.uid) {
+        existing.name = name
+      }
+      if (!textValue(existing.extraData.phone) && phone) {
+        existing.extraData.phone = phone
+      }
+      if (!textValue(existing.extraData.groupName) && groupName) {
+        existing.extraData.groupName = groupName
+      }
+      if (!textValue(existing.extraData.recipientStatus) && recipientStatus) {
+        existing.extraData.recipientStatus = recipientStatus
+      }
+      if (!textValue(existing.extraData.originalName) && originalName) {
+        existing.extraData.originalName = originalName
+      }
+      if ((existing.extraData.gender === null || existing.extraData.gender === undefined) && gender !== null && gender !== undefined) {
+        existing.extraData.gender = gender
+      }
+      if (isFriend !== undefined) {
+        existing.isFriend = isFriend
+      }
+      continue
+    }
+
+    const latestSentAt = textValue(detail.created_at)
+    const daysSinceLatest = latestSentAt ? getDaysSinceVietnam(latestSentAt) : null
+
+    rowsByUid.set(key, {
+      id: Number(detail.id),
+      accountId: normalizedAccountId,
+      contactType: 'person',
+      name,
+      uid,
+      url: '',
+      extraData: {
+        source: 'zalo_remarketing_customers',
+        phone,
+        groupName,
+        latestCampaignId: campaign.id,
+        latestCampaignName: campaign.name,
+        latestCampaignActionId: campaign.actionId,
+        latestCampaignActionName: campaign.actionName,
+        sentCount: 1,
+        latestSentAt,
+        latestSentDate: latestSentAt ? formatVietnamDate(latestSentAt) : '',
+        daysSinceLatest,
+        latestStatus: detail.status,
+        latestLog: textValue(detail.log),
+        latestErrorCode: textValue(detail.error_code),
+        recipientStatus,
+        originalName,
+        gender
+      },
+      isFriend,
+      isDelete: false
+    })
+  }
+
+  const contacts = Array.from(rowsByUid.values())
+  return { contacts, total: contacts.length }
 }
 
 async function countPendingCampaignInputData(campaignId: number): Promise<number> {

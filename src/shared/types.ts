@@ -297,7 +297,7 @@ export interface CampaignExtraSettings {
   postBumpRotationIndex?: number           // Con trỏ chia đều target qua nhiều bài post
   // Nhắn tin bạn bè / nhắn tin UID & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
-  enableAddFriend?: boolean                // Kết bạn (facebook_message_uid, zalo_message_phone, zalo_message_group_member)
+  enableAddFriend?: boolean                // Kết bạn (facebook_message_uid, zalo_message_phone, zalo_message_group_member, zalo_message_remarketing_customer)
   useSuggestedFriends?: boolean            // facebook_message_uid: lấy UID từ đề xuất bạn bè Facebook
   suggestedFriendsCount?: number           // Số lượng đề xuất bạn bè cần lấy
   // Zalo - Nhắn tin, kết bạn đến SĐT
@@ -481,6 +481,7 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   zalo_message_phone: { field: 'phone', label: 'SĐT Zalo' },
   zalo_message_friend: { field: 'uid', label: 'UID bạn bè Zalo' },
   zalo_message_group_member: { field: 'uid', label: 'UID thành viên group Zalo' },
+  zalo_message_remarketing_customer: { field: 'uid', label: 'UID khách hàng Zalo đã từng gửi tin' },
   zalo_message_group: { field: 'uid', label: 'ID group Zalo' },
   email_send: { field: 'email', label: 'email người nhận' }
 }
@@ -798,6 +799,14 @@ export interface PageInboxContactListQuery {
 export interface ContactListResult {
   contacts: AutoAccountContact[]
   total: number
+}
+
+export interface ZaloRemarketingCustomerListQuery {
+  campaignActionId?: string
+  campaignActionIds?: string[]
+  dateFrom?: string
+  dateTo?: string
+  limit?: number
 }
 
 export interface ContactLoadResult {
@@ -1217,6 +1226,7 @@ export const IPC_EVENTS = {
   CONTACTS_LOAD_ZALO_GROUP_MEMBERS: 'contacts:load-zalo-group-members',
   CONTACTS_LIST_PAGE_INBOX: 'contacts:list-page-inbox',
   CONTACTS_LIST_ZALO_GROUP_MEMBERS: 'contacts:list-zalo-group-members',
+  CONTACTS_LIST_ZALO_REMARKETING_CUSTOMERS: 'contacts:list-zalo-remarketing-customers',
   CONTACTS_EXPORT_PAGE_INBOX: 'contacts:export-page-inbox',
   CONTACTS_CANCEL_LOAD: 'contacts:cancel-load',
   CONTACTS_LIST: 'contacts:list',

@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { IPC_EVENTS, ZaloGroupMemberScanRequest } from '../../../shared/types'
+import { IPC_EVENTS, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import * as localContactRepo from '../../data/repositories/localAccountContactRepository'
@@ -83,6 +83,11 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_ZALO_GROUP_MEMBERS, async (_, accountId: number, zaloGroupId: string) => {
     await ensureContactAccess(supabase, accountId, 'zalo_tag')
     return supabase.listZaloGroupMemberContacts(accountId, zaloGroupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_ZALO_REMARKETING_CUSTOMERS, async (_, accountId: number, query: ZaloRemarketingCustomerListQuery = {}) => {
+    await ensureContactAccess(supabase, accountId, 'zalo_tag')
+    return supabase.listZaloRemarketingCustomers(accountId, query)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_EXPORT_PAGE_INBOX, async (_, accountId: number, query = {}) => {

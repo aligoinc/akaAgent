@@ -236,6 +236,7 @@ const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
+const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_FRIEND_TARGET_MODE_SELECTED = 'selected'
 const ZALO_FRIEND_TARGET_MODE_ALL = 'all_friends'
@@ -1534,6 +1535,7 @@ export class CampaignScheduler {
       || campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
+      || campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
   }
 
@@ -1544,6 +1546,7 @@ export class CampaignScheduler {
       : campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
+          campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
         ? [detail.name, detail.uid, detail.phone]
       : campaign.actionId === EMAIL_SEND_ACTION_ID
@@ -5582,6 +5585,41 @@ export class CampaignScheduler {
     return { ok: true, zaloTarget: target }
   }
 
+  private async zaloResolveRemarketingCustomerTarget(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloResolveGroupMemberTargetOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const uid = this.firstNonEmptyString(options.targetUid, options.inputData?.uid)
+    if (!uid) {
+      const detail = await this.createZaloPolicyDetailFromCode(
+        account,
+        campaign,
+        await this.supabase.getZaloErrorPolicyByCode('114'),
+        'UID khách hàng cũ Zalo không hợp lệ',
+        'zalo_message_stranger',
+        'Nhắn tin người lạ',
+        '114',
+        { uid, inputData: options.inputData }
+      )
+      return { ok: false, detail }
+    }
+
+    const target = await this.resolveZaloFriendMessageTarget(
+      account,
+      this.normalizeZaloTargetFromInputData(
+        uid,
+        options.targetName,
+        options.inputData,
+        { source: 'zalo_remarketing_customers' },
+        false
+      )
+    )
+
+    return { ok: true, zaloTarget: target }
+  }
+
   private async zaloSendPhoneMessage(
     account: AutoAccount,
     campaign: Campaign,
@@ -5973,6 +6011,7 @@ export class CampaignScheduler {
       }),
       zaloFindPhoneUser: (options) => this.zaloFindPhoneUser(account, campaign, options),
       zaloResolveGroupMemberTarget: (options) => this.zaloResolveGroupMemberTarget(account, campaign, options),
+      zaloResolveRemarketingCustomerTarget: (options) => this.zaloResolveRemarketingCustomerTarget(account, campaign, options),
       zaloSendPhoneMessage: (options) => this.zaloSendPhoneMessage(account, campaign, options),
       zaloSendFriendMessage: (options) => this.zaloSendFriendMessage(account, campaign, options),
       zaloSendGroupMessage: (options) => this.zaloSendGroupMessage(account, campaign, options),

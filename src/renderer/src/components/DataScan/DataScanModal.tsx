@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent } from 'react'
 import jsQR from 'jsqr'
-import { Check, ChevronLeft, ChevronRight, Download, Folder, Info, Link2, Maximize2, Minimize2, Plus, QrCode, RefreshCw, Search, Square, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, Info, Link2, Maximize2, Minimize2, Plus, QrCode, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
 import { AutoAccountContact, AutoAccountContactGroup, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberScanMode } from '../../../../shared/types'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -11,7 +11,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
 import type { AuthEntitlements } from '../../../../shared/types'
 
-export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members'
+export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers'
 type DataScanPlatform = 'facebook' | 'zalo'
 type ContactStatusFilter = 'active' | 'inactive' | 'all'
 type PageInboxTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
@@ -33,9 +33,18 @@ interface PageInboxSelectedRange {
 const POST_COMMENTERS_ACTION_ID: DataScanAction = 'facebook_post_commenters'
 const PAGE_INBOX_CUSTOMERS_ACTION_ID: DataScanAction = 'facebook_page_inbox_customers'
 const ZALO_GROUP_MEMBERS_ACTION_ID: DataScanAction = 'zalo_group_members'
+const ZALO_REMARKETING_CUSTOMERS_ACTION_ID: DataScanAction = 'zalo_remarketing_customers'
 const DEFAULT_POST_COMMENTER_LIMIT = 100
 const PAGE_INBOX_PAGE_SIZE = 100
 const DEFAULT_PAGE_INBOX_TIME_PRESET: PageInboxTimePreset = '30_days'
+const DEFAULT_ZALO_REMARKETING_LIMIT = 5000
+
+const ZALO_REMARKETING_ACTION_FILTER_OPTIONS = [
+  { value: 'zalo_message_phone', label: 'Zalo - Gửi tin nhắn đến SĐT (Kiêm kết bạn)' },
+  { value: 'zalo_message_friend', label: 'Zalo - Gửi tin nhắn đến bạn bè' },
+  { value: 'zalo_message_group_member', label: 'Zalo - Nhắn tin, kết bạn đến thành viên group' }
+]
+const DEFAULT_ZALO_REMARKETING_ACTION_IDS = ZALO_REMARKETING_ACTION_FILTER_OPTIONS.map(option => option.value)
 
 const PAGE_INBOX_TIME_PRESETS: Array<{ value: PageInboxTimePreset; label: string }> = [
   { value: 'all', label: 'Tất cả' },
@@ -65,6 +74,7 @@ interface DataScanModalProps {
   initialStatusFilter?: ContactStatusFilter
   allowedActions?: DataScanAction[]
   lockAction?: boolean
+  lockAccount?: boolean
   onClose: () => void
   onSelect?: (contacts: AutoAccountContact[]) => void
 }
@@ -133,6 +143,14 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
     contactType: 'person',
     emptyText: 'Chọn group hoặc nhập link rồi tải data',
     loadingText: 'Đang tải thành viên group Zalo...'
+  },
+  {
+    id: ZALO_REMARKETING_CUSTOMERS_ACTION_ID,
+    label: 'Zalo - Load khách hàng cũ từng gửi tin',
+    platform: 'zalo',
+    contactType: 'person',
+    emptyText: 'Chọn bộ lọc rồi tải data',
+    loadingText: 'Đang tải khách hàng cũ Zalo...'
   }
 ]
 
@@ -473,6 +491,29 @@ const getPageInboxLastMessageAt = (contact: AutoAccountContact) => {
   }).format(date)
 }
 
+const getExtraText = (contact: AutoAccountContact, key: string) => {
+  const value = contact.extraData?.[key]
+  return value === null || value === undefined ? '' : String(value).trim()
+}
+
+const getExtraNumber = (contact: AutoAccountContact, key: string) => {
+  const value = Number(contact.extraData?.[key])
+  return Number.isFinite(value) ? value : null
+}
+
+const getZaloRemarketingPhone = (contact: AutoAccountContact) => getExtraText(contact, 'phone')
+const getZaloRemarketingGroupName = (contact: AutoAccountContact) => getExtraText(contact, 'groupName')
+const getZaloRemarketingActionName = (contact: AutoAccountContact) => getExtraText(contact, 'latestCampaignActionName')
+const getZaloRemarketingSentCount = (contact: AutoAccountContact) => getExtraNumber(contact, 'sentCount') ?? 0
+const getZaloRemarketingLatestDate = (contact: AutoAccountContact) => getExtraText(contact, 'latestSentDate')
+const getZaloRemarketingDaysSinceLatest = (contact: AutoAccountContact) => {
+  const value = getExtraNumber(contact, 'daysSinceLatest')
+  return value === null ? '' : formatCount(value)
+}
+const getZaloRemarketingLatestStatus = (contact: AutoAccountContact) => getExtraText(contact, 'latestStatus')
+const getZaloRemarketingLatestLog = (contact: AutoAccountContact) => getExtraText(contact, 'latestLog')
+const getZaloRemarketingRecipientStatus = (contact: AutoAccountContact) => getExtraText(contact, 'recipientStatus')
+
 const getGroupApprovalStatus = (contact: AutoAccountContact) => {
   if (contact.requiresPostApproval === true) return 'Chờ duyệt bài'
   if (contact.requiresPostApproval === false) return 'Không cần duyệt'
@@ -556,6 +597,7 @@ export default function DataScanModal({
   initialStatusFilter,
   allowedActions,
   lockAction = false,
+  lockAccount = false,
   onClose,
   onSelect
 }: DataScanModalProps) {
@@ -571,6 +613,7 @@ export default function DataScanModal({
   const pageInboxOptionsAccountRef = useRef<number | ''>('')
   const pageInboxPageUidRef = useRef('')
   const zaloQrFileInputRef = useRef<HTMLInputElement | null>(null)
+  const zaloRemarketingActionDropdownRef = useRef<HTMLDivElement | null>(null)
   const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions, entitlements))
   const [accountId, setAccountId] = useState<number | ''>(initialAccountId || '')
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
@@ -603,6 +646,10 @@ export default function DataScanModal({
   const [zaloGroupMemberGroupId, setZaloGroupMemberGroupId] = useState('')
   const [zaloGroupMemberLink, setZaloGroupMemberLink] = useState('')
   const [zaloGroupOptions, setZaloGroupOptions] = useState<AutoAccountContact[]>([])
+  const [zaloRemarketingActionIds, setZaloRemarketingActionIds] = useState<string[]>(() => [...DEFAULT_ZALO_REMARKETING_ACTION_IDS])
+  const [zaloRemarketingActionDropdownOpen, setZaloRemarketingActionDropdownOpen] = useState(false)
+  const [zaloRemarketingDateFrom, setZaloRemarketingDateFrom] = useState(() => getPageInboxDateRange('7_days').fromDate)
+  const [zaloRemarketingDateTo, setZaloRemarketingDateTo] = useState(() => getPageInboxDateRange('7_days').toDate)
   const [zaloQrReading, setZaloQrReading] = useState(false)
   const [progressMessages, setProgressMessages] = useState<string[]>([])
   const [minimized, setMinimized] = useState(false)
@@ -633,7 +680,8 @@ export default function DataScanModal({
   const isPostCommentersAction = action === POST_COMMENTERS_ACTION_ID
   const isPageInboxAction = action === PAGE_INBOX_CUSTOMERS_ACTION_ID
   const isZaloGroupMembersAction = action === ZALO_GROUP_MEMBERS_ACTION_ID
-  const supportsContactGroups = !isPageInboxAction
+  const isZaloRemarketingCustomersAction = action === ZALO_REMARKETING_CUSTOMERS_ACTION_ID
+  const supportsContactGroups = !isPageInboxAction && !isZaloRemarketingCustomersAction
   const normalizedPostCommentersUrl = useMemo(
     () => normalizeFacebookPostUrlForCompare(postCommentersUrl),
     [postCommentersUrl]
@@ -648,16 +696,16 @@ export default function DataScanModal({
   )
   const selectedPlatform = (selectedAccount?.flatformType || actionDef.platform) as DataScanPlatform
   const showGroupApprovalColumn = actionDef.contactType === 'group' && actionDef.platform === 'facebook'
-  const showAvatarColumn = actionDef.platform === 'zalo'
+  const showAvatarColumn = actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
   const showLinkColumn = !isPageInboxAction && (actionDef.platform === 'facebook' || actionDef.id === 'zalo_groups')
   const showZaloGroupMemberCountColumn = actionDef.id === 'zalo_groups'
   const showGroupMemberRoleColumn = isZaloGroupMembersAction
-  const showFriendStatusColumn = actionDef.contactType === 'person' && !isZaloGroupMembersAction
+  const showFriendStatusColumn = actionDef.contactType === 'person' && !isZaloGroupMembersAction && !isZaloRemarketingCustomersAction
   const statusFilterOptions = useMemo(
     () => getStatusFilterOptions(actionDef.contactType),
     [actionDef.contactType]
   )
-  const hasStatusFilter = !isZaloGroupMembersAction && (actionDef.contactType === 'person' || actionDef.contactType === 'group')
+  const hasStatusFilter = !isZaloGroupMembersAction && !isZaloRemarketingCustomersAction && (actionDef.contactType === 'person' || actionDef.contactType === 'group')
   const selectedPageInboxPage = useMemo(
     () => pageInboxPages.find(page => page.uid === pageInboxPageUid) || null,
     [pageInboxPageUid, pageInboxPages]
@@ -671,6 +719,16 @@ export default function DataScanModal({
     () => zaloGroupOptions.filter(group => !!getZaloGroupContactLink(group)),
     [zaloGroupOptions]
   )
+  const zaloRemarketingActionFilterLabel = useMemo(() => {
+    if (zaloRemarketingActionIds.length === 0) return 'Chọn hành động'
+    if (zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length) {
+      return 'Tất cả'
+    }
+    if (zaloRemarketingActionIds.length === 1) {
+      return ZALO_REMARKETING_ACTION_FILTER_OPTIONS.find(option => option.value === zaloRemarketingActionIds[0])?.label || '1 hành động đã chọn'
+    }
+    return `${zaloRemarketingActionIds.length} hành động đã chọn`
+  }, [zaloRemarketingActionIds])
 
   useEffect(() => {
     loadAccounts()
@@ -682,6 +740,19 @@ export default function DataScanModal({
       mountedRef.current = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!zaloRemarketingActionDropdownOpen) return
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (!zaloRemarketingActionDropdownRef.current?.contains(event.target as Node)) {
+        setZaloRemarketingActionDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentMouseDown)
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
+  }, [zaloRemarketingActionDropdownOpen])
 
   useEffect(() => {
     if (accountId !== '') return
@@ -782,6 +853,70 @@ export default function DataScanModal({
     void decodeZaloQrImage(item.getAsFile())
   }, [decodeZaloQrImage])
 
+  const toggleZaloRemarketingActionFilter = useCallback((actionId: string) => {
+    setZaloRemarketingActionIds(prev => {
+      const checked = prev.includes(actionId)
+      if (!checked) return [...prev, actionId]
+      return prev.filter(item => item !== actionId)
+    })
+  }, [])
+
+  const toggleAllZaloRemarketingActionFilters = useCallback(() => {
+    setZaloRemarketingActionIds(prev => (
+      prev.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length
+        ? []
+        : [...DEFAULT_ZALO_REMARKETING_ACTION_IDS]
+    ))
+  }, [])
+
+  const loadZaloRemarketingCustomers = useCallback(async () => {
+    if (!window.electronAPI || !accountId) {
+      setContacts([])
+      setPageInboxTotal(0)
+      return null
+    }
+    if (zaloRemarketingActionIds.length === 0) {
+      showAlert('Vui lòng chọn ít nhất một hành động gửi tin nhắn.', 'error')
+      return null
+    }
+    if (zaloRemarketingDateFrom && zaloRemarketingDateTo && zaloRemarketingDateFrom > zaloRemarketingDateTo) {
+      showAlert('Từ ngày phải nhỏ hơn hoặc bằng đến ngày.', 'error')
+      return null
+    }
+    const loadId = contactsLoadIdRef.current + 1
+    contactsLoadIdRef.current = loadId
+    setLoading(true)
+    try {
+      const result = await window.electronAPI.listZaloRemarketingCustomers(accountId, {
+        campaignActionIds: zaloRemarketingActionIds,
+        dateFrom: zaloRemarketingDateFrom,
+        dateTo: zaloRemarketingDateTo,
+        limit: DEFAULT_ZALO_REMARKETING_LIMIT
+      })
+      if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return null
+      setContacts(result.contacts)
+      setPageInboxTotal(0)
+      setGroupContactCache({})
+      return result.total
+    } catch (err: any) {
+      console.error('Failed to load Zalo remarketing customers:', err)
+      if (mountedRef.current && contactsLoadIdRef.current === loadId) {
+        showAlert(err?.message || 'Không thể tải danh sách khách hàng cũ Zalo.', 'error')
+      }
+      return null
+    } finally {
+      if (mountedRef.current && contactsLoadIdRef.current === loadId) {
+        setLoading(false)
+      }
+    }
+  }, [
+    accountId,
+    showAlert,
+    zaloRemarketingActionIds,
+    zaloRemarketingDateFrom,
+    zaloRemarketingDateTo
+  ])
+
   const loadCachedContacts = useCallback(async () => {
     if (!window.electronAPI || !accountId) {
       contactsLoadIdRef.current += 1
@@ -826,6 +961,11 @@ export default function DataScanModal({
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(data)
         setPageInboxTotal(0)
+      } else if (isZaloRemarketingCustomersAction) {
+        if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
+        setContacts([])
+        setPageInboxTotal(0)
+        return
       } else {
         const data = await window.electronAPI.listContacts(accountId, actionDef.contactType)
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
@@ -848,6 +988,7 @@ export default function DataScanModal({
     actionDef.contactType,
     isPageInboxAction,
     isZaloGroupMembersAction,
+    isZaloRemarketingCustomersAction,
     pageInboxAppliedFilters,
     pageInboxPage,
     showAlert,
@@ -977,7 +1118,26 @@ export default function DataScanModal({
       setPageInboxMessageKeywords(defaults.messageKeywords)
       setPageInboxAppliedFilters(defaults)
     }
+    if (action === ZALO_REMARKETING_CUSTOMERS_ACTION_ID) {
+      const defaults = getPageInboxDateRange('7_days')
+      setZaloRemarketingActionIds([...DEFAULT_ZALO_REMARKETING_ACTION_IDS])
+      setZaloRemarketingActionDropdownOpen(false)
+      setZaloRemarketingDateFrom(defaults.fromDate)
+      setZaloRemarketingDateTo(defaults.toDate)
+    }
   }, [action, hasStatusFilter, initialShowGroupPanel, initialStatusFilter, isPostCommentersAction])
+
+  useEffect(() => {
+    if (!isZaloRemarketingCustomersAction) return
+    setContacts([])
+    setSelectedIds(new Set())
+  }, [
+    accountId,
+    isZaloRemarketingCustomersAction,
+    zaloRemarketingActionIds,
+    zaloRemarketingDateFrom,
+    zaloRemarketingDateTo
+  ])
 
   useEffect(() => {
     loadCachedContacts()
@@ -1199,9 +1359,17 @@ export default function DataScanModal({
       getContactInfo(contact),
       getContactStatusLabel(contact),
       isZaloGroupMembersAction ? getZaloGroupMemberRoleLabel(contact) : '',
+      isZaloRemarketingCustomersAction ? [
+        getZaloRemarketingPhone(contact),
+        getZaloRemarketingGroupName(contact),
+        getZaloRemarketingActionName(contact),
+        getZaloRemarketingLatestStatus(contact),
+        getZaloRemarketingLatestLog(contact),
+        getZaloRemarketingRecipientStatus(contact)
+      ].join(' ') : '',
       showGroupApprovalColumn ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [isPageInboxAction, isZaloGroupMembersAction, search, showGroupApprovalColumn, visibleContacts])
+  }, [isPageInboxAction, isZaloGroupMembersAction, isZaloRemarketingCustomersAction, search, showGroupApprovalColumn, visibleContacts])
 
   const getContactRowNumber = useCallback((index: number) => (
     isPageInboxAction ? (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE + index + 1 : index + 1
@@ -1277,6 +1445,8 @@ export default function DataScanModal({
   }, [groupContactsByStatus, search, selectedPlatform, showZaloGroupMemberCountColumn])
   const tableColSpan = isPageInboxAction
     ? 7
+    : isZaloRemarketingCustomersAction
+      ? 13
     : 4
       + (showAvatarColumn ? 1 : 0)
       + (showFriendStatusColumn ? 1 : 0)
@@ -1736,6 +1906,12 @@ export default function DataScanModal({
         return
       }
     }
+    if (isZaloRemarketingCustomersAction) {
+      const count = await loadZaloRemarketingCustomers()
+      if (count === null) return
+      showAlert(`Đã tải ${formatCount(count)} data.`, 'success')
+      return
+    }
 
     setScanLoading(true)
     setProgressMessages([])
@@ -1845,30 +2021,76 @@ export default function DataScanModal({
         return
       }
       const rows = [
-        isPageInboxAction ? ['Tên', 'PSID', 'SĐT', 'Ngày nhắn cuối', 'Tin nhắn cuối'] : EXPORT_HEADERS,
-        ...exportContacts.map(contact => isPageInboxAction
-          ? [
+        isPageInboxAction
+          ? ['Tên', 'PSID', 'SĐT', 'Ngày nhắn cuối', 'Tin nhắn cuối']
+          : isZaloRemarketingCustomersAction
+            ? [
+              'Tên Zalo',
+              'Số điện thoại',
+              'Zalo Id',
+              'Tên group',
+              'Hành động của chiến dịch gần nhất',
+              'Số tin đã gửi',
+              'Ngày gửi',
+              'Ngày gửi gần nhất cách hôm nay số ngày',
+              'Trạng thái gửi tin gần nhất',
+              'Ghi chú gửi tin gần nhất',
+              'Trạng thái của người nhận trong tin nhắn gần nhất'
+            ]
+            : EXPORT_HEADERS,
+        ...exportContacts.map(contact => {
+          if (isPageInboxAction) {
+            return [
             contact.name || '',
             contact.uid || '',
             getPageInboxPhone(contact),
             getPageInboxLastMessageAt(contact),
             getPageInboxLastMessage(contact)
-          ]
-          : [
+            ]
+          }
+          if (isZaloRemarketingCustomersAction) {
+            return [
+              contact.name || '',
+              getZaloRemarketingPhone(contact),
+              contact.uid || '',
+              getZaloRemarketingGroupName(contact),
+              getZaloRemarketingActionName(contact),
+              getZaloRemarketingSentCount(contact),
+              getZaloRemarketingLatestDate(contact),
+              getZaloRemarketingDaysSinceLatest(contact),
+              getZaloRemarketingLatestStatus(contact),
+              getZaloRemarketingLatestLog(contact),
+              getZaloRemarketingRecipientStatus(contact)
+            ]
+          }
+          return [
             contact.name || '',
             contact.uid || contact.url || ''
-          ])
+          ]
+        })
       ]
       const sheet = utils.aoa_to_sheet(rows)
       sheet['!cols'] = [
         { wch: 24 },
-        { wch: isPageInboxAction ? 28 : 48 },
+        { wch: isPageInboxAction ? 28 : isZaloRemarketingCustomersAction ? 16 : 48 },
         ...(isPageInboxAction
           ? [
             { wch: 16 },
             { wch: 20 },
             { wch: 60 }
           ]
+          : isZaloRemarketingCustomersAction
+            ? [
+              { wch: 28 },
+              { wch: 24 },
+              { wch: 32 },
+              { wch: 12 },
+              { wch: 18 },
+              { wch: 18 },
+              { wch: 20 },
+              { wch: 40 },
+              { wch: 34 }
+            ]
           : [])
       ]
       const workbook = utils.book_new()
@@ -1968,7 +2190,7 @@ export default function DataScanModal({
                 className="stepper-input"
                 value={accountId}
                 onChange={event => setAccountId(event.target.value ? Number(event.target.value) : '')}
-                disabled={scanLoading}
+                disabled={scanLoading || lockAccount}
               >
                 <option value="">Chọn tài khoản</option>
                 {platformAccounts.map(account => (
@@ -2231,6 +2453,85 @@ export default function DataScanModal({
             </div>
           )}
 
+          {isZaloRemarketingCustomersAction && (
+            <div className="data-scan-zalo-remarketing-controls">
+              <div className="stepper-form-group">
+                <label>Chọn hành động gửi tin nhắn</label>
+                <div className="data-scan-zalo-remarketing-action-dropdown" ref={zaloRemarketingActionDropdownRef}>
+                  <button
+                    type="button"
+                    className={`data-scan-zalo-remarketing-action-trigger${zaloRemarketingActionDropdownOpen ? ' is-open' : ''}`}
+                    onClick={() => setZaloRemarketingActionDropdownOpen(prev => !prev)}
+                    disabled={loading}
+                    aria-expanded={zaloRemarketingActionDropdownOpen}
+                    title={zaloRemarketingActionFilterLabel}
+                  >
+                    <span>{zaloRemarketingActionFilterLabel}</span>
+                    <ChevronDown size={15} />
+                  </button>
+
+                  {zaloRemarketingActionDropdownOpen && (
+                    <div className="data-scan-zalo-remarketing-action-menu">
+                      <button
+                        type="button"
+                        className={`data-scan-zalo-remarketing-action-option is-all${zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length ? ' selected' : ''}`}
+                        onClick={toggleAllZaloRemarketingActionFilters}
+                        role="menuitemcheckbox"
+                        aria-checked={zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length}
+                      >
+                        <span className="data-scan-zalo-remarketing-action-check">
+                          {zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length && <Check size={14} />}
+                        </span>
+                        <span className="data-scan-zalo-remarketing-action-label">Tất cả</span>
+                      </button>
+                      <div className="data-scan-zalo-remarketing-action-divider" />
+                      {ZALO_REMARKETING_ACTION_FILTER_OPTIONS.map(option => {
+                        const selected = zaloRemarketingActionIds.includes(option.value)
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`data-scan-zalo-remarketing-action-option${selected ? ' selected' : ''}`}
+                            onClick={() => toggleZaloRemarketingActionFilter(option.value)}
+                            role="menuitemcheckbox"
+                            aria-checked={selected}
+                          >
+                            <span className="data-scan-zalo-remarketing-action-check">
+                              {selected && <Check size={12} />}
+                            </span>
+                            <span className="data-scan-zalo-remarketing-action-label">{option.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="stepper-form-group">
+                <label>Từ ngày</label>
+                <input
+                  type="date"
+                  className="stepper-input"
+                  value={zaloRemarketingDateFrom}
+                  onChange={event => setZaloRemarketingDateFrom(event.target.value)}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="stepper-form-group">
+                <label>Đến ngày</label>
+                <input
+                  type="date"
+                  className="stepper-input"
+                  value={zaloRemarketingDateTo}
+                  onChange={event => setZaloRemarketingDateTo(event.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="data-scan-toolbar">
             <div className="data-scan-range">
               <span>Chọn từ STT</span>
@@ -2263,6 +2564,8 @@ export default function DataScanModal({
                   placeholder={
                     isPageInboxAction
                       ? 'Tìm theo tên, PSID hoặc SĐT...'
+                      : isZaloRemarketingCustomersAction
+                        ? 'Tìm theo tên, Zalo Id, SĐT, trạng thái...'
                       : showLinkColumn
                         ? 'Tìm theo tên, UID hoặc link...'
                         : 'Tìm theo tên hoặc UID...'
@@ -2282,6 +2585,8 @@ export default function DataScanModal({
                   className="btn btn-primary data-scan-load-button"
                   onClick={handleLoadData}
                   disabled={
+                    loading
+                    ||
                     !accountId
                     || (isPostCommentersAction && !postCommentersUrl.trim())
                     || (isPageInboxAction && !pageInboxPageUid)
@@ -2361,6 +2666,22 @@ export default function DataScanModal({
                     />
                   </th>
                   <th style={{ width: 64 }}>STT</th>
+                  {isZaloRemarketingCustomersAction ? (
+                    <>
+                      <th>Tên Zalo</th>
+                      <th>Số điện thoại</th>
+                      <th>Zalo Id</th>
+                      <th>Tên group</th>
+                      <th>Hành động của chiến dịch gần nhất</th>
+                      <th>Số tin đã gửi</th>
+                      <th>Ngày gửi</th>
+                      <th>Ngày gửi gần nhất cách hôm nay số ngày</th>
+                      <th>Trạng thái gửi tin gần nhất</th>
+                      <th>Ghi chú gửi tin gần nhất</th>
+                      <th>Trạng thái của người nhận trong tin nhắn gần nhất</th>
+                    </>
+                  ) : (
+                    <>
                   {showAvatarColumn && <th className="data-scan-avatar-col">Ảnh đại diện</th>}
                   <th>Tên</th>
                   <th>{isPageInboxAction ? 'PSID' : 'UID'}</th>
@@ -2377,6 +2698,8 @@ export default function DataScanModal({
                   {showFriendStatusColumn && <th>Bạn bè</th>}
                   {actionDef.contactType === 'group' && <th>Tham gia</th>}
                   {showGroupApprovalColumn && <th>Duyệt bài</th>}
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -2410,61 +2733,101 @@ export default function DataScanModal({
                         />
                       </td>
                       <td>{rowNumber}</td>
-                      {showAvatarColumn && <td className="data-scan-avatar-col">{renderContactAvatar(contact)}</td>}
-                      <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
-                        {contact.name || '-'}
-                      </td>
-                      <td className="data-scan-text-cell data-scan-uid-cell" title={contact.uid || undefined}>
-                        {contact.uid || '-'}
-                      </td>
-                      {isPageInboxAction ? (
+                      {isZaloRemarketingCustomersAction ? (
                         <>
-                          <td className="data-scan-text-cell data-scan-phone-cell" title={getPageInboxPhone(contact) || undefined}>
-                            {getPageInboxPhone(contact) || '-'}
+                          <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
+                            {contact.name || '-'}
                           </td>
-                          <td className="data-scan-text-cell data-scan-message-cell" title={getPageInboxLastMessage(contact) || undefined}>
-                            {getPageInboxLastMessage(contact) || '-'}
+                          <td className="data-scan-text-cell data-scan-phone-cell" title={getZaloRemarketingPhone(contact) || undefined}>
+                            {getZaloRemarketingPhone(contact) || '-'}
                           </td>
-                          <td className="data-scan-text-cell data-scan-date-cell" title={getPageInboxLastMessageAt(contact) || undefined}>
-                            {getPageInboxLastMessageAt(contact) || '-'}
+                          <td className="data-scan-text-cell data-scan-uid-cell" title={contact.uid || undefined}>
+                            {contact.uid || '-'}
+                          </td>
+                          <td className="data-scan-text-cell" title={getZaloRemarketingGroupName(contact) || undefined}>
+                            {getZaloRemarketingGroupName(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell" title={getZaloRemarketingActionName(contact) || undefined}>
+                            {getZaloRemarketingActionName(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-number-cell">
+                            {formatCount(getZaloRemarketingSentCount(contact))}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-date-cell" title={getZaloRemarketingLatestDate(contact) || undefined}>
+                            {getZaloRemarketingLatestDate(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-number-cell">
+                            {getZaloRemarketingDaysSinceLatest(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell" title={getZaloRemarketingLatestStatus(contact) || undefined}>
+                            {getZaloRemarketingLatestStatus(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-message-cell" title={getZaloRemarketingLatestLog(contact) || undefined}>
+                            {getZaloRemarketingLatestLog(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell" title={getZaloRemarketingRecipientStatus(contact) || undefined}>
+                            {getZaloRemarketingRecipientStatus(contact) || '-'}
                           </td>
                         </>
-                      ) : null}
-                      {showLinkColumn && (
-                        <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
-                          {contact.url || '-'}
-                        </td>
-                      )}
-                      {showZaloGroupMemberCountColumn && (
-                        <td className="data-scan-text-cell data-scan-number-cell" title={formatZaloGroupTotalMember(contact)}>
-                          {formatZaloGroupTotalMember(contact)}
-                        </td>
-                      )}
-                      {showGroupMemberRoleColumn && (
-                        <td>
-                          <span className="data-scan-status-badge">
-                            {getZaloGroupMemberRoleLabel(contact)}
-                          </span>
-                        </td>
-                      )}
-                      {showFriendStatusColumn && (
-                        <td>
-                          <span className={`data-scan-status-badge ${contact.isFriend ? 'is-active' : 'is-muted'}`}>
-                            {getContactStatusLabel(contact)}
-                          </span>
-                        </td>
-                      )}
-                      {actionDef.contactType === 'group' && (
-                        <td>
-                          <span className={`data-scan-status-badge ${contact.isJoined ? 'is-active' : 'is-muted'}`}>
-                            {getContactStatusLabel(contact)}
-                          </span>
-                        </td>
-                      )}
-                      {showGroupApprovalColumn && (
-                        <td>
-                          <span className="data-scan-status-badge">{getGroupApprovalStatus(contact)}</span>
-                        </td>
+                      ) : (
+                        <>
+                          {showAvatarColumn && <td className="data-scan-avatar-col">{renderContactAvatar(contact)}</td>}
+                          <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
+                            {contact.name || '-'}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-uid-cell" title={contact.uid || undefined}>
+                            {contact.uid || '-'}
+                          </td>
+                          {isPageInboxAction ? (
+                            <>
+                              <td className="data-scan-text-cell data-scan-phone-cell" title={getPageInboxPhone(contact) || undefined}>
+                                {getPageInboxPhone(contact) || '-'}
+                              </td>
+                              <td className="data-scan-text-cell data-scan-message-cell" title={getPageInboxLastMessage(contact) || undefined}>
+                                {getPageInboxLastMessage(contact) || '-'}
+                              </td>
+                              <td className="data-scan-text-cell data-scan-date-cell" title={getPageInboxLastMessageAt(contact) || undefined}>
+                                {getPageInboxLastMessageAt(contact) || '-'}
+                              </td>
+                            </>
+                          ) : null}
+                          {showLinkColumn && (
+                            <td className="data-scan-text-cell data-scan-link-cell" title={contact.url || undefined}>
+                              {contact.url || '-'}
+                            </td>
+                          )}
+                          {showZaloGroupMemberCountColumn && (
+                            <td className="data-scan-text-cell data-scan-number-cell" title={formatZaloGroupTotalMember(contact)}>
+                              {formatZaloGroupTotalMember(contact)}
+                            </td>
+                          )}
+                          {showGroupMemberRoleColumn && (
+                            <td>
+                              <span className="data-scan-status-badge">
+                                {getZaloGroupMemberRoleLabel(contact)}
+                              </span>
+                            </td>
+                          )}
+                          {showFriendStatusColumn && (
+                            <td>
+                              <span className={`data-scan-status-badge ${contact.isFriend ? 'is-active' : 'is-muted'}`}>
+                                {getContactStatusLabel(contact)}
+                              </span>
+                            </td>
+                          )}
+                          {actionDef.contactType === 'group' && (
+                            <td>
+                              <span className={`data-scan-status-badge ${contact.isJoined ? 'is-active' : 'is-muted'}`}>
+                                {getContactStatusLabel(contact)}
+                              </span>
+                            </td>
+                          )}
+                          {showGroupApprovalColumn && (
+                            <td>
+                              <span className="data-scan-status-badge">{getGroupApprovalStatus(contact)}</span>
+                            </td>
+                          )}
+                        </>
                       )}
                     </tr>
                     )
