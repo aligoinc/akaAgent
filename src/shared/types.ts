@@ -352,7 +352,7 @@ export interface CampaignExtraSettings {
   findDataGoalDailyLimit?: number
   findDataRerunEnabled?: boolean
   findDataRerunAfterHours?: number
-  multiDailyTimeSlotsEnabled?: boolean // Đăng bài profile/page: chạy nhiều khung giờ trong cùng ngày
+  multiDailyTimeSlotsEnabled?: boolean // Profile/page/Zalo friend/group: chạy nhiều khung giờ trong cùng ngày
   multiDailyTimeSlots?: string         // Danh sách HH:mm, cách nhau bởi dấu phẩy
   isFindPostByKeywords?: boolean
   postKeywords?: string
