@@ -1,4 +1,4 @@
-import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloSessionCredentials, EmailAccountConfig } from '../../shared/types'
+import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -183,6 +183,9 @@ export class SupabaseService {
   ) { return accountContactRepo.upsertZaloGroupMemberContacts(input) }
   listZaloGroupMemberContacts(accountId: number, zaloGroupId: string) {
     return accountContactRepo.listZaloGroupMemberContacts(accountId, zaloGroupId)
+  }
+  listZaloRemarketingCustomers(accountId: number, query?: ZaloRemarketingCustomerListQuery) {
+    return campaignRepo.listZaloRemarketingCustomers(accountId, query)
   }
   upsertGroupPostContactStatus(
     input: Parameters<typeof accountContactRepo.upsertGroupPostContactStatus>[0]

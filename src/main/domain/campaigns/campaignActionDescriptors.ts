@@ -16,6 +16,7 @@ const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
+const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 
@@ -103,12 +104,14 @@ function isActionCheckEnabledForCampaign(campaign: Campaign, actionCode: string)
     case 'zalo_message_stranger':
       return (
         campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID ||
-        campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
+        campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
+        campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
       ) && extra.enableMessage === true
     case 'zalo_add_friend':
       return (
         campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID ||
-        campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
+        campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
+        campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
       ) && extra.enableAddFriend === true
     case 'zalo_tag_contact':
     case 'zalo_change_alias':
@@ -208,6 +211,12 @@ export function getCampaignActionDescriptors(
       if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
       break
     case ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID:
+      if (extra.enableMessage) {
+        actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
+      }
+      if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
+      break
+    case ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID:
       if (extra.enableMessage) {
         actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
       }
