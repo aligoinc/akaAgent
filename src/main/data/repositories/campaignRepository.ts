@@ -48,7 +48,9 @@ const ZALO_REMARKETING_SOURCE_ACTION_IDS = [
   ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
 ]
 const ZALO_REMARKETING_MESSAGE_ACTION_CODES = ['zalo_message_stranger', 'zalo_message_friend']
-const ZALO_REMARKETING_DEFAULT_LIMIT = 5000
+const ZALO_REMARKETING_DETAIL_FETCH_CHUNK = 1000
+const ZALO_REMARKETING_PAGE_DEFAULT_LIMIT = 100
+const ZALO_REMARKETING_PAGE_MAX_LIMIT = 20000
 const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
   '0162': '032',
   '0163': '033',
@@ -1294,13 +1296,18 @@ async function loadZaloRemarketingInputMap(inputDataIds: number[]): Promise<Map<
   const ids = uniquePositiveIds(inputDataIds)
   if (ids.length === 0) return new Map()
 
-  const { data, error } = await client()
-    .from('auto_campaign_input_data')
-    .select('id, name, uid, phone, email, info1, info2, info3, info4, info5')
-    .in('id', ids)
+  const rows: Record<string, unknown>[] = []
+  for (const chunk of chunkArray(ids, 1000)) {
+    const { data, error } = await client()
+      .from('auto_campaign_input_data')
+      .select('id, name, uid, phone, email, info1, info2, info3, info4, info5')
+      .in('id', chunk)
 
-  if (error) throw new Error(`Failed to list Zalo remarketing input data: ${error.message}`)
-  return new Map((data || []).map(row => [
+    if (error) throw new Error(`Failed to list Zalo remarketing input data: ${error.message}`)
+    rows.push(...((data || []) as Record<string, unknown>[]))
+  }
+
+  return new Map(rows.map(row => [
     Number(row.id),
     {
       id: Number(row.id),
@@ -1328,6 +1335,16 @@ function getZaloRemarketingContactPhone(extraData: unknown): string {
   ))
 }
 
+function normalizeAkaBizTagIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(
+    value
+      .map(item => Number(item))
+      .filter(item => Number.isFinite(item) && item > 0)
+      .map(item => Math.floor(item))
+  ))
+}
+
 interface ZaloRemarketingLookup {
   nameByUid: Map<string, string>
   originalNameByUid: Map<string, string>
@@ -1336,6 +1353,7 @@ interface ZaloRemarketingLookup {
   recipientStatusByUid: Map<string, string>
   isFriendByUid: Map<string, boolean>
   genderByUid: Map<string, number | string | null>
+  akaBizTagIdsByUid: Map<string, number[]>
 }
 
 async function loadZaloRemarketingLookup(
@@ -1353,7 +1371,8 @@ async function loadZaloRemarketingLookup(
     groupNameByUid: new Map<string, string>(),
     recipientStatusByUid: new Map<string, string>(),
     isFriendByUid: new Map<string, boolean>(),
-    genderByUid: new Map<string, number | string | null>()
+    genderByUid: new Map<string, number | string | null>(),
+    akaBizTagIdsByUid: new Map<string, number[]>()
   }
   if (normalizedUids.length === 0) return empty
 
@@ -1365,6 +1384,7 @@ async function loadZaloRemarketingLookup(
   const recipientStatusByUid = new Map<string, string>()
   const isFriendByUid = new Map<string, boolean>()
   const genderByUid = new Map<string, number | string | null>()
+  const akaBizTagIdsByUid = new Map<string, number[]>()
   const chunkSize = 100
 
   for (let i = 0; i < normalizedUids.length; i += chunkSize) {
@@ -1408,7 +1428,7 @@ async function loadZaloRemarketingLookup(
     const chunk = normalizedUids.slice(i, i + chunkSize)
     const { data, error } = await client()
       .from('auto_account_contacts')
-      .select('uid, name, is_friend, extra_data')
+      .select('uid, name, is_friend, extra_data, akabiz_tag_ids')
       .eq('account_id', accountId)
       .eq('staff_id', staffId)
       .eq('contact_type', 'person')
@@ -1424,9 +1444,11 @@ async function loadZaloRemarketingLookup(
       const phone = getZaloRemarketingContactPhone(extra)
       const groupId = firstText(extra.zaloGroupId, extra.zalo_group_id)
       const isFriend = record.is_friend
+      const akaBizTagIds = normalizeAkaBizTagIds(record.akabiz_tag_ids)
       if (uid && name) nameByUid.set(uid, name)
       if (uid && phone && !phoneByUid.has(uid)) phoneByUid.set(uid, phone)
       if (uid && groupId && !contactGroupIdByUid.has(uid)) contactGroupIdByUid.set(uid, groupId)
+      if (uid && akaBizTagIds.length > 0) akaBizTagIdsByUid.set(uid, akaBizTagIds)
       if (uid && typeof isFriend === 'boolean') {
         if (isFriend) {
           isFriendByUid.set(uid, true)
@@ -1471,7 +1493,8 @@ async function loadZaloRemarketingLookup(
     groupNameByUid: new Map(),
     recipientStatusByUid,
     isFriendByUid,
-    genderByUid
+    genderByUid,
+    akaBizTagIdsByUid
   }
 
   const groupNameById = new Map<string, string>()
@@ -1504,7 +1527,8 @@ async function loadZaloRemarketingLookup(
     groupNameByUid,
     recipientStatusByUid,
     isFriendByUid,
-    genderByUid
+    genderByUid,
+    akaBizTagIdsByUid
   }
 }
 
@@ -1541,10 +1565,64 @@ function getZaloRemarketingDetailContext(
   }
 }
 
-export async function listZaloRemarketingCustomers(
+function clampZaloRemarketingOffset(value: unknown): number {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function clampZaloRemarketingLimit(value: unknown, fallback = ZALO_REMARKETING_PAGE_DEFAULT_LIMIT): number {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.min(ZALO_REMARKETING_PAGE_MAX_LIMIT, parsed)
+}
+
+function normalizeOptionalZaloRemarketingLimit(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  return clampZaloRemarketingLimit(value)
+}
+
+function normalizeZaloRemarketingIds(values: unknown): number[] {
+  if (!Array.isArray(values)) return []
+  return Array.from(new Set(
+    values
+      .map(value => Number(value))
+      .filter(value => Number.isFinite(value) && value > 0)
+  ))
+}
+
+function zaloRemarketingContactMatchesSearch(contact: AutoAccountContact, search: string): boolean {
+  if (!search) return true
+  const extra = contact.extraData || {}
+  return [
+    contact.name,
+    contact.uid,
+    extra.phone,
+    extra.phoneNumber,
+    extra.phone_number,
+    extra.mobilePhone,
+    extra.mobile_phone
+  ].join(' ').toLocaleLowerCase('vi-VN').includes(search)
+}
+
+function filterZaloRemarketingContacts(
+  contacts: AutoAccountContact[],
+  query: ZaloRemarketingCustomerListQuery
+): AutoAccountContact[] {
+  const ids = normalizeZaloRemarketingIds(query.ids)
+  const idSet = ids.length > 0 ? new Set(ids) : null
+  const excludeIds = new Set(normalizeZaloRemarketingIds(query.excludeIds))
+  const search = textValue(query.search).toLocaleLowerCase('vi-VN')
+  return contacts.filter(contact => {
+    if (idSet && !idSet.has(contact.id)) return false
+    if (excludeIds.has(contact.id)) return false
+    return zaloRemarketingContactMatchesSearch(contact, search)
+  })
+}
+
+async function buildZaloRemarketingCustomers(
   accountId: number,
   query: ZaloRemarketingCustomerListQuery = {}
-): Promise<ContactListResult> {
+): Promise<AutoAccountContact[]> {
   const u = requireCurrentUser()
   const normalizedAccountId = Number(accountId)
   if (!Number.isFinite(normalizedAccountId) || normalizedAccountId <= 0) {
@@ -1578,33 +1656,36 @@ export async function listZaloRemarketingCustomers(
   ))
   const campaignMap = await loadZaloRemarketingCampaignMap(normalizedAccountId, u.staffId, actionIds)
   const campaignIds = Array.from(campaignMap.keys())
-  if (campaignIds.length === 0) return { contacts: [], total: 0 }
+  if (campaignIds.length === 0) return []
 
   const startIso = dateInputToVietnamIso(textValue(query.dateFrom))
   const endIso = dateInputToVietnamIso(textValue(query.dateTo), true)
-  const limit = Math.min(
-    20000,
-    Math.max(1, Math.floor(Number(query.limit || ZALO_REMARKETING_DEFAULT_LIMIT)))
-  )
 
-  let detailQuery = client()
-    .from('auto_campaign_details')
-    .select('id, input_data_id, campaign_id, account_id, action_code, action_name, status, error_code, log, data, created_at')
-    .eq('account_id', normalizedAccountId)
-    .eq('is_delete', false)
-    .in('campaign_id', campaignIds)
-    .in('action_code', ZALO_REMARKETING_MESSAGE_ACTION_CODES)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(limit)
+  const details: ZaloRemarketingDetailRecord[] = []
+  let detailFrom = 0
+  while (true) {
+    let detailQuery = client()
+      .from('auto_campaign_details')
+      .select('id, input_data_id, campaign_id, account_id, action_code, action_name, status, error_code, log, data, created_at')
+      .eq('account_id', normalizedAccountId)
+      .eq('is_delete', false)
+      .in('campaign_id', campaignIds)
+      .in('action_code', ZALO_REMARKETING_MESSAGE_ACTION_CODES)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(detailFrom, detailFrom + ZALO_REMARKETING_DETAIL_FETCH_CHUNK - 1)
 
-  if (startIso) detailQuery = detailQuery.gte('created_at', startIso)
-  if (endIso) detailQuery = detailQuery.lt('created_at', endIso)
+    if (startIso) detailQuery = detailQuery.gte('created_at', startIso)
+    if (endIso) detailQuery = detailQuery.lt('created_at', endIso)
 
-  const { data: detailRows, error: detailError } = await detailQuery
-  if (detailError) throw new Error(`Failed to list Zalo remarketing customers: ${detailError.message}`)
+    const { data: detailRows, error: detailError } = await detailQuery
+    if (detailError) throw new Error(`Failed to list Zalo remarketing customers: ${detailError.message}`)
 
-  const details = (detailRows || []) as ZaloRemarketingDetailRecord[]
+    details.push(...((detailRows || []) as ZaloRemarketingDetailRecord[]))
+    if (!detailRows || detailRows.length < ZALO_REMARKETING_DETAIL_FETCH_CHUNK) break
+    detailFrom += ZALO_REMARKETING_DETAIL_FETCH_CHUNK
+  }
+
   const inputMap = await loadZaloRemarketingInputMap(
     details.map(row => Number(row.input_data_id)).filter(Number.isFinite)
   )
@@ -1654,6 +1735,7 @@ export async function listZaloRemarketingCustomers(
     const recipientStatus = lookup.recipientStatusByUid.get(uid) || ''
     const isFriend = lookup.isFriendByUid.get(uid)
     const gender = lookup.genderByUid.has(uid) ? lookup.genderByUid.get(uid) ?? null : null
+    const akaBizTagIds = lookup.akaBizTagIdsByUid.get(uid) || []
     const existing = rowsByUid.get(key)
     if (existing) {
       existing.extraData.sentCount = Number(existing.extraData.sentCount || 0) + 1
@@ -1677,6 +1759,9 @@ export async function listZaloRemarketingCustomers(
       }
       if (isFriend !== undefined) {
         existing.isFriend = isFriend
+      }
+      if ((!existing.akaBizTagIds || existing.akaBizTagIds.length === 0) && akaBizTagIds.length > 0) {
+        existing.akaBizTagIds = akaBizTagIds
       }
       continue
     }
@@ -1710,13 +1795,36 @@ export async function listZaloRemarketingCustomers(
         originalName,
         gender
       },
+      akaBizTagIds,
       isFriend,
       isDelete: false
     })
   }
 
-  const contacts = Array.from(rowsByUid.values())
-  return { contacts, total: contacts.length }
+  return filterZaloRemarketingContacts(Array.from(rowsByUid.values()), query)
+}
+
+export async function listZaloRemarketingCustomers(
+  accountId: number,
+  query: ZaloRemarketingCustomerListQuery = {}
+): Promise<ContactListResult> {
+  const filtered = await buildZaloRemarketingCustomers(accountId, query)
+  const offset = clampZaloRemarketingOffset(query.offset)
+  const limit = clampZaloRemarketingLimit(query.limit)
+  return {
+    contacts: filtered.slice(offset, offset + limit),
+    total: filtered.length
+  }
+}
+
+export async function exportZaloRemarketingCustomers(
+  accountId: number,
+  query: ZaloRemarketingCustomerListQuery = {}
+): Promise<AutoAccountContact[]> {
+  const filtered = await buildZaloRemarketingCustomers(accountId, query)
+  const offset = clampZaloRemarketingOffset(query.offset)
+  const limit = normalizeOptionalZaloRemarketingLimit(query.limit)
+  return limit === null ? filtered : filtered.slice(offset, offset + limit)
 }
 
 async function countPendingCampaignInputData(campaignId: number): Promise<number> {

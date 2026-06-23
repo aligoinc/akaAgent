@@ -1,4 +1,4 @@
-import { AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ZaloAccount } from '../../shared/types'
+import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ZaloAccount } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   return {
@@ -241,6 +241,9 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     uid: row.uid as string | undefined,
     url: row.url as string | undefined,
     extraData: row.extra_data as Record<string, unknown> | undefined,
+    akaBizTagIds: Array.isArray(row.akabiz_tag_ids)
+      ? (row.akabiz_tag_ids as unknown[]).map(Number).filter(id => Number.isFinite(id) && id > 0)
+      : [],
     zaloUserId: (row.zalo_user_id as number | null | undefined) ?? null,
     zaloGroupId: (row.zalo_group_id as number | null | undefined) ?? null,
     isFriend: (row.is_friend as boolean | null) ?? false,
@@ -249,6 +252,19 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapAkaBizContactTagFromDB(row: Record<string, unknown>): AkaBizContactTag {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    contactCount: row.contact_count as number | undefined,
+    isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: (row.organization_id as number | null | undefined) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }

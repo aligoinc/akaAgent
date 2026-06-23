@@ -1,4 +1,4 @@
-import { ActionLimitConfig, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery } from '../../shared/types'
+import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -9,6 +9,7 @@ import * as accountContactRepo from '../data/repositories/accountContactReposito
 import * as accountActionRepo from '../data/repositories/accountActionRepository'
 import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
 import * as contentTemplateRepo from '../data/repositories/contentTemplateRepository'
+import * as contactTagRepo from '../data/repositories/contactTagRepository'
 import * as emailNotificationRepo from '../data/repositories/emailNotificationRepository'
 import * as reportRepo from '../data/repositories/reportRepository'
 import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogRepository'
@@ -163,6 +164,21 @@ export class SupabaseService {
 
   // =========== CONTACTS ===========
   listContacts(accountId: number, contactType?: ContactType) { return accountContactRepo.listContacts(accountId, contactType) }
+  listContactsPage(accountId: number, query?: AccountContactListQuery) {
+    return accountContactRepo.listContactsPage(accountId, query)
+  }
+  exportContactsPage(accountId: number, query?: AccountContactListQuery) {
+    return accountContactRepo.exportContactsPage(accountId, query)
+  }
+  appendZaloTagsToExistingContacts(
+    accountId: number,
+    contactType: ContactType,
+    uids: string[],
+    tags: Array<{ id: number | string; name?: string | null }>
+  ) { return accountContactRepo.appendZaloTagsToExistingContacts(accountId, contactType, uids, tags) }
+  syncZaloLabelMemberships(accountId: number, labels: Parameters<typeof accountContactRepo.syncZaloLabelMemberships>[1]) {
+    return accountContactRepo.syncZaloLabelMemberships(accountId, labels)
+  }
   getGroupContactByTarget(accountId: number, targetUrl: string | undefined | null) {
     return accountContactRepo.getGroupContactByTarget(accountId, targetUrl)
   }
@@ -184,11 +200,17 @@ export class SupabaseService {
   upsertZaloGroupMemberContacts(
     input: accountContactRepo.ZaloGroupMemberUpsertInput
   ) { return accountContactRepo.upsertZaloGroupMemberContacts(input) }
-  listZaloGroupMemberContacts(accountId: number, zaloGroupId: string) {
-    return accountContactRepo.listZaloGroupMemberContacts(accountId, zaloGroupId)
+  listZaloGroupMemberContacts(accountId: number, query: ZaloGroupMemberContactListQuery) {
+    return accountContactRepo.listZaloGroupMemberContacts(accountId, query)
+  }
+  exportZaloGroupMemberContacts(accountId: number, query: ZaloGroupMemberContactListQuery) {
+    return accountContactRepo.exportZaloGroupMemberContacts(accountId, query)
   }
   listZaloRemarketingCustomers(accountId: number, query?: ZaloRemarketingCustomerListQuery) {
     return campaignRepo.listZaloRemarketingCustomers(accountId, query)
+  }
+  exportZaloRemarketingCustomers(accountId: number, query?: ZaloRemarketingCustomerListQuery) {
+    return campaignRepo.exportZaloRemarketingCustomers(accountId, query)
   }
   upsertGroupPostContactStatus(
     input: Parameters<typeof accountContactRepo.upsertGroupPostContactStatus>[0]
@@ -208,6 +230,24 @@ export class SupabaseService {
   }
   listContactGroupContacts(groupId: number) {
     return accountContactRepo.listContactGroupContacts(groupId)
+  }
+  listAkaBizContactTags() {
+    return contactTagRepo.listAkaBizContactTags()
+  }
+  createAkaBizContactTag(name: string): Promise<AkaBizContactTag> {
+    return contactTagRepo.createAkaBizContactTag(name)
+  }
+  updateAkaBizContactTag(tagId: number, name: string): Promise<AkaBizContactTag> {
+    return contactTagRepo.updateAkaBizContactTag(tagId, name)
+  }
+  deleteAkaBizContactTag(tagId: number) {
+    return contactTagRepo.deleteAkaBizContactTag(tagId)
+  }
+  applyAkaBizTagsToContactTargets(
+    targets: contactTagRepo.AkaBizContactTagTarget[],
+    tagIds: number[]
+  ) {
+    return contactTagRepo.applyAkaBizTagsToContactTargets(targets, tagIds)
   }
   addContactsToGroup(groupId: number, contactIds: number[]) {
     return accountContactRepo.addContactsToGroup(groupId, contactIds)

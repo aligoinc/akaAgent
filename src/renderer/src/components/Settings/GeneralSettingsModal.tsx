@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Ban, CheckCircle2, Edit3, FileText, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { Ban, CheckCircle2, Edit3, FileText, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, Save, Search, Tags, Trash2, X } from 'lucide-react'
 import {
+  AkaBizContactTag,
   AkaBizIntegrationInfo,
   AkaBizIntegrationKind,
   AkaBizIntegrations,
@@ -12,7 +13,7 @@ import {
 import { useUiStore } from '../../stores/uiStore'
 import ZaloFriendBlocklistSettings from './ZaloFriendBlocklistSettings'
 
-export type GeneralSettingsMenu = 'akabiz' | 'templates' | 'emailNotifications' | 'zaloBlocklists'
+export type GeneralSettingsMenu = 'akabiz' | 'templates' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists'
 
 interface GeneralSettingsModalProps {
   initialMenu?: GeneralSettingsMenu
@@ -32,6 +33,11 @@ interface TemplateFormState {
   id: number | null
   name: string
   content: string
+}
+
+interface AkaBizTagFormState {
+  id: number | null
+  name: string
 }
 
 const DEFAULT_EMAIL_NOTIFICATION_SETTINGS: EmailNotificationSettings = {
@@ -110,6 +116,11 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
   const [templateBusy, setTemplateBusy] = useState(false)
   const [templateSearch, setTemplateSearch] = useState('')
   const [templateForm, setTemplateForm] = useState<TemplateFormState>({ id: null, name: '', content: '' })
+  const [akabizTags, setAkaBizTags] = useState<AkaBizContactTag[]>([])
+  const [akabizTagsLoading, setAkaBizTagsLoading] = useState(true)
+  const [akabizTagBusy, setAkaBizTagBusy] = useState(false)
+  const [akabizTagSearch, setAkaBizTagSearch] = useState('')
+  const [akabizTagForm, setAkaBizTagForm] = useState<AkaBizTagFormState>({ id: null, name: '' })
   const [emailSettings, setEmailSettings] = useState<EmailNotificationSettings>(DEFAULT_EMAIL_NOTIFICATION_SETTINGS)
   const [emailRecipientsText, setEmailRecipientsText] = useState('')
   const [emailSettingsLoading, setEmailSettingsLoading] = useState(true)
@@ -157,6 +168,19 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
     }
   }
 
+  const loadAkaBizTags = async () => {
+    if (!window.electronAPI?.listAkaBizContactTags) return
+    setAkaBizTagsLoading(true)
+    try {
+      const rows = await window.electronAPI.listAkaBizContactTags()
+      setAkaBizTags(rows)
+    } catch (err) {
+      showAlert(formatAkaBizError(err, 'Không thể tải tag akaBiz.'), 'error')
+    } finally {
+      setAkaBizTagsLoading(false)
+    }
+  }
+
   const loadEmailSettings = async () => {
     if (!window.electronAPI?.getEmailNotificationSettings) return
     setEmailSettingsLoading(true)
@@ -174,6 +198,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
   useEffect(() => {
     loadIntegrations()
     loadTemplates()
+    loadAkaBizTags()
     loadEmailSettings()
   }, [])
 
@@ -188,6 +213,70 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
   const handleEditTemplate = (template: ContentTemplate) => {
     setTemplateForm({ id: template.id, name: template.name, content: template.content })
     setActiveMenu('templates')
+  }
+
+  const resetAkaBizTagForm = () => {
+    setAkaBizTagForm({ id: null, name: '' })
+  }
+
+  const handleEditAkaBizTag = (tag: AkaBizContactTag) => {
+    setAkaBizTagForm({ id: tag.id, name: tag.name })
+    setActiveMenu('akabizTags')
+  }
+
+  const handleSaveAkaBizTag = async () => {
+    const name = akabizTagForm.name.trim()
+    if (!name) {
+      showAlert('Vui lòng nhập tên tag akaBiz.', 'error')
+      return
+    }
+    if (!window.electronAPI?.createAkaBizContactTag || !window.electronAPI?.updateAkaBizContactTag) {
+      showAlert('Tính năng tag akaBiz chưa sẵn sàng.', 'error')
+      return
+    }
+
+    setAkaBizTagBusy(true)
+    try {
+      if (akabizTagForm.id) {
+        await window.electronAPI.updateAkaBizContactTag(akabizTagForm.id, name)
+        showAlert('Đã cập nhật tag akaBiz.', 'success')
+      } else {
+        await window.electronAPI.createAkaBizContactTag(name)
+        showAlert('Đã tạo tag akaBiz.', 'success')
+      }
+      resetAkaBizTagForm()
+      await loadAkaBizTags()
+      window.dispatchEvent(new Event('akabiz-contact-tags-updated'))
+    } catch (err) {
+      showAlert(formatAkaBizError(err, 'Không thể lưu tag akaBiz.'), 'error')
+    } finally {
+      setAkaBizTagBusy(false)
+    }
+  }
+
+  const handleDeleteAkaBizTag = (tag: AkaBizContactTag) => {
+    if (!window.electronAPI?.deleteAkaBizContactTag) {
+      showAlert('Tính năng xoá tag akaBiz chưa sẵn sàng.', 'error')
+      return
+    }
+    showConfirm(
+      `Bạn có muốn xoá tag akaBiz "${tag.name}" không?`,
+      async () => {
+        setAkaBizTagBusy(true)
+        try {
+          await window.electronAPI.deleteAkaBizContactTag(tag.id)
+          if (akabizTagForm.id === tag.id) resetAkaBizTagForm()
+          await loadAkaBizTags()
+          window.dispatchEvent(new Event('akabiz-contact-tags-updated'))
+          showAlert('Đã xoá tag akaBiz.', 'success')
+        } catch (err) {
+          showAlert(formatAkaBizError(err, 'Không thể xoá tag akaBiz.'), 'error')
+        } finally {
+          setAkaBizTagBusy(false)
+        }
+      },
+      { title: 'Xoá tag akaBiz', confirmText: 'Xoá', variant: 'danger' }
+    )
   }
 
   const handleSaveTemplate = async () => {
@@ -380,6 +469,11 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
     )
     : templates
 
+  const normalizedAkaBizTagSearch = akabizTagSearch.trim().toLowerCase()
+  const filteredAkaBizTags = normalizedAkaBizTagSearch
+    ? akabizTags.filter(tag => tag.name.toLowerCase().includes(normalizedAkaBizTagSearch))
+    : akabizTags
+
   const renderTemplatesContent = () => (
     <div className="content-template-settings">
       <div className="content-template-editor">
@@ -554,6 +648,87 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
     </div>
   )
 
+  const renderAkaBizTagsContent = () => (
+    <div className="content-template-settings akabiz-tag-settings">
+      <div className="content-template-editor akabiz-tag-editor">
+        <div className="content-template-editor-head">
+          <div className="content-template-title">
+            {akabizTagForm.id ? 'Sửa tag akaBiz' : 'Thêm tag akaBiz'}
+          </div>
+          {akabizTagForm.id && (
+            <button type="button" className="btn btn-ghost" onClick={resetAkaBizTagForm} disabled={akabizTagBusy}>
+              Hủy sửa
+            </button>
+          )}
+        </div>
+        <div className="akabiz-tag-form-row">
+          <div className="content-template-field akabiz-tag-name-field">
+            <label>Tên tag</label>
+            <input
+              className="stepper-input"
+              value={akabizTagForm.name}
+              onChange={event => setAkaBizTagForm(prev => ({ ...prev, name: event.target.value }))}
+              placeholder="Ví dụ: Khách quan tâm"
+              disabled={akabizTagBusy}
+            />
+          </div>
+          <button type="button" className="btn btn-primary akabiz-tag-save-button" onClick={handleSaveAkaBizTag} disabled={akabizTagBusy}>
+            <Plus size={15} />
+            <span>{akabizTagBusy ? 'Đang lưu...' : akabizTagForm.id ? 'Lưu thay đổi' : 'Thêm tag'}</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="content-template-list-head">
+        <div className="content-template-title">Danh sách tag</div>
+        <div className="content-template-search">
+          <Search size={15} />
+          <input
+            value={akabizTagSearch}
+            onChange={event => setAkaBizTagSearch(event.target.value)}
+            placeholder="Tìm tag akaBiz"
+          />
+        </div>
+      </div>
+
+      <div className="content-template-table-wrap">
+        <table className="campaign-grid content-template-table">
+          <thead>
+            <tr>
+              <th>Tên tag</th>
+              <th>Số contact</th>
+              <th>Ngày tạo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {akabizTagsLoading ? (
+              <tr><td colSpan={4} className="text-center text-secondary">Đang tải...</td></tr>
+            ) : filteredAkaBizTags.length === 0 ? (
+              <tr><td colSpan={4} className="text-center text-secondary">Chưa có tag akaBiz.</td></tr>
+            ) : filteredAkaBizTags.map(tag => (
+              <tr key={tag.id}>
+                <td className="content-template-name">{tag.name}</td>
+                <td>{tag.contactCount || 0}</td>
+                <td>{tag.createdAt ? new Date(tag.createdAt).toLocaleDateString('vi-VN') : '-'}</td>
+                <td>
+                  <div className="content-template-row-actions">
+                    <button type="button" className="btn-icon" title="Sửa tag" onClick={() => handleEditAkaBizTag(tag)} disabled={akabizTagBusy}>
+                      <Edit3 size={15} />
+                    </button>
+                    <button type="button" className="btn-icon danger" title="Xoá tag" onClick={() => handleDeleteAkaBizTag(tag)} disabled={akabizTagBusy}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+
   return createPortal(
     <div className="modal-overlay general-settings-modal-overlay" onClick={onClose}>
       <div className="general-settings-modal" onClick={event => event.stopPropagation()}>
@@ -582,6 +757,13 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
             >
               <FileText size={15} />
               <span>Mẫu nội dung</span>
+            </button>
+            <button
+              className={`general-settings-nav-item ${activeMenu === 'akabizTags' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('akabizTags')}
+            >
+              <Tags size={15} />
+              <span>Tag akaBiz</span>
             </button>
             <button
               className={`general-settings-nav-item ${activeMenu === 'emailNotifications' ? 'active' : ''}`}
@@ -707,7 +889,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
                   )
                 })}
               </div>
-            )) : activeMenu === 'templates' ? renderTemplatesContent() : activeMenu === 'emailNotifications' ? renderEmailNotificationContent() : <ZaloFriendBlocklistSettings />}
+            )) : activeMenu === 'templates' ? renderTemplatesContent() : activeMenu === 'akabizTags' ? renderAkaBizTagsContent() : activeMenu === 'emailNotifications' ? renderEmailNotificationContent() : <ZaloFriendBlocklistSettings />}
           </section>
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
   ActionLimitConfig,
   AkaBizCampaignListItem,
   AkaBizCampaignListKind,
+  AkaBizContactTag,
   AkaBizIntegrations,
   AutoAccountContact,
   AutoAccountContactGroup,
@@ -1107,6 +1108,11 @@ export default function CampaignFormModal({
     enableZaloTag: campaign?.extraSettings?.enableZaloTag ?? false,
     zaloTagId: campaign?.extraSettings?.zaloTagId ?? '',
     zaloTagName: campaign?.extraSettings?.zaloTagName || '',
+    enableAkaBizTag: campaign?.extraSettings?.enableAkaBizTag ?? false,
+    akaBizTagIds: getCampaignIdList(campaign?.extraSettings?.akaBizTagIds),
+    akaBizTagNames: Array.isArray(campaign?.extraSettings?.akaBizTagNames)
+      ? campaign.extraSettings.akaBizTagNames.map(name => String(name || '').trim())
+      : [] as string[],
     enableZaloAlias: campaign?.extraSettings?.enableZaloAlias ?? false,
     zaloAliasTemplate: campaign?.extraSettings?.zaloAliasTemplate || getDefaultZaloAliasTemplate(initialActionId),
     zaloMessageSendMode: (campaign?.extraSettings?.zaloMessageSendMode || 'normal') as ZaloMessageSendMode,
@@ -1214,6 +1220,8 @@ export default function CampaignFormModal({
   const [zaloLabelsLoading, setZaloLabelsLoading] = useState(false)
   const [zaloLabelsSyncing, setZaloLabelsSyncing] = useState(false)
   const [zaloLabelsError, setZaloLabelsError] = useState('')
+  const [akaBizContactTags, setAkaBizContactTags] = useState<AkaBizContactTag[]>([])
+  const [akaBizContactTagsLoading, setAkaBizContactTagsLoading] = useState(false)
   const [zaloFriendBlocklists, setZaloFriendBlocklists] = useState<AutoAccountContactGroup[]>([])
   const [zaloFriendBlocklistsLoading, setZaloFriendBlocklistsLoading] = useState(false)
   const [internalCampaignDrafts, setInternalCampaignDrafts] = useState<InternalCampaignDraft[]>([])
@@ -1246,6 +1254,7 @@ export default function CampaignFormModal({
   const isZaloMessageGroupCampaign = formData.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
   const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
+  const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
   const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
   const isPageInboxMessageCampaign = formData.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
@@ -2102,6 +2111,32 @@ export default function CampaignFormModal({
     }
   }
 
+  const loadAkaBizContactTags = async () => {
+    if (!window.electronAPI?.listAkaBizContactTags) return
+    setAkaBizContactTagsLoading(true)
+    try {
+      const rows = await window.electronAPI.listAkaBizContactTags()
+      setAkaBizContactTags(rows)
+      const activeIds = new Set(rows.map(tag => tag.id))
+      setFormData(prev => {
+        const currentIds = getCampaignIdList(prev.akaBizTagIds)
+        const nextIds = currentIds.filter(id => activeIds.has(id))
+        if (sameNumberList(currentIds, nextIds)) return prev
+        const nextNames = nextIds.map(id => rows.find(tag => tag.id === id)?.name || '')
+        return {
+          ...prev,
+          akaBizTagIds: nextIds,
+          akaBizTagNames: nextNames,
+          enableAkaBizTag: nextIds.length > 0 ? prev.enableAkaBizTag : false
+        }
+      })
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể tải tag akaBiz.'), 'error')
+    } finally {
+      setAkaBizContactTagsLoading(false)
+    }
+  }
+
   const loadAkaBizIntegrations = async () => {
     if (!window.electronAPI?.getAkaBizIntegrations) return
     setAkaBizIntegrationsLoading(true)
@@ -2148,6 +2183,13 @@ export default function CampaignFormModal({
     const handleContentTemplatesUpdated = () => void loadContentTemplates()
     window.addEventListener('content-templates-updated', handleContentTemplatesUpdated)
     return () => window.removeEventListener('content-templates-updated', handleContentTemplatesUpdated)
+  }, [])
+
+  useEffect(() => {
+    void loadAkaBizContactTags()
+    const handleAkaBizContactTagsUpdated = () => void loadAkaBizContactTags()
+    window.addEventListener('akabiz-contact-tags-updated', handleAkaBizContactTagsUpdated)
+    return () => window.removeEventListener('akabiz-contact-tags-updated', handleAkaBizContactTagsUpdated)
   }, [])
 
   useEffect(() => {
@@ -2721,6 +2763,13 @@ export default function CampaignFormModal({
           return label?.text || formData.zaloFriendSourceTagNames[tagIndex] || ''
         })
         : []
+      const selectedAkaBizTagIds = supportsAkaBizContactTags && formData.enableAkaBizTag
+        ? getCampaignIdList(formData.akaBizTagIds)
+        : []
+      const selectedAkaBizTagNames = selectedAkaBizTagIds.map((id, tagIndex) => {
+        const tag = akaBizContactTags.find(item => item.id === id)
+        return tag?.name || formData.akaBizTagNames[tagIndex] || ''
+      })
 
       return {
         campaignPayload: {
@@ -2802,6 +2851,9 @@ export default function CampaignFormModal({
             enableZaloTag: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloTag : false,
             zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
             zaloTagName: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagName : '',
+            enableAkaBizTag: supportsAkaBizContactTags ? formData.enableAkaBizTag : false,
+            akaBizTagIds: selectedAkaBizTagIds,
+            akaBizTagNames: selectedAkaBizTagNames,
             enableZaloAlias: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloAlias : false,
             zaloAliasTemplate: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloAlias ? formData.zaloAliasTemplate.trim() : '',
             zaloFriendTargetMode: isZaloMessageFriendCampaign ? formData.zaloFriendTargetMode : 'selected',
@@ -2946,6 +2998,10 @@ export default function CampaignFormModal({
         showAlert('Nội dung kết bạn không được quá 150 ký tự.', 'error')
         return
       }
+      if (supportsAkaBizContactTags && formData.enableAkaBizTag && getCampaignIdList(formData.akaBizTagIds).length === 0) {
+        showAlert('Vui lòng chọn tag akaBiz cần gắn.', 'error')
+        return
+      }
       if (!isZaloShareMessageMode && formData.enableZaloTag && !formData.zaloTagId) {
         showAlert('Vui lòng chọn tag Zalo cần gắn.', 'error')
         return
@@ -2964,6 +3020,10 @@ export default function CampaignFormModal({
         showAlert('Vui lòng chọn danh sách không gửi tin Zalo.', 'error')
         return
       }
+      if (supportsAkaBizContactTags && formData.enableAkaBizTag && getCampaignIdList(formData.akaBizTagIds).length === 0) {
+        showAlert('Vui lòng chọn tag akaBiz cần gắn.', 'error')
+        return
+      }
       if (!isZaloShareMessageMode && formData.enableZaloTag && !formData.zaloTagId) {
         showAlert('Vui lòng chọn tag Zalo cần gắn.', 'error')
         return
@@ -2972,6 +3032,10 @@ export default function CampaignFormModal({
         showAlert('Vui lòng nhập template đổi tên Zalo.', 'error')
         return
       }
+    }
+    if (isZaloMessageGroupCampaign && supportsAkaBizContactTags && formData.enableAkaBizTag && getCampaignIdList(formData.akaBizTagIds).length === 0) {
+      showAlert('Vui lòng chọn tag akaBiz cần gắn.', 'error')
+      return
     }
     if (showContentSection && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
       return
@@ -4631,6 +4695,92 @@ export default function CampaignFormModal({
     )
   }
 
+  const renderAkaBizContactTagOption = () => {
+    if (!supportsAkaBizContactTags) return null
+
+    const selected = new Set(getCampaignIdList(formData.akaBizTagIds))
+    const updateSelection = (id: number, checked: boolean) => {
+      const next = new Set(selected)
+      if (checked) next.add(id)
+      else next.delete(id)
+      const ids = akaBizContactTags
+        .map(tag => tag.id)
+        .filter(tagId => next.has(tagId))
+      const names = ids.map(tagId => akaBizContactTags.find(tag => tag.id === tagId)?.name || '')
+      setFormData(p => ({ ...p, akaBizTagIds: ids, akaBizTagNames: names }))
+    }
+
+    return (
+      <>
+        <div className="stepper-form-group">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={formData.enableAkaBizTag}
+              onChange={e => setFormData(p => ({
+                ...p,
+                enableAkaBizTag: e.target.checked,
+                akaBizTagIds: e.target.checked ? p.akaBizTagIds : [],
+                akaBizTagNames: e.target.checked ? p.akaBizTagNames : []
+              }))}
+            />
+            <span>Kiêm gắn tag akaBiz</span>
+          </label>
+        </div>
+
+        {formData.enableAkaBizTag && (
+          <div className="stepper-form-group" style={{ maxWidth: 420 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <label style={{ marginBottom: 0 }}>Tag akaBiz</label>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+                onClick={() => onOpenGeneralSettings?.('akabizTags')}
+                disabled={!onOpenGeneralSettings}
+                title={onOpenGeneralSettings ? 'Quản lý tag akaBiz' : 'Không thể mở quản lý tag akaBiz trong form này'}
+              >
+                <Settings2 size={14} />
+                <span>Quản lý</span>
+              </button>
+            </div>
+
+            {akaBizContactTagsLoading ? (
+              <div className="schedule-hint">Đang tải tag akaBiz...</div>
+            ) : akaBizContactTags.length === 0 ? (
+              <div className="schedule-hint">Chưa có tag akaBiz.</div>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: 10,
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 6,
+                  maxHeight: 180,
+                  overflowY: 'auto'
+                }}
+              >
+                {akaBizContactTags.map(tag => (
+                  <label key={tag.id} className="schedule-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(tag.id)}
+                      disabled={akaBizContactTagsLoading}
+                      onChange={e => updateSelection(tag.id, e.target.checked)}
+                    />
+                    <span>{tag.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </>
+    )
+  }
+
   const renderZaloMessagePhoneActionOptions = () => (
     <>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Chọn hành động</div>
@@ -4691,7 +4841,7 @@ export default function CampaignFormModal({
               zaloTagName: e.target.checked ? p.zaloTagName : ''
             }))}
           />
-          <span>Kiêm gắn tag</span>
+          <span>Kiêm gắn tag Zalo</span>
         </label>
       </div>
       {formData.enableZaloTag && (
@@ -4729,6 +4879,10 @@ export default function CampaignFormModal({
           />
         </div>
       )}
+
+      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+      {renderAkaBizContactTagOption()}
     </>
   )
 
@@ -4744,7 +4898,10 @@ export default function CampaignFormModal({
             enableZaloTag: e.target.checked ? false : p.enableZaloTag,
             zaloTagId: e.target.checked ? '' : p.zaloTagId,
             zaloTagName: e.target.checked ? '' : p.zaloTagName,
-            enableZaloAlias: e.target.checked ? false : p.enableZaloAlias
+            enableZaloAlias: e.target.checked ? false : p.enableZaloAlias,
+            enableAkaBizTag: e.target.checked ? false : p.enableAkaBizTag,
+            akaBizTagIds: e.target.checked ? [] : p.akaBizTagIds,
+            akaBizTagNames: e.target.checked ? [] : p.akaBizTagNames
           }))}
         />
         <span>Gửi dạng chia sẻ tin nhắn, gửi nhanh cho 50 người mỗi lần (không áp dụng cá nhân hoá nội dung tin nhắn)</span>
@@ -4855,6 +5012,10 @@ export default function CampaignFormModal({
 
       {renderZaloMessageShareModeOption()}
 
+      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+      {renderAkaBizContactTagOption()}
+
       {!isZaloShareMessageMode && (
         <>
           <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
@@ -4871,7 +5032,7 @@ export default function CampaignFormModal({
                   zaloTagName: e.target.checked ? p.zaloTagName : ''
                 }))}
               />
-              <span>Kiêm gắn tag</span>
+              <span>Kiêm gắn tag Zalo</span>
             </label>
           </div>
           {formData.enableZaloTag && renderZaloTagSelector({
@@ -4915,6 +5076,10 @@ export default function CampaignFormModal({
   const renderZaloMessageGroupActionOptions = () => (
     <>
       {renderZaloMessageShareModeOption()}
+
+      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+      {renderAkaBizContactTagOption()}
     </>
   )
 

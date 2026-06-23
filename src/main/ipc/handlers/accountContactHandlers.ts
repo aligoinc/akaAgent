@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { IPC_EVENTS, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
+import { AccountContactListQuery, IPC_EVENTS, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import * as localContactRepo from '../../data/repositories/localAccountContactRepository'
@@ -75,14 +75,19 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
     return supabase.listContacts(accountId, contactType as any)
   })
 
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_PAGED, async (_, accountId: number, query: AccountContactListQuery = {}) => {
+    await ensureContactAccess(supabase, accountId, query.contactType)
+    return supabase.listContactsPage(accountId, query)
+  })
+
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_PAGE_INBOX, async (_, accountId: number, query = {}) => {
     await ensureContactAccess(supabase, accountId, 'page_inbox_customer')
     return localContactRepo.listPageInboxContacts(accountId, query as any)
   })
 
-  ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_ZALO_GROUP_MEMBERS, async (_, accountId: number, zaloGroupId: string) => {
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_ZALO_GROUP_MEMBERS, async (_, accountId: number, query: ZaloGroupMemberContactListQuery = {}) => {
     await ensureContactAccess(supabase, accountId, 'zalo_tag')
-    return supabase.listZaloGroupMemberContacts(accountId, zaloGroupId)
+    return supabase.listZaloGroupMemberContacts(accountId, query)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_ZALO_REMARKETING_CUSTOMERS, async (_, accountId: number, query: ZaloRemarketingCustomerListQuery = {}) => {
@@ -93,6 +98,21 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
   ipcMain.handle(IPC_EVENTS.CONTACTS_EXPORT_PAGE_INBOX, async (_, accountId: number, query = {}) => {
     await ensureContactAccess(supabase, accountId, 'page_inbox_customer')
     return localContactRepo.exportPageInboxContacts(accountId, query as any)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACTS_EXPORT_PAGED, async (_, accountId: number, query: AccountContactListQuery = {}) => {
+    await ensureContactAccess(supabase, accountId, query.contactType)
+    return supabase.exportContactsPage(accountId, query)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACTS_EXPORT_ZALO_GROUP_MEMBERS, async (_, accountId: number, query: ZaloGroupMemberContactListQuery = {}) => {
+    await ensureContactAccess(supabase, accountId, 'zalo_tag')
+    return supabase.exportZaloGroupMemberContacts(accountId, query)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACTS_EXPORT_ZALO_REMARKETING_CUSTOMERS, async (_, accountId: number, query: ZaloRemarketingCustomerListQuery = {}) => {
+    await ensureContactAccess(supabase, accountId, 'zalo_tag')
+    return supabase.exportZaloRemarketingCustomers(accountId, query)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_DELETE, async (_, accountId: number, contactType: string) => {
@@ -123,6 +143,22 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
 
   ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_LIST_CONTACTS, async (_, groupId: number) => {
     return supabase.listContactGroupContacts(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.AKABIZ_CONTACT_TAGS_LIST, async () => {
+    return supabase.listAkaBizContactTags()
+  })
+
+  ipcMain.handle(IPC_EVENTS.AKABIZ_CONTACT_TAGS_CREATE, async (_, name: string) => {
+    return supabase.createAkaBizContactTag(name)
+  })
+
+  ipcMain.handle(IPC_EVENTS.AKABIZ_CONTACT_TAGS_UPDATE, async (_, tagId: number, name: string) => {
+    return supabase.updateAkaBizContactTag(tagId, name)
+  })
+
+  ipcMain.handle(IPC_EVENTS.AKABIZ_CONTACT_TAGS_DELETE, async (_, tagId: number) => {
+    return supabase.deleteAkaBizContactTag(tagId)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_ADD_CONTACTS, async (_, groupId: number, contactIds: number[]) => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import jsQR from 'jsqr'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, Info, Link2, Maximize2, Minimize2, Plus, QrCode, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
-import { AutoAccountContact, AutoAccountContactGroup, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberScanMode } from '../../../../shared/types'
+import { AccountContactListQuery, AkaBizContactTag, AutoAccountContact, AutoAccountContactGroup, ContactStatusFilter, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanMode, ZaloRemarketingCustomerListQuery } from '../../../../shared/types'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
 import DataScanGroupManagementModal from './DataScanGroupManagementModal'
@@ -13,7 +13,6 @@ import type { AuthEntitlements } from '../../../../shared/types'
 
 export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers'
 type DataScanPlatform = 'facebook' | 'zalo'
-type ContactStatusFilter = 'active' | 'inactive' | 'all'
 type PageInboxTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 interface PageInboxAppliedFilters {
   pageUid: string
@@ -37,7 +36,6 @@ const ZALO_REMARKETING_CUSTOMERS_ACTION_ID: DataScanAction = 'zalo_remarketing_c
 const DEFAULT_POST_COMMENTER_LIMIT = 100
 const PAGE_INBOX_PAGE_SIZE = 100
 const DEFAULT_PAGE_INBOX_TIME_PRESET: PageInboxTimePreset = '30_days'
-const DEFAULT_ZALO_REMARKETING_LIMIT = 5000
 
 const ZALO_REMARKETING_ACTION_FILTER_OPTIONS = [
   { value: 'zalo_message_phone', label: 'Zalo - Gửi tin nhắn đến SĐT (Kiêm kết bạn)' },
@@ -306,6 +304,147 @@ const renderContactAvatar = (contact: AutoAccountContact) => {
   )
 }
 
+const normalizeContactAkaBizTagIds = (contact: AutoAccountContact) => (
+  Array.isArray(contact.akaBizTagIds)
+    ? Array.from(new Set(
+      contact.akaBizTagIds
+        .map(id => Number(id))
+        .filter(id => Number.isFinite(id) && id > 0)
+    ))
+    : []
+)
+
+const getContactAkaBizTagLabels = (
+  contact: AutoAccountContact,
+  tagNameById: Map<number, string>
+) => normalizeContactAkaBizTagIds(contact).map(id => tagNameById.get(id) || `#${id}`)
+
+const formatContactAkaBizTags = (
+  contact: AutoAccountContact,
+  tagNameById: Map<number, string>
+) => getContactAkaBizTagLabels(contact, tagNameById).join(', ')
+
+const renderAkaBizTagCell = (
+  contact: AutoAccountContact,
+  tagNameById: Map<number, string>
+) => {
+  const labels = getContactAkaBizTagLabels(contact, tagNameById)
+  if (labels.length === 0) return <span className="data-scan-tag-empty">-</span>
+  const visibleLabels = labels.slice(0, 2)
+  const hiddenCount = labels.length - visibleLabels.length
+  return (
+    <div className="data-scan-tag-list" title={labels.join(', ')}>
+      {visibleLabels.map(label => (
+        <span key={label} className="data-scan-tag-chip">{label}</span>
+      ))}
+      {hiddenCount > 0 && <span className="data-scan-tag-chip is-more">+{hiddenCount}</span>}
+    </div>
+  )
+}
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+)
+
+const splitTagText = (value: string) => value
+  .split(/[,\n;]/)
+  .map(item => item.trim())
+  .filter(Boolean)
+
+const addZaloTagLabel = (labels: string[], seen: Set<string>, value: unknown) => {
+  const text = String(value || '').trim()
+  if (!text) return
+  const key = text.toLocaleLowerCase('vi-VN')
+  if (seen.has(key)) return
+  seen.add(key)
+  labels.push(text)
+}
+
+const collectZaloTagLabelsFromValue = (
+  value: unknown,
+  tagNameById: Map<string, string>,
+  labels: string[],
+  seen: Set<string>
+) => {
+  if (value === null || value === undefined) return
+  if (Array.isArray(value)) {
+    for (const item of value) collectZaloTagLabelsFromValue(item, tagNameById, labels, seen)
+    return
+  }
+  if (typeof value === 'object') {
+    const item = toRecord(value)
+    const id = String(item.id || item.labelId || item.label_id || item.tagId || item.tag_id || '').trim()
+    const mapped = id ? tagNameById.get(id) : ''
+    const name = String(item.text || item.name || item.labelName || item.label_name || item.tagName || item.tag_name || '').trim()
+    addZaloTagLabel(labels, seen, mapped || name || (id ? `#${id}` : ''))
+    return
+  }
+
+  const raw = String(value || '').trim()
+  if (!raw) return
+  const pieces = splitTagText(raw)
+  for (const piece of pieces.length > 0 ? pieces : [raw]) {
+    addZaloTagLabel(labels, seen, tagNameById.get(piece) || piece)
+  }
+}
+
+const getContactZaloTagLabels = (
+  contact: AutoAccountContact,
+  tagNameById: Map<string, string>
+) => {
+  const extra = toRecord(contact.extraData)
+  const sources = [
+    extra.zaloTagIds,
+    extra.zalo_tag_ids,
+    extra.labelIds,
+    extra.label_ids,
+    extra.tagIds,
+    extra.tag_ids,
+    extra.zaloTags,
+    extra.zalo_tags,
+    extra.labels,
+    extra.tagNames,
+    extra.tag_names,
+    extra.zaloTagNames,
+    extra.zalo_tag_names,
+    extra.labelNames,
+    extra.label_names,
+    toRecord(extra.rawPayload).labelIds,
+    toRecord(extra.rawPayload).labels,
+    toRecord(extra.rawPayload).tagIds,
+    toRecord(extra.rawPayload).tags
+  ]
+  const labels: string[] = []
+  const seen = new Set<string>()
+  for (const source of sources) collectZaloTagLabelsFromValue(source, tagNameById, labels, seen)
+  return labels
+}
+
+const formatContactZaloTags = (
+  contact: AutoAccountContact,
+  tagNameById: Map<string, string>
+) => getContactZaloTagLabels(contact, tagNameById).join(', ')
+
+const renderZaloTagCell = (
+  contact: AutoAccountContact,
+  tagNameById: Map<string, string>
+) => {
+  const labels = getContactZaloTagLabels(contact, tagNameById)
+  if (labels.length === 0) return <span className="data-scan-tag-empty">-</span>
+  const visibleLabels = labels.slice(0, 2)
+  const hiddenCount = labels.length - visibleLabels.length
+  return (
+    <div className="data-scan-tag-list" title={labels.join(', ')}>
+      {visibleLabels.map(label => (
+        <span key={label} className="data-scan-tag-chip is-zalo">{label}</span>
+      ))}
+      {hiddenCount > 0 && <span className="data-scan-tag-chip is-more">+{hiddenCount}</span>}
+    </div>
+  )
+}
+
 const normalizeFacebookPostUrlForCompare = (value: unknown) => {
   const raw = String(value || '').trim()
   if (!raw) return ''
@@ -496,12 +635,87 @@ const getExtraText = (contact: AutoAccountContact, key: string) => {
   return value === null || value === undefined ? '' : String(value).trim()
 }
 
+const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
+  '0162': '032',
+  '0163': '033',
+  '0164': '034',
+  '0165': '035',
+  '0166': '036',
+  '0167': '037',
+  '0168': '038',
+  '0169': '039',
+  '0120': '070',
+  '0121': '079',
+  '0122': '077',
+  '0126': '076',
+  '0128': '078',
+  '0123': '083',
+  '0124': '084',
+  '0125': '085',
+  '0127': '081',
+  '0129': '082',
+  '0186': '056',
+  '0188': '058',
+  '0199': '059'
+}
+
+const phoneInputText = (value: unknown): string => {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.trunc(value).toString() : ''
+  }
+  const text = String(value).trim()
+  if (/^[+-]?\d+(?:\.\d+)?e[+-]?\d+$/i.test(text)) {
+    const parsed = Number(text)
+    return Number.isFinite(parsed) ? Math.trunc(parsed).toString() : text
+  }
+  return text
+}
+
+const normalizeVietnamMobilePhone = (value: unknown): string => {
+  let digits = phoneInputText(value).replace(/\D+/g, '')
+  if (!digits) return ''
+
+  if (digits.startsWith('0084') && digits.length >= 13) {
+    digits = `0${digits.slice(4)}`
+  } else if (digits.startsWith('84') && digits.length >= 11) {
+    digits = `0${digits.slice(2)}`
+  }
+  if (digits.length === 9 && /^[35789]/.test(digits)) {
+    digits = `0${digits}`
+  }
+  if (digits.length === 11) {
+    const mappedPrefix = OLD_VN_MOBILE_PREFIX_MAP[digits.slice(0, 4)]
+    if (mappedPrefix) digits = `${mappedPrefix}${digits.slice(4)}`
+  }
+
+  return /^0[35789]\d{8}$/.test(digits) ? digits : ''
+}
+
+const getContactPhoneText = (contact: AutoAccountContact) => {
+  const extra = toRecord(contact.extraData)
+  const rawPayload = toRecord(extra.rawPayload)
+  const value = [
+    extra.phone,
+    extra.phoneNumber,
+    extra.phone_number,
+    extra.mobilePhone,
+    extra.mobile_phone,
+    rawPayload.phone,
+    rawPayload.phoneNumber,
+    rawPayload.phone_number,
+    rawPayload.mobilePhone,
+    rawPayload.mobile_phone
+  ].find(item => String(item || '').trim())
+  return normalizeVietnamMobilePhone(value)
+}
+
 const getExtraNumber = (contact: AutoAccountContact, key: string) => {
   const value = Number(contact.extraData?.[key])
   return Number.isFinite(value) ? value : null
 }
 
-const getZaloRemarketingPhone = (contact: AutoAccountContact) => getExtraText(contact, 'phone')
+const getZaloRemarketingPhone = (contact: AutoAccountContact) => getContactPhoneText(contact)
 const getZaloRemarketingGroupName = (contact: AutoAccountContact) => getExtraText(contact, 'groupName')
 const getZaloRemarketingActionName = (contact: AutoAccountContact) => getExtraText(contact, 'latestCampaignActionName')
 const getZaloRemarketingSentCount = (contact: AutoAccountContact) => getExtraNumber(contact, 'sentCount') ?? 0
@@ -518,13 +732,6 @@ const getGroupApprovalStatus = (contact: AutoAccountContact) => {
   if (contact.requiresPostApproval === true) return 'Chờ duyệt bài'
   if (contact.requiresPostApproval === false) return 'Không cần duyệt'
   return 'Chưa biết'
-}
-
-const contactHasSourcePostUrl = (contact: AutoAccountContact, normalizedPostUrl: string) => {
-  const extra = contact.extraData || {}
-  if (normalizeFacebookPostUrlForCompare(extra.sourcePostUrl) === normalizedPostUrl) return true
-  if (!Array.isArray(extra.sourcePostUrls)) return false
-  return extra.sourcePostUrls.some(value => normalizeFacebookPostUrlForCompare(value) === normalizedPostUrl)
 }
 
 const getContactStatusLabel = (contact: AutoAccountContact) => {
@@ -651,6 +858,8 @@ export default function DataScanModal({
   const [zaloRemarketingDateFrom, setZaloRemarketingDateFrom] = useState(() => getPageInboxDateRange('7_days').fromDate)
   const [zaloRemarketingDateTo, setZaloRemarketingDateTo] = useState(() => getPageInboxDateRange('7_days').toDate)
   const [zaloQrReading, setZaloQrReading] = useState(false)
+  const [zaloTagContacts, setZaloTagContacts] = useState<AutoAccountContact[]>([])
+  const [akaBizContactTags, setAkaBizContactTags] = useState<AkaBizContactTag[]>([])
   const [progressMessages, setProgressMessages] = useState<string[]>([])
   const [minimized, setMinimized] = useState(false)
   const [contactGroups, setContactGroups] = useState<AutoAccountContactGroup[]>([])
@@ -701,6 +910,9 @@ export default function DataScanModal({
   const showZaloGroupMemberCountColumn = actionDef.id === 'zalo_groups'
   const showGroupMemberRoleColumn = isZaloGroupMembersAction
   const showFriendStatusColumn = actionDef.contactType === 'person' && !isZaloGroupMembersAction && !isZaloRemarketingCustomersAction
+  const showZaloPhoneColumn = actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
+  const showZaloTagColumn = actionDef.platform === 'zalo'
+  const showAkaBizTagColumn = actionDef.platform === 'zalo'
   const statusFilterOptions = useMemo(
     () => getStatusFilterOptions(actionDef.contactType),
     [actionDef.contactType]
@@ -719,6 +931,19 @@ export default function DataScanModal({
     () => zaloGroupOptions.filter(group => !!getZaloGroupContactLink(group)),
     [zaloGroupOptions]
   )
+  const akaBizTagNameById = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const tag of akaBizContactTags) map.set(tag.id, tag.name)
+    return map
+  }, [akaBizContactTags])
+  const zaloTagNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const tag of zaloTagContacts) {
+      const uid = String(tag.uid || '').trim()
+      if (uid && tag.name) map.set(uid, tag.name)
+    }
+    return map
+  }, [zaloTagContacts])
   const zaloRemarketingActionFilterLabel = useMemo(() => {
     if (zaloRemarketingActionIds.length === 0) return 'Chọn hành động'
     if (zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length) {
@@ -733,6 +958,42 @@ export default function DataScanModal({
   useEffect(() => {
     loadAccounts()
   }, [loadAccounts])
+
+  const loadAkaBizContactTags = useCallback(async () => {
+    if (!window.electronAPI?.listAkaBizContactTags) return
+    try {
+      const rows = await window.electronAPI.listAkaBizContactTags()
+      if (mountedRef.current) setAkaBizContactTags(rows)
+    } catch (err: any) {
+      console.error('Failed to load akaBiz contact tags:', err)
+      if (mountedRef.current) showAlert(err?.message || 'Không thể tải tag akaBiz.', 'error')
+    }
+  }, [showAlert])
+
+  useEffect(() => {
+    void loadAkaBizContactTags()
+    const handleAkaBizContactTagsUpdated = () => void loadAkaBizContactTags()
+    window.addEventListener('akabiz-contact-tags-updated', handleAkaBizContactTagsUpdated)
+    return () => window.removeEventListener('akabiz-contact-tags-updated', handleAkaBizContactTagsUpdated)
+  }, [loadAkaBizContactTags])
+
+  const loadZaloTagContacts = useCallback(async () => {
+    if (!window.electronAPI?.listContacts || !accountId || actionDef.platform !== 'zalo') {
+      setZaloTagContacts([])
+      return
+    }
+    try {
+      const rows = await window.electronAPI.listContacts(accountId, 'zalo_tag')
+      if (mountedRef.current) setZaloTagContacts(rows)
+    } catch (err: any) {
+      console.error('Failed to load Zalo tags:', err)
+      if (mountedRef.current) showAlert(err?.message || 'Không thể tải tag Zalo.', 'error')
+    }
+  }, [accountId, actionDef.platform, showAlert])
+
+  useEffect(() => {
+    void loadZaloTagContacts()
+  }, [loadZaloTagContacts])
 
   useEffect(() => {
     mountedRef.current = true
@@ -777,6 +1038,35 @@ export default function DataScanModal({
     }
   }, [action, availableActions])
 
+  const getAccountContactListQuery = useCallback((overrides: Partial<AccountContactListQuery> = {}): AccountContactListQuery => ({
+    contactType: actionDef.contactType,
+    statusFilter: hasStatusFilter ? statusFilter : 'all',
+    search,
+    sourcePostUrl: isPostCommentersAction ? normalizedPostCommentersUrl : undefined,
+    ...overrides
+  }), [actionDef.contactType, hasStatusFilter, isPostCommentersAction, normalizedPostCommentersUrl, search, statusFilter])
+
+  const getZaloGroupMemberListQuery = useCallback((overrides: Partial<ZaloGroupMemberContactListQuery> = {}): ZaloGroupMemberContactListQuery => ({
+    zaloGroupId: zaloGroupMemberGroupId,
+    search,
+    ...overrides
+  }), [search, zaloGroupMemberGroupId])
+
+  const getZaloRemarketingListQuery = useCallback((overrides: Partial<ZaloRemarketingCustomerListQuery> = {}): ZaloRemarketingCustomerListQuery => ({
+    campaignActionIds: zaloRemarketingActionIds,
+    dateFrom: zaloRemarketingDateFrom,
+    dateTo: zaloRemarketingDateTo,
+    search,
+    ...overrides
+  }), [search, zaloRemarketingActionIds, zaloRemarketingDateFrom, zaloRemarketingDateTo])
+
+  const resetPagedContactSelection = useCallback(() => {
+    setSelectedIds(new Set())
+    setPageInboxSelectAllMatching(false)
+    setPageInboxSelectedRange(null)
+    setPageInboxExcludedIds(new Set())
+  }, [])
+
   const loadZaloGroupMemberContactsForGroup = useCallback(async (groupId: string) => {
     if (!window.electronAPI || !accountId || !groupId) {
       setContacts([])
@@ -785,10 +1075,15 @@ export default function DataScanModal({
     }
     setLoading(true)
     try {
-      const data = await window.electronAPI.listZaloGroupMemberContacts(accountId, groupId)
+      setPageInboxPage(1)
+      const result = await window.electronAPI.listZaloGroupMemberContacts(accountId, getZaloGroupMemberListQuery({
+        zaloGroupId: groupId,
+        limit: PAGE_INBOX_PAGE_SIZE,
+        offset: 0
+      }))
       if (!mountedRef.current) return
-      setContacts(data)
-      setPageInboxTotal(0)
+      setContacts(result.contacts)
+      setPageInboxTotal(result.total)
       setGroupContactCache({})
     } catch (err: any) {
       console.error('Failed to load Zalo group members:', err)
@@ -798,7 +1093,7 @@ export default function DataScanModal({
     } finally {
       if (mountedRef.current) setLoading(false)
     }
-  }, [accountId, showAlert])
+  }, [accountId, getZaloGroupMemberListQuery, showAlert])
 
   const findLinkedZaloGroupByLink = useCallback((link: string) => {
     const normalized = normalizeZaloGroupLink(link)
@@ -888,14 +1183,13 @@ export default function DataScanModal({
     setLoading(true)
     try {
       const result = await window.electronAPI.listZaloRemarketingCustomers(accountId, {
-        campaignActionIds: zaloRemarketingActionIds,
-        dateFrom: zaloRemarketingDateFrom,
-        dateTo: zaloRemarketingDateTo,
-        limit: DEFAULT_ZALO_REMARKETING_LIMIT
+        ...getZaloRemarketingListQuery(),
+        limit: PAGE_INBOX_PAGE_SIZE,
+        offset: (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE
       })
       if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return null
       setContacts(result.contacts)
-      setPageInboxTotal(0)
+      setPageInboxTotal(result.total)
       setGroupContactCache({})
       return result.total
     } catch (err: any) {
@@ -911,13 +1205,15 @@ export default function DataScanModal({
     }
   }, [
     accountId,
+    getZaloRemarketingListQuery,
+    pageInboxPage,
     showAlert,
     zaloRemarketingActionIds,
     zaloRemarketingDateFrom,
     zaloRemarketingDateTo
   ])
 
-  const loadCachedContacts = useCallback(async () => {
+  const loadCachedContacts = useCallback(async (pageOverride?: number) => {
     if (!window.electronAPI || !accountId) {
       contactsLoadIdRef.current += 1
       setContacts([])
@@ -925,6 +1221,7 @@ export default function DataScanModal({
       setLoading(false)
       return
     }
+    const pageToLoad = pageOverride ?? pageInboxPage
     const loadId = contactsLoadIdRef.current + 1
     contactsLoadIdRef.current = loadId
     setLoading(true)
@@ -945,7 +1242,7 @@ export default function DataScanModal({
           messageFilterMode: pageInboxAppliedFilters.messageFilterMode,
           messageKeywords: pageInboxAppliedFilters.messageKeywords,
           limit: PAGE_INBOX_PAGE_SIZE,
-          offset: (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
         })
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(result.contacts)
@@ -957,20 +1254,38 @@ export default function DataScanModal({
           setPageInboxTotal(0)
           return
         }
-        const data = await window.electronAPI.listZaloGroupMemberContacts(accountId, zaloGroupMemberGroupId)
+        const result = await window.electronAPI.listZaloGroupMemberContacts(accountId, {
+          ...getZaloGroupMemberListQuery(),
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        })
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
-        setContacts(data)
-        setPageInboxTotal(0)
+        setContacts(result.contacts)
+        setPageInboxTotal(result.total)
       } else if (isZaloRemarketingCustomersAction) {
+        const result = await window.electronAPI.listZaloRemarketingCustomers(accountId, {
+          ...getZaloRemarketingListQuery(),
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        })
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
-        setContacts([])
-        setPageInboxTotal(0)
-        return
+        setContacts(result.contacts)
+        setPageInboxTotal(result.total)
       } else {
-        const data = await window.electronAPI.listContacts(accountId, actionDef.contactType)
+        if (isPostCommentersAction && !normalizedPostCommentersUrl) {
+          if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
+          setContacts([])
+          setPageInboxTotal(0)
+          return
+        }
+        const result = await window.electronAPI.listContactsPage(accountId, {
+          ...getAccountContactListQuery(),
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        })
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
-        setContacts(data)
-        setPageInboxTotal(0)
+        setContacts(result.contacts)
+        setPageInboxTotal(result.total)
       }
       setGroupContactCache({})
     } catch (err: any) {
@@ -986,9 +1301,14 @@ export default function DataScanModal({
   }, [
     accountId,
     actionDef.contactType,
+    getAccountContactListQuery,
+    getZaloGroupMemberListQuery,
+    getZaloRemarketingListQuery,
     isPageInboxAction,
+    isPostCommentersAction,
     isZaloGroupMembersAction,
     isZaloRemarketingCustomersAction,
+    normalizedPostCommentersUrl,
     pageInboxAppliedFilters,
     pageInboxPage,
     showAlert,
@@ -1140,6 +1460,22 @@ export default function DataScanModal({
   ])
 
   useEffect(() => {
+    setPageInboxPage(1)
+    setSelectedIds(new Set())
+    setPageInboxSelectAllMatching(false)
+    setPageInboxSelectedRange(null)
+    setPageInboxExcludedIds(new Set())
+  }, [
+    search,
+    statusFilter,
+    normalizedPostCommentersUrl,
+    zaloGroupMemberGroupId,
+    zaloRemarketingActionIds,
+    zaloRemarketingDateFrom,
+    zaloRemarketingDateTo
+  ])
+
+  useEffect(() => {
     loadCachedContacts()
   }, [loadCachedContacts])
 
@@ -1198,7 +1534,7 @@ export default function DataScanModal({
       return
     }
     try {
-      const groups = await window.electronAPI.listContacts(accountId, 'group')
+      const groups = await window.electronAPI.exportContactsPage(accountId, { contactType: 'group' })
       const zaloGroups = groups.filter(group => group.extraData?.platform === 'zalo')
       setZaloGroupOptions(zaloGroups)
     } catch (err: any) {
@@ -1295,13 +1631,17 @@ export default function DataScanModal({
       if (isZaloGroupMembersAction && result.zaloGroupId) {
         setZaloGroupMemberGroupId(String(result.zaloGroupId))
       }
+      if (result.success) {
+        resetPagedContactSelection()
+        setPageInboxPage(1)
+      }
       if (isPageInboxAction) {
         applyPageInboxDraftFilters()
       } else if (isZaloGroupMembersAction && result.zaloGroupId) {
         loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
         void loadZaloGroupOptions()
       } else {
-        loadCachedContacts()
+        loadCachedContacts(result.success ? 1 : undefined)
       }
       loadContactGroups()
 
@@ -1323,6 +1663,7 @@ export default function DataScanModal({
     loadContactGroups,
     loadZaloGroupMemberContactsForGroup,
     loadZaloGroupOptions,
+    resetPagedContactSelection,
     showAlert
   ])
 
@@ -1339,43 +1680,21 @@ export default function DataScanModal({
   }, [actionDef.contactType, isZaloGroupMembersAction, statusFilter])
 
   const actionContacts = useMemo(() => {
-    if (!isPostCommentersAction) return contacts
-    if (!normalizedPostCommentersUrl) return []
-    return contacts.filter(contact => contactHasSourcePostUrl(contact, normalizedPostCommentersUrl))
-  }, [contacts, isPostCommentersAction, normalizedPostCommentersUrl])
+    return contacts
+  }, [contacts])
 
   const visibleContacts = useMemo(() => {
-    return actionContacts.filter(matchesStatusFilter)
-  }, [actionContacts, matchesStatusFilter])
+    return actionContacts
+  }, [actionContacts])
 
   const filteredContacts = useMemo(() => {
-    if (isPageInboxAction) return visibleContacts
-    const query = search.trim().toLocaleLowerCase('vi-VN')
-    if (!query) return visibleContacts
-    return visibleContacts.filter(contact => [
-      contact.name,
-      contact.uid,
-      contact.url,
-      getContactInfo(contact),
-      getContactStatusLabel(contact),
-      isZaloGroupMembersAction ? getZaloGroupMemberRoleLabel(contact) : '',
-      isZaloRemarketingCustomersAction ? [
-        getZaloRemarketingPhone(contact),
-        getZaloRemarketingGroupName(contact),
-        getZaloRemarketingActionName(contact),
-        getZaloRemarketingLatestStatus(contact),
-        getZaloRemarketingLatestLog(contact),
-        getZaloRemarketingRecipientStatus(contact)
-      ].join(' ') : '',
-      showGroupApprovalColumn ? getGroupApprovalStatus(contact) : ''
-    ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [isPageInboxAction, isZaloGroupMembersAction, isZaloRemarketingCustomersAction, search, showGroupApprovalColumn, visibleContacts])
+    return visibleContacts
+  }, [visibleContacts])
 
   const getContactRowNumber = useCallback((index: number) => (
-    isPageInboxAction ? (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE + index + 1 : index + 1
-  ), [isPageInboxAction, pageInboxPage])
+    (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE + index + 1
+  ), [pageInboxPage])
   const isContactSelected = useCallback((contactId: number, rowNumber?: number) => {
-    if (!isPageInboxAction) return selectedIds.has(contactId)
     if (pageInboxSelectAllMatching) return !pageInboxExcludedIds.has(contactId)
     if (pageInboxSelectedRange && rowNumber !== undefined) {
       const inRange = rowNumber >= pageInboxSelectedRange.start && rowNumber <= pageInboxSelectedRange.end
@@ -1383,26 +1702,18 @@ export default function DataScanModal({
     }
     return selectedIds.has(contactId)
   }, [
-    isPageInboxAction,
     pageInboxExcludedIds,
     pageInboxSelectAllMatching,
     pageInboxSelectedRange,
     selectedIds
   ])
-  const allPageInboxMatchingSelected = isPageInboxAction && pageInboxTotal > 0 && pageInboxSelectAllMatching && pageInboxExcludedIds.size === 0
-  const allVisibleSelected = filteredContacts.length > 0 && filteredContacts.every((contact, index) => (
-    isContactSelected(contact.id, getContactRowNumber(index))
-  ))
-  const pageInboxSelectedCount = pageInboxSelectAllMatching
+  const allMatchingSelected = pageInboxTotal > 0 && pageInboxSelectAllMatching && pageInboxExcludedIds.size === 0
+  const pagedSelectedCount = pageInboxSelectAllMatching
     ? Math.max(0, pageInboxTotal - pageInboxExcludedIds.size)
     : pageInboxSelectedRange
       ? Math.max(0, pageInboxSelectedRange.end - pageInboxSelectedRange.start + 1 - pageInboxExcludedIds.size) + selectedIds.size
       : selectedIds.size
-  const currentTotalCount = isPageInboxAction ? pageInboxTotal : filteredContacts.length
-  const selectedContacts = useMemo(
-    () => visibleContacts.filter(contact => selectedIds.has(contact.id)),
-    [selectedIds, visibleContacts]
-  )
+  const currentTotalCount = pageInboxTotal
   const selectedGroupContacts = useMemo(() => {
     const rows: AutoAccountContact[] = []
     selectedGroupIds.forEach(groupId => {
@@ -1410,14 +1721,6 @@ export default function DataScanModal({
     })
     return rows
   }, [groupContactCache, matchesStatusFilter, selectedGroupIds])
-  const rawOutputContacts = useMemo(
-    () => [...selectedContacts, ...selectedGroupContacts],
-    [selectedContacts, selectedGroupContacts]
-  )
-  const outputContacts = useMemo(
-    () => dedupeOnOutput ? dedupeContacts(rawOutputContacts) : rawOutputContacts,
-    [dedupeOnOutput, rawOutputContacts]
-  )
   const activeContactGroup = useMemo(
     () => allContactGroups.find(group => group.id === activeGroupId) || null,
     [activeGroupId, allContactGroups]
@@ -1426,6 +1729,9 @@ export default function DataScanModal({
   const activeGroupShowApprovalColumn = activeGroupContactType === 'group' && selectedPlatform === 'facebook'
   const activeGroupShowAvatarColumn = selectedPlatform === 'zalo'
   const activeGroupShowLinkColumn = selectedPlatform === 'facebook' || (activeGroupContactType === 'group' && selectedPlatform === 'zalo')
+  const activeGroupShowPhoneColumn = selectedPlatform === 'zalo'
+  const activeGroupShowZaloTagColumn = selectedPlatform === 'zalo'
+  const activeGroupShowAkaBizTagColumn = selectedPlatform === 'zalo'
   const groupContactsByStatus = useMemo(
     () => activeGroupContactType === actionDef.contactType ? groupContacts.filter(matchesStatusFilter) : groupContacts,
     [activeGroupContactType, actionDef.contactType, groupContacts, matchesStatusFilter]
@@ -1436,19 +1742,25 @@ export default function DataScanModal({
     return groupContactsByStatus.filter(contact => [
       contact.name,
       contact.uid,
+      getContactPhoneText(contact),
       contact.url,
       getContactInfo(contact),
       getContactStatusLabel(contact),
+      activeGroupShowZaloTagColumn ? formatContactZaloTags(contact, zaloTagNameById) : '',
+      activeGroupShowAkaBizTagColumn ? formatContactAkaBizTags(contact, akaBizTagNameById) : '',
       showZaloGroupMemberCountColumn ? formatZaloGroupTotalMember(contact) : '',
       contact.contactType === 'group' && selectedPlatform === 'facebook' ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
-  }, [groupContactsByStatus, search, selectedPlatform, showZaloGroupMemberCountColumn])
+  }, [activeGroupShowAkaBizTagColumn, activeGroupShowZaloTagColumn, akaBizTagNameById, groupContactsByStatus, search, selectedPlatform, showZaloGroupMemberCountColumn, zaloTagNameById])
   const tableColSpan = isPageInboxAction
     ? 7
     : isZaloRemarketingCustomersAction
-      ? 13
+      ? 13 + (showZaloTagColumn ? 1 : 0) + (showAkaBizTagColumn ? 1 : 0)
     : 4
       + (showAvatarColumn ? 1 : 0)
+      + (showZaloPhoneColumn ? 1 : 0)
+      + (showZaloTagColumn ? 1 : 0)
+      + (showAkaBizTagColumn ? 1 : 0)
       + (showFriendStatusColumn ? 1 : 0)
       + (actionDef.contactType === 'group' ? 1 : 0)
       + (showGroupApprovalColumn ? 1 : 0)
@@ -1457,10 +1769,13 @@ export default function DataScanModal({
       + (showZaloGroupMemberCountColumn ? 1 : 0)
   const groupTableColSpan = 4
     + (activeGroupShowAvatarColumn ? 1 : 0)
+    + (activeGroupShowPhoneColumn ? 1 : 0)
     + (activeGroupContactType === 'person' ? 1 : 0)
     + (activeGroupContactType === 'group' ? 1 : 0)
     + (activeGroupShowApprovalColumn ? 1 : 0)
     + (activeGroupShowLinkColumn ? 1 : 0)
+    + (activeGroupShowZaloTagColumn ? 1 : 0)
+    + (activeGroupShowAkaBizTagColumn ? 1 : 0)
   const currentRenderStart = currentTotalCount > 0 && filteredContacts.length > 0
     ? getContactRowNumber(0)
     : 0
@@ -1479,8 +1794,19 @@ export default function DataScanModal({
   const canSaveGroupModal = modalSelectedGroupIds.size > 0 || (showNewGroupInput && newGroupName.trim().length > 0)
 
   const toggleContact = (id: number, rowNumber?: number) => {
-    if (isPageInboxAction) {
-      if (pageInboxSelectAllMatching) {
+    if (pageInboxSelectAllMatching) {
+      setPageInboxExcludedIds(prev => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+      return
+    }
+
+    if (pageInboxSelectedRange && rowNumber !== undefined) {
+      const inRange = rowNumber >= pageInboxSelectedRange.start && rowNumber <= pageInboxSelectedRange.end
+      if (inRange) {
         setPageInboxExcludedIds(prev => {
           const next = new Set(prev)
           if (next.has(id)) next.delete(id)
@@ -1488,19 +1814,6 @@ export default function DataScanModal({
           return next
         })
         return
-      }
-
-      if (pageInboxSelectedRange && rowNumber !== undefined) {
-        const inRange = rowNumber >= pageInboxSelectedRange.start && rowNumber <= pageInboxSelectedRange.end
-        if (inRange) {
-          setPageInboxExcludedIds(prev => {
-            const next = new Set(prev)
-            if (next.has(id)) next.delete(id)
-            else next.add(id)
-            return next
-          })
-          return
-        }
       }
     }
 
@@ -1513,23 +1826,11 @@ export default function DataScanModal({
   }
 
   const toggleAllVisible = () => {
-    if (isPageInboxAction) {
-      if (pageInboxSelectAllMatching && pageInboxExcludedIds.size === 0) {
-        handleClearPageInboxSelection()
-      } else {
-        handleSelectAllPageInboxMatching()
-      }
-      return
+    if (pageInboxSelectAllMatching && pageInboxExcludedIds.size === 0) {
+      handleClearPageInboxSelection()
+    } else {
+      handleSelectAllPageInboxMatching()
     }
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      if (allVisibleSelected) {
-        for (const contact of filteredContacts) next.delete(contact.id)
-      } else {
-        for (const contact of filteredContacts) next.add(contact.id)
-      }
-      return next
-    })
   }
 
   const selectRange = async () => {
@@ -1550,21 +1851,15 @@ export default function DataScanModal({
     setRangeStart(start)
     setRangeEnd(end)
 
-    if (isPageInboxAction) {
-      setPageInboxExcludedIds(new Set())
-      setSelectedIds(new Set())
-      if (start === 1 && end === pageInboxTotal) {
-        setPageInboxSelectedRange(null)
-        setPageInboxSelectAllMatching(true)
-      } else {
-        setPageInboxSelectAllMatching(false)
-        setPageInboxSelectedRange({ start, end })
-      }
-      return
+    setPageInboxExcludedIds(new Set())
+    setSelectedIds(new Set())
+    if (start === 1 && end === pageInboxTotal) {
+      setPageInboxSelectedRange(null)
+      setPageInboxSelectAllMatching(true)
+    } else {
+      setPageInboxSelectAllMatching(false)
+      setPageInboxSelectedRange({ start, end })
     }
-
-    const contactsInRange = filteredContacts.slice(start - 1, end)
-    setSelectedIds(new Set(contactsInRange.map(contact => contact.id)))
   }
 
   const handlePageInboxTimePresetChange = (value: PageInboxTimePreset) => {
@@ -1592,29 +1887,59 @@ export default function DataScanModal({
     setPageInboxSelectAllMatching(false)
   }
 
-  const loadPageInboxSelectedContacts = async () => {
+  const exportCurrentSelection = async (overrides: any = {}) => {
     if (!window.electronAPI || !accountId) return []
-    if (pageInboxSelectAllMatching) {
+    if (isPageInboxAction) {
       return window.electronAPI.exportPageInboxContacts(accountId, {
         ...pageInboxAppliedFilters,
+        ...overrides
+      })
+    }
+    if (isZaloGroupMembersAction) {
+      return window.electronAPI.exportZaloGroupMemberContacts(accountId, {
+        ...getZaloGroupMemberListQuery(),
+        ...overrides
+      })
+    }
+    if (isZaloRemarketingCustomersAction) {
+      return window.electronAPI.exportZaloRemarketingCustomers(accountId, {
+        ...getZaloRemarketingListQuery(),
+        ...overrides
+      })
+    }
+    return window.electronAPI.exportContactsPage(accountId, {
+      ...getAccountContactListQuery(),
+      ...overrides
+    })
+  }
+
+  const loadSelectedContacts = async () => {
+    if (!window.electronAPI || !accountId) return []
+    if (pageInboxSelectAllMatching) {
+      return exportCurrentSelection({
         excludeIds: Array.from(pageInboxExcludedIds)
       })
     }
     if (pageInboxSelectedRange) {
-      const rangeContacts = await window.electronAPI.exportPageInboxContacts(accountId, {
-        ...pageInboxAppliedFilters,
+      const rangeContacts = await exportCurrentSelection({
         excludeIds: Array.from(pageInboxExcludedIds),
         offset: pageInboxSelectedRange.start - 1,
         limit: pageInboxSelectedRange.end - pageInboxSelectedRange.start + 1
       })
       const extraIds = Array.from(selectedIds)
       if (extraIds.length === 0) return rangeContacts
-      const extraContacts = await window.electronAPI.exportPageInboxContacts(accountId, { ids: extraIds })
+      const extraContacts = await exportCurrentSelection({ ids: extraIds })
       return dedupeContacts([...rangeContacts, ...extraContacts])
     }
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return []
-    return window.electronAPI.exportPageInboxContacts(accountId, { ids })
+    return exportCurrentSelection({ ids })
+  }
+
+  const loadOutputContacts = async () => {
+    const selectedContacts = await loadSelectedContacts()
+    const rawContacts = [...selectedContacts, ...selectedGroupContacts]
+    return dedupeOnOutput ? dedupeContacts(rawContacts) : rawContacts
   }
 
   const handleRenameContactGroup = async (group: AutoAccountContactGroup, name: string) => {
@@ -1702,7 +2027,7 @@ export default function DataScanModal({
   }
 
   const handleOpenAddGroupModal = () => {
-    if (selectedContacts.length === 0) {
+    if (pagedSelectedCount === 0) {
       showAlert('Vui lòng tích chọn data trước khi thêm vào nhóm.', 'error')
       return
     }
@@ -1731,6 +2056,7 @@ export default function DataScanModal({
 
   const handleSaveSelectedToGroups = async () => {
     if (!window.electronAPI || !accountId) return
+    const selectedContacts = await loadSelectedContacts()
     const contactIds = selectedContacts.map(contact => contact.id)
     if (contactIds.length === 0) {
       showAlert('Vui lòng tích chọn data trước khi thêm vào nhóm.', 'error')
@@ -1954,13 +2280,15 @@ export default function DataScanModal({
         showAlert(result.error || 'Tải data thất bại.', 'error')
         return
       }
+      resetPagedContactSelection()
+      setPageInboxPage(1)
       if (isPageInboxAction) {
         applyPageInboxDraftFilters()
       } else if (isZaloGroupMembersAction && result.zaloGroupId) {
         await loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
         await loadZaloGroupOptions()
       } else {
-        await loadCachedContacts()
+        await loadCachedContacts(1)
       }
       await loadContactGroups()
       if (wasStopped) return
@@ -2015,37 +2343,46 @@ export default function DataScanModal({
 
   const handleExport = async () => {
     try {
-      const exportContacts = isPageInboxAction ? await loadPageInboxSelectedContacts() : outputContacts
+      const exportContacts = await loadOutputContacts()
       if (exportContacts.length === 0) {
         showAlert('Vui lòng tích chọn data trước khi xuất Excel.', 'error')
         return
       }
+      const getAkaBizTagExportText = (contact: AutoAccountContact) => formatContactAkaBizTags(contact, akaBizTagNameById)
+      const getZaloTagExportText = (contact: AutoAccountContact) => formatContactZaloTags(contact, zaloTagNameById)
+      const headers = isPageInboxAction
+        ? ['Tên', 'PSID', 'SĐT', 'Ngày nhắn cuối', 'Tin nhắn cuối']
+        : isZaloRemarketingCustomersAction
+          ? [
+            'Tên Zalo',
+            'Số điện thoại',
+            'Zalo Id',
+            ...(showZaloTagColumn ? ['Tag Zalo'] : []),
+            ...(showAkaBizTagColumn ? ['Tag akaBiz'] : []),
+            'Tên group',
+            'Hành động của chiến dịch gần nhất',
+            'Số tin đã gửi',
+            'Ngày gửi',
+            'Ngày gửi gần nhất cách hôm nay số ngày',
+            'Trạng thái gửi tin gần nhất',
+            'Ghi chú gửi tin gần nhất',
+            'Trạng thái của người nhận trong tin nhắn gần nhất'
+          ]
+          : [
+            ...(actionDef.platform === 'zalo' ? ['Tên', 'Số điện thoại', 'UID'] : EXPORT_HEADERS),
+            ...(showZaloTagColumn ? ['Tag Zalo'] : []),
+            ...(showAkaBizTagColumn ? ['Tag akaBiz'] : [])
+          ]
       const rows = [
-        isPageInboxAction
-          ? ['Tên', 'PSID', 'SĐT', 'Ngày nhắn cuối', 'Tin nhắn cuối']
-          : isZaloRemarketingCustomersAction
-            ? [
-              'Tên Zalo',
-              'Số điện thoại',
-              'Zalo Id',
-              'Tên group',
-              'Hành động của chiến dịch gần nhất',
-              'Số tin đã gửi',
-              'Ngày gửi',
-              'Ngày gửi gần nhất cách hôm nay số ngày',
-              'Trạng thái gửi tin gần nhất',
-              'Ghi chú gửi tin gần nhất',
-              'Trạng thái của người nhận trong tin nhắn gần nhất'
-            ]
-            : EXPORT_HEADERS,
+        headers,
         ...exportContacts.map(contact => {
           if (isPageInboxAction) {
             return [
-            contact.name || '',
-            contact.uid || '',
-            getPageInboxPhone(contact),
-            getPageInboxLastMessageAt(contact),
-            getPageInboxLastMessage(contact)
+              contact.name || '',
+              contact.uid || '',
+              getPageInboxPhone(contact),
+              getPageInboxLastMessageAt(contact),
+              getPageInboxLastMessage(contact)
             ]
           }
           if (isZaloRemarketingCustomersAction) {
@@ -2053,6 +2390,8 @@ export default function DataScanModal({
               contact.name || '',
               getZaloRemarketingPhone(contact),
               contact.uid || '',
+              ...(showZaloTagColumn ? [getZaloTagExportText(contact)] : []),
+              ...(showAkaBizTagColumn ? [getAkaBizTagExportText(contact)] : []),
               getZaloRemarketingGroupName(contact),
               getZaloRemarketingActionName(contact),
               getZaloRemarketingSentCount(contact),
@@ -2065,34 +2404,47 @@ export default function DataScanModal({
           }
           return [
             contact.name || '',
-            contact.uid || contact.url || ''
+            ...(actionDef.platform === 'zalo'
+              ? [getContactPhoneText(contact), contact.uid || contact.url || '']
+              : [contact.uid || contact.url || '']),
+            ...(showZaloTagColumn ? [getZaloTagExportText(contact)] : []),
+            ...(showAkaBizTagColumn ? [getAkaBizTagExportText(contact)] : [])
           ]
         })
       ]
       const sheet = utils.aoa_to_sheet(rows)
-      sheet['!cols'] = [
-        { wch: 24 },
-        { wch: isPageInboxAction ? 28 : isZaloRemarketingCustomersAction ? 16 : 48 },
-        ...(isPageInboxAction
+      sheet['!cols'] = isPageInboxAction
+        ? [
+          { wch: 24 },
+          { wch: 28 },
+          { wch: 16 },
+          { wch: 20 },
+          { wch: 60 }
+        ]
+        : isZaloRemarketingCustomersAction
           ? [
+            { wch: 24 },
             { wch: 16 },
+            { wch: 28 },
+            ...(showZaloTagColumn ? [{ wch: 28 }] : []),
+            ...(showAkaBizTagColumn ? [{ wch: 28 }] : []),
+            { wch: 24 },
+            { wch: 32 },
+            { wch: 12 },
+            { wch: 18 },
+            { wch: 18 },
             { wch: 20 },
-            { wch: 60 }
+            { wch: 40 },
+            { wch: 34 }
           ]
-          : isZaloRemarketingCustomersAction
-            ? [
-              { wch: 28 },
-              { wch: 24 },
-              { wch: 32 },
-              { wch: 12 },
-              { wch: 18 },
-              { wch: 18 },
-              { wch: 20 },
-              { wch: 40 },
-              { wch: 34 }
-            ]
-          : [])
-      ]
+          : [
+            { wch: 24 },
+            ...(actionDef.platform === 'zalo'
+              ? [{ wch: 16 }, { wch: 48 }]
+              : [{ wch: 48 }]),
+            ...(showZaloTagColumn ? [{ wch: 28 }] : []),
+            ...(showAkaBizTagColumn ? [{ wch: 28 }] : [])
+          ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Sheet1')
       const accountName = sanitizeFileSegment(selectedAccount?.name || 'account')
@@ -2108,7 +2460,7 @@ export default function DataScanModal({
   const handleSelect = async () => {
     if (!onSelect) return
     try {
-      const selected = isPageInboxAction ? await loadPageInboxSelectedContacts() : outputContacts
+      const selected = await loadOutputContacts()
       if (selected.length === 0) {
         showAlert('Vui lòng tích chọn data trước khi chọn.', 'error')
         return
@@ -2564,11 +2916,7 @@ export default function DataScanModal({
                   placeholder={
                     isPageInboxAction
                       ? 'Tìm theo tên, PSID hoặc SĐT...'
-                      : isZaloRemarketingCustomersAction
-                        ? 'Tìm theo tên, Zalo Id, SĐT, trạng thái...'
-                      : showLinkColumn
-                        ? 'Tìm theo tên, UID hoặc link...'
-                        : 'Tìm theo tên hoặc UID...'
+                      : 'Tìm theo tên, UID hoặc SĐT...'
                   }
                 />
               </label>
@@ -2611,36 +2959,32 @@ export default function DataScanModal({
               <span>Lọc trùng dữ liệu khi chọn, xuất excel</span>
             </label>
             <span>
-              {isPageInboxAction
-                ? `${formatCount(pageInboxSelectedCount)} đã tích chọn`
-                : `${formatCount(selectedIds.size)} đã tích chọn`}
+              {`${formatCount(pagedSelectedCount)} đã tích chọn`}
             </span>
             {selectedGroupIds.size > 0 && <span>{selectedGroupIds.size} nhóm đã chọn</span>}
           </div>
 
           <div className="data-scan-pagination">
             <span className="data-scan-pagination-summary">{currentRenderText}</span>
-            {isPageInboxAction && (
-              <>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setPageInboxPage(page => Math.max(1, page - 1))}
-                  disabled={pageInboxPage <= 1 || loading}
-                  title="Trang trước"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span>Trang {Math.min(pageInboxPage, pageInboxPageCount)}/{pageInboxPageCount}</span>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setPageInboxPage(page => Math.min(pageInboxPageCount, page + 1))}
-                  disabled={pageInboxPage >= pageInboxPageCount || loading}
-                  title="Trang sau"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </>
-            )}
+            <>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setPageInboxPage(page => Math.max(1, page - 1))}
+                disabled={pageInboxPage <= 1 || loading}
+                title="Trang trước"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span>Trang {Math.min(pageInboxPage, pageInboxPageCount)}/{pageInboxPageCount}</span>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setPageInboxPage(page => Math.min(pageInboxPageCount, page + 1))}
+                disabled={pageInboxPage >= pageInboxPageCount || loading}
+                title="Trang sau"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </>
           </div>
 
           {progressMessages.length > 0 && (
@@ -2658,11 +3002,11 @@ export default function DataScanModal({
                   <th style={{ width: 44 }}>
                     <input
                       type="checkbox"
-                      checked={isPageInboxAction ? allPageInboxMatchingSelected : allVisibleSelected}
+                      checked={allMatchingSelected}
                       onChange={toggleAllVisible}
                       disabled={filteredContacts.length === 0}
-                      title={isPageInboxAction ? 'Chọn hoặc bỏ chọn tất cả data' : 'Chọn tất cả data đang hiển thị'}
-                      aria-label={isPageInboxAction ? 'Chọn hoặc bỏ chọn tất cả data' : 'Chọn tất cả data đang hiển thị'}
+                      title="Chọn hoặc bỏ chọn tất cả data phù hợp bộ lọc"
+                      aria-label="Chọn hoặc bỏ chọn tất cả data phù hợp bộ lọc"
                     />
                   </th>
                   <th style={{ width: 64 }}>STT</th>
@@ -2671,6 +3015,8 @@ export default function DataScanModal({
                       <th>Tên Zalo</th>
                       <th>Số điện thoại</th>
                       <th>Zalo Id</th>
+                      {showZaloTagColumn && <th>Tag Zalo</th>}
+                      {showAkaBizTagColumn && <th>Tag akaBiz</th>}
                       <th>Tên group</th>
                       <th>Hành động của chiến dịch gần nhất</th>
                       <th>Số tin đã gửi</th>
@@ -2684,7 +3030,10 @@ export default function DataScanModal({
                     <>
                   {showAvatarColumn && <th className="data-scan-avatar-col">Ảnh đại diện</th>}
                   <th>Tên</th>
+                  {showZaloPhoneColumn && <th>Số điện thoại</th>}
                   <th>{isPageInboxAction ? 'PSID' : 'UID'}</th>
+                  {showZaloTagColumn && <th>Tag Zalo</th>}
+                  {showAkaBizTagColumn && <th>Tag akaBiz</th>}
                   {isPageInboxAction ? (
                     <>
                       <th>SĐT</th>
@@ -2744,6 +3093,16 @@ export default function DataScanModal({
                           <td className="data-scan-text-cell data-scan-uid-cell" title={contact.uid || undefined}>
                             {contact.uid || '-'}
                           </td>
+                          {showZaloTagColumn && (
+                            <td className="data-scan-tag-cell">
+                              {renderZaloTagCell(contact, zaloTagNameById)}
+                            </td>
+                          )}
+                          {showAkaBizTagColumn && (
+                            <td className="data-scan-tag-cell">
+                              {renderAkaBizTagCell(contact, akaBizTagNameById)}
+                            </td>
+                          )}
                           <td className="data-scan-text-cell" title={getZaloRemarketingGroupName(contact) || undefined}>
                             {getZaloRemarketingGroupName(contact) || '-'}
                           </td>
@@ -2775,9 +3134,24 @@ export default function DataScanModal({
                           <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
                             {contact.name || '-'}
                           </td>
+                          {showZaloPhoneColumn && (
+                            <td className="data-scan-text-cell data-scan-phone-cell" title={getContactPhoneText(contact) || undefined}>
+                              {getContactPhoneText(contact) || '-'}
+                            </td>
+                          )}
                           <td className="data-scan-text-cell data-scan-uid-cell" title={contact.uid || undefined}>
                             {contact.uid || '-'}
                           </td>
+                          {showZaloTagColumn && (
+                            <td className="data-scan-tag-cell">
+                              {renderZaloTagCell(contact, zaloTagNameById)}
+                            </td>
+                          )}
+                          {showAkaBizTagColumn && (
+                            <td className="data-scan-tag-cell">
+                              {renderAkaBizTagCell(contact, akaBizTagNameById)}
+                            </td>
+                          )}
                           {isPageInboxAction ? (
                             <>
                               <td className="data-scan-text-cell data-scan-phone-cell" title={getPageInboxPhone(contact) || undefined}>
@@ -2870,6 +3244,8 @@ export default function DataScanModal({
             filteredGroupContacts={filteredGroupContacts}
             groupContactsByStatusCount={groupContactsByStatus.length}
             groupTableColSpan={groupTableColSpan}
+            zaloTagNameById={zaloTagNameById}
+            akaBizTagNameById={akaBizTagNameById}
             onClose={() => setShowGroupPanel(false)}
             onActivateGroup={handleActivateGroup}
             onRenameGroup={handleRenameContactGroup}
@@ -2902,7 +3278,7 @@ export default function DataScanModal({
               <div className="data-scan-group-modal-header">
                 <div>
                   <div className="data-scan-group-modal-title">Chọn nhóm</div>
-                  <div className="data-scan-group-modal-subtitle">{selectedContacts.length} data đã chọn</div>
+                  <div className="data-scan-group-modal-subtitle">{formatCount(pagedSelectedCount)} data đã chọn</div>
                 </div>
                 <button
                   className="btn-icon"

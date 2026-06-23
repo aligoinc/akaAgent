@@ -1,4 +1,4 @@
-import { AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactGroupPurpose, ContactType } from '../../../shared/types'
+import { AccountContactListQuery, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactGroupPurpose, ContactListResult, ContactType, ZaloGroupMemberContactListQuery, ZaloLabelOption } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountContactFromDB, mapAccountContactGroupFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -465,6 +465,561 @@ export async function listContacts(accountId: number, contactType?: ContactType)
   return contactType === 'group' || !contactType
     ? enrichZaloGroupContactCounts(contacts, accountId, u.staffId)
     : contacts
+}
+
+const CONTACT_LIST_DEFAULT_LIMIT = 100
+const CONTACT_LIST_MAX_LIMIT = 20000
+const CONTACT_LIST_FETCH_CHUNK = 1000
+const CONTACT_LIST_MUTATION_CHUNK = 500
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
+function clampContactListLimit(value: unknown, fallback = CONTACT_LIST_DEFAULT_LIMIT): number {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.min(CONTACT_LIST_MAX_LIMIT, parsed)
+}
+
+function normalizeOptionalContactListLimit(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  return clampContactListLimit(value)
+}
+
+function clampContactListOffset(value: unknown): number {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function normalizeContactIdList(values: unknown): number[] {
+  if (!Array.isArray(values)) return []
+  return Array.from(new Set(
+    values
+      .map(value => Number(value))
+      .filter(value => Number.isFinite(value) && value > 0)
+  ))
+}
+
+function normalizeSearchText(value: unknown): string {
+  return String(value || '').trim().toLocaleLowerCase('vi-VN')
+}
+
+function getContactPhoneSearchText(contact: AutoAccountContact): string {
+  const extra = toRecord(contact.extraData)
+  const rawPayload = toRecord(extra.rawPayload)
+  return [
+    extra.phone,
+    extra.phoneNumber,
+    extra.phone_number,
+    extra.mobilePhone,
+    extra.mobile_phone,
+    rawPayload.phone,
+    rawPayload.phoneNumber,
+    rawPayload.phone_number,
+    rawPayload.mobilePhone,
+    rawPayload.mobile_phone
+  ].filter(Boolean).join(' ')
+}
+
+function normalizeFacebookPostUrlForCompare(value: unknown): string {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+    const host = url.hostname.replace(/^www\./i, '').replace(/^web\./i, '').replace(/^m\./i, '').toLowerCase()
+    if (host !== 'facebook.com' && host !== 'fb.com') return ''
+    url.hostname = 'www.facebook.com'
+    url.hash = ''
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (
+        key.startsWith('__') ||
+        key === 'mibextid' ||
+        key === 'ref' ||
+        key === 'locale' ||
+        key === 'comment_id' ||
+        key === 'reply_comment_id'
+      ) {
+        url.searchParams.delete(key)
+      }
+    }
+    return url.toString().replace(/\/+$/g, '').toLowerCase()
+  } catch {
+    return raw.replace(/\/+$/g, '').toLowerCase()
+  }
+}
+
+function contactMatchesSourcePostUrl(contact: AutoAccountContact, normalizedPostUrl: string): boolean {
+  if (!normalizedPostUrl) return true
+  const extra = toRecord(contact.extraData)
+  if (normalizeFacebookPostUrlForCompare(extra.sourcePostUrl) === normalizedPostUrl) return true
+  return toStringArray(extra.sourcePostUrls).some(value => normalizeFacebookPostUrlForCompare(value) === normalizedPostUrl)
+}
+
+function contactMatchesStatusFilter(contact: AutoAccountContact, statusFilter: AccountContactListQuery['statusFilter']): boolean {
+  if (!statusFilter || statusFilter === 'all') return true
+  if (contact.contactType === 'person') {
+    return statusFilter === 'active' ? contact.isFriend === true : contact.isFriend !== true
+  }
+  if (contact.contactType === 'group') {
+    return statusFilter === 'active' ? contact.isJoined === true : contact.isJoined !== true
+  }
+  return true
+}
+
+function contactMatchesSearch(contact: AutoAccountContact, search: string): boolean {
+  if (!search) return true
+  const haystack = [
+    contact.name,
+    contact.uid,
+    getContactPhoneSearchText(contact)
+  ].join(' ').toLocaleLowerCase('vi-VN')
+  return haystack.includes(search)
+}
+
+function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
+  const ids = normalizeContactIdList(query.ids)
+  const excludeIds = normalizeContactIdList(query.excludeIds)
+  const statusFilter = query.statusFilter || 'all'
+  if (ids.length > 0 || excludeIds.length > 0) return false
+  if (normalizeSearchText(query.search)) return false
+  if (String(query.sourcePostUrl || '').trim()) return false
+  if (statusFilter !== 'all' && !query.contactType) return false
+  return true
+}
+
+function applyDbContactStatusFilter(dbQuery: any, contactType: ContactType | undefined, statusFilter: AccountContactListQuery['statusFilter']): any {
+  if (!statusFilter || statusFilter === 'all') return dbQuery
+  if (contactType === 'person') {
+    return statusFilter === 'active'
+      ? dbQuery.eq('is_friend', true)
+      : dbQuery.or('is_friend.is.null,is_friend.eq.false')
+  }
+  if (contactType === 'group') {
+    return statusFilter === 'active'
+      ? dbQuery.eq('is_joined', true)
+      : dbQuery.or('is_joined.is.null,is_joined.eq.false')
+  }
+  return dbQuery
+}
+
+async function listContactsPageFromDb(
+  accountId: number,
+  staffId: number,
+  query: AccountContactListQuery,
+  offset: number,
+  limit: number
+): Promise<ContactListResult> {
+  let dbQuery: any = client()
+    .from('auto_account_contacts')
+    .select('*', { count: 'exact' })
+    .eq('account_id', accountId)
+    .eq('staff_id', staffId)
+    .eq('is_delete', false)
+
+  if (query.contactType) dbQuery = dbQuery.eq('contact_type', query.contactType)
+  dbQuery = applyDbContactStatusFilter(dbQuery, query.contactType, query.statusFilter)
+
+  const { data, error, count } = await dbQuery
+    .order('name', { ascending: true })
+    .range(offset, offset + limit - 1)
+
+  if (error) throw new Error(`Failed to list paged contacts: ${error.message}`)
+  const contacts = (data || []).map((row: Record<string, unknown>) => mapAccountContactFromDB(row))
+  return {
+    contacts: await enrichContactListResult(contacts, accountId, staffId, query.contactType),
+    total: count ?? 0
+  }
+}
+
+async function fetchContactRowsForList(
+  accountId: number,
+  staffId: number,
+  contactType?: ContactType,
+  ids: number[] = []
+): Promise<AutoAccountContact[]> {
+  const rows: Record<string, unknown>[] = []
+  if (ids.length > 0) {
+    const idChunkSize = 1000
+    for (let i = 0; i < ids.length; i += idChunkSize) {
+      const chunk = ids.slice(i, i + idChunkSize)
+      let query = client()
+        .from('auto_account_contacts')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('staff_id', staffId)
+        .eq('is_delete', false)
+        .in('id', chunk)
+        .order('name', { ascending: true })
+
+      if (contactType) query = query.eq('contact_type', contactType)
+
+      const { data, error } = await query
+      if (error) throw new Error(`Failed to list selected contacts: ${error.message}`)
+      rows.push(...(data || []))
+    }
+  } else {
+    let from = 0
+    while (true) {
+      let query = client()
+        .from('auto_account_contacts')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('staff_id', staffId)
+        .eq('is_delete', false)
+        .order('name', { ascending: true })
+        .range(from, from + CONTACT_LIST_FETCH_CHUNK - 1)
+
+      if (contactType) query = query.eq('contact_type', contactType)
+
+      const { data, error } = await query
+      if (error) throw new Error(`Failed to list paged contacts: ${error.message}`)
+      rows.push(...(data || []))
+      if (!data || data.length < CONTACT_LIST_FETCH_CHUNK) break
+      from += CONTACT_LIST_FETCH_CHUNK
+    }
+  }
+
+  return rows.map(row => mapAccountContactFromDB(row))
+}
+
+async function filterContactsForList(
+  accountId: number,
+  staffId: number,
+  query: AccountContactListQuery = {}
+): Promise<AutoAccountContact[]> {
+  const ids = normalizeContactIdList(query.ids)
+  const excludeIds = new Set(normalizeContactIdList(query.excludeIds))
+  const search = normalizeSearchText(query.search)
+  const normalizedPostUrl = normalizeFacebookPostUrlForCompare(query.sourcePostUrl)
+  const contacts = await fetchContactRowsForList(accountId, staffId, query.contactType, ids)
+
+  return contacts.filter(contact => {
+    if (excludeIds.has(contact.id)) return false
+    if (!contactMatchesStatusFilter(contact, query.statusFilter)) return false
+    if (!contactMatchesSourcePostUrl(contact, normalizedPostUrl)) return false
+    if (!contactMatchesSearch(contact, search)) return false
+    return true
+  })
+}
+
+async function enrichContactListResult(
+  contacts: AutoAccountContact[],
+  accountId: number,
+  staffId: number,
+  contactType?: ContactType
+): Promise<AutoAccountContact[]> {
+  return contactType === 'group' || !contactType
+    ? enrichZaloGroupContactCounts(contacts, accountId, staffId)
+    : contacts
+}
+
+export async function listContactsPage(
+  accountId: number,
+  query: AccountContactListQuery = {}
+): Promise<ContactListResult> {
+  const u = requireCurrentUser()
+  const offset = clampContactListOffset(query.offset)
+  const limit = clampContactListLimit(query.limit)
+  if (canUseDbPagedContactList(query)) {
+    return listContactsPageFromDb(accountId, u.staffId, query, offset, limit)
+  }
+
+  const filtered = await filterContactsForList(accountId, u.staffId, query)
+  const contacts = filtered.slice(offset, offset + limit)
+  return {
+    contacts: await enrichContactListResult(contacts, accountId, u.staffId, query.contactType),
+    total: filtered.length
+  }
+}
+
+export async function exportContactsPage(
+  accountId: number,
+  query: AccountContactListQuery = {}
+): Promise<AutoAccountContact[]> {
+  const u = requireCurrentUser()
+  const offset = clampContactListOffset(query.offset)
+  const limit = normalizeOptionalContactListLimit(query.limit)
+  if (limit !== null && canUseDbPagedContactList(query)) {
+    const result = await listContactsPageFromDb(accountId, u.staffId, query, offset, limit)
+    return result.contacts
+  }
+
+  const filtered = await filterContactsForList(accountId, u.staffId, query)
+  const contacts = limit === null ? filtered : filtered.slice(offset, offset + limit)
+  return enrichContactListResult(contacts, accountId, u.staffId, query.contactType)
+}
+
+function normalizeZaloTagIdList(values: unknown): string[] {
+  return Array.from(new Set(
+    toStringArray(values).filter(Boolean)
+  ))
+}
+
+function normalizeZaloTagNameList(values: unknown): string[] {
+  return Array.from(new Set(
+    toStringArray(values).filter(Boolean)
+  ))
+}
+
+function extractZaloTagsFromExtra(extra: Record<string, unknown>): Array<{ id: string; name: string }> {
+  const tags: Array<{ id: string; name: string }> = []
+  const rawTags = Array.isArray(extra.zaloTags)
+    ? extra.zaloTags
+    : Array.isArray(extra.zalo_tags)
+      ? extra.zalo_tags
+      : []
+  for (const rawTag of rawTags) {
+    const tag = toRecord(rawTag)
+    const id = normalizeNullableString(tag.id || tag.labelId || tag.label_id || tag.tagId || tag.tag_id)
+    const name = normalizeNullableString(tag.name || tag.text || tag.labelName || tag.label_name || tag.tagName || tag.tag_name)
+    if (id) tags.push({ id, name: name || '' })
+  }
+  return tags
+}
+
+export async function appendZaloTagsToExistingContacts(
+  accountId: number,
+  contactType: ContactType,
+  uids: string[],
+  tags: Array<{ id: number | string; name?: string | null }>
+): Promise<number> {
+  const u = requireCurrentUser()
+  const normalizedAccountId = Number(accountId)
+  if (!Number.isFinite(normalizedAccountId) || normalizedAccountId <= 0) return 0
+  if (contactType !== 'person' && contactType !== 'group') return 0
+
+  const normalizedUids = Array.from(new Set(
+    uids.map(uid => String(uid || '').trim()).filter(Boolean)
+  ))
+  const normalizedTags = tags
+    .map(tag => ({
+      id: String(tag.id || '').trim(),
+      name: String(tag.name || '').trim()
+    }))
+    .filter(tag => tag.id)
+
+  if (normalizedUids.length === 0 || normalizedTags.length === 0) return 0
+
+  let updatedCount = 0
+  const chunkSize = 100
+  const now = new Date().toISOString()
+
+  for (let i = 0; i < normalizedUids.length; i += chunkSize) {
+    const chunk = normalizedUids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('auto_account_contacts')
+      .select('id, extra_data')
+      .eq('account_id', normalizedAccountId)
+      .eq('staff_id', u.staffId)
+      .eq('contact_type', contactType)
+      .eq('is_delete', false)
+      .in('uid', chunk)
+
+    if (error) throw new Error(`Failed to list contacts for Zalo tag mirror: ${error.message}`)
+
+    for (const row of data || []) {
+      const extra = toRecord(row.extra_data)
+      const tagById = new Map<string, string>()
+      for (const existingTag of extractZaloTagsFromExtra(extra)) {
+        tagById.set(existingTag.id, existingTag.name)
+      }
+      const ids = normalizeZaloTagIdList(extra.zaloTagIds || extra.zalo_tag_ids || extra.labelIds || extra.label_ids)
+      const names = normalizeZaloTagNameList(extra.zaloTagNames || extra.zalo_tag_names || extra.labelNames || extra.label_names)
+      ids.forEach((id, index) => tagById.set(id, tagById.get(id) || names[index] || ''))
+      for (const tag of normalizedTags) {
+        tagById.set(tag.id, tag.name || tagById.get(tag.id) || '')
+      }
+
+      const nextTags = Array.from(tagById.entries()).map(([id, name]) => ({ id, name }))
+      const nextExtra = {
+        ...extra,
+        zaloTagIds: nextTags.map(tag => tag.id),
+        zaloTagNames: nextTags.map(tag => tag.name).filter(Boolean),
+        zaloTags: nextTags
+      }
+
+      const { error: updateError } = await client()
+        .from('auto_account_contacts')
+        .update({ extra_data: nextExtra, updated_at: now })
+        .eq('id', row.id as number)
+        .eq('staff_id', u.staffId)
+
+      if (updateError) throw new Error(`Failed to mirror Zalo tags to contact: ${updateError.message}`)
+      updatedCount += 1
+    }
+  }
+
+  return updatedCount
+}
+
+type NormalizedZaloTag = { id: string; name: string }
+
+function normalizeZaloLabelMemberships(labels: ZaloLabelOption[]): Map<string, NormalizedZaloTag[]> {
+  const tagsByConversation = new Map<string, Map<string, string>>()
+
+  for (const label of labels) {
+    const id = String(label.id || '').trim()
+    const name = String(label.text || '').trim()
+    if (!id || !name) continue
+    const conversations = Array.isArray(label.conversations) ? label.conversations : []
+    for (const rawConversation of conversations) {
+      const conversation = String(rawConversation || '').trim()
+      if (!conversation) continue
+      const existing = tagsByConversation.get(conversation) || new Map<string, string>()
+      existing.set(id, name)
+      tagsByConversation.set(conversation, existing)
+    }
+  }
+
+  const result = new Map<string, NormalizedZaloTag[]>()
+  for (const [conversation, tagMap] of tagsByConversation.entries()) {
+    result.set(conversation, Array.from(tagMap.entries()).map(([id, name]) => ({ id, name })))
+  }
+  return result
+}
+
+function getZaloConversationLookupKeys(uid: unknown, contactType: ContactType): string[] {
+  const raw = String(uid || '').trim()
+  if (!raw) return []
+  if (contactType !== 'group') return [raw]
+
+  const withoutPrefix = raw.replace(/^g/i, '')
+  return Array.from(new Set([
+    raw,
+    withoutPrefix,
+    withoutPrefix ? `g${withoutPrefix}` : ''
+  ].filter(Boolean)))
+}
+
+function getZaloTagsForContactUid(
+  uid: unknown,
+  contactType: ContactType,
+  tagsByConversation: Map<string, NormalizedZaloTag[]>
+): NormalizedZaloTag[] {
+  const tagById = new Map<string, string>()
+  for (const key of getZaloConversationLookupKeys(uid, contactType)) {
+    for (const tag of tagsByConversation.get(key) || []) {
+      tagById.set(tag.id, tag.name || tagById.get(tag.id) || '')
+    }
+  }
+  return Array.from(tagById.entries()).map(([id, name]) => ({ id, name }))
+}
+
+function stripZaloTagExtraFields(extra: Record<string, unknown>): Record<string, unknown> {
+  const {
+    zaloTagIds: _zaloTagIds,
+    zalo_tag_ids: _zaloTagIdsSnake,
+    zaloTagNames: _zaloTagNames,
+    zalo_tag_names: _zaloTagNamesSnake,
+    zaloTags: _zaloTags,
+    zalo_tags: _zaloTagsSnake,
+    labelIds: _labelIds,
+    label_ids: _labelIdsSnake,
+    labelNames: _labelNames,
+    label_names: _labelNamesSnake,
+    labels: _labels,
+    tagIds: _tagIds,
+    tag_ids: _tagIdsSnake,
+    tagNames: _tagNames,
+    tag_names: _tagNamesSnake,
+    ...rest
+  } = extra
+  return rest
+}
+
+function applyZaloTagsToExtra(
+  extraData: unknown,
+  tags: NormalizedZaloTag[]
+): Record<string, unknown> {
+  const stripped = stripZaloTagExtraFields(toRecord(extraData))
+  if (tags.length === 0) return stripped
+  return {
+    ...stripped,
+    zaloTagIds: tags.map(tag => tag.id),
+    zaloTagNames: tags.map(tag => tag.name).filter(Boolean),
+    zaloTags: tags
+  }
+}
+
+function getZaloTagExtraSignature(extraData: unknown): string {
+  const extra = toRecord(extraData)
+  const tags = extractZaloTagsFromExtra(extra)
+  const tagById = new Map<string, string>()
+  for (const tag of tags) tagById.set(tag.id, tag.name)
+
+  const ids = normalizeZaloTagIdList(extra.zaloTagIds || extra.zalo_tag_ids || extra.labelIds || extra.label_ids || extra.tagIds || extra.tag_ids)
+  const names = normalizeZaloTagNameList(extra.zaloTagNames || extra.zalo_tag_names || extra.labelNames || extra.label_names || extra.tagNames || extra.tag_names)
+  ids.forEach((id, index) => tagById.set(id, tagById.get(id) || names[index] || ''))
+
+  return Array.from(tagById.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, name]) => `${id}:${name}`)
+    .join('|')
+}
+
+function getNormalizedZaloTagSignature(tags: NormalizedZaloTag[]): string {
+  return [...tags]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(tag => `${tag.id}:${tag.name}`)
+    .join('|')
+}
+
+export async function syncZaloLabelMemberships(
+  accountId: number,
+  labels: ZaloLabelOption[]
+): Promise<number> {
+  const u = requireCurrentUser()
+  const normalizedAccountId = Number(accountId)
+  if (!Number.isFinite(normalizedAccountId) || normalizedAccountId <= 0) return 0
+
+  const tagsByConversation = normalizeZaloLabelMemberships(labels)
+  const contactTypes: ContactType[] = ['person', 'group']
+  let updatedCount = 0
+  const now = new Date().toISOString()
+
+  for (const contactType of contactTypes) {
+    let from = 0
+    while (true) {
+      const { data, error } = await client()
+        .from('auto_account_contacts')
+        .select('id, uid, extra_data')
+        .eq('account_id', normalizedAccountId)
+        .eq('staff_id', u.staffId)
+        .eq('contact_type', contactType)
+        .eq('is_delete', false)
+        .order('id', { ascending: true })
+        .range(from, from + CONTACT_LIST_FETCH_CHUNK - 1)
+
+      if (error) throw new Error(`Failed to list contacts for Zalo label sync: ${error.message}`)
+      const rows = data || []
+      for (const row of rows) {
+        const tags = getZaloTagsForContactUid(row.uid, contactType, tagsByConversation)
+        if (getZaloTagExtraSignature(row.extra_data) === getNormalizedZaloTagSignature(tags)) continue
+
+        const { error: updateError } = await client()
+          .from('auto_account_contacts')
+          .update({
+            extra_data: applyZaloTagsToExtra(row.extra_data, tags),
+            updated_at: now
+          })
+          .eq('id', row.id as number)
+          .eq('staff_id', u.staffId)
+
+        if (updateError) throw new Error(`Failed to sync Zalo labels to contact: ${updateError.message}`)
+        updatedCount += 1
+      }
+
+      if (rows.length < CONTACT_LIST_FETCH_CHUNK) break
+      from += CONTACT_LIST_FETCH_CHUNK
+    }
+  }
+
+  return updatedCount
 }
 
 async function enrichZaloGroupContactCounts(
@@ -1421,50 +1976,85 @@ export async function upsertZaloGroupMemberContacts(input: ZaloGroupMemberUpsert
   return totalSaved
 }
 
-export async function listZaloGroupMemberContacts(
+async function fetchZaloGroupMemberContactsForList(
   accountId: number,
-  zaloGroupId: string
+  query: ZaloGroupMemberContactListQuery = {}
 ): Promise<AutoAccountContact[]> {
   const u = requireCurrentUser()
-  const normalizedGroupId = String(zaloGroupId || '').trim()
+  const normalizedGroupId = String(query.zaloGroupId || '').trim()
   if (!normalizedGroupId) return []
 
+  const groupType = await getZaloGroupTypeForMemberList(accountId, u.staffId, normalizedGroupId)
+
+  const members: Record<string, unknown>[] = []
+  let from = 0
+  while (true) {
+    const { data, error: memberError } = await client()
+      .from('zalo_group_members')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('staff_id', u.staffId)
+      .eq('zalo_group_id', normalizedGroupId)
+      .eq('is_current', true)
+      .order('role_rank', { ascending: true })
+      .order('updated_at', { ascending: false })
+      .range(from, from + CONTACT_LIST_FETCH_CHUNK - 1)
+
+    if (memberError) throw new Error(`Failed to list Zalo group members: ${memberError.message}`)
+    members.push(...(data || []))
+    if (!data || data.length < CONTACT_LIST_FETCH_CHUNK) break
+    from += CONTACT_LIST_FETCH_CHUNK
+  }
+
+  if (members.length === 0) return []
+
+  const result = await mapZaloGroupMemberRowsToContacts(accountId, u.staffId, normalizedGroupId, groupType, members)
+  const ids = normalizeContactIdList(query.ids)
+  const idSet = ids.length > 0 ? new Set(ids) : null
+  const excludeIds = new Set(normalizeContactIdList(query.excludeIds))
+  const search = normalizeSearchText(query.search)
+
+  return result.filter(contact => {
+    if (idSet && !idSet.has(contact.id)) return false
+    if (excludeIds.has(contact.id)) return false
+    return contactMatchesSearch(contact, search)
+  })
+}
+
+async function getZaloGroupTypeForMemberList(
+  accountId: number,
+  staffId: number,
+  normalizedGroupId: string
+): Promise<number | null> {
   const { data: groupRow, error: groupError } = await client()
     .from('zalo_groups')
     .select('group_type')
     .eq('account_id', accountId)
-    .eq('staff_id', u.staffId)
+    .eq('staff_id', staffId)
     .eq('zalo_group_id', normalizedGroupId)
     .maybeSingle()
 
   if (groupError) throw new Error(`Failed to get Zalo group for members: ${groupError.message}`)
-  const groupType = normalizeNullableNumber(groupRow?.group_type)
+  return normalizeNullableNumber(groupRow?.group_type)
+}
 
-  const { data: members, error: memberError } = await client()
-    .from('zalo_group_members')
-    .select('*')
-    .eq('account_id', accountId)
-    .eq('staff_id', u.staffId)
-    .eq('zalo_group_id', normalizedGroupId)
-    .eq('is_current', true)
-    .order('role_rank', { ascending: true })
-    .order('updated_at', { ascending: false })
-
-  if (memberError) throw new Error(`Failed to list Zalo group members: ${memberError.message}`)
-  if (!members || members.length === 0) return []
-
+async function mapZaloGroupMemberRowsToContacts(
+  accountId: number,
+  staffId: number,
+  normalizedGroupId: string,
+  groupType: number | null,
+  members: Record<string, unknown>[]
+): Promise<AutoAccountContact[]> {
   const memberByUid = new Map<string, Record<string, unknown>>()
   for (const member of members) memberByUid.set(String(member.zalo_uid || '').trim(), member)
   const uids = Array.from(memberByUid.keys())
   const contactsByUid = new Map<string, AutoAccountContact>()
-  const chunkSize = 100
-  for (let i = 0; i < uids.length; i += chunkSize) {
-    const chunk = uids.slice(i, i + chunkSize)
+  for (const chunk of chunkArray(uids, 100)) {
     const { data, error } = await client()
       .from('auto_account_contacts')
       .select('*')
       .eq('account_id', accountId)
-      .eq('staff_id', u.staffId)
+      .eq('staff_id', staffId)
       .eq('contact_type', 'person')
       .eq('is_delete', false)
       .in('uid', chunk)
@@ -1496,6 +2086,81 @@ export async function listZaloGroupMemberContacts(
   }
 
   return result
+}
+
+function canUseDbPagedZaloGroupMemberContacts(query: ZaloGroupMemberContactListQuery): boolean {
+  if (!String(query.zaloGroupId || '').trim()) return false
+  if (normalizeContactIdList(query.ids).length > 0) return false
+  if (normalizeContactIdList(query.excludeIds).length > 0) return false
+  if (normalizeSearchText(query.search)) return false
+  return true
+}
+
+async function listZaloGroupMemberContactsPageFromDb(
+  accountId: number,
+  query: ZaloGroupMemberContactListQuery,
+  offset: number,
+  limit: number
+): Promise<ContactListResult> {
+  const u = requireCurrentUser()
+  const normalizedGroupId = String(query.zaloGroupId || '').trim()
+  if (!normalizedGroupId) return { contacts: [], total: 0 }
+
+  const groupType = await getZaloGroupTypeForMemberList(accountId, u.staffId, normalizedGroupId)
+  const { data, error, count } = await client()
+    .from('zalo_group_members')
+    .select('*', { count: 'exact' })
+    .eq('account_id', accountId)
+    .eq('staff_id', u.staffId)
+    .eq('zalo_group_id', normalizedGroupId)
+    .eq('is_current', true)
+    .order('role_rank', { ascending: true })
+    .order('updated_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (error) throw new Error(`Failed to list Zalo group members: ${error.message}`)
+  return {
+    contacts: await mapZaloGroupMemberRowsToContacts(
+      accountId,
+      u.staffId,
+      normalizedGroupId,
+      groupType,
+      (data || []) as Record<string, unknown>[]
+    ),
+    total: count ?? 0
+  }
+}
+
+export async function listZaloGroupMemberContacts(
+  accountId: number,
+  query: ZaloGroupMemberContactListQuery = {}
+): Promise<ContactListResult> {
+  const offset = clampContactListOffset(query.offset)
+  const limit = clampContactListLimit(query.limit)
+  if (canUseDbPagedZaloGroupMemberContacts(query)) {
+    return listZaloGroupMemberContactsPageFromDb(accountId, query, offset, limit)
+  }
+
+  const filtered = await fetchZaloGroupMemberContactsForList(accountId, query)
+  return {
+    contacts: filtered.slice(offset, offset + limit),
+    total: filtered.length
+  }
+}
+
+export async function exportZaloGroupMemberContacts(
+  accountId: number,
+  query: ZaloGroupMemberContactListQuery = {}
+): Promise<AutoAccountContact[]> {
+  const offset = clampContactListOffset(query.offset)
+  const limit = normalizeOptionalContactListLimit(query.limit)
+  if (limit !== null && canUseDbPagedZaloGroupMemberContacts(query)) {
+    const result = await listZaloGroupMemberContactsPageFromDb(accountId, query, offset, limit)
+    return result.contacts
+  }
+
+  const filtered = await fetchZaloGroupMemberContactsForList(accountId, query)
+  return limit === null ? filtered : filtered.slice(offset, offset + limit)
 }
 
 export async function deleteContacts(accountId: number, contactType: ContactType): Promise<void> {
@@ -1545,15 +2210,19 @@ async function getActiveContactIds(contactIds: number[], staffId: number): Promi
   const ids = uniqueIds(contactIds)
   if (ids.length === 0) return new Set()
 
-  const { data, error } = await client()
-    .from('auto_account_contacts')
-    .select('id')
-    .in('id', ids)
-    .eq('staff_id', staffId)
-    .eq('is_delete', false)
+  const activeIds = new Set<number>()
+  for (const chunk of chunkArray(ids, CONTACT_LIST_FETCH_CHUNK)) {
+    const { data, error } = await client()
+      .from('auto_account_contacts')
+      .select('id')
+      .in('id', chunk)
+      .eq('staff_id', staffId)
+      .eq('is_delete', false)
 
-  if (error) throw new Error(`Failed to list active contacts: ${error.message}`)
-  return new Set((data || []).map(row => row.id as number))
+    if (error) throw new Error(`Failed to list active contacts: ${error.message}`)
+    for (const row of data || []) activeIds.add(row.id as number)
+  }
+  return activeIds
 }
 
 export async function listContactGroups(
@@ -1694,28 +2363,45 @@ export async function listContactGroupContacts(
   const u = requireCurrentUser()
   const group = await getContactGroup(groupId, purpose)
 
-  const { data: members, error: memberError } = await client()
-    .from('auto_account_contact_group_members')
-    .select('contact_id')
-    .eq('group_id', groupId)
+  const members: Record<string, unknown>[] = []
+  let memberFrom = 0
+  while (true) {
+    const { data, error: memberError } = await client()
+      .from('auto_account_contact_group_members')
+      .select('contact_id')
+      .eq('group_id', groupId)
+      .range(memberFrom, memberFrom + CONTACT_LIST_FETCH_CHUNK - 1)
 
-  if (memberError) throw new Error(`Failed to list contact group members: ${memberError.message}`)
+    if (memberError) throw new Error(`Failed to list contact group members: ${memberError.message}`)
+    members.push(...(data || []))
+    if (!data || data.length < CONTACT_LIST_FETCH_CHUNK) break
+    memberFrom += CONTACT_LIST_FETCH_CHUNK
+  }
 
-  const contactIds = uniqueIds((members || []).map(row => row.contact_id as number))
+  const contactIds = uniqueIds(members.map(row => row.contact_id as number))
   if (contactIds.length === 0) return []
 
-  const { data, error } = await client()
-    .from('auto_account_contacts')
-    .select('*')
-    .in('id', contactIds)
-    .eq('account_id', group.accountId)
-    .eq('contact_type', group.contactType)
-    .eq('staff_id', u.staffId)
-    .eq('is_delete', false)
-    .order('name', { ascending: true })
+  const rows: Record<string, unknown>[] = []
+  const contactChunkSize = 1000
+  for (let i = 0; i < contactIds.length; i += contactChunkSize) {
+    const chunk = contactIds.slice(i, i + contactChunkSize)
+    const { data, error } = await client()
+      .from('auto_account_contacts')
+      .select('*')
+      .in('id', chunk)
+      .eq('account_id', group.accountId)
+      .eq('contact_type', group.contactType)
+      .eq('staff_id', u.staffId)
+      .eq('is_delete', false)
+      .order('name', { ascending: true })
 
-  if (error) throw new Error(`Failed to list contacts in group: ${error.message}`)
-  return (data || []).map(row => mapAccountContactFromDB(row))
+    if (error) throw new Error(`Failed to list contacts in group: ${error.message}`)
+    rows.push(...(data || []))
+  }
+
+  return rows
+    .map(row => mapAccountContactFromDB(row))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'vi-VN'))
 }
 
 export async function addContactsToGroup(
@@ -1728,40 +2414,49 @@ export async function addContactsToGroup(
   const ids = uniqueIds(contactIds)
   if (ids.length === 0) return { success: true, count: 0 }
 
-  const { data: contacts, error: contactError } = await client()
-    .from('auto_account_contacts')
-    .select('id')
-    .in('id', ids)
-    .eq('account_id', group.accountId)
-    .eq('contact_type', group.contactType)
-    .eq('staff_id', u.staffId)
-    .eq('is_delete', false)
+  const validIdSet = new Set<number>()
+  for (const chunk of chunkArray(ids, CONTACT_LIST_FETCH_CHUNK)) {
+    const { data: contacts, error: contactError } = await client()
+      .from('auto_account_contacts')
+      .select('id')
+      .in('id', chunk)
+      .eq('account_id', group.accountId)
+      .eq('contact_type', group.contactType)
+      .eq('staff_id', u.staffId)
+      .eq('is_delete', false)
 
-  if (contactError) throw new Error(`Failed to validate contacts: ${contactError.message}`)
+    if (contactError) throw new Error(`Failed to validate contacts: ${contactError.message}`)
+    for (const row of contacts || []) validIdSet.add(row.id as number)
+  }
 
-  const validIds = uniqueIds((contacts || []).map(row => row.id as number))
+  const validIds = ids.filter(id => validIdSet.has(id))
   if (validIds.length === 0) return { success: true, count: 0 }
 
-  const { data: existing, error: existingError } = await client()
-    .from('auto_account_contact_group_members')
-    .select('contact_id')
-    .eq('group_id', groupId)
-    .in('contact_id', validIds)
+  const existingIds = new Set<number>()
+  for (const chunk of chunkArray(validIds, CONTACT_LIST_FETCH_CHUNK)) {
+    const { data: existing, error: existingError } = await client()
+      .from('auto_account_contact_group_members')
+      .select('contact_id')
+      .eq('group_id', groupId)
+      .in('contact_id', chunk)
 
-  if (existingError) throw new Error(`Failed to list existing group members: ${existingError.message}`)
+    if (existingError) throw new Error(`Failed to list existing group members: ${existingError.message}`)
+    for (const row of existing || []) existingIds.add(row.contact_id as number)
+  }
 
-  const existingIds = new Set((existing || []).map(row => row.contact_id as number))
   const idsToInsert = validIds.filter(id => !existingIds.has(id))
   if (idsToInsert.length === 0) return { success: true, count: 0 }
 
-  const { error } = await client()
-    .from('auto_account_contact_group_members')
-    .upsert(idsToInsert.map(contactId => ({
-      group_id: groupId,
-      contact_id: contactId
-    })), { onConflict: 'group_id,contact_id', ignoreDuplicates: true })
+  for (const chunk of chunkArray(idsToInsert, CONTACT_LIST_MUTATION_CHUNK)) {
+    const { error } = await client()
+      .from('auto_account_contact_group_members')
+      .upsert(chunk.map(contactId => ({
+        group_id: groupId,
+        contact_id: contactId
+      })), { onConflict: 'group_id,contact_id', ignoreDuplicates: true })
 
-  if (error) throw new Error(`Failed to add contacts to group: ${error.message}`)
+    if (error) throw new Error(`Failed to add contacts to group: ${error.message}`)
+  }
   return { success: true, count: idsToInsert.length }
 }
 
