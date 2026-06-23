@@ -56,6 +56,36 @@ type ImageDimensions = {
   height: number
 }
 
+export interface ZaloForwardMessageTargetResult {
+  threadId: string
+  ok: boolean
+  raw?: Record<string, unknown>
+  errorCode?: string
+  errorMessage?: string
+}
+
+export interface ZaloForwardMessageResult {
+  response: unknown
+  results: ZaloForwardMessageTargetResult[]
+  successCount: number
+  failCount: number
+}
+
+interface ZaloForwardMessageRequestTarget {
+  threadId: string
+  clientId: number
+}
+
+interface ZaloRawForwardMessagePayload {
+  targets: ZaloForwardMessageRequestTarget[]
+  type: ThreadType
+  message: string
+}
+
+type ZaloRawForwardMessageApi = API & {
+  akaForwardMessageBatch?: (payload: ZaloRawForwardMessagePayload) => Promise<unknown>
+}
+
 async function getZaloImageMetadata(filePath: string): Promise<ImageMetadataGetterResponse> {
   const data = await fs.readFile(filePath)
   const dimensions = getImageDimensions(data)
@@ -624,6 +654,25 @@ export class ZaloRuntimeService {
     return this.sendMessage(accountId, groupId, ThreadType.Group, message, attachments)
   }
 
+  async forwardMessageToUsers(
+    accountId: number,
+    userIds: string[],
+    message: string
+  ): Promise<ZaloForwardMessageResult> {
+    return this.forwardMessage(accountId, userIds, ThreadType.User, message)
+  }
+
+  async forwardMessageToGroups(
+    accountId: number,
+    groupIds: string[],
+    message: string
+  ): Promise<ZaloForwardMessageResult> {
+    const normalizedGroupIds = groupIds
+      .map(groupId => String(groupId || '').trim().replace(/^g/i, ''))
+      .filter(Boolean)
+    return this.forwardMessage(accountId, normalizedGroupIds, ThreadType.Group, message)
+  }
+
   private async sendMessage(
     accountId: number,
     threadId: string,
@@ -664,6 +713,228 @@ export class ZaloRuntimeService {
         if (needsUploadCallback) this.invalidateAccount(accountId)
       }
     )
+  }
+
+  private async forwardMessage(
+    accountId: number,
+    threadIds: string[],
+    type: ThreadType,
+    message: string
+  ): Promise<ZaloForwardMessageResult> {
+    const api = await this.ensureApi(accountId)
+    const safeThreadIds = threadIds.map(item => String(item || '').trim()).filter(Boolean)
+    const text = String(message || '').trim()
+    if (safeThreadIds.length === 0) throw new ZaloApiError('Missing thread IDs')
+    if (!text) throw new ZaloApiError('Missing message content')
+
+    const timestamp = Date.now()
+    const requestTargets = safeThreadIds.map((threadId, index) => ({
+      threadId,
+      clientId: timestamp + index
+    }))
+    const ownId = type === ThreadType.User ? String(api.getOwnId?.() || '').trim() : ''
+    const skippedSelfResults: ZaloForwardMessageTargetResult[] = ownId
+      ? requestTargets
+          .filter(target => target.threadId === ownId)
+          .map(target => ({
+            threadId: target.threadId,
+            ok: false,
+            raw: {
+              clientId: String(target.clientId),
+              toUid: target.threadId,
+              error_code: '114',
+              error_message: 'Không thể chia sẻ tin nhắn Zalo cho chính tài khoản đang gửi'
+            },
+            errorCode: '114',
+            errorMessage: 'Không thể chia sẻ tin nhắn Zalo cho chính tài khoản đang gửi'
+          }))
+      : []
+    const sendTargets = ownId
+      ? requestTargets.filter(target => target.threadId !== ownId)
+      : requestTargets
+
+    const targetLabel = type === ThreadType.Group ? 'group' : 'người dùng'
+    const response = sendTargets.length > 0
+      ? await this.withTimeout(
+          this.forwardMessageRaw(api, sendTargets, type, text),
+          ZALO_MESSAGE_SEND_TIMEOUT_MS,
+          `Chia sẻ tin nhắn Zalo đến ${targetLabel} quá thời gian chờ (${Math.round(ZALO_MESSAGE_SEND_TIMEOUT_MS / 1000)} giây)`
+        )
+      : { success: [], fail: [], skipped: skippedSelfResults }
+    const remoteResult = this.normalizeForwardMessageResult(sendTargets, type, response)
+    if (skippedSelfResults.length === 0) return remoteResult
+
+    const remainingRemoteResults = [...remoteResult.results]
+    const results = requestTargets.map(target => {
+      const skipped = skippedSelfResults.find(item => item.threadId === target.threadId)
+      if (skipped) return skipped
+      const resultIndex = remainingRemoteResults.findIndex(item => item.threadId === target.threadId)
+      if (resultIndex >= 0) {
+        const [result] = remainingRemoteResults.splice(resultIndex, 1)
+        return result
+      }
+      return {
+        threadId: target.threadId,
+        ok: false,
+        errorMessage: 'Không xác định được kết quả chia sẻ tin nhắn Zalo cho target này'
+      }
+    })
+
+    return {
+      response: {
+        response,
+        skipped: skippedSelfResults
+      },
+      results,
+      successCount: results.filter(item => item.ok).length,
+      failCount: results.filter(item => !item.ok).length
+    }
+  }
+
+  private async forwardMessageRaw(
+    api: API,
+    targets: ZaloForwardMessageRequestTarget[],
+    type: ThreadType,
+    message: string
+  ): Promise<unknown> {
+    const customApi = api as ZaloRawForwardMessageApi
+    if (typeof customApi.akaForwardMessageBatch !== 'function') {
+      api.custom<Promise<unknown>, ZaloRawForwardMessagePayload>('akaForwardMessageBatch', async ({ ctx, utils, props }) => {
+        const isGroup = props.type === ThreadType.Group
+        const serviceURL = utils.makeURL(`${api.zpwServiceMap.file[0]}/api/${isGroup ? 'group' : 'message'}/mforward`)
+        const forwardTargets = props.targets.map(target => (
+          isGroup
+            ? { clientId: target.clientId, grid: target.threadId, ttl: 0 }
+            : { clientId: target.clientId, toUid: target.threadId, ttl: 0 }
+        ))
+        const params = isGroup
+          ? {
+              grids: forwardTargets,
+              ttl: 0,
+              msgType: '1',
+              totalIds: forwardTargets.length,
+              msgInfo: JSON.stringify({ message: props.message })
+            }
+          : {
+              toIds: forwardTargets,
+              imei: ctx.imei,
+              ttl: 0,
+              msgType: '1',
+              totalIds: forwardTargets.length,
+              msgInfo: JSON.stringify({ message: props.message })
+            }
+        const encryptedParams = utils.encodeAES(JSON.stringify(params))
+        if (!encryptedParams) throw new ZaloApiError('Failed to encrypt params')
+        const response = await utils.request(serviceURL, {
+          method: 'POST',
+          body: new URLSearchParams({ params: encryptedParams })
+        })
+        return utils.resolve(response)
+      })
+    }
+
+    const forwardBatch = customApi.akaForwardMessageBatch
+    if (typeof forwardBatch !== 'function') {
+      throw new Error('Không khởi tạo được API chia sẻ tin nhắn Zalo')
+    }
+    return forwardBatch({ targets, type, message })
+  }
+
+  private normalizeForwardMessageResult(
+    targets: ZaloForwardMessageRequestTarget[],
+    type: ThreadType,
+    response: unknown
+  ): ZaloForwardMessageResult {
+    const responseRecord = normalizeRecord(response)
+    const payload = responseRecord.data && typeof responseRecord.data === 'object'
+      ? normalizeRecord(responseRecord.data)
+      : responseRecord
+    const successRows = Array.isArray(payload.success) ? payload.success.map(item => normalizeRecord(item)) : []
+    const failRows = [
+      ...(Array.isArray(payload.fail) ? payload.fail : []),
+      ...(Array.isArray(payload.failed) ? payload.failed : [])
+    ].map(item => normalizeRecord(item))
+    const keyName = type === ThreadType.Group ? 'grid' : 'toUid'
+    const targetByClientId = new Map(targets.map(target => [String(target.clientId), target]))
+    const targetByThreadId = new Map(targets.map(target => [target.threadId, target]))
+    const successByClientId = new Map<string, Record<string, unknown>>()
+    const failByClientId = new Map<string, Record<string, unknown>>()
+    const successByThreadId = new Map<string, Record<string, unknown>>()
+    const failByThreadId = new Map<string, Record<string, unknown>>()
+
+    for (const row of successRows) {
+      const clientId = String(row.clientId || '').trim()
+      const targetKey = String(row[keyName] || row.id || '').trim()
+      const target = (clientId ? targetByClientId.get(clientId) : undefined)
+        || (targetKey ? targetByThreadId.get(targetKey) : undefined)
+      if (clientId && target) successByClientId.set(clientId, row)
+      if (target) successByThreadId.set(target.threadId, row)
+    }
+    for (const row of failRows) {
+      const clientId = String(row.clientId || '').trim()
+      const targetKey = String(row[keyName] || row.id || '').trim()
+      const target = (clientId ? targetByClientId.get(clientId) : undefined)
+        || (targetKey ? targetByThreadId.get(targetKey) : undefined)
+      if (clientId && target) failByClientId.set(clientId, row)
+      if (target) failByThreadId.set(target.threadId, row)
+    }
+
+    const hasMappedRows = successByClientId.size > 0 || failByClientId.size > 0 || successByThreadId.size > 0 || failByThreadId.size > 0
+    const allSucceededByCount = !hasMappedRows && successRows.length === targets.length && failRows.length === 0
+    const allFailedByCount = !hasMappedRows && failRows.length === targets.length && successRows.length === 0
+    const results = targets.map((target, index) => {
+      const normalizedThreadId = target.threadId
+      const targetClientId = String(target.clientId)
+      const failRow = failByClientId.get(targetClientId) || failByThreadId.get(normalizedThreadId)
+      if (failRow) {
+        return {
+          threadId: normalizedThreadId,
+          ok: false,
+          raw: failRow,
+          errorCode: String(failRow.error_code || failRow.code || '').trim() || undefined,
+          errorMessage: String(failRow.error_message || failRow.message || '').trim() || undefined
+        }
+      }
+      const successRow = successByClientId.get(targetClientId) || successByThreadId.get(normalizedThreadId)
+      if (successRow) {
+        return {
+          threadId: normalizedThreadId,
+          ok: true,
+          raw: successRow
+        }
+      }
+      if (allSucceededByCount) {
+        return {
+          threadId: normalizedThreadId,
+          ok: true,
+          raw: successRows[index] || {}
+        }
+      }
+      if (allFailedByCount) {
+        const failRowByCount = failRows[index] || failRows[0]
+        return {
+          threadId: normalizedThreadId,
+          ok: false,
+          raw: failRowByCount,
+          errorCode: failRowByCount ? String(failRowByCount.error_code || failRowByCount.code || '').trim() || undefined : undefined,
+          errorMessage: failRowByCount
+            ? String(failRowByCount.error_message || failRowByCount.message || failRowByCount.error_code || '').trim() || undefined
+            : undefined
+        }
+      }
+      return {
+        threadId: normalizedThreadId,
+        ok: false,
+        errorMessage: 'Không xác định được kết quả chia sẻ tin nhắn Zalo cho target này'
+      }
+    })
+
+    return {
+      response,
+      results,
+      successCount: results.filter(item => item.ok).length,
+      failCount: results.filter(item => !item.ok).length
+    }
   }
 
   async sendFriendRequestToUser(accountId: number, uid: string, message: string): Promise<unknown> {

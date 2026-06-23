@@ -2417,6 +2417,8 @@ export async function getAccountRateLimitStatus(
       retryAfterMs: tomorrow.getTime() - Date.now(),
       currentCount: dailyActionCount,
       limit: dailyLimit,
+      dailyActionCount,
+      dailyLimit,
       reason: `Đạt giới hạn ngày cho hành động "${actionName}" (${dailyActionCount}/${dailyLimit})`
     }
   }
@@ -2443,9 +2445,25 @@ export async function getAccountRateLimitStatus(
       retryAfterMs,
       currentCount: windowActionCount,
       limit: rateLimitCount,
+      dailyActionCount,
+      dailyLimit,
+      windowActionCount,
+      windowLimit: rateLimitCount,
+      windowMinutes: rateLimitMinutes,
       reason: `Đạt tốc độ giới hạn hành động "${actionName}" (${windowActionCount}/${rateLimitCount} lần / ${rateLimitMinutes} phút)`
     }
   }
 
-  return { ok: true }
+  return {
+    ok: true,
+    actionCode: normalizedActionCode,
+    actionName,
+    currentCount: windowActionCount,
+    limit: rateLimitCount,
+    dailyActionCount,
+    dailyLimit,
+    windowActionCount,
+    windowLimit: rateLimitCount,
+    windowMinutes: rateLimitMinutes
+  }
 }

@@ -41,7 +41,7 @@ import {
 } from '../domain/campaigns/campaignActionDescriptors'
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import { ZaloApiError } from 'zca-js'
-import { ZaloRuntimeService, type ZaloFoundUser } from './zaloRuntimeService'
+import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser } from './zaloRuntimeService'
 import { EmailRuntimeService } from './emailRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import { callAiUsing } from './aiRuntimeService'
@@ -138,6 +138,19 @@ interface NewsfeedActionAvailability {
   allowComment: boolean
   blockedReasons: string[]
   allCheckedActionsBlocked: boolean
+}
+
+interface ZaloShareMessageTarget {
+  detail: CampaignInputData
+  target: ZaloResolvedTarget
+  threadId: string
+  inputData: Record<string, unknown>
+}
+
+interface ZaloShareMessageCapacity {
+  ok: boolean
+  capacity: number
+  limitStatus?: AccountActionLimitStatus
 }
 
 interface PostBumpTarget {
@@ -238,6 +251,9 @@ const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_MESSAGE_SEND_MODE_SHARE = 'share'
+const ZALO_SHARE_MESSAGE_BATCH_SIZE = 50
+const ZALO_SHARE_MESSAGE_REWRITE_AI_CODE = 'fb_send_message_rewrite'
 const ZALO_FRIEND_TARGET_MODE_SELECTED = 'selected'
 const ZALO_FRIEND_TARGET_MODE_ALL = 'all_friends'
 const ZALO_FRIEND_TARGET_MODE_TAGGED = 'tagged_friends'
@@ -1105,6 +1121,11 @@ export class CampaignScheduler {
       }
     }
 
+    if (this.shouldUseZaloShareMessageBatch(campaign)) {
+      await this.executeZaloShareMessageBatchCampaign(account, campaign, details, actionDescriptors)
+      return
+    }
+
     // Shuffle group list nếu enabled
     if (campaign.extraSettings?.shuffleGroupList && details.length > 1 && campaign.actionId === 'facebook_group_post') {
       for (let i = details.length - 1; i > 0; i--) {
@@ -1493,6 +1514,520 @@ export class CampaignScheduler {
       }
     }
     await this.releaseRunningAccount(account.id)
+  }
+
+  private shouldUseZaloShareMessageBatch(campaign: Campaign): boolean {
+    return (
+      campaign.extraSettings?.zaloMessageSendMode === ZALO_MESSAGE_SEND_MODE_SHARE &&
+      (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID)
+    )
+  }
+
+  private getZaloShareMessageActionDescriptor(
+    campaign: Campaign,
+    actionDescriptors: CampaignActionDescriptor[]
+  ): CampaignActionDescriptor {
+    const actionCode = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+      ? 'zalo_message_group'
+      : 'zalo_message_friend'
+    return actionDescriptors.find(action => action.code === actionCode) || {
+      code: actionCode,
+      name: this.getAccountActionName(actionCode)
+    }
+  }
+
+  private async executeZaloShareMessageBatchCampaign(
+    account: AutoAccount,
+    campaign: Campaign,
+    details: CampaignInputData[],
+    actionDescriptors: CampaignActionDescriptor[]
+  ): Promise<void> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+
+    const extra = campaign.extraSettings || {}
+    const actionDescriptor = this.getZaloShareMessageActionDescriptor(campaign, actionDescriptors)
+    const baseMessage = this.cycleVariant(this.splitContentVariants(campaign.content), 0)
+    const attachments = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
+    const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+    const targetKindLabel = isGroup ? 'group Zalo' : 'bạn bè Zalo'
+
+    if (!baseMessage.trim() && attachments.length === 0) {
+      const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+      await this.releaseRunningAccount(account.id)
+      return
+    }
+
+    if (details.length === 0) {
+      const note = `Không có ${targetKindLabel} để gửi tin`
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+      await this.releaseRunningAccount(account.id)
+      return
+    }
+
+    const limitConfig = extra.actionLimits
+    let stoppedBeforeCompletion = false
+    let earliestFutureInputSchedule: Date | null = null
+    let index = 0
+
+    while (index < details.length) {
+      const cur = await this.supabase.getCampaign(campaign.id)
+      if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
+        await this.releaseRunningAccount(account.id)
+        await this.completeCampaignPause(campaign)
+        return
+      }
+
+      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+      if (accountBlockReason) {
+        stoppedBeforeCompletion = true
+        await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
+        await this.releaseRunningAccount(account.id)
+        return
+      }
+
+      const capacity = await this.getZaloShareMessageBatchCapacity(account, campaign, actionDescriptor, limitConfig)
+      if (!capacity.ok || capacity.capacity < 1) {
+        stoppedBeforeCompletion = true
+        await this.handleLimitStatus(account, campaign, capacity.limitStatus || {
+          ok: false,
+          actionCode: actionDescriptor.code,
+          actionName: actionDescriptor.name,
+          reason: `Hành động "${actionDescriptor.name}" đang đạt giới hạn`
+        })
+        break
+      }
+
+      const batch: ZaloShareMessageTarget[] = []
+      let stopAfterInvalidTarget = false
+
+      while (index < details.length && batch.length < capacity.capacity) {
+        const detail = details[index]
+        index += 1
+
+        if (detail.status !== 'chờ xử lý') continue
+        const futureSchedule = this.getFutureInputSchedule(detail, new Date())
+        if (futureSchedule) {
+          if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
+            earliestFutureInputSchedule = futureSchedule
+          }
+          continue
+        }
+
+        await this.supabase.updateCampaignInputData(detail.id, {
+          status: 'đang chạy',
+          dateAction: new Date().toISOString()
+        })
+
+        const target = this.createZaloShareMessageTarget(campaign, detail)
+        if (!target) {
+          stopAfterInvalidTarget = await this.handleInvalidZaloShareMessageTarget(account, campaign, detail, actionDescriptor)
+          if (stopAfterInvalidTarget) break
+          continue
+        }
+        batch.push(target)
+      }
+
+      if (stopAfterInvalidTarget) {
+        stoppedBeforeCompletion = true
+        break
+      }
+      if (batch.length === 0) continue
+
+      const message = await this.getZaloShareMessageForBatch(account, campaign, baseMessage)
+      const stopAfterBatch = await this.processZaloShareMessageBatch(
+        account,
+        campaign,
+        batch,
+        actionDescriptor,
+        message,
+        attachments
+      )
+      if (stopAfterBatch) {
+        stoppedBeforeCompletion = true
+        break
+      }
+
+      if (index < details.length) {
+        const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
+        if (sleepTime > 0) {
+          const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime)
+          if (sleepResult === 'paused') {
+            await this.releaseRunningAccount(account.id)
+            await this.completeCampaignPause(campaign)
+            return
+          }
+        }
+      }
+    }
+
+    if (!stoppedBeforeCompletion) {
+      if (earliestFutureInputSchedule) {
+        await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
+      } else {
+        await this.handleCampaignCompletion(campaign)
+      }
+    }
+    await this.releaseRunningAccount(account.id)
+  }
+
+  private async getZaloShareMessageBatchCapacity(
+    account: AutoAccount,
+    campaign: Campaign,
+    actionDescriptor: CampaignActionDescriptor,
+    limitConfig?: CampaignActionLimitSettings
+  ): Promise<ZaloShareMessageCapacity> {
+    const entitlements = await loadCurrentUserEffectiveEntitlements()
+    const actionLimitConfig = this.getActionLimitConfig(actionDescriptor.code, limitConfig, account, entitlements)
+    const limitStatus = await this.supabase.getAccountRateLimitStatus(
+      account.id,
+      actionDescriptor.code,
+      actionDescriptor.name,
+      actionLimitConfig
+    )
+    if (!limitStatus.ok) return { ok: false, capacity: 0, limitStatus }
+
+    const dailyLimit = limitStatus.dailyLimit ?? actionLimitConfig?.dailyLimit ?? 30
+    const dailyActionCount = limitStatus.dailyActionCount ?? 0
+    const windowLimit = limitStatus.windowLimit ?? actionLimitConfig?.rateLimitCount ?? 9
+    const windowActionCount = limitStatus.windowActionCount ?? 0
+    const dailyRemaining = Math.max(0, dailyLimit - dailyActionCount)
+    const windowRemaining = Math.max(0, windowLimit - windowActionCount)
+    const capacity = Math.min(ZALO_SHARE_MESSAGE_BATCH_SIZE, dailyRemaining, windowRemaining)
+
+    if (capacity < 1) {
+      return {
+        ok: false,
+        capacity: 0,
+        limitStatus: {
+          ok: false,
+          actionCode: actionDescriptor.code,
+          actionName: actionDescriptor.name,
+          currentCount: Math.max(dailyActionCount, windowActionCount),
+          limit: Math.min(dailyLimit, windowLimit),
+          dailyActionCount,
+          dailyLimit,
+          windowActionCount,
+          windowLimit,
+          windowMinutes: limitStatus.windowMinutes,
+          reason: `Hành động "${actionDescriptor.name}" không còn quota để gửi batch`
+        }
+      }
+    }
+
+    return { ok: true, capacity }
+  }
+
+  private async getZaloShareMessageForBatch(
+    account: AutoAccount,
+    campaign: Campaign,
+    message: string
+  ): Promise<string> {
+    const original = String(message || '')
+    const content = original.trim()
+    if (campaign.extraSettings?.rewriteContentEachRun !== true || !content) {
+      return original
+    }
+
+    try {
+      const result = await callAiUsing(ZALO_SHARE_MESSAGE_REWRITE_AI_CODE, {
+        content,
+        question: content,
+        source: 'aka_agent'
+      }, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? null,
+        accountId: account.id,
+        campaignId: campaign.id
+      })
+
+      if (!result.ok) {
+        throw new Error(result.error || 'AI lỗi')
+      }
+
+      const rewritten = String(result.content || '').trim()
+      if (!rewritten) {
+        throw new Error('AI trả về nội dung không hợp lệ.')
+      }
+      return rewritten
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn('[CampaignScheduler] Zalo share AI rewrite failed, using original content', {
+        campaignId: campaign.id,
+        accountId: account.id,
+        message
+      })
+      return original
+    }
+  }
+
+  private createZaloShareMessageTarget(
+    campaign: Campaign,
+    detail: CampaignInputData
+  ): ZaloShareMessageTarget | null {
+    const threadId = this.getZaloShareMessageThreadId(campaign, detail)
+    if (!threadId) return null
+    const inputData = this.buildZaloShareInputData(detail)
+    const target = this.normalizeZaloTargetFromInputData(
+      threadId,
+      detail.name,
+      inputData,
+      campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID ? { type: 'group' } : undefined,
+      campaign.actionId !== ZALO_MESSAGE_GROUP_ACTION_ID
+    )
+    return { detail, target, threadId, inputData }
+  }
+
+  private getZaloShareMessageThreadId(campaign: Campaign, detail: CampaignInputData): string {
+    const raw = this.firstNonEmptyString(detail.uid)
+    return campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+      ? raw.replace(/^g/i, '')
+      : raw
+  }
+
+  private buildZaloShareInputData(detail: CampaignInputData): Record<string, unknown> {
+    return {
+      id: detail.id,
+      name: detail.name || '',
+      phone: detail.phone || '',
+      uid: detail.uid || '',
+      email: detail.email || '',
+      info1: detail.info1 || '',
+      info2: detail.info2 || '',
+      info3: detail.info3 || '',
+      info4: detail.info4 || '',
+      info5: detail.info5 || ''
+    }
+  }
+
+  private async handleInvalidZaloShareMessageTarget(
+    account: AutoAccount,
+    campaign: Campaign,
+    detail: CampaignInputData,
+    actionDescriptor: CampaignActionDescriptor
+  ): Promise<boolean> {
+    const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+    const rawMessage = isGroup ? 'ID group Zalo không hợp lệ' : 'UID bạn bè Zalo không hợp lệ'
+    const actionDetail = await this.createZaloPolicyDetailFromCode(
+      account,
+      campaign,
+      await this.supabase.getZaloErrorPolicyByCode('114'),
+      rawMessage,
+      actionDescriptor.code,
+      actionDescriptor.name,
+      '114',
+      { inputData: this.buildZaloShareInputData(detail) }
+    )
+    await this.recordZaloShareActionDetail(campaign, detail, account.id, actionDetail)
+    await this.updateZaloShareInputStatus(detail, actionDetail)
+    if (actionDetail.stopAfterTarget) return true
+    return false
+  }
+
+  private async processZaloShareMessageBatch(
+    account: AutoAccount,
+    campaign: Campaign,
+    batch: ZaloShareMessageTarget[],
+    actionDescriptor: CampaignActionDescriptor,
+    message: string,
+    attachments: string[]
+  ): Promise<boolean> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+
+    const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+    const trimmedMessage = String(message || '').trim()
+    const mediaFailures = new Map<number, ZaloActionDetailOutput>()
+    const mediaResponses = new Map<number, unknown>()
+
+    if (attachments.length > 0) {
+      for (const item of batch) {
+        try {
+          const response = isGroup
+            ? await this.zaloRuntime.sendMessageToGroup(account.id, item.threadId, '', attachments)
+            : await this.zaloRuntime.sendMessageToUser(account.id, item.threadId, '', attachments)
+          mediaResponses.set(item.detail.id, response)
+        } catch (err) {
+          mediaFailures.set(item.detail.id, await this.createZaloErrorDetail(
+            account,
+            campaign,
+            err,
+            actionDescriptor.code,
+            actionDescriptor.name,
+            { target: item.target, threadId: item.threadId, attachments, inputData: item.inputData, sendMode: 'share_media' }
+          ))
+        }
+      }
+    }
+
+    let forwardResult: ZaloForwardMessageResult | null = null
+    let forwardError: unknown = null
+    const textBatch = batch.filter(item => !mediaFailures.has(item.detail.id))
+    if (trimmedMessage) {
+      if (textBatch.length > 0) {
+        try {
+          forwardResult = isGroup
+            ? await this.zaloRuntime.forwardMessageToGroups(account.id, textBatch.map(item => item.threadId), trimmedMessage)
+            : await this.zaloRuntime.forwardMessageToUsers(account.id, textBatch.map(item => item.threadId), trimmedMessage)
+        } catch (err) {
+          forwardError = err
+        }
+      }
+    }
+
+    let stopAfterBatch = false
+    let shareSuccessCount = 0
+    let shareFailCount = 0
+    for (const item of batch) {
+      const mediaFailure = mediaFailures.get(item.detail.id)
+      let actionDetail: ZaloActionDetailOutput
+
+      if (mediaFailure) {
+        actionDetail = mediaFailure
+      } else if (forwardError) {
+        actionDetail = await this.createZaloErrorDetail(
+          account,
+          campaign,
+          forwardError,
+          actionDescriptor.code,
+          actionDescriptor.name,
+          { target: item.target, threadId: item.threadId, message: trimmedMessage, attachments, inputData: item.inputData, sendMode: 'share_text' }
+        )
+      } else if (trimmedMessage) {
+        const targetResult = this.findZaloForwardTargetResult(forwardResult, item.threadId)
+        actionDetail = targetResult?.ok
+          ? this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response)
+          : await this.createZaloForwardFailureDetail(account, campaign, actionDescriptor, item, targetResult, trimmedMessage, attachments, forwardResult?.response)
+      } else {
+        actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, '', attachments, mediaResponses.get(item.detail.id), null)
+      }
+
+      const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail)
+      await this.updateZaloShareInputStatus(item.detail, actionDetail)
+
+      if (actionDetail.stopAfterTarget) {
+        stopAfterBatch = true
+      }
+
+      const createdStatus = created?.status || actionDetail.status
+      if (createdStatus === 'thành công') {
+        shareSuccessCount += 1
+        await this.resetCampaignBadTargetCount(campaign)
+      } else {
+        shareFailCount += 1
+      }
+    }
+
+    await this.logCampaignProgress(
+      campaign.id,
+      `📨 Kết quả chia sẻ tin nhắn Zalo: tổng ${batch.length}, thành công ${shareSuccessCount}, thất bại ${shareFailCount}`
+    )
+
+    return stopAfterBatch
+  }
+
+  private findZaloForwardTargetResult(
+    forwardResult: ZaloForwardMessageResult | null,
+    threadId: string
+  ): ZaloForwardMessageTargetResult | null {
+    return forwardResult?.results.find(item => item.threadId === threadId) || null
+  }
+
+  private createZaloShareSuccessDetail(
+    actionDescriptor: CampaignActionDescriptor,
+    item: ZaloShareMessageTarget,
+    message: string,
+    attachments: string[],
+    mediaResponse: unknown,
+    forwardResponse: unknown
+  ): ZaloActionDetailOutput {
+    const isGroup = actionDescriptor.code === 'zalo_message_group'
+    return this.createZaloSuccessDetail({
+      actionCode: actionDescriptor.code,
+      actionName: actionDescriptor.name,
+      log: isGroup
+        ? `Đã chia sẻ tin nhắn vào group ${this.getZaloTargetLabel(item.target)}`
+        : `Đã chia sẻ tin nhắn đến ${this.getZaloTargetLabel(item.target)}`,
+      data: {
+        target: item.target,
+        threadId: item.threadId,
+        message,
+        attachments,
+        sendMode: 'share',
+        mediaResponse: mediaResponse as Record<string, unknown> | undefined,
+        forwardResponse: forwardResponse as Record<string, unknown> | undefined
+      }
+    })
+  }
+
+  private async createZaloForwardFailureDetail(
+    account: AutoAccount,
+    campaign: Campaign,
+    actionDescriptor: CampaignActionDescriptor,
+    item: ZaloShareMessageTarget,
+    targetResult: ZaloForwardMessageTargetResult | null,
+    message: string,
+    attachments: string[],
+    forwardResponse: unknown
+  ): Promise<ZaloActionDetailOutput> {
+    const rawMessage = targetResult?.errorMessage || 'Chia sẻ tin nhắn Zalo thất bại'
+    const err = {
+      message: rawMessage,
+      code: targetResult?.errorCode
+    }
+    return this.createZaloErrorDetail(account, campaign, err, actionDescriptor.code, actionDescriptor.name, {
+      target: item.target,
+      threadId: item.threadId,
+      message,
+      attachments,
+      sendMode: 'share',
+      forwardTargetResult: targetResult || undefined,
+      forwardResponse: forwardResponse as Record<string, unknown> | undefined
+    })
+  }
+
+  private async recordZaloShareActionDetail(
+    campaign: Campaign,
+    detail: CampaignInputData,
+    accountId: number,
+    actionDetail: ZaloActionDetailOutput
+  ): Promise<CampaignDetail | null> {
+    if (actionDetail.createDetail === false || !actionDetail.status) {
+      return null
+    }
+
+    const created = await this.supabase.createCampaignDetail({
+      inputDataId: detail.id,
+      campaignId: campaign.id,
+      accountId,
+      actionCode: actionDetail.actionCode ?? null,
+      actionName: actionDetail.actionName || this.getAccountActionName(actionDetail.actionCode || ''),
+      status: actionDetail.status,
+      errorCode: actionDetail.errorCode ?? null,
+      log: actionDetail.log || undefined,
+      data: actionDetail.data || {},
+      shouldCountAction: actionDetail.countsTowardLimit === true
+    })
+
+    return created
+  }
+
+  private async updateZaloShareInputStatus(
+    detail: CampaignInputData,
+    actionDetail: ZaloActionDetailOutput
+  ): Promise<void> {
+    if (actionDetail.resetInputToPending) {
+      await this.supabase.updateCampaignInputData(detail.id, {
+        status: 'chờ xử lý',
+        note: actionDetail.pendingNote || actionDetail.log || ''
+      })
+      return
+    }
+
+    await this.supabase.updateCampaignInputData(detail.id, {
+      status: 'hoàn thành',
+      note: actionDetail.status === 'thành công' ? '' : (actionDetail.log || '')
+    })
   }
 
   private shouldUseSuggestedFriends(campaign: Campaign): boolean {
