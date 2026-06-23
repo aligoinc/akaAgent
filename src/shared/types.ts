@@ -232,6 +232,11 @@ export interface AccountActionLimitStatus {
   retryAfterMs?: number
   currentCount?: number
   limit?: number
+  dailyActionCount?: number
+  dailyLimit?: number
+  windowActionCount?: number
+  windowLimit?: number
+  windowMinutes?: number
   disabledReason?: string | null
 }
 
@@ -302,6 +307,7 @@ export interface CampaignExtraSettings {
   suggestedFriendsCount?: number           // Số lượng đề xuất bạn bè cần lấy
   // Zalo - Nhắn tin, kết bạn đến SĐT
   friendRequestMessage?: string
+  zaloMessageSendMode?: 'normal' | 'share'
   enableZaloTag?: boolean
   zaloTagId?: number | string | null
   zaloTagName?: string | null

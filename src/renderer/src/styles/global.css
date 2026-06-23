@@ -5733,6 +5733,10 @@ td.report-account-col span {
   align-items: stretch;
 }
 
+.campaign-content-template-layout.full-width {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .campaign-message-content-layout {
   display: flex;
   flex-direction: column;

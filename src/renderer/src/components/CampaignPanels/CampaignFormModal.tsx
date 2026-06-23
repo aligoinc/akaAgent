@@ -39,6 +39,7 @@ const FIND_DATA_TARGET_FIELDS = [
 type FindDataTargetCampaignField = typeof FIND_DATA_TARGET_FIELDS[number]
 type FindDataSourceKind = 'group' | 'search'
 type ZaloFriendTargetMode = NonNullable<CampaignExtraSettings['zaloFriendTargetMode']>
+type ZaloMessageSendMode = NonNullable<CampaignExtraSettings['zaloMessageSendMode']>
 type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'updatedAt' | 'dataTypes' | 'sourceTypes'
 type CampaignPickerSource =
   | { type: 'findDataSource'; sourceKind?: FindDataSourceKind }
@@ -1107,6 +1108,7 @@ export default function CampaignFormModal({
     zaloTagName: campaign?.extraSettings?.zaloTagName || '',
     enableZaloAlias: campaign?.extraSettings?.enableZaloAlias ?? false,
     zaloAliasTemplate: campaign?.extraSettings?.zaloAliasTemplate || getDefaultZaloAliasTemplate(initialActionId),
+    zaloMessageSendMode: (campaign?.extraSettings?.zaloMessageSendMode || 'normal') as ZaloMessageSendMode,
     zaloFriendTargetMode: (campaign?.extraSettings?.zaloFriendTargetMode || 'selected') as ZaloFriendTargetMode,
     zaloFriendSourceTagIds: normalizeZaloTagIdList(campaign?.extraSettings?.zaloFriendSourceTagIds),
     zaloFriendSourceTagNames: normalizeZaloTagNameList(campaign?.extraSettings?.zaloFriendSourceTagNames),
@@ -1237,6 +1239,7 @@ export default function CampaignFormModal({
   const isZaloMessageRemarketingCustomerCampaign = formData.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
   const isZaloMessageGroupCampaign = formData.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
   const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
+  const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
   const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
   const isPageInboxMessageCampaign = formData.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
@@ -1275,10 +1278,10 @@ export default function CampaignFormModal({
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
   const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageGroupCampaign
   const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
-  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign
+  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
   const needsZaloLabels =
     ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag) ||
-    (isZaloMessageFriendCampaign && (formData.enableZaloTag || formData.zaloFriendTargetMode === 'tagged_friends'))
+    (isZaloMessageFriendCampaign && ((!isZaloShareMessageMode && formData.enableZaloTag) || formData.zaloFriendTargetMode === 'tagged_friends'))
   const showFoundDataHandlingSection = isFindDataGroupCampaign && (
     formData.isFindPhone ||
     formData.isFindLinkGroupZalo ||
@@ -1634,7 +1637,7 @@ export default function CampaignFormModal({
           }
           return s
         })
-      const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign
+      const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
         ? steps.flatMap(s => s.id === 'general' ? [s, ACTION_OPTIONS_STEP] : [s])
         : steps
       return showFindDataSourceSection
@@ -2732,11 +2735,12 @@ export default function CampaignFormModal({
             emailSubject: isEmailCampaign ? formData.emailSubject.trim() : '',
             emailBodyIsHtml: isEmailCampaign ? formData.emailBodyIsHtml : false,
             friendRequestMessage: (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.friendRequestMessage.trim() : '',
-            enableZaloTag: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloTag : false,
-            zaloTagId: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
-            zaloTagName: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagName : '',
-            enableZaloAlias: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloAlias : false,
-            zaloAliasTemplate: (isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloAlias ? formData.zaloAliasTemplate.trim() : '',
+            zaloMessageSendMode: (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) ? formData.zaloMessageSendMode : 'normal',
+            enableZaloTag: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloTag : false,
+            zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
+            zaloTagName: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagName : '',
+            enableZaloAlias: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloAlias : false,
+            zaloAliasTemplate: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloAlias ? formData.zaloAliasTemplate.trim() : '',
             zaloFriendTargetMode: isZaloMessageFriendCampaign ? formData.zaloFriendTargetMode : 'selected',
             zaloFriendSourceTagIds: selectedZaloFriendSourceTagIds,
             zaloFriendSourceTagNames: selectedZaloFriendSourceTagNames,
@@ -2874,11 +2878,11 @@ export default function CampaignFormModal({
         showAlert('Nội dung kết bạn không được quá 150 ký tự.', 'error')
         return
       }
-      if (formData.enableZaloTag && !formData.zaloTagId) {
+      if (!isZaloShareMessageMode && formData.enableZaloTag && !formData.zaloTagId) {
         showAlert('Vui lòng chọn tag Zalo cần gắn.', 'error')
         return
       }
-      if (formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
+      if (!isZaloShareMessageMode && formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
         showAlert('Vui lòng nhập template đổi tên Zalo.', 'error')
         return
       }
@@ -2888,11 +2892,11 @@ export default function CampaignFormModal({
         showAlert('Vui lòng chọn tag nguồn Zalo để lấy danh sách bạn bè.', 'error')
         return
       }
-      if (formData.enableZaloTag && !formData.zaloTagId) {
+      if (!isZaloShareMessageMode && formData.enableZaloTag && !formData.zaloTagId) {
         showAlert('Vui lòng chọn tag Zalo cần gắn.', 'error')
         return
       }
-      if (formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
+      if (!isZaloShareMessageMode && formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
         showAlert('Vui lòng nhập template đổi tên Zalo.', 'error')
         return
       }
@@ -4656,6 +4660,26 @@ export default function CampaignFormModal({
     </>
   )
 
+  const renderZaloMessageShareModeOption = () => (
+    <div className="stepper-form-group">
+      <label className="schedule-checkbox-label">
+        <input
+          type="checkbox"
+          checked={formData.zaloMessageSendMode === 'share'}
+          onChange={e => setFormData(p => ({
+            ...p,
+            zaloMessageSendMode: e.target.checked ? 'share' : 'normal',
+            enableZaloTag: e.target.checked ? false : p.enableZaloTag,
+            zaloTagId: e.target.checked ? '' : p.zaloTagId,
+            zaloTagName: e.target.checked ? '' : p.zaloTagName,
+            enableZaloAlias: e.target.checked ? false : p.enableZaloAlias
+          }))}
+        />
+        <span>Gửi dạng chia sẻ tin nhắn, gửi nhanh cho 50 người mỗi lần (không áp dụng cá nhân hoá nội dung tin nhắn)</span>
+      </label>
+    </div>
+  )
+
   const renderZaloMessageFriendActionOptions = () => (
     <>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Nguồn bạn bè</div>
@@ -4693,54 +4717,68 @@ export default function CampaignFormModal({
 
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 
-      <div className="stepper-form-group">
-        <label className="schedule-checkbox-label">
-          <input
-            type="checkbox"
-            checked={formData.enableZaloTag}
-            onChange={e => setFormData(p => ({
-              ...p,
-              enableZaloTag: e.target.checked,
-              zaloTagId: e.target.checked ? p.zaloTagId : '',
-              zaloTagName: e.target.checked ? p.zaloTagName : ''
-            }))}
-          />
-          <span>Kiêm gắn tag</span>
-        </label>
-      </div>
-      {formData.enableZaloTag && renderZaloTagSelector({
-        label: 'Tag Zalo',
-        value: formData.zaloTagId,
-        onChange: (id, name) => setFormData(p => ({ ...p, zaloTagId: id, zaloTagName: name }))
-      })}
+      {renderZaloMessageShareModeOption()}
 
-      <div className="stepper-form-group">
-        <label className="schedule-checkbox-label">
-          <input
-            type="checkbox"
-            checked={formData.enableZaloAlias}
-            onChange={e => setFormData(p => ({
-              ...p,
-              enableZaloAlias: e.target.checked,
-              zaloAliasTemplate: e.target.checked && !p.zaloAliasTemplate.trim()
-                ? getDefaultZaloAliasTemplate(p.actionId)
-                : p.zaloAliasTemplate
-            }))}
-          />
-          <span>Kiêm đổi tên</span>
-        </label>
-      </div>
-      {formData.enableZaloAlias && (
-        <div className="stepper-form-group">
-          <input
-            type="text"
-            className="stepper-input"
-            value={formData.zaloAliasTemplate}
-            onChange={e => setFormData(p => ({ ...p, zaloAliasTemplate: e.target.value }))}
-            placeholder={defaultZaloAliasTemplate}
-          />
-        </div>
+      {!isZaloShareMessageMode && (
+        <>
+          <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+          <div className="stepper-form-group">
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.enableZaloTag}
+                onChange={e => setFormData(p => ({
+                  ...p,
+                  enableZaloTag: e.target.checked,
+                  zaloTagId: e.target.checked ? p.zaloTagId : '',
+                  zaloTagName: e.target.checked ? p.zaloTagName : ''
+                }))}
+              />
+              <span>Kiêm gắn tag</span>
+            </label>
+          </div>
+          {formData.enableZaloTag && renderZaloTagSelector({
+            label: 'Tag Zalo',
+            value: formData.zaloTagId,
+            onChange: (id, name) => setFormData(p => ({ ...p, zaloTagId: id, zaloTagName: name }))
+          })}
+
+          <div className="stepper-form-group">
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.enableZaloAlias}
+                onChange={e => setFormData(p => ({
+                  ...p,
+                  enableZaloAlias: e.target.checked,
+                  zaloAliasTemplate: e.target.checked && !p.zaloAliasTemplate.trim()
+                    ? getDefaultZaloAliasTemplate(p.actionId)
+                    : p.zaloAliasTemplate
+                }))}
+              />
+              <span>Kiêm đổi tên</span>
+            </label>
+          </div>
+          {formData.enableZaloAlias && (
+            <div className="stepper-form-group">
+              <input
+                type="text"
+                className="stepper-input"
+                value={formData.zaloAliasTemplate}
+                onChange={e => setFormData(p => ({ ...p, zaloAliasTemplate: e.target.value }))}
+                placeholder={defaultZaloAliasTemplate}
+              />
+            </div>
+          )}
+        </>
       )}
+    </>
+  )
+
+  const renderZaloMessageGroupActionOptions = () => (
+    <>
+      {renderZaloMessageShareModeOption()}
     </>
   )
 
@@ -7398,6 +7436,8 @@ export default function CampaignFormModal({
                       ? renderZaloMessagePhoneActionOptions()
                       : isZaloMessageFriendCampaign
                         ? renderZaloMessageFriendActionOptions()
+                        : isZaloMessageGroupCampaign
+                          ? renderZaloMessageGroupActionOptions()
                         : renderMessageUidActionOptions()}
                   </div>
                 )}
@@ -7875,33 +7915,33 @@ export default function CampaignFormModal({
                       </div>
                     </>
                   )}
-	                  {isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
-	                    <>
-	                  {isMessageCampaign ? (
-	                    <div className="campaign-message-content-layout">
-                      <div className="stepper-form-group campaign-message-content-tools">
-                        <label>{getCampaignContentLabel()}</label>
-                        {renderContentToolsRow('content')}
-                      </div>
-                      <div className="campaign-content-template-layout">
-                        <div className="stepper-form-group">
-                          {renderCampaignContentTextarea(false)}
+                  {isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
+                    <>
+                      {isMessageCampaign ? (
+                        <div className="campaign-message-content-layout">
+                          <div className="stepper-form-group campaign-message-content-tools">
+                            <label>{getCampaignContentLabel()}</label>
+                            {renderContentToolsRow('content')}
+                          </div>
+                          <div className={`campaign-content-template-layout${isZaloShareMessageMode ? ' full-width' : ''}`}>
+                            <div className="stepper-form-group">
+                              {renderCampaignContentTextarea(false)}
+                            </div>
+                            {!isZaloShareMessageMode && renderMessageInsertPanel()}
+                          </div>
+                          {renderCampaignContentHint()}
+                          {renderRewriteContentEachRunOption()}
                         </div>
-                        {renderMessageInsertPanel()}
-                      </div>
-                      {renderCampaignContentHint()}
-                      {renderRewriteContentEachRunOption()}
-                    </div>
-                  ) : (
-	                    <div className="stepper-form-group">
-	                      <label>Nội dung chiến dịch</label>
-	                      {renderContentToolsRow('content')}
-	                      {renderCampaignContentTextarea()}
-	                    </div>
-	                  )}
+                      ) : (
+                        <div className="stepper-form-group">
+                          <label>Nội dung chiến dịch</label>
+                          {renderContentToolsRow('content')}
+                          {renderCampaignContentTextarea()}
+                        </div>
+                      )}
 
-	                  {renderImagePicker('post', 'Media')}
-	                    </>
+                      {renderImagePicker('post', 'Media')}
+                    </>
                   )}
                 </div>
               )}
