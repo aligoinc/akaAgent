@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, Edit3, FileText, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { Ban, CheckCircle2, Edit3, FileText, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, Save, Search, Trash2, X } from 'lucide-react'
 import {
   AkaBizIntegrationInfo,
   AkaBizIntegrationKind,
@@ -10,8 +10,9 @@ import {
   EmailNotificationSettings
 } from '../../../../shared/types'
 import { useUiStore } from '../../stores/uiStore'
+import ZaloFriendBlocklistSettings from './ZaloFriendBlocklistSettings'
 
-export type GeneralSettingsMenu = 'akabiz' | 'templates' | 'emailNotifications'
+export type GeneralSettingsMenu = 'akabiz' | 'templates' | 'emailNotifications' | 'zaloBlocklists'
 
 interface GeneralSettingsModalProps {
   initialMenu?: GeneralSettingsMenu
@@ -589,9 +590,16 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
               <Mail size={15} />
               <span>Nhận thông báo</span>
             </button>
+            <button
+              className={`general-settings-nav-item ${activeMenu === 'zaloBlocklists' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('zaloBlocklists')}
+            >
+              <Ban size={15} />
+              <span>Danh sách không gửi tin</span>
+            </button>
           </aside>
 
-          <section className="general-settings-content">
+          <section className={`general-settings-content ${activeMenu === 'zaloBlocklists' ? 'zalo-blocklist-content' : ''}`}>
             {activeMenu === 'akabiz' ? (loading ? (
               <div className="text-center text-secondary" style={{ padding: 24 }}>Đang tải...</div>
             ) : (
@@ -699,7 +707,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
                   )
                 })}
               </div>
-            )) : activeMenu === 'templates' ? renderTemplatesContent() : renderEmailNotificationContent()}
+            )) : activeMenu === 'templates' ? renderTemplatesContent() : activeMenu === 'emailNotifications' ? renderEmailNotificationContent() : <ZaloFriendBlocklistSettings />}
           </section>
         </div>
       </div>

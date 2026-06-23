@@ -259,6 +259,7 @@ export function mapAccountContactGroupFromDB(row: Record<string, unknown>): Auto
     id: row.id as number,
     accountId: row.account_id as number,
     contactType: row.contact_type as ContactType,
+    purpose: (row.purpose as AutoAccountContactGroup['purpose'] | null | undefined) || 'data_group',
     name: row.name as string,
     contactCount: row.contact_count as number | undefined,
     isDelete: row.is_delete as boolean,

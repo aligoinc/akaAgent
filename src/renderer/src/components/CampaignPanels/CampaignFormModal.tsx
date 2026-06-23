@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3 } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -8,6 +8,7 @@ import {
   AkaBizCampaignListKind,
   AkaBizIntegrations,
   AutoAccountContact,
+  AutoAccountContactGroup,
   Campaign,
   CampaignAction,
   CampaignInputData,
@@ -1112,6 +1113,9 @@ export default function CampaignFormModal({
     zaloFriendTargetMode: (campaign?.extraSettings?.zaloFriendTargetMode || 'selected') as ZaloFriendTargetMode,
     zaloFriendSourceTagIds: normalizeZaloTagIdList(campaign?.extraSettings?.zaloFriendSourceTagIds),
     zaloFriendSourceTagNames: normalizeZaloTagNameList(campaign?.extraSettings?.zaloFriendSourceTagNames),
+    zaloFriendBlocklistEnabled: campaign?.extraSettings?.zaloFriendBlocklistEnabled ?? false,
+    zaloFriendBlocklistId: campaign?.extraSettings?.zaloFriendBlocklistId ?? null as number | null,
+    zaloFriendBlocklistName: campaign?.extraSettings?.zaloFriendBlocklistName || '',
     pageInboxPageUid: campaign?.extraSettings?.pageInboxPageUid || '',
     pageInboxPageName: campaign?.extraSettings?.pageInboxPageName || '',
     // Nguồn đăng bài (timeline post)
@@ -1210,6 +1214,8 @@ export default function CampaignFormModal({
   const [zaloLabelsLoading, setZaloLabelsLoading] = useState(false)
   const [zaloLabelsSyncing, setZaloLabelsSyncing] = useState(false)
   const [zaloLabelsError, setZaloLabelsError] = useState('')
+  const [zaloFriendBlocklists, setZaloFriendBlocklists] = useState<AutoAccountContactGroup[]>([])
+  const [zaloFriendBlocklistsLoading, setZaloFriendBlocklistsLoading] = useState(false)
   const [internalCampaignDrafts, setInternalCampaignDrafts] = useState<InternalCampaignDraft[]>([])
   const [draftFormConfig, setDraftFormConfig] = useState<{
     tempId: number
@@ -1282,6 +1288,7 @@ export default function CampaignFormModal({
   const needsZaloLabels =
     ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag) ||
     (isZaloMessageFriendCampaign && ((!isZaloShareMessageMode && formData.enableZaloTag) || formData.zaloFriendTargetMode === 'tagged_friends'))
+  const selectedZaloFriendBlocklist = zaloFriendBlocklists.find(group => group.id === formData.zaloFriendBlocklistId) || null
   const showFoundDataHandlingSection = isFindDataGroupCampaign && (
     formData.isFindPhone ||
     formData.isFindLinkGroupZalo ||
@@ -1934,6 +1941,58 @@ export default function CampaignFormModal({
     return () => { cancelled = true }
   }, [
     needsZaloLabels,
+    formData.accountIds.join(',')
+  ])
+
+  useEffect(() => {
+    if (!isZaloMessageFriendCampaign || formData.accountIds.length === 0) {
+      setZaloFriendBlocklists([])
+      setZaloFriendBlocklistsLoading(false)
+      setFormData(prev => (
+        prev.zaloFriendBlocklistEnabled || prev.zaloFriendBlocklistId || prev.zaloFriendBlocklistName
+          ? {
+            ...prev,
+            zaloFriendBlocklistEnabled: false,
+            zaloFriendBlocklistId: null,
+            zaloFriendBlocklistName: ''
+          }
+          : prev
+      ))
+      return
+    }
+
+    let cancelled = false
+    const accountId = formData.accountIds[0]
+    setZaloFriendBlocklistsLoading(true)
+    window.electronAPI.listZaloFriendBlocklists(accountId)
+      .then(groups => {
+        if (cancelled) return
+        setZaloFriendBlocklists(groups)
+        setFormData(prev => {
+          if (!prev.zaloFriendBlocklistId) return prev
+          const selected = groups.find(group => group.id === prev.zaloFriendBlocklistId)
+          return selected
+            ? { ...prev, zaloFriendBlocklistName: selected.name }
+            : {
+              ...prev,
+              zaloFriendBlocklistEnabled: false,
+              zaloFriendBlocklistId: null,
+              zaloFriendBlocklistName: ''
+            }
+        })
+      })
+      .catch(err => {
+        if (cancelled) return
+        setZaloFriendBlocklists([])
+        showAlert(formatIpcErrorMessage(err, 'Không tải được danh sách không gửi tin Zalo.'), 'error')
+      })
+      .finally(() => {
+        if (!cancelled) setZaloFriendBlocklistsLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [
+    isZaloMessageFriendCampaign,
     formData.accountIds.join(',')
   ])
 
@@ -2754,6 +2813,11 @@ export default function CampaignFormModal({
             zaloFriendMaterializedCount: isZaloMessageFriendCampaign && isZaloFriendAutoDataMode && !cloneFromId
               ? (campaign?.extraSettings?.zaloFriendMaterializedCount ?? 0)
               : 0,
+            zaloFriendBlocklistEnabled: isZaloMessageFriendCampaign ? formData.zaloFriendBlocklistEnabled : false,
+            zaloFriendBlocklistId: isZaloMessageFriendCampaign && formData.zaloFriendBlocklistEnabled ? formData.zaloFriendBlocklistId : null,
+            zaloFriendBlocklistName: isZaloMessageFriendCampaign && formData.zaloFriendBlocklistEnabled
+              ? (selectedZaloFriendBlocklist?.name || formData.zaloFriendBlocklistName || '')
+              : '',
             zaloBirthdayDataMaterializedDate: isZaloMessageBirthdayCampaign && !cloneFromId
               ? (campaign?.extraSettings?.zaloBirthdayDataMaterializedDate ?? null)
               : null,
@@ -2894,6 +2958,10 @@ export default function CampaignFormModal({
     if (isZaloMessageFriendCampaign) {
       if (formData.zaloFriendTargetMode === 'tagged_friends' && normalizeZaloTagIdList(formData.zaloFriendSourceTagIds).length === 0) {
         showAlert('Vui lòng chọn tag nguồn Zalo để lấy danh sách bạn bè.', 'error')
+        return
+      }
+      if (formData.zaloFriendBlocklistEnabled && !formData.zaloFriendBlocklistId) {
+        showAlert('Vui lòng chọn danh sách không gửi tin Zalo.', 'error')
         return
       }
       if (!isZaloShareMessageMode && formData.enableZaloTag && !formData.zaloTagId) {
@@ -4684,6 +4752,66 @@ export default function CampaignFormModal({
     </div>
   )
 
+  const renderZaloFriendBlocklistOption = () => (
+    <div className="stepper-form-group">
+      <label className="schedule-checkbox-label">
+        <input
+          type="checkbox"
+          checked={formData.zaloFriendBlocklistEnabled}
+          onChange={e => {
+            const checked = e.target.checked
+            const fallback = checked
+              ? (selectedZaloFriendBlocklist || zaloFriendBlocklists[0] || null)
+              : null
+            setFormData(p => ({
+              ...p,
+              zaloFriendBlocklistEnabled: checked,
+              zaloFriendBlocklistId: checked ? (fallback?.id ?? p.zaloFriendBlocklistId ?? null) : null,
+              zaloFriendBlocklistName: checked ? (fallback?.name || p.zaloFriendBlocklistName || '') : ''
+            }))
+          }}
+        />
+        <span>Không gửi tin cho những người trong danh sách</span>
+      </label>
+
+      {formData.zaloFriendBlocklistEnabled && (
+        <div className="zalo-friend-blocklist-picker">
+          <div className="zalo-friend-blocklist-select-wrap">
+            <select
+              className="zalo-friend-blocklist-select"
+              value={formData.zaloFriendBlocklistId || ''}
+              onChange={e => {
+                const nextId = Number(e.target.value) || null
+                const selected = zaloFriendBlocklists.find(group => group.id === nextId) || null
+                setFormData(p => ({
+                  ...p,
+                  zaloFriendBlocklistId: nextId,
+                  zaloFriendBlocklistName: selected?.name || ''
+                }))
+              }}
+              disabled={zaloFriendBlocklistsLoading || zaloFriendBlocklists.length === 0}
+            >
+              <option value="">{zaloFriendBlocklistsLoading ? 'Đang tải danh sách không gửi tin...' : '-- Chọn danh sách không gửi tin --'}</option>
+              {zaloFriendBlocklists.map(group => (
+                <option key={group.id} value={group.id}>{group.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary zalo-friend-blocklist-manage-btn"
+            onClick={() => onOpenGeneralSettings?.('zaloBlocklists')}
+            disabled={!onOpenGeneralSettings}
+            title={onOpenGeneralSettings ? 'Quản lý danh sách không gửi tin' : 'Không thể mở quản lý danh sách không gửi tin trong form này'}
+          >
+            <ListChecks size={14} />
+            <span>Quản lý</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
   const renderZaloMessageFriendActionOptions = () => (
     <>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Nguồn bạn bè</div>
@@ -4718,6 +4846,10 @@ export default function CampaignFormModal({
         })),
         emptyHint: 'Bấm “Tải tag” để lấy tag từ Zalo.'
       })}
+
+      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+      {renderZaloFriendBlocklistOption()}
 
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 

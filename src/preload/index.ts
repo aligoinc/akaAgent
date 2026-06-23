@@ -429,6 +429,27 @@ const electronAPI = {
   removeContactsFromGroup: (groupId: number, contactIds: number[]): Promise<ContactGroupMutationResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_REMOVE_CONTACTS, groupId, contactIds),
 
+  listZaloFriendBlocklists: (accountId: number): Promise<AutoAccountContactGroup[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_LIST, accountId),
+
+  createZaloFriendBlocklist: (accountId: number, name: string): Promise<AutoAccountContactGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_CREATE, accountId, name),
+
+  updateZaloFriendBlocklist: (groupId: number, name: string): Promise<AutoAccountContactGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_UPDATE, groupId, name),
+
+  deleteZaloFriendBlocklist: (groupId: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_DELETE, groupId),
+
+  listZaloFriendBlocklistFriends: (groupId: number): Promise<AutoAccountContact[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_LIST_FRIENDS, groupId),
+
+  addFriendsToZaloFriendBlocklist: (groupId: number, contactIds: number[]): Promise<ContactGroupMutationResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_ADD_FRIENDS, groupId, contactIds),
+
+  removeFriendsFromZaloFriendBlocklist: (groupId: number, contactIds: number[]): Promise<ContactGroupMutationResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_REMOVE_FRIENDS, groupId, contactIds),
+
   onContactsProgress: (callback: (data: ContactLoadProgress) => void): () => void => {
     const handler = (_event: Electron.IpcRendererEvent, data: ContactLoadProgress) => callback(data)
     ipcRenderer.on(IPC_EVENTS.CONTACTS_PROGRESS, handler)

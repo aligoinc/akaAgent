@@ -212,6 +212,30 @@ export class SupabaseService {
   removeContactsFromGroup(groupId: number, contactIds: number[]) {
     return accountContactRepo.removeContactsFromGroup(groupId, contactIds)
   }
+  listZaloFriendBlocklists(accountId: number) {
+    return accountContactRepo.listZaloFriendBlocklists(accountId)
+  }
+  createZaloFriendBlocklist(accountId: number, name: string) {
+    return accountContactRepo.createZaloFriendBlocklist(accountId, name)
+  }
+  updateZaloFriendBlocklist(groupId: number, name: string) {
+    return accountContactRepo.updateZaloFriendBlocklist(groupId, name)
+  }
+  deleteZaloFriendBlocklist(groupId: number) {
+    return accountContactRepo.deleteZaloFriendBlocklist(groupId)
+  }
+  listZaloFriendBlocklistFriends(groupId: number) {
+    return accountContactRepo.listZaloFriendBlocklistFriends(groupId)
+  }
+  addFriendsToZaloFriendBlocklist(groupId: number, contactIds: number[]) {
+    return accountContactRepo.addFriendsToZaloFriendBlocklist(groupId, contactIds)
+  }
+  removeFriendsFromZaloFriendBlocklist(groupId: number, contactIds: number[]) {
+    return accountContactRepo.removeFriendsFromZaloFriendBlocklist(groupId, contactIds)
+  }
+  getZaloFriendBlocklistUidSnapshot(accountId: number, groupId: number) {
+    return accountContactRepo.getZaloFriendBlocklistUidSnapshot(accountId, groupId)
+  }
 
   // =========== SYSTEM SETTINGS ===========
   async getSystemSettingValue(key: string): Promise<string> {

@@ -318,6 +318,9 @@ export interface CampaignExtraSettings {
   zaloFriendSourceTagNames?: string[]
   zaloFriendDataMaterializedAt?: string | null
   zaloFriendMaterializedCount?: number
+  zaloFriendBlocklistEnabled?: boolean
+  zaloFriendBlocklistId?: number | null
+  zaloFriendBlocklistName?: string | null
   zaloBirthdayDataMaterializedDate?: string | null
   zaloBirthdayMaterializedCount?: number
   pageInboxPageUid?: string                // facebook_page_to_message: Page ID dùng để mở Business Inbox
@@ -871,10 +874,13 @@ export interface AutoAccountContact {
   updatedAt?: string
 }
 
+export type ContactGroupPurpose = 'data_group' | 'zalo_friend_blocklist'
+
 export interface AutoAccountContactGroup {
   id: number
   accountId: number
   contactType: ContactType
+  purpose: ContactGroupPurpose
   name: string
   contactCount?: number
   isDelete: boolean
@@ -1244,6 +1250,13 @@ export const IPC_EVENTS = {
   CONTACT_GROUPS_LIST_CONTACTS: 'contacts:groups:list-contacts',
   CONTACT_GROUPS_ADD_CONTACTS: 'contacts:groups:add-contacts',
   CONTACT_GROUPS_REMOVE_CONTACTS: 'contacts:groups:remove-contacts',
+  ZALO_FRIEND_BLOCKLISTS_LIST: 'contacts:zalo-friend-blocklists:list',
+  ZALO_FRIEND_BLOCKLISTS_CREATE: 'contacts:zalo-friend-blocklists:create',
+  ZALO_FRIEND_BLOCKLISTS_UPDATE: 'contacts:zalo-friend-blocklists:update',
+  ZALO_FRIEND_BLOCKLISTS_DELETE: 'contacts:zalo-friend-blocklists:delete',
+  ZALO_FRIEND_BLOCKLISTS_LIST_FRIENDS: 'contacts:zalo-friend-blocklists:list-friends',
+  ZALO_FRIEND_BLOCKLISTS_ADD_FRIENDS: 'contacts:zalo-friend-blocklists:add-friends',
+  ZALO_FRIEND_BLOCKLISTS_REMOVE_FRIENDS: 'contacts:zalo-friend-blocklists:remove-friends',
   CONTACTS_PROGRESS: 'contacts:progress',
   CONTACTS_COMPLETED: 'contacts:completed',
 

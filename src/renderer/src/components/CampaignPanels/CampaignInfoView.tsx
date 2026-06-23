@@ -313,6 +313,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || extra.enableAddFriend !== undefined
     || !!extra.useSuggestedFriends
     || !!extra.pageInboxPageUid
+    || !!extra.zaloFriendBlocklistEnabled
   const hasFindDataSettings = actionId === 'facebook_find_data_group' || actionId === 'facebook_find_data_search'
     || getFindDataTypeLabels(extra).length > 0
     || getFindDataSourceLabels(extra).length > 0
@@ -374,6 +375,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Kết bạn', value: onOff(extra.enableAddFriend), hidden: actionId !== 'facebook_message_uid' && !extra.enableAddFriend },
     { label: 'Dùng bạn bè đề xuất', value: onOff(extra.useSuggestedFriends), hidden: actionId !== 'facebook_message_uid' && !extra.useSuggestedFriends },
     { label: 'Số bạn bè đề xuất', value: extra.suggestedFriendsCount ?? '-', hidden: !extra.useSuggestedFriends },
+    { label: 'Không gửi tin theo danh sách', value: onOff(extra.zaloFriendBlocklistEnabled), hidden: actionId !== 'zalo_message_friend' && !extra.zaloFriendBlocklistEnabled },
+    { label: 'Danh sách không gửi tin', value: textOrDash(extra.zaloFriendBlocklistName || extra.zaloFriendBlocklistId), hidden: actionId !== 'zalo_message_friend' || !extra.zaloFriendBlocklistEnabled },
     { label: 'Page inbox', value: textOrDash(extra.pageInboxPageName || extra.pageInboxPageUid), hidden: actionId !== 'facebook_page_to_message' && !extra.pageInboxPageUid },
     { label: 'Page UID', value: textOrDash(extra.pageInboxPageUid), hidden: actionId !== 'facebook_page_to_message' && !extra.pageInboxPageUid }
   ]
