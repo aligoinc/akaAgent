@@ -132,4 +132,34 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
   ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_REMOVE_CONTACTS, async (_, groupId: number, contactIds: number[]) => {
     return supabase.removeContactsFromGroup(groupId, contactIds)
   })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_LIST, async (_, accountId: number) => {
+    await ensureContactAccess(supabase, accountId, 'person')
+    return supabase.listZaloFriendBlocklists(accountId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_CREATE, async (_, accountId: number, name: string) => {
+    await ensureContactAccess(supabase, accountId, 'person')
+    return supabase.createZaloFriendBlocklist(accountId, name)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_UPDATE, async (_, groupId: number, name: string) => {
+    return supabase.updateZaloFriendBlocklist(groupId, name)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_DELETE, async (_, groupId: number) => {
+    return supabase.deleteZaloFriendBlocklist(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_LIST_FRIENDS, async (_, groupId: number) => {
+    return supabase.listZaloFriendBlocklistFriends(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_ADD_FRIENDS, async (_, groupId: number, contactIds: number[]) => {
+    return supabase.addFriendsToZaloFriendBlocklist(groupId, contactIds)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_REMOVE_FRIENDS, async (_, groupId: number, contactIds: number[]) => {
+    return supabase.removeFriendsFromZaloFriendBlocklist(groupId, contactIds)
+  })
 }

@@ -1,4 +1,4 @@
-import { AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType } from '../../../shared/types'
+import { AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactGroupPurpose, ContactType } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountContactFromDB, mapAccountContactGroupFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -108,6 +108,8 @@ export interface ZaloGroupMemberUpsertInput {
 
 const client = () => getSupabaseClient()
 const GROUP_ACTIVITY_RE = /\s*(Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity)[:：]?.*$/i
+const CONTACT_GROUP_PURPOSE_DATA: ContactGroupPurpose = 'data_group'
+const CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST: ContactGroupPurpose = 'zalo_friend_blocklist'
 
 function parseFacebookUrl(value: string): URL | null {
   const raw = String(value || '').trim()
@@ -1282,13 +1284,17 @@ function uniqueIds(ids: number[]): number[] {
   ))
 }
 
-async function getContactGroup(groupId: number): Promise<AutoAccountContactGroup> {
+async function getContactGroup(
+  groupId: number,
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
+): Promise<AutoAccountContactGroup> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_account_contact_groups')
     .select('*')
     .eq('id', groupId)
     .eq('staff_id', u.staffId)
+    .eq('purpose', purpose)
     .eq('is_delete', false)
     .single()
 
@@ -1313,7 +1319,8 @@ async function getActiveContactIds(contactIds: number[], staffId: number): Promi
 
 export async function listContactGroups(
   accountId: number,
-  contactType?: ContactType
+  contactType?: ContactType,
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
 ): Promise<AutoAccountContactGroup[]> {
   const u = requireCurrentUser()
   let query = client()
@@ -1321,6 +1328,7 @@ export async function listContactGroups(
     .select('*')
     .eq('account_id', accountId)
     .eq('staff_id', u.staffId)
+    .eq('purpose', purpose)
     .eq('is_delete', false)
 
   if (contactType) query = query.eq('contact_type', contactType)
@@ -1362,7 +1370,8 @@ export async function listContactGroups(
 export async function createContactGroup(
   accountId: number,
   contactType: ContactType,
-  name: string
+  name: string,
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
 ): Promise<AutoAccountContactGroup> {
   const u = requireCurrentUser()
   const normalizedName = normalizeGroupName(name)
@@ -1373,6 +1382,7 @@ export async function createContactGroup(
     .insert({
       account_id: accountId,
       contact_type: contactType,
+      purpose,
       name: normalizedName,
       is_delete: false,
       staff_id: u.staffId,
@@ -1391,9 +1401,11 @@ export async function createContactGroup(
 
 export async function updateContactGroup(
   groupId: number,
-  name: string
+  name: string,
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
 ): Promise<AutoAccountContactGroup> {
   const u = requireCurrentUser()
+  await getContactGroup(groupId, purpose)
   const normalizedName = normalizeGroupName(name)
   if (!normalizedName) throw new Error('Vui lòng nhập tên nhóm.')
 
@@ -1405,6 +1417,7 @@ export async function updateContactGroup(
     })
     .eq('id', groupId)
     .eq('staff_id', u.staffId)
+    .eq('purpose', purpose)
     .eq('is_delete', false)
     .select()
     .single()
@@ -1416,8 +1429,12 @@ export async function updateContactGroup(
   return mapAccountContactGroupFromDB(data)
 }
 
-export async function deleteContactGroup(groupId: number): Promise<void> {
+export async function deleteContactGroup(
+  groupId: number,
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
+): Promise<void> {
   const u = requireCurrentUser()
+  await getContactGroup(groupId, purpose)
   const { error } = await client()
     .from('auto_account_contact_groups')
     .update({
@@ -1426,13 +1443,17 @@ export async function deleteContactGroup(groupId: number): Promise<void> {
     })
     .eq('id', groupId)
     .eq('staff_id', u.staffId)
+    .eq('purpose', purpose)
 
   if (error) throw new Error(`Failed to delete contact group: ${error.message}`)
 }
 
-export async function listContactGroupContacts(groupId: number): Promise<AutoAccountContact[]> {
+export async function listContactGroupContacts(
+  groupId: number,
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
+): Promise<AutoAccountContact[]> {
   const u = requireCurrentUser()
-  const group = await getContactGroup(groupId)
+  const group = await getContactGroup(groupId, purpose)
 
   const { data: members, error: memberError } = await client()
     .from('auto_account_contact_group_members')
@@ -1460,10 +1481,11 @@ export async function listContactGroupContacts(groupId: number): Promise<AutoAcc
 
 export async function addContactsToGroup(
   groupId: number,
-  contactIds: number[]
+  contactIds: number[],
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
 ): Promise<ContactGroupMutationResult> {
   const u = requireCurrentUser()
-  const group = await getContactGroup(groupId)
+  const group = await getContactGroup(groupId, purpose)
   const ids = uniqueIds(contactIds)
   if (ids.length === 0) return { success: true, count: 0 }
 
@@ -1506,9 +1528,10 @@ export async function addContactsToGroup(
 
 export async function removeContactsFromGroup(
   groupId: number,
-  contactIds: number[]
+  contactIds: number[],
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
 ): Promise<ContactGroupMutationResult> {
-  await getContactGroup(groupId)
+  await getContactGroup(groupId, purpose)
   const ids = uniqueIds(contactIds)
   if (ids.length === 0) return { success: true, count: 0 }
 
@@ -1521,6 +1544,134 @@ export async function removeContactsFromGroup(
 
   if (error) throw new Error(`Failed to remove contacts from group: ${error.message}`)
   return { success: true, count: data?.length || 0 }
+}
+
+export interface ZaloFriendBlocklistUidSnapshot {
+  group: AutoAccountContactGroup
+  uids: string[]
+}
+
+export async function listZaloFriendBlocklists(accountId: number): Promise<AutoAccountContactGroup[]> {
+  return listContactGroups(accountId, 'person', CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+}
+
+export async function createZaloFriendBlocklist(
+  accountId: number,
+  name: string
+): Promise<AutoAccountContactGroup> {
+  return createContactGroup(accountId, 'person', name, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+}
+
+export async function updateZaloFriendBlocklist(
+  groupId: number,
+  name: string
+): Promise<AutoAccountContactGroup> {
+  return updateContactGroup(groupId, name, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+}
+
+export async function deleteZaloFriendBlocklist(groupId: number): Promise<void> {
+  return deleteContactGroup(groupId, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+}
+
+export async function listZaloFriendBlocklistFriends(groupId: number): Promise<AutoAccountContact[]> {
+  return listContactGroupContacts(groupId, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+}
+
+export async function addFriendsToZaloFriendBlocklist(
+  groupId: number,
+  contactIds: number[]
+): Promise<ContactGroupMutationResult> {
+  const u = requireCurrentUser()
+  const group = await getContactGroup(groupId, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+  if (group.contactType !== 'person') throw new Error('Danh sách không gửi tin không đúng loại bạn bè Zalo.')
+
+  const ids = uniqueIds(contactIds)
+  if (ids.length === 0) return { success: true, count: 0 }
+
+  const { data: contacts, error: contactError } = await client()
+    .from('auto_account_contacts')
+    .select('id')
+    .in('id', ids)
+    .eq('account_id', group.accountId)
+    .eq('contact_type', 'person')
+    .eq('staff_id', u.staffId)
+    .eq('is_friend', true)
+    .eq('is_delete', false)
+
+  if (contactError) throw new Error(`Failed to validate Zalo friend blocklist contacts: ${contactError.message}`)
+
+  const validIds = uniqueIds((contacts || []).map(row => row.id as number))
+  if (validIds.length === 0) return { success: true, count: 0 }
+
+  const { data: existing, error: existingError } = await client()
+    .from('auto_account_contact_group_members')
+    .select('contact_id')
+    .eq('group_id', groupId)
+    .in('contact_id', validIds)
+
+  if (existingError) throw new Error(`Failed to list existing Zalo friend blocklist members: ${existingError.message}`)
+
+  const existingIds = new Set((existing || []).map(row => row.contact_id as number))
+  const idsToInsert = validIds.filter(id => !existingIds.has(id))
+  if (idsToInsert.length === 0) return { success: true, count: 0 }
+
+  const { error } = await client()
+    .from('auto_account_contact_group_members')
+    .upsert(idsToInsert.map(contactId => ({
+      group_id: groupId,
+      contact_id: contactId
+    })), { onConflict: 'group_id,contact_id', ignoreDuplicates: true })
+
+  if (error) throw new Error(`Failed to add friends to Zalo friend blocklist: ${error.message}`)
+  return { success: true, count: idsToInsert.length }
+}
+
+export async function removeFriendsFromZaloFriendBlocklist(
+  groupId: number,
+  contactIds: number[]
+): Promise<ContactGroupMutationResult> {
+  return removeContactsFromGroup(groupId, contactIds, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+}
+
+export async function getZaloFriendBlocklistUidSnapshot(
+  accountId: number,
+  groupId: number
+): Promise<ZaloFriendBlocklistUidSnapshot> {
+  const u = requireCurrentUser()
+  const group = await getContactGroup(groupId, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+  if (group.accountId !== accountId || group.contactType !== 'person') {
+    throw new Error('Danh sách không gửi tin không thuộc tài khoản Zalo của chiến dịch.')
+  }
+
+  const { data: members, error: memberError } = await client()
+    .from('auto_account_contact_group_members')
+    .select('contact_id')
+    .eq('group_id', groupId)
+
+  if (memberError) throw new Error(`Failed to list Zalo friend blocklist members: ${memberError.message}`)
+
+  const contactIds = uniqueIds((members || []).map(row => row.contact_id as number))
+  if (contactIds.length === 0) return { group, uids: [] }
+
+  const { data, error } = await client()
+    .from('auto_account_contacts')
+    .select('uid')
+    .in('id', contactIds)
+    .eq('account_id', accountId)
+    .eq('contact_type', 'person')
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+
+  if (error) throw new Error(`Failed to list Zalo friend blocklist UIDs: ${error.message}`)
+
+  return {
+    group,
+    uids: Array.from(new Set(
+      (data || [])
+        .map(row => String(row.uid || '').trim())
+        .filter(Boolean)
+    ))
+  }
 }
 
 export async function upsertGroupPostContactStatus(

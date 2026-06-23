@@ -982,8 +982,8 @@ button.btn-icon:not(.btn):disabled {
 }
 
 .general-settings-modal {
-  width: min(1120px, calc(100vw - 48px));
-  height: min(620px, calc(100vh - 48px));
+  width: min(1480px, calc(100vw - 32px));
+  height: min(740px, calc(100vh - 32px));
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -1023,7 +1023,7 @@ button.btn-icon:not(.btn):disabled {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
 }
 
 .general-settings-sidebar {
@@ -1059,6 +1059,12 @@ button.btn-icon:not(.btn):disabled {
   min-width: 0;
   overflow-y: auto;
   padding: 18px;
+}
+
+.general-settings-content.zalo-blocklist-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .akabiz-integration-grid {
@@ -1338,6 +1344,290 @@ button.btn-icon:not(.btn):disabled {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.zalo-blocklist-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  height: 100%;
+}
+
+.zalo-blocklist-editor {
+  flex: 0 0 auto;
+  padding: 16px;
+}
+
+.zalo-blocklist-toolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr)) 112px;
+  gap: 16px;
+  align-items: end;
+}
+
+.zalo-blocklist-toolbar .stepper-select,
+.zalo-blocklist-toolbar .stepper-input {
+  width: 100%;
+}
+
+.zalo-account-select-wrap {
+  position: relative;
+}
+
+.zalo-account-select-wrap::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-tertiary);
+  border-bottom: 2px solid var(--text-tertiary);
+  pointer-events: none;
+  transform: translateY(-65%) rotate(45deg);
+}
+
+.zalo-account-select {
+  height: 40px;
+  padding: 0 38px 0 12px;
+  appearance: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.zalo-account-select:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.zalo-account-select:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.12);
+}
+
+.zalo-account-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.zalo-account-select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.zalo-blocklist-toolbar .stepper-input {
+  height: 40px;
+}
+
+.zalo-blocklist-create-btn {
+  height: 40px;
+  justify-content: center;
+}
+
+.zalo-blocklist-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.75fr) repeat(2, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.zalo-blocklist-panel {
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  padding: 12px;
+  overflow: hidden;
+}
+
+.zalo-blocklist-panel-head {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.zalo-blocklist-panel-title {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zalo-blocklist-panel-meta {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.zalo-blocklist-search {
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-tertiary);
+  padding: 0 10px;
+}
+
+.zalo-blocklist-search input {
+  min-width: 0;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.zalo-blocklist-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  overflow: auto;
+}
+
+.zalo-blocklist-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px 30px;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  cursor: pointer;
+}
+
+.zalo-blocklist-row:hover,
+.zalo-blocklist-row.is-active {
+  border-color: var(--accent-primary);
+  background: var(--bg-secondary);
+}
+
+.zalo-blocklist-row-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.zalo-blocklist-row-main strong,
+.zalo-blocklist-row-main span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zalo-blocklist-row-main strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.zalo-blocklist-row-main span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.zalo-blocklist-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: auto;
+}
+
+.zalo-blocklist-table-wrap .content-template-table {
+  min-width: 100%;
+}
+
+.zalo-blocklist-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.zalo-blocklist-table th,
+.zalo-blocklist-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zalo-blocklist-table .zalo-blocklist-check-col {
+  width: 42px;
+  text-align: center;
+}
+
+.zalo-blocklist-table .zalo-blocklist-uid-col {
+  width: 46%;
+  text-align: right;
+}
+
+.zalo-blocklist-name-cell {
+  color: var(--text-primary);
+}
+
+.zalo-blocklist-panel-actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+@media (max-width: 1180px) {
+  .general-settings-content.zalo-blocklist-content {
+    overflow-y: auto;
+  }
+
+  .zalo-blocklist-settings {
+    height: auto;
+  }
+
+  .zalo-blocklist-layout {
+    flex: 0 0 auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zalo-blocklist-panel {
+    max-height: none;
+  }
+
+  .zalo-blocklist-list,
+  .zalo-blocklist-table-wrap {
+    max-height: 360px;
+  }
+
+  .zalo-blocklist-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .email-notification-settings {
@@ -6154,6 +6444,81 @@ td.report-account-col span {
   opacity: 0.4;
   cursor: not-allowed;
   background: var(--bg-elevated);
+}
+
+.zalo-friend-blocklist-picker {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) 96px;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.zalo-friend-blocklist-select-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.zalo-friend-blocklist-select-wrap::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-tertiary);
+  border-bottom: 2px solid var(--text-tertiary);
+  pointer-events: none;
+  transform: translateY(-65%) rotate(45deg);
+}
+
+.zalo-friend-blocklist-select {
+  width: 100%;
+  height: 36px;
+  padding: 0 38px 0 12px;
+  appearance: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.zalo-friend-blocklist-select:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.zalo-friend-blocklist-select:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.12);
+}
+
+.zalo-friend-blocklist-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.zalo-friend-blocklist-select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.zalo-friend-blocklist-manage-btn {
+  width: 96px;
+  height: 36px;
+  justify-content: center;
+  padding: 0 12px;
+}
+
+@media (max-width: 680px) {
+  .zalo-friend-blocklist-picker {
+    grid-template-columns: minmax(0, 1fr) 96px;
+  }
 }
 
 /* --- Extra Settings Section --- */

@@ -153,6 +153,13 @@ interface ZaloShareMessageCapacity {
   limitStatus?: AccountActionLimitStatus
 }
 
+interface ZaloFriendBlocklistContext {
+  groupId: number
+  groupName: string
+  uidKeys: Set<string>
+  invalidReason?: string
+}
+
 interface PostBumpTarget {
   campaignId: number
 }
@@ -1135,8 +1142,17 @@ export class CampaignScheduler {
       }
     }
 
+    const zaloFriendBlocklist = await this.loadZaloFriendBlocklistContext(account, campaign)
+    if (zaloFriendBlocklist?.invalidReason) {
+      const note = `Danh sách không gửi tin Zalo không hợp lệ: ${zaloFriendBlocklist.invalidReason}`
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+      await this.releaseRunningAccount(account.id)
+      return
+    }
+
     if (this.shouldUseZaloShareMessageBatch(campaign)) {
-      await this.executeZaloShareMessageBatchCampaign(account, campaign, details, actionDescriptors)
+      await this.executeZaloShareMessageBatchCampaign(account, campaign, details, actionDescriptors, zaloFriendBlocklist)
       return
     }
 
@@ -1173,6 +1189,7 @@ export class CampaignScheduler {
     const limitConfig = extra.actionLimits
     let stoppedBeforeCompletion = false
     let earliestFutureInputSchedule: Date | null = null
+    let zaloFriendBlocklistSkippedCount = 0
 
     for (let i = 0; i < targets.length; i++) {
       // Check pause
@@ -1201,6 +1218,12 @@ export class CampaignScheduler {
           }
           continue
         }
+      }
+
+      if (detail && this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)) {
+        await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!)
+        zaloFriendBlocklistSkippedCount += 1
+        continue
       }
 
       const groupPostApproval = await this.resolveGroupPostApprovalForTarget(account.id, campaign, detail)
@@ -1554,7 +1577,8 @@ export class CampaignScheduler {
     account: AutoAccount,
     campaign: Campaign,
     details: CampaignInputData[],
-    actionDescriptors: CampaignActionDescriptor[]
+    actionDescriptors: CampaignActionDescriptor[],
+    zaloFriendBlocklist: ZaloFriendBlocklistContext | null
   ): Promise<void> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
 
@@ -1579,6 +1603,25 @@ export class CampaignScheduler {
       await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
       await this.releaseRunningAccount(account.id)
       return
+    }
+
+    let zaloFriendBlocklistSkippedCount = 0
+    if (zaloFriendBlocklist && campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
+      const now = new Date()
+      const remainingDetails: CampaignInputData[] = []
+      for (const detail of details) {
+        if (
+          detail.status === 'chờ xử lý' &&
+          !this.getFutureInputSchedule(detail, now) &&
+          this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)
+        ) {
+          await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist, { logProgress: false })
+          zaloFriendBlocklistSkippedCount += 1
+          continue
+        }
+        remainingDetails.push(detail)
+      }
+      details = remainingDetails
     }
 
     const limitConfig = extra.actionLimits
@@ -1630,6 +1673,12 @@ export class CampaignScheduler {
           continue
         }
 
+        if (this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)) {
+          await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!, { logProgress: false })
+          zaloFriendBlocklistSkippedCount += 1
+          continue
+        }
+
         await this.supabase.updateCampaignInputData(detail.id, {
           status: 'đang chạy',
           dateAction: new Date().toISOString()
@@ -1675,6 +1724,10 @@ export class CampaignScheduler {
           }
         }
       }
+    }
+
+    if (zaloFriendBlocklistSkippedCount > 0) {
+      await this.logCampaignProgress(campaign.id, `🚫 Đã bỏ qua ${zaloFriendBlocklistSkippedCount} bạn bè Zalo trong danh sách không gửi tin`)
     }
 
     if (!stoppedBeforeCompletion) {
@@ -2056,6 +2109,84 @@ export class CampaignScheduler {
   private isZaloFriendAutoDataCampaign(campaign: Campaign): boolean {
     const mode = this.getZaloFriendTargetMode(campaign)
     return campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID && mode !== ZALO_FRIEND_TARGET_MODE_SELECTED
+  }
+
+  private getZaloFriendBlocklistId(campaign: Campaign): number {
+    const id = Number(campaign.extraSettings?.zaloFriendBlocklistId)
+    return Number.isFinite(id) && id > 0 ? Math.floor(id) : 0
+  }
+
+  private async loadZaloFriendBlocklistContext(
+    account: AutoAccount,
+    campaign: Campaign
+  ): Promise<ZaloFriendBlocklistContext | null> {
+    if (
+      campaign.actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID ||
+      campaign.extraSettings?.zaloFriendBlocklistEnabled !== true
+    ) {
+      return null
+    }
+
+    const groupId = this.getZaloFriendBlocklistId(campaign)
+    if (!groupId) {
+      return {
+        groupId: 0,
+        groupName: '',
+        uidKeys: new Set(),
+        invalidReason: 'Chưa chọn danh sách không gửi tin Zalo'
+      }
+    }
+
+    try {
+      const snapshot = await this.supabase.getZaloFriendBlocklistUidSnapshot(account.id, groupId)
+      const uidKeys = new Set(
+        snapshot.uids
+          .map(uid => this.normalizeUidForCompare(uid))
+          .filter(Boolean)
+      )
+      return {
+        groupId: snapshot.group.id,
+        groupName: snapshot.group.name,
+        uidKeys
+      }
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err)
+      const message = raw.replace(/^Failed to get contact group:\s*/i, '').trim() || 'Danh sách không gửi tin Zalo không hợp lệ'
+      return {
+        groupId,
+        groupName: String(campaign.extraSettings?.zaloFriendBlocklistName || '').trim(),
+        uidKeys: new Set(),
+        invalidReason: message
+      }
+    }
+  }
+
+  private isZaloFriendBlockedByBlocklist(
+    campaign: Campaign,
+    detail: CampaignInputData | null | undefined,
+    blocklist: ZaloFriendBlocklistContext | null
+  ): boolean {
+    if (campaign.actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID || !detail || !blocklist || blocklist.invalidReason) return false
+    const uid = this.normalizeUidForCompare(this.firstNonEmptyString(detail.uid))
+    return Boolean(uid && blocklist.uidKeys.has(uid))
+  }
+
+  private async markZaloFriendBlocklistSkipped(
+    campaign: Campaign,
+    detail: CampaignInputData,
+    blocklist: ZaloFriendBlocklistContext,
+    options: { logProgress?: boolean } = {}
+  ): Promise<void> {
+    const groupName = blocklist.groupName || 'danh sách không gửi tin'
+    const targetName = this.getInputDataDisplayName(campaign, detail)
+    await this.supabase.updateCampaignInputData(detail.id, {
+      status: 'hoàn thành',
+      note: `Bỏ qua vì nằm trong danh sách không gửi tin: ${groupName}`,
+      dateAction: new Date().toISOString()
+    })
+    if (options.logProgress !== false) {
+      await this.logCampaignProgress(campaign.id, `🚫 Bỏ qua "${targetName}" vì nằm trong danh sách không gửi tin: ${groupName}`)
+    }
   }
 
   private isZaloBirthdayCampaign(campaign: Campaign): boolean {
