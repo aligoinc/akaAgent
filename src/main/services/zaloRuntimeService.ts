@@ -447,7 +447,12 @@ export class ZaloRuntimeService {
         text: String(label.text || '').trim(),
         textKey: String(label.textKey || '').trim() || undefined,
         color: String(label.color || '').trim() || undefined,
-        emoji: String(label.emoji || '').trim() || undefined
+        emoji: String(label.emoji || '').trim() || undefined,
+        conversations: Array.from(new Set(
+          (Array.isArray(label.conversations) ? label.conversations : [])
+            .map(item => String(item || '').trim())
+            .filter(Boolean)
+        ))
       }))
       .filter(label => Number.isFinite(label.id) && label.id > 0 && label.text)
   }

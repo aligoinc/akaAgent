@@ -311,6 +311,9 @@ export interface CampaignExtraSettings {
   enableZaloTag?: boolean
   zaloTagId?: number | string | null
   zaloTagName?: string | null
+  enableAkaBizTag?: boolean
+  akaBizTagIds?: number[]
+  akaBizTagNames?: string[]
   enableZaloAlias?: boolean
   zaloAliasTemplate?: string
   zaloFriendTargetMode?: 'selected' | 'all_friends' | 'tagged_friends'
@@ -780,6 +783,7 @@ export interface ZaloLabelOption {
   textKey?: string
   color?: string
   emoji?: string
+  conversations?: string[]
 }
 
 // ============================================
@@ -787,6 +791,7 @@ export interface ZaloLabelOption {
 // ============================================
 
 export type ContactType = 'person' | 'group' | 'page' | 'page_inbox_customer' | 'zalo_tag'
+export type ContactStatusFilter = 'active' | 'inactive' | 'all'
 
 export type PageInboxPhoneFilter = 'all' | 'has_phone' | 'no_phone'
 export type PageInboxMessageFilterMode = 'all' | 'contain_all' | 'contain_any' | 'not_contain_all' | 'not_contain_any'
@@ -805,9 +810,24 @@ export interface PageInboxContactListQuery {
   limit?: number
 }
 
+export interface AccountContactListQuery {
+  contactType?: ContactType
+  statusFilter?: ContactStatusFilter
+  search?: string
+  sourcePostUrl?: string
+  ids?: number[]
+  excludeIds?: number[]
+  offset?: number
+  limit?: number
+}
+
 export interface ContactListResult {
   contacts: AutoAccountContact[]
   total: number
+}
+
+export interface ZaloGroupMemberContactListQuery extends AccountContactListQuery {
+  zaloGroupId?: string
 }
 
 export interface ZaloRemarketingCustomerListQuery {
@@ -815,6 +835,10 @@ export interface ZaloRemarketingCustomerListQuery {
   campaignActionIds?: string[]
   dateFrom?: string
   dateTo?: string
+  search?: string
+  ids?: number[]
+  excludeIds?: number[]
+  offset?: number
   limit?: number
 }
 
@@ -862,6 +886,7 @@ export interface AutoAccountContact {
   uid?: string
   url?: string
   extraData?: Record<string, unknown>
+  akaBizTagIds?: number[]
   zaloUserId?: number | null
   zaloGroupId?: number | null
   isFriend?: boolean
@@ -893,6 +918,17 @@ export interface AutoAccountContactGroup {
 export interface ContactGroupMutationResult {
   success: boolean
   count: number
+}
+
+export interface AkaBizContactTag {
+  id: number
+  name: string
+  contactCount?: number
+  isDelete: boolean
+  staffId?: number
+  organizationId?: number | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ContentTemplate {
@@ -1237,9 +1273,13 @@ export const IPC_EVENTS = {
   CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS: 'contacts:load-page-inbox-customers',
   CONTACTS_LOAD_ZALO_GROUP_MEMBERS: 'contacts:load-zalo-group-members',
   CONTACTS_LIST_PAGE_INBOX: 'contacts:list-page-inbox',
+  CONTACTS_LIST_PAGED: 'contacts:list-paged',
   CONTACTS_LIST_ZALO_GROUP_MEMBERS: 'contacts:list-zalo-group-members',
   CONTACTS_LIST_ZALO_REMARKETING_CUSTOMERS: 'contacts:list-zalo-remarketing-customers',
   CONTACTS_EXPORT_PAGE_INBOX: 'contacts:export-page-inbox',
+  CONTACTS_EXPORT_PAGED: 'contacts:export-paged',
+  CONTACTS_EXPORT_ZALO_GROUP_MEMBERS: 'contacts:export-zalo-group-members',
+  CONTACTS_EXPORT_ZALO_REMARKETING_CUSTOMERS: 'contacts:export-zalo-remarketing-customers',
   CONTACTS_CANCEL_LOAD: 'contacts:cancel-load',
   CONTACTS_LIST: 'contacts:list',
   CONTACTS_DELETE: 'contacts:delete',
@@ -1250,6 +1290,10 @@ export const IPC_EVENTS = {
   CONTACT_GROUPS_LIST_CONTACTS: 'contacts:groups:list-contacts',
   CONTACT_GROUPS_ADD_CONTACTS: 'contacts:groups:add-contacts',
   CONTACT_GROUPS_REMOVE_CONTACTS: 'contacts:groups:remove-contacts',
+  AKABIZ_CONTACT_TAGS_LIST: 'contacts:akabiz-tags:list',
+  AKABIZ_CONTACT_TAGS_CREATE: 'contacts:akabiz-tags:create',
+  AKABIZ_CONTACT_TAGS_UPDATE: 'contacts:akabiz-tags:update',
+  AKABIZ_CONTACT_TAGS_DELETE: 'contacts:akabiz-tags:delete',
   ZALO_FRIEND_BLOCKLISTS_LIST: 'contacts:zalo-friend-blocklists:list',
   ZALO_FRIEND_BLOCKLISTS_CREATE: 'contacts:zalo-friend-blocklists:create',
   ZALO_FRIEND_BLOCKLISTS_UPDATE: 'contacts:zalo-friend-blocklists:update',

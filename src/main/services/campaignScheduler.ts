@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignRunEvent, CampaignRunEventInput } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -2511,6 +2511,86 @@ export class CampaignScheduler {
         this.firstNonEmptyString(raw.profileUid, target.uid)
       )
     ])
+  }
+
+  private getAkaBizTagIdsForCampaign(campaign: Campaign): number[] {
+    if (
+      campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID ||
+      campaign.extraSettings?.zaloMessageSendMode === ZALO_MESSAGE_SEND_MODE_SHARE ||
+      campaign.extraSettings?.enableAkaBizTag !== true
+    ) {
+      return []
+    }
+
+    const seen = new Set<number>()
+    const ids: number[] = []
+    const rawIds = Array.isArray(campaign.extraSettings?.akaBizTagIds)
+      ? campaign.extraSettings.akaBizTagIds
+      : []
+    for (const rawId of rawIds) {
+      const id = Number(rawId)
+      if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue
+      seen.add(id)
+      ids.push(id)
+    }
+    return ids
+  }
+
+  private getAkaBizTargetUids(target: ZaloResolvedTarget, contactType: ContactType): string[] {
+    const uid = this.firstNonEmptyString(target.uid)
+    if (!uid) return []
+    if (contactType !== 'group') return [uid]
+
+    const withoutPrefix = uid.replace(/^g/i, '')
+    return Array.from(new Set([uid, withoutPrefix].map(value => value.trim()).filter(Boolean)))
+  }
+
+  private async applyAkaBizTagsToZaloTarget(
+    account: AutoAccount,
+    campaign: Campaign,
+    target: ZaloResolvedTarget | null | undefined,
+    contactType: ContactType
+  ): Promise<void> {
+    const tagIds = this.getAkaBizTagIdsForCampaign(campaign)
+    if (tagIds.length === 0 || !target?.uid) return
+
+    const uids = this.getAkaBizTargetUids(target, contactType)
+    if (uids.length === 0) return
+
+    try {
+      const result = await this.supabase.applyAkaBizTagsToContactTargets(
+        uids.map(uid => ({
+          accountId: account.id,
+          contactType,
+          uid
+        })),
+        tagIds
+      )
+      if (result.count > 0) {
+        const label = contactType === 'group'
+          ? `group ${this.getZaloTargetLabel(target)}`
+          : this.getZaloTargetLabel(target)
+        await this.logCampaignProgress(campaign.id, `🏷️ Đã gắn tag akaBiz cho ${label}`)
+      } else {
+        console.warn('[CampaignScheduler] No existing contact found for akaBiz tags', {
+          accountId: account.id,
+          campaignId: campaign.id,
+          contactType,
+          uid: target.uid,
+          tagIds
+        })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn('[CampaignScheduler] Failed to apply akaBiz contact tags:', {
+        accountId: account.id,
+        campaignId: campaign.id,
+        contactType,
+        uid: target.uid,
+        message
+      })
+      await this.logCampaignProgress(campaign.id, `⚠️ Không thể gắn tag akaBiz cho ${this.getZaloTargetLabel(target)}: ${message}`)
+    }
   }
 
   private normalizeZaloFriendProfile(raw: Record<string, unknown>): ZaloFriendMaterializedProfile | null {
@@ -6345,6 +6425,7 @@ export class CampaignScheduler {
 
       const target = this.normalizeZaloTarget(phone, user)
       await this.upsertZaloFoundUserContact(account, user, campaign.actionId)
+      await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
       const inputDataId = Number((options.inputData as Record<string, unknown> | undefined)?.id)
       if (Number.isFinite(inputDataId) && inputDataId > 0) {
         const nextName = target.displayName || target.originalName || ''
@@ -6404,6 +6485,7 @@ export class CampaignScheduler {
       )
     )
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
 
     return { ok: true, zaloTarget: target }
   }
@@ -6440,6 +6522,7 @@ export class CampaignScheduler {
       )
     )
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
 
     return { ok: true, zaloTarget: target }
   }
@@ -6509,6 +6592,7 @@ export class CampaignScheduler {
       this.normalizeZaloTargetFromInputData(uid, options.targetName, options.inputData)
     )
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
@@ -6566,6 +6650,7 @@ export class CampaignScheduler {
 
     try {
       const response = await this.zaloRuntime.sendMessageToGroup(account.id, groupId, message, attachments)
+      await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'group')
       return {
         ok: true,
         zaloTarget: target,
@@ -6649,15 +6734,29 @@ export class CampaignScheduler {
 
     try {
       const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId)
+      const labelName = label.text || options.labelName || ''
+      await this.supabase.appendZaloTagsToExistingContacts(
+        account.id,
+        'person',
+        [target.uid],
+        [{ id: labelId, name: labelName }]
+      ).catch(err => {
+        console.warn('[CampaignScheduler] Failed to mirror Zalo tag to contact:', {
+          accountId: account.id,
+          uid: target.uid,
+          labelId,
+          err
+        })
+      })
       return {
         ok: true,
         zaloTarget: target,
         detail: this.createZaloSuccessDetail({
           actionCode: 'zalo_tag_contact',
           actionName: 'Gắn tag Zalo',
-          log: `Đã gắn tag "${label.text || options.labelName || labelId}" cho ${this.getZaloTargetLabel(target)}`,
+          log: `Đã gắn tag "${labelName || labelId}" cho ${this.getZaloTargetLabel(target)}`,
           countsTowardLimit: false,
-          data: { target, labelId, labelName: label.text || options.labelName || '' }
+          data: { target, labelId, labelName }
         })
       }
     } catch (err) {

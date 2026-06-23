@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, ContentTemplate, ContactListResult, PageInboxContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig } from '../shared/types'
+import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContactListResult, PageInboxContactListQuery, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -393,17 +393,29 @@ const electronAPI = {
   listContacts: (accountId: number, contactType?: ContactType): Promise<AutoAccountContact[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST, accountId, contactType),
 
+  listContactsPage: (accountId: number, query?: AccountContactListQuery): Promise<ContactListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_PAGED, accountId, query),
+
   listPageInboxContacts: (accountId: number, query?: PageInboxContactListQuery): Promise<ContactListResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_PAGE_INBOX, accountId, query),
 
-  listZaloGroupMemberContacts: (accountId: number, zaloGroupId: string): Promise<AutoAccountContact[]> =>
-    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_ZALO_GROUP_MEMBERS, accountId, zaloGroupId),
+  listZaloGroupMemberContacts: (accountId: number, query?: ZaloGroupMemberContactListQuery): Promise<ContactListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_ZALO_GROUP_MEMBERS, accountId, query),
 
   listZaloRemarketingCustomers: (accountId: number, query?: ZaloRemarketingCustomerListQuery): Promise<ContactListResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_ZALO_REMARKETING_CUSTOMERS, accountId, query),
 
   exportPageInboxContacts: (accountId: number, query?: PageInboxContactListQuery): Promise<AutoAccountContact[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_EXPORT_PAGE_INBOX, accountId, query),
+
+  exportContactsPage: (accountId: number, query?: AccountContactListQuery): Promise<AutoAccountContact[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_EXPORT_PAGED, accountId, query),
+
+  exportZaloGroupMemberContacts: (accountId: number, query?: ZaloGroupMemberContactListQuery): Promise<AutoAccountContact[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_EXPORT_ZALO_GROUP_MEMBERS, accountId, query),
+
+  exportZaloRemarketingCustomers: (accountId: number, query?: ZaloRemarketingCustomerListQuery): Promise<AutoAccountContact[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_EXPORT_ZALO_REMARKETING_CUSTOMERS, accountId, query),
 
   deleteContacts: (accountId: number, contactType: ContactType): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_DELETE, accountId, contactType),
@@ -422,6 +434,18 @@ const electronAPI = {
 
   listContactGroupContacts: (groupId: number): Promise<AutoAccountContact[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_LIST_CONTACTS, groupId),
+
+  listAkaBizContactTags: (): Promise<AkaBizContactTag[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.AKABIZ_CONTACT_TAGS_LIST),
+
+  createAkaBizContactTag: (name: string): Promise<AkaBizContactTag> =>
+    ipcRenderer.invoke(IPC_EVENTS.AKABIZ_CONTACT_TAGS_CREATE, name),
+
+  updateAkaBizContactTag: (tagId: number, name: string): Promise<AkaBizContactTag> =>
+    ipcRenderer.invoke(IPC_EVENTS.AKABIZ_CONTACT_TAGS_UPDATE, tagId, name),
+
+  deleteAkaBizContactTag: (tagId: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_EVENTS.AKABIZ_CONTACT_TAGS_DELETE, tagId),
 
   addContactsToGroup: (groupId: number, contactIds: number[]): Promise<ContactGroupMutationResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_ADD_CONTACTS, groupId, contactIds),

@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { IPC_EVENTS, ContactType, AutoAccount, AutoAccountContact, ContactLoadProgress, ContactLoadResult, ZaloGroupMemberScanRequest } from '../../shared/types'
+import { IPC_EVENTS, ContactType, AutoAccount, AutoAccountContact, ContactLoadProgress, ContactLoadResult, ZaloGroupMemberScanRequest, ZaloLabelOption } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 import { PageController } from '../v2/runtime/pageController'
@@ -550,6 +550,8 @@ export class ContactLoader {
         }, loadState.runKey)
       }
 
+      await this.syncZaloLabelsForContacts(accountId, contactType, loadState)
+
       this.sendProgress(`✅ Đã load ${saved} ${typeName} thành công!`, {
         accountId,
         contactType,
@@ -590,6 +592,67 @@ export class ContactLoader {
           await this.restoreAccountStatus(accountId, previousStatus)
         }
       }
+    }
+  }
+
+  private mapZaloLabelToContact(accountId: number, label: ZaloLabelOption): Partial<AutoAccountContact> {
+    return {
+      accountId,
+      contactType: 'zalo_tag',
+      uid: String(label.id),
+      name: label.text,
+      extraData: {
+        textKey: label.textKey || undefined,
+        color: label.color || undefined,
+        emoji: label.emoji || undefined,
+        conversations: Array.isArray(label.conversations)
+          ? label.conversations.map(item => String(item || '').trim()).filter(Boolean)
+          : []
+      }
+    }
+  }
+
+  private async syncZaloLabelsForContacts(
+    accountId: number,
+    contactType: ContactType,
+    loadState: ActiveContactLoad
+  ): Promise<void> {
+    if (!this.zaloRuntime) return
+    this.sendProgress('🏷️ Đang đồng bộ tag Zalo...', {
+      accountId,
+      contactType,
+      runKey: loadState.runKey
+    })
+
+    try {
+      const labels = await this.zaloRuntime.listLabels(accountId)
+      if (labels.length === 0) {
+        await this.supabase.deleteContacts(accountId, 'zalo_tag')
+      } else {
+        await this.supabase.upsertContacts(
+          labels.map(label => this.mapZaloLabelToContact(accountId, label)),
+          { markMissingDeleted: true }
+        )
+      }
+
+      const updated = await this.supabase.syncZaloLabelMemberships(accountId, labels)
+      this.sendProgress(`🏷️ Đã đồng bộ tag Zalo cho ${updated} data.`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn('[ContactLoader] Failed to sync Zalo labels:', {
+        accountId,
+        contactType,
+        message
+      })
+      this.sendProgress(`⚠️ Không thể đồng bộ tag Zalo: ${message}`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
     }
   }
 
@@ -705,6 +768,8 @@ export class ContactLoader {
           stopped: true
         }, loadState.runKey)
       }
+
+      await this.syncZaloLabelsForContacts(accountId, contactType, loadState)
 
       this.sendProgress(`✅ Đã load ${saved} ${typeName} thành công!`, {
         accountId,

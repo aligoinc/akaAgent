@@ -26,7 +26,10 @@ function mapZaloLabelContact(contact: AutoAccountContact): ZaloLabelOption {
     text: contact.name,
     textKey: typeof extra.textKey === 'string' ? extra.textKey : undefined,
     color: typeof extra.color === 'string' ? extra.color : undefined,
-    emoji: typeof extra.emoji === 'string' ? extra.emoji : undefined
+    emoji: typeof extra.emoji === 'string' ? extra.emoji : undefined,
+    conversations: Array.isArray(extra.conversations)
+      ? extra.conversations.map(item => String(item || '').trim()).filter(Boolean)
+      : undefined
   }
 }
 
@@ -39,7 +42,10 @@ function mapZaloLabelToContact(accountId: number, label: ZaloLabelOption): Parti
     extraData: {
       textKey: label.textKey || undefined,
       color: label.color || undefined,
-      emoji: label.emoji || undefined
+      emoji: label.emoji || undefined,
+      conversations: Array.isArray(label.conversations)
+        ? label.conversations.map(item => String(item || '').trim()).filter(Boolean)
+        : []
     }
   }
 }
@@ -229,6 +235,7 @@ export function registerAccountHandlers(
         markMissingDeleted: true
       })
     }
+    await supabase.syncZaloLabelMemberships(accountId, labels)
     return labels
   })
 
