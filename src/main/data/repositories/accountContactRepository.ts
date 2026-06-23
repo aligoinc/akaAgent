@@ -17,6 +17,8 @@ interface UpsertGroupPostContactStatusInput {
 export interface ZaloUserContactInput {
   accountId: number
   zaloUid: string
+  contactSource?: string | null
+  contactExtraData?: Record<string, unknown>
   userId?: string | null
   username?: string | null
   displayName?: string | null
@@ -256,8 +258,35 @@ function normalizeJsonValue(value: unknown): unknown {
   return value === undefined ? null : value
 }
 
+function firstNullableString(...values: unknown[]): string | null {
+  for (const value of values) {
+    const parsed = normalizeNullableString(value)
+    if (parsed) return parsed
+  }
+  return null
+}
+
 function isNonEmptyRecord(value: unknown): boolean {
   return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0
+}
+
+function compactRecord(record: Record<string, unknown>): Record<string, unknown> {
+  const compacted: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(record)) {
+    if (value === null || value === undefined) continue
+    if (typeof value === 'string' && value.trim() === '') continue
+    compacted[key] = value
+  }
+  return compacted
+}
+
+function hasKnownZaloFriendStatus(contact: ZaloUserContactInput): boolean {
+  return contact.isFr !== undefined && contact.isFr !== null && normalizeNullableNumber(contact.isFr) !== null
+}
+
+function getZaloFriendStatus(contact: ZaloUserContactInput): boolean | undefined {
+  const isFr = normalizeNullableNumber(contact.isFr)
+  return isFr === null ? undefined : isFr === 1
 }
 
 function zaloMetaKey(accountId: unknown, uid: unknown): string {
@@ -666,6 +695,216 @@ export async function upsertZaloUserContacts(
     .filter((contact): contact is Partial<AutoAccountContact> => !!contact)
 
   return upsertContacts(accountContacts, options)
+}
+
+function buildZaloUserPayload(
+  contact: ZaloUserContactInput,
+  existing: Record<string, unknown>,
+  staffId: number,
+  organizationId: number,
+  now: string
+): Record<string, unknown> {
+  const rawPayload = isNonEmptyRecord(contact.rawPayload)
+    ? { ...toRecord(existing.raw_payload), ...(contact.rawPayload || {}) }
+    : toRecord(existing.raw_payload)
+  const isFr = contact.isFr !== undefined
+    ? normalizeNullableNumber(contact.isFr)
+    : normalizeNullableNumber(existing.is_fr)
+
+  return {
+    account_id: contact.accountId,
+    zalo_uid: contact.zaloUid,
+    user_id: firstNullableString(contact.userId, existing.user_id),
+    username: firstNullableString(contact.username, existing.username),
+    display_name: firstNullableString(contact.displayName, existing.display_name),
+    zalo_name: firstNullableString(contact.zaloName, existing.zalo_name),
+    avatar: firstNullableString(contact.avatar, existing.avatar),
+    bgavatar: firstNullableString(contact.bgavatar, existing.bgavatar),
+    cover: firstNullableString(contact.cover, existing.cover),
+    gender: firstNullableNumber(contact.gender, existing.gender),
+    dob: firstNullableNumber(contact.dob, existing.dob),
+    sdob: firstNullableString(contact.sdob, existing.sdob),
+    status: firstNullableString(contact.status, existing.status),
+    phone_number: firstNullableString(contact.phoneNumber, existing.phone_number),
+    is_fr: isFr,
+    is_blocked: firstNullableNumber(contact.isBlocked, existing.is_blocked),
+    last_action_time: firstNullableNumber(contact.lastActionTime, existing.last_action_time),
+    last_update_time: firstNullableNumber(contact.lastUpdateTime, existing.last_update_time),
+    is_active: firstNullableNumber(contact.isActive, existing.is_active),
+    key: firstNullableNumber(contact.key, existing.key),
+    type: firstNullableNumber(contact.type, existing.type),
+    is_active_pc: firstNullableNumber(contact.isActivePC, existing.is_active_pc),
+    is_active_web: firstNullableNumber(contact.isActiveWeb, existing.is_active_web),
+    is_valid: firstNullableNumber(contact.isValid, existing.is_valid),
+    user_key: firstNullableString(contact.userKey, existing.user_key),
+    account_status: firstNullableNumber(contact.accountStatus, existing.account_status),
+    oa_info: contact.oaInfo !== undefined ? normalizeJsonValue(contact.oaInfo) : normalizeJsonValue(existing.oa_info),
+    user_mode: firstNullableNumber(contact.userMode, existing.user_mode),
+    global_id: firstNullableString(contact.globalId, existing.global_id),
+    biz_pkg: contact.bizPkg !== undefined ? normalizeJsonValue(contact.bizPkg) : normalizeJsonValue(existing.biz_pkg),
+    created_ts: firstNullableNumber(contact.createdTs, existing.created_ts),
+    oa_status: contact.oaStatus !== undefined ? normalizeJsonValue(contact.oaStatus) : normalizeJsonValue(existing.oa_status),
+    raw_payload: rawPayload,
+    last_seen_at: now,
+    staff_id: staffId,
+    organization_id: organizationId,
+    updated_at: now
+  }
+}
+
+async function getExistingPersonContactRows(
+  accountId: number,
+  zaloUids: string[],
+  staffId: number
+): Promise<Map<string, Record<string, unknown>>> {
+  const existing = new Map<string, Record<string, unknown>>()
+  const chunkSize = 100
+  for (let i = 0; i < zaloUids.length; i += chunkSize) {
+    const chunk = zaloUids.slice(i, i + chunkSize)
+    const { data, error } = await client()
+      .from('auto_account_contacts')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('staff_id', staffId)
+      .eq('contact_type', 'person')
+      .in('uid', chunk)
+
+    if (error) throw new Error(`Failed to list existing Zalo campaign contacts: ${error.message}`)
+    for (const row of data || []) {
+      existing.set(String(row.uid || '').trim(), row)
+    }
+  }
+  return existing
+}
+
+export async function upsertZaloCampaignUserContacts(
+  contacts: ZaloUserContactInput[]
+): Promise<number> {
+  const u = requireCurrentUser()
+  const normalized = dedupeZaloUserContacts(contacts)
+  if (normalized.length === 0) return 0
+
+  const now = new Date().toISOString()
+  const chunkSize = 100
+  const metaByKey = new Map<string, { id: number }>()
+
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize)
+    const accountIds = Array.from(new Set(chunk.map(contact => contact.accountId)))
+    const existingByKey = new Map<string, Record<string, unknown>>()
+    for (const accountId of accountIds) {
+      const accountContacts = chunk.filter(contact => contact.accountId === accountId)
+      const existing = await getExistingZaloUsers(
+        accountId,
+        accountContacts.map(contact => contact.zaloUid),
+        u.staffId
+      )
+      for (const [zaloUid, row] of existing.entries()) {
+        existingByKey.set(zaloMetaKey(accountId, zaloUid), row)
+      }
+    }
+
+    const payloads = chunk.map(contact => buildZaloUserPayload(
+      contact,
+      existingByKey.get(zaloMetaKey(contact.accountId, contact.zaloUid)) || {},
+      u.staffId,
+      u.organizationId,
+      now
+    ))
+
+    const { data, error } = await client()
+      .from('zalo_users')
+      .upsert(payloads, { onConflict: 'account_id,zalo_uid' })
+      .select('id, account_id, zalo_uid')
+
+    if (error) throw new Error(`Failed to upsert Zalo campaign users: ${error.message}`)
+
+    for (const row of data || []) {
+      metaByKey.set(zaloMetaKey(row.account_id, row.zalo_uid), { id: row.id as number })
+    }
+  }
+
+  let totalSaved = 0
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize)
+    const accountIds = Array.from(new Set(chunk.map(contact => contact.accountId)))
+    const existingContactByKey = new Map<string, Record<string, unknown>>()
+    for (const accountId of accountIds) {
+      const accountContacts = chunk.filter(contact => contact.accountId === accountId)
+      const existing = await getExistingPersonContactRows(
+        accountId,
+        accountContacts.map(contact => contact.zaloUid),
+        u.staffId
+      )
+      for (const [zaloUid, row] of existing.entries()) {
+        existingContactByKey.set(zaloMetaKey(accountId, zaloUid), row)
+      }
+    }
+
+    const knownFriendPayloads: Record<string, unknown>[] = []
+    const unknownFriendPayloads: Record<string, unknown>[] = []
+
+    for (const contact of chunk) {
+      const meta = metaByKey.get(zaloMetaKey(contact.accountId, contact.zaloUid))
+      if (!meta) continue
+      const existing = existingContactByKey.get(zaloMetaKey(contact.accountId, contact.zaloUid)) || {}
+      const source = normalizeNullableString(contact.contactSource)
+      const extraData = mergeContactExtraData(
+        existing.extra_data,
+        compactRecord({
+          platform: 'zalo',
+          source,
+          avatarUrl: contact.avatar,
+          bgavatar: contact.bgavatar,
+          cover: contact.cover,
+          phone: contact.phoneNumber,
+          ...(contact.contactExtraData || {})
+        })
+      )
+      const payload: Record<string, unknown> = {
+        account_id: contact.accountId,
+        contact_type: 'person',
+        uid: contact.zaloUid,
+        name: firstNullableString(
+          contact.displayName,
+          contact.zaloName,
+          contact.username,
+          existing.name,
+          contact.zaloUid
+        ),
+        url: firstNullableString(existing.url),
+        extra_data: extraData,
+        is_delete: false,
+        zalo_user_id: meta.id,
+        staff_id: u.staffId,
+        organization_id: u.organizationId,
+        updated_at: now
+      }
+
+      if (hasKnownZaloFriendStatus(contact)) {
+        payload.is_friend = getZaloFriendStatus(contact) === true
+        knownFriendPayloads.push(payload)
+      } else {
+        unknownFriendPayloads.push(payload)
+      }
+    }
+
+    const upsertContactPayloads = async (payloads: Record<string, unknown>[]): Promise<void> => {
+      if (payloads.length === 0) return
+      const { data, error } = await client()
+        .from('auto_account_contacts')
+        .upsert(payloads, { onConflict: 'account_id,contact_type,uid' })
+        .select('id')
+
+      if (error) throw new Error(`Failed to upsert Zalo campaign contacts: ${error.message}`)
+      totalSaved += data?.length || 0
+    }
+
+    await upsertContactPayloads(knownFriendPayloads)
+    await upsertContactPayloads(unknownFriendPayloads)
+  }
+
+  return totalSaved
 }
 
 export async function upsertZaloGroupContacts(
