@@ -174,6 +174,9 @@ export class SupabaseService {
     contacts: accountContactRepo.ZaloUserContactInput[],
     options?: Parameters<typeof accountContactRepo.upsertZaloUserContacts>[1]
   ) { return accountContactRepo.upsertZaloUserContacts(contacts, options) }
+  upsertZaloCampaignUserContacts(
+    contacts: accountContactRepo.ZaloUserContactInput[]
+  ) { return accountContactRepo.upsertZaloCampaignUserContacts(contacts) }
   upsertZaloGroupContacts(
     contacts: accountContactRepo.ZaloGroupContactInput[],
     options?: Parameters<typeof accountContactRepo.upsertZaloGroupContacts>[1]

@@ -44,6 +44,7 @@ import { ZaloApiError } from 'zca-js'
 import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser } from './zaloRuntimeService'
 import { EmailRuntimeService } from './emailRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
+import type { ZaloUserContactInput } from '../data/repositories/accountContactRepository'
 import { callAiUsing } from './aiRuntimeService'
 import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
 import type {
@@ -131,6 +132,7 @@ interface ZaloFriendMaterializedProfile {
   uid: string
   phone?: string
   sdob?: string
+  raw: Record<string, unknown>
 }
 
 interface NewsfeedActionAvailability {
@@ -1690,7 +1692,13 @@ export class CampaignScheduler {
           if (stopAfterInvalidTarget) break
           continue
         }
-        batch.push(target)
+        if (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
+          const resolvedTarget = await this.resolveZaloFriendMessageTarget(account, target.target)
+          await this.upsertZaloResolvedProfileTarget(account, resolvedTarget, campaign.actionId)
+          batch.push({ ...target, target: resolvedTarget })
+        } else {
+          batch.push(target)
+        }
       }
 
       if (stopAfterInvalidTarget) {
@@ -2381,6 +2389,130 @@ export class CampaignScheduler {
     return text
   }
 
+  private nullableNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  private recordValue(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? { ...(value as Record<string, unknown>) }
+      : {}
+  }
+
+  private getOwnNullableNumber(raw: Record<string, unknown>, ...keys: string[]): number | undefined {
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(raw, key)) continue
+      const value = this.nullableNumber(raw[key])
+      if (value !== null) return value
+    }
+    return undefined
+  }
+
+  private mapZaloApiRawUserContact(
+    accountId: number,
+    rawInput: Record<string, unknown>,
+    source: string,
+    fallbackUid?: string
+  ): ZaloUserContactInput | null {
+    const raw = this.recordValue(rawInput)
+    const zaloUid = this.firstNonEmptyString(raw.userId, raw.uid, raw.id, raw.globalId, fallbackUid)
+    if (!zaloUid) return null
+
+    const isFr = this.getOwnNullableNumber(raw, 'isFr', 'is_fr')
+    return {
+      accountId,
+      zaloUid,
+      contactSource: source,
+      userId: this.firstNonEmptyString(raw.userId) || null,
+      username: this.firstNonEmptyString(raw.username) || null,
+      displayName: this.firstNonEmptyString(raw.displayName, raw.display_name) || null,
+      zaloName: this.firstNonEmptyString(raw.zaloName, raw.zalo_name) || null,
+      avatar: this.firstNonEmptyString(raw.avatar) || null,
+      bgavatar: this.firstNonEmptyString(raw.bgavatar) || null,
+      cover: this.firstNonEmptyString(raw.cover) || null,
+      gender: this.nullableNumber(raw.gender),
+      dob: this.nullableNumber(raw.dob),
+      sdob: this.firstNonEmptyString(raw.sdob) || null,
+      status: this.firstNonEmptyString(raw.status) || null,
+      phoneNumber: this.firstNonEmptyString(raw.phoneNumber, raw.phone) || null,
+      isFr,
+      isBlocked: this.nullableNumber(raw.isBlocked),
+      lastActionTime: this.nullableNumber(raw.lastActionTime),
+      lastUpdateTime: this.nullableNumber(raw.lastUpdateTime),
+      isActive: this.nullableNumber(raw.isActive),
+      key: this.nullableNumber(raw.key),
+      type: this.nullableNumber(raw.type),
+      isActivePC: this.nullableNumber(raw.isActivePC),
+      isActiveWeb: this.nullableNumber(raw.isActiveWeb),
+      isValid: this.nullableNumber(raw.isValid),
+      userKey: this.firstNonEmptyString(raw.userKey) || null,
+      accountStatus: this.nullableNumber(raw.accountStatus),
+      oaInfo: raw.oaInfo,
+      userMode: this.nullableNumber(raw.userMode ?? raw.user_mode),
+      globalId: this.firstNonEmptyString(raw.globalId) || null,
+      bizPkg: raw.bizPkg,
+      createdTs: this.nullableNumber(raw.createdTs),
+      oaStatus: raw.oaStatus ?? raw.oa_status,
+      rawPayload: raw
+    }
+  }
+
+  private mapZaloFoundUserContact(
+    accountId: number,
+    user: ZaloFoundUser,
+    source: string
+  ): ZaloUserContactInput | null {
+    const raw = {
+      ...this.recordValue(user.raw),
+      uid: user.uid,
+      phoneNumber: user.phone,
+      displayName: user.displayName,
+      zaloName: user.originalName,
+      gender: user.gender,
+      avatar: user.avatar
+    }
+    return this.mapZaloApiRawUserContact(accountId, raw, source, user.uid)
+  }
+
+  private async upsertZaloApiUserContacts(contacts: Array<ZaloUserContactInput | null>): Promise<void> {
+    const validContacts = contacts.filter((contact): contact is ZaloUserContactInput => !!contact)
+    if (validContacts.length === 0) return
+    await this.supabase.upsertZaloCampaignUserContacts(validContacts)
+  }
+
+  private async upsertZaloFoundUserContact(
+    account: AutoAccount,
+    user: ZaloFoundUser,
+    source: string
+  ): Promise<void> {
+    await this.upsertZaloApiUserContacts([
+      this.mapZaloFoundUserContact(account.id, user, source)
+    ])
+  }
+
+  private async upsertZaloResolvedProfileTarget(
+    account: AutoAccount,
+    target: ZaloResolvedTarget,
+    source: string
+  ): Promise<void> {
+    const raw = this.recordValue(target.raw)
+    const profile = this.recordValue(raw.profile)
+    if (Object.keys(profile).length === 0) return
+    await this.upsertZaloApiUserContacts([
+      this.mapZaloApiRawUserContact(
+        account.id,
+        {
+          ...profile,
+          uid: this.firstNonEmptyString(raw.profileUid, profile.uid, profile.userId)
+        },
+        source,
+        this.firstNonEmptyString(raw.profileUid, target.uid)
+      )
+    ])
+  }
+
   private normalizeZaloFriendProfile(raw: Record<string, unknown>): ZaloFriendMaterializedProfile | null {
     const uid = this.firstNonEmptyString(raw.userId, raw.uid, raw.id)
     if (!uid) return null
@@ -2388,7 +2520,8 @@ export class CampaignScheduler {
       uid,
       name: this.firstNonEmptyString(raw.displayName, raw.zaloName, raw.username, raw.name, uid),
       phone: this.firstNonEmptyString(raw.phoneNumber, raw.phone),
-      sdob: this.firstNonEmptyString(raw.sdob)
+      sdob: this.firstNonEmptyString(raw.sdob),
+      raw
     }
   }
 
@@ -2469,6 +2602,10 @@ export class CampaignScheduler {
       page += 1
     }
 
+    await this.upsertZaloApiUserContacts(
+      profiles.map(profile => this.mapZaloApiRawUserContact(account.id, profile.raw, campaign.actionId))
+    )
+
     for (const profile of profiles) {
       await this.supabase.createCampaignInputData({
         campaignId: campaign.id,
@@ -2519,6 +2656,10 @@ export class CampaignScheduler {
       if (rows.length < ZALO_FRIEND_PAGE_SIZE) break
       page += 1
     }
+
+    await this.upsertZaloApiUserContacts(
+      profiles.map(profile => this.mapZaloApiRawUserContact(account.id, profile.raw, campaign.actionId))
+    )
 
     for (const profile of profiles) {
       await this.supabase.createCampaignInputData({
@@ -6203,6 +6344,7 @@ export class CampaignScheduler {
       }
 
       const target = this.normalizeZaloTarget(phone, user)
+      await this.upsertZaloFoundUserContact(account, user, campaign.actionId)
       const inputDataId = Number((options.inputData as Record<string, unknown> | undefined)?.id)
       if (Number.isFinite(inputDataId) && inputDataId > 0) {
         const nextName = target.displayName || target.originalName || ''
@@ -6261,6 +6403,7 @@ export class CampaignScheduler {
         false
       )
     )
+    await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
 
     return { ok: true, zaloTarget: target }
   }
@@ -6296,6 +6439,7 @@ export class CampaignScheduler {
         false
       )
     )
+    await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
 
     return { ok: true, zaloTarget: target }
   }
@@ -6364,6 +6508,7 @@ export class CampaignScheduler {
       account,
       this.normalizeZaloTargetFromInputData(uid, options.targetName, options.inputData)
     )
+    await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
