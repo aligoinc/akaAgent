@@ -38,6 +38,25 @@ const getErrorMessage = (err: unknown, fallback: string) => {
 
 const hasProtocol = (value: string) => /^[a-z][a-z0-9+.-]*:\/\//i.test(value)
 
+const parseHostPortUserPassword = (value: string, fallbackProtocol: ProxyProtocol) => {
+  const protocolMatch = value.match(/^([a-z][a-z0-9+.-]*):\/\/(.+)$/i)
+  const parsedProtocol = (protocolMatch?.[1] || fallbackProtocol).toLowerCase() as ProxyProtocol
+  const body = protocolMatch?.[2] || value
+  if (body.includes('@')) return null
+
+  const parts = body.split(':')
+  if (parts.length < 4) return null
+
+  const [parsedHost, parsedPort, parsedUsername, ...passwordParts] = parts
+  const host = parsedHost.trim()
+  const port = parsedPort.trim()
+  const username = parsedUsername.trim()
+  const password = passwordParts.join(':').trim()
+
+  if (!host || !port || !username) return null
+  return { protocol: parsedProtocol, host, port, username, password }
+}
+
 export default function ProxyManagerModal({
   proxies,
   accounts,
@@ -128,6 +147,22 @@ export default function ProxyManagerModal({
     try {
       const raw = importValue.trim()
       if (!raw) return
+      const colonProxy = parseHostPortUserPassword(raw, protocol)
+      if (colonProxy) {
+        if (!PROTOCOL_OPTIONS.some(option => option.value === colonProxy.protocol)) {
+          throw new Error('Chuỗi proxy chỉ hỗ trợ http, https hoặc socks5')
+        }
+        setProtocol(colonProxy.protocol)
+        setHost(colonProxy.host)
+        setPort(colonProxy.port)
+        setUsername(colonProxy.username)
+        setPassword(colonProxy.password)
+        setClearPassword(false)
+        if (!name.trim()) {
+          setName(`${colonProxy.host}:${colonProxy.port}`)
+        }
+        return
+      }
       const normalizedRaw = hasProtocol(raw) ? raw : `${protocol}://${raw}`
       const parsed = new URL(normalizedRaw)
       const parsedProtocol = parsed.protocol.replace(':', '').toLowerCase() as ProxyProtocol
@@ -272,7 +307,7 @@ export default function ProxyManagerModal({
                 className="stepper-input"
                 value={importValue}
                 onChange={event => setImportValue(event.target.value)}
-                placeholder="user:pass@host:port hoặc protocol://user:pass@host:port"
+                placeholder="host:port:user:pass hoặc user:pass@host:port"
               />
               <button className="btn btn-secondary" onClick={handleParseImport} type="button">Nhập</button>
             </div>
