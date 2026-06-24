@@ -728,6 +728,13 @@ const parseDateInputBoundary = (value: string, boundary: 'start' | 'end') => {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+const parseCampaignListDateToBoundary = (value: string) => {
+  const date = parseDateInputBoundary(value, 'end')
+  if (!date) return null
+  date.setDate(date.getDate() + 1)
+  return date
+}
+
 const isWithinDateFilter = (value: string | undefined | null, dateStart: Date | null, dateEnd: Date | null) => {
   if (!value) return false
   const date = new Date(value)
@@ -2576,7 +2583,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   // Filter campaigns by account and the local list filters.
   const filteredCampaigns = useMemo(() => {
     const dateStart = parseDateInputBoundary(dateFrom, 'start')
-    const dateEnd = parseDateInputBoundary(dateTo, 'end')
+    const dateEnd = parseCampaignListDateToBoundary(dateTo)
     const hasDateFilter = timePreset !== 'all' && (!!dateStart || !!dateEnd)
     const searchQuery = normalizeFilterText(campaignNameSearch)
 
