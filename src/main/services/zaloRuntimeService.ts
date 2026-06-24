@@ -576,14 +576,14 @@ export class ZaloRuntimeService {
     const directFirstPage = await api.getGroupLinkInfo({ link: normalizedLink, memberPage: 1 })
     const firstGroup = normalizeRecord(directFirstPage)
     const firstMembers = this.getCurrentMembersFromGroupLinkPage(firstGroup)
-    const totalMember = Number(firstGroup.totalMember || 0)
+    const firstTotalMember = nullableNumber(firstGroup.totalMember)
 
-    if (totalMember > 0 && firstMembers.length === 0) {
-      const proxyUrl = await this.getGroupLinkGinfoProxyUrl()
-      if (!proxyUrl) {
-        throw new Error('Zalo trả về group có thành viên nhưng không trả danh sách member. Vui lòng cấu hình proxy fallback cho quét link group Zalo.')
-      }
-      return this.getGroupMembersByLinkWithProxy(api, normalizedLink, proxyUrl)
+    if (firstTotalMember !== null && firstTotalMember > 0 && firstMembers.length === 0) {
+      return this.getGroupMembersByLinkFallback(
+        api,
+        normalizedLink,
+        'Zalo trả về group có thành viên nhưng không trả danh sách member. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
+      )
     }
 
     const collected = await this.collectGroupLinkMemberPages(api, normalizedLink, async (page) => (
@@ -591,8 +591,28 @@ export class ZaloRuntimeService {
         ? firstGroup
         : normalizeRecord(await api.getGroupLinkInfo({ link: normalizedLink, memberPage: page }))
     ))
-    if (collected.members.length === 0 && Number(collected.group.totalMember || 0) > 0) {
-      throw new Error('Zalo không trả danh sách member cho link group này.')
+
+    const totalMember = nullableNumber(collected.group.totalMember)
+    if (collected.members.length === 0) {
+      return this.getGroupMembersByLinkFallback(
+        api,
+        normalizedLink,
+        'Zalo không trả danh sách member cho link group này. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
+      )
+    }
+    if (totalMember === null || totalMember <= 0) {
+      return this.getGroupMembersByLinkFallback(
+        api,
+        normalizedLink,
+        'Zalo không trả tổng số thành viên group. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
+      )
+    }
+    if (collected.members.length * 100 <= totalMember * 70) {
+      return this.getGroupMembersByLinkFallback(
+        api,
+        normalizedLink,
+        'Zalo trả danh sách member không đầy đủ. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
+      )
     }
     return collected
   }
@@ -1543,6 +1563,16 @@ export class ZaloRuntimeService {
       this.getGroupLinkInfoWithProxyPage(api, link, memberPage, proxyUrl)
     ))
     return { ...collected, usedProxy: true }
+  }
+
+  private async getGroupMembersByLinkFallback(
+    api: API,
+    link: string,
+    messageIfMissingProxy: string
+  ): Promise<ZaloGroupMembersResult> {
+    const proxyUrl = await this.getGroupLinkGinfoProxyUrl()
+    if (!proxyUrl) throw new Error(messageIfMissingProxy)
+    return this.getGroupMembersByLinkWithProxy(api, link, proxyUrl)
   }
 
   private async getGroupLinkInfoWithProxyPage(
