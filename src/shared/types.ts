@@ -326,6 +326,10 @@ export interface CampaignExtraSettings {
   zaloFriendBlocklistName?: string | null
   zaloBirthdayDataMaterializedDate?: string | null
   zaloBirthdayMaterializedCount?: number
+  zaloRealtimeTriggers?: Array<'join' | 'leave' | 'interact'>
+  zaloRealtimeGroupIds?: string[]
+  zaloRealtimeGroupNames?: string[]
+  zaloRealtimeEndDate?: string | null
   pageInboxPageUid?: string                // facebook_page_to_message: Page ID dùng để mở Business Inbox
   pageInboxPageName?: string               // facebook_page_to_message: tên page hiển thị/log
   // Đăng bài lên trang cá nhân — tuỳ chọn nguồn
@@ -493,6 +497,7 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   zalo_message_phone: { field: 'phone', label: 'SĐT Zalo' },
   zalo_message_friend: { field: 'uid', label: 'UID bạn bè Zalo' },
   zalo_message_group_member: { field: 'uid', label: 'UID thành viên group Zalo' },
+  zalo_message_group_realtime: { field: 'uid', label: 'UID thành viên group Zalo theo thời gian thực' },
   zalo_message_remarketing_customer: { field: 'uid', label: 'UID khách hàng Zalo đã từng gửi tin' },
   zalo_message_group: { field: 'uid', label: 'ID group Zalo' },
   email_send: { field: 'email', label: 'email người nhận' }

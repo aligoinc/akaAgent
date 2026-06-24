@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError } from 'zca-js'
-import type { API, AttachmentSource, Credentials, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, MessageContent, Options as ZaloOptions, ProfileInfo, UserBasic } from 'zca-js'
+import type { API, AttachmentSource, Credentials, GroupEvent, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, Message, MessageContent, Options as ZaloOptions, ProfileInfo, Reaction, UserBasic } from 'zca-js'
 import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, ZaloSessionCredentials } from '../../shared/types'
 import { SupabaseService } from './supabase'
 
@@ -35,6 +35,22 @@ interface ZaloListenerState {
   readyAt?: number
   lastEventAt?: number
   lastError?: string | null
+}
+
+export interface ZaloListenerStatusEvent {
+  accountId: number
+  status: ZaloListenerStatus
+  ready: boolean
+  code?: number
+  reason?: string
+  error?: string | null
+}
+
+export interface ZaloRealtimeListenerHandlers {
+  groupEvent?: (event: GroupEvent) => unknown
+  message?: (message: Message) => unknown
+  reaction?: (reaction: Reaction) => unknown
+  status?: (event: ZaloListenerStatusEvent) => unknown
 }
 
 type ZaloProfile = {
@@ -273,6 +289,7 @@ export class ZaloRuntimeService {
   private apiLoginInflight = new Map<number, Promise<API>>()
   private verifyInflight = new Map<number, Promise<void>>()
   private listenerStates = new Map<number, ZaloListenerState>()
+  private realtimeListenerSubscribers = new Map<number, Set<ZaloRealtimeListenerHandlers>>()
   private accountCacheVersions = new Map<number, number>()
   private cacheVersion = 0
 
@@ -349,6 +366,29 @@ export class ZaloRuntimeService {
     return promise
   }
 
+  subscribeRealtimeListener(accountId: number, handlers: ZaloRealtimeListenerHandlers): () => void {
+    let subscribers = this.realtimeListenerSubscribers.get(accountId)
+    if (!subscribers) {
+      subscribers = new Set()
+      this.realtimeListenerSubscribers.set(accountId, subscribers)
+    }
+    subscribers.add(handlers)
+
+    return () => {
+      const current = this.realtimeListenerSubscribers.get(accountId)
+      if (!current) return
+      current.delete(handlers)
+      if (current.size === 0) {
+        this.realtimeListenerSubscribers.delete(accountId)
+      }
+    }
+  }
+
+  async ensureRealtimeListenerReady(accountId: number): Promise<void> {
+    const api = await this.ensureApi(accountId)
+    await this.ensureZaloListenerReady(accountId, api)
+  }
+
   async warmStoredSessions(): Promise<void> {
     const version = this.cacheVersion
     const entries = await this.supabase.listZaloAccountsWithSession()
@@ -394,6 +434,7 @@ export class ZaloRuntimeService {
     }
     this.activeQrLogins.clear()
     this.stopAllZaloListeners()
+    this.realtimeListenerSubscribers.clear()
     this.apiCache.clear()
     this.apiLoginInflight.clear()
     this.verifyInflight.clear()
@@ -1239,6 +1280,45 @@ export class ZaloRuntimeService {
     return promise
   }
 
+  private notifyRealtimeSubscribers(
+    accountId: number,
+    invoke: (handlers: ZaloRealtimeListenerHandlers) => unknown,
+    context: string
+  ): void {
+    const subscribers = this.realtimeListenerSubscribers.get(accountId)
+    if (!subscribers || subscribers.size === 0) return
+
+    for (const handlers of Array.from(subscribers)) {
+      try {
+        void Promise.resolve(invoke(handlers)).catch((err) => {
+          console.warn(`[ZaloRuntime] Realtime listener subscriber failed (${context})`, {
+            accountId,
+            message: this.getErrorMessage(err)
+          })
+        })
+      } catch (err) {
+        console.warn(`[ZaloRuntime] Realtime listener subscriber failed (${context})`, {
+          accountId,
+          message: this.getErrorMessage(err)
+        })
+      }
+    }
+  }
+
+  private emitZaloListenerStatus(state: ZaloListenerState, extra: Partial<ZaloListenerStatusEvent> = {}): void {
+    this.notifyRealtimeSubscribers(
+      state.accountId,
+      (handlers) => handlers.status?.({
+        accountId: state.accountId,
+        status: state.status,
+        ready: state.ready,
+        error: state.lastError,
+        ...extra
+      }),
+      'status'
+    )
+  }
+
   private attachZaloListenerHandlers(state: ZaloListenerState): void {
     if (state.handlersAttached) return
     state.handlersAttached = true
@@ -1250,6 +1330,7 @@ export class ZaloRuntimeService {
       state.status = 'starting'
       state.ready = false
       state.lastEventAt = Date.now()
+      this.emitZaloListenerStatus(state)
     })
     api.listener.on('cipher_key', () => {
       const current = this.listenerStates.get(accountId)
@@ -1259,6 +1340,7 @@ export class ZaloRuntimeService {
       state.readyAt = Date.now()
       state.lastEventAt = state.readyAt
       state.lastError = null
+      this.emitZaloListenerStatus(state)
     })
     api.listener.on('disconnected', (code, reason) => {
       const current = this.listenerStates.get(accountId)
@@ -1267,6 +1349,7 @@ export class ZaloRuntimeService {
       state.ready = false
       state.lastEventAt = Date.now()
       state.lastError = `Listener Zalo bị ngắt (${code}${reason ? `: ${reason}` : ''})`
+      this.emitZaloListenerStatus(state, { code, reason })
     })
     api.listener.on('closed', (code, reason) => {
       const current = this.listenerStates.get(accountId)
@@ -1275,6 +1358,7 @@ export class ZaloRuntimeService {
       state.ready = false
       state.lastEventAt = Date.now()
       state.lastError = `Listener Zalo đã đóng (${code}${reason ? `: ${reason}` : ''})`
+      this.emitZaloListenerStatus(state, { code, reason })
     })
     api.listener.on('error', (err) => {
       const current = this.listenerStates.get(accountId)
@@ -1284,6 +1368,22 @@ export class ZaloRuntimeService {
       if (!state.ready) {
         state.status = 'error'
       }
+      this.emitZaloListenerStatus(state)
+    })
+    api.listener.on('group_event', (event) => {
+      const current = this.listenerStates.get(accountId)
+      if (current !== state) return
+      this.notifyRealtimeSubscribers(accountId, handlers => handlers.groupEvent?.(event), 'group_event')
+    })
+    api.listener.on('message', (message) => {
+      const current = this.listenerStates.get(accountId)
+      if (current !== state) return
+      this.notifyRealtimeSubscribers(accountId, handlers => handlers.message?.(message), 'message')
+    })
+    api.listener.on('reaction', (reaction) => {
+      const current = this.listenerStates.get(accountId)
+      if (current !== state) return
+      this.notifyRealtimeSubscribers(accountId, handlers => handlers.reaction?.(reaction), 'reaction')
     })
   }
 
@@ -1439,6 +1539,7 @@ export class ZaloRuntimeService {
       ? await this.createProxyAgent(proxy)
       : undefined
     const options: Partial<ZaloOptions> = {
+      selfListen: true,
       checkUpdate: false,
       logging: false,
       imageMetadataGetter: getZaloImageMetadata

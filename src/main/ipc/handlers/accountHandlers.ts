@@ -50,13 +50,18 @@ function mapZaloLabelToContact(accountId: number, label: ZaloLabelOption): Parti
   }
 }
 
+interface ZaloRealtimeRefreshController {
+  refreshSoon(reason?: string): void
+}
+
 export function registerAccountHandlers(
   supabase: SupabaseService,
   webviewRegistry: WebviewRegistry,
   proxyRuntime: ProxyRuntimeService,
   zaloRuntime?: ZaloRuntimeService,
   emailRuntime?: EmailRuntimeService,
-  mainWindow?: BrowserWindow
+  mainWindow?: BrowserWindow,
+  zaloRealtimeRefresh?: ZaloRealtimeRefreshController
 ): void {
   const resolveProxyForTest = async (request: ProxyTestRequest): Promise<Partial<AutoProxy>> => {
     const existing = request.proxyId ? await supabase.getProxy(request.proxyId) : null
@@ -201,6 +206,7 @@ export function registerAccountHandlers(
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
     const result = await zaloRuntime.checkSession(accountId)
     sendAccountStatusUpdated(mainWindow)
+    zaloRealtimeRefresh?.refreshSoon('zalo-check-session')
     return result
   })
 
@@ -209,6 +215,7 @@ export function registerAccountHandlers(
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
     const result = await zaloRuntime.logout(accountId)
     sendAccountStatusUpdated(mainWindow)
+    zaloRealtimeRefresh?.refreshSoon('zalo-logout')
     return result
   })
 

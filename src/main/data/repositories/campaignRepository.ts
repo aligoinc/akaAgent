@@ -41,11 +41,13 @@ const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
+const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_FRIEND_AUTO_TARGET_MODES = new Set(['all_friends', 'tagged_friends'])
 const ZALO_REMARKETING_SOURCE_ACTION_IDS = [
   ZALO_MESSAGE_PHONE_ACTION_ID,
   ZALO_MESSAGE_FRIEND_ACTION_ID,
-  ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
+  ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID,
+  ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
 ]
 const ZALO_REMARKETING_MESSAGE_ACTION_CODES = ['zalo_message_stranger', 'zalo_message_friend']
 const ZALO_REMARKETING_DETAIL_FETCH_CHUNK = 1000
@@ -99,6 +101,32 @@ const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
+
+export interface ZaloRealtimeGroupCampaignSnapshot {
+  campaign: Campaign
+  accountLoginStatus: string
+  accountStatus: string
+  accountIsActive: boolean
+}
+
+export interface EnqueueZaloRealtimeGroupEventRequest {
+  campaignId: number
+  accountId: number
+  groupId: string
+  groupName?: string | null
+  triggerType: 'join' | 'leave' | 'interact'
+  targetUid: string
+  targetName?: string | null
+  eventTime?: string | null
+  scheduleAt: string
+  rawPayload?: Record<string, unknown>
+}
+
+export interface EnqueueZaloRealtimeGroupEventResult {
+  inserted: boolean
+  eventId: number | null
+  inputDataId: number | null
+}
 
 const uniquePositiveIds = (ids: number[]): number[] => Array.from(new Set(
   ids
@@ -197,6 +225,7 @@ function clampCampaignExtraSettingsDailyLimits(
 }
 
 const shouldSkipCloneCampaignInputData = (actionId: string, extraSettings: unknown): boolean => {
+  if (actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID) return true
   if (actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) return true
   if (actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID) return false
   const extra = extraSettings && typeof extraSettings === 'object'
@@ -675,6 +704,57 @@ export async function listCampaigns(): Promise<Campaign[]> {
   if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   return filterCampaignsByEntitlements((data || []).map(row => mapCampaignFromDB(row)), entitlements)
+}
+
+export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloRealtimeGroupCampaignSnapshot[]> {
+  const u = requireCurrentUser()
+  await ensureCurrentUserCanUseCampaignAction(ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
+
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('*, auto_campaign_actions(name), auto_accounts(name, login_status, status, is_active)')
+    .eq('staff_id', u.staffId)
+    .eq('action_id', ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
+    .eq('is_delete', false)
+    .in('status', ['chờ xử lý', 'đang chạy'])
+
+  if (error) throw new Error(`Không thể tải danh sách chiến dịch Zalo theo thời gian thực: ${error.message}`)
+
+  return (data || []).map(row => {
+    const account = (row as Record<string, any>).auto_accounts || {}
+    return {
+      campaign: mapCampaignFromDB(row),
+      accountLoginStatus: String(account.login_status || ''),
+      accountStatus: String(account.status || ''),
+      accountIsActive: account.is_active !== false
+    }
+  })
+}
+
+export async function enqueueZaloRealtimeGroupEvent(
+  request: EnqueueZaloRealtimeGroupEventRequest
+): Promise<EnqueueZaloRealtimeGroupEventResult> {
+  const { data, error } = await client().rpc('enqueue_campaign_zalo_realtime_group_event', {
+    p_campaign_id: request.campaignId,
+    p_account_id: request.accountId,
+    p_group_id: request.groupId,
+    p_group_name: request.groupName || null,
+    p_trigger_type: request.triggerType,
+    p_target_uid: request.targetUid,
+    p_target_name: request.targetName || null,
+    p_event_time: request.eventTime || new Date().toISOString(),
+    p_schedule_at: request.scheduleAt,
+    p_raw_payload: request.rawPayload || {}
+  })
+
+  if (error) throw new Error(`Không thể ghi sự kiện group Zalo theo thời gian thực: ${error.message}`)
+
+  const row = Array.isArray(data) ? data[0] : data
+  return {
+    inserted: Boolean(row?.inserted),
+    eventId: row?.event_id ? Number(row.event_id) : null,
+    inputDataId: row?.input_data_id ? Number(row.input_data_id) : null
+  }
 }
 
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {

@@ -258,6 +258,7 @@ const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
+const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_MESSAGE_SEND_MODE_SHARE = 'share'
@@ -603,6 +604,10 @@ export class CampaignScheduler {
   private async handleCampaignCompletion(campaign: Campaign): Promise<void> {
     // Check end date
     const now = new Date()
+    if (await this.handleZaloRealtimeGroupCompletion(campaign, now)) {
+      return
+    }
+
     if (campaign.scheduleEndDate) {
       const endDate = new Date(campaign.scheduleEndDate)
       if (now >= endDate) {
@@ -622,6 +627,58 @@ export class CampaignScheduler {
 
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
     await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+  }
+
+  private async handleZaloRealtimeGroupCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+    if (!this.isZaloRealtimeGroupCampaign(campaign)) return false
+
+    const details = await this.supabase.listCampaignInputData(campaign.id)
+    let earliestFutureInputSchedule: Date | null = null
+    let hasPendingDueInput = false
+
+    for (const detail of details) {
+      if (detail.status !== 'chờ xử lý') continue
+      const futureSchedule = this.getFutureInputSchedule(detail, now)
+      if (futureSchedule) {
+        if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
+          earliestFutureInputSchedule = futureSchedule
+        }
+      } else {
+        hasPendingDueInput = true
+      }
+    }
+
+    if (hasPendingDueInput) {
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        schedule: now.toISOString(),
+        note: null
+      })
+      return true
+    }
+
+    if (earliestFutureInputSchedule) {
+      await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
+      return true
+    }
+
+    if (this.isZaloRealtimeReceivingWindowActive(campaign, now)) {
+      const nextSchedule = this.getZaloRealtimeWaitSchedule(campaign, now)
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        schedule: nextSchedule.toISOString(),
+        note: null
+      })
+      await this.logCampaignProgress(campaign.id, `⏳ Chiến dịch "${campaign.name}" tiếp tục chờ data theo thời gian thực từ group Zalo`)
+      return true
+    }
+
+    await this.updateCampaignAndBroadcast(campaign.id, {
+      status: 'hoàn thành',
+      note: 'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy'
+    })
+    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
+    return true
   }
 
   private async handleMultiDailyTimeSlotAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
@@ -958,6 +1015,80 @@ export class CampaignScheduler {
     await this.logCampaignProgress(campaign.id, `⏳ ${message}`)
   }
 
+  private isZaloRealtimeGroupCampaign(campaign: Campaign): boolean {
+    return campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
+  }
+
+  private getZaloRealtimeEndDateKey(campaign: Campaign): string {
+    const raw = String(campaign.extraSettings?.zaloRealtimeEndDate || '').trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+    const date = raw ? new Date(raw) : null
+    return date && !Number.isNaN(date.getTime()) ? this.getVietnamDateKey(date) : ''
+  }
+
+  private isZaloRealtimeReceivingWindowActive(campaign: Campaign, now = new Date()): boolean {
+    const endDateKey = this.getZaloRealtimeEndDateKey(campaign)
+    return Boolean(endDateKey) && this.getVietnamDateKey(now) <= endDateKey
+  }
+
+  private getZaloRealtimeWaitSchedule(campaign: Campaign, now = new Date()): Date {
+    const anchor = campaign.originalSchedule || campaign.schedule || now.toISOString()
+    const anchorDate = new Date(anchor)
+    const anchorParts = Number.isNaN(anchorDate.getTime())
+      ? this.getVietnamDateTimeParts(now)
+      : this.getVietnamDateTimeParts(anchorDate)
+    const slot = `${String(anchorParts.hour).padStart(2, '0')}:${String(anchorParts.minute).padStart(2, '0')}`
+    const todayAtSlot = this.withVietnamTimeSlot(now, slot)
+    if (todayAtSlot && todayAtSlot.getTime() > now.getTime()) return todayAtSlot
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    return this.withVietnamTimeSlot(tomorrow, slot) || new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  }
+
+  private async prepareZaloRealtimeGroupCampaignRun(campaign: Campaign): Promise<boolean> {
+    if (!this.isZaloRealtimeGroupCampaign(campaign)) return true
+
+    const details = await this.supabase.listCampaignInputData(campaign.id)
+    const now = new Date()
+    let earliestFutureInputSchedule: Date | null = null
+    let pendingCount = 0
+
+    for (const detail of details) {
+      if (detail.status !== 'chờ xử lý') continue
+      pendingCount += 1
+      const futureSchedule = this.getFutureInputSchedule(detail, now)
+      if (futureSchedule) {
+        if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
+          earliestFutureInputSchedule = futureSchedule
+        }
+        continue
+      }
+      return true
+    }
+
+    if (earliestFutureInputSchedule) {
+      await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
+      return false
+    }
+
+    if (pendingCount === 0 && this.isZaloRealtimeReceivingWindowActive(campaign, now)) {
+      const nextSchedule = this.getZaloRealtimeWaitSchedule(campaign, now)
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        schedule: nextSchedule.toISOString(),
+        note: null
+      })
+      await this.logCampaignProgress(campaign.id, `⏳ Chiến dịch "${campaign.name}" đang chờ data theo thời gian thực từ group Zalo`)
+      return false
+    }
+
+    await this.updateCampaignAndBroadcast(campaign.id, {
+      status: 'hoàn thành',
+      note: 'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy'
+    })
+    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
+    return false
+  }
+
   private async getFindDataSourceWaitNote(campaign: Campaign): Promise<string | null> {
     const targetField = this.getFindDataTargetCampaignField(campaign)
     if (!targetField) return null
@@ -1013,6 +1144,10 @@ export class CampaignScheduler {
       const workflowSelection = this.resolveCampaignWorkflow(action)
       if (!workflowSelection.workflowId) {
         await this.updateCampaignPreflightNote(campaign, workflowSelection.missingNote)
+        return
+      }
+
+      if (!(await this.prepareZaloRealtimeGroupCampaignRun(campaign))) {
         return
       }
 
@@ -2223,6 +2358,7 @@ export class CampaignScheduler {
       || campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
+      || campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
   }
@@ -2234,6 +2370,7 @@ export class CampaignScheduler {
       : campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
+          campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
         ? [detail.name, detail.uid, detail.phone]
