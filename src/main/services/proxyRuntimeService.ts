@@ -8,11 +8,17 @@ type ProxyCredential = {
   password: string
 }
 
+type NormalizedProxy = Required<Pick<AutoProxy, 'protocol' | 'host' | 'port'>> & {
+  username: string | null
+  password: string | null
+}
+
 const PROTOCOLS: ProxyProtocol[] = ['http', 'https', 'socks5']
 const IP_CHECK_URL = 'https://api.ipify.org?format=json'
+const PROXY_TEST_TIMEOUT_MS = 15000
 
 const PLATFORM_TEST_URLS: Record<string, string> = {
-  facebook: 'https://www.facebook.com',
+  facebook: 'https://www.facebook.com/',
   zalo: 'https://chat.zalo.me',
   tiktok: 'https://www.tiktok.com',
   instagram: 'https://www.instagram.com'
@@ -70,32 +76,13 @@ export class ProxyRuntimeService {
     customTestUrl?: string
   ): Promise<ProxyTestResult> {
     const normalized = this.normalizeProxy(proxy)
-    const partition = `proxy_test_${Date.now()}_${Math.random().toString(36).slice(2)}`
-    const ses = session.fromPartition(partition)
     const startedAt = Date.now()
     const testUrl = this.getTestUrl(platform, customTestUrl)
 
-    this.ensureLoginHandler()
-    if (normalized.username && normalized.password) {
-      const credential = {
-        host: normalized.host,
-        port: normalized.port,
-        username: normalized.username,
-        password: normalized.password
-      }
-      this.setSessionCredential(ses, credential)
-    }
-
     try {
-      await ses.setProxy({
-        mode: 'fixed_servers',
-        proxyRules: `${normalized.protocol}://${normalized.host}:${normalized.port}`
-      })
-      await ses.forceReloadProxyConfig().catch(() => {})
-
-      const response = await ses.fetch(testUrl, { cache: 'no-store' })
+      const response = await this.fetchWithProxy(testUrl, normalized)
       const latencyMs = Date.now() - startedAt
-      const ip = await this.fetchIpAddress(ses)
+      const ip = await this.fetchIpAddress(normalized)
 
       return {
         ok: response.ok,
@@ -108,17 +95,14 @@ export class ProxyRuntimeService {
         error: response.ok ? undefined : `HTTP ${response.status} ${response.statusText || ''}`.trim()
       }
     } catch (err: any) {
+      const errorMessage = this.sanitizeProxyError(err?.message || String(err), normalized)
       return {
         ok: false,
         platform,
         testUrl,
         latencyMs: Date.now() - startedAt,
-        error: err?.message || String(err)
+        error: errorMessage
       }
-    } finally {
-      this.deleteSessionCredential(ses)
-      await ses.closeAllConnections().catch(() => {})
-      await ses.clearStorageData().catch(() => {})
     }
   }
 
@@ -148,10 +132,7 @@ export class ProxyRuntimeService {
     })
   }
 
-  private normalizeProxy(proxy: Partial<AutoProxy>): Required<Pick<AutoProxy, 'protocol' | 'host' | 'port'>> & {
-    username: string | null
-    password: string | null
-  } {
+  private normalizeProxy(proxy: Partial<AutoProxy>): NormalizedProxy {
     const protocol = String(proxy.protocol || '').trim().toLowerCase() as ProxyProtocol
     if (!PROTOCOLS.includes(protocol)) {
       throw new Error('Loại proxy không hợp lệ')
@@ -198,9 +179,71 @@ export class ProxyRuntimeService {
     return PLATFORM_TEST_URLS[String(platform || '').trim().toLowerCase()] || IP_CHECK_URL
   }
 
-  private async fetchIpAddress(ses: Session): Promise<string | undefined> {
+  private async fetchWithProxy(url: string, proxy: NormalizedProxy): Promise<any> {
+    const { default: nodeFetch } = await import('node-fetch')
+    const agent = await this.createProxyAgent(proxy, url)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), PROXY_TEST_TIMEOUT_MS)
+
     try {
-      const response = await ses.fetch(IP_CHECK_URL, { cache: 'no-store' })
+      return await nodeFetch(url, {
+        agent,
+        signal: controller.signal,
+        headers: {
+          Accept: '*/*',
+          'User-Agent': 'Mozilla/5.0'
+        }
+      } as any)
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  private async createProxyAgent(proxy: NormalizedProxy, targetUrl: string): Promise<any> {
+    const proxyUrl = this.buildProxyUrl(proxy)
+    if (proxy.protocol === 'socks5') {
+      const mod = await import('socks-proxy-agent')
+      return new mod.SocksProxyAgent(proxyUrl)
+    }
+
+    const targetProtocol = new URL(targetUrl).protocol
+    if (targetProtocol === 'http:') {
+      const mod = await import('http-proxy-agent')
+      return new mod.HttpProxyAgent(proxyUrl)
+    }
+
+    const mod = await import('https-proxy-agent')
+    return new mod.HttpsProxyAgent(proxyUrl)
+  }
+
+  private buildProxyUrl(proxy: NormalizedProxy): string {
+    const auth = proxy.username
+      ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password || '')}@`
+      : ''
+    return `${proxy.protocol}://${auth}${proxy.host}:${proxy.port}`
+  }
+
+  private sanitizeProxyError(message: string, proxy: NormalizedProxy): string {
+    let sanitized = message
+    if (proxy.username) {
+      const fullProxyUrl = this.buildProxyUrl(proxy)
+      const maskedProxyUrl = this.buildProxyUrl({
+        ...proxy,
+        password: proxy.password ? '******' : proxy.password
+      })
+      sanitized = sanitized.split(fullProxyUrl).join(maskedProxyUrl)
+    }
+    if (proxy.password) {
+      sanitized = sanitized
+        .split(proxy.password).join('******')
+        .split(encodeURIComponent(proxy.password)).join('******')
+    }
+    return sanitized
+  }
+
+  private async fetchIpAddress(proxy: NormalizedProxy): Promise<string | undefined> {
+    try {
+      const response = await this.fetchWithProxy(IP_CHECK_URL, proxy)
       if (!response.ok) return undefined
       const data = await response.json() as { ip?: unknown }
       const ip = String(data?.ip || '').trim()
