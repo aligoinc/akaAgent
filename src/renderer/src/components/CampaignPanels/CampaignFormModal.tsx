@@ -12,6 +12,7 @@ import {
   AutoAccountContactGroup,
   Campaign,
   CampaignAction,
+  CampaignImportPlatform,
   CampaignInputData,
   CampaignExtraSettings,
   ContentTemplate,
@@ -24,6 +25,7 @@ import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
+import CampaignDataUploadModal from './CampaignDataUploadModal'
 import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
 import {
   canUseCampaignAction,
@@ -652,6 +654,30 @@ const normalizeEmailAddress = (value: unknown): string => getExcelCellText(value
 
 const isValidEmailAddress = (value: unknown): boolean => isValidEmailInputDataValue(normalizeEmailAddress(value))
 
+const normalizeCampaignImportUid = (value: unknown): string => {
+  const text = getExcelCellText(value).replace(/\s+/g, '')
+  if (!text) return ''
+  const lower = text.toLowerCase()
+  return ['uid', 'url', 'link', 'profile', 'facebook', 'facebookuid'].includes(lower) ? '' : text
+}
+
+const isCampaignTemplateHeaderRow = (row: unknown[]): boolean => {
+  const normalizeHeader = (value: unknown) => getExcelCellText(value)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+
+  const headers = row.map(normalizeHeader)
+  return (
+    ['ten', 'name', 'fullname', 'hoten'].includes(headers[0] || '') &&
+    ['uid', 'url', 'link'].includes(headers[1] || '') &&
+    ['sdt', 'phone', 'mobile', 'sodienthoai'].includes(headers[2] || '') &&
+    ['email', 'emailaddress'].includes(headers[3] || '')
+  )
+}
+
 const parseFindDataSearchKeywordsText = (value: string): string[] =>
   value.split(',').map(item => item.trim()).filter(Boolean)
 
@@ -959,8 +985,7 @@ export default function CampaignFormModal({
   const campaignContentTextareaRef = useRef<HTMLTextAreaElement>(null)
   const emailHtmlEditorRef = useRef<EmailHtmlEditorHandle | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const txtFileInputRef = useRef<HTMLInputElement>(null)
+  const excelUploadInputRef = useRef<HTMLInputElement>(null)
   const [savingCampaign, setSavingCampaign] = useState(false)
 
   const initSchedule = () => {
@@ -1755,6 +1780,11 @@ export default function CampaignFormModal({
     phone: row.phone || '',
     uid: row.uid || '',
     email: row.email || '',
+    info1: row.info1 || '',
+    info2: row.info2 || '',
+    info3: row.info3 || '',
+    info4: row.info4 || '',
+    info5: row.info5 || '',
     note: '',
     status: 'chờ xử lý'
   }))
@@ -3541,271 +3571,19 @@ export default function CampaignFormModal({
     })
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (isZaloMessagePhoneCampaign && !/\.(xlsx|xls)$/i.test(file.name)) {
-      showAlert('Chiến dịch Zalo chỉ hỗ trợ upload file Excel .xlsx hoặc .xls.', 'error')
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result
-        const wb = read(bstr, { type: 'binary' })
-        const wsname = wb.SheetNames[0]
-        const ws = wb.Sheets[wsname]
-
-        // Convert to array of arrays, treating header row as ordinary data for a moment
-        // using header: 1 to get raw 2D array
-        const data = utils.sheet_to_json<any[]>(ws, { header: 1 })
-
-        if (isZaloMessagePhoneCampaign) {
-          const expectedHeaders = ['fullname', 'uid', 'mobile', 'email', 'info1', 'info2', 'info3', 'info4', 'info5']
-          const headerRow = Array.isArray(data[0]) ? data[0].map(cell => getExcelCellText(cell).trim().toLowerCase()) : []
-          const hasTemplateHeader = expectedHeaders.every((header, index) => headerRow[index] === header)
-          if (!hasTemplateHeader) {
-            showAlert('File Excel Zalo không đúng template. Vui lòng dùng header: Fullname, Uid, Mobile, Email, Info1, Info2, Info3, Info4, Info5.', 'error')
-            return
-          }
-
-          const seenPhones = new Set(details.map(row => normalizeVietnamMobilePhone(row.phone)).filter((phone): phone is string => !!phone))
-          const newRows: Partial<CampaignInputData>[] = []
-          let invalidCount = 0
-          let duplicateCount = 0
-
-          for (let i = 1; i < data.length; i++) {
-            const row = data[i]
-            if (!row || row.length === 0 || row.every((cell: unknown) => !getExcelCellText(cell))) continue
-            const phone = normalizeVietnamMobilePhone(row[2])
-            if (!phone) {
-              invalidCount += 1
-              continue
-            }
-            if (seenPhones.has(phone)) {
-              duplicateCount += 1
-              continue
-            }
-            seenPhones.add(phone)
-            newRows.push({
-              name: getExcelCellText(row[0]).trim(),
-              uid: getExcelCellText(row[1]).trim(),
-              phone,
-              email: getExcelCellText(row[3]).trim(),
-              info1: getExcelCellText(row[4]).trim(),
-              info2: getExcelCellText(row[5]).trim(),
-              info3: getExcelCellText(row[6]).trim(),
-              info4: getExcelCellText(row[7]).trim(),
-              info5: getExcelCellText(row[8]).trim(),
-              note: '',
-              status: 'chờ xử lý'
-            })
-          }
-
-          if (newRows.length === 0) {
-            showAlert(`Không có SĐT hợp lệ để thêm. Đã loại ${invalidCount} dòng không hợp lệ và ${duplicateCount} dòng trùng.`, 'error')
-            return
-          }
-
-          setDetails(prev => [...prev, ...newRows])
-          const skippedParts = [
-            invalidCount > 0 ? `${invalidCount} không hợp lệ` : '',
-            duplicateCount > 0 ? `${duplicateCount} trùng` : ''
-          ].filter(Boolean)
-          showAlert(`Đã thêm ${newRows.length} SĐT Zalo${skippedParts.length ? `, bỏ qua ${skippedParts.join(', ')}` : ''}.`, 'success')
-          return
-        }
-
-        // Find index of first data row (skip header if 'Tên', 'Uid', etc. is in A1)
-        let startIndex = 0
-        const firstRow = Array.isArray(data[0]) ? data[0].map(cell => getExcelCellText(cell).trim().toLowerCase()) : []
-        const firstCell = firstRow[0] || ''
-        if (
-          data.length > 0 &&
-          (firstCell.includes('tên') ||
-            (isEmailCampaign && firstRow.some(cell => cell.includes('email') || cell.includes('e-mail'))) ||
-            (isCommentSeedingPostCampaign && firstRow.some(cell => cell.includes('link') || cell.includes('url') || cell.includes('bài'))))
-        ) {
-          startIndex = 1
-        }
-
-        const newRows: Partial<CampaignInputData>[] = []
-        let invalidEmailImportCount = 0
-        for (let i = startIndex; i < data.length; i++) {
-          const row = data[i]
-          if (!row || row.length === 0 || row.every((c: any) => !getExcelCellText(c))) continue // skip empty rows
-
-          // A: Tên (0), B: Uid (1), C: Sđt (2), D: Email (3)
-          const cells = row.map((cell: any) => getExcelCellText(cell).trim())
-          if (isEmailCampaign) {
-            const preferredEmail = normalizeEmailAddress(row[3])
-            const email = isValidEmailAddress(preferredEmail)
-              ? preferredEmail
-              : (cells.find(cell => isValidEmailAddress(cell)) || '')
-            if (!email) {
-              invalidEmailImportCount += 1
-              continue
-            }
-            const emailColumnIndex = cells.findIndex(cell => normalizeEmailAddress(cell) === email)
-            newRows.push({
-              name: emailColumnIndex === 0 ? '' : (cells[0] || ''),
-              uid: '',
-              phone: '',
-              email,
-              note: '',
-              status: 'chờ xử lý'
-            })
-            continue
-          }
-          const postLink = cells.find(cell => /^https?:\/\//i.test(cell) || /facebook\.com|fb\.watch/i.test(cell)) || cells[1] || cells[0] || ''
-          const searchKeyword = cells[0] || cells[1] || ''
-          const name = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : (cells[0] || '')
-          const uid = isFindDataSearchCampaign ? searchKeyword : isCommentSeedingPostCampaign ? postLink : (cells[1] || '')
-          const phone = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : (cells[2] || '')
-          const email = isCommentSeedingPostCampaign || isFindDataSearchCampaign ? '' : (cells[3] || '')
-
-          newRows.push({
-            name,
-            uid,
-            phone,
-            email,
-            note: '',
-            status: 'chờ xử lý'
-          })
-        }
-
-        if (isEmailCampaign) {
-          if (newRows.length === 0) {
-            showAlert(
-              invalidEmailImportCount > 0
-                ? `Không có email hợp lệ để thêm. Đã loại ${invalidEmailImportCount} dòng không hợp lệ.`
-                : 'File Excel trống hoặc không có email hợp lệ.',
-              'error'
-            )
-            return
-          }
-          setDetails(prev => [...prev, ...newRows])
-          showAlert(`Đã thêm ${newRows.length} email${invalidEmailImportCount > 0 ? `, bỏ qua ${invalidEmailImportCount} dòng không hợp lệ` : ''}.`, 'success')
-          return
-        }
-
-        if (isFindDataSearchCampaign) {
-          const addedCount = appendFindDataSearchKeywords(newRows.map(row => row.uid))
-          if (addedCount > 0) {
-            showAlert(`Đã thêm ${addedCount} từ khóa từ file Excel.`, 'success')
-          } else {
-            showAlert('File Excel trống hoặc không có từ khóa hợp lệ.', 'error')
-          }
-          return
-        }
-
-        setDetails(prev => [...prev, ...newRows])
-      } catch (err) {
-        console.error('Lỗi khi đọc file Excel:', err)
-        showAlert('Có lỗi xảy ra khi đọc file Excel. Vui lòng kiểm tra lại định dạng file.', 'error')
-      }
-    }
-    reader.readAsBinaryString(file)
-    // Clear input so same file can be selected again
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const handleTxtFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (evt) => {
-      try {
-        const text = evt.target?.result as string
-        if (!text) return
-
-        // Mảng chứa các UID cắt bằng dấu phẩy hoặc xuống dòng
-        const tokens = text.split(/[\r\n,]+/)
-
-        const newRows: Partial<CampaignInputData>[] = []
-        let invalidEmailImportCount = 0
-        for (const token of tokens) {
-          const value = token.trim()
-          if (!value) continue
-
-          if (isEmailCampaign) {
-            const email = normalizeEmailAddress(value)
-            if (!isValidEmailAddress(email)) {
-              invalidEmailImportCount += 1
-              continue
-            }
-            newRows.push({
-              name: '',
-              uid: '',
-              phone: '',
-              email,
-              note: '',
-              status: 'chờ xử lý'
-            })
-            continue
-          }
-
-          newRows.push({
-            name: '',
-            uid: value,
-            phone: '',
-            email: '',
-            note: '',
-            status: 'chờ xử lý'
-          })
-        }
-
-        if (newRows.length > 0) {
-          if (isFindDataSearchCampaign) {
-            const addedCount = appendFindDataSearchKeywords(newRows.map(row => row.uid))
-            showAlert(
-              addedCount > 0
-                ? `Đã thêm ${addedCount} từ khóa từ file TXT.`
-                : 'File TXT trống hoặc không có từ khóa hợp lệ.',
-              addedCount > 0 ? 'success' : 'error'
-            )
-            return
-          }
-
-          setDetails(prev => [...prev, ...newRows])
-          showAlert(
-            isEmailCampaign
-              ? `Đã thêm ${newRows.length} email từ file TXT${invalidEmailImportCount > 0 ? `, bỏ qua ${invalidEmailImportCount} email không hợp lệ` : ''}.`
-              : `Đã thêm ${newRows.length} ${isFindDataSearchCampaign ? 'từ khóa' : isCommentSeedingPostCampaign ? 'link bài post' : 'UID'} từ file TXT.`,
-            'success'
-          )
-        } else {
-          showAlert(
-            isEmailCampaign
-              ? invalidEmailImportCount > 0
-                ? `File TXT không có email hợp lệ. Đã loại ${invalidEmailImportCount} email không hợp lệ.`
-                : 'File TXT trống hoặc không có email hợp lệ.'
-            : isFindDataSearchCampaign
-              ? 'File TXT trống hoặc không có từ khóa hợp lệ.'
-              : isCommentSeedingPostCampaign
-                ? 'File TXT trống hoặc không có link bài post hợp lệ.'
-                : 'File TXT trống hoặc không có UID hợp lệ.',
-            'error'
-          )
-        }
-      } catch (err) {
-        console.error('Lỗi khi đọc file TXT:', err)
-        showAlert('Có lỗi xảy ra khi đọc file TXT.', 'error')
-      }
-    }
-    reader.readAsText(file) // For text files
-    if (txtFileInputRef.current) txtFileInputRef.current.value = ''
-  }
-
   const [dataScanPicker, setDataScanPicker] = useState<{
     action: DataScanAction
     mode: 'friends' | 'users' | 'groups' | 'pages' | 'pageInboxCustomers' | 'zaloRemarketingCustomers'
     initialStatusFilter?: 'active' | 'inactive' | 'all'
     allowedActions?: DataScanAction[]
   } | null>(null)
+  const [showDataUploadModal, setShowDataUploadModal] = useState(false)
+
+  const dataUploadPlatform: CampaignImportPlatform = selectedActionPlatform === 'zalo'
+    ? 'zalo'
+    : selectedActionPlatform === 'email'
+      ? 'email'
+      : 'facebook'
 
   const getDetailDedupeKey = (row: Partial<CampaignInputData>): string => {
     return String(row.uid || row.email || row.phone || row.name || '')
@@ -3827,6 +3605,115 @@ export default function CampaignFormModal({
       setDetails(prev => [...prev, ...uniqueRows])
     }
     return uniqueRows.length
+  }
+
+  const handleImportedDataRows = (rows: Partial<CampaignInputData>[]) => {
+    if (rows.length === 0) {
+      showAlert('Không có data hợp lệ để chèn.', 'error')
+      return
+    }
+
+    if (isFindDataSearchCampaign) {
+      const addedCount = appendFindDataSearchKeywords(rows.map(row => row.uid))
+      showAlert(
+        addedCount > 0 ? `Đã thêm ${addedCount} từ khóa.` : 'Không có từ khóa hợp lệ để chèn.',
+        addedCount > 0 ? 'success' : 'error'
+      )
+      return
+    }
+
+    const addedCount = appendUniqueDetails(rows)
+    showAlert(
+      addedCount > 0 ? `Đã thêm ${addedCount} data.` : 'Các data đã có trong danh sách.',
+      addedCount > 0 ? 'success' : 'error'
+    )
+  }
+
+  const handleExcelUploadShortcut = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+        showAlert('Vui lòng chọn file Excel .xlsx, .xls hoặc .csv.', 'error')
+        return
+      }
+
+      const workbook = read(new Uint8Array(await file.arrayBuffer()), { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      if (!sheet) {
+        showAlert('File Excel trống hoặc không đọc được sheet đầu tiên.', 'error')
+        return
+      }
+
+      const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
+      const importedRows: Partial<CampaignInputData>[] = []
+
+      for (const row of rows) {
+        if (!Array.isArray(row)) continue
+        if (row.every(cell => !getExcelCellText(cell))) continue
+        if (isCampaignTemplateHeaderRow(row)) continue
+
+        const name = getExcelCellText(row[0]).trim()
+        const uid = normalizeCampaignImportUid(row[1])
+        const phone = getExcelCellText(row[2]).trim()
+        const email = normalizeEmailAddress(row[3])
+        const baseRow: Partial<CampaignInputData> = {
+          name,
+          uid,
+          phone,
+          email,
+          info1: getExcelCellText(row[4]).trim(),
+          info2: getExcelCellText(row[5]).trim(),
+          info3: getExcelCellText(row[6]).trim(),
+          info4: getExcelCellText(row[7]).trim(),
+          info5: getExcelCellText(row[8]).trim(),
+          note: '',
+          status: 'chờ xử lý'
+        }
+
+        if (isFindDataSearchCampaign || isCommentSeedingPostCampaign) {
+          const target = uid || name
+          if (!target) continue
+          importedRows.push({
+            ...baseRow,
+            name: '',
+            uid: target,
+            phone: '',
+            email: ''
+          })
+          continue
+        }
+
+        if (isZaloMessagePhoneCampaign) {
+          const normalizedPhone = normalizeVietnamMobilePhone(phone)
+          if (!normalizedPhone) continue
+          importedRows.push({ ...baseRow, phone: normalizedPhone })
+          continue
+        }
+
+        if (isEmailCampaign) {
+          if (!isValidEmailAddress(email)) continue
+          importedRows.push({ ...baseRow, email })
+          continue
+        }
+
+        if (!uid) continue
+        importedRows.push(baseRow)
+      }
+
+      if (importedRows.length === 0) {
+        showAlert('File Excel trống hoặc không có data hợp lệ.', 'error')
+        return
+      }
+
+      handleImportedDataRows(importedRows)
+    } catch (err) {
+      console.error('Lỗi khi đọc file Excel:', err)
+      showAlert('Có lỗi xảy ra khi đọc file Excel. Vui lòng kiểm tra lại định dạng file.', 'error')
+    } finally {
+      event.target.value = ''
+    }
   }
 
   const onFriendsSelected = (contacts: AutoAccountContact[]) => {
@@ -8481,7 +8368,11 @@ export default function CampaignFormModal({
                   )}
                   {!isEditingSavedCampaign && (
                     <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
-                      {!isFindDataSearchCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageGroupCampaign && (
+                      {canUploadData ? (
+                        <button className="btn btn-secondary" onClick={() => setShowDataUploadModal(true)}>
+                          <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
+                        </button>
+                      ) : !isFindDataSearchCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageGroupCampaign && (
                         <button className="btn btn-secondary" onClick={addDetailRow}>
                           <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
                         </button>
@@ -8490,18 +8381,18 @@ export default function CampaignFormModal({
                         <>
                           <button
                             className="btn btn-secondary"
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={() => excelUploadInputRef.current?.click()}
                           >
                             <Upload size={14} /> Upload Excel
                           </button>
-                          {!isZaloMessagePhoneCampaign && (
-                            <button
-                              className="btn btn-secondary"
-                              onClick={() => txtFileInputRef.current?.click()}
-                            >
-                              <Upload size={14} /> Upload TXT
-                            </button>
-                          )}
+                          <input
+                            type="file"
+                            ref={excelUploadInputRef}
+                            style={{ display: 'none' }}
+                            accept=".xlsx,.xls,.csv"
+                            onChange={event => void handleExcelUploadShortcut(event)}
+                            title="Upload Excel"
+                          />
                         </>
                       )}
                       {canPickFriends && (
@@ -8665,28 +8556,6 @@ export default function CampaignFormModal({
                       >
                         <Trash2 size={14} /> Xoá hết
                       </button>
-                      {canUploadData && (
-                        <>
-                          <input
-                            type="file"
-                            ref={fileInputRef}
-                            style={{ display: 'none' }}
-                            accept={isZaloMessagePhoneCampaign ? '.xlsx,.xls' : '.xlsx, .xls, .csv'}
-                            onChange={handleFileUpload}
-                            title="Upload Excel"
-                          />
-                          {!isZaloMessagePhoneCampaign && (
-                            <input
-                              type="file"
-                              ref={txtFileInputRef}
-                              style={{ display: 'none' }}
-                              accept=".txt"
-                              onChange={handleTxtFileUpload}
-                              title="Upload TXT"
-                            />
-                          )}
-                        </>
-                      )}
                     </div>
                   )}
 
@@ -8828,6 +8697,14 @@ export default function CampaignFormModal({
                       ? onZaloRemarketingCustomersSelected
                   : onGroupsSelected
           }
+        />
+      )}
+      {showDataUploadModal && (
+        <CampaignDataUploadModal
+          platform={dataUploadPlatform}
+          actionId={formData.actionId}
+          onClose={() => setShowDataUploadModal(false)}
+          onInsert={handleImportedDataRows}
         />
       )}
       {!draftFormConfig && renderCampaignPickerModal()}

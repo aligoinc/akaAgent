@@ -1086,6 +1086,32 @@ export interface CampaignAssistantChatResponse {
   usage?: unknown
 }
 
+export type CampaignImportPlatform = 'facebook' | 'zalo' | 'email'
+
+export interface CampaignImportDataRow {
+  name?: string
+  phone?: string
+  uid?: string
+  email?: string
+  info1?: string
+  info2?: string
+  info3?: string
+  info4?: string
+  info5?: string
+}
+
+export interface CampaignImportImageRequest {
+  imageDataUrl: string
+  platform: CampaignImportPlatform
+  actionId?: string
+}
+
+export interface CampaignImportSheetRequest {
+  linkSheet: string
+  platform: CampaignImportPlatform
+  actionId?: string
+}
+
 export type AkaBizIntegrationKind = 'sms' | 'zaloWeb' | 'akaBizDesktop'
 export type AkaBizCampaignListKind = 'sms' | 'zaloPhone' | 'zaloGroupLink' | 'desktopZaloPhone' | 'desktopZaloGroupLink'
 
@@ -1156,6 +1182,10 @@ export const IPC_EVENTS = {
   AI_WRITE_MULTI_OTHER_CONTENT: 'ai:write-multi-other-content',
   AI_CAMPAIGN_ASSISTANT_CONTEXT: 'ai:campaign-assistant-context',
   AI_CAMPAIGN_ASSISTANT_CHAT: 'ai:campaign-assistant-chat',
+
+  // Campaign data import helpers
+  CAMPAIGN_IMPORT_EXTRACT_IMAGE: 'campaign-import:extract-image',
+  CAMPAIGN_IMPORT_LOAD_SHEET: 'campaign-import:load-sheet',
 
   // akaBiz external integrations
   AKABIZ_INTEGRATIONS_GET: 'akabiz:integrations:get',
