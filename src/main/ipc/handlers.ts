@@ -19,6 +19,7 @@ import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
 import { registerAkaBizIntegrationHandlers } from './handlers/akaBizIntegrationHandlers'
+import { registerCampaignImportHandlers } from './handlers/campaignImportHandlers'
 import { registerContentTemplateHandlers } from './handlers/contentTemplateHandlers'
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
@@ -315,6 +316,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerUpdateHandlers(mainWindow)
   registerAiHandlers()
   registerAkaBizIntegrationHandlers()
+  registerCampaignImportHandlers()
   registerContentTemplateHandlers(supabase)
   registerEmailNotificationHandlers(supabase)
   registerReportHandlers(supabase)
