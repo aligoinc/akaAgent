@@ -44,6 +44,7 @@ type FindDataTargetCampaignField = typeof FIND_DATA_TARGET_FIELDS[number]
 type FindDataSourceKind = 'group' | 'search'
 type ZaloFriendTargetMode = NonNullable<CampaignExtraSettings['zaloFriendTargetMode']>
 type ZaloMessageSendMode = NonNullable<CampaignExtraSettings['zaloMessageSendMode']>
+type ZaloRealtimeTrigger = NonNullable<CampaignExtraSettings['zaloRealtimeTriggers']>[number]
 type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'updatedAt' | 'dataTypes' | 'sourceTypes'
 type CampaignPickerSource =
   | { type: 'findDataSource'; sourceKind?: FindDataSourceKind }
@@ -316,6 +317,7 @@ const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
+const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const EMAIL_SEND_ACTION_ID = 'email_send'
@@ -340,6 +342,8 @@ const normalizeZaloTagNameList = (value: unknown): string[] => {
   const rawItems = Array.isArray(value) ? value : []
   return rawItems.map(item => String(item ?? '').trim())
 }
+const normalizeZaloRealtimeGroupId = (value: unknown): string =>
+  String(value || '').trim().replace(/^g/i, '')
 const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   MESSAGE_FRIEND_ACTION_ID,
   MESSAGE_UID_ACTION_ID,
@@ -348,10 +352,31 @@ const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   ZALO_MESSAGE_FRIEND_ACTION_ID,
   ZALO_MESSAGE_BIRTHDAY_ACTION_ID,
   ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID,
+  ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID,
   ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID,
   ZALO_MESSAGE_GROUP_ACTION_ID,
   EMAIL_SEND_ACTION_ID
 ])
+const ZALO_REALTIME_TRIGGER_OPTIONS: Array<{ value: ZaloRealtimeTrigger; label: string }> = [
+  { value: 'join', label: 'Nhắn tin, kết bạn đến những người THAM GIA vào group theo thời gian thực' },
+  { value: 'leave', label: 'Nhắn tin, kết bạn đến những người RỜI group theo thời gian thực' },
+  { value: 'interact', label: 'Nhắn tin, kết bạn đến những người NHẮN TIN, TƯƠNG TÁC trong group theo thời gian thực' }
+]
+const ZALO_REALTIME_TRIGGER_VALUES = new Set<ZaloRealtimeTrigger>(
+  ZALO_REALTIME_TRIGGER_OPTIONS.map(option => option.value)
+)
+const normalizeZaloRealtimeTriggers = (
+  value: unknown,
+  fallback: ZaloRealtimeTrigger[] = ['join']
+): ZaloRealtimeTrigger[] => {
+  const items = Array.isArray(value) ? value : []
+  const triggers = Array.from(new Set(
+    items
+      .map(item => String(item || '').trim())
+      .filter((item): item is ZaloRealtimeTrigger => ZALO_REALTIME_TRIGGER_VALUES.has(item as ZaloRealtimeTrigger))
+  ))
+  return triggers.length > 0 ? triggers : fallback
+}
 
 // Campaign action IDs for "Đăng bài vào group" type — show "Chọn nhóm" picker in data list
 const GROUP_POST_ACTIONS = new Set([
@@ -1010,6 +1035,12 @@ export default function CampaignFormModal({
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   }
 
+  const initRealtimeEndDate = () => {
+    const saved = String(campaign?.extraSettings?.zaloRealtimeEndDate || '').trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved
+    return initEndDate()
+  }
+
   const savedCommentImages = (campaign?.extraSettings?.commentImages || []).slice(0, 1)
   const savedCommentImageOption: CommentImageOption =
     (campaign?.extraSettings?.commentImageOption && campaign.extraSettings.commentImageOption !== 'none' && savedCommentImages.length > 0)
@@ -1130,6 +1161,14 @@ export default function CampaignFormModal({
     useSuggestedFriends: campaign?.extraSettings?.useSuggestedFriends ?? false,
     suggestedFriendsCount: campaign?.extraSettings?.suggestedFriendsCount ?? 10,
     friendRequestMessage: campaign?.extraSettings?.friendRequestMessage || '',
+    zaloRealtimeTriggers: normalizeZaloRealtimeTriggers(campaign?.extraSettings?.zaloRealtimeTriggers),
+    zaloRealtimeGroupIds: Array.isArray(campaign?.extraSettings?.zaloRealtimeGroupIds)
+      ? campaign.extraSettings.zaloRealtimeGroupIds.map(id => String(id || '').trim()).filter(Boolean)
+      : [] as string[],
+    zaloRealtimeGroupNames: Array.isArray(campaign?.extraSettings?.zaloRealtimeGroupNames)
+      ? campaign.extraSettings.zaloRealtimeGroupNames.map(name => String(name || '').trim())
+      : [] as string[],
+    zaloRealtimeEndDate: initRealtimeEndDate(),
     enableZaloTag: campaign?.extraSettings?.enableZaloTag ?? false,
     zaloTagId: campaign?.extraSettings?.zaloTagId ?? '',
     zaloTagName: campaign?.extraSettings?.zaloTagName || '',
@@ -1249,6 +1288,8 @@ export default function CampaignFormModal({
   const [akaBizContactTagsLoading, setAkaBizContactTagsLoading] = useState(false)
   const [zaloFriendBlocklists, setZaloFriendBlocklists] = useState<AutoAccountContactGroup[]>([])
   const [zaloFriendBlocklistsLoading, setZaloFriendBlocklistsLoading] = useState(false)
+  const [zaloRealtimeGroups, setZaloRealtimeGroups] = useState<AutoAccountContact[]>([])
+  const [zaloRealtimeGroupsLoading, setZaloRealtimeGroupsLoading] = useState(false)
   const [internalCampaignDrafts, setInternalCampaignDrafts] = useState<InternalCampaignDraft[]>([])
   const [draftFormConfig, setDraftFormConfig] = useState<{
     tempId: number
@@ -1275,9 +1316,10 @@ export default function CampaignFormModal({
   const isZaloMessageFriendCampaign = formData.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID
   const isZaloMessageBirthdayCampaign = formData.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID
   const isZaloMessageGroupMemberCampaign = formData.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
+  const isZaloMessageGroupRealtimeCampaign = formData.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
   const isZaloMessageRemarketingCustomerCampaign = formData.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
   const isZaloMessageGroupCampaign = formData.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
-  const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
+  const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
   const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
@@ -1297,7 +1339,7 @@ export default function CampaignFormModal({
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const isSuggestedFriendsUidCampaign = isMessageUidCampaign && formData.useSuggestedFriends
   const isZaloFriendAutoDataMode = isZaloMessageFriendCampaign && formData.zaloFriendTargetMode !== 'selected'
-  const hideDetailsSection = (isSuggestedFriendsUidCampaign && !isEditingSavedCampaign) || isZaloFriendAutoDataMode || isZaloMessageBirthdayCampaign
+  const hideDetailsSection = (isSuggestedFriendsUidCampaign && !isEditingSavedCampaign) || isZaloFriendAutoDataMode || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign
   const targetFindDataField = getFindDataTargetCampaignField(formData.actionId)
   const findDataSourceSectionLabel = getFindDataSourceSectionLabel(formData.actionId)
   const findDataSourceStep = getFindDataSourceStep(findDataSourceSectionLabel)
@@ -1316,11 +1358,11 @@ export default function CampaignFormModal({
   const canPickZaloRemarketingCustomers = isZaloMessageRemarketingCustomerCampaign
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
-  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageGroupCampaign
-  const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
-  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
+  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageGroupCampaign
+  const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
+  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
   const needsZaloLabels =
-    ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag) ||
+    ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag) ||
     (isZaloMessageFriendCampaign && ((!isZaloShareMessageMode && formData.enableZaloTag) || formData.zaloFriendTargetMode === 'tagged_friends'))
   const selectedZaloFriendBlocklist = zaloFriendBlocklists.find(group => group.id === formData.zaloFriendBlocklistId) || null
   const showFoundDataHandlingSection = isFindDataGroupCampaign && (
@@ -1381,6 +1423,7 @@ export default function CampaignFormModal({
     (!isMessageUidCampaign || formData.enableMessage) &&
     (!isZaloMessagePhoneCampaign || formData.enableMessage) &&
     (!isZaloMessageGroupMemberCampaign || formData.enableMessage) &&
+    (!isZaloMessageGroupRealtimeCampaign || formData.enableMessage) &&
     (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage)
   const hasMainContentText = formData.content.trim().length > 0
   const hasSelectedMainMedia = formData.imageOption !== 'none' && formData.images.length > 0
@@ -1437,7 +1480,7 @@ export default function CampaignFormModal({
       if (actionCode === 'zalo_add_friend') return formData.enableAddFriend
       if (actionCode === 'zalo_tag_contact' || actionCode === 'zalo_change_alias') return false
     }
-    if (isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) {
+    if (isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) {
       if (actionCode === 'zalo_message_stranger') return formData.enableMessage
       if (actionCode === 'zalo_add_friend') return formData.enableAddFriend
       if (actionCode === 'zalo_tag_contact' || actionCode === 'zalo_change_alias') return false
@@ -1472,11 +1515,15 @@ export default function CampaignFormModal({
     ? visibleLimitActionCodes.filter(code => code !== 'fb_comment')
     : visibleLimitActionCodes
   const showGroupPostCommentLimit = isFacebookGroupPostCampaign && visibleLimitActionCodes.includes('fb_comment')
-  const showContentSection = !isFindDataCampaign && !isNewsfeedInteractionCampaign && (!isMessageUidCampaign || formData.enableMessage)
+  const showContentSection =
+    !isFindDataCampaign &&
+    !isNewsfeedInteractionCampaign &&
+    (!isMessageUidCampaign || formData.enableMessage) &&
+    (!isZaloMessageGroupRealtimeCampaign || formData.enableMessage)
   const visibleScheduleFields: StepDef['fields'] = [
     { key: 'scheduleType', label: 'Loại lịch' },
     { key: 'schedule', label: 'Ngày chạy' },
-    ...(formData.scheduleType === 'daily' ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
+    ...(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
     ...(formData.scheduleType === 'weekly' ? [{ key: 'scheduleWeekDays', label: 'Lịch tuần' }] : []),
     ...(formData.scheduleType === 'monthly' ? [{ key: 'scheduleDays', label: 'Lịch tháng' }] : []),
     { key: 'dailyStopTime', label: 'Giờ dừng' }
@@ -1611,6 +1658,7 @@ export default function CampaignFormModal({
           if (isMessageUidCampaign && !formData.enableMessage && s.id === 'content') return false
           if (isZaloMessagePhoneCampaign && !formData.enableMessage && s.id === 'content') return false
           if (isZaloMessageGroupMemberCampaign && !formData.enableMessage && s.id === 'content') return false
+          if (isZaloMessageGroupRealtimeCampaign && !formData.enableMessage && s.id === 'content') return false
           if (isZaloMessageRemarketingCustomerCampaign && !formData.enableMessage && s.id === 'content') return false
           return true
         })
@@ -1682,7 +1730,7 @@ export default function CampaignFormModal({
           }
           return s
         })
-      const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
+      const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
         ? steps.flatMap(s => s.id === 'general' ? [s, ACTION_OPTIONS_STEP] : [s])
         : steps
       return showFindDataSourceSection
@@ -1927,6 +1975,16 @@ export default function CampaignFormModal({
   }, [requiresSingleAccount, formData.accountIds.length])
 
   useEffect(() => {
+    if (!isZaloMessageGroupRealtimeCampaign || formData.scheduleType === 'daily') return
+    setFormData(prev => ({
+      ...prev,
+      scheduleType: 'daily',
+      scheduleDays: '',
+      scheduleWeekDays: ''
+    }))
+  }, [isZaloMessageGroupRealtimeCampaign, formData.scheduleType])
+
+  useEffect(() => {
     if (!selectedActionPlatform) return
     const allowedIds = new Set(selectableAccounts.map(account => account.id))
     setFormData(prev => {
@@ -2091,6 +2149,88 @@ export default function CampaignFormModal({
   const hasSmsIntegration = !!akabizIntegrations?.sms?.staffId
   const hasZaloWebIntegration = !!akabizIntegrations?.zaloWeb?.staffId
   const hasAkaBizDesktopIntegration = !!akabizIntegrations?.akaBizDesktop?.staffId && !!akabizIntegrations?.akaBizDesktop?.dbPath && !desktopIntegrationInvalid
+
+  const getZaloRealtimeGroupNameMap = () => {
+    const nameById = new Map<string, string>()
+    formData.zaloRealtimeGroupIds.forEach((id, index) => {
+      const normalizedId = normalizeZaloRealtimeGroupId(id)
+      const name = String(formData.zaloRealtimeGroupNames[index] || '').trim()
+      if (normalizedId && name) nameById.set(normalizedId, name)
+    })
+    for (const group of zaloRealtimeGroups) {
+      const normalizedId = normalizeZaloRealtimeGroupId(group.uid || group.url)
+      if (normalizedId && group.name) nameById.set(normalizedId, group.name)
+    }
+    return nameById
+  }
+
+  const getZaloRealtimeGroupIdsForSave = () => Array.from(new Set(
+    formData.zaloRealtimeGroupIds
+      .map(normalizeZaloRealtimeGroupId)
+      .filter(Boolean)
+  ))
+
+  const getZaloRealtimeGroupNamesForSave = (ids: string[]) => {
+    const nameById = getZaloRealtimeGroupNameMap()
+    return ids.map(id => nameById.get(id) || '')
+  }
+
+  const getZaloRealtimeTriggersForSave = () => normalizeZaloRealtimeTriggers(formData.zaloRealtimeTriggers, [])
+
+  const loadZaloRealtimeGroupsFromLocal = async (options: { silent?: boolean } = {}) => {
+    const accountId = formData.accountIds[0]
+    if (!isZaloMessageGroupRealtimeCampaign || !accountId) {
+      setZaloRealtimeGroups([])
+      if (!options.silent) showAlert('Vui lòng chọn tài khoản Zalo trước khi load group.', 'error')
+      return
+    }
+
+    setZaloRealtimeGroupsLoading(true)
+    try {
+      const rows = await window.electronAPI.listContacts(accountId, 'group')
+      const groups = rows.filter(contact => contact.contactType === 'group' && normalizeZaloRealtimeGroupId(contact.uid || contact.url))
+      setZaloRealtimeGroups(groups)
+      if (!options.silent) showAlert(`Đã load ${groups.length} group đã lưu.`, 'success')
+    } catch (err) {
+      setZaloRealtimeGroups([])
+      if (!options.silent) {
+        showAlert(formatIpcErrorMessage(err, 'Không load được group Zalo đã lưu.'), 'error')
+      }
+    } finally {
+      setZaloRealtimeGroupsLoading(false)
+    }
+  }
+
+  const syncZaloRealtimeGroupsFromZalo = async () => {
+    const accountId = formData.accountIds[0]
+    if (!isZaloMessageGroupRealtimeCampaign || !accountId) {
+      showAlert('Vui lòng chọn tài khoản Zalo trước khi tải group.', 'error')
+      return
+    }
+
+    setZaloRealtimeGroupsLoading(true)
+    try {
+      const result = await window.electronAPI.loadGroups(accountId)
+      if (!result.success) throw new Error(result.error || 'Không tải được group từ Zalo.')
+      const rows = await window.electronAPI.listContacts(accountId, 'group')
+      const groups = rows.filter(contact => contact.contactType === 'group' && normalizeZaloRealtimeGroupId(contact.uid || contact.url))
+      setZaloRealtimeGroups(groups)
+      showAlert(`Đã tải group từ Zalo. Tổng group đã lưu: ${groups.length}${result.count ? `, cập nhật ${result.count}` : ''}.`, 'success')
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không tải được group từ Zalo.'), 'error')
+    } finally {
+      setZaloRealtimeGroupsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isZaloMessageGroupRealtimeCampaign || formData.accountIds.length !== 1) {
+      setZaloRealtimeGroups([])
+      setZaloRealtimeGroupsLoading(false)
+      return
+    }
+    void loadZaloRealtimeGroupsFromLocal({ silent: true })
+  }, [isZaloMessageGroupRealtimeCampaign, formData.accountIds.join(',')])
 
   const handleSyncZaloLabels = async () => {
     const accountId = formData.accountIds[0]
@@ -2373,7 +2513,16 @@ export default function CampaignFormModal({
       case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink || formData.isFindFacebookGroup
       case 'foundDataHandling': return true
       case 'findDataSources': return true
-      case 'messageActions': return isMessageFriendCampaign || formData.enableMessage || formData.enableAddFriend
+      case 'messageActions':
+        return isMessageFriendCampaign || (
+          (formData.enableMessage || formData.enableAddFriend) &&
+          (!isZaloMessageGroupRealtimeCampaign ||
+            (
+              getZaloRealtimeTriggersForSave().length > 0 &&
+              getZaloRealtimeGroupIdsForSave().length > 0 &&
+              !!formData.zaloRealtimeEndDate
+            ))
+        )
       case 'details': return hideDetailsSection || detailEntryCount > 0 || hasSelectedFindDataSourceCampaign
       default: return false
     }
@@ -2769,11 +2918,12 @@ export default function CampaignFormModal({
         ? setDateTimeLocalTime(formData.schedule, normalizedMultiDailySlots[0])
         : formData.schedule
       const formSchedule = toIsoDateTimeValue(scheduleInput)
-      const normalizedScheduleEndDate = formData.scheduleType === 'daily'
+      const normalizedScheduleEndDate = formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign
         ? null
         : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null)
-      const normalizedScheduleDays = formData.scheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
-      const normalizedScheduleWeekDays = formData.scheduleType === 'weekly' ? formData.scheduleWeekDays : ''
+      const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign ? 'daily' : formData.scheduleType
+      const normalizedScheduleDays = normalizedScheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
+      const normalizedScheduleWeekDays = normalizedScheduleType === 'weekly' ? formData.scheduleWeekDays : ''
       const normalizedFindData = normalizeFindDataFlagState(formData, { isSearchCampaign: isFindDataSearchCampaign })
       const canUseFindDataPostContentConditionsForSave = normalizedFindData.isFindInPost || normalizedFindData.isFindInComment || normalizedFindData.isFindPostLink
       const canUsePostContentConditionsForSave = isCommentSeedingFeedCampaign || canUseFindDataPostContentConditionsForSave
@@ -2800,6 +2950,12 @@ export default function CampaignFormModal({
         const tag = akaBizContactTags.find(item => item.id === id)
         return tag?.name || formData.akaBizTagNames[tagIndex] || ''
       })
+      const selectedZaloRealtimeGroupIds = isZaloMessageGroupRealtimeCampaign
+        ? getZaloRealtimeGroupIdsForSave()
+        : []
+      const selectedZaloRealtimeGroupNames = isZaloMessageGroupRealtimeCampaign
+        ? getZaloRealtimeGroupNamesForSave(selectedZaloRealtimeGroupIds)
+        : []
 
       return {
         campaignPayload: {
@@ -2809,13 +2965,13 @@ export default function CampaignFormModal({
           ...(cloneFromId ? { status: 'tạm dừng' } : {}),
           schedule: formSchedule,
           originalSchedule: formSchedule,
-          scheduleType: formData.scheduleType,
+          scheduleType: normalizedScheduleType,
           scheduleEndDate: normalizedScheduleEndDate,
           dailyStopTime: formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null,
           scheduleDays: normalizedScheduleDays,
           scheduleWeekDays: normalizedScheduleWeekDays,
-          continueNextDay: (isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign) ? false : formData.continueNextDay,
-          refreshData: isZaloMessageBirthdayCampaign ? true : formData.refreshData,
+          continueNextDay: (isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign) ? false : formData.continueNextDay,
+          refreshData: isZaloMessageBirthdayCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData),
           content: formData.content,
           extraSettings: {
             sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
@@ -2876,16 +3032,20 @@ export default function CampaignFormModal({
             suggestedFriendsCount: effectiveSuggestedFriendsCount,
             emailSubject: isEmailCampaign ? formData.emailSubject.trim() : '',
             emailBodyIsHtml: isEmailCampaign ? formData.emailBodyIsHtml : false,
-            friendRequestMessage: (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.friendRequestMessage.trim() : '',
+            friendRequestMessage: (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.friendRequestMessage.trim() : '',
+            zaloRealtimeTriggers: isZaloMessageGroupRealtimeCampaign ? getZaloRealtimeTriggersForSave() : [],
+            zaloRealtimeGroupIds: selectedZaloRealtimeGroupIds,
+            zaloRealtimeGroupNames: selectedZaloRealtimeGroupNames,
+            zaloRealtimeEndDate: isZaloMessageGroupRealtimeCampaign ? formData.zaloRealtimeEndDate : null,
             zaloMessageSendMode: (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) ? formData.zaloMessageSendMode : 'normal',
-            enableZaloTag: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloTag : false,
-            zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
-            zaloTagName: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagName : '',
+            enableZaloTag: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloTag : false,
+            zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
+            zaloTagName: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag ? formData.zaloTagName : '',
             enableAkaBizTag: supportsAkaBizContactTags ? formData.enableAkaBizTag : false,
             akaBizTagIds: selectedAkaBizTagIds,
             akaBizTagNames: selectedAkaBizTagNames,
-            enableZaloAlias: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloAlias : false,
-            zaloAliasTemplate: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloAlias ? formData.zaloAliasTemplate.trim() : '',
+            enableZaloAlias: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) ? formData.enableZaloAlias : false,
+            zaloAliasTemplate: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloAlias ? formData.zaloAliasTemplate.trim() : '',
             zaloFriendTargetMode: isZaloMessageFriendCampaign ? formData.zaloFriendTargetMode : 'selected',
             zaloFriendSourceTagIds: selectedZaloFriendSourceTagIds,
             zaloFriendSourceTagNames: selectedZaloFriendSourceTagNames,
@@ -3019,7 +3179,7 @@ export default function CampaignFormModal({
         return
       }
     }
-    if (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign) {
+    if (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) {
       if (!formData.enableMessage && !formData.enableAddFriend) {
         showAlert('Vui lòng chọn ít nhất nhắn tin hoặc kết bạn.', 'error')
         return
@@ -3038,6 +3198,20 @@ export default function CampaignFormModal({
       }
       if (!isZaloShareMessageMode && formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
         showAlert('Vui lòng nhập template đổi tên Zalo.', 'error')
+        return
+      }
+    }
+    if (isZaloMessageGroupRealtimeCampaign) {
+      if (getZaloRealtimeTriggersForSave().length === 0) {
+        showAlert('Vui lòng chọn ít nhất một loại data theo thời gian thực cần nhận.', 'error')
+        return
+      }
+      if (getZaloRealtimeGroupIdsForSave().length === 0) {
+        showAlert('Vui lòng chọn ít nhất một group Zalo để nhận data theo thời gian thực.', 'error')
+        return
+      }
+      if (!formData.zaloRealtimeEndDate) {
+        showAlert('Vui lòng chọn ngày kết thúc không nhận data nữa.', 'error')
         return
       }
     }
@@ -4131,7 +4305,7 @@ export default function CampaignFormModal({
     const excelTokens = ['INPUT_FULLNAME', 'PHONE', 'EMAIL', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
     const showCustomerTokens = !isEmailCampaign
     const showExcelTokens = isZaloMessagePhoneCampaign || isEmailCampaign
-    const showZaloProfileTokens = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign
+    const showZaloProfileTokens = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign
     const renderExcelTokens = () => (
       <div className="message-template-token-row">
         {excelTokens.map(token => (
@@ -4664,6 +4838,159 @@ export default function CampaignFormModal({
             )}
           </div>
         )}
+      </>
+    )
+  }
+
+  const renderZaloRealtimeGroupSettings = () => {
+    const selectedTriggers = new Set(formData.zaloRealtimeTriggers)
+    const selectedGroupIds = new Set(getZaloRealtimeGroupIdsForSave())
+    const groupNameById = getZaloRealtimeGroupNameMap()
+    const loadedGroupIds = new Set(
+      zaloRealtimeGroups
+        .map(group => normalizeZaloRealtimeGroupId(group.uid || group.url))
+        .filter(Boolean)
+    )
+    const missingLoadedSelectionIds = Array.from(selectedGroupIds).filter(id => !loadedGroupIds.has(id))
+    const toggleTrigger = (trigger: ZaloRealtimeTrigger, checked: boolean) => {
+      setFormData(p => {
+        const next = new Set(p.zaloRealtimeTriggers)
+        if (checked) next.add(trigger)
+        else next.delete(trigger)
+        return { ...p, zaloRealtimeTriggers: Array.from(next) }
+      })
+    }
+    const toggleGroup = (group: AutoAccountContact, checked: boolean) => {
+      const groupId = normalizeZaloRealtimeGroupId(group.uid || group.url)
+      if (!groupId) return
+      setFormData(p => {
+        const existingNameById = new Map<string, string>()
+        p.zaloRealtimeGroupIds.forEach((id, index) => {
+          const normalizedId = normalizeZaloRealtimeGroupId(id)
+          if (normalizedId) existingNameById.set(normalizedId, String(p.zaloRealtimeGroupNames[index] || '').trim())
+        })
+        existingNameById.set(groupId, group.name || existingNameById.get(groupId) || '')
+
+        const next = new Set(p.zaloRealtimeGroupIds.map(normalizeZaloRealtimeGroupId).filter(Boolean))
+        if (checked) next.add(groupId)
+        else next.delete(groupId)
+        const ids = Array.from(next)
+        return {
+          ...p,
+          zaloRealtimeGroupIds: ids,
+          zaloRealtimeGroupNames: ids.map(id => existingNameById.get(id) || groupNameById.get(id) || '')
+        }
+      })
+    }
+
+    return (
+      <>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Nhận data theo thời gian thực</div>
+        <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+          {ZALO_REALTIME_TRIGGER_OPTIONS.map(option => (
+            <label key={option.value} className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={selectedTriggers.has(option.value)}
+                onChange={e => toggleTrigger(option.value, e.target.checked)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+        {getZaloRealtimeTriggersForSave().length === 0 && (
+          <div style={{ color: 'var(--text-error)', fontSize: 12, marginTop: -8, marginBottom: 12 }}>
+            Vui lòng chọn ít nhất một loại data theo thời gian thực cần nhận.
+          </div>
+        )}
+
+        <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+        <div className="stepper-form-row" style={{ alignItems: 'flex-end' }}>
+          <div className="stepper-form-group" style={{ minWidth: 360, flex: '1 1 360px' }}>
+            <label>Chọn group</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={zaloRealtimeGroupsLoading || formData.accountIds.length !== 1}
+                onClick={() => void loadZaloRealtimeGroupsFromLocal()}
+              >
+                {zaloRealtimeGroupsLoading ? <Loader2 size={14} /> : <RefreshCw size={14} />}
+                <span>Load</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={zaloRealtimeGroupsLoading || formData.accountIds.length !== 1}
+                onClick={() => void syncZaloRealtimeGroupsFromZalo()}
+              >
+                {zaloRealtimeGroupsLoading ? <Loader2 size={14} /> : <RefreshCw size={14} />}
+                <span>Tải group từ Zalo</span>
+              </button>
+            </div>
+            {formData.accountIds.length !== 1 && (
+              <div className="schedule-hint">Vui lòng chọn 1 tài khoản Zalo để load group.</div>
+            )}
+          </div>
+
+          <div className="stepper-form-group" style={{ maxWidth: 280, flex: '0 0 280px' }}>
+            <label>Ngày kết thúc không nhận data nữa</label>
+            <input
+              type="date"
+              value={formData.zaloRealtimeEndDate}
+              onChange={e => setFormData(p => ({ ...p, zaloRealtimeEndDate: e.target.value }))}
+              className="stepper-input"
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gap: 8,
+            marginTop: 8,
+            padding: 10,
+            border: '1px solid var(--border-default)',
+            borderRadius: 6,
+            maxHeight: 220,
+            overflowY: 'auto'
+          }}
+        >
+          {zaloRealtimeGroupsLoading ? (
+            <div className="text-muted" style={{ fontSize: 13 }}>Đang load group Zalo...</div>
+          ) : zaloRealtimeGroups.length === 0 ? (
+            <div className="text-muted" style={{ fontSize: 13 }}>Chưa có group Zalo đã lưu.</div>
+          ) : (
+            zaloRealtimeGroups.map(group => {
+              const groupId = normalizeZaloRealtimeGroupId(group.uid || group.url)
+              if (!groupId) return null
+              return (
+                <label key={group.id || groupId} className="schedule-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selectedGroupIds.has(groupId)}
+                    onChange={e => toggleGroup(group, e.target.checked)}
+                  />
+                  <span>{group.name || groupId}</span>
+                </label>
+              )
+            })
+          )}
+        </div>
+
+        {missingLoadedSelectionIds.length > 0 && (
+          <div className="schedule-hint" style={{ marginTop: 8 }}>
+            Đang giữ {missingLoadedSelectionIds.length} group đã chọn trước đó: {missingLoadedSelectionIds.map(id => groupNameById.get(id) || id).join(', ')}
+          </div>
+        )}
+        {selectedGroupIds.size === 0 && (
+          <div style={{ color: 'var(--text-error)', fontSize: 12, marginTop: 8 }}>Vui lòng chọn ít nhất một group Zalo.</div>
+        )}
+
+        <div style={{ fontStyle: 'italic', color: 'var(--text-secondary)', marginTop: 16 }}>
+          Mỗi ngày chiến dịch sẽ lấy danh sách những người mới tham gia/rời/tương tác (nhắn tin, like, tim,...) trong group và sẽ gửi vào ngày hôm sau theo thời gian cài đặt
+        </div>
       </>
     )
   }
@@ -7620,7 +7947,15 @@ export default function CampaignFormModal({
 
                 {!collapsedSections['actionOptions'] && (
                   <div className="stepper-section-body">
-                    {isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign
+                    {isZaloMessageGroupRealtimeCampaign
+                      ? (
+                        <>
+                          {renderZaloRealtimeGroupSettings()}
+                          <div style={{ borderTop: '1px solid var(--border-default)', margin: '18px 0' }} />
+                          {renderZaloMessagePhoneActionOptions()}
+                        </>
+                      )
+                      : isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign
                       ? renderZaloMessagePhoneActionOptions()
                       : isZaloMessageFriendCampaign
                         ? renderZaloMessageFriendActionOptions()
@@ -7757,6 +8092,7 @@ export default function CampaignFormModal({
                             name="scheduleType"
                             value={value}
                             checked={formData.scheduleType === value}
+                            disabled={isZaloMessageGroupRealtimeCampaign && value !== 'daily'}
                             onChange={() => setFormData(p => ({ ...p, scheduleType: value }))}
                           />
                           <span>{label}</span>
@@ -7785,7 +8121,7 @@ export default function CampaignFormModal({
                         className="stepper-input"
                       />
                     </div>
-                    {formData.scheduleType !== 'daily' && (
+                    {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && (
                       <div className="stepper-form-group schedule-end-date-field">
                         <label>Ngày kết thúc</label>
                         <input
@@ -7796,7 +8132,7 @@ export default function CampaignFormModal({
                         />
                       </div>
                     )}
-                    {formData.scheduleType === 'daily' && (
+                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign) && (
                       <div className="stepper-form-group schedule-end-date-field schedule-placeholder-field" aria-hidden="true" />
                     )}
                   </div>
@@ -7839,7 +8175,7 @@ export default function CampaignFormModal({
                   )}
 
                   {/* Conditional checkbox based on schedule type */}
-                  {formData.scheduleType === 'daily' && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && (
+                  {formData.scheduleType === 'daily' && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
@@ -7852,7 +8188,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isZaloMessageBirthdayCampaign && (
+                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input

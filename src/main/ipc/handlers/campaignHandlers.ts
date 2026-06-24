@@ -6,6 +6,10 @@ interface CampaignPauseController {
   requestPauseCampaign(campaignId: number): Promise<Campaign>
 }
 
+interface CampaignRealtimeRefreshController {
+  refreshSoon(reason?: string): void
+}
+
 const isKnownCampaignStatus = (status: string): status is CampaignStatus =>
   (CAMPAIGN_STATUSES as readonly string[]).includes(status)
 
@@ -54,7 +58,11 @@ async function assertCanUpdateCampaignFromRenderer(
   }
 }
 
-export function registerCampaignHandlers(supabase: SupabaseService, campaignPauseController: CampaignPauseController): void {
+export function registerCampaignHandlers(
+  supabase: SupabaseService,
+  campaignPauseController: CampaignPauseController,
+  realtimeRefreshController?: CampaignRealtimeRefreshController
+): void {
   // Campaign Actions
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_ACTIONS, async () => {
     return supabase.listCampaignActions()
@@ -82,20 +90,28 @@ export function registerCampaignHandlers(supabase: SupabaseService, campaignPaus
   })
 
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN, async (_, campaignData) => {
-    return supabase.createCampaign(campaignData)
+    const campaign = await supabase.createCampaign(campaignData)
+    realtimeRefreshController?.refreshSoon('campaign-created')
+    return campaign
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: Partial<Campaign> | null | undefined) => {
     const payload = updates || {}
     if (isStatusOnlyCampaignUpdate(payload) && payload.status === 'tạm dừng') {
-      return campaignPauseController.requestPauseCampaign(id)
+      const campaign = await campaignPauseController.requestPauseCampaign(id)
+      realtimeRefreshController?.refreshSoon('campaign-paused')
+      return campaign
     }
     await assertCanUpdateCampaignFromRenderer(supabase, id, payload)
-    return supabase.updateCampaign(id, payload)
+    const campaign = await supabase.updateCampaign(id, payload)
+    realtimeRefreshController?.refreshSoon('campaign-updated')
+    return campaign
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_CAMPAIGN, async (_, id: number) => {
-    return supabase.deleteCampaign(id)
+    const result = await supabase.deleteCampaign(id)
+    realtimeRefreshController?.refreshSoon('campaign-deleted')
+    return result
   })
 
   ipcMain.handle(IPC_EVENTS.DB_CLONE_CAMPAIGN, async (_, id: number) => {

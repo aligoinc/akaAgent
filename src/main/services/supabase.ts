@@ -84,6 +84,10 @@ export class SupabaseService {
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }
   getPendingCampaigns(accountId: number) { return campaignRepo.getPendingCampaigns(accountId) }
   maintainCampaignSchedules() { return campaignRepo.maintainCampaignSchedules() }
+  listZaloRealtimeGroupCampaignSnapshots() { return campaignRepo.listZaloRealtimeGroupCampaignSnapshots() }
+  enqueueZaloRealtimeGroupEvent(request: campaignRepo.EnqueueZaloRealtimeGroupEventRequest) {
+    return campaignRepo.enqueueZaloRealtimeGroupEvent(request)
+  }
 
   // =========== CAMPAIGN INPUTS (pool nguyên liệu) ===========
   listCampaignInputs(campaignId: number) { return campaignRepo.listCampaignInputs(campaignId) }

@@ -7,6 +7,7 @@ import { CampaignScheduler } from '../services/campaignScheduler'
 import { ContactLoader } from '../services/contactLoader'
 import { ProxyRuntimeService } from '../services/proxyRuntimeService'
 import { ZaloRuntimeService } from '../services/zaloRuntimeService'
+import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupCampaignManager'
 import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { startAccountPoller } from '../domain/accounts/accountPoller'
 
@@ -76,6 +77,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
   const proxyRuntime = new ProxyRuntimeService((id) => supabase.getProxy(id))
+  let zaloRealtimeGroupManager: ZaloRealtimeGroupCampaignManager | null = null
   const zaloRuntime = new ZaloRuntimeService(
     supabase,
     (id) => supabase.getProxy(id),
@@ -84,6 +86,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         mainWindow.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, event)
         if (event.status === 'success' || event.status === 'error' || event.status === 'cancelled') {
           mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+          zaloRealtimeGroupManager?.refreshSoon(`zalo-login-${event.status}`)
         }
       } catch {
         // Window may be closed
@@ -94,6 +97,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const campaignScheduler = new CampaignScheduler(supabase, webviewRegistry, mainWindow, proxyRuntime, zaloRuntime, emailRuntime)
   campaignScheduler.setPageRegistry(pageRegistry)
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime, zaloRuntime)
+  zaloRealtimeGroupManager = new ZaloRealtimeGroupCampaignManager(supabase, zaloRuntime, mainWindow)
 
   const runScopedRecovery = async (reason: 'login' | 'logout' | 'quit'): Promise<void> => {
     const user = getCurrentUser()
@@ -132,6 +136,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     try {
       contactLoader.stopAll()
       campaignScheduler.stop()
+      zaloRealtimeGroupManager?.stop()
       zaloRuntime.clearAll()
       emailRuntime.clearAll()
       await supabase.resetRunningStatuses(user.staffId)
@@ -252,6 +257,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         clearSessionExpiryTimer()
         contactLoader.stopAll()
         campaignScheduler.stop()
+        zaloRealtimeGroupManager?.stop()
         zaloRuntime.clearAll()
         emailRuntime.clearAll()
         await supabase.resetRunningStatuses(user.staffId)
@@ -301,6 +307,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         await runSessionExpiryCheck('login')
         if (!getCurrentUser()) return
         warmZaloSessions()
+        zaloRealtimeGroupManager?.start()
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
       }
     },
@@ -308,6 +315,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       clearSessionExpiryTimer()
       contactLoader.stopAll()
       campaignScheduler.stop()
+      zaloRealtimeGroupManager?.stop()
       zaloRuntime.clearAll()
       emailRuntime.clearAll()
       await runScopedRecovery('logout')
@@ -321,8 +329,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerEmailNotificationHandlers(supabase)
   registerReportHandlers(supabase)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
-  registerCampaignHandlers(supabase, campaignScheduler)
-  registerAccountHandlers(supabase, webviewRegistry, proxyRuntime, zaloRuntime, emailRuntime, mainWindow)
+  registerCampaignHandlers(supabase, campaignScheduler, zaloRealtimeGroupManager || undefined)
+  registerAccountHandlers(supabase, webviewRegistry, proxyRuntime, zaloRuntime, emailRuntime, mainWindow, zaloRealtimeGroupManager || undefined)
   registerAccountContactHandlers(supabase, contactLoader)
   registerV2Handlers(mainWindow, pageRegistry)
 
