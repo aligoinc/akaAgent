@@ -19,6 +19,7 @@ const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 
 export function isCommentSeedingCampaign(actionId: string): boolean {
@@ -53,6 +54,7 @@ export function getAccountActionName(actionCode: string): string {
     case 'zalo_message_group': return 'Nhắn tin group'
     case 'zalo_message_stranger': return 'Nhắn tin người lạ'
     case 'zalo_add_friend': return 'Kết bạn'
+    case 'zalo_join_group_link': return 'Tham gia group'
     case 'zalo_tag_contact': return 'Gắn tag Zalo'
     case 'zalo_change_alias': return 'Đổi tên Zalo'
     case 'email_send': return 'Gửi email'
@@ -102,6 +104,8 @@ function isActionCheckEnabledForCampaign(campaign: Campaign, actionCode: string)
       return campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID || campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID
     case 'zalo_message_group':
       return campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+    case 'zalo_join_group_link':
+      return campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
     case 'zalo_message_stranger':
       return (
         campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID ||
@@ -234,6 +238,9 @@ export function getCampaignActionDescriptors(
       break
     case ZALO_MESSAGE_GROUP_ACTION_ID:
       actions.push({ code: 'zalo_message_group', name: 'Nhắn tin group' })
+      break
+    case ZALO_JOIN_GROUP_LINK_ACTION_ID:
+      actions.push({ code: 'zalo_join_group_link', name: 'Tham gia group' })
       break
     case EMAIL_SEND_ACTION_ID:
       actions.push({ code: 'email_send', name: 'Gửi email' })

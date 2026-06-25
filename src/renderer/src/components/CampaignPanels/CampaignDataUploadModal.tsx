@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, X } from 'lucide-react'
+import jsQR from 'jsqr'
 import { read, utils } from 'xlsx'
 import {
   CampaignImportDataRow,
@@ -38,6 +39,8 @@ const INFO_FIELDS: FieldDef[] = [
   { key: 'info4', label: 'Info 4' },
   { key: 'info5', label: 'Info 5' }
 ]
+const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
+const isZaloJoinGroupLinkAction = (actionId?: string | null): boolean => actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
 
 const getCellText = (value: unknown): string => {
   if (value === null || value === undefined) return ''
@@ -80,6 +83,86 @@ const normalizeUid = (value: unknown): string => {
   return text
 }
 
+const normalizeZaloGroupInviteLink = (value: unknown): string => {
+  const raw = getCellText(value)
+  if (!raw) return ''
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(withProtocol)
+    const hostname = url.hostname.replace(/^www\./i, '').toLowerCase()
+    const parts = url.pathname.split('/').filter(Boolean)
+    let groupCode = ''
+    if (hostname === 'zalo.me' || hostname.endsWith('.zalo.me')) {
+      if (parts[0]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[1] || ''
+    } else if (hostname === 'zaloapp.com' || hostname.endsWith('.zaloapp.com')) {
+      if (parts[0]?.toLowerCase() !== 'qr' || parts[1]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[2] || ''
+    } else {
+      return ''
+    }
+    return groupCode ? `https://zalo.me/g/${groupCode}` : ''
+  } catch {
+    return ''
+  }
+}
+
+const loadImageFromDataUrl = (dataUrl: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const image = new Image()
+  image.onload = () => resolve(image)
+  image.onerror = () => reject(new Error('Không thể mở ảnh QR.'))
+  image.src = dataUrl
+})
+
+const decodeQrDataFromImage = (image: HTMLImageElement): string => {
+  const width = image.naturalWidth || image.width
+  const height = image.naturalHeight || image.height
+  if (width <= 0 || height <= 0) return ''
+
+  const minSide = Math.min(width, height)
+  const attempts = [
+    { sx: 0, sy: 0, sw: width, sh: height },
+    ...[0.78, 0.68, 0.58, 0.48].map(ratio => {
+      const side = Math.round(minSide * ratio)
+      return {
+        sx: Math.max(0, Math.round((width - side) / 2)),
+        sy: Math.max(0, Math.round((height - side) / 2)),
+        sw: side,
+        sh: side
+      }
+    })
+  ]
+
+  for (const attempt of attempts) {
+    const canvas = document.createElement('canvas')
+    canvas.width = attempt.sw
+    canvas.height = attempt.sh
+    const ctx = canvas.getContext('2d')
+    if (!ctx) continue
+    ctx.drawImage(
+      image,
+      attempt.sx,
+      attempt.sy,
+      attempt.sw,
+      attempt.sh,
+      0,
+      0,
+      attempt.sw,
+      attempt.sh
+    )
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const qr = jsQR(imageData.data, imageData.width, imageData.height)
+    if (qr?.data) return qr.data
+  }
+
+  return ''
+}
+
+const decodeQrDataFromDataUrl = async (dataUrl: string): Promise<string> => {
+  const image = await loadImageFromDataUrl(dataUrl)
+  return decodeQrDataFromImage(image)
+}
+
 const numberToColumnLetter = (value: number): string => String.fromCharCode(64 + value)
 
 const columnLetterToIndex = (value: string): number | null => {
@@ -99,7 +182,14 @@ const firstText = (...values: unknown[]): string => {
   return ''
 }
 
-const getFieldsForPlatform = (platform: CampaignImportPlatform): FieldDef[] => {
+const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string): FieldDef[] => {
+  if (isZaloJoinGroupLinkAction(actionId)) {
+    return [
+      { key: 'name', label: 'Tên group' },
+      { key: 'uid', label: 'Link group Zalo', required: true },
+      ...INFO_FIELDS
+    ]
+  }
   if (platform === 'zalo') {
     return [
       { key: 'name', label: 'Tên' },
@@ -165,11 +255,26 @@ const rowValueByColumn = (row: unknown[], column?: string): unknown => {
   return row[index] ?? ''
 }
 
-const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPlatform): CampaignImportDataRow[] => {
+const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPlatform, actionId: string): CampaignImportDataRow[] => {
   const seen = new Set<string>()
   const output: CampaignImportDataRow[] = []
 
   for (const row of rows) {
+    if (isZaloJoinGroupLinkAction(actionId)) {
+      const link = normalizeZaloGroupInviteLink(row.uid)
+      if (!link || seen.has(link)) continue
+      const rawName = getCellText(row.name)
+      seen.add(link)
+      output.push({
+        ...row,
+        name: normalizeZaloGroupInviteLink(rawName) === link ? '' : rawName,
+        phone: '',
+        uid: link,
+        email: ''
+      })
+      continue
+    }
+
     const item: CampaignImportDataRow = {
       name: getCellText(row.name),
       info1: getCellText(row.info1),
@@ -265,7 +370,12 @@ const detectNonWhitespaceColumn = (rows: unknown[][]): string => {
   return bestIndex >= 0 ? numberToColumnLetter(bestIndex + 1) : ''
 }
 
-const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlatform): ColumnMap => {
+const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlatform, actionId: string): ColumnMap => {
+  if (isZaloJoinGroupLinkAction(actionId)) {
+    return {
+      uid: detectColumnFromHeader(rows, ['link', 'url', 'group', 'zalo']) || detectNonWhitespaceColumn(rows)
+    }
+  }
   if (platform === 'zalo') {
     return { phone: detectPhoneColumn(rows) }
   }
@@ -284,7 +394,7 @@ export default function CampaignDataUploadModal({
   onInsert
 }: CampaignDataUploadModalProps) {
   const showAlert = useUiStore(state => state.showAlert)
-  const fields = useMemo(() => getFieldsForPlatform(platform), [platform])
+  const fields = useMemo(() => getFieldsForPlatform(platform, actionId), [platform, actionId])
   const [activeTab, setActiveTab] = useState<ImportTab>('textbox')
   const [textContent, setTextContent] = useState('')
   const [txtFileName, setTxtFileName] = useState('')
@@ -367,7 +477,7 @@ export default function CampaignDataUploadModal({
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
       setExcelRows(rows)
-      setColumnMap(detectRequiredColumnMap(rows, platform))
+      setColumnMap(detectRequiredColumnMap(rows, platform, actionId))
     } catch (err) {
       showAlert(err instanceof Error ? err.message : 'Không thể đọc file Excel.', 'error')
     } finally {
@@ -377,6 +487,7 @@ export default function CampaignDataUploadModal({
 
   const buildRowsFromText = (): CampaignImportDataRow[] => {
     return splitTextItems(textContent).map(value => {
+      if (isZaloJoinGroupLinkAction(actionId)) return { uid: value }
       if (platform === 'zalo') return { phone: value }
       if (platform === 'facebook') return { uid: value }
       return { email: value }
@@ -431,14 +542,26 @@ export default function CampaignDataUploadModal({
           showAlert('Vui lòng tải hoặc dán ảnh.', 'error')
           return
         }
-        rows = await window.electronAPI.extractCampaignDataFromImage({
-          imageDataUrl,
-          platform,
-          actionId
-        })
+        if (isZaloJoinGroupLinkAction(actionId)) {
+          const qrData = await decodeQrDataFromDataUrl(imageDataUrl).catch(() => '')
+          const qrLink = normalizeZaloGroupInviteLink(qrData)
+          rows = qrLink
+            ? [{ uid: qrLink }]
+            : await window.electronAPI.extractCampaignDataFromImage({
+              imageDataUrl,
+              platform,
+              actionId
+            })
+        } else {
+          rows = await window.electronAPI.extractCampaignDataFromImage({
+            imageDataUrl,
+            platform,
+            actionId
+          })
+        }
       }
 
-      const normalized = normalizeRows(rows, platform)
+      const normalized = normalizeRows(rows, platform, actionId)
       if (normalized.length === 0) {
         showAlert('Không có data hợp lệ.', 'error')
         return
@@ -480,7 +603,7 @@ export default function CampaignDataUploadModal({
   )
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 3600 }} onMouseDown={onClose}>
+    <div className="modal-overlay" style={{ zIndex: 3600 }}>
       <div className="modal campaign-import-modal" onMouseDown={event => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">Upload dữ liệu</div>

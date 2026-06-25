@@ -223,6 +223,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_message_group: 'Nhắn tin group',
   zalo_message_stranger: 'Nhắn tin người lạ',
   zalo_add_friend: 'Kết bạn',
+  zalo_join_group_link: 'Tham gia group',
   zalo_tag_contact: 'Gắn tag Zalo',
   zalo_change_alias: 'Đổi tên Zalo'
 }
@@ -320,6 +321,7 @@ const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const ZALO_FRIEND_TARGET_MODES: Array<{ value: ZaloFriendTargetMode; label: string }> = [
   { value: 'selected', label: 'Chọn bạn bè để gửi' },
@@ -684,6 +686,30 @@ const normalizeCampaignImportUid = (value: unknown): string => {
   if (!text) return ''
   const lower = text.toLowerCase()
   return ['uid', 'url', 'link', 'profile', 'facebook', 'facebookuid'].includes(lower) ? '' : text
+}
+
+const normalizeZaloGroupInviteLink = (value: unknown): string => {
+  const raw = getExcelCellText(value)
+  if (!raw) return ''
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(withProtocol)
+    const hostname = url.hostname.replace(/^www\./i, '').toLowerCase()
+    const parts = url.pathname.split('/').filter(Boolean)
+    let groupCode = ''
+    if (hostname === 'zalo.me' || hostname.endsWith('.zalo.me')) {
+      if (parts[0]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[1] || ''
+    } else if (hostname === 'zaloapp.com' || hostname.endsWith('.zaloapp.com')) {
+      if (parts[0]?.toLowerCase() !== 'qr' || parts[1]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[2] || ''
+    } else {
+      return ''
+    }
+    return groupCode ? `https://zalo.me/g/${groupCode}` : ''
+  } catch {
+    return ''
+  }
 }
 
 const isCampaignTemplateHeaderRow = (row: unknown[]): boolean => {
@@ -1319,6 +1345,7 @@ export default function CampaignFormModal({
   const isZaloMessageGroupRealtimeCampaign = formData.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
   const isZaloMessageRemarketingCustomerCampaign = formData.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
   const isZaloMessageGroupCampaign = formData.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+  const isZaloJoinGroupLinkCampaign = formData.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
   const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
@@ -1359,7 +1386,7 @@ export default function CampaignFormModal({
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
   const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageGroupCampaign
-  const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
+  const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign || isZaloJoinGroupLinkCampaign
   const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign
   const needsZaloLabels =
     ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign) && formData.enableZaloTag) ||
@@ -1424,11 +1451,12 @@ export default function CampaignFormModal({
     (!isZaloMessagePhoneCampaign || formData.enableMessage) &&
     (!isZaloMessageGroupMemberCampaign || formData.enableMessage) &&
     (!isZaloMessageGroupRealtimeCampaign || formData.enableMessage) &&
-    (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage)
+    (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage) &&
+    !isZaloJoinGroupLinkCampaign
   const hasMainContentText = formData.content.trim().length > 0
   const hasSelectedMainMedia = formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
-  const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign
+  const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 1 : 2)
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 3 : 4)
@@ -1518,6 +1546,7 @@ export default function CampaignFormModal({
   const showContentSection =
     !isFindDataCampaign &&
     !isNewsfeedInteractionCampaign &&
+    !isZaloJoinGroupLinkCampaign &&
     (!isMessageUidCampaign || formData.enableMessage) &&
     (!isZaloMessageGroupRealtimeCampaign || formData.enableMessage)
   const visibleScheduleFields: StepDef['fields'] = [
@@ -1649,6 +1678,17 @@ export default function CampaignFormModal({
         limitStep,
         detailsStep
       ]
+    }
+    if (isZaloJoinGroupLinkCampaign) {
+      const generalStep = ALL_STEPS.find(s => s.id === 'general')!
+      const scheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
+      const limitStep = ALL_STEPS.find(s => s.id === 'limits')!
+      const detailsStep: StepDef = {
+        ...ALL_STEPS.find(s => s.id === 'details')!,
+        title: 'Danh sách link group Zalo',
+        fields: [{ key: 'details', label: 'Link group Zalo' }]
+      }
+      return [generalStep, scheduleStep, limitStep, detailsStep]
     }
     if (isMessageCampaign) {
       const steps = ALL_STEPS
@@ -3844,6 +3884,19 @@ export default function CampaignFormModal({
           info5: getExcelCellText(row[8]).trim(),
           note: '',
           status: 'chờ xử lý'
+        }
+
+        if (isZaloJoinGroupLinkCampaign) {
+          const link = normalizeZaloGroupInviteLink(uid || name)
+          if (!link) continue
+          importedRows.push({
+            ...baseRow,
+            name: normalizeZaloGroupInviteLink(name) === link ? '' : name,
+            uid: link,
+            phone: '',
+            email: ''
+          })
+          continue
         }
 
         if (isFindDataSearchCampaign || isCommentSeedingPostCampaign) {
@@ -8666,6 +8719,8 @@ export default function CampaignFormModal({
 	                                ? 'Danh sách khách hàng cũ Zalo'
 	                              : isZaloMessageGroupCampaign
 	                                ? 'Danh sách group Zalo'
+	                              : isZaloJoinGroupLinkCampaign
+	                                ? 'Danh sách link group Zalo'
 	                            : isMessageFriendCampaign
 	                              ? 'Danh sách bạn bè'
                               : isPageInboxMessageCampaign
@@ -8910,9 +8965,9 @@ export default function CampaignFormModal({
                     <div className="stepper-grid-container">
                       <table className="campaign-grid">
                         <thead>
-                          {isCommentSeedingPostCampaign || isFindDataSearchCampaign ? (
+                          {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isZaloJoinGroupLinkCampaign ? (
                             <tr>
-                              <th>{isFindDataSearchCampaign ? 'Từ khóa' : 'Link bài post'}</th>
+                              <th>{isFindDataSearchCampaign ? 'Từ khóa' : isZaloJoinGroupLinkCampaign ? 'Link group Zalo' : 'Link bài post'}</th>
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           ) : isPagePostCampaign ? (
@@ -8940,13 +8995,13 @@ export default function CampaignFormModal({
                           ) : (
                             details.map((d, i) => (
                               <tr key={d.id || `new-${i}`}>
-                                {isCommentSeedingPostCampaign || isFindDataSearchCampaign ? (
+                                {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isZaloJoinGroupLinkCampaign ? (
                                   <td>
                                     <input
                                       type="text"
                                       value={d.uid || ''}
                                       onChange={e => updateDetailRow(i, 'uid', e.target.value)}
-                                      placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : 'Dán link bài post...'}
+                                      placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'Dán link bài post...'}
                                       disabled={isEditingSavedCampaign}
                                     />
                                   </td>
@@ -8971,7 +9026,7 @@ export default function CampaignFormModal({
                                       <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." disabled={isEditingSavedCampaign} />
                                     </td>
                                     <td>
-                                      <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder="UID hoặc link..." disabled={isEditingSavedCampaign} />
+                                      <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder={isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'UID hoặc link...'} disabled={isEditingSavedCampaign} />
                                     </td>
                                     <td>
                                       <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />

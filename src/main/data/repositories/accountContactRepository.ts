@@ -55,6 +55,7 @@ export interface ZaloUserContactInput {
 export interface ZaloGroupContactInput {
   accountId: number
   zaloGroupId: string
+  isJoined?: boolean
   name?: string | null
   description?: string | null
   link?: string | null
@@ -1541,7 +1542,7 @@ export async function upsertZaloGroupContacts(
           fullAvatar: normalizeNullableString(group.fullAvatar),
           totalMember: normalizeNullableNumber(group.totalMember)
         },
-        isJoined: true,
+        isJoined: group.isJoined ?? true,
         zaloGroupId: meta.id
       }
     })

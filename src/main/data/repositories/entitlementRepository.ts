@@ -32,7 +32,8 @@ export const ZALO_CAMPAIGN_ACTION_IDS = new Set([
   'zalo_message_group_member',
   'zalo_message_group_realtime',
   'zalo_message_remarketing_customer',
-  'zalo_message_group'
+  'zalo_message_group',
+  'zalo_join_group_link'
 ])
 
 export const FACEBOOK_FANPAGE_ACCOUNT_ACTION_CODES = new Set([
@@ -46,6 +47,7 @@ export const ZALO_ACCOUNT_ACTION_CODES = new Set([
   'zalo_message_group',
   'zalo_message_stranger',
   'zalo_add_friend',
+  'zalo_join_group_link',
   'zalo_tag_contact',
   'zalo_change_alias'
 ])

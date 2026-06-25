@@ -35,6 +35,7 @@ export interface BlockHelpers {
   zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult>
   zaloSendFriendMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
   zaloSendGroupMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
+  zaloJoinGroupLink(options: ZaloJoinGroupLinkOptions): Promise<ZaloActionHelperResult>
   zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult>
   zaloApplyContactTag(options: ZaloApplyContactTagOptions): Promise<ZaloActionHelperResult>
   zaloChangeContactAlias(options: ZaloChangeContactAliasOptions): Promise<ZaloActionHelperResult>
@@ -88,6 +89,7 @@ export interface BlockRuntimeHelpers {
   zaloSendPhoneMessage?: (options: ZaloSendPhoneMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendFriendMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendGroupMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloJoinGroupLink?: (options: ZaloJoinGroupLinkOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendPhoneFriendRequest?: (options: ZaloSendPhoneFriendRequestOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloApplyContactTag?: (options: ZaloApplyContactTagOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloChangeContactAlias?: (options: ZaloChangeContactAliasOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
@@ -152,6 +154,12 @@ export interface ZaloSendDirectMessageOptions {
   targetName?: string
   message?: string
   attachments?: unknown[]
+  inputData?: Record<string, unknown>
+}
+
+export interface ZaloJoinGroupLinkOptions {
+  targetLink?: string
+  targetName?: string
   inputData?: Record<string, unknown>
 }
 
@@ -343,6 +351,11 @@ export function createBlockHelpers(
     async zaloSendGroupMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult> {
       if (!runtimeHelpers.zaloSendGroupMessage) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
       return runtimeHelpers.zaloSendGroupMessage(options, runtimeMetadata)
+    },
+
+    async zaloJoinGroupLink(options: ZaloJoinGroupLinkOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloJoinGroupLink) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloJoinGroupLink(options, runtimeMetadata)
     },
 
     async zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult> {

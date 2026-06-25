@@ -41,10 +41,10 @@ import {
 } from '../domain/campaigns/campaignActionDescriptors'
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import { ZaloApiError } from 'zca-js'
-import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser } from './zaloRuntimeService'
+import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser, type ZaloJoinGroupLinkResult } from './zaloRuntimeService'
 import { EmailRuntimeService } from './emailRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
-import type { ZaloUserContactInput } from '../data/repositories/accountContactRepository'
+import type { ZaloGroupContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
 import { callAiUsing } from './aiRuntimeService'
 import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
 import type {
@@ -53,6 +53,7 @@ import type {
   ZaloApplyContactTagOptions,
   ZaloChangeContactAliasOptions,
   ZaloFindPhoneUserOptions,
+  ZaloJoinGroupLinkOptions,
   ZaloResolvedTarget,
   ZaloResolveGroupMemberTargetOptions,
   ZaloSendDirectMessageOptions,
@@ -261,6 +262,7 @@ const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_MESSAGE_SEND_MODE_SHARE = 'share'
 const ZALO_SHARE_MESSAGE_BATCH_SIZE = 50
 const ZALO_SHARE_MESSAGE_REWRITE_AI_CODE = 'fb_send_message_rewrite'
@@ -2361,6 +2363,7 @@ export class CampaignScheduler {
       || campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+      || campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
   }
 
   private getInputDataDisplayName(campaign: Campaign, detail: CampaignInputData | null | undefined, fallback = 'N/A'): string {
@@ -2372,7 +2375,8 @@ export class CampaignScheduler {
           campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
-          campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+          campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID ||
+          campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
         ? [detail.name, detail.uid, detail.phone]
       : campaign.actionId === EMAIL_SEND_ACTION_ID
         ? [detail.email, detail.name, detail.uid]
@@ -2532,6 +2536,37 @@ export class CampaignScheduler {
     return Number.isFinite(parsed) ? parsed : null
   }
 
+  private stringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) return []
+    return value
+      .map(item => String(item ?? '').trim())
+      .filter(Boolean)
+  }
+
+  private normalizeZaloGroupInviteLink(value: unknown): string {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+    try {
+      const url = new URL(withProtocol)
+      const hostname = url.hostname.replace(/^www\./i, '').toLowerCase()
+      const parts = url.pathname.split('/').filter(Boolean)
+      let groupCode = ''
+      if (hostname === 'zalo.me' || hostname.endsWith('.zalo.me')) {
+        if (parts[0]?.toLowerCase() !== 'g') return ''
+        groupCode = parts[1] || ''
+      } else if (hostname === 'zaloapp.com' || hostname.endsWith('.zaloapp.com')) {
+        if (parts[0]?.toLowerCase() !== 'qr' || parts[1]?.toLowerCase() !== 'g') return ''
+        groupCode = parts[2] || ''
+      } else {
+        return ''
+      }
+      return groupCode ? `https://zalo.me/g/${groupCode}` : ''
+    } catch {
+      return ''
+    }
+  }
+
   private recordValue(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? { ...(value as Record<string, unknown>) }
@@ -2596,6 +2631,55 @@ export class CampaignScheduler {
     }
   }
 
+  private mapZaloApiRawGroupContact(
+    accountId: number,
+    rawInput: Record<string, unknown>,
+    source: string,
+    fallbackLink?: string,
+    isJoined = true
+  ): ZaloGroupContactInput | null {
+    const raw = this.recordValue(rawInput)
+    const zaloGroupId = this.firstNonEmptyString(raw.groupId, raw.gridId, raw.id)
+    if (!zaloGroupId) return null
+    const link = this.firstNonEmptyString(raw.link, fallbackLink)
+    return {
+      accountId,
+      zaloGroupId,
+      isJoined,
+      name: this.firstNonEmptyString(raw.name) || null,
+      description: this.firstNonEmptyString(raw.desc, raw.description) || null,
+      link: link || null,
+      groupType: this.nullableNumber(raw.type),
+      creatorUid: this.firstNonEmptyString(raw.creatorId) || null,
+      version: this.firstNonEmptyString(raw.version) || null,
+      avatar: this.firstNonEmptyString(raw.avt, raw.avatar) || null,
+      fullAvatar: this.firstNonEmptyString(raw.fullAvt, raw.fullAvatar) || null,
+      memberIds: this.stringArray(raw.memberIds),
+      adminIds: this.stringArray(raw.adminIds),
+      currentMems: raw.currentMems,
+      updateMems: raw.updateMems,
+      admins: raw.admins,
+      hasMoreMember: this.nullableNumber(raw.hasMoreMember),
+      subType: this.nullableNumber(raw.subType),
+      totalMember: this.nullableNumber(raw.totalMember),
+      maxMember: this.nullableNumber(raw.maxMember),
+      setting: raw.setting,
+      createdTime: this.nullableNumber(raw.createdTime),
+      visibility: this.nullableNumber(raw.visibility),
+      globalId: this.firstNonEmptyString(raw.globalId) || null,
+      e2ee: this.nullableNumber(raw.e2ee),
+      status: this.nullableNumber(raw.status),
+      extraInfo: raw.extraInfo,
+      memVerList: this.stringArray(raw.memVerList),
+      pendingApprove: raw.pendingApprove,
+      rawPayload: {
+        ...raw,
+        source,
+        link
+      }
+    }
+  }
+
   private mapZaloFoundUserContact(
     accountId: number,
     user: ZaloFoundUser,
@@ -2627,6 +2711,22 @@ export class CampaignScheduler {
     await this.upsertZaloApiUserContacts([
       this.mapZaloFoundUserContact(account.id, user, source)
     ])
+  }
+
+  private async upsertZaloJoinGroupLinkContact(
+    account: AutoAccount,
+    result: ZaloJoinGroupLinkResult,
+    isJoined: boolean
+  ): Promise<void> {
+    const contact = this.mapZaloApiRawGroupContact(
+      account.id,
+      result.group,
+      ZALO_JOIN_GROUP_LINK_ACTION_ID,
+      result.link,
+      isJoined
+    )
+    if (!contact) return
+    await this.supabase.upsertZaloGroupContacts([contact], { markMissingDeleted: false })
   }
 
   private async upsertZaloResolvedProfileTarget(
@@ -6251,6 +6351,8 @@ export class CampaignScheduler {
         return 'sendMessage'
       case 'zalo_add_friend':
         return 'sendFriendRequest'
+      case 'zalo_join_group_link':
+        return 'joinGroupLink'
       case 'zalo_tag_contact':
         return 'updateLabels'
       case 'zalo_change_alias':
@@ -6807,6 +6909,113 @@ export class CampaignScheduler {
     }
   }
 
+  private async zaloJoinGroupLink(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloJoinGroupLinkOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const actionCode = ZALO_JOIN_GROUP_LINK_ACTION_ID
+    const actionName = 'Tham gia group'
+    const link = this.firstNonEmptyString(options.targetLink, options.inputData?.uid)
+    const normalizedLink = this.normalizeZaloGroupInviteLink(link)
+    if (!normalizedLink) {
+      const detail = await this.createZaloPolicyDetailFromCode(
+        account,
+        campaign,
+        await this.supabase.getZaloErrorPolicyByCode('114'),
+        'Link group Zalo không hợp lệ',
+        actionCode,
+        actionName,
+        '114',
+        { link, inputData: options.inputData }
+      )
+      return { ok: false, detail }
+    }
+
+    try {
+      const result = await this.zaloRuntime.joinGroupByLink(account.id, normalizedLink)
+      const isJoined = result.outcome !== 'pending_approval'
+      await this.upsertZaloJoinGroupLinkContact(account, result, isJoined)
+
+      const groupLabel = this.firstNonEmptyString(result.groupName, result.groupId, result.link)
+      const target = this.normalizeZaloTargetFromInputData(
+        this.firstNonEmptyString(result.groupId, result.link),
+        groupLabel,
+        {
+          ...(options.inputData || {}),
+          uid: this.firstNonEmptyString(result.groupId, options.inputData?.uid, result.link),
+          name: groupLabel
+        },
+        {
+          type: 'group',
+          link: result.link,
+          group: result.group,
+          joinOutcome: result.outcome
+        },
+        false
+      )
+      const data = {
+        target,
+        link: result.link,
+        groupId: result.groupId,
+        groupName: groupLabel,
+        group: result.group,
+        response: result.response as Record<string, unknown> | undefined,
+        zalo: {
+          code: result.zaloCode,
+          message: result.zaloMessage
+        }
+      }
+
+      if (result.outcome === 'already_joined') {
+        return {
+          ok: true,
+          zaloTarget: target,
+          detail: this.createZaloSuccessDetail({
+            actionCode,
+            actionName,
+            status: 'đã tham gia',
+            log: `Tài khoản đã tham gia group ${groupLabel} từ trước`,
+            countsTowardLimit: false,
+            data
+          })
+        }
+      }
+
+      if (result.outcome === 'pending_approval') {
+        return {
+          ok: true,
+          zaloTarget: target,
+          detail: this.createZaloSuccessDetail({
+            actionCode,
+            actionName,
+            log: `Đã gửi yêu cầu tham gia group ${groupLabel}, đang chờ duyệt`,
+            countsTowardLimit: true,
+            data
+          })
+        }
+      }
+
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode,
+          actionName,
+          log: `Đã tham gia group ${groupLabel}`,
+          countsTowardLimit: true,
+          data
+        })
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        detail: await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { link: normalizedLink, inputData: options.inputData })
+      }
+    }
+  }
+
   private async zaloSendPhoneFriendRequest(
     account: AutoAccount,
     campaign: Campaign,
@@ -7076,6 +7285,7 @@ export class CampaignScheduler {
       zaloSendPhoneMessage: (options) => this.zaloSendPhoneMessage(account, campaign, options),
       zaloSendFriendMessage: (options) => this.zaloSendFriendMessage(account, campaign, options),
       zaloSendGroupMessage: (options) => this.zaloSendGroupMessage(account, campaign, options),
+      zaloJoinGroupLink: (options) => this.zaloJoinGroupLink(account, campaign, options),
       zaloSendPhoneFriendRequest: (options) => this.zaloSendPhoneFriendRequest(account, campaign, options),
       zaloApplyContactTag: (options) => this.zaloApplyContactTag(account, campaign, options),
       zaloChangeContactAlias: (options) => this.zaloChangeContactAlias(account, campaign, options),

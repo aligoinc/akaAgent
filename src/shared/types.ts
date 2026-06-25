@@ -500,6 +500,7 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   zalo_message_group_realtime: { field: 'uid', label: 'UID thành viên group Zalo theo thời gian thực' },
   zalo_message_remarketing_customer: { field: 'uid', label: 'UID khách hàng Zalo đã từng gửi tin' },
   zalo_message_group: { field: 'uid', label: 'ID group Zalo' },
+  zalo_join_group_link: { field: 'uid', label: 'Link group Zalo' },
   email_send: { field: 'email', label: 'email người nhận' }
 }
 
