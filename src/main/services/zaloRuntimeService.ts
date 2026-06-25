@@ -274,6 +274,19 @@ export interface ZaloGroupMembersResult {
   usedProxy?: boolean
 }
 
+export type ZaloJoinGroupLinkOutcome = 'joined' | 'already_joined' | 'pending_approval'
+
+export interface ZaloJoinGroupLinkResult {
+  link: string
+  group: Record<string, unknown>
+  groupId: string
+  groupName?: string
+  outcome: ZaloJoinGroupLinkOutcome
+  response?: unknown
+  zaloCode?: string
+  zaloMessage?: string
+}
+
 const ZALO_GROUP_MEMBER_PROFILE_BATCH_SIZE = 300
 const ZALO_GROUP_LINK_MAX_MEMBER_PAGES = 500
 const ZALO_GROUP_LINK_GINFO_PROXY_SETTING_KEY = 'zalo.group_link.ginfo_proxy_url'
@@ -718,6 +731,43 @@ export class ZaloRuntimeService {
     attachments: string[] = []
   ): Promise<unknown> {
     return this.sendMessage(accountId, groupId, ThreadType.Group, message, attachments)
+  }
+
+  async joinGroupByLink(accountId: number, link: string): Promise<ZaloJoinGroupLinkResult> {
+    const api = await this.ensureApi(accountId)
+    const normalizedLink = normalizeZaloGroupLink(link)
+    if (!normalizedLink) throw new Error('Link group Zalo không hợp lệ')
+
+    const group = normalizeRecord(await api.getGroupLinkInfo({ link: normalizedLink, memberPage: 1 }))
+    if (!group.link) group.link = normalizedLink
+    const groupId = normalizeZaloGroupId(group.groupId)
+    const groupName = firstString(group.name)
+
+    try {
+      const response = await api.joinGroupLink(normalizedLink)
+      return {
+        link: normalizedLink,
+        group,
+        groupId,
+        groupName: groupName || undefined,
+        outcome: 'joined',
+        response
+      }
+    } catch (err) {
+      const zaloCode = this.getApiErrorCode(err)
+      if (zaloCode === '178' || zaloCode === '240') {
+        return {
+          link: normalizedLink,
+          group,
+          groupId,
+          groupName: groupName || undefined,
+          outcome: zaloCode === '178' ? 'already_joined' : 'pending_approval',
+          zaloCode,
+          zaloMessage: this.getErrorMessage(err)
+        }
+      }
+      throw err
+    }
   }
 
   async forwardMessageToUsers(
@@ -1895,6 +1945,14 @@ export class ZaloRuntimeService {
     }
     if (err instanceof Error) return err.message
     return String(err)
+  }
+
+  private getApiErrorCode(err: unknown): string {
+    if (err instanceof ZaloApiError && err.code !== null && err.code !== undefined) {
+      return String(err.code).trim()
+    }
+    const rawCode = (err as { code?: unknown } | null | undefined)?.code
+    return rawCode === null || rawCode === undefined ? '' : String(rawCode).trim()
   }
 }
 

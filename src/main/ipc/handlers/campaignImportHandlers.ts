@@ -13,6 +13,11 @@ import { callAiUsing } from '../../services/aiRuntimeService'
 
 const IMPORT_IMAGE_AI_CODE = 'app_campaign_import_image_to_data'
 const SHEET_FETCH_TIMEOUT_MS = 30000
+const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
+
+function isZaloJoinGroupLinkAction(actionId?: string | null): boolean {
+  return actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
+}
 
 function toText(value: unknown): string {
   if (value === null || value === undefined) return ''
@@ -62,6 +67,30 @@ function normalizeUid(value: unknown): string {
   const lower = text.toLowerCase()
   if (['uid', 'url', 'link', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
   return text
+}
+
+function normalizeZaloGroupInviteLink(value: unknown): string {
+  const raw = toText(value)
+  if (!raw) return ''
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(withProtocol)
+    const hostname = url.hostname.replace(/^www\./i, '').toLowerCase()
+    const parts = url.pathname.split('/').filter(Boolean)
+    let groupCode = ''
+    if (hostname === 'zalo.me' || hostname.endsWith('.zalo.me')) {
+      if (parts[0]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[1] || ''
+    } else if (hostname === 'zaloapp.com' || hostname.endsWith('.zaloapp.com')) {
+      if (parts[0]?.toLowerCase() !== 'qr' || parts[1]?.toLowerCase() !== 'g') return ''
+      groupCode = parts[2] || ''
+    } else {
+      return ''
+    }
+    return groupCode ? `https://zalo.me/g/${groupCode}` : ''
+  } catch {
+    return ''
+  }
 }
 
 function normalizePlatform(value: unknown): CampaignImportPlatform {
@@ -213,7 +242,7 @@ function rawRowsFromAiContent(content: string): unknown[] {
   throw new Error('AI không trả về JSON array hợp lệ.')
 }
 
-function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform): CampaignImportDataRow[] {
+function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform, actionId?: string | null): CampaignImportDataRow[] {
   const seen = new Set<string>()
   const output: CampaignImportDataRow[] = []
 
@@ -229,7 +258,22 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
     }
 
     let key = ''
-    if (platform === 'zalo') {
+    if (isZaloJoinGroupLinkAction(actionId)) {
+      item.uid = normalizeZaloGroupInviteLink(firstText(
+        record.uid,
+        record.url,
+        record.link,
+        record.groupLink,
+        record.zaloGroupLink,
+        record.zalo_group_link,
+        record.value,
+        record.name
+      ))
+      if (normalizeZaloGroupInviteLink(item.name) === item.uid) item.name = ''
+      item.phone = ''
+      item.email = ''
+      key = item.uid
+    } else if (platform === 'zalo') {
       item.phone = normalizeVietnamMobilePhone(firstText(record.phone, record.mobile, record.sdt, record.soDienThoai, record.value))
       key = item.phone
     } else if (platform === 'facebook') {
@@ -253,7 +297,7 @@ export function registerCampaignImportHandlers(): void {
     requireCurrentUser()
     const platform = normalizePlatform(request?.platform)
     const rows = await fetchSheetWorkbookRows(request?.linkSheet)
-    return normalizeImportedRows(mapSheetRows(rows), platform)
+    return normalizeImportedRows(mapSheetRows(rows), platform, request?.actionId || '')
   })
 
   ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_EXTRACT_IMAGE, async (_, request: CampaignImportImageRequest): Promise<CampaignImportDataRow[]> => {
@@ -271,6 +315,6 @@ export function registerCampaignImportHandlers(): void {
     })
     if (!result.ok) throw new Error(result.error || 'AI không thể đọc dữ liệu từ ảnh.')
 
-    return normalizeImportedRows(rawRowsFromAiContent(result.content), platform)
+    return normalizeImportedRows(rawRowsFromAiContent(result.content), platform, request?.actionId || '')
   })
 }
