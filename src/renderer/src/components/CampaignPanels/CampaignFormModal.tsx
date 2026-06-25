@@ -8236,7 +8236,7 @@ export default function CampaignFormModal({
                           checked={formData.continueNextDay}
                           onChange={e => setFormData(p => ({ ...p, continueNextDay: e.target.checked }))}
                         />
-                        <span>Nếu chưa chạy hết data do đạt giới hạn, 00h ngày hôm sau sẽ tiếp tục chạy. Nếu chạy hết data sẽ hoàn thành chiến dịch.</span>
+                        <span>Nếu chưa chạy hết data, hôm sau chiến dịch sẽ tiếp tục chạy theo thời gian hẹn giờ.</span>
                       </label>
                     </div>
                   )}
