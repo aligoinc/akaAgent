@@ -27,6 +27,12 @@ import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
 import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
+import ContentPreviewModal, {
+  type ContentPreviewMediaItem,
+  type ContentPreviewModalData,
+  type ContentPreviewPlatform,
+  type ContentPreviewSurface
+} from './ContentPreviewModal'
 import {
   canUseCampaignAction,
   clampDailyLimitToEntitlement,
@@ -165,6 +171,7 @@ type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 type MessageTemplateDropdown = 'date' | 'format' | null
 type MessagePersonalizationTarget = 'content' | 'friendRequestMessage' | 'zaloAliasTemplate'
 type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
+type ContentPreviewTarget = AiContentTarget | 'friendRequestMessage' | 'newsfeedCommentContent'
 type AiContentAction = 'multi' | 'rewrite'
 type FindDataGoalPriority = NonNullable<CampaignExtraSettings['findDataGoalPriority']>
 interface FindDataGoalFlagState {
@@ -1357,6 +1364,7 @@ export default function CampaignFormModal({
   const [contentTemplatePicker, setContentTemplatePicker] = useState<ContentTemplatePickerModalState | null>(null)
   const [contentTemplateSaveModal, setContentTemplateSaveModal] = useState<ContentTemplateSaveModalState | null>(null)
   const [contentTemplateSaving, setContentTemplateSaving] = useState(false)
+  const [contentPreviewModal, setContentPreviewModal] = useState<ContentPreviewModalData | null>(null)
   const [zaloLabels, setZaloLabels] = useState<ZaloLabelOption[]>([])
   const [zaloLabelsLoading, setZaloLabelsLoading] = useState(false)
   const [zaloLabelsSyncing, setZaloLabelsSyncing] = useState(false)
@@ -2751,6 +2759,145 @@ export default function CampaignFormModal({
     onOpenGeneralSettings?.('templates')
   }
 
+  const getPreviewContentValue = (target: ContentPreviewTarget): string => {
+    if (target === 'friendRequestMessage') return formData.friendRequestMessage
+    if (target === 'newsfeedCommentContent') return formData.newsfeedCommentContent
+    return getAiContentValue(target)
+  }
+
+  const getContentPreviewMedia = (target: ContentPreviewTarget): {
+    media: ContentPreviewMediaItem[]
+    mediaMode: ContentPreviewModalData['mediaMode']
+    randomCount?: number
+  } => {
+    if (target === 'commentContent') {
+      return {
+        media: formData.commentImageOption === 'none'
+          ? []
+          : formData.commentImages.slice(0, 1).map(path => ({ path, label: getImageDisplayName(path) })),
+        mediaMode: formData.commentImageOption
+      }
+    }
+
+    if (target === 'content' && !isFacebookJoinGroupCampaign && !isPostBackgroundActive) {
+      return {
+        media: formData.imageOption === 'none'
+          ? []
+          : formData.images.map(path => ({ path, label: getImageDisplayName(path) })),
+        mediaMode: formData.imageOption,
+        randomCount: formData.randomImageCount
+      }
+    }
+
+    return {
+      media: [],
+      mediaMode: 'none'
+    }
+  }
+
+  const getContentPreviewKind = (target: ContentPreviewTarget): ContentPreviewModalData['kind'] => {
+    if (target === 'friendRequestMessage') return 'friendRequest'
+    if (target === 'commentContent' || target === 'newsfeedCommentContent' || target === 'postBumpContent') return 'comment'
+    if (target === 'content') {
+      if (isEmailCampaign) return 'email'
+      if (isMessageCampaign) return 'message'
+      if (isFacebookJoinGroupCampaign) return 'answer'
+    }
+    return 'post'
+  }
+
+  const getContentPreviewPlatform = (target: ContentPreviewTarget): ContentPreviewPlatform => {
+    if (target === 'friendRequestMessage') return 'zalo'
+    if (target === 'commentContent' || target === 'newsfeedCommentContent' || target === 'postBumpContent') return 'facebook'
+    if (target === 'content') {
+      if (isEmailCampaign) return 'email'
+      if (isZaloMessageCampaign) return 'zalo'
+      if (isMessageCampaign || isFacebookJoinGroupCampaign || isFacebookGroupPostCampaign || isTimelinePostCampaign || isPagePostCampaign) return 'facebook'
+    }
+    return 'generic'
+  }
+
+  const getContentPreviewSurface = (target: ContentPreviewTarget): ContentPreviewSurface => {
+    if (target === 'friendRequestMessage') return 'chat'
+    if (target === 'commentContent' || target === 'newsfeedCommentContent' || target === 'postBumpContent') return 'comment'
+    if (target === 'content') {
+      if (isEmailCampaign) return 'email'
+      if (isMessageCampaign) return 'chat'
+      if (isFacebookJoinGroupCampaign) return 'answer'
+    }
+    return 'post'
+  }
+
+  const getContentPreviewTitle = (target: ContentPreviewTarget): string => {
+    if (target === 'friendRequestMessage') return 'Xem trước nội dung kết bạn'
+    if (target === 'newsfeedCommentContent') return 'Xem trước comment newsfeed'
+    if (target === 'commentContent') return 'Xem trước nội dung comment'
+    if (target === 'postBumpContent') return 'Xem trước nội dung up tin'
+    return `Xem trước ${getCampaignContentLabel().toLowerCase()}`
+  }
+
+  const getContentPreviewSubtitle = (target: ContentPreviewTarget): string => {
+    if (target === 'content') {
+      if (isEmailCampaign) return 'Email xem trước với dữ liệu mẫu'
+      if (isZaloMessageCampaign) return 'Tin nhắn Zalo xem trước với dữ liệu mẫu'
+      if (isMessageCampaign) return 'Tin nhắn Facebook xem trước với dữ liệu mẫu'
+      if (isFacebookJoinGroupCampaign) return 'Câu trả lời sẽ được xoay vòng theo biến thể'
+      if (isPagePostCampaign) return 'Bài đăng fanpage xem trước với dữ liệu mẫu'
+      if (isTimelinePostCampaign) return 'Bài đăng trang cá nhân xem trước với dữ liệu mẫu'
+      if (isFacebookGroupPostCampaign) return 'Bài đăng group xem trước với dữ liệu mẫu'
+    }
+    if (target === 'friendRequestMessage') return 'Lời nhắn kết bạn Zalo xem trước với dữ liệu mẫu'
+    return 'Xem trước với dữ liệu mẫu'
+  }
+
+  const getContentPreviewNotes = (target: ContentPreviewTarget): string[] => {
+    const notes: string[] = []
+    if (target === 'content') {
+      if (formData.rewriteContentEachRun) notes.push('Bản xem trước chưa chạy AI viết lại; khi runtime chạy, nội dung có thể được AI viết lại.')
+      if (supportsSourceContent && formData.copyContentFromSource) notes.push('Bản xem trước chỉ hiển thị phần nội dung nhập trong form, chưa bao gồm nội dung copy từ nguồn.')
+      if (supportsSourceSharePost && formData.sharePost) notes.push('Bản xem trước chưa hiển thị phần bài viết được chia sẻ từ nguồn.')
+      if (formData.postAsReels) notes.push('Bản xem trước chưa mô phỏng giao diện Reels.')
+      if (isPostBackgroundActive) notes.push('Bản xem trước chưa mô phỏng phông nền Facebook.')
+    }
+    if (target === 'commentContent' && formData.rewriteCommentContentEachRun) {
+      notes.push('Bản xem trước chưa chạy AI viết lại comment; khi runtime chạy, comment có thể được AI viết lại.')
+    }
+    if (target === 'newsfeedCommentContent' && formData.newsfeedCommentUseAI) {
+      notes.push('Đang bật AI tạo comment; bản xem trước chỉ hiển thị nội dung/prompt đang nhập.')
+    }
+    return notes
+  }
+
+  const openContentPreview = (target: ContentPreviewTarget) => {
+    const mediaConfig = getContentPreviewMedia(target)
+    setContentPreviewModal({
+      title: getContentPreviewTitle(target),
+      subtitle: getContentPreviewSubtitle(target),
+      kind: getContentPreviewKind(target),
+      platform: getContentPreviewPlatform(target),
+      surface: getContentPreviewSurface(target),
+      content: getPreviewContentValue(target),
+      subject: target === 'content' && isEmailCampaign ? formData.emailSubject : undefined,
+      isHtml: target === 'content' && isEmailCampaign && formData.emailBodyIsHtml,
+      media: mediaConfig.media,
+      mediaMode: mediaConfig.mediaMode,
+      randomCount: mediaConfig.randomCount,
+      notes: getContentPreviewNotes(target)
+    })
+  }
+
+  const renderContentPreviewButton = (target: ContentPreviewTarget, disabled = false) => (
+    <button
+      type="button"
+      className="btn btn-ghost content-template-inline-button"
+      onClick={() => openContentPreview(target)}
+      disabled={disabled}
+    >
+      <Eye size={15} />
+      <span>Xem trước</span>
+    </button>
+  )
+
   const applyContentTemplate = (template: ContentTemplate) => {
     if (!contentTemplatePicker) return
     const target = contentTemplatePicker.target
@@ -2807,6 +2954,7 @@ export default function CampaignFormModal({
   const renderContentTemplateToolbar = (target: AiContentTarget) => (
     <div className="content-template-inline-toolbar">
       {target === 'content' && isMessageCampaign && !isZaloShareMessageMode && renderMessagePersonalizationDropdown('content')}
+      {renderContentPreviewButton(target)}
       <button
         type="button"
         className="btn btn-ghost content-template-inline-button"
@@ -4535,7 +4683,10 @@ export default function CampaignFormModal({
           </div>
 
           <div className="stepper-form-group">
-            <label>Nội dung comment</label>
+            <div className="content-preview-field-header">
+              <label>Nội dung comment</label>
+              {renderContentPreviewButton('newsfeedCommentContent', !formData.enableComment)}
+            </div>
             <textarea
               value={formData.newsfeedCommentContent}
               onChange={e => setFormData(p => ({ ...p, newsfeedCommentContent: e.target.value }))}
@@ -5434,6 +5585,7 @@ export default function CampaignFormModal({
             <div className="message-personalization-field-title">
               <label>Nội dung kết bạn</label>
               {renderMessagePersonalizationDropdown('friendRequestMessage', 'field')}
+              {renderContentPreviewButton('friendRequestMessage')}
             </div>
             <span className="message-personalization-field-count" style={{ color: formData.friendRequestMessage.length > 150 ? 'var(--text-error)' : 'var(--text-muted)' }}>
               {formData.friendRequestMessage.length}/150
@@ -9779,6 +9931,12 @@ export default function CampaignFormModal({
       {renderSourceCampaignViewModal()}
       {renderContentTemplatePickerModal()}
       {renderContentTemplateSaveModal()}
+      {contentPreviewModal && (
+        <ContentPreviewModal
+          data={contentPreviewModal}
+          onClose={() => setContentPreviewModal(null)}
+        />
+      )}
       {editingSourceCampaign && (
         <CampaignFormModal
           campaign={editingSourceCampaign}

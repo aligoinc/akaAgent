@@ -32,6 +32,7 @@ import {
   loadOrganizationEntitlements
 } from '../data/repositories/entitlementRepository'
 import { readBlockScreenshotDataUrl } from '../services/blockScreenshotService'
+import { readCampaignPreviewFileDataUrl } from '../services/campaignPreviewFileService'
 
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET_MS = 7 * 60 * 60 * 1000
@@ -345,6 +346,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IPC_EVENTS.APP_READ_BLOCK_SCREENSHOT, async (_, filePath: string) => {
     return readBlockScreenshotDataUrl(filePath)
+  })
+
+  ipcMain.handle(IPC_EVENTS.APP_READ_CAMPAIGN_PREVIEW_FILE, async (_, filePath: string) => {
+    return readCampaignPreviewFileDataUrl(filePath)
   })
 
   // Register domain handlers

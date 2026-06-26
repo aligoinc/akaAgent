@@ -513,6 +513,9 @@ const electronAPI = {
   readBlockScreenshotDataUrl: (filePath: string): Promise<{ filePath: string; dataUrl: string; sizeBytes: number }> =>
     ipcRenderer.invoke(IPC_EVENTS.APP_READ_BLOCK_SCREENSHOT, filePath),
 
+  readCampaignPreviewFileDataUrl: (filePath: string): Promise<{ filePath: string; dataUrl: string; sizeBytes: number; mimeType: string }> =>
+    ipcRenderer.invoke(IPC_EVENTS.APP_READ_CAMPAIGN_PREVIEW_FILE, filePath),
+
   // Auto-update
   getAppVersion: (): Promise<string> =>
     ipcRenderer.invoke(IPC_EVENTS.APP_GET_VERSION),
