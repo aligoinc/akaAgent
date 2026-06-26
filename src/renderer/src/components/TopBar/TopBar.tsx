@@ -1,15 +1,37 @@
-import { useEffect, useRef, useState } from 'react'
-import { Layers, Settings, Globe, Sun, Moon, LogOut, User, ChevronDown, Monitor, Database, SlidersHorizontal, KeyRound, BarChart3, RefreshCw } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  ArrowUp,
+  BarChart3,
+  Badge,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  Globe,
+  Info,
+  KeyRound,
+  Layers,
+  LogOut,
+  Monitor,
+  Moon,
+  RefreshCw,
+  Settings,
+  SlidersHorizontal,
+  Sun,
+  User
+} from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
+type AppPage = 'campaigns' | 'workflow-editor' | 'browsers' | 'reports'
+
 interface TopBarProps {
-  activePage: 'campaigns' | 'workflow-editor' | 'browsers' | 'reports'
-  onPageChange: (page: 'campaigns' | 'workflow-editor' | 'browsers' | 'reports') => void
+  activePage: AppPage
+  onPageChange: (page: AppPage) => void
   onOpenDataScan: () => void
+  onOpenAccountInfo: () => void
   onOpenGeneralSettings: () => void
   onOpenChangePassword: () => void
   currentVersion: string
@@ -17,10 +39,28 @@ interface TopBarProps {
   onCheckUpdate: () => void
 }
 
+interface SidebarNavItem {
+  key: string
+  label: string
+  icon: ReactNode
+  active?: boolean
+  onClick: () => void
+}
+
+function UpdateBadgeIcon() {
+  return (
+    <span className="app-sidebar-update-icon" aria-hidden="true">
+      <Badge size={17} />
+      <ArrowUp size={9} strokeWidth={3} />
+    </span>
+  )
+}
+
 export default function TopBar({
   activePage,
   onPageChange,
   onOpenDataScan,
+  onOpenAccountInfo,
   onOpenGeneralSettings,
   onOpenChangePassword,
   currentVersion,
@@ -29,21 +69,22 @@ export default function TopBar({
 }: TopBarProps) {
   const { theme, toggleTheme } = useThemeStore()
   const { user, logout, resetDeviceLock } = useAuthStore()
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const settingsRef = useRef<HTMLDivElement>(null)
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const accountMenuRef = useRef<HTMLDivElement>(null)
   const isAdminAkabiz = !!user?.isAdminAkabiz
   const canOpenWorkflowEditor = isAdminAkabiz
 
   useEffect(() => {
-    if (!settingsOpen) return
+    if (!accountMenuOpen) return
 
     const handleMouseDown = (event: MouseEvent) => {
-      if (!settingsRef.current?.contains(event.target as Node)) {
-        setSettingsOpen(false)
+      if (!accountMenuRef.current?.contains(event.target as Node)) {
+        setAccountMenuOpen(false)
       }
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSettingsOpen(false)
+      if (event.key === 'Escape') setAccountMenuOpen(false)
     }
 
     document.addEventListener('mousedown', handleMouseDown)
@@ -52,9 +93,56 @@ export default function TopBar({
       document.removeEventListener('mousedown', handleMouseDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [settingsOpen])
+  }, [accountMenuOpen])
+
+  const navItems = useMemo<SidebarNavItem[]>(() => {
+    const items: SidebarNavItem[] = [
+      {
+        key: 'campaigns',
+        label: 'Chiến dịch',
+        icon: <Layers size={18} />,
+        active: activePage === 'campaigns',
+        onClick: () => onPageChange('campaigns')
+      },
+      {
+        key: 'browsers',
+        label: 'Trình duyệt',
+        icon: <Globe size={18} />,
+        active: activePage === 'browsers',
+        onClick: () => onPageChange('browsers')
+      },
+      {
+        key: 'data-scan',
+        label: 'Quét data',
+        icon: <Database size={18} />,
+        onClick: onOpenDataScan
+      },
+      {
+        key: 'reports',
+        label: 'Báo cáo',
+        icon: <BarChart3 size={18} />,
+        active: activePage === 'reports',
+        onClick: () => onPageChange('reports')
+      }
+    ]
+
+    if (canOpenWorkflowEditor) {
+      items.push({
+        key: 'workflow-editor',
+        label: 'Cài đặt Workflow',
+        icon: <Settings size={18} />,
+        active: activePage === 'workflow-editor',
+        onClick: () => onPageChange('workflow-editor')
+      })
+    }
+
+    return items
+  }, [activePage, canOpenWorkflowEditor, onOpenDataScan, onPageChange])
+
+  const closeAccountMenu = () => setAccountMenuOpen(false)
 
   const handleLogout = () => {
+    closeAccountMenu()
     useUiStore.getState().showConfirm(
       'Đăng xuất khỏi tài khoản?',
       async () => {
@@ -69,7 +157,7 @@ export default function TopBar({
   }
 
   const handleResetDeviceLock = () => {
-    setSettingsOpen(false)
+    closeAccountMenu()
     useUiStore.getState().showConfirm(
       'Bạn có muốn đổi máy tính không?',
       async () => {
@@ -85,149 +173,150 @@ export default function TopBar({
   }
 
   const handleOpenGeneralSettings = () => {
-    setSettingsOpen(false)
+    closeAccountMenu()
     onOpenGeneralSettings()
   }
 
+  const handleOpenAccountInfo = () => {
+    closeAccountMenu()
+    onOpenAccountInfo()
+  }
+
   const handleOpenChangePassword = () => {
-    setSettingsOpen(false)
+    closeAccountMenu()
     onOpenChangePassword()
   }
 
+  const handleCheckUpdate = () => {
+    if (checkingUpdate) return
+    onCheckUpdate()
+  }
+
   return (
-    <div className="topbar">
-      <div className="topbar-left">
-        <div className="topbar-logo">
-          <img src={appIconUrl} alt="" />
+    <aside className={`app-sidebar ${sidebarExpanded ? 'is-expanded' : 'is-collapsed'}`}>
+      <div className="app-sidebar-header">
+        <div className="app-sidebar-brand" title="akaBizAuto">
+          <span className="app-sidebar-logo">
+            <img src={appIconUrl} alt="" />
+          </span>
+          <span className="app-sidebar-label app-sidebar-brand-name">akaBizAuto</span>
         </div>
-        <span className="topbar-brand">akaBizAuto</span>
+        <button
+          type="button"
+          className="app-sidebar-toggle"
+          onClick={() => setSidebarExpanded(expanded => !expanded)}
+          title={sidebarExpanded ? 'Thu gọn menu' : 'Mở rộng menu'}
+          aria-label={sidebarExpanded ? 'Thu gọn menu' : 'Mở rộng menu'}
+          aria-expanded={sidebarExpanded}
+        >
+          {sidebarExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+        </button>
       </div>
 
-      <nav className="topbar-nav">
-        <button
-          className={`topbar-nav-item ${activePage === 'campaigns' ? 'active' : ''}`}
-          onClick={() => onPageChange('campaigns')}
-        >
-          <Layers size={15} />
-          Chiến dịch
-        </button>
-        <button
-          className={`topbar-nav-item ${activePage === 'browsers' ? 'active' : ''}`}
-          onClick={() => onPageChange('browsers')}
-        >
-          <Globe size={15} />
-          Trình duyệt
-        </button>
-        <button
-          className="topbar-nav-item"
-          onClick={onOpenDataScan}
-        >
-          <Database size={15} />
-          Quét data
-        </button>
-        <button
-          className={`topbar-nav-item ${activePage === 'reports' ? 'active' : ''}`}
-          onClick={() => onPageChange('reports')}
-        >
-          <BarChart3 size={15} />
-          Báo cáo
-        </button>
-        {canOpenWorkflowEditor && (
+      <nav className="app-sidebar-nav" aria-label="Điều hướng chính">
+        {navItems.map(item => (
           <button
-            className={`topbar-nav-item ${activePage === 'workflow-editor' ? 'active' : ''}`}
-            onClick={() => onPageChange('workflow-editor')}
+            key={item.key}
+            type="button"
+            className={`app-sidebar-nav-item ${item.active ? 'active' : ''}`}
+            onClick={item.onClick}
+            title={item.label}
+            aria-current={item.active ? 'page' : undefined}
           >
-            <Settings size={15} />
-            Cài đặt Workflow
+            <span className="app-sidebar-item-icon">{item.icon}</span>
+            <span className="app-sidebar-label">{item.label}</span>
           </button>
-        )}
+        ))}
       </nav>
 
-      <div className="topbar-right">
-        <div className="topbar-version-group">
-          <span className="topbar-version-chip" title={`Phiên bản hiện tại: ${currentVersion || 'đang tải'}`}>
-            v{currentVersion || '...'}
+      <div className="app-sidebar-footer" ref={accountMenuRef}>
+        <button
+          type="button"
+          className={`app-sidebar-account-button ${accountMenuOpen ? 'active' : ''}`}
+          onClick={() => setAccountMenuOpen(open => !open)}
+          title={user?.name || 'Tài khoản'}
+          aria-label="Mở menu tài khoản"
+          aria-haspopup="menu"
+          aria-expanded={accountMenuOpen}
+        >
+          <span className="app-sidebar-user-avatar">
+            <User size={18} />
           </span>
-          <button
-            className="btn btn-ghost topbar-update-button"
-            onClick={onCheckUpdate}
-            disabled={checkingUpdate}
-            title="Kiểm tra cập nhật"
-          >
-            <RefreshCw size={13} className={checkingUpdate ? 'animate-spin' : undefined} />
-            <span>{checkingUpdate ? 'Đang kiểm tra' : 'Cập nhật'}</span>
-          </button>
-        </div>
+          <span className="app-sidebar-label app-sidebar-account-copy">
+            <strong>{user?.name || 'Tài khoản'}</strong>
+            <span>{user?.organizationName || 'akaBizAuto'}</span>
+          </span>
+          <ChevronRight size={15} className="app-sidebar-account-chevron" />
+        </button>
 
-        {user && (
-          <div
-            title={`${user.organizationName}${isAdminAkabiz ? ' · admin akaBiz' : ''}`}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '4px 10px',
-              fontSize: 12,
-              color: 'var(--text-topbar-muted, var(--text-secondary, #aaa))',
-              border: '1px solid var(--border-topbar, var(--border-default, #27272f))',
-              borderRadius: 6,
-              marginRight: 8
-            }}
-          >
-            <User size={13} />
-            <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user.name}
-            </span>
-          </div>
-        )}
+        {accountMenuOpen && (
+          <div className="app-sidebar-account-flyout" role="menu">
+            <div className="app-sidebar-flyout-header">
+              <span className="app-sidebar-flyout-avatar">
+                <User size={18} />
+              </span>
+              <div className="app-sidebar-flyout-user">
+                <strong>{user?.name || 'Tài khoản'}</strong>
+                <span>{user?.organizationName || 'akaBizAuto'} · v{currentVersion || '...'}</span>
+              </div>
+            </div>
 
-        <div className="topbar-settings-menu-wrap" ref={settingsRef}>
-          <button
-            className={`btn btn-ghost topbar-settings-button ${settingsOpen ? 'active' : ''}`}
-            onClick={() => setSettingsOpen(open => !open)}
-            title="Cài đặt"
-            aria-haspopup="menu"
-            aria-expanded={settingsOpen}
-          >
-            <Settings size={15} />
-            <ChevronDown size={12} />
-          </button>
-          {settingsOpen && (
-            <div className="topbar-settings-menu" role="menu">
-              <button className="topbar-settings-item" role="menuitem" onClick={handleOpenGeneralSettings}>
-                <SlidersHorizontal size={14} />
+            <div className="app-sidebar-flyout-section">
+              <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenAccountInfo} role="menuitem">
+                <Info size={16} />
+                <span>Thông tin tài khoản</span>
+              </button>
+              <button
+                type="button"
+                className="app-sidebar-flyout-item"
+                onClick={handleCheckUpdate}
+                disabled={checkingUpdate}
+                role="menuitem"
+              >
+                {checkingUpdate ? <RefreshCw size={16} className="animate-spin" /> : <UpdateBadgeIcon />}
+                <span>{checkingUpdate ? 'Đang kiểm tra' : 'Cập nhật'}</span>
+              </button>
+              <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenGeneralSettings} role="menuitem">
+                <SlidersHorizontal size={16} />
                 <span>Cài đặt chung</span>
               </button>
-              <button className="topbar-settings-item" role="menuitem" onClick={handleOpenChangePassword}>
-                <KeyRound size={14} />
+              <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenChangePassword} role="menuitem">
+                <KeyRound size={16} />
                 <span>Đổi mật khẩu</span>
               </button>
-              <button className="topbar-settings-item" role="menuitem" onClick={handleResetDeviceLock}>
-                <Monitor size={14} />
+              <button type="button" className="app-sidebar-flyout-item" onClick={handleResetDeviceLock} role="menuitem">
+                <Monitor size={16} />
                 <span>Đổi máy tính</span>
               </button>
               <button
-                className="topbar-settings-item topbar-theme-toggle-item"
+                type="button"
+                className="app-sidebar-flyout-item app-sidebar-theme-toggle-item"
+                onClick={handleToggleTheme}
                 role="menuitemcheckbox"
                 aria-checked={theme === 'dark'}
-                onClick={handleToggleTheme}
               >
-                {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+                {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
                 <span>Giao diện sáng/tối</span>
-                <span className={`topbar-theme-switch ${theme === 'dark' ? 'on' : ''}`}>
-                  <span className="topbar-theme-switch-thumb" />
+                <span className={`app-sidebar-theme-switch ${theme === 'dark' ? 'on' : ''}`}>
+                  <span className="app-sidebar-theme-switch-thumb" />
                 </span>
               </button>
             </div>
-          )}
-        </div>
 
-        <button
-          className="btn btn-ghost btn-icon"
-          onClick={handleLogout}
-          title="Đăng xuất"
-        >
-          <LogOut size={15} />
-        </button>
+            <div className="app-sidebar-flyout-section">
+              <button
+                type="button"
+                className="app-sidebar-flyout-item app-sidebar-flyout-danger"
+                onClick={handleLogout}
+                role="menuitem"
+              >
+                <LogOut size={16} />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </aside>
   )
 }

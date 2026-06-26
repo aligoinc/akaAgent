@@ -1,4 +1,5 @@
-import { AuthEntitlementFeature, AuthEntitlements, AuthUser } from '../../../shared/types'
+import { AuthAccountProduct, AuthEntitlementFeature, AuthEntitlements, AuthUser } from '../../../shared/types'
+import { AUTH_PRODUCT_BY_FEATURE, AUTH_PRODUCT_IDS, getAuthProductById } from '../../../shared/authProductCatalog'
 import { requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
@@ -6,10 +7,10 @@ const client = () => getSupabaseClient()
 
 export type EntitlementFeature = AuthEntitlementFeature
 
-export const FACEBOOK_CORE_PRODUCT_ID = 3
-export const FACEBOOK_FANPAGE_PRODUCT_ID = 10
-export const EMAIL_PRODUCT_ID = 13
-export const ZALO_PRODUCT_ID = 16
+export const FACEBOOK_CORE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookCore.productId
+export const FACEBOOK_FANPAGE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId
+export const EMAIL_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.email.productId
+export const ZALO_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.zalo.productId
 export const AKA_AGENT_PRODUCT_ID = FACEBOOK_CORE_PRODUCT_ID
 export const DEFAULT_DEMO_DAILY_SEND_LIMIT = 30
 export const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
@@ -56,10 +57,10 @@ export const ZALO_ACCOUNT_ACTION_CODES = new Set([
 ])
 
 const FEATURE_PRODUCT_IDS: Record<EntitlementFeature, number> = {
-  facebookCore: FACEBOOK_CORE_PRODUCT_ID,
-  facebookFanpage: FACEBOOK_FANPAGE_PRODUCT_ID,
-  email: EMAIL_PRODUCT_ID,
-  zalo: ZALO_PRODUCT_ID
+  facebookCore: AUTH_PRODUCT_BY_FEATURE.facebookCore.productId,
+  facebookFanpage: AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId,
+  email: AUTH_PRODUCT_BY_FEATURE.email.productId,
+  zalo: AUTH_PRODUCT_BY_FEATURE.zalo.productId
 }
 
 const FEATURE_UNAVAILABLE_MESSAGES: Record<EntitlementFeature, string> = {
@@ -71,6 +72,8 @@ const FEATURE_UNAVAILABLE_MESSAGES: Record<EntitlementFeature, string> = {
 
 interface OrganizationProductRow {
   product_id?: number | null
+  product_name?: string | null
+  package_name?: string | null
   expiration_date?: string | null
   package_type?: string | null
   max_sends_per_day?: number | string | null
@@ -146,13 +149,12 @@ export function getFeatureUnavailableMessage(feature: EntitlementFeature): strin
 
 export async function loadOrganizationEntitlements(organizationId: number): Promise<AuthEntitlements> {
   const entitlements = emptyAuthEntitlements()
-  const productIds = Object.values(FEATURE_PRODUCT_IDS)
   const { data, error } = await client()
     .from('org_organization_product')
     .select('product_id, expiration_date, package_type, max_sends_per_day')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
-    .in('product_id', productIds)
+    .in('product_id', AUTH_PRODUCT_IDS)
     .order('expiration_date', { ascending: false, nullsFirst: false })
     .order('id', { ascending: false })
 
@@ -169,6 +171,40 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
   }
 
   return entitlements
+}
+
+export async function loadOrganizationAccountProducts(organizationId: number): Promise<AuthAccountProduct[]> {
+  const { data, error } = await client()
+    .from('org_organization_product')
+    .select('product_id, product_name, package_name, package_type, expiration_date')
+    .eq('organization_id', organizationId)
+    .eq('is_deleted', false)
+    .in('product_id', AUTH_PRODUCT_IDS)
+    .order('expiration_date', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
+
+  if (error) {
+    console.error('[entitlements] load organization account products:', error)
+    throw new Error('Không thể tải thông tin gói sản phẩm. Vui lòng thử lại sau.')
+  }
+
+  return ((data || []) as unknown as OrganizationProductRow[]).map(row => {
+    const productId = Number(row.product_id)
+    const productCatalogItem = getAuthProductById(Number.isFinite(productId) ? productId : null)
+    const productName = String(row.product_name || '').trim()
+    const packageName = String(row.package_name || '').trim()
+    return {
+      feature: productCatalogItem?.feature ?? null,
+      productId: Number.isFinite(productId) ? productId : null,
+      productName,
+      packageName,
+      packageType: row.package_type ? String(row.package_type).trim() : null,
+      displayName: productCatalogItem?.label || productName || packageName || 'Sản phẩm',
+      displayOrder: productCatalogItem?.order ?? 99,
+      expirationDate: row.expiration_date || null,
+      isActive: isExpirationActive(row.expiration_date)
+    }
+  })
 }
 
 export async function ensureAkaAgentSubscriptionActive(organizationId: number): Promise<void> {

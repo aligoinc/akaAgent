@@ -10,6 +10,7 @@ import { getSupabaseClient } from '../supabaseClient'
 import {
   ACCOUNT_EXPIRED_MESSAGE,
   ensureAkaAgentSubscriptionActive,
+  loadOrganizationAccountProducts,
   loadOrganizationEntitlements
 } from './entitlementRepository'
 
@@ -33,6 +34,7 @@ interface StaffRow extends StaffDeviceColumns {
   id: number
   organization_id: number
   name: string
+  phone?: string | null
   username: string
   password: string
   is_active: boolean
@@ -61,6 +63,7 @@ const STAFF_SELECT = [
   'id',
   'organization_id',
   'name',
+  'phone',
   'username',
   'password',
   'is_active',
@@ -165,17 +168,22 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     )
   }
 
-  const entitlements = await loadOrganizationEntitlements(staffRow.organization_id)
+  const [entitlements, accountProducts] = await Promise.all([
+    loadOrganizationEntitlements(staffRow.organization_id),
+    loadOrganizationAccountProducts(staffRow.organization_id)
+  ])
 
   return {
     staffId: staffRow.id,
     organizationId: staffRow.organization_id,
     name: staffRow.name,
     username: staffRow.username,
+    phone: staffRow.phone || null,
     organizationName: (org?.name as string) || '',
     isAdminAkabiz: !!staffRow.is_admin_akabiz,
     useTestWorkflow: !!staffRow.use_test_workflow,
     entitlements,
+    accountProducts,
     deviceLabel: deviceRecord.device_label || null,
     devicePlatform: deviceRecord.device_platform || null,
     deviceBoundAt: deviceRecord.device_bound_at || null,
