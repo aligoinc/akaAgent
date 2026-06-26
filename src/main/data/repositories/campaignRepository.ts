@@ -42,12 +42,14 @@ const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
+const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_FRIEND_AUTO_TARGET_MODES = new Set(['all_friends', 'tagged_friends'])
 const ZALO_REMARKETING_SOURCE_ACTION_IDS = [
   ZALO_MESSAGE_PHONE_ACTION_ID,
   ZALO_MESSAGE_FRIEND_ACTION_ID,
   ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID,
-  ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
+  ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID,
+  ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
 ]
 const ZALO_REMARKETING_MESSAGE_ACTION_CODES = ['zalo_message_stranger', 'zalo_message_friend']
 const ZALO_REMARKETING_DETAIL_FETCH_CHUNK = 1000
@@ -227,6 +229,7 @@ function clampCampaignExtraSettingsDailyLimits(
 const shouldSkipCloneCampaignInputData = (actionId: string, extraSettings: unknown): boolean => {
   if (actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID) return true
   if (actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) return true
+  if (actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID) return true
   if (actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID) return false
   const extra = extraSettings && typeof extraSettings === 'object'
     ? extraSettings as Record<string, unknown>
@@ -243,6 +246,8 @@ const sanitizeClonedCampaignExtraSettings = (actionId: string, extraSettings: un
   delete extra.zaloFriendMaterializedCount
   delete extra.zaloBirthdayDataMaterializedDate
   delete extra.zaloBirthdayMaterializedCount
+  delete extra.zaloFriendRecommendationDataMaterializedAt
+  delete extra.zaloFriendRecommendationMaterializedCount
   return extra
 }
 

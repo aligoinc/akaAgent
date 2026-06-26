@@ -35,7 +35,13 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   fb_message_friend: 'Nhắn tin bạn bè',
   fb_message_page_inbox_customer: 'Nhắn tin khách inbox page',
   fb_add_friend: 'Kết bạn',
-  fb_like_post: 'Like post'
+  fb_like_post: 'Like post',
+  zalo_message_stranger: 'Zalo - Nhắn tin người lạ',
+  zalo_message_friend: 'Zalo - Nhắn tin bạn bè',
+  zalo_message_group: 'Zalo - Nhắn tin group',
+  zalo_add_friend: 'Zalo - Kết bạn',
+  zalo_tag_contact: 'Zalo - Gắn tag',
+  zalo_change_alias: 'Zalo - Đổi tên'
 }
 
 const POST_SORT_LABELS: Record<NonNullable<CampaignExtraSettings['sortTypePost']>, string> = {
@@ -82,6 +88,7 @@ const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const POST_ACTIONS_WITH_SOURCE = new Set(['facebook_timeline_post', 'facebook_page_post', 'facebook_group_post'])
 const COMMENT_ACTIONS = new Set(['facebook_group_post', 'facebook_comment_seeding', 'facebook_comment_seeding_post'])
 const MESSAGE_ACTIONS = new Set(['facebook_message_friend', 'facebook_message_uid', 'facebook_page_to_message'])
+const ZALO_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
 
@@ -309,11 +316,14 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || !!extra.enablePostLike
   )
   const hasMessageSettings = MESSAGE_ACTIONS.has(actionId)
+    || actionId === ZALO_FRIEND_RECOMMENDATION_ACTION_ID
     || extra.enableMessage !== undefined
     || extra.enableAddFriend !== undefined
     || !!extra.useSuggestedFriends
     || !!extra.pageInboxPageUid
     || !!extra.zaloFriendBlocklistEnabled
+    || extra.zaloFriendRecommendationCount !== undefined
+    || !!extra.zaloFriendRecommendationDataMaterializedAt
   const hasFindDataSettings = actionId === 'facebook_find_data_group' || actionId === 'facebook_find_data_search'
     || getFindDataTypeLabels(extra).length > 0
     || getFindDataSourceLabels(extra).length > 0
@@ -375,6 +385,14 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Kết bạn', value: onOff(extra.enableAddFriend), hidden: actionId !== 'facebook_message_uid' && !extra.enableAddFriend },
     { label: 'Dùng bạn bè đề xuất', value: onOff(extra.useSuggestedFriends), hidden: actionId !== 'facebook_message_uid' && !extra.useSuggestedFriends },
     { label: 'Số bạn bè đề xuất', value: extra.suggestedFriendsCount ?? '-', hidden: !extra.useSuggestedFriends },
+    { label: 'Số lượng đề xuất Zalo', value: extra.zaloFriendRecommendationCount ?? 10, hidden: actionId !== ZALO_FRIEND_RECOMMENDATION_ACTION_ID && extra.zaloFriendRecommendationCount === undefined },
+    {
+      label: 'Data đề xuất đã lấy',
+      value: extra.zaloFriendRecommendationDataMaterializedAt
+        ? `${extra.zaloFriendRecommendationMaterializedCount ?? 0} đề xuất, ${formatDateTime(extra.zaloFriendRecommendationDataMaterializedAt)}`
+        : 'Chưa lấy',
+      hidden: actionId !== ZALO_FRIEND_RECOMMENDATION_ACTION_ID && !extra.zaloFriendRecommendationDataMaterializedAt
+    },
     { label: 'Không gửi tin theo danh sách', value: onOff(extra.zaloFriendBlocklistEnabled), hidden: actionId !== 'zalo_message_friend' && !extra.zaloFriendBlocklistEnabled },
     { label: 'Danh sách không gửi tin', value: textOrDash(extra.zaloFriendBlocklistName || extra.zaloFriendBlocklistId), hidden: actionId !== 'zalo_message_friend' || !extra.zaloFriendBlocklistEnabled },
     { label: 'Page inbox', value: textOrDash(extra.pageInboxPageName || extra.pageInboxPageUid), hidden: actionId !== 'facebook_page_to_message' && !extra.pageInboxPageUid },

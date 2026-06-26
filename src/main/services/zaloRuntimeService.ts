@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs'
-import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError } from 'zca-js'
+import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError, FriendRecommendationsType } from 'zca-js'
 import type { API, AttachmentSource, Credentials, GroupEvent, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, Message, MessageContent, Options as ZaloOptions, ProfileInfo, Reaction, UserBasic } from 'zca-js'
 import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, ZaloSessionCredentials } from '../../shared/types'
 import { SupabaseService } from './supabase'
@@ -233,6 +233,26 @@ export interface ZaloFoundUser {
   gender?: number | string | null
   avatar?: string
   raw: Record<string, unknown>
+}
+
+export interface ZaloFriendRecommendationProfile {
+  uid: string
+  name: string
+  displayName?: string
+  zaloName?: string
+  phone?: string
+  avatar?: string
+  gender?: number | null
+  dob?: number | null
+  raw: Record<string, unknown>
+}
+
+export interface ZaloFriendRecommendationSnapshot {
+  profiles: ZaloFriendRecommendationProfile[]
+  totalItems: number
+  recommendedItems: number
+  missingUidItems: number
+  hasRecommendationList: boolean
 }
 
 export interface ZaloFriendRequestStatus {
@@ -530,6 +550,56 @@ export class ZaloRuntimeService {
     const api = await this.ensureApi(accountId)
     const response = await api.getAllFriends(count, page)
     return Array.isArray(response) ? response.map(item => normalizeRecord(item)) : []
+  }
+
+  async getFriendRecommendations(accountId: number): Promise<ZaloFriendRecommendationSnapshot> {
+    const api = await this.ensureApi(accountId)
+    const response = await api.getFriendRecommendations()
+    const rawItems = Array.isArray((response as any)?.recommItems)
+      ? (response as any).recommItems
+      : []
+    const profiles: ZaloFriendRecommendationProfile[] = []
+    let recommendedItems = 0
+    let missingUidItems = 0
+
+    for (const item of rawItems) {
+      const record = normalizeRecord(item)
+      const dataInfo = normalizeRecord(record.dataInfo)
+      if (Number(dataInfo.recommType) !== FriendRecommendationsType.RecommendedFriend) continue
+      recommendedItems += 1
+
+      const uid = firstString(dataInfo.userId, dataInfo.uid, dataInfo.id)
+      if (!uid) {
+        missingUidItems += 1
+        continue
+      }
+
+      const displayName = firstString(dataInfo.displayName, dataInfo.display_name) || undefined
+      const zaloName = firstString(dataInfo.zaloName, dataInfo.zalo_name) || undefined
+      const name = firstString(displayName, zaloName) || ''
+      profiles.push({
+        uid,
+        name,
+        displayName,
+        zaloName,
+        phone: firstString(dataInfo.phoneNumber, dataInfo.phone) || undefined,
+        avatar: firstString(dataInfo.avatar) || undefined,
+        gender: nullableNumber(dataInfo.gender),
+        dob: nullableNumber(dataInfo.dob),
+        raw: {
+          ...dataInfo,
+          recommItem: record
+        }
+      })
+    }
+
+    return {
+      profiles,
+      totalItems: rawItems.length,
+      recommendedItems,
+      missingUidItems,
+      hasRecommendationList: Array.isArray((response as any)?.recommItems)
+    }
   }
 
   async getAllGroups(accountId: number): Promise<Record<string, string>> {

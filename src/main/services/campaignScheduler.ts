@@ -41,7 +41,7 @@ import {
 } from '../domain/campaigns/campaignActionDescriptors'
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import { ZaloApiError } from 'zca-js'
-import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser, type ZaloJoinGroupLinkResult } from './zaloRuntimeService'
+import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser, type ZaloFriendRecommendationProfile, type ZaloJoinGroupLinkResult } from './zaloRuntimeService'
 import { EmailRuntimeService } from './emailRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import type { ZaloGroupContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
@@ -261,6 +261,7 @@ const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
+const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_MESSAGE_SEND_MODE_SHARE = 'share'
@@ -844,6 +845,16 @@ export class CampaignScheduler {
     await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
   }
 
+  private async completeZaloFriendRecommendationWithoutTargets(campaign: Campaign, message: string): Promise<void> {
+    const note = message || 'Không lấy được đề xuất Zalo để chạy'
+    await this.updateCampaignAndBroadcast(campaign.id, {
+      status: 'hoàn thành',
+      note
+    })
+    await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+  }
+
   private getFutureInputSchedule(detail: CampaignInputData, now: Date): Date | null {
     if (!detail.schedule) return null
     const scheduledAt = new Date(detail.schedule)
@@ -1251,6 +1262,19 @@ export class CampaignScheduler {
       }
     }
 
+    if (this.shouldMaterializeZaloFriendRecommendationInputData(campaign, details)) {
+      details = await this.materializeZaloFriendRecommendationInputData(account, campaign)
+      if (details.length === 0) {
+        await this.releaseRunningAccount(account.id)
+        return
+      }
+      if (this.isCampaignPauseRequested(campaign.id)) {
+        await this.releaseRunningAccount(account.id)
+        await this.completeCampaignPause(campaign)
+        return
+      }
+    }
+
     if (this.isZaloFriendAutoDataCampaign(campaign) && details.length === 0) {
       const message = 'Chiến dịch đã lấy data bạn bè Zalo một lần nhưng chưa có data để chạy'
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
@@ -1261,6 +1285,12 @@ export class CampaignScheduler {
 
     if (this.isZaloBirthdayCampaign(campaign) && details.length === 0) {
       await this.completeZaloBirthdayWithoutTargets(campaign)
+      await this.releaseRunningAccount(account.id)
+      return
+    }
+
+    if (this.isZaloFriendRecommendationCampaign(campaign) && details.length === 0) {
+      await this.completeZaloFriendRecommendationWithoutTargets(campaign, 'Zalo không có danh sách đề xuất để chạy')
       await this.releaseRunningAccount(account.id)
       return
     }
@@ -2338,6 +2368,10 @@ export class CampaignScheduler {
     return campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID
   }
 
+  private isZaloFriendRecommendationCampaign(campaign: Campaign): boolean {
+    return campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
+  }
+
   private shouldMaterializeZaloFriendInputData(campaign: Campaign, details: CampaignInputData[]): boolean {
     if (!this.isZaloFriendAutoDataCampaign(campaign)) return false
     if (details.length > 0) return false
@@ -2348,6 +2382,12 @@ export class CampaignScheduler {
     if (!this.isZaloBirthdayCampaign(campaign)) return false
     if (details.length > 0) return false
     return campaign.extraSettings?.zaloBirthdayDataMaterializedDate !== this.getVietnamDateKey()
+  }
+
+  private shouldMaterializeZaloFriendRecommendationInputData(campaign: Campaign, details: CampaignInputData[]): boolean {
+    if (!this.isZaloFriendRecommendationCampaign(campaign)) return false
+    if (details.length > 0) return false
+    return !campaign.extraSettings?.zaloFriendRecommendationDataMaterializedAt
   }
 
   private isBrowserlessCampaign(campaign: Campaign): boolean {
@@ -2362,6 +2402,7 @@ export class CampaignScheduler {
       || campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
+      || campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
       || campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
   }
@@ -2375,6 +2416,7 @@ export class CampaignScheduler {
           campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
+          campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID ||
           campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
         ? [detail.name, detail.uid, detail.phone]
@@ -3002,6 +3044,98 @@ export class CampaignScheduler {
     }
 
     await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${profiles.length} bạn bè sinh nhật hôm nay vào chiến dịch "${campaign.name}"`)
+    return await this.supabase.listCampaignInputData(campaign.id)
+  }
+
+  private normalizeZaloFriendRecommendationCount(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    if (!Number.isFinite(parsed)) return 10
+    return Math.max(1, parsed)
+  }
+
+  private async markZaloFriendRecommendationMaterialized(campaign: Campaign, count: number): Promise<void> {
+    const nextExtraSettings = {
+      ...(campaign.extraSettings || {}),
+      zaloFriendRecommendationDataMaterializedAt: new Date().toISOString(),
+      zaloFriendRecommendationMaterializedCount: count
+    }
+    campaign.extraSettings = nextExtraSettings
+    await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+  }
+
+  private getZaloFriendRecommendationEmptyReason(input: {
+    hasRecommendationList: boolean
+    totalItems: number
+    recommendedItems: number
+    missingUidItems: number
+  }): string {
+    if (!input.hasRecommendationList) return 'Zalo không trả danh sách đề xuất để chạy'
+    if (input.totalItems === 0) return 'Zalo không có danh sách đề xuất để chạy'
+    if (input.recommendedItems === 0) return 'Zalo không có danh sách đề xuất để chạy'
+    if (input.missingUidItems >= input.recommendedItems) return 'Danh sách đề xuất Zalo không có UID hợp lệ để chạy'
+    return 'Không lấy được đề xuất Zalo để chạy'
+  }
+
+  private async materializeZaloFriendRecommendationInputData(
+    account: AutoAccount,
+    campaign: Campaign
+  ): Promise<CampaignInputData[]> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const requestedCount = this.normalizeZaloFriendRecommendationCount(
+      campaign.extraSettings?.zaloFriendRecommendationCount
+    )
+    await this.logCampaignProgress(campaign.id, `🔄 Đang lấy ${requestedCount} đề xuất Zalo`)
+
+    let snapshot: Awaited<ReturnType<ZaloRuntimeService['getFriendRecommendations']>>
+    try {
+      snapshot = await this.zaloRuntime.getFriendRecommendations(account.id)
+    } catch (err) {
+      await this.markZaloFriendRecommendationMaterialized(campaign, 0)
+      const message = `Không lấy được đề xuất Zalo: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
+      await this.completeZaloFriendRecommendationWithoutTargets(campaign, message)
+      return []
+    }
+
+    const selectedProfiles: ZaloFriendRecommendationProfile[] = []
+    const seen = new Set<string>()
+    for (const profile of snapshot.profiles) {
+      const key = this.normalizeUidForCompare(profile.uid)
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      selectedProfiles.push(profile)
+      if (selectedProfiles.length >= requestedCount) break
+    }
+
+    if (snapshot.missingUidItems > 0) {
+      await this.logCampaignProgress(campaign.id, `⚠️ Bỏ qua ${snapshot.missingUidItems} đề xuất Zalo thiếu UID`)
+    }
+
+    if (selectedProfiles.length === 0) {
+      await this.markZaloFriendRecommendationMaterialized(campaign, 0)
+      await this.completeZaloFriendRecommendationWithoutTargets(
+        campaign,
+        this.getZaloFriendRecommendationEmptyReason(snapshot)
+      )
+      return []
+    }
+
+    if (selectedProfiles.length < requestedCount) {
+      await this.logCampaignProgress(campaign.id, `⚠️ Chỉ lấy được ${selectedProfiles.length}/${requestedCount} đề xuất Zalo`)
+    }
+
+    for (const profile of selectedProfiles) {
+      await this.supabase.createCampaignInputData({
+        campaignId: campaign.id,
+        name: profile.name || '',
+        uid: profile.uid,
+        phone: profile.phone || '',
+        status: 'chờ xử lý',
+        note: ''
+      })
+    }
+
+    await this.markZaloFriendRecommendationMaterialized(campaign, selectedProfiles.length)
+    await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${selectedProfiles.length} đề xuất Zalo vào chiến dịch "${campaign.name}"`)
     return await this.supabase.listCampaignInputData(campaign.id)
   }
 
@@ -6766,6 +6900,43 @@ export class CampaignScheduler {
     return { ok: true, zaloTarget: target }
   }
 
+  private async zaloResolveFriendRecommendationTarget(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloResolveGroupMemberTargetOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const uid = this.firstNonEmptyString(options.targetUid, options.inputData?.uid)
+    if (!uid) {
+      const detail = await this.createZaloPolicyDetailFromCode(
+        account,
+        campaign,
+        await this.supabase.getZaloErrorPolicyByCode('114'),
+        'UID đề xuất Zalo không hợp lệ',
+        'zalo_message_stranger',
+        'Nhắn tin người lạ',
+        '114',
+        { uid, inputData: options.inputData }
+      )
+      return { ok: false, detail }
+    }
+
+    const target = await this.resolveZaloFriendMessageTarget(
+      account,
+      this.normalizeZaloTargetFromInputData(
+        uid,
+        options.targetName,
+        options.inputData,
+        { source: 'zalo_friend_recommendations' },
+        false
+      )
+    )
+    await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+
+    return { ok: true, zaloTarget: target }
+  }
+
   private async zaloSendPhoneMessage(
     account: AutoAccount,
     campaign: Campaign,
@@ -7282,6 +7453,7 @@ export class CampaignScheduler {
       zaloFindPhoneUser: (options) => this.zaloFindPhoneUser(account, campaign, options),
       zaloResolveGroupMemberTarget: (options) => this.zaloResolveGroupMemberTarget(account, campaign, options),
       zaloResolveRemarketingCustomerTarget: (options) => this.zaloResolveRemarketingCustomerTarget(account, campaign, options),
+      zaloResolveFriendRecommendationTarget: (options) => this.zaloResolveFriendRecommendationTarget(account, campaign, options),
       zaloSendPhoneMessage: (options) => this.zaloSendPhoneMessage(account, campaign, options),
       zaloSendFriendMessage: (options) => this.zaloSendFriendMessage(account, campaign, options),
       zaloSendGroupMessage: (options) => this.zaloSendGroupMessage(account, campaign, options),

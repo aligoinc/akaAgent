@@ -32,6 +32,7 @@ export interface BlockHelpers {
   zaloFindPhoneUser(options: ZaloFindPhoneUserOptions): Promise<ZaloActionHelperResult>
   zaloResolveGroupMemberTarget(options: ZaloResolveGroupMemberTargetOptions): Promise<ZaloActionHelperResult>
   zaloResolveRemarketingCustomerTarget(options: ZaloResolveGroupMemberTargetOptions): Promise<ZaloActionHelperResult>
+  zaloResolveFriendRecommendationTarget(options: ZaloResolveGroupMemberTargetOptions): Promise<ZaloActionHelperResult>
   zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult>
   zaloSendFriendMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
   zaloSendGroupMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
@@ -86,6 +87,7 @@ export interface BlockRuntimeHelpers {
   zaloFindPhoneUser?: (options: ZaloFindPhoneUserOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloResolveGroupMemberTarget?: (options: ZaloResolveGroupMemberTargetOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloResolveRemarketingCustomerTarget?: (options: ZaloResolveGroupMemberTargetOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloResolveFriendRecommendationTarget?: (options: ZaloResolveGroupMemberTargetOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendPhoneMessage?: (options: ZaloSendPhoneMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendFriendMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendGroupMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
@@ -336,6 +338,11 @@ export function createBlockHelpers(
     async zaloResolveRemarketingCustomerTarget(options: ZaloResolveGroupMemberTargetOptions): Promise<ZaloActionHelperResult> {
       if (!runtimeHelpers.zaloResolveRemarketingCustomerTarget) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
       return runtimeHelpers.zaloResolveRemarketingCustomerTarget(options, runtimeMetadata)
+    },
+
+    async zaloResolveFriendRecommendationTarget(options: ZaloResolveGroupMemberTargetOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloResolveFriendRecommendationTarget) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloResolveFriendRecommendationTarget(options, runtimeMetadata)
     },
 
     async zaloSendPhoneMessage(options: ZaloSendPhoneMessageOptions): Promise<ZaloActionHelperResult> {
