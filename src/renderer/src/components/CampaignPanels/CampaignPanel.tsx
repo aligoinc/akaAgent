@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, MoreHorizontal, Eye, LogIn, Info, History } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, MoreHorizontal, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -35,7 +35,7 @@ interface CampaignPanelProps {
 type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
-type CampaignFilterDropdown = 'status' | 'platform' | 'action'
+type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
 type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'actionsTime' | 'actionsStatus' | 'findDataLogScope'
 type DetailTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'custom'
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
@@ -44,6 +44,7 @@ type FindDataLogScope = 'visible' | 'all'
 interface CampaignFilterOption {
   value: string
   label: string
+  platform?: string
 }
 
 interface DetailFilterState {
@@ -209,13 +210,11 @@ const CAMPAIGN_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }>
   { value: 'this_month', label: 'Tháng này' },
   { value: 'last_month', label: 'Tháng trước' },
   { value: '60_days', label: '60 ngày' },
-  { value: '90_days', label: '90 ngày' }
-]
-
-const ADD_INPUT_DATA_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }> = [
-  ...CAMPAIGN_TIME_PRESETS,
+  { value: '90_days', label: '90 ngày' },
   { value: 'custom', label: 'Tùy chọn' }
 ]
+
+const ADD_INPUT_DATA_TIME_PRESETS: Array<{ value: CampaignTimePreset; label: string }> = CAMPAIGN_TIME_PRESETS
 
 const DETAIL_TIME_PRESETS: Array<{ value: DetailTimePreset; label: string }> = [
   { value: 'all', label: 'Tất cả' },
@@ -283,6 +282,12 @@ const CAMPAIGN_PLATFORM_OPTIONS: CampaignFilterOption[] = [
   { value: 'zalo', label: 'Zalo' },
   { value: 'email', label: 'Email' }
 ]
+
+const CAMPAIGN_PLATFORM_SORT_ORDER = new Map<string, number>([
+  ['facebook', 0],
+  ['zalo', 1],
+  ['email', 2]
+])
 
 const DETAIL_DOCK_MIN_HEIGHT = 220
 const DETAIL_DOCK_LIST_MIN_HEIGHT = 220
@@ -784,10 +789,29 @@ const getMultiSelectLabel = (options: CampaignFilterOption[], values: string[]) 
   return `${values.length} đã chọn`
 }
 
+const renderCampaignFilterIcon = (key: CampaignFilterDropdown) => {
+  if (key === 'time') return <CalendarDays size={17} />
+  if (key === 'account') return <AtSign size={17} />
+  if (key === 'status') return <CircleDot size={17} />
+  if (key === 'platform') return <Monitor size={17} />
+  return <Tags size={17} />
+}
+
 const formatDetailRangeDate = (value: string) => {
   if (!value) return ''
   const date = new Date(`${value}T00:00:00`)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('vi-VN')
+}
+
+const getCampaignRangeLabel = (preset: CampaignTimePreset, dateFrom: string, dateTo: string) => {
+  if (preset === 'custom') {
+    const startDate = formatDetailRangeDate(dateFrom)
+    const endDate = formatDetailRangeDate(dateTo)
+    if (startDate && endDate) return `${startDate} - ${endDate}`
+    return 'Tùy chọn'
+  }
+
+  return CAMPAIGN_TIME_PRESETS.find(option => option.value === preset)?.label || 'Tất cả'
 }
 
 const getDetailRangeLabel = (filters: DetailFilterState) => {
@@ -899,6 +923,25 @@ const inferCampaignPlatformFromActionId = (actionId: string) => {
   if (normalized.startsWith('sms_')) return 'sms'
   if (normalized.startsWith('email_')) return 'email'
   return ''
+}
+
+const getCampaignPlatformSortOrder = (platform: string | undefined | null) => {
+  const normalized = normalizeCampaignPlatform(platform)
+  return CAMPAIGN_PLATFORM_SORT_ORDER.get(normalized) ?? Number.MAX_SAFE_INTEGER
+}
+
+const compareCampaignFilterOptionsByPlatform = (left: CampaignFilterOption, right: CampaignFilterOption) => {
+  const leftOrder = getCampaignPlatformSortOrder(left.platform)
+  const rightOrder = getCampaignPlatformSortOrder(right.platform)
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder
+
+  const leftPlatform = normalizeCampaignPlatform(left.platform)
+  const rightPlatform = normalizeCampaignPlatform(right.platform)
+  const platformCompare = leftPlatform.localeCompare(rightPlatform, 'vi')
+  if (platformCompare !== 0) return platformCompare
+
+  const labelCompare = left.label.localeCompare(right.label, 'vi', { sensitivity: 'base' })
+  return labelCompare !== 0 ? labelCompare : left.value.localeCompare(right.value, 'vi')
 }
 
 const normalizeFilterText = (value: string | undefined | null) => (
@@ -1091,6 +1134,11 @@ function AddInputDataToCampaignModal({
 
   const handleTimePresetChange = (value: CampaignTimePreset) => {
     if (value === 'custom') {
+      if (!dateFrom || !dateTo) {
+        const range = getCampaignDateRange(value)
+        setDateFrom(range.fromDate)
+        setDateTo(range.toDate)
+      }
       setTimePreset(value)
       return
     }
@@ -1328,6 +1376,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [dateTo, setDateTo] = useState(defaultTimeRange.toDate)
   const [campaignNameSearch, setCampaignNameSearch] = useState('')
   const [statusFilters, setStatusFilters] = useState<string[]>([])
+  const [accountFilters, setAccountFilters] = useState<string[]>([])
   const [platformFilters, setPlatformFilters] = useState<string[]>([])
   const [actionFilters, setActionFilters] = useState<string[]>([])
   const [inputDataFilters, setInputDataFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
@@ -1343,6 +1392,28 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     () => CAMPAIGN_PLATFORM_OPTIONS.filter(option => canUsePlatform(option.value, entitlements)),
     [entitlements]
   )
+  const accountFilterOptions = useMemo<CampaignFilterOption[]>(() => {
+    const optionMap = new Map<string, CampaignFilterOption>()
+    accounts.forEach(account => {
+      const value = String(account.id)
+      optionMap.set(value, {
+        value,
+        label: account.name || `ID: ${account.id}`,
+        platform: account.flatformType
+      })
+    })
+    campaigns.forEach(campaign => {
+      const value = String(campaign.accountId)
+      if (!optionMap.has(value)) {
+        optionMap.set(value, {
+          value,
+          label: campaign.accountName || `ID: ${campaign.accountId}`,
+          platform: ''
+        })
+      }
+    })
+    return Array.from(optionMap.values()).sort(compareCampaignFilterOptionsByPlatform)
+  }, [accounts, campaigns])
   const workAreaRef = useRef<HTMLDivElement>(null)
   const detailDockRef = useRef<HTMLDivElement>(null)
   const findDataLogTableWrapRef = useRef<HTMLDivElement>(null)
@@ -1570,7 +1641,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     setOpenCampaignActionMenuId(null)
     setCampaignActionMenuPosition(null)
     campaignActionMenuAnchorRef.current = null
-  }, [filterAccountId, timePreset, dateFrom, dateTo, campaignNameSearch, statusFilters, platformFilters, actionFilters])
+  }, [filterAccountId, timePreset, dateFrom, dateTo, campaignNameSearch, statusFilters, accountFilters, platformFilters, actionFilters])
 
   useEffect(() => {
     const allowedPlatforms = new Set(campaignPlatformOptions.map(option => option.value))
@@ -1579,6 +1650,14 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       return next.length === prev.length ? prev : next
     })
   }, [campaignPlatformOptions, platformFilters])
+
+  useEffect(() => {
+    const allowedAccounts = new Set(accountFilterOptions.map(option => option.value))
+    setAccountFilters(prev => {
+      const next = prev.filter(value => allowedAccounts.has(value))
+      return next.length === prev.length ? prev : next
+    })
+  }, [accountFilterOptions, accountFilters])
 
   useEffect(() => {
     setSelectedInputDataIds(new Set())
@@ -1694,6 +1773,11 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
   const handleTimePresetChange = (value: CampaignTimePreset) => {
     if (value === 'custom') {
+      if (!dateFrom || !dateTo) {
+        const range = getCampaignDateRange(value)
+        setDateFrom(range.fromDate)
+        setDateTo(range.toDate)
+      }
       setTimePreset(value)
       return
     }
@@ -2789,19 +2873,27 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   )
 
   const actionFilterOptions = useMemo<CampaignFilterOption[]>(() => {
-    const optionMap = new Map<string, string>()
+    const optionMap = new Map<string, CampaignFilterOption>()
     campaignActions.forEach(action => {
-      optionMap.set(action.id, action.name || action.id)
+      optionMap.set(action.id, {
+        value: action.id,
+        label: action.name || action.id,
+        platform: normalizeCampaignPlatform(action.flatformType) || inferCampaignPlatformFromActionId(action.id)
+      })
     })
     campaigns.forEach(campaign => {
       if (!optionMap.has(campaign.actionId)) {
-        optionMap.set(campaign.actionId, campaign.actionName || campaign.actionId)
+        const actionPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
+        const accountPlatform = normalizeCampaignPlatform(accountById.get(campaign.accountId)?.flatformType)
+        optionMap.set(campaign.actionId, {
+          value: campaign.actionId,
+          label: campaign.actionName || campaign.actionId,
+          platform: actionPlatform || inferCampaignPlatformFromActionId(campaign.actionId) || accountPlatform
+        })
       }
     })
-    return Array.from(optionMap.entries())
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
-  }, [campaignActions, campaigns])
+    return Array.from(optionMap.values()).sort(compareCampaignFilterOptionsByPlatform)
+  }, [campaignActions, campaigns, actionById, accountById])
 
   // Filter campaigns by account and the local list filters.
   const filteredCampaigns = useMemo(() => {
@@ -2825,6 +2917,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
       if (statusFilters.length > 0 && !statusFilters.includes(campaign.status)) return false
 
+      if (accountFilters.length > 0 && !accountFilters.includes(String(campaign.accountId))) return false
+
       if (platformFilters.length > 0) {
         const actionPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
         const accountPlatform = normalizeCampaignPlatform(accountById.get(campaign.accountId)?.flatformType)
@@ -2844,6 +2938,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     timePreset,
     campaignNameSearch,
     statusFilters,
+    accountFilters,
     platformFilters,
     actionFilters,
     actionById,
@@ -2864,6 +2959,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     : 'Không có chiến dịch phù hợp bộ lọc'
 
   const showCampaignTableLoading = showInitialCampaignLoading || showManualCampaignLoading
+  const campaignRangeLabel = getCampaignRangeLabel(timePreset, dateFrom, dateTo)
 
   const handleReloadCampaigns = () => {
     setShowManualCampaignLoading(true)
@@ -3021,17 +3117,20 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     const triggerLabel = getMultiSelectLabel(options, values)
 
     return (
-      <div className={`campaign-filter-field campaign-filter-multiselect ${wide ? 'is-wide' : ''}`}>
-        <label>{label}</label>
+      <div className={`campaign-filter-field campaign-filter-multiselect campaign-filter-${key} ${wide ? 'is-wide' : ''}`}>
         <div className="campaign-multi-select">
           <button
             type="button"
             className={`campaign-multi-select-trigger ${isOpen ? 'is-open' : ''}`}
             onClick={() => setOpenFilterDropdown(prev => prev === key ? null : key)}
             aria-expanded={isOpen}
-            title={triggerLabel}
+            title={`${label}: ${triggerLabel}`}
           >
-            <span>{triggerLabel}</span>
+            {renderCampaignFilterIcon(key)}
+            <span className="campaign-filter-trigger-copy">
+              <span className="campaign-filter-trigger-label">{label}:</span>
+              <strong>{triggerLabel}</strong>
+            </span>
             <ChevronDown size={14} />
           </button>
 
@@ -3189,7 +3288,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               <RefreshCw size={14} />
             </button>
             <button
-              className="btn btn-primary btn-icon"
+              className="btn btn-primary btn-sm"
               onClick={() => {
                 setEditingCampaign(null)
                 setCloneFromId(undefined)
@@ -3200,68 +3299,91 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
               title="Thêm chiến dịch"
             >
               <Plus size={14} />
+              <span>Thêm chiến dịch</span>
             </button>
           </div>
         </div>
 
         <div className="campaign-list-filter-panel" ref={filterPanelRef}>
-          <div className="campaign-filter-row campaign-filter-time-row">
-            <div className="campaign-filter-field campaign-filter-time-preset">
-              <label>Thời gian</label>
-              <select
-                className="stepper-input campaign-filter-control"
-                value={timePreset}
-                onChange={event => handleTimePresetChange(event.target.value as CampaignTimePreset)}
-              >
-                {CAMPAIGN_TIME_PRESETS.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="campaign-filter-field campaign-filter-date-field">
-              <label>Từ ngày</label>
-              <input
-                type="date"
-                className="stepper-input campaign-filter-date-input"
-                value={dateFrom}
-                onChange={event => setDateFrom(event.target.value)}
-                disabled={timePreset === 'all'}
-              />
-            </div>
-
-            <div className="campaign-filter-field campaign-filter-date-field">
-              <label>Đến ngày</label>
-              <input
-                type="date"
-                className="stepper-input campaign-filter-date-input"
-                value={dateTo}
-                onChange={event => setDateTo(event.target.value)}
-                disabled={timePreset === 'all'}
-              />
-            </div>
-
+          <div className="campaign-filter-row campaign-filter-compact-row">
             <div className="campaign-filter-field campaign-filter-search-field">
-              <label>Tìm kiếm</label>
               <div className="campaign-filter-search-box">
-                <Search size={15} />
+                <Search size={17} />
                 <input
                   value={campaignNameSearch}
                   onChange={event => setCampaignNameSearch(event.target.value)}
-                  placeholder="Nhập tên chiến dịch..."
+                  placeholder="Tìm tên chiến dịch..."
                 />
               </div>
             </div>
-          </div>
 
-          <div className="campaign-filter-row campaign-filter-select-row">
+            <div className="report-dropdown-field campaign-filter-time-preset">
+              <button
+                type="button"
+                className={`report-filter-button campaign-filter-inline-button ${openFilterDropdown === 'time' ? 'active' : ''}`}
+                onClick={() => setOpenFilterDropdown(prev => prev === 'time' ? null : 'time')}
+                title={`Thời gian: ${campaignRangeLabel}`}
+              >
+                {renderCampaignFilterIcon('time')}
+                <span className="campaign-filter-trigger-copy">
+                  <span className="campaign-filter-trigger-label">Thời gian:</span>
+                  <strong>{campaignRangeLabel}</strong>
+                </span>
+                <ChevronDown size={14} />
+              </button>
+              {openFilterDropdown === 'time' && (
+                <div className="report-filter-popover campaign-time-filter-popover">
+                  <div className="report-option-list">
+                    {CAMPAIGN_TIME_PRESETS.map(option => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`report-option-button ${timePreset === option.value ? 'selected' : ''}`}
+                        onClick={() => handleTimePresetChange(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {timePreset === 'custom' && (
+                    <div className="report-date-grid">
+                      <label>
+                        <span>Từ ngày</span>
+                        <input
+                          type="date"
+                          value={dateFrom}
+                          onChange={event => setDateFrom(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Đến ngày</span>
+                        <input
+                          type="date"
+                          value={dateTo}
+                          onChange={event => setDateTo(event.target.value)}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {renderMultiSelectFilter(
               'status',
-              'Trạng thái chiến dịch',
+              'Trạng thái',
               CAMPAIGN_STATUS_FILTER_OPTIONS,
               statusFilters,
               value => setStatusFilters(prev => toggleStringValue(prev, value)),
               () => setStatusFilters([])
+            )}
+            {renderMultiSelectFilter(
+              'account',
+              'Tài khoản',
+              accountFilterOptions,
+              accountFilters,
+              value => setAccountFilters(prev => toggleStringValue(prev, value)),
+              () => setAccountFilters([])
             )}
             {renderMultiSelectFilter(
               'platform',

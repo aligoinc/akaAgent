@@ -9553,12 +9553,19 @@ button.btn-icon.campaign-control-button.assistant {
 
 .campaign-filter-row {
   display: grid;
-  gap: 8px 12px;
+  gap: 8px;
   align-items: end;
 }
 
 .campaign-filter-time-row {
-  grid-template-columns: minmax(150px, 0.65fr) minmax(150px, 0.75fr) minmax(150px, 0.75fr) minmax(240px, 1.25fr);
+  grid-template-columns: minmax(230px, 0.8fr) minmax(260px, 1.6fr);
+}
+
+.campaign-filter-compact-row {
+  grid-template-columns: minmax(240px, 1fr) minmax(260px, 1.05fr) minmax(260px, 1.05fr);
+  grid-template-areas:
+    "search time status"
+    "account platform action";
 }
 
 .campaign-filter-select-row {
@@ -9571,6 +9578,30 @@ button.btn-icon.campaign-control-button.assistant {
   align-items: stretch;
   gap: 4px;
   min-width: 0;
+}
+
+.campaign-filter-search-field {
+  grid-area: search;
+}
+
+.campaign-filter-time-preset {
+  grid-area: time;
+}
+
+.campaign-filter-status {
+  grid-area: status;
+}
+
+.campaign-filter-account {
+  grid-area: account;
+}
+
+.campaign-filter-platform {
+  grid-area: platform;
+}
+
+.campaign-filter-action {
+  grid-area: action;
 }
 
 .campaign-filter-field label {
@@ -9600,6 +9631,12 @@ button.btn-icon.campaign-control-button.assistant {
   cursor: not-allowed;
 }
 
+.campaign-time-filter-popover {
+  min-width: 300px;
+  max-height: none;
+  overflow: visible;
+}
+
 .campaign-filter-multiselect {
   min-width: 0;
 }
@@ -9612,12 +9649,12 @@ button.btn-icon.campaign-control-button.assistant {
 
 .campaign-multi-select-trigger {
   width: 100%;
-  height: 30px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  padding: 5px 8px;
+  gap: 10px;
+  padding: 0 12px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
@@ -9642,6 +9679,42 @@ button.btn-icon.campaign-control-button.assistant {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.campaign-filter-inline-button,
+.campaign-multi-select-trigger {
+  box-shadow: var(--shadow-sm);
+}
+
+.campaign-filter-inline-button svg,
+.campaign-multi-select-trigger > svg,
+.campaign-filter-search-box > svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.campaign-filter-trigger-copy {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.campaign-filter-trigger-label {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.campaign-filter-trigger-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 .campaign-filter-menu {
@@ -9719,11 +9792,11 @@ button.btn-icon.campaign-control-button.assistant {
 
 .campaign-filter-search-box {
   width: 100%;
-  height: 30px;
+  height: 38px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 10px;
+  padding: 0 12px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
@@ -9757,12 +9830,31 @@ button.btn-icon.campaign-control-button.assistant {
   .campaign-filter-select-row {
     grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
+
+  .campaign-filter-compact-row {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+    grid-template-areas:
+      "search time"
+      "status account"
+      "platform action";
+  }
 }
 
 @media (max-width: 760px) {
   .campaign-filter-time-row,
   .campaign-filter-select-row {
     grid-template-columns: 1fr;
+  }
+
+  .campaign-filter-compact-row {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "search"
+      "time"
+      "status"
+      "account"
+      "platform"
+      "action";
   }
 }
 
