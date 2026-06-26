@@ -26,7 +26,11 @@ import { registerEmailNotificationHandlers } from './handlers/emailNotificationH
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { getCurrentUser, setCurrentUser } from '../data/currentUser'
 import { loadLoginSettingsForCurrentDevice, updateStartupSettingForCurrentDevice } from '../data/repositories/authRepository'
-import { ACCOUNT_EXPIRED_MESSAGE, loadOrganizationEntitlements } from '../data/repositories/entitlementRepository'
+import {
+  ACCOUNT_EXPIRED_MESSAGE,
+  loadOrganizationAccountProducts,
+  loadOrganizationEntitlements
+} from '../data/repositories/entitlementRepository'
 import { readBlockScreenshotDataUrl } from '../services/blockScreenshotService'
 
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
@@ -180,7 +184,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     sessionExpiryCheckRunning = true
     try {
-      const liveEntitlements = await loadOrganizationEntitlements(checkedUser.organizationId)
+      const [liveEntitlements, liveAccountProducts] = await Promise.all([
+        loadOrganizationEntitlements(checkedUser.organizationId),
+        loadOrganizationAccountProducts(checkedUser.organizationId)
+      ])
       const currentUser = getCurrentUser()
       if (!currentUser || currentUser.staffId !== checkedUser.staffId) return
 
@@ -189,12 +196,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         return
       }
 
-      const updatedUser = { ...currentUser, entitlements: liveEntitlements }
+      const updatedUser = { ...currentUser, entitlements: liveEntitlements, accountProducts: liveAccountProducts }
       const entitlementsChanged = !authEntitlementsEqual(currentUser.entitlements, liveEntitlements)
+      const accountProductsChanged = JSON.stringify(currentUser.accountProducts || []) !== JSON.stringify(liveAccountProducts)
       setCurrentUser(updatedUser)
       if (reason === 'daily') {
         syncZaloBackgroundForCurrentUser('daily-entitlement-refresh')
-        if (entitlementsChanged) notifyRendererUserUpdated(updatedUser)
+        if (entitlementsChanged || accountProductsChanged) notifyRendererUserUpdated(updatedUser)
       }
     } catch (err) {
       console.error(`[AuthSessionExpiry] ${reason}: failed to refresh entitlements:`, err)

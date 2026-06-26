@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, MoreHorizontal, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -2083,6 +2083,22 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     }
   }
 
+  const getAccountLoginStatusClass = (status: string) => {
+    const normalized = status.trim().toLowerCase()
+    if (normalized === 'đã đăng nhập') return 'is-success'
+    if (!normalized || normalized === '-') return 'is-muted'
+    if (normalized.includes('checkpoint')) return 'is-warning'
+    if (
+      normalized.includes('chưa') ||
+      normalized.includes('đăng xuất') ||
+      normalized.includes('hết hạn') ||
+      normalized.includes('lỗi')
+    ) {
+      return 'is-danger'
+    }
+    return 'is-muted'
+  }
+
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
   const selectedCampaignAccount = selectedCampaign?.accountId
     ? accounts.find(account => account.id === selectedCampaign.accountId) || null
@@ -3582,7 +3598,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                           aria-haspopup="menu"
                           aria-expanded={openCampaignActionMenuId === campaign.id}
                         >
-                          <MoreHorizontal size={15} />
+                          <ListTodo size={15} />
                           <span>Hành động</span>
                         </button>
                         {openCampaignActionMenuId === campaign.id && campaignActionMenuPosition && (
@@ -3683,13 +3699,15 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     <div className="campaign-col col-account" title={`${accountLabel}\n${accountLoginStatus}`}>
                       <div className="campaign-two-line-cell">
                         <div className="campaign-strong-line">{accountLabel}</div>
-                        <div className="campaign-meta-line">{accountLoginStatus}</div>
+                        <div className={`campaign-account-login-badge ${getAccountLoginStatusClass(accountLoginStatus)}`}>
+                          {accountLoginStatus}
+                        </div>
                       </div>
                     </div>
                     <div className="campaign-col col-send-date" title={`${scheduleTypeLabel}\n${scheduleTimeLabel}`}>
                       <div className="campaign-two-line-cell">
-                        <div className="campaign-strong-line">{scheduleTypeLabel}</div>
-                        <div className="campaign-meta-line">{scheduleTimeLabel}</div>
+                        <div className="campaign-send-time-line">{scheduleTimeLabel}</div>
+                        <div className="campaign-schedule-type-badge">{scheduleTypeLabel}</div>
                       </div>
                     </div>
                     <div className="campaign-col col-update-date" title={updatedLabel}>

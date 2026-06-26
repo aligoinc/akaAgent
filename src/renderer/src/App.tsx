@@ -15,6 +15,7 @@ import UpdateModal from './components/UpdateModal/UpdateModal'
 import DataScanModal from './components/DataScan/DataScanModal'
 import GeneralSettingsModal, { type GeneralSettingsMenu } from './components/Settings/GeneralSettingsModal'
 import ChangePasswordModal from './components/Settings/ChangePasswordModal'
+import AccountProfileModal from './components/Settings/AccountProfileModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage, handleSessionExpired, handleUserUpdated } = useAuthStore()
@@ -29,6 +30,7 @@ export default function App() {
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showAccountProfile, setShowAccountProfile] = useState(false)
   const [localVersion, setLocalVersion] = useState('')
   const [checkingUpdate, setCheckingUpdate] = useState(false)
 
@@ -198,11 +200,12 @@ export default function App() {
   }
 
   return (
-    <div className="app-layout">
+    <div className="app-layout app-layout-authenticated">
       <TopBar
         activePage={activePage}
         onPageChange={setActivePage}
         onOpenDataScan={() => setShowDataScan(true)}
+        onOpenAccountInfo={() => setShowAccountProfile(true)}
         onOpenGeneralSettings={() => openGeneralSettings()}
         onOpenChangePassword={() => setShowChangePassword(true)}
         currentVersion={localVersion}
@@ -210,35 +213,37 @@ export default function App() {
         onCheckUpdate={() => { void handleCheckForUpdate(true) }}
       />
 
-      <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <CampaignPage
-          onNavigateToBrowser={requestOpenBrowser}
-          onOpenGeneralSettings={openGeneralSettings}
-        />
-      </div>
-
-      <div style={activePage === 'browsers'
-        ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
-        : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
-      }>
-        <BrowserPage
-          openRequest={browserOpenRequest}
-          onRequestHandled={(requestId) => {
-            setBrowserOpenRequest(prev => prev?.requestId === requestId ? null : prev)
-          }}
-        />
-      </div>
-
-      <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <ReportPage isActive={activePage === 'reports'} />
-      </div>
-
-      {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}
-      {activePage === 'workflow-editor' && canOpenWorkflowEditor && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <WorkflowEditorV2 />
+      <div className="app-main">
+        <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <CampaignPage
+            onNavigateToBrowser={requestOpenBrowser}
+            onOpenGeneralSettings={openGeneralSettings}
+          />
         </div>
-      )}
+
+        <div style={activePage === 'browsers'
+          ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
+          : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
+        }>
+          <BrowserPage
+            openRequest={browserOpenRequest}
+            onRequestHandled={(requestId) => {
+              setBrowserOpenRequest(prev => prev?.requestId === requestId ? null : prev)
+            }}
+          />
+        </div>
+
+        <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <ReportPage isActive={activePage === 'reports'} />
+        </div>
+
+        {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}
+        {activePage === 'workflow-editor' && canOpenWorkflowEditor && (
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <WorkflowEditorV2 />
+          </div>
+        )}
+      </div>
 
       <AlertModal />
       <ConfirmModal />
@@ -253,6 +258,9 @@ export default function App() {
       )}
       {showChangePassword && (
         <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
+      {showAccountProfile && (
+        <AccountProfileModal onClose={() => setShowAccountProfile(false)} />
       )}
       {updateInfo && (
         <UpdateModal

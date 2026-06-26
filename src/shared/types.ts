@@ -997,15 +997,29 @@ export interface AuthSessionExpiredPayload {
   message: string
 }
 
+export interface AuthAccountProduct {
+  feature: AuthEntitlementFeature | null
+  productId: number | null
+  productName: string
+  packageName: string
+  packageType: string | null
+  displayName: string
+  displayOrder: number
+  expirationDate: string | null
+  isActive: boolean
+}
+
 export interface AuthUser {
   staffId: number
   organizationId: number
   name: string
   username: string
+  phone?: string | null
   organizationName: string
   isAdminAkabiz: boolean
   useTestWorkflow: boolean
   entitlements: AuthEntitlements
+  accountProducts: AuthAccountProduct[]
   deviceLabel?: string | null
   devicePlatform?: string | null
   deviceBoundAt?: string | null
