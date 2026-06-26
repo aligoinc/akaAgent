@@ -8462,7 +8462,7 @@ export default function CampaignFormModal({
                   {generalLimitActionCodes.length === 0 ? (
                     <div className="text-muted" style={{ fontSize: 12, marginTop: 12 }}>
                       {checkedLimitActionCodes.length === 0
-                        ? 'Loại chiến dịch này không check giới hạn hành động trước khi chạy.'
+                        ? 'Loại chiến dịch này không check quota ngày/khung giờ trước khi chạy.'
                         : 'Một số giới hạn hành động đang dùng giá trị mặc định.'}
                     </div>
                   ) : (

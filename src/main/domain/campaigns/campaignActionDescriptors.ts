@@ -151,7 +151,14 @@ function normalizeActionDescriptors(actionCodes: string[]): CampaignActionDescri
   }).filter(action => action.code))
 }
 
-function filterCampaignActionDescriptors(
+function filterExecutableActionDescriptors(
+  campaign: Campaign,
+  actions: CampaignActionDescriptor[]
+): CampaignActionDescriptor[] {
+  return actions.filter(action => isActionCheckEnabledForCampaign(campaign, action.code))
+}
+
+function filterQuotaActionDescriptors(
   campaign: Campaign,
   actions: CampaignActionDescriptor[]
 ): CampaignActionDescriptor[] {
@@ -166,17 +173,7 @@ function filterCampaignActionDescriptors(
   })
 }
 
-export function getCampaignActionDescriptors(
-  campaign: Campaign,
-  campaignAction?: CampaignAction
-): CampaignActionDescriptor[] {
-  if (campaignAction && Array.isArray(campaignAction.limitCheckActionCodes)) {
-    return filterCampaignActionDescriptors(
-      campaign,
-      normalizeActionDescriptors(campaignAction.limitCheckActionCodes)
-    )
-  }
-
+function getDefaultCampaignActionDescriptors(campaign: Campaign): CampaignActionDescriptor[] {
   const extra = campaign.extraSettings || {}
   const actions: CampaignActionDescriptor[] = []
 
@@ -263,5 +260,37 @@ export function getCampaignActionDescriptors(
       break
   }
 
-  return filterCampaignActionDescriptors(campaign, dedupeActionDescriptors(actions))
+  return dedupeActionDescriptors(actions)
+}
+
+function getQuotaCandidateActionDescriptors(
+  campaign: Campaign,
+  campaignAction?: CampaignAction
+): CampaignActionDescriptor[] {
+  if (campaignAction && Array.isArray(campaignAction.limitCheckActionCodes)) {
+    return normalizeActionDescriptors(campaignAction.limitCheckActionCodes)
+  }
+
+  return getDefaultCampaignActionDescriptors(campaign)
+}
+
+export function getCampaignExecutableActionDescriptors(
+  campaign: Campaign,
+  campaignAction?: CampaignAction
+): CampaignActionDescriptor[] {
+  void campaignAction
+  return filterExecutableActionDescriptors(
+    campaign,
+    getDefaultCampaignActionDescriptors(campaign)
+  )
+}
+
+export function getCampaignActionDescriptors(
+  campaign: Campaign,
+  campaignAction?: CampaignAction
+): CampaignActionDescriptor[] {
+  return filterQuotaActionDescriptors(
+    campaign,
+    getQuotaCandidateActionDescriptors(campaign, campaignAction)
+  )
 }

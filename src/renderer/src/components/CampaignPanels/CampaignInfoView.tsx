@@ -297,9 +297,10 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const actionId = campaign.actionId
   const scheduleType = campaign.scheduleType || 'daily'
   const linkedSourceCampaigns = findLinkedSourceCampaigns(campaign, campaigns)
-  const enabledActionCodes = getStringList(extra.actionLimits?.enabledActionCodes)
+  const rawEnabledActionCodes = extra.actionLimits?.enabledActionCodes
+  const enabledActionCodes = getStringList(rawEnabledActionCodes)
   const defaultActionCodes = getStringList(action?.limitCheckActionCodes)
-  const limitCodes = enabledActionCodes.length > 0 ? enabledActionCodes : defaultActionCodes
+  const limitCodes = Array.isArray(rawEnabledActionCodes) ? enabledActionCodes : defaultActionCodes
   const limitWindowMinutes = extra.actionLimits?.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES
   const byActionCode = Object.entries(extra.actionLimits?.byActionCode || {})
   const hasSourceSettings = POST_ACTIONS_WITH_SOURCE.has(actionId)
@@ -466,7 +467,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   ]
 
   const limitRows: InfoRow[] = [
-    { label: 'Hành động kiểm tra giới hạn', value: formatActionCodeChips(limitCodes) },
+    { label: 'Hành động kiểm tra quota ngày/giờ', value: formatActionCodeChips(limitCodes) },
     { label: 'Nghỉ giữa actions', value: `${extra.actionLimits?.sleepBetweenActions ?? 0} giây` },
     ...byActionCode.map(([code, limit]) => ({
       label: `Giới hạn ${getActionCodeLabel(code)}`,

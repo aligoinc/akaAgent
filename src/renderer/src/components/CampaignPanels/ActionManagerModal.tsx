@@ -359,7 +359,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
 
                   <div className="action-code-picker-block">
                     <div className="action-code-picker-title">
-                      <strong>Check giới hạn</strong>
+                      <strong>Check quota ngày/giờ</strong>
                       <span>{formData.limitCheckActionCodes.length} action</span>
                     </div>
                     <div className="action-code-picker">

@@ -128,6 +128,9 @@ export class SupabaseService {
   getAccountRateLimitStatus(accountId: number, actionCode: string, actionName: string, limitConfig?: ActionLimitConfig) {
     return campaignRepo.getAccountRateLimitStatus(accountId, actionCode, actionName, limitConfig)
   }
+  getAccountActionDisabledStatus(accountId: number, actionCode: string, actionName: string) {
+    return campaignRepo.getAccountActionDisabledStatus(accountId, actionCode, actionName)
+  }
 
   // =========== CONTENT TEMPLATES ===========
   listContentTemplates() { return contentTemplateRepo.listContentTemplates() }
