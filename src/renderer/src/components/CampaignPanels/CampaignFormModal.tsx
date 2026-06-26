@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -162,6 +162,8 @@ type CommentType = 'own' | 'others' | 'all'
 type PostBumpMode = 'select' | 'create'
 type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
 type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
+type MessageTemplateDropdown = 'date' | 'format' | null
+type MessagePersonalizationTarget = 'content' | 'friendRequestMessage' | 'zaloAliasTemplate'
 type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
 type AiContentAction = 'multi' | 'rewrite'
 type FindDataGoalPriority = NonNullable<CampaignExtraSettings['findDataGoalPriority']>
@@ -1064,6 +1066,8 @@ export default function CampaignFormModal({
 
   const contentRef = useRef<HTMLDivElement>(null)
   const campaignContentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const friendRequestMessageTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const zaloAliasTemplateInputRef = useRef<HTMLInputElement>(null)
   const emailHtmlEditorRef = useRef<EmailHtmlEditorHandle | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const excelUploadInputRef = useRef<HTMLInputElement>(null)
@@ -2019,6 +2023,7 @@ export default function CampaignFormModal({
   const [isOtherDataSourceOpen, setIsOtherDataSourceOpen] = useState(false)
   const [messageDateOption, setMessageDateOption] = useState<MessageDateOption>('today')
   const [messageDateFormat, setMessageDateFormat] = useState<MessageDateFormat>('DD/MM/YYYY')
+  const [messageTemplateDropdownOpen, setMessageTemplateDropdownOpen] = useState<MessageTemplateDropdown>(null)
   const [aiContentCounts, setAiContentCounts] = useState<Record<AiContentTarget, number>>({
     content: 3,
     commentContent: 3,
@@ -2092,12 +2097,6 @@ export default function CampaignFormModal({
       setActiveStep('general')
     }
   }, [activeStep, stepIdsKey])
-
-  useEffect(() => {
-    if (isZaloMessagePhoneCampaign && messageDateOption !== 'today') {
-      setMessageDateOption('today')
-    }
-  }, [isZaloMessagePhoneCampaign, messageDateOption])
 
   useEffect(() => {
     if (previousZaloAliasActionIdRef.current === formData.actionId) return
@@ -2807,6 +2806,7 @@ export default function CampaignFormModal({
 
   const renderContentTemplateToolbar = (target: AiContentTarget) => (
     <div className="content-template-inline-toolbar">
+      {target === 'content' && isMessageCampaign && !isZaloShareMessageMode && renderMessagePersonalizationDropdown('content')}
       <button
         type="button"
         className="btn btn-ghost content-template-inline-button"
@@ -4560,41 +4560,78 @@ export default function CampaignFormModal({
     </div>
   )
 
-  const insertCampaignContentToken = (token: string) => {
-    if (isEmailCampaign && formData.emailBodyIsHtml && emailHtmlEditorRef.current) {
+  const getInsertedText = (
+    currentValue: string,
+    token: string,
+    element: HTMLInputElement | HTMLTextAreaElement | null
+  ) => {
+    const start = element?.selectionStart ?? currentValue.length
+    const end = element?.selectionEnd ?? start
+    const safeStart = Math.max(0, Math.min(start, currentValue.length))
+    const safeEnd = Math.max(safeStart, Math.min(end, currentValue.length))
+    const insertedValue =
+      currentValue.slice(0, safeStart) +
+      token +
+      currentValue.slice(safeEnd)
+    const nextValue = insertedValue
+    const nextCursor = Math.min(safeStart + token.length, nextValue.length)
+
+    return { nextValue, nextCursor }
+  }
+
+  const insertCampaignContentToken = (token: string, target: MessagePersonalizationTarget = 'content') => {
+    if (target === 'content' && isEmailCampaign && formData.emailBodyIsHtml && emailHtmlEditorRef.current) {
       emailHtmlEditorRef.current.chain().focus().insertContent(token).run()
       return
     }
 
-    const textarea = campaignContentTextareaRef.current
-    const start = textarea?.selectionStart ?? formData.content.length
-    const end = textarea?.selectionEnd ?? start
-    const safeStart = Math.max(0, Math.min(start, formData.content.length))
-    const safeEnd = Math.max(safeStart, Math.min(end, formData.content.length))
-    const nextContent =
-      formData.content.slice(0, safeStart) +
-      token +
-      formData.content.slice(safeEnd)
-    const nextCursor = safeStart + token.length
+    if (target === 'friendRequestMessage') {
+      const textarea = friendRequestMessageTextareaRef.current
+      const { nextValue, nextCursor } = getInsertedText(formData.friendRequestMessage, token, textarea)
 
-    setFormData(p => ({ ...p, content: nextContent }))
+      setFormData(p => ({ ...p, friendRequestMessage: nextValue }))
+      window.requestAnimationFrame(() => {
+        textarea?.focus()
+        textarea?.setSelectionRange(nextCursor, nextCursor)
+      })
+      return
+    }
+
+    if (target === 'zaloAliasTemplate') {
+      const input = zaloAliasTemplateInputRef.current
+      const { nextValue, nextCursor } = getInsertedText(formData.zaloAliasTemplate, token, input)
+
+      setFormData(p => ({ ...p, zaloAliasTemplate: nextValue }))
+      window.requestAnimationFrame(() => {
+        input?.focus()
+        input?.setSelectionRange(nextCursor, nextCursor)
+      })
+      return
+    }
+
+    const textarea = campaignContentTextareaRef.current
+    const { nextValue, nextCursor } = getInsertedText(formData.content, token, textarea)
+
+    setFormData(p => ({ ...p, content: nextValue }))
     window.requestAnimationFrame(() => {
       textarea?.focus()
       textarea?.setSelectionRange(nextCursor, nextCursor)
     })
   }
 
-  const renderMessageInsertPanel = () => {
-    const dateOptions = isZaloMessagePhoneCampaign
-      ? MESSAGE_DATE_OPTIONS.filter(opt => opt.value === 'today')
-      : MESSAGE_DATE_OPTIONS
-    const dateTokenName = isZaloMessagePhoneCampaign
-      ? 'TODAY'
-      : (MESSAGE_DATE_OPTIONS.find(opt => opt.value === messageDateOption)?.token || 'TODAY')
+  function renderMessagePersonalizationDropdown(
+    target: MessagePersonalizationTarget = 'content',
+    placement: 'toolbar' | 'field' = 'toolbar'
+  ) {
+    const dateOptions = MESSAGE_DATE_OPTIONS
+    const dateTokenName = MESSAGE_DATE_OPTIONS.find(opt => opt.value === messageDateOption)?.token || 'TODAY'
     const dateToken = `#{${dateTokenName}(${messageDateFormat})}`
+    const selectedDateLabel = dateOptions.find(opt => opt.value === messageDateOption)?.label || dateOptions[0]?.label || ''
     const excelTokens = ['INPUT_FULLNAME', 'PHONE', 'EMAIL', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
-    const showCustomerTokens = !isEmailCampaign
-    const showExcelTokens = isZaloMessagePhoneCampaign || isEmailCampaign
+    const showCustomerTokens = target === 'content' ? !isEmailCampaign : true
+    const showExcelTokens = target === 'content'
+      ? isZaloMessagePhoneCampaign || isEmailCampaign
+      : isZaloMessagePhoneCampaign
     const showZaloProfileTokens = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign
     const renderExcelTokens = () => (
       <div className="message-template-token-row">
@@ -4603,7 +4640,7 @@ export default function CampaignFormModal({
             key={token}
             type="button"
             className="message-template-token"
-            onClick={() => insertCampaignContentToken(`#{${token}}`)}
+            onClick={() => insertCampaignContentToken(`#{${token}}`, target)}
           >
             {`#{${token}}`}
           </button>
@@ -4611,104 +4648,162 @@ export default function CampaignFormModal({
       </div>
     )
 
-    return (
-      <aside className="message-template-panel" aria-label="Chèn thông tin">
-        <div className="message-template-title">Chèn thông tin</div>
+    const sectionCount = (showCustomerTokens ? 1 : 0) + (showExcelTokens ? 1 : 0) + 1
+    const sectionLayoutClass = sectionCount >= 3 ? 'three-token-sections' : 'two-token-sections'
+    const tokenAvailabilityClass = showExcelTokens ? 'has-excel-tokens' : 'no-excel-tokens'
+    const placementClass = placement === 'field' ? 'field-token-dropdown' : ''
+    const dropdownClassName = [
+      'message-personalization-dropdown',
+      sectionLayoutClass,
+      tokenAvailabilityClass,
+      placementClass
+    ].filter(Boolean).join(' ')
+    const popoverClassName = [
+      'message-personalization-popover',
+      sectionLayoutClass,
+      tokenAvailabilityClass
+    ].join(' ')
 
-        {showCustomerTokens && (
+    return (
+      <div className={dropdownClassName}>
+        <button
+          type="button"
+          className="btn btn-ghost content-template-inline-button message-personalization-button"
+          aria-haspopup="dialog"
+        >
+          <Braces size={15} />
+          <span>Cá nhân hoá</span>
+        </button>
+        <div
+          className={popoverClassName}
+          aria-label="Chèn thông tin cá nhân hoá"
+          onMouseLeave={() => setMessageTemplateDropdownOpen(null)}
+        >
+          <div className="message-template-title">Chèn thông tin</div>
+
+          {showCustomerTokens && (
+            <div className="message-template-section">
+              <div className="message-template-section-title">
+                <Users size={16} />
+                <span>Khách hàng</span>
+              </div>
+              <label>Tên hiển thị{showZaloProfileTokens ? ' Zalo' : ''}</label>
+              <button
+                type="button"
+                className="message-template-token"
+                onClick={() => insertCampaignContentToken(MESSAGE_FULL_NAME_TOKEN, target)}
+              >
+                {MESSAGE_FULL_NAME_TOKEN}
+              </button>
+              {showZaloProfileTokens && (
+                <>
+                  <label>Tên gốc Zalo</label>
+                  <button
+                    type="button"
+                    className="message-template-token"
+                    onClick={() => insertCampaignContentToken('#{ORIGINAL_NAME}', target)}
+                  >
+                    {'#{ORIGINAL_NAME}'}
+                  </button>
+                  <label>Giới tính</label>
+                  <button
+                    type="button"
+                    className="message-template-token"
+                    onClick={() => insertCampaignContentToken('#{SEX{anh-chị-anh/chị}}', target)}
+                  >
+                    {'#{SEX{anh-chị-anh/chị}}'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {showExcelTokens && (
+            <div className="message-template-section">
+              <div className="message-template-section-title">
+                <FileText size={16} />
+                <span>Thông tin Excel</span>
+              </div>
+              {renderExcelTokens()}
+            </div>
+          )}
+
           <div className="message-template-section">
             <div className="message-template-section-title">
-              <Users size={16} />
-              <span>Khách hàng</span>
+              <Calendar size={16} />
+              <span>Chọn thời gian</span>
             </div>
-            <label>Tên hiển thị{showZaloProfileTokens ? ' Zalo' : ''}</label>
+            <div className="message-template-control-row">
+              <div className="message-template-control">
+                <label>Chọn ngày:</label>
+                <div className={`message-template-dropdown ${messageTemplateDropdownOpen === 'date' ? 'open' : ''}`}>
+                  <button
+                    type="button"
+                    className="message-template-dropdown-button"
+                    aria-expanded={messageTemplateDropdownOpen === 'date'}
+                    onClick={() => setMessageTemplateDropdownOpen(current => current === 'date' ? null : 'date')}
+                  >
+                    <span>{selectedDateLabel}</span>
+                    <ChevronDown size={14} />
+                  </button>
+                  <div className="message-template-dropdown-list">
+                    {dateOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={`message-template-dropdown-item ${messageDateOption === opt.value ? 'active' : ''}`}
+                        onClick={() => {
+                          setMessageDateOption(opt.value)
+                          setMessageTemplateDropdownOpen(null)
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="message-template-control">
+                <label>Chọn định dạng:</label>
+                <div className={`message-template-dropdown ${messageTemplateDropdownOpen === 'format' ? 'open' : ''}`}>
+                  <button
+                    type="button"
+                    className="message-template-dropdown-button"
+                    aria-expanded={messageTemplateDropdownOpen === 'format'}
+                    onClick={() => setMessageTemplateDropdownOpen(current => current === 'format' ? null : 'format')}
+                  >
+                    <span>{messageDateFormat}</span>
+                    <ChevronDown size={14} />
+                  </button>
+                  <div className="message-template-dropdown-list">
+                    {MESSAGE_DATE_FORMATS.map(format => (
+                      <button
+                        key={format}
+                        type="button"
+                        className={`message-template-dropdown-item ${messageDateFormat === format ? 'active' : ''}`}
+                        onClick={() => {
+                          setMessageDateFormat(format)
+                          setMessageTemplateDropdownOpen(null)
+                        }}
+                      >
+                        {format}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <label>Chèn định dạng ngày</label>
             <button
               type="button"
               className="message-template-token"
-              onClick={() => insertCampaignContentToken(MESSAGE_FULL_NAME_TOKEN)}
+              onClick={() => insertCampaignContentToken(dateToken, target)}
             >
-              {MESSAGE_FULL_NAME_TOKEN}
+              {dateToken}
             </button>
-            {showZaloProfileTokens && (
-              <>
-                <label>Tên gốc Zalo</label>
-                <button
-                  type="button"
-                  className="message-template-token"
-                  onClick={() => insertCampaignContentToken('#{ORIGINAL_NAME}')}
-                >
-                  {'#{ORIGINAL_NAME}'}
-                </button>
-                <label>Giới tính</label>
-                <button
-                  type="button"
-                  className="message-template-token"
-                  onClick={() => insertCampaignContentToken('#{SEX{anh-chị-anh/chị}}')}
-                >
-                  {'#{SEX{anh-chị-anh/chị}}'}
-                </button>
-                {showExcelTokens && (
-                  <>
-                    <label>Thông tin Excel</label>
-                    {renderExcelTokens()}
-                  </>
-                )}
-              </>
-            )}
           </div>
-        )}
-
-        {isEmailCampaign && (
-          <div className="message-template-section">
-            <div className="message-template-section-title">
-              <Users size={16} />
-              <span>Thông tin Excel</span>
-            </div>
-            {renderExcelTokens()}
-          </div>
-        )}
-
-        <div className="message-template-section">
-          <div className="message-template-section-title">
-            <Calendar size={16} />
-            <span>Chọn thời gian</span>
-          </div>
-          <div className="message-template-control-row">
-            <div className="message-template-control">
-              <label>Chọn ngày:</label>
-              <select
-                className="stepper-input"
-                value={messageDateOption}
-                onChange={e => setMessageDateOption(e.target.value as MessageDateOption)}
-              >
-                {dateOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="message-template-control">
-              <label>Chọn định dạng:</label>
-              <select
-                className="stepper-input"
-                value={messageDateFormat}
-                onChange={e => setMessageDateFormat(e.target.value as MessageDateFormat)}
-              >
-                {MESSAGE_DATE_FORMATS.map(format => (
-                  <option key={format} value={format}>{format}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <label>Chèn định dạng ngày</label>
-          <button
-            type="button"
-            className="message-template-token"
-            onClick={() => insertCampaignContentToken(dateToken)}
-          >
-            {dateToken}
-          </button>
         </div>
-      </aside>
+      </div>
     )
   }
 
@@ -5335,13 +5430,17 @@ export default function CampaignFormModal({
 
       {formData.enableAddFriend && (
         <div className="stepper-form-group" style={{ marginTop: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-            <label>Nội dung kết bạn</label>
-            <span style={{ fontSize: 12, color: formData.friendRequestMessage.length > 150 ? 'var(--text-error)' : 'var(--text-muted)' }}>
+          <div className="message-personalization-field-header">
+            <div className="message-personalization-field-title">
+              <label>Nội dung kết bạn</label>
+              {renderMessagePersonalizationDropdown('friendRequestMessage', 'field')}
+            </div>
+            <span className="message-personalization-field-count" style={{ color: formData.friendRequestMessage.length > 150 ? 'var(--text-error)' : 'var(--text-muted)' }}>
               {formData.friendRequestMessage.length}/150
             </span>
           </div>
           <textarea
+            ref={friendRequestMessageTextareaRef}
             className="stepper-textarea"
             rows={3}
             maxLength={150}
@@ -5395,7 +5494,14 @@ export default function CampaignFormModal({
       </div>
       {formData.enableZaloAlias && (
         <div className="stepper-form-group">
+          <div className="message-personalization-field-header">
+            <div className="message-personalization-field-title">
+              <label>Mẫu đổi tên</label>
+              {renderMessagePersonalizationDropdown('zaloAliasTemplate', 'field')}
+            </div>
+          </div>
           <input
+            ref={zaloAliasTemplateInputRef}
             type="text"
             className="stepper-input"
             value={formData.zaloAliasTemplate}
@@ -5608,7 +5714,14 @@ export default function CampaignFormModal({
           </div>
           {formData.enableZaloAlias && (
             <div className="stepper-form-group">
+              <div className="message-personalization-field-header">
+                <div className="message-personalization-field-title">
+                  <label>Mẫu đổi tên</label>
+                  {renderMessagePersonalizationDropdown('zaloAliasTemplate', 'field')}
+                </div>
+              </div>
               <input
+                ref={zaloAliasTemplateInputRef}
                 type="text"
                 className="stepper-input"
                 value={formData.zaloAliasTemplate}
@@ -8520,7 +8633,7 @@ export default function CampaignFormModal({
               <>
             {showActionOptionsSection && (
               <div
-                className="stepper-section"
+                className={`stepper-section${isZaloMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}
                 ref={el => { sectionRefs.current['actionOptions'] = el }}
               >
                 <div
@@ -8987,7 +9100,7 @@ export default function CampaignFormModal({
 
             {/* Section 4: Nội dung */}
             {showContentSection && <div
-              className="stepper-section"
+              className={`stepper-section${isMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}
               ref={el => { sectionRefs.current['content'] = el }}
             >
               <div
@@ -9038,11 +9151,10 @@ export default function CampaignFormModal({
                             <label>{getCampaignContentLabel()}</label>
                             {renderContentToolsRow('content')}
                           </div>
-                          <div className={`campaign-content-template-layout${isZaloShareMessageMode ? ' full-width' : ''}`}>
+                          <div className="campaign-content-template-layout">
                             <div className="stepper-form-group">
                               {renderCampaignContentTextarea(false)}
                             </div>
-                            {!isZaloShareMessageMode && renderMessageInsertPanel()}
                           </div>
                           {renderCampaignContentHint()}
                           {renderRewriteContentEachRunOption()}
