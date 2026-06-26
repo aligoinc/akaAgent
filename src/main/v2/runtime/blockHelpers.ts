@@ -38,6 +38,7 @@ export interface BlockHelpers {
   zaloSendGroupMessage(options: ZaloSendDirectMessageOptions): Promise<ZaloActionHelperResult>
   zaloJoinGroupLink(options: ZaloJoinGroupLinkOptions): Promise<ZaloActionHelperResult>
   zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult>
+  zaloCancelSentFriendRequest(options: ZaloCancelSentFriendRequestOptions): Promise<ZaloActionHelperResult>
   zaloApplyContactTag(options: ZaloApplyContactTagOptions): Promise<ZaloActionHelperResult>
   zaloChangeContactAlias(options: ZaloChangeContactAliasOptions): Promise<ZaloActionHelperResult>
   /** Email browserless helper. Implemented only by campaign runtime. */
@@ -93,6 +94,7 @@ export interface BlockRuntimeHelpers {
   zaloSendGroupMessage?: (options: ZaloSendDirectMessageOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloJoinGroupLink?: (options: ZaloJoinGroupLinkOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloSendPhoneFriendRequest?: (options: ZaloSendPhoneFriendRequestOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
+  zaloCancelSentFriendRequest?: (options: ZaloCancelSentFriendRequestOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloApplyContactTag?: (options: ZaloApplyContactTagOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   zaloChangeContactAlias?: (options: ZaloChangeContactAliasOptions, metadata: BlockRuntimeMetadata) => Promise<ZaloActionHelperResult>
   emailSendMessage?: (options: EmailSendMessageOptions, metadata: BlockRuntimeMetadata) => Promise<EmailActionHelperResult>
@@ -169,6 +171,14 @@ export interface ZaloSendPhoneFriendRequestOptions {
   enabled?: boolean
   target?: ZaloResolvedTarget | null
   message?: string
+  inputData?: Record<string, unknown>
+}
+
+export interface ZaloCancelSentFriendRequestOptions {
+  targetUid?: string
+  targetName?: string
+  sentAt?: string | number | null
+  requestMessage?: string
   inputData?: Record<string, unknown>
 }
 
@@ -368,6 +378,11 @@ export function createBlockHelpers(
     async zaloSendPhoneFriendRequest(options: ZaloSendPhoneFriendRequestOptions): Promise<ZaloActionHelperResult> {
       if (!runtimeHelpers.zaloSendPhoneFriendRequest) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
       return runtimeHelpers.zaloSendPhoneFriendRequest(options, runtimeMetadata)
+    },
+
+    async zaloCancelSentFriendRequest(options: ZaloCancelSentFriendRequestOptions): Promise<ZaloActionHelperResult> {
+      if (!runtimeHelpers.zaloCancelSentFriendRequest) throw new Error('Runtime hiện tại không hỗ trợ Zalo API')
+      return runtimeHelpers.zaloCancelSentFriendRequest(options, runtimeMetadata)
     },
 
     async zaloApplyContactTag(options: ZaloApplyContactTagOptions): Promise<ZaloActionHelperResult> {

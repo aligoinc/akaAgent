@@ -255,6 +255,25 @@ export interface ZaloFriendRecommendationSnapshot {
   hasRecommendationList: boolean
 }
 
+export interface ZaloSentFriendRequestProfile {
+  uid: string
+  name: string
+  displayName?: string
+  zaloName?: string
+  avatar?: string
+  globalId?: string
+  requestMessage?: string
+  requestSource?: number | null
+  sentAt?: number | null
+  raw: Record<string, unknown>
+}
+
+export interface ZaloSentFriendRequestSnapshot {
+  profiles: ZaloSentFriendRequestProfile[]
+  totalItems: number
+  missingUidItems: number
+}
+
 export interface ZaloFriendRequestStatus {
   isFriend: boolean
   isRequested: boolean
@@ -599,6 +618,57 @@ export class ZaloRuntimeService {
       recommendedItems,
       missingUidItems,
       hasRecommendationList: Array.isArray((response as any)?.recommItems)
+    }
+  }
+
+  async getSentFriendRequests(accountId: number): Promise<ZaloSentFriendRequestSnapshot> {
+    const api = await this.ensureApi(accountId)
+    let response: Awaited<ReturnType<API['getSentFriendRequest']>>
+    try {
+      response = await api.getSentFriendRequest()
+    } catch (err) {
+      if (err instanceof ZaloApiError && String(err.code) === '112') {
+        return {
+          profiles: [],
+          totalItems: 0,
+          missingUidItems: 0
+        }
+      }
+      throw err
+    }
+    const entries = Object.values(normalizeRecord(response))
+    const profiles: ZaloSentFriendRequestProfile[] = []
+    let missingUidItems = 0
+
+    for (const item of entries) {
+      const record = normalizeRecord(item)
+      const requestInfo = normalizeRecord(record.fReqInfo)
+      const uid = firstString(record.userId, record.uid, record.id)
+      if (!uid) {
+        missingUidItems += 1
+        continue
+      }
+
+      const displayName = firstString(record.displayName, record.display_name) || undefined
+      const zaloName = firstString(record.zaloName, record.zalo_name) || undefined
+      profiles.push({
+        uid,
+        name: firstString(displayName, zaloName, uid) || uid,
+        displayName,
+        zaloName,
+        avatar: firstString(record.avatar) || undefined,
+        globalId: firstString(record.globalId, record.global_id) || undefined,
+        requestMessage: firstString(requestInfo.message) || undefined,
+        requestSource: nullableNumber(requestInfo.src),
+        sentAt: nullableNumber(requestInfo.time),
+        raw: record
+      })
+    }
+
+    return {
+      profiles,
+      totalItems: entries.length,
+      missingUidItems
     }
   }
 
@@ -1126,6 +1196,11 @@ export class ZaloRuntimeService {
   async sendFriendRequestToUser(accountId: number, uid: string, message: string): Promise<unknown> {
     const api = await this.ensureApi(accountId)
     return api.sendFriendRequest(String(message || ''), uid)
+  }
+
+  async undoFriendRequest(accountId: number, uid: string): Promise<unknown> {
+    const api = await this.ensureApi(accountId)
+    return api.undoFriendRequest(uid)
   }
 
   async applyLabelToUser(accountId: number, uid: string, labelId: number | string): Promise<LabelData> {

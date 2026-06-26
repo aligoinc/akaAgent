@@ -329,6 +329,9 @@ export interface CampaignExtraSettings {
   zaloFriendRecommendationCount?: number
   zaloFriendRecommendationDataMaterializedAt?: string | null
   zaloFriendRecommendationMaterializedCount?: number
+  zaloCancelFriendRequestLimit?: number
+  zaloCancelFriendRequestDataMaterializedAt?: string | null
+  zaloCancelFriendRequestMaterializedCount?: number
   zaloRealtimeTriggers?: Array<'join' | 'leave' | 'interact'>
   zaloRealtimeGroupIds?: string[]
   zaloRealtimeGroupNames?: string[]
@@ -504,6 +507,7 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   zalo_message_remarketing_customer: { field: 'uid', label: 'UID khách hàng Zalo đã từng gửi tin' },
   zalo_message_group: { field: 'uid', label: 'ID group Zalo' },
   zalo_join_group_link: { field: 'uid', label: 'Link group Zalo' },
+  zalo_cancel_sent_friend_request: { field: 'uid', label: 'UID lời mời kết bạn Zalo đã gửi' },
   email_send: { field: 'email', label: 'email người nhận' }
 }
 

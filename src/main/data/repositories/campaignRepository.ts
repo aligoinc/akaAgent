@@ -43,6 +43,7 @@ const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
 const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
+const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const ZALO_FRIEND_AUTO_TARGET_MODES = new Set(['all_friends', 'tagged_friends'])
 const ZALO_REMARKETING_SOURCE_ACTION_IDS = [
   ZALO_MESSAGE_PHONE_ACTION_ID,
@@ -230,6 +231,7 @@ const shouldSkipCloneCampaignInputData = (actionId: string, extraSettings: unkno
   if (actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID) return true
   if (actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) return true
   if (actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID) return true
+  if (actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID) return true
   if (actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID) return false
   const extra = extraSettings && typeof extraSettings === 'object'
     ? extraSettings as Record<string, unknown>
@@ -248,6 +250,8 @@ const sanitizeClonedCampaignExtraSettings = (actionId: string, extraSettings: un
   delete extra.zaloBirthdayMaterializedCount
   delete extra.zaloFriendRecommendationDataMaterializedAt
   delete extra.zaloFriendRecommendationMaterializedCount
+  delete extra.zaloCancelFriendRequestDataMaterializedAt
+  delete extra.zaloCancelFriendRequestMaterializedCount
   return extra
 }
 
@@ -255,6 +259,20 @@ function clearZaloBirthdayMaterializedExtra(extraSettings: Campaign['extraSettin
   const nextExtra = { ...(extraSettings || {}) }
   delete nextExtra.zaloBirthdayDataMaterializedDate
   delete nextExtra.zaloBirthdayMaterializedCount
+  return nextExtra
+}
+
+function clearZaloFriendRecommendationMaterializedExtra(extraSettings: Campaign['extraSettings']): Campaign['extraSettings'] {
+  const nextExtra = { ...(extraSettings || {}) }
+  delete nextExtra.zaloFriendRecommendationDataMaterializedAt
+  delete nextExtra.zaloFriendRecommendationMaterializedCount
+  return nextExtra
+}
+
+function clearZaloCancelSentFriendRequestMaterializedExtra(extraSettings: Campaign['extraSettings']): Campaign['extraSettings'] {
+  const nextExtra = { ...(extraSettings || {}) }
+  delete nextExtra.zaloCancelFriendRequestDataMaterializedAt
+  delete nextExtra.zaloCancelFriendRequestMaterializedCount
   return nextExtra
 }
 
@@ -1095,6 +1113,9 @@ export async function maintainCampaignSchedules(): Promise<Campaign[]> {
 
         if (campaign.status !== 'chờ xử lý') continue
 
+        // continueNextDay controls timing, not whether stale daily data continues.
+        // true waits until today's original scheduled time; false keeps the stale
+        // schedule due so the scheduler can run it immediately when eligible.
         if (campaign.continueNextDay) {
           const updated = await updateCampaign(campaign.id, {
             schedule: nextSchedule.toISOString()
@@ -1107,6 +1128,36 @@ export async function maintainCampaignSchedules(): Promise<Campaign[]> {
       const details = await listCampaignInputData(campaign.id)
       const allDataDone = details.length > 0 && details.every(detail => detail.status === 'hoàn thành')
       const shouldRefreshData = campaign.refreshData && (allDataDone || details.length === 0)
+
+      if (campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID) {
+        if (details.length > 0) {
+          await clearCampaignInputData(campaign.id)
+        }
+
+        const updated = await updateCampaign(campaign.id, {
+          status: 'chờ xử lý',
+          schedule: nextSchedule.toISOString(),
+          note: null,
+          extraSettings: clearZaloFriendRecommendationMaterializedExtra(campaign.extraSettings)
+        })
+        updatedCampaigns.push(updated)
+        continue
+      }
+
+      if (campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID) {
+        if (details.length > 0) {
+          await clearCampaignInputData(campaign.id)
+        }
+
+        const updated = await updateCampaign(campaign.id, {
+          status: 'chờ xử lý',
+          schedule: nextSchedule.toISOString(),
+          note: null,
+          extraSettings: clearZaloCancelSentFriendRequestMaterializedExtra(campaign.extraSettings)
+        })
+        updatedCampaigns.push(updated)
+        continue
+      }
 
       if (campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) {
         if (details.length > 0) {
@@ -2335,6 +2386,16 @@ export async function resetCampaignInputDataForRerun(campaignId: number): Promis
     .neq('status', 'tạm dừng')
 
   if (error) throw new Error(`Failed to reset campaign input data for rerun: ${error.message}`)
+}
+
+export async function clearCampaignInputData(campaignId: number): Promise<void> {
+  const { error } = await client()
+    .from('auto_campaign_input_data')
+    .update({ is_delete: true })
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+
+  if (error) throw new Error(`Failed to clear campaign input data: ${error.message}`)
 }
 
 export async function deleteCampaignInputData(id: number): Promise<void> {

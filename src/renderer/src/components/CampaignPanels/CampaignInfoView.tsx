@@ -40,6 +40,8 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_message_friend: 'Zalo - Nhắn tin bạn bè',
   zalo_message_group: 'Zalo - Nhắn tin group',
   zalo_add_friend: 'Zalo - Kết bạn',
+  zalo_join_group_link: 'Zalo - Tham gia group',
+  zalo_cancel_sent_friend_request: 'Zalo - Huỷ lời mời kết bạn',
   zalo_tag_contact: 'Zalo - Gắn tag',
   zalo_change_alias: 'Zalo - Đổi tên'
 }
@@ -89,6 +91,7 @@ const POST_ACTIONS_WITH_SOURCE = new Set(['facebook_timeline_post', 'facebook_pa
 const COMMENT_ACTIONS = new Set(['facebook_group_post', 'facebook_comment_seeding', 'facebook_comment_seeding_post'])
 const MESSAGE_ACTIONS = new Set(['facebook_message_friend', 'facebook_message_uid', 'facebook_page_to_message'])
 const ZALO_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
+const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
 
@@ -317,6 +320,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   )
   const hasMessageSettings = MESSAGE_ACTIONS.has(actionId)
     || actionId === ZALO_FRIEND_RECOMMENDATION_ACTION_ID
+    || actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
     || extra.enableMessage !== undefined
     || extra.enableAddFriend !== undefined
     || !!extra.useSuggestedFriends
@@ -324,6 +328,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || !!extra.zaloFriendBlocklistEnabled
     || extra.zaloFriendRecommendationCount !== undefined
     || !!extra.zaloFriendRecommendationDataMaterializedAt
+    || extra.zaloCancelFriendRequestLimit !== undefined
+    || !!extra.zaloCancelFriendRequestDataMaterializedAt
   const hasFindDataSettings = actionId === 'facebook_find_data_group' || actionId === 'facebook_find_data_search'
     || getFindDataTypeLabels(extra).length > 0
     || getFindDataSourceLabels(extra).length > 0
@@ -392,6 +398,14 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
         ? `${extra.zaloFriendRecommendationMaterializedCount ?? 0} đề xuất, ${formatDateTime(extra.zaloFriendRecommendationDataMaterializedAt)}`
         : 'Chưa lấy',
       hidden: actionId !== ZALO_FRIEND_RECOMMENDATION_ACTION_ID && !extra.zaloFriendRecommendationDataMaterializedAt
+    },
+    { label: 'Số lời mời cần huỷ', value: extra.zaloCancelFriendRequestLimit ?? 10, hidden: actionId !== ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID && extra.zaloCancelFriendRequestLimit === undefined },
+    {
+      label: 'Data lời mời đã lấy',
+      value: extra.zaloCancelFriendRequestDataMaterializedAt
+        ? `${extra.zaloCancelFriendRequestMaterializedCount ?? 0} lời mời, ${formatDateTime(extra.zaloCancelFriendRequestDataMaterializedAt)}`
+        : 'Chưa lấy',
+      hidden: actionId !== ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID && !extra.zaloCancelFriendRequestDataMaterializedAt
     },
     { label: 'Không gửi tin theo danh sách', value: onOff(extra.zaloFriendBlocklistEnabled), hidden: actionId !== 'zalo_message_friend' && !extra.zaloFriendBlocklistEnabled },
     { label: 'Danh sách không gửi tin', value: textOrDash(extra.zaloFriendBlocklistName || extra.zaloFriendBlocklistId), hidden: actionId !== 'zalo_message_friend' || !extra.zaloFriendBlocklistEnabled },
