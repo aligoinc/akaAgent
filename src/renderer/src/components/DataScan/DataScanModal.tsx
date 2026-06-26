@@ -1213,7 +1213,7 @@ export default function DataScanModal({
     zaloRemarketingDateTo
   ])
 
-  const loadCachedContacts = useCallback(async (pageOverride?: number) => {
+  const loadCachedContacts = useCallback(async (pageOverride?: number, pageInboxFiltersOverride?: PageInboxAppliedFilters) => {
     if (!window.electronAPI || !accountId) {
       contactsLoadIdRef.current += 1
       setContacts([])
@@ -1227,20 +1227,21 @@ export default function DataScanModal({
     setLoading(true)
     try {
       if (isPageInboxAction) {
-        if (!pageInboxAppliedFilters.pageUid) {
+        const pageInboxFilters = pageInboxFiltersOverride || pageInboxAppliedFilters
+        if (!pageInboxFilters.pageUid) {
           if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
           setContacts([])
           setPageInboxTotal(0)
           return
         }
         const result = await window.electronAPI.listPageInboxContacts(accountId, {
-          pageUid: pageInboxAppliedFilters.pageUid,
-          search: pageInboxAppliedFilters.search,
-          phoneFilter: pageInboxAppliedFilters.phoneFilter,
-          dateFrom: pageInboxAppliedFilters.dateFrom,
-          dateTo: pageInboxAppliedFilters.dateTo,
-          messageFilterMode: pageInboxAppliedFilters.messageFilterMode,
-          messageKeywords: pageInboxAppliedFilters.messageKeywords,
+          pageUid: pageInboxFilters.pageUid,
+          search: pageInboxFilters.search,
+          phoneFilter: pageInboxFilters.phoneFilter,
+          dateFrom: pageInboxFilters.dateFrom,
+          dateTo: pageInboxFilters.dateTo,
+          messageFilterMode: pageInboxFilters.messageFilterMode,
+          messageKeywords: pageInboxFilters.messageKeywords,
           limit: PAGE_INBOX_PAGE_SIZE,
           offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
         })
@@ -1384,7 +1385,13 @@ export default function DataScanModal({
     setPageInboxExcludedIds(new Set())
     setPageInboxPage(1)
     setPageInboxAppliedFilters(prev => arePageInboxFiltersEqual(prev, nextFilters) ? prev : nextFilters)
+    return nextFilters
   }, [getPageInboxDraftFilters])
+
+  const refreshPageInboxContactsAfterScan = useCallback(async () => {
+    const nextFilters = applyPageInboxDraftFilters()
+    await loadCachedContacts(1, nextFilters)
+  }, [applyPageInboxDraftFilters, loadCachedContacts])
 
   useEffect(() => {
     if (!isPageInboxAction) return
@@ -1636,7 +1643,7 @@ export default function DataScanModal({
         setPageInboxPage(1)
       }
       if (isPageInboxAction) {
-        applyPageInboxDraftFilters()
+        void refreshPageInboxContactsAfterScan()
       } else if (isZaloGroupMembersAction && result.zaloGroupId) {
         loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
         void loadZaloGroupOptions()
@@ -1655,7 +1662,6 @@ export default function DataScanModal({
   }, [
     accountId,
     actionDef.contactType,
-    applyPageInboxDraftFilters,
     isPageInboxAction,
     isPostCommentersAction,
     isZaloGroupMembersAction,
@@ -1663,6 +1669,7 @@ export default function DataScanModal({
     loadContactGroups,
     loadZaloGroupMemberContactsForGroup,
     loadZaloGroupOptions,
+    refreshPageInboxContactsAfterScan,
     resetPagedContactSelection,
     showAlert
   ])
@@ -2283,7 +2290,7 @@ export default function DataScanModal({
       resetPagedContactSelection()
       setPageInboxPage(1)
       if (isPageInboxAction) {
-        applyPageInboxDraftFilters()
+        await refreshPageInboxContactsAfterScan()
       } else if (isZaloGroupMembersAction && result.zaloGroupId) {
         await loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
         await loadZaloGroupOptions()
