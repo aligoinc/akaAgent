@@ -87,6 +87,33 @@ interface CampaignStore {
 
 }
 
+const getCampaignUpdatedAtTime = (campaign: Campaign): number | null => {
+  const time = Date.parse(campaign.updatedAt || '')
+  return Number.isFinite(time) ? time : null
+}
+
+const isIncomingCampaignOlder = (existing: Campaign, incoming: Campaign): boolean => {
+  const existingTime = getCampaignUpdatedAtTime(existing)
+  const incomingTime = getCampaignUpdatedAtTime(incoming)
+  if (existingTime === null || incomingTime === null) return false
+  if (incomingTime !== existingTime) return incomingTime < existingTime
+
+  const existingStamp = existing.updatedAt || ''
+  const incomingStamp = incoming.updatedAt || ''
+  return !!existingStamp && !!incomingStamp && incomingStamp < existingStamp
+}
+
+const mergeCampaignPreservingNewest = (existing: Campaign | undefined, incoming: Campaign): Campaign => {
+  if (!existing) return incoming
+  if (isIncomingCampaignOlder(existing, incoming)) return existing
+  return { ...existing, ...incoming }
+}
+
+const mergeLoadedCampaignsPreservingNewest = (current: Campaign[], loaded: Campaign[]): Campaign[] => {
+  const currentById = new Map(current.map(campaign => [campaign.id, campaign]))
+  return loaded.map(campaign => mergeCampaignPreservingNewest(currentById.get(campaign.id), campaign))
+}
+
 export const useCampaignStore = create<CampaignStore>((set, get) => ({
   // =========== ACCOUNTS ===========
   accounts: [],
@@ -251,7 +278,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     set({ loadingCampaigns: true })
     try {
       const campaigns = await window.electronAPI.listCampaigns()
-      set({ campaigns })
+      set(state => ({ campaigns: mergeLoadedCampaignsPreservingNewest(state.campaigns, campaigns) }))
     } catch (err) {
       console.error('Failed to load campaigns:', err)
     } finally {
@@ -304,7 +331,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       const idx = state.campaigns.findIndex(c => c.id === campaign.id)
       if (idx === -1) return { campaigns: [campaign, ...state.campaigns] }
       const next = state.campaigns.slice()
-      next[idx] = { ...next[idx], ...campaign }
+      next[idx] = mergeCampaignPreservingNewest(next[idx], campaign)
       return { campaigns: next }
     })
   },

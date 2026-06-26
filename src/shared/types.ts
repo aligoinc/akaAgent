@@ -435,6 +435,8 @@ export interface Campaign {
   updatedAt?: string
   completedAt?: string | null
   lastRunAt?: string | null
+  inputDataCompletedCount?: number
+  inputDataTotalCount?: number
   // Joined fields
   actionName?: string
   accountName?: string
