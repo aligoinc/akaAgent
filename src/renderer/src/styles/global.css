@@ -6967,6 +6967,50 @@ td.report-account-col span {
   min-width: 0;
 }
 
+.campaign-other-data-source {
+  position: relative;
+  display: inline-flex;
+}
+
+.campaign-other-data-source > .btn {
+  white-space: nowrap;
+}
+
+.campaign-other-data-source-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 3200;
+  min-width: 260px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+  animation: contextMenuIn 0.12s ease-out;
+}
+
+.campaign-other-data-source-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.campaign-other-data-source-item:hover {
+  background: var(--bg-tertiary);
+}
+
 .data-scan-zalo-member-group,
 .data-scan-zalo-member-linked-group,
 .data-scan-zalo-member-link {

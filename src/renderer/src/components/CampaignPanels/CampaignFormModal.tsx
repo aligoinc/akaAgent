@@ -1058,6 +1058,7 @@ export default function CampaignFormModal({
   } = useCampaignStore()
   const entitlements = useAuthStore(state => state.user?.entitlements)
   const canUseEmailFeature = !!entitlements?.email
+  const canUseFanpageFeature = !!entitlements?.facebookFanpage
   const canUseZaloFeature = canUseCampaignAction({ id: ZALO_MESSAGE_PHONE_ACTION_ID, flatformType: 'zalo' }, entitlements)
   const zaloEntitlementNote = 'Bạn chưa đăng ký gói Zalo, không thể sử dụng tính năng này'
 
@@ -1448,6 +1449,7 @@ export default function CampaignFormModal({
   const canPickZaloRemarketingCustomers = isZaloMessageRemarketingCustomerCampaign
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
+  const canUseOtherDataSources = isZaloMessagePhoneCampaign && !isEditingSavedCampaign
   const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && !isZaloCancelSentFriendRequestCampaign
   const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign || isZaloJoinGroupLinkCampaign || isZaloCancelSentFriendRequestCampaign
   const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign || isZaloCancelSentFriendRequestCampaign
@@ -2014,6 +2016,7 @@ export default function CampaignFormModal({
   const [activeStep, setActiveStep] = useState('general')
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
+  const [isOtherDataSourceOpen, setIsOtherDataSourceOpen] = useState(false)
   const [messageDateOption, setMessageDateOption] = useState<MessageDateOption>('today')
   const [messageDateFormat, setMessageDateFormat] = useState<MessageDateFormat>('DD/MM/YYYY')
   const [aiContentCounts, setAiContentCounts] = useState<Record<AiContentTarget, number>>({
@@ -2027,6 +2030,7 @@ export default function CampaignFormModal({
     postBumpContent: null
   })
   const accountDropdownRef = useRef<HTMLDivElement>(null)
+  const otherDataSourceDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setFormData(prev => {
@@ -2074,6 +2078,9 @@ export default function CampaignFormModal({
     const handleClickOutside = (event: MouseEvent) => {
       if (accountDropdownRef.current && !accountDropdownRef.current.contains(event.target as Node)) {
         setIsAccountDropdownOpen(false)
+      }
+      if (otherDataSourceDropdownRef.current && !otherDataSourceDropdownRef.current.contains(event.target as Node)) {
+        setIsOtherDataSourceOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -3956,7 +3963,7 @@ export default function CampaignFormModal({
 
   const [dataScanPicker, setDataScanPicker] = useState<{
     action: DataScanAction
-    mode: 'friends' | 'users' | 'groups' | 'pages' | 'pageInboxCustomers' | 'zaloRemarketingCustomers'
+    mode: 'friends' | 'users' | 'groups' | 'pages' | 'pageInboxCustomers' | 'pageInboxPhones' | 'zaloRemarketingCustomers'
     initialStatusFilter?: 'active' | 'inactive' | 'all'
     allowedActions?: DataScanAction[]
   } | null>(null)
@@ -3969,7 +3976,13 @@ export default function CampaignFormModal({
       : 'facebook'
 
   const getDetailDedupeKey = (row: Partial<CampaignInputData>): string => {
-    return String(row.uid || row.email || row.phone || row.name || '')
+    if (isZaloMessagePhoneCampaign) {
+      return normalizeVietnamMobilePhone(row.phone) || ''
+    }
+    if (isEmailCampaign) {
+      return normalizeEmailAddress(row.email).toLowerCase()
+    }
+    return String(row.uid || '')
       .trim()
       .replace(/\/+$/g, '')
       .toLowerCase()
@@ -3988,6 +4001,20 @@ export default function CampaignFormModal({
       setDetails(prev => [...prev, ...uniqueRows])
     }
     return uniqueRows.length
+  }
+
+  const openPageInboxPhoneSource = () => {
+    setIsOtherDataSourceOpen(false)
+    if (!canUseFanpageFeature) {
+      showAlert('Bạn chưa đăng ký gói Fanpage, không thể sử dụng tính năng này', 'error')
+      return
+    }
+    setDataScanPicker({
+      action: 'facebook_page_inbox_customers',
+      mode: 'pageInboxPhones',
+      initialStatusFilter: 'all',
+      allowedActions: ['facebook_page_inbox_customers']
+    })
   }
 
   const handleImportedDataRows = (rows: Partial<CampaignInputData>[]) => {
@@ -4282,6 +4309,34 @@ export default function CampaignFormModal({
       return
     }
     showAlert(`Đã thêm ${addedCount} khách inbox Page.`, 'success')
+  }
+
+  const onPageInboxPhonesSelected = (contacts: AutoAccountContact[]) => {
+    const newRows: Partial<CampaignInputData>[] = []
+    for (const contact of contacts) {
+      if (contact.contactType !== 'page_inbox_customer') continue
+      const phone = normalizeVietnamMobilePhone(contact.extraData?.phone)
+      if (!phone) continue
+      newRows.push({
+        name: contact.name,
+        uid: '',
+        phone,
+        email: '',
+        note: '',
+        status: 'chờ xử lý'
+      })
+    }
+
+    if (newRows.length === 0) {
+      showAlert('Không có khách inbox Page có SĐT hợp lệ để thêm vào chiến dịch.', 'error')
+      return
+    }
+    const addedCount = appendUniqueDetails(newRows)
+    if (addedCount === 0) {
+      showAlert('Các SĐT đã chọn đã có trong danh sách.', 'error')
+      return
+    }
+    showAlert(`Đã thêm ${addedCount} data từ khách inbox Page.`, 'success')
   }
 
   const syncFindDataSourceCampaignLinks = async (targetCampaignIds: number[]) => {
@@ -9271,6 +9326,29 @@ export default function CampaignFormModal({
                           />
                         </>
                       )}
+                      {canUseOtherDataSources && (
+                        <div className="campaign-other-data-source" ref={otherDataSourceDropdownRef}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setIsOtherDataSourceOpen(prev => !prev)}
+                          >
+                            <ListChecks size={14} /> Nguồn khác <ChevronDown size={14} />
+                          </button>
+                          {isOtherDataSourceOpen && (
+                            <div className="campaign-other-data-source-menu">
+                              <button
+                                type="button"
+                                className="campaign-other-data-source-item"
+                                onClick={openPageInboxPhoneSource}
+                              >
+                                <Users size={14} />
+                                <span>Từ những người inbox fanpage</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {canPickFriends && (
                         <button
                           className="btn btn-secondary"
@@ -9551,10 +9629,10 @@ export default function CampaignFormModal({
           </button>
         </div>
       </div>
-      {dataScanPicker && formData.accountIds.length > 0 && (
+      {dataScanPicker && (formData.accountIds.length > 0 || dataScanPicker.mode === 'pageInboxPhones') && (
         <DataScanModal
           initialAction={dataScanPicker.action}
-          initialAccountId={formData.accountIds[0]}
+          initialAccountId={dataScanPicker.mode === 'pageInboxPhones' ? undefined : formData.accountIds[0]}
           initialStatusFilter={dataScanPicker.initialStatusFilter}
           allowedActions={dataScanPicker.allowedActions}
           lockAction
@@ -9569,6 +9647,8 @@ export default function CampaignFormModal({
                   ? onPagesSelected
                   : dataScanPicker.mode === 'pageInboxCustomers'
                     ? onPageInboxCustomersSelected
+                    : dataScanPicker.mode === 'pageInboxPhones'
+                      ? onPageInboxPhonesSelected
                     : dataScanPicker.mode === 'zaloRemarketingCustomers'
                       ? onZaloRemarketingCustomersSelected
                   : onGroupsSelected
