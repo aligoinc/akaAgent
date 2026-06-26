@@ -32,6 +32,7 @@ export const ZALO_CAMPAIGN_ACTION_IDS = new Set([
   'zalo_message_group_member',
   'zalo_message_group_realtime',
   'zalo_message_remarketing_customer',
+  'zalo_message_friend_recommendation',
   'zalo_message_group',
   'zalo_join_group_link'
 ])

@@ -302,7 +302,7 @@ export interface CampaignExtraSettings {
   postBumpRotationIndex?: number           // Con trỏ chia đều target qua nhiều bài post
   // Nhắn tin bạn bè / nhắn tin UID & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
-  enableAddFriend?: boolean                // Kết bạn (facebook_message_uid, zalo_message_phone, zalo_message_group_member, zalo_message_remarketing_customer)
+  enableAddFriend?: boolean                // Kết bạn (facebook_message_uid, zalo_message_phone, zalo_message_group_member, zalo_message_remarketing_customer, zalo_message_friend_recommendation)
   useSuggestedFriends?: boolean            // facebook_message_uid: lấy UID từ đề xuất bạn bè Facebook
   suggestedFriendsCount?: number           // Số lượng đề xuất bạn bè cần lấy
   // Zalo - Nhắn tin, kết bạn đến SĐT
@@ -326,6 +326,9 @@ export interface CampaignExtraSettings {
   zaloFriendBlocklistName?: string | null
   zaloBirthdayDataMaterializedDate?: string | null
   zaloBirthdayMaterializedCount?: number
+  zaloFriendRecommendationCount?: number
+  zaloFriendRecommendationDataMaterializedAt?: string | null
+  zaloFriendRecommendationMaterializedCount?: number
   zaloRealtimeTriggers?: Array<'join' | 'leave' | 'interact'>
   zaloRealtimeGroupIds?: string[]
   zaloRealtimeGroupNames?: string[]
