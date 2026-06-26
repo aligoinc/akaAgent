@@ -165,6 +165,7 @@ export interface CampaignAction {
   isActive: boolean
   workflowId?: number       // engine v2 (BIGINT, FK auto_workflows.id)
   testWorkflowId?: number   // engine v2 test workflow (BIGINT, FK auto_workflows.id)
+  // Candidate action codes for daily/window quota checks, not for action-disable enforcement.
   limitCheckActionCodes: string[]
   isDelete: boolean
   createdAt?: string
@@ -255,6 +256,7 @@ export interface ActionLimitConfig {
 
 export interface CampaignActionLimitSettings extends ActionLimitConfig {
   sleepBetweenActions?: number
+  // Chỉ điều khiển quota ngày/khung giờ; action disable vẫn luôn check theo action thực sự chạy.
   enabledActionCodes?: string[]
   byActionCode?: Record<string, ActionLimitConfig>
 }

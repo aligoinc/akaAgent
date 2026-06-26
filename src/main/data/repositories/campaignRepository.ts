@@ -14,6 +14,7 @@ import {
   AddCampaignInputDataToCampaignRequest,
   AddCampaignInputDataToCampaignResult,
   AutoAccountContact,
+  AutoAccountActionStatus,
   BulkUpdateCampaignInputDataStatusResult,
   ContactListResult,
   getCampaignInputDataRequirement,
@@ -2637,25 +2638,8 @@ export async function getAccountRateLimitStatus(
   const rateLimitMinutes = limitConfig?.rateLimitMinutes && limitConfig.rateLimitMinutes > 0 ? limitConfig.rateLimitMinutes : 65
   const actionStatus = await accountActionRepo.getAccountActionStatus(accountId, normalizedActionCode)
 
-  if (actionStatus.isDisable) {
-    const retryAfterMs = actionStatus.dateEnable
-      ? Math.max(0, new Date(actionStatus.dateEnable).getTime() - Date.now())
-      : undefined
-    if (!actionStatus.dateEnable || retryAfterMs === undefined || retryAfterMs > 0) {
-      return {
-        ok: false,
-        actionCode: normalizedActionCode,
-        actionName,
-        errorCode: actionStatus.disabledErrorCode || undefined,
-        isActionDisabled: true,
-        disabledReason: actionStatus.disabledReason,
-        retryAfterMs,
-        reason: retryAfterMs
-          ? actionStatus.disabledReason || `Hành động "${actionName}" đang tạm dừng, còn khoảng ${Math.ceil(retryAfterMs / 60000)} phút`
-          : actionStatus.disabledReason || `Hành động "${actionName}" đang tạm dừng`
-      }
-    }
-  }
+  const disabledStatus = buildAccountActionDisabledStatus(actionStatus, normalizedActionCode, actionName)
+  if (disabledStatus) return disabledStatus
 
   const dailyActionCount = actionStatus.countActionInDay
 
@@ -2719,5 +2703,47 @@ export async function getAccountRateLimitStatus(
     windowActionCount,
     windowLimit: rateLimitCount,
     windowMinutes: rateLimitMinutes
+  }
+}
+
+function buildAccountActionDisabledStatus(
+  actionStatus: AutoAccountActionStatus,
+  actionCode: string,
+  actionName: string
+): AccountActionLimitStatus | null {
+  if (!actionStatus.isDisable) return null
+
+  const retryAfterMs = actionStatus.dateEnable
+    ? Math.max(0, new Date(actionStatus.dateEnable).getTime() - Date.now())
+    : undefined
+  if (actionStatus.dateEnable && retryAfterMs !== undefined && retryAfterMs <= 0) return null
+
+  return {
+    ok: false,
+    actionCode,
+    actionName,
+    errorCode: actionStatus.disabledErrorCode || undefined,
+    isActionDisabled: true,
+    disabledReason: actionStatus.disabledReason,
+    retryAfterMs,
+    reason: retryAfterMs
+      ? actionStatus.disabledReason || `Hành động "${actionName}" đang tạm dừng, còn khoảng ${Math.ceil(retryAfterMs / 60000)} phút`
+      : actionStatus.disabledReason || `Hành động "${actionName}" đang tạm dừng`
+  }
+}
+
+export async function getAccountActionDisabledStatus(
+  accountId: number,
+  actionCode: string,
+  actionName: string
+): Promise<AccountActionLimitStatus> {
+  const normalizedActionCode = actionCode.trim()
+  if (!normalizedActionCode) return { ok: true }
+
+  const actionStatus = await accountActionRepo.getAccountActionStatus(accountId, normalizedActionCode)
+  return buildAccountActionDisabledStatus(actionStatus, normalizedActionCode, actionName) || {
+    ok: true,
+    actionCode: normalizedActionCode,
+    actionName
   }
 }

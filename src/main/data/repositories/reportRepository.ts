@@ -12,7 +12,7 @@ import {
   CampaignAction,
   CampaignDetailStatus
 } from '../../../shared/types'
-import { getCampaignActionDescriptors } from '../../domain/campaigns/campaignActionDescriptors'
+import { getCampaignExecutableActionDescriptors } from '../../domain/campaigns/campaignActionDescriptors'
 import { requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 import * as accountActionRepo from './accountActionRepository'
@@ -546,7 +546,7 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
         } as CampaignAction
         : undefined
 
-      for (const action of getCampaignActionDescriptors(campaign, campaignAction)) {
+      for (const action of getCampaignExecutableActionDescriptors(campaign, campaignAction)) {
         if (!actionCodeSet.has(action.code)) continue
         const cell = reportRow.countsByActionCode[action.code] || makeEmptyCell()
         cell.pendingCount += 1
@@ -713,7 +713,7 @@ async function getPendingDetailRows(
             : []
         } as CampaignAction
         : undefined
-      const descriptor = getCampaignActionDescriptors(campaign, campaignAction)
+      const descriptor = getCampaignExecutableActionDescriptors(campaign, campaignAction)
         .find(item => item.code === action.code)
       if (!descriptor) continue
 
