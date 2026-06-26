@@ -6257,6 +6257,10 @@ button.btn-icon.campaign-control-button.assistant {
   flex-shrink: 0; /* Prevents squishing */
 }
 
+.stepper-section.has-message-personalization {
+  overflow: visible;
+}
+
 .stepper-section:hover {
   border-color: var(--border-hover);
 }
@@ -7186,7 +7190,7 @@ button.btn-icon.campaign-control-button.assistant {
 
 .campaign-content-template-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
 }
@@ -7222,6 +7226,264 @@ button.btn-icon.campaign-control-button.assistant {
 .campaign-content-template-layout .message-content-textarea {
   height: 100%;
   min-height: 0;
+}
+
+.message-personalization-dropdown {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.message-personalization-dropdown::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  z-index: 79;
+  display: none;
+  width: min(700px, calc(100vw - 56px));
+  height: 12px;
+  transform: translateX(-50%);
+}
+
+.message-personalization-dropdown.two-token-sections.has-excel-tokens::after {
+  width: min(560px, calc(100vw - 56px));
+}
+
+.message-personalization-dropdown.two-token-sections.no-excel-tokens::after {
+  width: min(470px, calc(100vw - 56px));
+}
+
+.message-personalization-dropdown.field-token-dropdown::after {
+  left: 0;
+  transform: none;
+}
+
+.message-personalization-button {
+  color: var(--accent-primary);
+}
+
+.message-personalization-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 6px;
+}
+
+.message-personalization-field-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stepper-form-group .message-personalization-field-title label {
+  margin-bottom: 0;
+}
+
+.message-personalization-field-count {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.message-personalization-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 80;
+  display: none;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 12px 14px;
+  align-items: start;
+  width: min(700px, calc(100vw - 56px));
+  max-height: min(330px, 72vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(var(--border-default), var(--border-default)) calc(12px + (100% - 24px - 28px) * 0.283333) 12px / 1px calc(100% - 24px) no-repeat,
+    linear-gradient(var(--border-default), var(--border-default)) calc(12px + 14px + (100% - 24px - 28px) * 0.666667) 12px / 1px calc(100% - 24px) no-repeat,
+    var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
+  transform: translateX(-50%);
+}
+
+.message-personalization-popover.two-token-sections {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1fr);
+  width: min(560px, calc(100vw - 56px));
+  background:
+    linear-gradient(var(--border-default), var(--border-default)) calc(12px + ((100% - 24px - 14px) * 0.487179) + 7px) 12px / 1px calc(100% - 24px) no-repeat,
+    var(--bg-secondary);
+}
+
+.message-personalization-popover.two-token-sections.no-excel-tokens {
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.05fr);
+  width: min(470px, calc(100vw - 56px));
+  background:
+    linear-gradient(var(--border-default), var(--border-default)) calc(12px + (100% - 24px - 14px) * 0.447368) 12px / 1px calc(100% - 24px) no-repeat,
+    var(--bg-secondary);
+}
+
+.message-personalization-dropdown.field-token-dropdown .message-personalization-popover {
+  left: 0;
+  transform: none;
+}
+
+.message-personalization-dropdown:hover::after,
+.message-personalization-dropdown:focus-within::after {
+  display: block;
+}
+
+.message-personalization-dropdown:hover .message-personalization-popover,
+.message-personalization-dropdown:focus-within .message-personalization-popover {
+  display: grid;
+}
+
+.message-personalization-popover .message-template-title {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  margin-bottom: 0;
+}
+
+.message-personalization-popover .message-template-section {
+  position: relative;
+  min-width: 0;
+  margin-bottom: 0;
+  gap: 2px;
+  overflow: visible;
+}
+
+.message-personalization-popover .message-template-section + .message-template-section {
+  padding-left: 14px;
+}
+
+.message-personalization-popover .message-template-section-title {
+  font-size: 13px;
+}
+
+.message-personalization-popover .message-template-section-title svg {
+  flex: 0 0 auto;
+}
+
+.message-personalization-popover .message-template-token {
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.message-personalization-popover .message-template-token + label {
+  margin-top: 8px;
+}
+
+.message-personalization-popover .message-template-token-row {
+  gap: 5px;
+}
+
+.message-personalization-popover .message-template-control-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.message-personalization-popover .message-template-control-row + label {
+  margin-top: 6px;
+}
+
+.message-template-dropdown {
+  position: relative;
+  min-width: 0;
+  width: min(180px, 100%);
+  z-index: 1;
+}
+
+.message-template-dropdown-button {
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.message-template-dropdown-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-template-dropdown-button svg {
+  flex: 0 0 auto;
+}
+
+.message-template-dropdown-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 95;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
+}
+
+.message-template-dropdown.open .message-template-dropdown-list {
+  display: flex;
+}
+
+.message-template-dropdown.open {
+  z-index: 2;
+}
+
+.message-template-dropdown:hover .message-template-dropdown-button,
+.message-template-dropdown.open .message-template-dropdown-button,
+.message-template-dropdown-button:hover {
+  border-color: var(--accent-primary);
+  background: rgba(124, 92, 252, 0.16);
+  color: var(--text-primary);
+}
+
+.message-template-dropdown-item {
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.message-template-dropdown-item:hover,
+.message-template-dropdown-item.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .message-template-panel {
@@ -7418,6 +7680,32 @@ button.btn-icon.campaign-control-button.assistant {
 @media (max-width: 980px) {
   .campaign-content-template-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .message-personalization-popover {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(420px, calc(100vw - 40px));
+    background: var(--bg-secondary);
+  }
+
+  .message-personalization-popover.no-excel-tokens {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(420px, calc(100vw - 40px));
+    background: var(--bg-secondary);
+  }
+
+  .message-personalization-popover .message-template-section + .message-template-section {
+    padding-left: 0;
+  }
+
+  .message-personalization-dropdown::after {
+    width: min(420px, calc(100vw - 40px));
+  }
+
+  .message-personalization-dropdown.no-excel-tokens::after {
+    width: min(420px, calc(100vw - 40px));
   }
 }
 
