@@ -19,6 +19,7 @@ interface AuthState {
   updateUseTestWorkflow: (useTestWorkflow: boolean) => Promise<void>
   rehydrateFromStorage: () => Promise<void>
   handleSessionExpired: (message?: string | null) => void
+  handleUserUpdated: (user: AuthUser) => void
   clearError: () => void
 }
 
@@ -270,6 +271,11 @@ export const useAuthStore = create<AuthState>()((set) => ({
     loggingIn: false,
     initializing: false,
     errorMessage: formatAuthErrorMessage(message || 'Tài khoản của bạn đã hết hạn', 'Tài khoản của bạn đã hết hạn')
+  }),
+
+  handleUserUpdated: (user) => set({
+    user,
+    errorMessage: null
   }),
 
   clearError: () => set({ errorMessage: null })

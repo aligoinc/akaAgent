@@ -43,6 +43,12 @@ const electronAPI = {
     return () => ipcRenderer.removeListener(IPC_EVENTS.AUTH_SESSION_EXPIRED, handler)
   },
 
+  onAuthUserUpdated: (callback: (user: AuthUser) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, user: AuthUser) => callback(user)
+    ipcRenderer.on(IPC_EVENTS.AUTH_USER_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.AUTH_USER_UPDATED, handler)
+  },
+
   // Theme
   setTheme: (theme: 'light' | 'dark'): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.THEME_CHANGE, theme),

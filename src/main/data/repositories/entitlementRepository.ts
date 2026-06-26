@@ -76,11 +76,6 @@ interface OrganizationProductRow {
   max_sends_per_day?: number | string | null
 }
 
-interface ProductCheckOptions {
-  context: string
-  technicalMessage: string
-}
-
 export function emptyAuthEntitlements(): AuthEntitlements {
   return {
     facebookCore: false,
@@ -92,6 +87,20 @@ export function emptyAuthEntitlements(): AuthEntitlements {
       facebookFanpage: null,
       email: null,
       zalo: null
+    }
+  }
+}
+
+function normalizeAuthEntitlements(entitlements?: Partial<AuthEntitlements> | null): AuthEntitlements {
+  const empty = emptyAuthEntitlements()
+  return {
+    facebookCore: !!entitlements?.facebookCore,
+    facebookFanpage: !!entitlements?.facebookFanpage,
+    email: !!entitlements?.email,
+    zalo: !!entitlements?.zalo,
+    dailySendLimits: {
+      ...empty.dailySendLimits,
+      ...(entitlements?.dailySendLimits || {})
     }
   }
 }
@@ -120,29 +129,6 @@ function getDemoDailySendLimit(rows: OrganizationProductRow[]): number | null {
   if (hasNonDemo) return null
 
   return normalizePositiveInteger(activeRows[0]?.max_sends_per_day) ?? DEFAULT_DEMO_DAILY_SEND_LIMIT
-}
-
-function mergeCachedAndLiveEntitlements(
-  cached?: Partial<AuthEntitlements> | null,
-  live?: Partial<AuthEntitlements> | null
-): AuthEntitlements {
-  const facebookCore = !!cached?.facebookCore && !!live?.facebookCore
-  const facebookFanpage = !!cached?.facebookFanpage && !!live?.facebookFanpage
-  const email = !!cached?.email && !!live?.email
-  const zalo = !!cached?.zalo && !!live?.zalo
-
-  return {
-    facebookCore,
-    facebookFanpage,
-    email,
-    zalo,
-    dailySendLimits: {
-      facebookCore: facebookCore ? live?.dailySendLimits?.facebookCore ?? null : null,
-      facebookFanpage: facebookFanpage ? live?.dailySendLimits?.facebookFanpage ?? null : null,
-      email: email ? live?.dailySendLimits?.email ?? null : null,
-      zalo: zalo ? live?.dailySendLimits?.zalo ?? null : null
-    }
-  }
 }
 
 function hasAnyEntitlement(entitlements: Partial<AuthEntitlements> | null | undefined): boolean {
@@ -185,31 +171,6 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
   return entitlements
 }
 
-export async function isOrganizationProductActive(
-  organizationId: number,
-  productId: number,
-  options: ProductCheckOptions
-): Promise<boolean> {
-  const { data, error } = await client()
-    .from('org_organization_product')
-    .select('expiration_date')
-    .eq('organization_id', organizationId)
-    .eq('product_id', productId)
-    .eq('is_deleted', false)
-    .order('expiration_date', { ascending: false, nullsFirst: false })
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) {
-    console.error(`[entitlements] ${options.context}:`, error)
-    throw new Error(options.technicalMessage)
-  }
-
-  const row = data as unknown as OrganizationProductRow | null
-  return isExpirationActive(row?.expiration_date)
-}
-
 export async function ensureAkaAgentSubscriptionActive(organizationId: number): Promise<void> {
   const entitlements = await loadOrganizationEntitlements(organizationId)
   if (!hasAnyEntitlement(entitlements)) throw new Error(ACCOUNT_EXPIRED_MESSAGE)
@@ -235,31 +196,19 @@ export function hasCurrentUserEmailFeatureEntitlement(): boolean {
 }
 
 export async function loadCurrentUserEffectiveEntitlements(): Promise<AuthEntitlements> {
-  const user = requireCurrentUser()
-  const live = await loadOrganizationEntitlements(user.organizationId)
-  return mergeCachedAndLiveEntitlements(user.entitlements, live)
+  return normalizeAuthEntitlements(requireCurrentUser().entitlements)
 }
 
 export async function isCurrentUserFeatureActive(feature: EntitlementFeature): Promise<boolean> {
-  const user = requireCurrentUser()
-  return isOrganizationProductActive(user.organizationId, FEATURE_PRODUCT_IDS[feature], {
-    context: `check current user ${feature} entitlement`,
-    technicalMessage: 'Không thể kiểm tra quyền sử dụng. Vui lòng thử lại sau.'
-  })
+  return hasCurrentUserFeatureEntitlement(feature)
 }
 
 export async function canCurrentUserUseFeature(feature: EntitlementFeature): Promise<boolean> {
-  if (!hasCurrentUserFeatureEntitlement(feature)) return false
-  try {
-    return await isCurrentUserFeatureActive(feature)
-  } catch (err) {
-    console.error(`[entitlements] Failed to refresh current ${feature} entitlement:`, err)
-    return false
-  }
+  return hasCurrentUserFeatureEntitlement(feature)
 }
 
 export async function ensureCurrentUserFeatureActive(feature: EntitlementFeature): Promise<void> {
-  if (!(await isCurrentUserFeatureActive(feature))) {
+  if (!hasCurrentUserFeatureEntitlement(feature)) {
     throw new Error(getFeatureUnavailableMessage(feature))
   }
 }

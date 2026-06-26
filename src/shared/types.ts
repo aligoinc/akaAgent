@@ -1189,6 +1189,7 @@ export const IPC_EVENTS = {
   AUTH_CHANGE_PASSWORD: 'auth:change-password',
   AUTH_UPDATE_USE_TEST_WORKFLOW: 'auth:update-use-test-workflow',
   AUTH_SESSION_EXPIRED: 'auth:session-expired',
+  AUTH_USER_UPDATED: 'auth:user-updated',
 
   // App
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',
