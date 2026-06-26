@@ -254,10 +254,16 @@ const findLinkedSourceCampaigns = (campaign: Campaign, campaigns: Campaign[]): C
     ? ['findUidTargetCampaignIds']
     : campaign.actionId === 'facebook_comment_seeding_post'
       ? ['findPostLinkTargetCampaignIds']
+      : campaign.actionId === 'zalo_message_phone'
+        ? ['findPhoneZaloMessagePhoneTargetCampaignIds']
+      : campaign.actionId === 'zalo_join_group_link'
+        ? ['findZaloGroupLinkJoinTargetCampaignIds']
       : campaign.actionId === 'facebook_group_post'
         ? ['findFacebookGroupPostTargetCampaignIds']
         : campaign.actionId === 'facebook_comment_seeding'
           ? ['findFacebookGroupCommentTargetCampaignIds']
+        : campaign.actionId === 'facebook_join_group'
+          ? ['findFacebookGroupJoinTargetCampaignIds']
           : []
   if (targetFields.length === 0) return []
   return campaigns.filter(source => targetFields.some(field =>
@@ -459,11 +465,14 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Đẩy link post sang campaign', value: formatCampaignRefs(extra.findPostLinkTargetCampaignIds, campaigns), hidden: !extra.findPostLinkTargetCampaignIds?.length },
     { label: 'Đẩy SĐT sang SMS', value: textOrDash(getNumberList(extra.findPhoneSmsTargetCampaignIds).join(', ')), hidden: !extra.findPhoneSmsTargetCampaignIds?.length },
     { label: 'Đẩy SĐT sang Zalo Web', value: textOrDash(getNumberList(extra.findPhoneZaloWebTargetCampaignIds).join(', ')), hidden: !extra.findPhoneZaloWebTargetCampaignIds?.length },
+    { label: 'Đẩy SĐT sang Zalo phone', value: formatCampaignRefs(extra.findPhoneZaloMessagePhoneTargetCampaignIds, campaigns), hidden: !extra.findPhoneZaloMessagePhoneTargetCampaignIds?.length },
     { label: 'Đẩy link Zalo sang Zalo Web', value: textOrDash(getNumberList(extra.findZaloGroupLinkWebTargetCampaignIds).join(', ')), hidden: !extra.findZaloGroupLinkWebTargetCampaignIds?.length },
+    { label: 'Đẩy link Zalo sang campaign tham gia group', value: formatCampaignRefs(extra.findZaloGroupLinkJoinTargetCampaignIds, campaigns), hidden: !extra.findZaloGroupLinkJoinTargetCampaignIds?.length },
     { label: 'Đẩy SĐT sang akaBiz Desktop', value: textOrDash(getNumberList(extra.findPhoneAkaBizDesktopTargetCampaignIds).join(', ')), hidden: !extra.findPhoneAkaBizDesktopTargetCampaignIds?.length },
     { label: 'Đẩy link Zalo sang akaBiz Desktop', value: textOrDash(getNumberList(extra.findZaloGroupLinkAkaBizDesktopTargetCampaignIds).join(', ')), hidden: !extra.findZaloGroupLinkAkaBizDesktopTargetCampaignIds?.length },
     { label: 'Đẩy group sang campaign đăng bài', value: formatCampaignRefs(extra.findFacebookGroupPostTargetCampaignIds, campaigns), hidden: !extra.findFacebookGroupPostTargetCampaignIds?.length },
     { label: 'Đẩy group sang campaign comment seeding', value: formatCampaignRefs(extra.findFacebookGroupCommentTargetCampaignIds, campaigns), hidden: !extra.findFacebookGroupCommentTargetCampaignIds?.length },
+    { label: 'Đẩy group sang campaign tham gia group', value: formatCampaignRefs(extra.findFacebookGroupJoinTargetCampaignIds, campaigns), hidden: !extra.findFacebookGroupJoinTargetCampaignIds?.length },
     { label: 'Nguồn tìm data liên kết', value: formatLinkedCampaigns(linkedSourceCampaigns), hidden: linkedSourceCampaigns.length === 0 }
   ]
 

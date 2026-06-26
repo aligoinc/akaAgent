@@ -384,7 +384,9 @@ export interface CampaignExtraSettings {
   findPostLinkTargetCampaignIds?: number[]     // Khi tìm link bài post, tự thêm link vào campaign comment seeding bài post đã chọn
   findPhoneSmsTargetCampaignIds?: number[]       // Khi tìm SĐT, đẩy sang campaign akaBiz Sms đã chọn
   findPhoneZaloWebTargetCampaignIds?: number[]   // Khi tìm SĐT, đẩy sang campaign akaBiz Zalo Web đã chọn
+  findPhoneZaloMessagePhoneTargetCampaignIds?: number[] // Khi tìm SĐT, đẩy sang campaign Zalo phone nội bộ đã chọn
   findZaloGroupLinkWebTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Zalo Web đã chọn
+  findZaloGroupLinkJoinTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign Zalo tham gia group nội bộ đã chọn
   findPhoneAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm SĐT, đẩy sang campaign akaBiz Desktop đã chọn
   findZaloGroupLinkAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Desktop đã chọn
   // Tìm kiếm data bằng Facebook Search — UI/config phase
@@ -403,6 +405,7 @@ export interface CampaignExtraSettings {
   minSearchGroupPostsPerDay?: number
   findFacebookGroupPostTargetCampaignIds?: number[] // Khi tìm group Facebook, đẩy sang campaign đăng bài group
   findFacebookGroupCommentTargetCampaignIds?: number[] // Khi tìm group Facebook, đẩy sang campaign comment seeding group/page/profile
+  findFacebookGroupJoinTargetCampaignIds?: number[] // Khi tìm group Facebook, đẩy sang campaign tham gia group
 }
 
 export interface Campaign {

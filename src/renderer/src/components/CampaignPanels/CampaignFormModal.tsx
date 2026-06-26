@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -37,21 +37,27 @@ import {
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
   'findPostLinkTargetCampaignIds',
+  'findPhoneZaloMessagePhoneTargetCampaignIds',
+  'findZaloGroupLinkJoinTargetCampaignIds',
   'findFacebookGroupPostTargetCampaignIds',
-  'findFacebookGroupCommentTargetCampaignIds'
+  'findFacebookGroupCommentTargetCampaignIds',
+  'findFacebookGroupJoinTargetCampaignIds'
 ] as const
 type FindDataTargetCampaignField = typeof FIND_DATA_TARGET_FIELDS[number]
 type FindDataSourceKind = 'group' | 'search'
 type ZaloFriendTargetMode = NonNullable<CampaignExtraSettings['zaloFriendTargetMode']>
 type ZaloMessageSendMode = NonNullable<CampaignExtraSettings['zaloMessageSendMode']>
 type ZaloRealtimeTrigger = NonNullable<CampaignExtraSettings['zaloRealtimeTriggers']>[number]
-type CampaignPickerColumn = 'name' | 'account' | 'status' | 'schedule' | 'updatedAt' | 'dataTypes' | 'sourceTypes'
+type CampaignPickerColumn = 'name' | 'action' | 'account' | 'status' | 'schedule' | 'updatedAt' | 'dataTypes' | 'sourceTypes'
 type CampaignPickerSource =
   | { type: 'findDataSource'; sourceKind?: FindDataSourceKind }
   | { type: 'messageUidTarget' }
   | { type: 'postLinkTarget' }
   | { type: 'groupPostTarget' }
   | { type: 'groupCommentTarget' }
+  | { type: 'zaloMessagePhoneTarget' }
+  | { type: 'zaloJoinGroupLinkTarget' }
+  | { type: 'facebookJoinGroupTarget' }
   | { type: 'external'; kind: AkaBizCampaignListKind }
 
 const CAMPAIGN_ACTION_PLATFORM_ORDER: Record<string, number> = {
@@ -78,6 +84,7 @@ type InternalCampaignPickerSourceType = Exclude<CampaignPickerSource['type'], 'e
 interface CampaignPickerRow {
   id: number
   name: string
+  actionLabel?: string
   accountName?: string
   status?: string
   scheduleLabel?: string
@@ -832,6 +839,7 @@ const getFindDataTargetCampaignField = (actionId: string): FindDataTargetCampaig
   if (actionId === COMMENT_SEEDING_POST_ACTION_ID) return 'findPostLinkTargetCampaignIds'
   if (actionId === GROUP_POST_ACTION_ID) return 'findFacebookGroupPostTargetCampaignIds'
   if (actionId === COMMENT_SEEDING_FEED_ACTION_ID) return 'findFacebookGroupCommentTargetCampaignIds'
+  if (actionId === FACEBOOK_JOIN_GROUP_ACTION_ID) return 'findFacebookGroupJoinTargetCampaignIds'
   return null
 }
 
@@ -840,6 +848,7 @@ const getFindDataSourceSectionLabel = (actionId: string): string => {
   if (actionId === COMMENT_SEEDING_POST_ACTION_ID) return 'Chọn chiến dịch: Tìm kiếm bài post để comment'
   if (actionId === GROUP_POST_ACTION_ID) return 'Chọn chiến dịch: Tìm kiếm group để đăng bài'
   if (actionId === COMMENT_SEEDING_FEED_ACTION_ID) return 'Chọn chiến dịch: Tìm kiếm group để comment'
+  if (actionId === FACEBOOK_JOIN_GROUP_ACTION_ID) return 'Chọn chiến dịch: Tìm kiếm group để tham gia'
   return 'Nguồn chiến dịch tìm kiếm data'
 }
 
@@ -1049,6 +1058,8 @@ export default function CampaignFormModal({
   } = useCampaignStore()
   const entitlements = useAuthStore(state => state.user?.entitlements)
   const canUseEmailFeature = !!entitlements?.email
+  const canUseZaloFeature = canUseCampaignAction({ id: ZALO_MESSAGE_PHONE_ACTION_ID, flatformType: 'zalo' }, entitlements)
+  const zaloEntitlementNote = 'Bạn chưa đăng ký gói Zalo, không thể sử dụng tính năng này'
 
   const contentRef = useRef<HTMLDivElement>(null)
   const campaignContentTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -1099,7 +1110,8 @@ export default function CampaignFormModal({
   const initialIsFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(initialActionId)
   const initialIsDraftFacebookGroupSource =
     draftRequiredTargetField === 'findFacebookGroupPostTargetCampaignIds' ||
-    draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds'
+    draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds' ||
+    draftRequiredTargetField === 'findFacebookGroupJoinTargetCampaignIds'
   const initialFindDataFlags = normalizeFindDataFlagState({
     isFindPhone: campaign?.extraSettings?.isFindPhone ?? false,
     isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
@@ -1280,11 +1292,14 @@ export default function CampaignFormModal({
     findPostLinkTargetCampaignIds: campaign?.extraSettings?.findPostLinkTargetCampaignIds || [] as number[],
     findPhoneSmsTargetCampaignIds: campaign?.extraSettings?.findPhoneSmsTargetCampaignIds || [] as number[],
     findPhoneZaloWebTargetCampaignIds: campaign?.extraSettings?.findPhoneZaloWebTargetCampaignIds || [] as number[],
+    findPhoneZaloMessagePhoneTargetCampaignIds: campaign?.extraSettings?.findPhoneZaloMessagePhoneTargetCampaignIds || [] as number[],
     findZaloGroupLinkWebTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkWebTargetCampaignIds || [] as number[],
+    findZaloGroupLinkJoinTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkJoinTargetCampaignIds || [] as number[],
     findPhoneAkaBizDesktopTargetCampaignIds: campaign?.extraSettings?.findPhoneAkaBizDesktopTargetCampaignIds || [] as number[],
     findZaloGroupLinkAkaBizDesktopTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || [] as number[],
     findFacebookGroupPostTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupPostTargetCampaignIds || [] as number[],
-    findFacebookGroupCommentTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || [] as number[]
+    findFacebookGroupCommentTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || [] as number[],
+    findFacebookGroupJoinTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || [] as number[]
   })
   const imageInputRef = useRef<HTMLInputElement>(null)
   const commentImageInputRef = useRef<HTMLInputElement>(null)
@@ -1300,8 +1315,14 @@ export default function CampaignFormModal({
   const [handleFoundPhoneZaloWebData, setHandleFoundPhoneZaloWebData] = useState(() =>
     (campaign?.extraSettings?.findPhoneZaloWebTargetCampaignIds || []).length > 0
   )
+  const [handleFoundPhoneZaloMessagePhoneData, setHandleFoundPhoneZaloMessagePhoneData] = useState(() =>
+    (campaign?.extraSettings?.findPhoneZaloMessagePhoneTargetCampaignIds || []).length > 0
+  )
   const [handleFoundZaloGroupLinkWebData, setHandleFoundZaloGroupLinkWebData] = useState(() =>
     (campaign?.extraSettings?.findZaloGroupLinkWebTargetCampaignIds || []).length > 0
+  )
+  const [handleFoundZaloGroupLinkJoinData, setHandleFoundZaloGroupLinkJoinData] = useState(() =>
+    (campaign?.extraSettings?.findZaloGroupLinkJoinTargetCampaignIds || []).length > 0
   )
   const [handleFoundPhoneAkaBizDesktopData, setHandleFoundPhoneAkaBizDesktopData] = useState(() =>
     (campaign?.extraSettings?.findPhoneAkaBizDesktopTargetCampaignIds || []).length > 0
@@ -1316,6 +1337,10 @@ export default function CampaignFormModal({
   const [handleFoundFacebookGroupCommentData, setHandleFoundFacebookGroupCommentData] = useState(() =>
     draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds' ||
     (campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || []).length > 0
+  )
+  const [handleFoundFacebookGroupJoinData, setHandleFoundFacebookGroupJoinData] = useState(() =>
+    draftRequiredTargetField === 'findFacebookGroupJoinTargetCampaignIds' ||
+    (campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || []).length > 0
   )
   const [selectedFindDataSourceCampaignIds, setSelectedFindDataSourceCampaignIds] = useState<number[]>([])
   const findDataSourceSelectionTouchedRef = useRef(false)
@@ -1347,6 +1372,7 @@ export default function CampaignFormModal({
     initialAccountIds?: number[]
     initialDetails?: Partial<CampaignInputData>[]
     submitLabel?: string
+    autoSelectOnSave?: boolean
   } | null>(null)
   const [viewingSourceCampaign, setViewingSourceCampaign] = useState<Campaign | null>(null)
   const [editingSourceCampaign, setEditingSourceCampaign] = useState<Campaign | null>(null)
@@ -1398,13 +1424,22 @@ export default function CampaignFormModal({
   const targetFindDataField = getFindDataTargetCampaignField(formData.actionId)
   const findDataSourceSectionLabel = getFindDataSourceSectionLabel(formData.actionId)
   const findDataSourceStep = getFindDataSourceStep(findDataSourceSectionLabel)
-  const isDraftTargetFromFindData = draftMode && (draftPickerSourceType === 'messageUidTarget' || draftPickerSourceType === 'postLinkTarget')
+  const isDraftTargetFromFindData = draftMode && (
+    draftPickerSourceType === 'messageUidTarget' ||
+    draftPickerSourceType === 'postLinkTarget' ||
+    draftPickerSourceType === 'groupPostTarget' ||
+    draftPickerSourceType === 'groupCommentTarget' ||
+    draftPickerSourceType === 'zaloMessagePhoneTarget' ||
+    draftPickerSourceType === 'zaloJoinGroupLinkTarget' ||
+    draftPickerSourceType === 'facebookJoinGroupTarget'
+  )
   const isDraftSourceForTarget = draftMode && draftPickerSourceType === 'findDataSource'
   const isDraftAutoLinkedFindUid = isDraftSourceForTarget && draftRequiredTargetField === 'findUidTargetCampaignIds'
   const isDraftAutoLinkedPostLink = isDraftSourceForTarget && draftRequiredTargetField === 'findPostLinkTargetCampaignIds'
   const isDraftAutoLinkedFacebookGroupPost = isDraftSourceForTarget && draftRequiredTargetField === 'findFacebookGroupPostTargetCampaignIds'
   const isDraftAutoLinkedFacebookGroupComment = isDraftSourceForTarget && draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds'
-  const isDraftAutoLinkedFacebookGroup = isDraftAutoLinkedFacebookGroupPost || isDraftAutoLinkedFacebookGroupComment
+  const isDraftAutoLinkedFacebookGroupJoin = isDraftSourceForTarget && draftRequiredTargetField === 'findFacebookGroupJoinTargetCampaignIds'
+  const isDraftAutoLinkedFacebookGroup = isDraftAutoLinkedFacebookGroupPost || isDraftAutoLinkedFacebookGroupComment || isDraftAutoLinkedFacebookGroupJoin
   const hasSelectedCampaignAction = !!formData.actionId
   const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign || isZaloMessageGroupCampaign
   const canPickPages = isPagePostCampaign
@@ -1875,11 +1910,30 @@ export default function CampaignFormModal({
     c.id !== campaign?.id &&
     !c.isDelete
   )
+  const zaloMessagePhoneCampaignOptions = campaigns.filter(c =>
+    c.actionId === ZALO_MESSAGE_PHONE_ACTION_ID &&
+    c.id !== campaign?.id &&
+    !c.isDelete
+  )
+  const zaloJoinGroupLinkCampaignOptions = campaigns.filter(c =>
+    c.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID &&
+    c.id !== campaign?.id &&
+    !c.isDelete
+  )
+  const facebookJoinGroupCampaignOptions = campaigns.filter(c =>
+    c.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID &&
+    c.id !== campaign?.id &&
+    !c.isDelete
+  )
   const allFindDataSourceCampaignOptions = campaigns.filter(c => {
     if ((!FIND_DATA_GROUP_ACTIONS.has(c.actionId) && !FIND_DATA_SEARCH_ACTIONS.has(c.actionId)) || c.isDelete) return false
     if (targetFindDataField === 'findUidTargetCampaignIds') return c.extraSettings?.isFindUid === true
     if (targetFindDataField === 'findPostLinkTargetCampaignIds') return c.extraSettings?.isFindPostLink === true
-    if (targetFindDataField === 'findFacebookGroupPostTargetCampaignIds' || targetFindDataField === 'findFacebookGroupCommentTargetCampaignIds') {
+    if (
+      targetFindDataField === 'findFacebookGroupPostTargetCampaignIds' ||
+      targetFindDataField === 'findFacebookGroupCommentTargetCampaignIds' ||
+      targetFindDataField === 'findFacebookGroupJoinTargetCampaignIds'
+    ) {
       return FIND_DATA_SEARCH_ACTIONS.has(c.actionId) && c.extraSettings?.isFindFacebookGroup === true
     }
     return false
@@ -1895,8 +1949,11 @@ export default function CampaignFormModal({
       c.id,
       (c.extraSettings?.findUidTargetCampaignIds || []).join(','),
       (c.extraSettings?.findPostLinkTargetCampaignIds || []).join(','),
+      (c.extraSettings?.findPhoneZaloMessagePhoneTargetCampaignIds || []).join(','),
+      (c.extraSettings?.findZaloGroupLinkJoinTargetCampaignIds || []).join(','),
       (c.extraSettings?.findFacebookGroupPostTargetCampaignIds || []).join(','),
-      (c.extraSettings?.findFacebookGroupCommentTargetCampaignIds || []).join(',')
+      (c.extraSettings?.findFacebookGroupCommentTargetCampaignIds || []).join(','),
+      (c.extraSettings?.findFacebookGroupJoinTargetCampaignIds || []).join(',')
     ].join(':'))
     .join('|')
   const sourceSelectionTargetCampaignId = cloneFromId || (isEditingSavedCampaign && campaign?.id ? campaign.id : null)
@@ -3246,7 +3303,9 @@ export default function CampaignFormModal({
             findPostLinkTargetCampaignIds: normalizedFindData.isFindPostLink && handleFoundPostLinkData ? getCampaignIdList(formData.findPostLinkTargetCampaignIds) : [],
             findPhoneSmsTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneSmsData ? getCampaignIdList(formData.findPhoneSmsTargetCampaignIds) : [],
             findPhoneZaloWebTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneZaloWebData ? getCampaignIdList(formData.findPhoneZaloWebTargetCampaignIds) : [],
+            findPhoneZaloMessagePhoneTargetCampaignIds: normalizedFindData.isFindPhone && canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData ? getCampaignIdList(formData.findPhoneZaloMessagePhoneTargetCampaignIds) : [],
             findZaloGroupLinkWebTargetCampaignIds: normalizedFindData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData ? getCampaignIdList(formData.findZaloGroupLinkWebTargetCampaignIds) : [],
+            findZaloGroupLinkJoinTargetCampaignIds: normalizedFindData.isFindLinkGroupZalo && canUseZaloFeature && handleFoundZaloGroupLinkJoinData ? getCampaignIdList(formData.findZaloGroupLinkJoinTargetCampaignIds) : [],
             findPhoneAkaBizDesktopTargetCampaignIds: normalizedFindData.isFindPhone && handleFoundPhoneAkaBizDesktopData ? getCampaignIdList(formData.findPhoneAkaBizDesktopTargetCampaignIds) : [],
             findZaloGroupLinkAkaBizDesktopTargetCampaignIds: normalizedFindData.isFindLinkGroupZalo && handleFoundZaloGroupLinkAkaBizDesktopData ? getCampaignIdList(formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds) : [],
             findFacebookGroupPostTargetCampaignIds: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup && handleFoundFacebookGroupPostData
@@ -3254,6 +3313,9 @@ export default function CampaignFormModal({
               : [],
             findFacebookGroupCommentTargetCampaignIds: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup && handleFoundFacebookGroupCommentData
               ? getCampaignIdList(formData.findFacebookGroupCommentTargetCampaignIds)
+              : [],
+            findFacebookGroupJoinTargetCampaignIds: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup && handleFoundFacebookGroupJoinData
+              ? getCampaignIdList(formData.findFacebookGroupJoinTargetCampaignIds)
               : []
           } as CampaignExtraSettings,
           images: isFacebookJoinGroupCampaign ? [] : formData.images
@@ -3483,6 +3545,10 @@ export default function CampaignFormModal({
         showAlert('Vui lòng chọn ít nhất một chiến dịch comment seeding để nhận group Facebook.', 'error')
         return
       }
+      if (isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupJoinData && formData.findFacebookGroupJoinTargetCampaignIds.length === 0 && !isDraftAutoLinkedFacebookGroupJoin) {
+        showAlert('Vui lòng chọn ít nhất một chiến dịch tham gia group để nhận group Facebook.', 'error')
+        return
+      }
       if (formData.isFindPhone && handleFoundPhoneSmsData) {
         if (!hasSmsIntegration) {
           showAlert('Vui lòng tích hợp akaBiz Sms trước khi đẩy SĐT.', 'error')
@@ -3503,6 +3569,10 @@ export default function CampaignFormModal({
           return
         }
       }
+      if (formData.isFindPhone && canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData && formData.findPhoneZaloMessagePhoneTargetCampaignIds.length === 0) {
+        showAlert('Vui lòng chọn ít nhất một chiến dịch Zalo phone nhận SĐT.', 'error')
+        return
+      }
       if (formData.isFindLinkGroupZalo && handleFoundZaloGroupLinkWebData) {
         if (!hasZaloWebIntegration) {
           showAlert('Vui lòng tích hợp akaBiz Zalo Web trước khi đẩy link group Zalo.', 'error')
@@ -3512,6 +3582,10 @@ export default function CampaignFormModal({
           showAlert('Vui lòng chọn ít nhất một chiến dịch akaBiz Zalo Web nhận link group Zalo.', 'error')
           return
         }
+      }
+      if (formData.isFindLinkGroupZalo && canUseZaloFeature && handleFoundZaloGroupLinkJoinData && formData.findZaloGroupLinkJoinTargetCampaignIds.length === 0) {
+        showAlert('Vui lòng chọn ít nhất một chiến dịch Zalo tham gia group nhận link group Zalo.', 'error')
+        return
       }
       if (formData.isFindPhone && handleFoundPhoneAkaBizDesktopData) {
         if (!hasAkaBizDesktopIntegration) {
@@ -3542,7 +3616,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isFacebookJoinGroupCampaign && validDetails.length === 0) {
+    if (!isEditingSavedCampaign && isFacebookJoinGroupCampaign && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
@@ -3554,7 +3628,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng chọn ít nhất một hành động nhắn tin hoặc kết bạn.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
+    if (!isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign && !isDraftTargetFromFindData) {
       showAlert(
         isMessageUidCampaign
           ? 'Vui lòng thêm ít nhất một UID vào danh sách data.'
@@ -3784,18 +3858,25 @@ export default function CampaignFormModal({
         savedCampaignPayloadById.set(savedCampaign.id, campaignPayload)
       }
 
-      const tempUidTargetIds = formData.isFindUid && handleFoundUidData
-        ? formData.findUidTargetCampaignIds.filter(id => id < 0)
-        : []
-      const tempPostLinkTargetIds = formData.isFindPostLink && handleFoundPostLinkData
-        ? formData.findPostLinkTargetCampaignIds.filter(id => id < 0)
-        : []
-      const createdUidTargetIds = (await Promise.all(tempUidTargetIds.map(tempId => persistDraftByTempId(tempId)))).flat()
-      const createdPostLinkTargetIds = (await Promise.all(tempPostLinkTargetIds.map(tempId => persistDraftByTempId(tempId)))).flat()
+      const persistAndPatchFindDataTargetDrafts = async (
+        field: FindDataTargetCampaignField,
+        rawIds: number[],
+        enabled: boolean
+      ) => {
+        if (!isFindDataCampaign || !enabled) return
+        const tempIds = rawIds.filter(id => id < 0)
+        const createdIds = (await Promise.all(tempIds.map(tempId => persistDraftByTempId(tempId)))).flat()
+        await patchSavedSourceCampaignTargets(field, createdIds)
+      }
 
       if (isFindDataCampaign) {
-        await patchSavedSourceCampaignTargets('findUidTargetCampaignIds', createdUidTargetIds)
-        await patchSavedSourceCampaignTargets('findPostLinkTargetCampaignIds', createdPostLinkTargetIds)
+        await persistAndPatchFindDataTargetDrafts('findUidTargetCampaignIds', formData.findUidTargetCampaignIds, formData.isFindUid && handleFoundUidData)
+        await persistAndPatchFindDataTargetDrafts('findPostLinkTargetCampaignIds', formData.findPostLinkTargetCampaignIds, formData.isFindPostLink && handleFoundPostLinkData)
+        await persistAndPatchFindDataTargetDrafts('findPhoneZaloMessagePhoneTargetCampaignIds', formData.findPhoneZaloMessagePhoneTargetCampaignIds, formData.isFindPhone && canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData)
+        await persistAndPatchFindDataTargetDrafts('findZaloGroupLinkJoinTargetCampaignIds', formData.findZaloGroupLinkJoinTargetCampaignIds, formData.isFindLinkGroupZalo && canUseZaloFeature && handleFoundZaloGroupLinkJoinData)
+        await persistAndPatchFindDataTargetDrafts('findFacebookGroupPostTargetCampaignIds', formData.findFacebookGroupPostTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupPostData)
+        await persistAndPatchFindDataTargetDrafts('findFacebookGroupCommentTargetCampaignIds', formData.findFacebookGroupCommentTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupCommentData)
+        await persistAndPatchFindDataTargetDrafts('findFacebookGroupJoinTargetCampaignIds', formData.findFacebookGroupJoinTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupJoinData)
       }
 
       await syncFindDataSourceCampaignLinks(savedCampaignIds)
@@ -5633,11 +5714,13 @@ export default function CampaignFormModal({
       isFindPhone: checked,
       findPhoneSmsTargetCampaignIds: checked ? p.findPhoneSmsTargetCampaignIds : [],
       findPhoneZaloWebTargetCampaignIds: checked ? p.findPhoneZaloWebTargetCampaignIds : [],
+      findPhoneZaloMessagePhoneTargetCampaignIds: checked ? p.findPhoneZaloMessagePhoneTargetCampaignIds : [],
       findPhoneAkaBizDesktopTargetCampaignIds: checked ? p.findPhoneAkaBizDesktopTargetCampaignIds : []
     }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) {
       setHandleFoundPhoneSmsData(false)
       setHandleFoundPhoneZaloWebData(false)
+      setHandleFoundPhoneZaloMessagePhoneData(false)
       setHandleFoundPhoneAkaBizDesktopData(false)
     }
   }
@@ -5647,10 +5730,12 @@ export default function CampaignFormModal({
       ...p,
       isFindLinkGroupZalo: checked,
       findZaloGroupLinkWebTargetCampaignIds: checked ? p.findZaloGroupLinkWebTargetCampaignIds : [],
+      findZaloGroupLinkJoinTargetCampaignIds: checked ? p.findZaloGroupLinkJoinTargetCampaignIds : [],
       findZaloGroupLinkAkaBizDesktopTargetCampaignIds: checked ? p.findZaloGroupLinkAkaBizDesktopTargetCampaignIds : []
     }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) {
       setHandleFoundZaloGroupLinkWebData(false)
+      setHandleFoundZaloGroupLinkJoinData(false)
       setHandleFoundZaloGroupLinkAkaBizDesktopData(false)
     }
   }
@@ -5679,11 +5764,13 @@ export default function CampaignFormModal({
       ...p,
       isFindFacebookGroup: checked,
       findFacebookGroupPostTargetCampaignIds: checked ? p.findFacebookGroupPostTargetCampaignIds : [],
-      findFacebookGroupCommentTargetCampaignIds: checked ? p.findFacebookGroupCommentTargetCampaignIds : []
+      findFacebookGroupCommentTargetCampaignIds: checked ? p.findFacebookGroupCommentTargetCampaignIds : [],
+      findFacebookGroupJoinTargetCampaignIds: checked ? p.findFacebookGroupJoinTargetCampaignIds : []
     }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) {
       setHandleFoundFacebookGroupPostData(false)
       setHandleFoundFacebookGroupCommentData(false)
+      setHandleFoundFacebookGroupJoinData(false)
     }
   }
 
@@ -5886,19 +5973,24 @@ export default function CampaignFormModal({
 
   const toInternalCampaignPickerRow = (item: Campaign): CampaignPickerRow => {
     const accountName = item.accountName || `Tài khoản #${item.accountId}`
+    const actionLabel = item.actionName || item.actionId
     const scheduleLabel = getCampaignScheduleLabel(item)
+    const updatedAtLabel = formatPickerDateTime(item.updatedAt)
     return {
       id: item.id,
       name: item.name || `Campaign #${item.id}`,
+      actionLabel,
       accountName,
       status: item.status || 'Không rõ',
       scheduleLabel,
-      searchText: buildCampaignPickerSearchText([item.name, accountName, item.status, scheduleLabel])
+      updatedAtLabel,
+      searchText: buildCampaignPickerSearchText([item.name, actionLabel, accountName, item.status, scheduleLabel, updatedAtLabel])
     }
   }
 
   const toFindDataSourcePickerRow = (item: Campaign): CampaignPickerRow => {
     const accountName = item.accountName || `Tài khoản #${item.accountId}`
+    const actionLabel = item.actionName || item.actionId
     const scheduleLabel = getCampaignScheduleLabel(item)
     const updatedAtLabel = formatPickerDateTime(item.updatedAt)
     const dataTypes = getFindDataTypeLabels(item.extraSettings)
@@ -5906,28 +5998,31 @@ export default function CampaignFormModal({
     return {
       id: item.id,
       name: item.name || `Campaign #${item.id}`,
+      actionLabel,
       accountName,
       status: item.status || 'Không rõ',
       scheduleLabel,
       updatedAtLabel,
       dataTypes,
       sourceTypes,
-      searchText: buildCampaignPickerSearchText([item.name, accountName, item.status, scheduleLabel, updatedAtLabel, dataTypes, sourceTypes])
+      searchText: buildCampaignPickerSearchText([item.name, actionLabel, accountName, item.status, scheduleLabel, updatedAtLabel, dataTypes, sourceTypes])
     }
   }
 
   const toExternalCampaignPickerRow = (item: AkaBizCampaignListItem): CampaignPickerRow => {
     const name = item.name || `Campaign #${item.id}`
+    const actionLabel = item.campaignActionId || undefined
     const accountName = item.shopName || `Tài khoản #${item.shopId}`
     const status = item.status || 'Không rõ'
     const scheduleLabel = formatPickerDateTime(item.schedule)
     return {
       id: item.id,
       name,
+      actionLabel,
       accountName,
       status,
       scheduleLabel,
-      searchText: buildCampaignPickerSearchText([name, accountName, status, scheduleLabel])
+      searchText: buildCampaignPickerSearchText([name, actionLabel, accountName, status, scheduleLabel])
     }
   }
 
@@ -5988,22 +6083,25 @@ export default function CampaignFormModal({
     ))
     const name = String(payload.name || `Chiến dịch tạm #${Math.abs(draft.tempId)}`)
     const displayName = draft.items.length > 1 ? `${name} (${draft.items.length} tài khoản)` : name
+    const actionId = String(payload.actionId || draft.actionId || '')
+    const actionLabel = campaignActions.find(action => action.id === actionId)?.name || actionId
     const extraSettings = payload.extraSettings as CampaignExtraSettings | undefined
     const dataTypes = draft.sourceType === 'findDataSource' ? getFindDataTypeLabels(extraSettings) : undefined
     const sourceTypes = draft.sourceType === 'findDataSource' ? getFindDataSourceLabels(extraSettings) : undefined
     const scheduleLabel = getCampaignScheduleLabel(payload as Pick<Campaign, 'schedule' | 'scheduleType' | 'scheduleDays' | 'scheduleWeekDays'>)
-    const updatedAtLabel = draft.sourceType === 'findDataSource' ? formatPickerDateTime(payload.updatedAt) : undefined
+    const updatedAtLabel = formatPickerDateTime(payload.updatedAt)
 
     return {
       id: draft.tempId,
       name: displayName,
+      actionLabel,
       accountName: accountNames.join(', '),
       status: 'Tạm',
       scheduleLabel,
       updatedAtLabel,
       dataTypes,
       sourceTypes,
-      searchText: buildCampaignPickerSearchText([displayName, accountNames, 'Tạm', scheduleLabel, updatedAtLabel, dataTypes, sourceTypes])
+      searchText: buildCampaignPickerSearchText([displayName, actionLabel, accountNames, 'Tạm', scheduleLabel, updatedAtLabel, dataTypes, sourceTypes])
     }
   }
 
@@ -6066,8 +6164,11 @@ export default function CampaignFormModal({
     }
     if (source.type === 'messageUidTarget') return [...messageUidCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
     if (source.type === 'postLinkTarget') return [...postLinkCommentCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
-    if (source.type === 'groupPostTarget') return groupPostCampaignOptions.map(toInternalCampaignPickerRow)
-    if (source.type === 'groupCommentTarget') return groupCommentCampaignOptions.map(toInternalCampaignPickerRow)
+    if (source.type === 'groupPostTarget') return [...groupPostCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
+    if (source.type === 'groupCommentTarget') return [...groupCommentCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
+    if (source.type === 'zaloMessagePhoneTarget') return [...zaloMessagePhoneCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
+    if (source.type === 'zaloJoinGroupLinkTarget') return [...zaloJoinGroupLinkCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
+    if (source.type === 'facebookJoinGroupTarget') return [...facebookJoinGroupCampaignOptions.map(toInternalCampaignPickerRow), ...draftRows]
     return (externalCampaigns[source.kind] || []).map(toExternalCampaignPickerRow)
   }
 
@@ -6142,20 +6243,48 @@ export default function CampaignFormModal({
   const getDraftActionIdForPickerSource = (source: CampaignPickerSource): string | null => {
     if (source.type === 'messageUidTarget') return MESSAGE_UID_ACTION_ID
     if (source.type === 'postLinkTarget') return COMMENT_SEEDING_POST_ACTION_ID
+    if (source.type === 'groupPostTarget') return GROUP_POST_ACTION_ID
+    if (source.type === 'groupCommentTarget') return COMMENT_SEEDING_FEED_ACTION_ID
+    if (source.type === 'zaloMessagePhoneTarget') return ZALO_MESSAGE_PHONE_ACTION_ID
+    if (source.type === 'zaloJoinGroupLinkTarget') return ZALO_JOIN_GROUP_LINK_ACTION_ID
+    if (source.type === 'facebookJoinGroupTarget') return FACEBOOK_JOIN_GROUP_ACTION_ID
     if (source.type === 'findDataSource') {
       if (source.sourceKind === 'group') return FIND_DATA_GROUP_ACTION_ID
       if (source.sourceKind === 'search') return FIND_DATA_SEARCH_ACTION_ID
-      return targetFindDataField === 'findFacebookGroupPostTargetCampaignIds' || targetFindDataField === 'findFacebookGroupCommentTargetCampaignIds'
+      return targetFindDataField === 'findFacebookGroupPostTargetCampaignIds' ||
+        targetFindDataField === 'findFacebookGroupCommentTargetCampaignIds' ||
+        targetFindDataField === 'findFacebookGroupJoinTargetCampaignIds'
         ? FIND_DATA_SEARCH_ACTION_ID
         : FIND_DATA_GROUP_ACTION_ID
     }
     return null
   }
 
+  const getFindDataTargetFieldForDraftSourceType = (sourceType: InternalCampaignPickerSourceType): FindDataTargetCampaignField | null => {
+    if (sourceType === 'messageUidTarget') return 'findUidTargetCampaignIds'
+    if (sourceType === 'postLinkTarget') return 'findPostLinkTargetCampaignIds'
+    if (sourceType === 'groupPostTarget') return 'findFacebookGroupPostTargetCampaignIds'
+    if (sourceType === 'groupCommentTarget') return 'findFacebookGroupCommentTargetCampaignIds'
+    if (sourceType === 'zaloMessagePhoneTarget') return 'findPhoneZaloMessagePhoneTargetCampaignIds'
+    if (sourceType === 'zaloJoinGroupLinkTarget') return 'findZaloGroupLinkJoinTargetCampaignIds'
+    if (sourceType === 'facebookJoinGroupTarget') return 'findFacebookGroupJoinTargetCampaignIds'
+    return null
+  }
+
+  const appendDraftTargetSelection = (sourceType: InternalCampaignPickerSourceType, tempId: number) => {
+    const field = getFindDataTargetFieldForDraftSourceType(sourceType)
+    if (!field) return
+    setFormData(prev => ({
+      ...prev,
+      [field]: getPickerCampaignIdList([...(prev[field] || []), tempId])
+    }))
+  }
+
   const openDraftCampaignForm = (
     source: CampaignPickerSource,
     draft?: InternalCampaignDraft,
-    overrideSubmitLabel?: string
+    overrideSubmitLabel?: string,
+    autoSelectOnSave = false
   ) => {
     const actionId = getDraftActionIdForPickerSource(source)
     if (!actionId || source.type === 'external') return
@@ -6167,7 +6296,8 @@ export default function CampaignFormModal({
       initialCampaign: draft ? buildDraftCampaignPreview(draft, 0) : null,
       initialAccountIds: draft ? getDraftCampaignAccountIds(draft) : undefined,
       initialDetails: draft ? getDraftCampaignDetails(draft) : undefined,
-      submitLabel: overrideSubmitLabel || (draft ? 'Sửa' : source.type === 'findDataSource' ? 'Thêm' : undefined)
+      submitLabel: overrideSubmitLabel || (draft ? 'Sửa' : source.type === 'findDataSource' ? 'Thêm' : undefined),
+      autoSelectOnSave
     })
   }
 
@@ -6181,6 +6311,9 @@ export default function CampaignFormModal({
       findDataSourceSelectionTouchedRef.current = true
       setSelectedFindDataSourceCampaignIds(prev => getPickerCampaignIdList([...prev, draft.tempId]))
     }
+    if (draftFormConfig?.autoSelectOnSave) {
+      appendDraftTargetSelection(draft.sourceType, draft.tempId)
+    }
     setDraftFormConfig(null)
   }
 
@@ -6191,27 +6324,44 @@ export default function CampaignFormModal({
     return <span className="campaign-picker-text-list">{items.join(', ')}</span>
   }
 
+  const isInternalTargetCampaignPickerSource = (source: CampaignPickerSource): boolean =>
+    source.type !== 'external' && source.type !== 'findDataSource'
+
   const renderSelectedCampaignSummary = (
     source: CampaignPickerSource,
     selectedIds: number[],
-    emptyText: string
+    emptyText: string,
+    onSelectedIdsChange?: (ids: number[]) => void
   ) => {
     if (selectedIds.length === 0) {
       return <div className="campaign-picker-empty-summary">{emptyText}</div>
     }
 
+    const showTargetActions = isInternalTargetCampaignPickerSource(source) && !!onSelectedIdsChange
     const rows = getCampaignPickerRows(source)
     const rowById = new Map(rows.map(row => [row.id, row]))
-    const selectedRows = selectedIds.map(id => rowById.get(id) || {
-      id,
-      name: `Campaign #${id}`,
-      searchText: String(id)
+    const selectedItems = selectedIds.map(id => {
+      const draft = internalCampaignDrafts.find(item => item.tempId === id && draftMatchesCampaignPickerSource(item, source))
+      const campaign = campaigns.find(item => item.id === id)
+      return {
+        id,
+        draft,
+        campaign,
+        row: rowById.get(id) || {
+          id,
+          name: `Campaign #${id}`,
+          searchText: String(id)
+        }
+      }
     })
     const columns: CampaignPickerColumn[] = source.type === 'findDataSource'
       ? ['name', 'account', 'status', 'schedule', 'updatedAt', 'dataTypes', 'sourceTypes']
-      : ['name', 'account', 'status', 'schedule']
+      : isInternalTargetCampaignPickerSource(source)
+        ? ['name', 'action', 'account', 'status', 'schedule', 'updatedAt']
+        : ['name', 'account', 'status', 'schedule']
     const columnLabels: Record<CampaignPickerColumn, string> = {
       name: 'Tên chiến dịch',
+      action: 'Hành động',
       account: source.type === 'external' ? 'Tài khoản/Shop' : 'Tài khoản',
       status: 'Trạng thái',
       schedule: 'Lịch chạy',
@@ -6221,6 +6371,7 @@ export default function CampaignFormModal({
     }
     const renderSummaryCell = (row: CampaignPickerRow, column: CampaignPickerColumn) => {
       if (column === 'name') return <span className="campaign-picker-table-name">{row.name}</span>
+      if (column === 'action') return row.actionLabel || <span className="campaign-picker-muted">Không rõ</span>
       if (column === 'account') return row.accountName || <span className="campaign-picker-muted">Không rõ</span>
       if (column === 'status') return row.status || <span className="campaign-picker-muted">Không rõ</span>
       if (column === 'schedule') return row.scheduleLabel
@@ -6233,24 +6384,81 @@ export default function CampaignFormModal({
       return renderTextList(row.sourceTypes)
     }
 
+    const viewTargetCampaign = (item: typeof selectedItems[number]) => {
+      if (item.draft) {
+        setViewingSourceCampaign(buildDraftCampaignPreview(item.draft))
+        return
+      }
+      if (item.campaign) setViewingSourceCampaign(item.campaign)
+    }
+
+    const editTargetCampaign = (item: typeof selectedItems[number]) => {
+      if (item.draft) {
+        openDraftCampaignForm(source, item.draft, 'Sửa')
+        return
+      }
+      if (!item.campaign) return
+      if (!isEditableFindDataSourceCampaign(item.campaign)) {
+        showAlert('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
+        return
+      }
+      setEditingSourceCampaign(item.campaign)
+    }
+
+    const detachTargetCampaign = (item: typeof selectedItems[number]) => {
+      showConfirm(
+        `Gỡ chiến dịch "${item.row.name}" khỏi danh sách?`,
+        () => {
+          onSelectedIdsChange?.(selectedIds.filter(id => id !== item.id))
+          setInternalCampaignDrafts(prev => prev.filter(draft => draft.tempId !== item.id))
+        },
+        { title: 'Gỡ chiến dịch', confirmText: 'Gỡ' }
+      )
+    }
+
     return (
       <div className="campaign-picker-summary-table-wrap">
-        <table className="campaign-picker-summary-table">
+        <table className={`campaign-picker-summary-table${showTargetActions ? ' campaign-picker-target-table' : ''}`}>
           <thead>
             <tr>
+              {showTargetActions && <th className="campaign-picker-summary-actions-col">Thao tác</th>}
               {columns.map(column => (
                 <th key={column}>{columnLabels[column]}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {selectedRows.map(row => (
-              <tr key={row.id} title={getCampaignPickerRowLabel(row)}>
-                {columns.map(column => (
-                  <td key={column}>{renderSummaryCell(row, column)}</td>
-                ))}
-              </tr>
-            ))}
+            {selectedItems.map(item => {
+              const editDisabled = item.campaign ? !isEditableFindDataSourceCampaign(item.campaign) : !item.draft
+              return (
+                <tr key={item.id} title={getCampaignPickerRowLabel(item.row)}>
+                  {showTargetActions && (
+                    <td className="campaign-picker-summary-actions-col">
+                      <div className="campaign-picker-summary-row-actions">
+                        <button type="button" className="btn-icon" onClick={() => viewTargetCampaign(item)} title="Xem">
+                          <Eye size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          onClick={() => editTargetCampaign(item)}
+                          disabled={editDisabled}
+                          title={editDisabled ? 'Chỉ sửa được chiến dịch chờ xử lý hoặc tạm dừng' : 'Sửa'}
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button type="button" className="btn-icon" onClick={() => detachTargetCampaign(item)} title="Gỡ">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                  {columns.map(column => (
+                    <td key={column}>{renderSummaryCell(item.row, column)}</td>
+                  ))}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -6391,7 +6599,7 @@ export default function CampaignFormModal({
         <table className="campaign-picker-summary-table source-campaign-table">
           <thead>
             <tr>
-              <th className="source-campaign-actions-col">Hành động</th>
+              <th className="source-campaign-actions-col">Thao tác</th>
               <th>Tên chiến dịch</th>
               <th>Tài khoản</th>
               <th>Trạng thái</th>
@@ -6622,30 +6830,57 @@ export default function CampaignFormModal({
     selectedIds: number[],
     onConfirm: (ids: number[]) => void,
     emptyText: string
-  ) => (
-    <div className="campaign-picker-field">
-      <button
-        type="button"
-        className="btn btn-secondary btn-sm campaign-picker-select-button"
-        onClick={() => openCampaignPicker({
-          title: 'Chọn chiến dịch',
-          source,
-          columns: ['name', 'account', 'status', 'schedule'],
-          emptyText,
-          selectedIds,
-          onConfirm
-        })}
-      >
-        Chọn chiến dịch
-      </button>
-      {renderSelectedCampaignSummary(source, selectedIds, 'Chưa chọn chiến dịch nào.')}
-    </div>
-  )
+  ) => {
+    const canAddInternalCampaign = !draftMode && !!getDraftActionIdForPickerSource(source)
 
-  const renderFoundDataHandling = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {formData.isFindPhone && (
-        <div className="extra-comment-options">
+    return (
+      <div className="campaign-picker-field">
+        <div className="source-campaign-toolbar">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm campaign-picker-select-button"
+            onClick={() => openCampaignPicker({
+              title: 'Chọn chiến dịch',
+              source,
+              columns: ['name', 'action', 'account', 'status', 'schedule', 'updatedAt'],
+              emptyText,
+              selectedIds,
+              onConfirm
+            })}
+          >
+            Chọn chiến dịch
+          </button>
+          {canAddInternalCampaign && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm source-campaign-add-button"
+              onClick={() => openDraftCampaignForm(source, undefined, undefined, true)}
+            >
+              <Plus size={15} /> Thêm chiến dịch
+            </button>
+          )}
+        </div>
+        {renderSelectedCampaignSummary(source, selectedIds, 'Chưa chọn chiến dịch nào.', onConfirm)}
+      </div>
+    )
+  }
+
+  const renderFoundDataHandlingGroup = (title: string, items: ReactNode[]) => {
+    const visibleItems = items.filter(Boolean)
+    if (visibleItems.length === 0) return null
+
+    return (
+      <div className="found-data-handling-group">
+        <div className="found-data-handling-group-title">{title}</div>
+        <div className="found-data-handling-group-options">{visibleItems}</div>
+      </div>
+    )
+  }
+
+  const renderFoundDataHandling = () => {
+    const externalOptions: ReactNode[] = [
+      formData.isFindPhone && (
+        <div key="phone-sms" className="extra-comment-options">
           <label className="schedule-checkbox-label">
             <input
               type="checkbox"
@@ -6671,10 +6906,9 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
-
-      {formData.isFindPhone && (
-        <div className="extra-comment-options">
+      ),
+      formData.isFindPhone && (
+        <div key="phone-zalo-web" className="extra-comment-options">
           <label className="schedule-checkbox-label">
             <input
               type="checkbox"
@@ -6700,10 +6934,9 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
-
-      {formData.isFindPhone && (
-        <div className="extra-comment-options">
+      ),
+      formData.isFindPhone && (
+        <div key="phone-desktop" className="extra-comment-options">
           <label className="schedule-checkbox-label">
             <input
               type="checkbox"
@@ -6729,10 +6962,9 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
-
-      {formData.isFindLinkGroupZalo && (
-        <div className="extra-comment-options">
+      ),
+      formData.isFindLinkGroupZalo && (
+        <div key="zalo-link-web" className="extra-comment-options">
           <label className="schedule-checkbox-label">
             <input
               type="checkbox"
@@ -6758,10 +6990,9 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
-
-      {formData.isFindLinkGroupZalo && (
-        <div className="extra-comment-options">
+      ),
+      formData.isFindLinkGroupZalo && (
+        <div key="zalo-link-desktop" className="extra-comment-options">
           <label className="schedule-checkbox-label">
             <input
               type="checkbox"
@@ -6787,10 +7018,12 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
+      )
+    ]
 
-      {formData.isFindUid && (
-        <div className="extra-comment-options">
+    const facebookOptions: ReactNode[] = [
+      formData.isFindUid && (
+        <div key="uid-message" className="extra-comment-options">
           <label className="schedule-checkbox-label">
             <input
               type="checkbox"
@@ -6817,10 +7050,9 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
-
-      {formData.isFindPostLink && (
-        <div className="extra-comment-options">
+      ),
+      formData.isFindPostLink && (
+        <div key="post-link-comment" className="extra-comment-options">
           <label className="schedule-checkbox-label">
             <input
               type="checkbox"
@@ -6847,18 +7079,45 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
-
-      {isFindDataSearchCampaign && formData.isFindFacebookGroup && (
-        <div className="extra-comment-options">
+      ),
+      isFindDataSearchCampaign && formData.isFindFacebookGroup && (
+        <div key="fb-group-join" className="extra-comment-options">
           <label className="schedule-checkbox-label">
-              <input
-                type="checkbox"
-                checked={handleFoundFacebookGroupPostData}
-                disabled={isDraftAutoLinkedFacebookGroupPost}
-                onChange={e => {
-                  const checked = e.target.checked
-                  setHandleFoundFacebookGroupPostData(checked)
+            <input
+              type="checkbox"
+              checked={handleFoundFacebookGroupJoinData}
+              disabled={isDraftAutoLinkedFacebookGroupJoin}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundFacebookGroupJoinData(checked)
+                if (!checked) setFormData(p => ({ ...p, findFacebookGroupJoinTargetCampaignIds: [] }))
+              }}
+            />
+            <span>Đẩy group sang chiến dịch tham gia group</span>
+          </label>
+          {handleFoundFacebookGroupJoinData && (
+            <div className="stepper-form-group" style={{ marginTop: 12 }}>
+              <label>Chọn chiến dịch</label>
+              {renderInternalCampaignPicker(
+                { type: 'facebookJoinGroupTarget' },
+                formData.findFacebookGroupJoinTargetCampaignIds || [],
+                ids => setFormData(p => ({ ...p, findFacebookGroupJoinTargetCampaignIds: ids })),
+                'Chưa có chiến dịch Tham gia group để nhận group Facebook.'
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      isFindDataSearchCampaign && formData.isFindFacebookGroup && (
+        <div key="fb-group-post" className="extra-comment-options">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={handleFoundFacebookGroupPostData}
+              disabled={isDraftAutoLinkedFacebookGroupPost}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundFacebookGroupPostData(checked)
                 if (!checked) setFormData(p => ({ ...p, findFacebookGroupPostTargetCampaignIds: [] }))
               }}
             />
@@ -6876,18 +7135,17 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
-
-      {isFindDataSearchCampaign && formData.isFindFacebookGroup && (
-        <div className="extra-comment-options">
+      ),
+      isFindDataSearchCampaign && formData.isFindFacebookGroup && (
+        <div key="fb-group-comment" className="extra-comment-options">
           <label className="schedule-checkbox-label">
-              <input
-                type="checkbox"
-                checked={handleFoundFacebookGroupCommentData}
-                disabled={isDraftAutoLinkedFacebookGroupComment}
-                onChange={e => {
-                  const checked = e.target.checked
-                  setHandleFoundFacebookGroupCommentData(checked)
+            <input
+              type="checkbox"
+              checked={handleFoundFacebookGroupCommentData}
+              disabled={isDraftAutoLinkedFacebookGroupComment}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundFacebookGroupCommentData(checked)
                 if (!checked) setFormData(p => ({ ...p, findFacebookGroupCommentTargetCampaignIds: [] }))
               }}
             />
@@ -6905,9 +7163,78 @@ export default function CampaignFormModal({
             </div>
           )}
         </div>
-      )}
-    </div>
-  )
+      )
+    ]
+
+    const zaloOptions: ReactNode[] = [
+      formData.isFindPhone && (
+        <div key="zalo-message-phone" className="extra-comment-options">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData}
+              disabled={!canUseZaloFeature}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundPhoneZaloMessagePhoneData(checked)
+                if (!checked) setFormData(p => ({ ...p, findPhoneZaloMessagePhoneTargetCampaignIds: [] }))
+              }}
+            />
+            <span>Đẩy SĐT sang chiến dịch Zalo gửi tin nhắn, kết bạn</span>
+          </label>
+          {!canUseZaloFeature && <div className="schedule-hint found-data-entitlement-note">{zaloEntitlementNote}</div>}
+          {canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData && (
+            <div className="stepper-form-group" style={{ marginTop: 12 }}>
+              <label>Chọn chiến dịch</label>
+              {renderInternalCampaignPicker(
+                { type: 'zaloMessagePhoneTarget' },
+                formData.findPhoneZaloMessagePhoneTargetCampaignIds || [],
+                ids => setFormData(p => ({ ...p, findPhoneZaloMessagePhoneTargetCampaignIds: ids })),
+                'Chưa có chiến dịch Zalo phone để nhận SĐT.'
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      formData.isFindLinkGroupZalo && (
+        <div key="zalo-link-join" className="extra-comment-options">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={canUseZaloFeature && handleFoundZaloGroupLinkJoinData}
+              disabled={!canUseZaloFeature}
+              onChange={e => {
+                const checked = e.target.checked
+                setHandleFoundZaloGroupLinkJoinData(checked)
+                if (!checked) setFormData(p => ({ ...p, findZaloGroupLinkJoinTargetCampaignIds: [] }))
+              }}
+            />
+            <span>Đẩy link group Zalo sang chiến dịch tham gia group</span>
+          </label>
+          {!canUseZaloFeature && <div className="schedule-hint found-data-entitlement-note">{zaloEntitlementNote}</div>}
+          {canUseZaloFeature && handleFoundZaloGroupLinkJoinData && (
+            <div className="stepper-form-group" style={{ marginTop: 12 }}>
+              <label>Chọn chiến dịch</label>
+              {renderInternalCampaignPicker(
+                { type: 'zaloJoinGroupLinkTarget' },
+                formData.findZaloGroupLinkJoinTargetCampaignIds || [],
+                ids => setFormData(p => ({ ...p, findZaloGroupLinkJoinTargetCampaignIds: ids })),
+                'Chưa có chiến dịch Zalo tham gia group để nhận link group Zalo.'
+              )}
+            </div>
+          )}
+        </div>
+      )
+    ]
+
+    return (
+      <div className="found-data-handling-groups">
+        {renderFoundDataHandlingGroup('Hệ thống ngoài (akaBiz)', externalOptions)}
+        {renderFoundDataHandlingGroup('Chiến dịch Facebook', facebookOptions)}
+        {renderFoundDataHandlingGroup('Chiến dịch Zalo', zaloOptions)}
+      </div>
+    )
+  }
 
   const renderFindDataPostContentConditions = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
@@ -7713,6 +8040,7 @@ export default function CampaignFormModal({
 
     const renderCell = (row: CampaignPickerRow, column: CampaignPickerColumn) => {
       if (column === 'name') return <span className="campaign-picker-table-name">{row.name}</span>
+      if (column === 'action') return row.actionLabel || <span className="campaign-picker-muted">Không rõ</span>
       if (column === 'account') return row.accountName || <span className="campaign-picker-muted">Không rõ</span>
       if (column === 'status') return row.status || <span className="campaign-picker-muted">Không rõ</span>
       if (column === 'schedule') return row.scheduleLabel
@@ -7727,6 +8055,7 @@ export default function CampaignFormModal({
 
     const columnLabels: Record<CampaignPickerColumn, string> = {
       name: 'Tên chiến dịch',
+      action: 'Hành động',
       account: campaignPickerModal.source.type === 'external' ? 'Tài khoản/Shop' : 'Tài khoản',
       status: 'Trạng thái',
       schedule: 'Lịch chạy',
@@ -7838,7 +8167,7 @@ export default function CampaignFormModal({
       <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: 3200 }}>
         <div className="source-campaign-view-modal">
           <div className="modal-header">
-            <span className="modal-title">Xem chiến dịch nguồn</span>
+            <span className="modal-title">Xem chiến dịch</span>
             <button type="button" className="btn-icon" onClick={() => setViewingSourceCampaign(null)}>
               <X size={18} />
             </button>
