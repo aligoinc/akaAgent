@@ -1212,6 +1212,7 @@ export const IPC_EVENTS = {
   APP_SET_STARTUP_SETTING: 'app:set-startup-setting',
   APP_GET_VERSION: 'app:get-version',
   APP_READ_BLOCK_SCREENSHOT: 'app:read-block-screenshot',
+  APP_READ_CAMPAIGN_PREVIEW_FILE: 'app:read-campaign-preview-file',
 
   // AI content tools
   AI_REWRITE_CONTENT: 'ai:rewrite-content',
