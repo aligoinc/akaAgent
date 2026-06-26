@@ -257,6 +257,7 @@ const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
@@ -3690,6 +3691,7 @@ export class CampaignScheduler {
     else if (errorStep?.blockName === 'fb_add_friend') actionCode = 'fb_add_friend'
     else if (errorStep?.blockName === 'fb_comment_at_position' || errorStep?.blockName === 'fb_comment_current_post') actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_click_like_current_post') actionCode = 'fb_like_post'
+    else if (errorStep?.blockName === 'fb_join_group') actionCode = 'fb_join_group'
     else if (errorStep?.blockName && errorStep.blockName.startsWith('fb_newsfeed_comment')) actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_newsfeed_like_post') actionCode = 'fb_like_post'
     else if (errorStep?.blockName === 'fb_click_post_button' || errorStep?.blockName === 'fb_verify_group_post_form_closed') actionCode = this.getPostActionCode(campaign) || undefined
@@ -4464,7 +4466,7 @@ export class CampaignScheduler {
   ): Promise<MilestoneSummary> {
     void overallSuccess
     const summary = this.createMilestoneSummary()
-    const createCampaignDetail = async (action: Partial<CampaignDetail>) => {
+    const createCampaignDetail = async (action: Partial<CampaignDetail> & { shouldCountAction?: boolean }) => {
       const created = await this.supabase.createCampaignDetail(action)
       this.recordMilestoneSummary(
         summary,
@@ -4777,6 +4779,74 @@ export class CampaignScheduler {
         )
       })
       if (hasNewsfeedSuccess) this.recordMilestoneSummary(summary, 'thành công', 'Tương tác newsfeed thành công')
+      await flushRemainingScreenshotLogs()
+      return summary
+    }
+
+    if (campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID) {
+      const joinGroupSteps = steps.filter(s =>
+        s.blockName === 'fb_join_group' &&
+        (s.status === 'success' || s.status === 'error')
+      )
+      for (const s of joinGroupSteps) {
+        try {
+          const out = (s.output as any) || {}
+          const outcome = String(out.joinOutcome || '').trim()
+          const targetUrl = String(out.targetUrl || detail?.uid || '').trim()
+          const targetUid = String(out.targetUid || detail?.uid || '').trim()
+          const groupName = String(out.targetName || inputDataName || targetUid || targetUrl || 'group').trim()
+          const errMsg = String(out.error || out.message || s.error || 'Lỗi không xác định').trim()
+          const isError = s.status === 'error'
+          const isFailure = !isError && out.ok === false
+          const isSuccess = !isError && !isFailure
+          const status: CampaignDetailStatus = isError ? 'lỗi' : isFailure ? 'thất bại' : outcome === 'already_joined' ? 'đã tham gia' : 'thành công'
+          const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined
+          const shouldCountAction = outcome !== 'already_joined'
+          const log = (() => {
+            if (status === 'lỗi') return `Lỗi tham gia group ${groupName}: ${errMsg}`
+            if (status === 'thất bại') return `Tham gia group thất bại ${groupName}: ${errMsg}`
+            if (outcome === 'requested') return `Đã gửi yêu cầu tham gia group ${groupName}`
+            if (outcome === 'already_joined') return `Bỏ qua group ${groupName} (đã tham gia từ trước)`
+            return `Đã tham gia group ${groupName}`
+          })()
+
+          await createCampaignDetail({
+            inputDataId: detail?.id,
+            campaignId: campaign.id,
+            accountId,
+            actionCode: 'fb_join_group',
+            actionName: 'Tham gia group',
+            status,
+            errorCode,
+            log,
+            shouldCountAction,
+            data: {
+              joinOutcome: outcome || undefined,
+              statusCode: out.statusCode,
+              targetUrl,
+              targetUid,
+              targetName: groupName,
+              questionStats: out.questionStats,
+              error: isSuccess ? undefined : errMsg
+            }
+          })
+
+          if (isSuccess) {
+            if (outcome === 'already_joined') {
+              await this.logCampaignProgress(campaign.id, `ℹ️ Bỏ qua group "${groupName}" vì đã tham gia từ trước`)
+            } else if (outcome === 'requested') {
+              await this.logCampaignProgress(campaign.id, `✅ Đã gửi yêu cầu tham gia group "${groupName}"`)
+            } else {
+              await this.logCampaignProgress(campaign.id, `✅ Đã tham gia group "${groupName}"`)
+            }
+          } else if (status === 'lỗi') {
+            await this.logCampaignProgress(campaign.id, `❌ Lỗi tham gia group "${groupName}": ${errMsg}`)
+          } else {
+            await this.logCampaignProgress(campaign.id, `❌ Tham gia group thất bại "${groupName}": ${errMsg}`)
+          }
+          await flushScreenshotLogsForStep(s)
+        } catch (err) { console.error('Failed log Facebook join group:', err) }
+      }
       await flushRemainingScreenshotLogs()
       return summary
     }
@@ -7873,6 +7943,7 @@ export class CampaignScheduler {
   private getScreenshotActionName(campaign: Campaign, request: BlockScreenshotCaptureRequest): string {
     const blockName = String(request.blockName || '')
     if (blockName === 'fb_verify_group_post_form_closed' || blockName === 'fb_click_post_button') return 'Đăng bài'
+    if (blockName === 'fb_join_group') return 'Tham gia group'
     if (
       blockName === 'fb_page_post_api' ||
       blockName === 'fb_post_current_identity_ui' ||

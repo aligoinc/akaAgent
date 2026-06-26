@@ -14,9 +14,14 @@ import { callAiUsing } from '../../services/aiRuntimeService'
 const IMPORT_IMAGE_AI_CODE = 'app_campaign_import_image_to_data'
 const SHEET_FETCH_TIMEOUT_MS = 30000
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
+const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 
 function isZaloJoinGroupLinkAction(actionId?: string | null): boolean {
   return actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
+}
+
+function isFacebookJoinGroupAction(actionId?: string | null): boolean {
+  return actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
 }
 
 function toText(value: unknown): string {
@@ -65,7 +70,7 @@ function normalizeUid(value: unknown): string {
   const text = toText(value).replace(/\s+/g, '')
   if (!text) return ''
   const lower = text.toLowerCase()
-  if (['uid', 'url', 'link', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
+  if (['uid', 'url', 'link', 'group', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
   return text
 }
 
@@ -112,6 +117,13 @@ function isLikelyHeaderValue(value: string): boolean {
     'uid',
     'url',
     'link',
+    'group',
+    'group url',
+    'group uid',
+    'group id',
+    'facebook',
+    'facebook group',
+    'facebook group link',
     'phone',
     'mobile',
     'sdt',
@@ -270,6 +282,24 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
         record.name
       ))
       if (normalizeZaloGroupInviteLink(item.name) === item.uid) item.name = ''
+      item.phone = ''
+      item.email = ''
+      key = item.uid
+    } else if (isFacebookJoinGroupAction(actionId)) {
+      item.uid = normalizeUid(firstText(
+        record.uid,
+        record.url,
+        record.link,
+        record.group,
+        record.groupLink,
+        record.facebookGroupLink,
+        record.facebook_group_link,
+        record.group_id,
+        record.groupId,
+        record.value,
+        record.name
+      ))
+      if (normalizeUid(item.name) === item.uid) item.name = ''
       item.phone = ''
       item.email = ''
       key = item.uid

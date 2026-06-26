@@ -40,7 +40,9 @@ const INFO_FIELDS: FieldDef[] = [
   { key: 'info5', label: 'Info 5' }
 ]
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
+const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const isZaloJoinGroupLinkAction = (actionId?: string | null): boolean => actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
+const isFacebookJoinGroupAction = (actionId?: string | null): boolean => actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
 
 const getCellText = (value: unknown): string => {
   if (value === null || value === undefined) return ''
@@ -79,7 +81,7 @@ const normalizeVietnamMobilePhone = (value: unknown): string => {
 const normalizeUid = (value: unknown): string => {
   const text = getCellText(value).replace(/\s+/g, '')
   const lower = text.toLowerCase()
-  if (!text || ['uid', 'url', 'link', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
+  if (!text || ['uid', 'url', 'link', 'group', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
   return text
 }
 
@@ -190,6 +192,13 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
       ...INFO_FIELDS
     ]
   }
+  if (isFacebookJoinGroupAction(actionId)) {
+    return [
+      { key: 'name', label: 'Tên group' },
+      { key: 'uid', label: 'Group URL/UID', required: true },
+      ...INFO_FIELDS
+    ]
+  }
   if (platform === 'zalo') {
     return [
       { key: 'name', label: 'Tên' },
@@ -226,6 +235,13 @@ const isLikelyHeaderValue = (value: string): boolean => {
     'uid',
     'url',
     'link',
+    'group',
+    'group url',
+    'group uid',
+    'group id',
+    'facebook',
+    'facebook group',
+    'facebook group link',
     'phone',
     'mobile',
     'sdt',
@@ -270,6 +286,20 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
         name: normalizeZaloGroupInviteLink(rawName) === link ? '' : rawName,
         phone: '',
         uid: link,
+        email: ''
+      })
+      continue
+    }
+    if (isFacebookJoinGroupAction(actionId)) {
+      const uid = normalizeUid(firstText(row.uid, row.name))
+      if (!uid || seen.has(uid)) continue
+      const rawName = getCellText(row.name)
+      seen.add(uid)
+      output.push({
+        ...row,
+        name: normalizeUid(rawName) === uid ? '' : rawName,
+        phone: '',
+        uid,
         email: ''
       })
       continue
@@ -374,6 +404,11 @@ const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlat
   if (isZaloJoinGroupLinkAction(actionId)) {
     return {
       uid: detectColumnFromHeader(rows, ['link', 'url', 'group', 'zalo']) || detectNonWhitespaceColumn(rows)
+    }
+  }
+  if (isFacebookJoinGroupAction(actionId)) {
+    return {
+      uid: detectColumnFromHeader(rows, ['uid', 'url', 'link', 'group', 'facebook']) || detectNonWhitespaceColumn(rows)
     }
   }
   if (platform === 'zalo') {

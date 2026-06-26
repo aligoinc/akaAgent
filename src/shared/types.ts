@@ -494,6 +494,7 @@ export interface CampaignInputDataRequirement {
 
 const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirement> = {
   facebook_group_post: { field: 'uid', label: 'group URL' },
+  facebook_join_group: { field: 'uid', label: 'group URL/UID' },
   facebook_page_post: { field: 'uid', label: 'Page ID' },
   facebook_message_friend: { field: 'uid', label: 'UID/link bạn bè' },
   facebook_message_uid: { field: 'uid', label: 'UID/link profile' },
