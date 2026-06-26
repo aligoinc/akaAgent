@@ -16,7 +16,7 @@ import { useUiStore } from '../../stores/uiStore'
 import { canUsePlatform, getFirstAllowedPlatform } from '../../utils/entitlements'
 
 interface AccountPanelProps {
-  onNavigateToBrowser?: (accountId: number) => void
+  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onFilterCampaigns?: (accountId: number | null) => void
 }
 
@@ -326,7 +326,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleViewBrowser = (accountId: number) => {
-    onNavigateToBrowser?.(accountId)
+    onNavigateToBrowser?.({ accountId, reloadAfterOpen: false })
   }
 
   const handleReloadPage = async (account: AutoAccount) => {
@@ -334,9 +334,21 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
-    const result = await window.electronAPI.reloadAccountPage(account.id, account.flatformType)
-    if (!result.success) {
-      useUiStore.getState().showAlert(`Không thể load lại: ${result.reason}`, 'error')
+    try {
+      const result = await window.electronAPI.reloadAccountPage(account.id, account.flatformType)
+      if (!result.success) {
+        const reason = String(result.reason || '')
+        if (
+          onNavigateToBrowser &&
+          (reason.includes('Tab trình duyệt chưa được mở') || reason.includes('Tab trình duyệt không khả dụng'))
+        ) {
+          onNavigateToBrowser({ accountId: account.id, reloadAfterOpen: true })
+          return
+        }
+        useUiStore.getState().showAlert(`Không thể load lại: ${result.reason}`, 'error')
+      }
+    } catch (err) {
+      useUiStore.getState().showAlert(`Không thể load lại: ${getErrorMessage(err, 'Lỗi không xác định')}`, 'error')
     }
   }
 

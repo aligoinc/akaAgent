@@ -11,15 +11,24 @@ const PLATFORM_URLS: Record<string, string> = {
 }
 const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email'])
 
-interface BrowserPageProps {
-  focusAccountId?: number | null
-  onFocusHandled?: () => void
+export interface BrowserOpenRequest {
+  requestId: number
+  accountId: number
+  reloadAfterOpen?: boolean
 }
 
-export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserPageProps) {
-  const { accounts, loadAccounts } = useCampaignStore()
+interface BrowserPageProps {
+  openRequest?: BrowserOpenRequest | null
+  onRequestHandled?: (requestId: number) => void
+}
+
+export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPageProps) {
+  const { accounts, loadingAccounts, loadAccounts } = useCampaignStore()
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
   const [preparedProxyByAccountId, setPreparedProxyByAccountId] = useState<Map<number, number | null>>(new Map())
+  const [accountsLoadAttempted, setAccountsLoadAttempted] = useState(false)
+  const [pendingOpenRequest, setPendingOpenRequest] = useState<BrowserOpenRequest | null>(null)
+  const [webviewReadyVersion, setWebviewReadyVersion] = useState(0)
   const [backgroundPreviews, setBackgroundPreviews] = useState<Map<number, {
     active: boolean
     image?: string
@@ -28,6 +37,7 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
     timestamp: string
   }>>(new Map())
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
+  const webviewDomReadyHandlers = useRef<Map<number, EventListener>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
   const preparingSessionKeys = useRef<Set<string>>(new Set())
 
@@ -36,7 +46,14 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
 
   // Load accounts on mount
   useEffect(() => {
+    let cancelled = false
     loadAccounts()
+      .finally(() => {
+        if (!cancelled) setAccountsLoadAttempted(true)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [loadAccounts])
 
   // Auto-select first account
@@ -99,15 +116,12 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
     }
   }, [browserAccounts, preparedProxyByAccountId, prepareAccountSession, markAccountPrepared])
 
-  // Handle focus from external navigation (context menu)
+  // Stage open requests from AccountPanel until the target webview is truly mounted.
   useEffect(() => {
-    if (focusAccountId) {
-      if (browserAccounts.some(account => account.id === focusAccountId)) {
-        setActiveAccountId(focusAccountId)
-      }
-      onFocusHandled?.()
+    if (openRequest) {
+      setPendingOpenRequest(openRequest)
     }
-  }, [browserAccounts, focusAccountId, onFocusHandled])
+  }, [openRequest])
 
   // Background/offscreen campaign runs stream previews here so users can observe
   // without the app forcing focus or relying on minimized webview painting.
@@ -135,7 +149,11 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
     const browserAccountIds = new Set(browserAccounts.map(account => account.id))
     Array.from(registeredIds.current).forEach((accountId) => {
       if (!browserAccountIds.has(accountId)) {
+        const wv = webviewRefs.current.get(accountId)
+        const handler = webviewDomReadyHandlers.current.get(accountId)
+        if (wv && handler) wv.removeEventListener('dom-ready', handler)
         webviewRefs.current.delete(accountId)
+        webviewDomReadyHandlers.current.delete(accountId)
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
         registeredIds.current.delete(accountId)
       }
@@ -146,9 +164,13 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   useEffect(() => {
     return () => {
       registeredIds.current.forEach((accountId) => {
+        const wv = webviewRefs.current.get(accountId)
+        const handler = webviewDomReadyHandlers.current.get(accountId)
+        if (wv && handler) wv.removeEventListener('dom-ready', handler)
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
       })
       registeredIds.current.clear()
+      webviewDomReadyHandlers.current.clear()
       webviewRefs.current.clear()
     }
   }, [])
@@ -160,6 +182,29 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
   const getProfilePartition = (accountId: number) => {
     return `persist:account_${accountId}`
   }
+
+  const markRequestHandled = useCallback((requestId: number) => {
+    setPendingOpenRequest(prev => prev?.requestId === requestId ? null : prev)
+    onRequestHandled?.(requestId)
+  }, [onRequestHandled])
+
+  const registerWebviewNow = useCallback((accountId: number, wv: Electron.WebviewTag) => {
+    try {
+      const wcId = (wv as any).getWebContentsId?.()
+      if (wcId && window.electronAPI) {
+        const wasRegistered = registeredIds.current.has(accountId)
+        window.electronAPI.registerWebview(accountId, wcId).catch(err => {
+          console.error('Failed to register webview:', err)
+        })
+        registeredIds.current.add(accountId)
+        if (!wasRegistered) setWebviewReadyVersion(version => version + 1)
+        return true
+      }
+    } catch (err) {
+      console.error('Failed to register webview:', err)
+    }
+    return false
+  }, [])
 
   const handleReload = async () => {
     if (!activeAccountId) return
@@ -187,27 +232,77 @@ export default function BrowserPage({ focusAccountId, onFocusHandled }: BrowserP
     ? 'Quét data đang chạy trong trình duyệt nền.'
     : 'Automation đang chạy trong trình duyệt nền.'
 
+  useEffect(() => {
+    if (!pendingOpenRequest) return
+
+    const account = browserAccounts.find(item => item.id === pendingOpenRequest.accountId)
+    if (!account) {
+      const knownAccount = accounts.some(item => item.id === pendingOpenRequest.accountId)
+      if (knownAccount || (accountsLoadAttempted && !loadingAccounts)) {
+        markRequestHandled(pendingOpenRequest.requestId)
+      }
+      return
+    }
+
+    if (activeAccountId !== account.id) {
+      setActiveAccountId(account.id)
+    }
+
+    if (!isBrowserSessionPrepared(account)) return
+
+    const wv = webviewRefs.current.get(account.id)
+    if (!wv) return
+
+    registerWebviewNow(account.id, wv)
+
+    if (pendingOpenRequest.reloadAfterOpen) {
+      try {
+        wv.loadURL(getInitialUrl(account))
+      } catch (err) {
+        console.error('Failed to reload opened browser webview:', err)
+      }
+    }
+
+    markRequestHandled(pendingOpenRequest.requestId)
+  }, [
+    activeAccountId,
+    accounts,
+    accountsLoadAttempted,
+    browserAccounts,
+    loadingAccounts,
+    markRequestHandled,
+    pendingOpenRequest,
+    preparedProxyByAccountId,
+    registerWebviewNow,
+    webviewReadyVersion
+  ])
+
   // Register webview with main process when it's ready
   const handleWebviewRef = useCallback((account: AutoAccount, el: any) => {
     if (!el) return
     const wv = el as Electron.WebviewTag
-    webviewRefs.current.set(account.id, wv)
-
-    const onDomReady = () => {
-      try {
-        const wcId = (wv as any).getWebContentsId()
-        if (wcId && window.electronAPI) {
-          window.electronAPI.registerWebview(account.id, wcId)
-          registeredIds.current.add(account.id)
-        }
-      } catch (err) {
-        console.error('Failed to register webview:', err)
-      }
+    const existing = webviewRefs.current.get(account.id)
+    if (existing === wv) {
+      registerWebviewNow(account.id, wv)
+      return
     }
 
-    // Listen for dom-ready to register
+    const previousHandler = webviewDomReadyHandlers.current.get(account.id)
+    if (existing && previousHandler) {
+      existing.removeEventListener('dom-ready', previousHandler)
+    }
+
+    webviewRefs.current.set(account.id, wv)
+    setWebviewReadyVersion(version => version + 1)
+
+    const onDomReady = () => {
+      registerWebviewNow(account.id, wv)
+    }
+    webviewDomReadyHandlers.current.set(account.id, onDomReady)
+
+    registerWebviewNow(account.id, wv)
     wv.addEventListener('dom-ready', onDomReady)
-  }, [])
+  }, [registerWebviewNow])
 
   return (
     <div className="browser-page">

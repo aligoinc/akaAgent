@@ -218,6 +218,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   fb_message_page_inbox_customer: 'Nhắn tin khách inbox page',
   fb_add_friend: 'Kết bạn',
   fb_like_post: 'Like post',
+  fb_join_group: 'Tham gia group',
   zalo_find_phone_user: 'Tìm SĐT',
   zalo_message_friend: 'Nhắn tin bạn bè',
   zalo_message_group: 'Nhắn tin group',
@@ -326,6 +327,7 @@ const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const GROUP_POST_ACTION_ID = 'facebook_group_post'
+const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
@@ -1374,6 +1376,7 @@ export default function CampaignFormModal({
   const isPageInboxMessageCampaign = formData.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
   const isGroupPostCampaign = GROUP_POST_ACTIONS.has(formData.actionId)
   const isFacebookGroupPostCampaign = formData.actionId === 'facebook_group_post'
+  const isFacebookJoinGroupCampaign = formData.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const isPagePostCampaign = formData.actionId === PAGE_POST_ACTION_ID
   const isNewsfeedInteractionCampaign = formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
@@ -1478,12 +1481,13 @@ export default function CampaignFormModal({
     (!isZaloMessageGroupRealtimeCampaign || formData.enableMessage) &&
     (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage) &&
     (!isZaloMessageFriendRecommendationCampaign || formData.enableMessage) &&
+    !isFacebookJoinGroupCampaign &&
     !isZaloJoinGroupLinkCampaign &&
     !isZaloCancelSentFriendRequestCampaign
   const hasMainContentText = formData.content.trim().length > 0
   const hasSelectedMainMedia = formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
-  const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign || isZaloJoinGroupLinkCampaign
+  const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 1 : 2)
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 3 : 4)
@@ -1721,6 +1725,22 @@ export default function CampaignFormModal({
         fields: [{ key: 'details', label: 'Link group Zalo' }]
       }
       return [generalStep, scheduleStep, limitStep, detailsStep]
+    }
+    if (isFacebookJoinGroupCampaign) {
+      const generalStep = ALL_STEPS.find(s => s.id === 'general')!
+      const contentStep: StepDef = {
+        ...ALL_STEPS.find(s => s.id === 'content')!,
+        title: 'Câu trả lời câu hỏi group',
+        fields: [{ key: 'content', label: 'Câu trả lời câu hỏi group' }]
+      }
+      const scheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
+      const limitStep = ALL_STEPS.find(s => s.id === 'limits')!
+      const detailsStep: StepDef = {
+        ...ALL_STEPS.find(s => s.id === 'details')!,
+        title: 'Danh sách group Facebook',
+        fields: [{ key: 'details', label: 'Group URL/UID' }]
+      }
+      return [generalStep, contentStep, scheduleStep, limitStep, detailsStep]
     }
     if (isMessageCampaign) {
       const steps = ALL_STEPS
@@ -3078,7 +3098,7 @@ export default function CampaignFormModal({
               rateLimitMinutes: accountRateLimitMinutes,
               byActionCode
             },
-            imageOption: isPostBackgroundActive ? 'none' : formData.imageOption,
+            imageOption: (isFacebookJoinGroupCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
             randomImageCount: formData.randomImageCount,
             commentImageOption: formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none',
             commentImages: formData.commentImages.slice(0, 1),
@@ -3236,7 +3256,7 @@ export default function CampaignFormModal({
               ? getCampaignIdList(formData.findFacebookGroupCommentTargetCampaignIds)
               : []
           } as CampaignExtraSettings,
-          images: formData.images
+          images: isFacebookJoinGroupCampaign ? [] : formData.images
         },
         details: (accountChunks[index] || []).map(detail => ({ ...detail }))
       }
@@ -3345,7 +3365,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập số lời mời cần huỷ lớn hơn 0.', 'error')
       return
     }
-    if (showContentSection && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
+    if (showContentSection && !isFacebookJoinGroupCampaign && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
       return
     }
     if (!validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
@@ -3519,6 +3539,10 @@ export default function CampaignFormModal({
       }
     }
     if (!isEditingSavedCampaign && formData.actionId === 'facebook_group_post' && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
+      showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
+      return
+    }
+    if (!isEditingSavedCampaign && isFacebookJoinGroupCampaign && validDetails.length === 0) {
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
@@ -3957,6 +3981,19 @@ export default function CampaignFormModal({
             ...baseRow,
             name: normalizeZaloGroupInviteLink(name) === link ? '' : name,
             uid: link,
+            phone: '',
+            email: ''
+          })
+          continue
+        }
+
+        if (isFacebookJoinGroupCampaign) {
+          const target = uid || name
+          if (!target) continue
+          importedRows.push({
+            ...baseRow,
+            name: target === name ? '' : name,
+            uid: target,
             phone: '',
             email: ''
           })
@@ -7493,7 +7530,9 @@ export default function CampaignFormModal({
 
   const renderCampaignContentHint = () => (
     <div className="campaign-content-hint">
-      Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
+      {isFacebookJoinGroupCampaign
+        ? <>Mẹo: tách nhiều câu trả lời bằng dấu <code>|</code> — câu trả lời thứ N dùng cho group thứ N.</>
+        : <>Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).</>}
     </div>
   )
 
@@ -7592,6 +7631,7 @@ export default function CampaignFormModal({
   const getCampaignContentLabel = (): string => {
     if (isEmailCampaign) return formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email'
     if (isMessageCampaign) return 'Nội dung tin nhắn'
+    if (isFacebookJoinGroupCampaign) return 'Câu trả lời câu hỏi group'
     return 'Nội dung chiến dịch'
   }
 
@@ -7604,6 +7644,9 @@ export default function CampaignFormModal({
     }
     if (isMessageCampaign) {
       return 'Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2...'
+    }
+    if (isFacebookJoinGroupCampaign) {
+      return 'Nhập câu trả lời câu hỏi group. Có thể để trống nếu group không hỏi; dùng dấu | để tách nhiều câu trả lời.'
     }
     return 'Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2...'
   }
@@ -7627,7 +7670,7 @@ export default function CampaignFormModal({
         />
       )}
       {showHint && !(isEmailCampaign && formData.emailBodyIsHtml) && renderCampaignContentHint()}
-      {showHint && renderRewriteContentEachRunOption()}
+      {showHint && !isFacebookJoinGroupCampaign && renderRewriteContentEachRunOption()}
     </>
   )
 
@@ -8570,7 +8613,7 @@ export default function CampaignFormModal({
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('content')}</span>
                   <span className="stepper-section-title">
-                    {isEmailCampaign ? 'Nội dung email' : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung'}
+                    {isEmailCampaign ? 'Nội dung email' : isMessageCampaign ? 'Nội dung tin nhắn' : isFacebookJoinGroupCampaign ? 'Câu trả lời câu hỏi group' : 'Nội dung'}
                   </span>
                 </div>
                 {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -8622,13 +8665,13 @@ export default function CampaignFormModal({
                         </div>
                       ) : (
                         <div className="stepper-form-group">
-                          <label>Nội dung chiến dịch</label>
+                          <label>{getCampaignContentLabel()}</label>
                           {renderContentToolsRow('content')}
                           {renderCampaignContentTextarea()}
                         </div>
                       )}
 
-                      {renderImagePicker('post', 'Media')}
+                      {!isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
                     </>
                   )}
                 </div>
@@ -8816,6 +8859,8 @@ export default function CampaignFormModal({
                       ? 'Danh sách từ khóa'
                       : isFindDataGroupCampaign
                         ? 'Danh sách group'
+                      : isFacebookJoinGroupCampaign
+                        ? 'Danh sách group Facebook'
                       : isCommentSeedingPostCampaign
                         ? 'Danh sách bài post'
                         : isPagePostCampaign
@@ -9076,9 +9121,9 @@ export default function CampaignFormModal({
                     <div className="stepper-grid-container">
                       <table className="campaign-grid">
                         <thead>
-                          {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isZaloJoinGroupLinkCampaign ? (
+                          {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
                             <tr>
-                              <th>{isFindDataSearchCampaign ? 'Từ khóa' : isZaloJoinGroupLinkCampaign ? 'Link group Zalo' : 'Link bài post'}</th>
+                              <th>{isFindDataSearchCampaign ? 'Từ khóa' : isFacebookJoinGroupCampaign ? 'Group URL/UID' : isZaloJoinGroupLinkCampaign ? 'Link group Zalo' : 'Link bài post'}</th>
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           ) : isPagePostCampaign ? (
@@ -9106,13 +9151,13 @@ export default function CampaignFormModal({
                           ) : (
                             details.map((d, i) => (
                               <tr key={d.id || `new-${i}`}>
-                                {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isZaloJoinGroupLinkCampaign ? (
+                                {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
                                   <td>
                                     <input
                                       type="text"
                                       value={d.uid || ''}
                                       onChange={e => updateDetailRow(i, 'uid', e.target.value)}
-                                      placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'Dán link bài post...'}
+                                      placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : isFacebookJoinGroupCampaign ? 'Dán link hoặc UID group...' : isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'Dán link bài post...'}
                                       disabled={isEditingSavedCampaign}
                                     />
                                   </td>

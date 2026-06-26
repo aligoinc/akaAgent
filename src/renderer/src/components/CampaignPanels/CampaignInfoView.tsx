@@ -36,6 +36,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   fb_message_page_inbox_customer: 'Nhắn tin khách inbox page',
   fb_add_friend: 'Kết bạn',
   fb_like_post: 'Like post',
+  fb_join_group: 'Tham gia group',
   zalo_message_stranger: 'Zalo - Nhắn tin người lạ',
   zalo_message_friend: 'Zalo - Nhắn tin bạn bè',
   zalo_message_group: 'Zalo - Nhắn tin group',

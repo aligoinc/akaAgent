@@ -5,7 +5,7 @@ import LogPanel from '../components/CampaignPanels/LogPanel'
 import type { GeneralSettingsMenu } from '../components/Settings/GeneralSettingsModal'
 
 interface CampaignPageProps {
-  onNavigateToBrowser?: (accountId: number) => void
+  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
 }
 

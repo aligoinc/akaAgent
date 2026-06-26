@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import TopBar from './components/TopBar/TopBar'
 import CampaignPage from './pages/CampaignPage'
-import BrowserPage from './pages/BrowserPage'
+import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
 import ReportPage from './pages/ReportPage'
 import LoginPage from './pages/LoginPage'
 import WorkflowEditorV2 from './components/v2/WorkflowEditorV2'
@@ -21,7 +21,8 @@ export default function App() {
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
-  const [focusAccountId, setFocusAccountId] = useState<number | null>(null)
+  const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null)
+  const browserOpenRequestSeq = useRef(0)
   const [showDataScan, setShowDataScan] = useState(false)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
@@ -103,6 +104,16 @@ export default function App() {
     setGeneralSettingsInitialMenu(menu)
     setShowGeneralSettings(true)
   }
+
+  const requestOpenBrowser = useCallback((request: { accountId: number; reloadAfterOpen?: boolean }) => {
+    browserOpenRequestSeq.current += 1
+    setBrowserOpenRequest({
+      requestId: browserOpenRequestSeq.current,
+      accountId: request.accountId,
+      reloadAfterOpen: request.reloadAfterOpen === true
+    })
+    setActivePage('browsers')
+  }, [])
 
   // Auto-check for updates once on app start (non-blocking).
   useEffect(() => {
@@ -192,10 +203,7 @@ export default function App() {
 
       <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <CampaignPage
-          onNavigateToBrowser={(accountId) => {
-            setFocusAccountId(accountId)
-            setActivePage('browsers')
-          }}
+          onNavigateToBrowser={requestOpenBrowser}
           onOpenGeneralSettings={openGeneralSettings}
         />
       </div>
@@ -204,7 +212,12 @@ export default function App() {
         ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
         : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
       }>
-        <BrowserPage focusAccountId={focusAccountId} onFocusHandled={() => setFocusAccountId(null)} />
+        <BrowserPage
+          openRequest={browserOpenRequest}
+          onRequestHandled={(requestId) => {
+            setBrowserOpenRequest(prev => prev?.requestId === requestId ? null : prev)
+          }}
+        />
       </div>
 
       <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>

@@ -12,6 +12,7 @@ const MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
@@ -51,6 +52,7 @@ export function getAccountActionName(actionCode: string): string {
     case 'fb_message_page_inbox_customer': return 'Nhắn tin khách inbox page'
     case 'fb_add_friend': return 'Kết bạn'
     case 'fb_like_post': return 'Like post'
+    case 'fb_join_group': return 'Tham gia group'
     case 'zalo_find_phone_user': return 'Tìm SĐT'
     case 'zalo_message_friend': return 'Nhắn tin bạn bè'
     case 'zalo_message_group': return 'Nhắn tin group'
@@ -213,6 +215,9 @@ function getDefaultCampaignActionDescriptors(campaign: Campaign): CampaignAction
       if (isNewsfeedLikeConfigured(extra)) {
         actions.push({ code: 'fb_like_post', name: 'Like post' })
       }
+      break
+    case FACEBOOK_JOIN_GROUP_ACTION_ID:
+      actions.push({ code: 'fb_join_group', name: 'Tham gia group' })
       break
     case ZALO_MESSAGE_PHONE_ACTION_ID:
       actions.push({ code: 'zalo_find_phone_user', name: 'Tìm SĐT' })
