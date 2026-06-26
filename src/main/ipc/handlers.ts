@@ -1,5 +1,5 @@
 import { app, ipcMain, BrowserWindow } from 'electron'
-import { AuthEntitlements, IPC_EVENTS } from '../../shared/types'
+import { AuthEntitlements, AuthUser, IPC_EVENTS } from '../../shared/types'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { PageControllerRegistry } from '../v2/runtime/pageController'
 import { SupabaseService } from '../services/supabase'
@@ -72,6 +72,20 @@ function hasAnyEntitlement(entitlements: Partial<AuthEntitlements> | null | unde
   )
 }
 
+function authEntitlementsEqual(
+  left: Partial<AuthEntitlements> | null | undefined,
+  right: Partial<AuthEntitlements> | null | undefined
+): boolean {
+  return !!left?.facebookCore === !!right?.facebookCore &&
+    !!left?.facebookFanpage === !!right?.facebookFanpage &&
+    !!left?.email === !!right?.email &&
+    !!left?.zalo === !!right?.zalo &&
+    (left?.dailySendLimits?.facebookCore ?? null) === (right?.dailySendLimits?.facebookCore ?? null) &&
+    (left?.dailySendLimits?.facebookFanpage ?? null) === (right?.dailySendLimits?.facebookFanpage ?? null) &&
+    (left?.dailySendLimits?.email ?? null) === (right?.dailySendLimits?.email ?? null) &&
+    (left?.dailySendLimits?.zalo ?? null) === (right?.dailySendLimits?.zalo ?? null)
+}
+
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
@@ -128,6 +142,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   }
 
+  const notifyRendererUserUpdated = (user: AuthUser): void => {
+    try {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_EVENTS.AUTH_USER_UPDATED, user)
+      }
+    } catch {
+      // Window may be closed
+    }
+  }
+
   const expireCurrentSession = async (reason: 'login' | 'daily'): Promise<void> => {
     const user = getCurrentUser()
     if (!user) return
@@ -165,7 +189,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         return
       }
 
-      setCurrentUser({ ...currentUser, entitlements: liveEntitlements })
+      const updatedUser = { ...currentUser, entitlements: liveEntitlements }
+      const entitlementsChanged = !authEntitlementsEqual(currentUser.entitlements, liveEntitlements)
+      setCurrentUser(updatedUser)
+      if (reason === 'daily') {
+        syncZaloBackgroundForCurrentUser('daily-entitlement-refresh')
+        if (entitlementsChanged) notifyRendererUserUpdated(updatedUser)
+      }
     } catch (err) {
       console.error(`[AuthSessionExpiry] ${reason}: failed to refresh entitlements:`, err)
     } finally {
@@ -197,6 +227,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       .catch((err) => {
         console.error('[ZaloRuntime] Failed to warm stored sessions:', err)
       })
+  }
+
+  const syncZaloBackgroundForCurrentUser = (_reason: string): void => {
+    const user = getCurrentUser()
+    if (user?.entitlements?.zalo) {
+      warmZaloSessions()
+      zaloRealtimeGroupManager?.start()
+      return
+    }
+
+    zaloRealtimeGroupManager?.stop()
+    zaloRuntime.clearAll()
   }
 
   let lastScheduleMaintenanceDay = getVietnamDateKey()
@@ -306,8 +348,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       } finally {
         await runSessionExpiryCheck('login')
         if (!getCurrentUser()) return
-        warmZaloSessions()
-        zaloRealtimeGroupManager?.start()
+        syncZaloBackgroundForCurrentUser('login')
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
       }
     },

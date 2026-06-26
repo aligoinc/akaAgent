@@ -735,7 +735,8 @@ export async function listCampaigns(): Promise<Campaign[]> {
 
 export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloRealtimeGroupCampaignSnapshot[]> {
   const u = requireCurrentUser()
-  await ensureCurrentUserCanUseCampaignAction(ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  if (!entitlements.zalo) return []
 
   const { data, error } = await client()
     .from('auto_campaigns')

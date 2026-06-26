@@ -17,7 +17,9 @@ import GeneralSettingsModal, { type GeneralSettingsMenu } from './components/Set
 import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 
 export default function App() {
-  const { user, initializing, rehydrateFromStorage, handleSessionExpired } = useAuthStore()
+  const { user, initializing, rehydrateFromStorage, handleSessionExpired, handleUserUpdated } = useAuthStore()
+  const { theme } = useThemeStore()
+  const { loadAccounts, loadCampaigns, loadCampaignActions, upsertCampaign } = useCampaignStore()
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
@@ -42,15 +44,22 @@ export default function App() {
     })
   }, [handleSessionExpired])
 
+  useEffect(() => {
+    if (!window.electronAPI?.onAuthUserUpdated) return
+    return window.electronAPI.onAuthUserUpdated((nextUser) => {
+      handleUserUpdated(nextUser)
+      void loadAccounts()
+      void loadCampaigns()
+      void loadCampaignActions()
+    })
+  }, [handleUserUpdated, loadAccounts, loadCampaigns, loadCampaignActions])
+
   // Snap workflow-editor -> campaigns if user loses workflow access (e.g. after switching account).
   useEffect(() => {
     if (!canOpenWorkflowEditor && activePage === 'workflow-editor') {
       setActivePage('campaigns')
     }
   }, [canOpenWorkflowEditor, activePage])
-
-  const { theme } = useThemeStore()
-  const { loadAccounts, upsertCampaign } = useCampaignStore()
 
   const [updateInfo, setUpdateInfo] = useState<{ localVersion: string; remoteVersion: string } | null>(null)
 
