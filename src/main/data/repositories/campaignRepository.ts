@@ -85,8 +85,11 @@ const LIMIT_COUNT_STATUSES = ['thành công', 'thất bại']
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
   'findPostLinkTargetCampaignIds',
+  'findPhoneZaloMessagePhoneTargetCampaignIds',
+  'findZaloGroupLinkJoinTargetCampaignIds',
   'findFacebookGroupPostTargetCampaignIds',
-  'findFacebookGroupCommentTargetCampaignIds'
+  'findFacebookGroupCommentTargetCampaignIds',
+  'findFacebookGroupJoinTargetCampaignIds'
 ] as const
 const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
   'name',

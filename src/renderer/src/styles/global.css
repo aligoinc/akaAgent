@@ -5569,6 +5569,10 @@ td.report-account-col span {
   font-size: 12px;
 }
 
+.campaign-picker-target-table {
+  min-width: 1040px;
+}
+
 .campaign-picker-summary-table th,
 .campaign-picker-summary-table td {
   padding: 8px 10px;
@@ -5586,6 +5590,18 @@ td.report-account-col span {
 
 .campaign-picker-summary-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.campaign-picker-summary-actions-col {
+  width: 112px;
+  text-align: center !important;
+}
+
+.campaign-picker-summary-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .source-campaign-table-wrap {
@@ -6736,6 +6752,42 @@ td.report-account-col span {
   padding-left: 24px;
   border-left: 2px solid var(--border-hover);
   margin-bottom: 8px;
+}
+
+.found-data-handling-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.found-data-handling-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.found-data-handling-group-title {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.found-data-handling-group-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.found-data-handling-group-options .extra-comment-options {
+  margin-bottom: 0;
+}
+
+.found-data-entitlement-note {
+  margin-top: 6px;
+  padding-left: 32px;
+  color: var(--accent-warning);
 }
 
 .extra-image-upload {

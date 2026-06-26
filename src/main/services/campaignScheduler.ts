@@ -243,8 +243,11 @@ interface FindDataPreviousValues {
 type FindDataTargetCampaignField =
   | 'findUidTargetCampaignIds'
   | 'findPostLinkTargetCampaignIds'
+  | 'findPhoneZaloMessagePhoneTargetCampaignIds'
+  | 'findZaloGroupLinkJoinTargetCampaignIds'
   | 'findFacebookGroupPostTargetCampaignIds'
   | 'findFacebookGroupCommentTargetCampaignIds'
+  | 'findFacebookGroupJoinTargetCampaignIds'
 
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
@@ -426,8 +429,11 @@ export class CampaignScheduler {
   private getFindDataTargetCampaignField(campaign: Campaign): FindDataTargetCampaignField | null {
     if (campaign.actionId === MESSAGE_UID_ACTION_ID) return 'findUidTargetCampaignIds'
     if (campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID) return 'findPostLinkTargetCampaignIds'
+    if (campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID) return 'findPhoneZaloMessagePhoneTargetCampaignIds'
+    if (campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID) return 'findZaloGroupLinkJoinTargetCampaignIds'
     if (campaign.actionId === GROUP_POST_ACTION_ID) return 'findFacebookGroupPostTargetCampaignIds'
     if (campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID) return 'findFacebookGroupCommentTargetCampaignIds'
+    if (campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID) return 'findFacebookGroupJoinTargetCampaignIds'
     return null
   }
 
@@ -439,6 +445,8 @@ export class CampaignScheduler {
 
     if (targetField === 'findUidTargetCampaignIds') return sourceCampaign.extraSettings?.isFindUid === true
     if (targetField === 'findPostLinkTargetCampaignIds') return sourceCampaign.extraSettings?.isFindPostLink === true
+    if (targetField === 'findPhoneZaloMessagePhoneTargetCampaignIds') return sourceCampaign.extraSettings?.isFindPhone === true
+    if (targetField === 'findZaloGroupLinkJoinTargetCampaignIds') return sourceCampaign.extraSettings?.isFindLinkGroupZalo === true
     if (!isFindDataSearch) return false
     return sourceCampaign.extraSettings?.isFindFacebookGroup === true
   }
@@ -4627,14 +4635,23 @@ export class CampaignScheduler {
       const findFacebookGroupCommentTargetCampaignIds = Array.isArray(campaign.extraSettings?.findFacebookGroupCommentTargetCampaignIds)
         ? campaign.extraSettings.findFacebookGroupCommentTargetCampaignIds
         : []
+      const findFacebookGroupJoinTargetCampaignIds = Array.isArray(campaign.extraSettings?.findFacebookGroupJoinTargetCampaignIds)
+        ? campaign.extraSettings.findFacebookGroupJoinTargetCampaignIds
+        : []
       const findPhoneSmsTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPhoneSmsTargetCampaignIds)
         ? campaign.extraSettings.findPhoneSmsTargetCampaignIds
         : []
       const findPhoneZaloWebTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPhoneZaloWebTargetCampaignIds)
         ? campaign.extraSettings.findPhoneZaloWebTargetCampaignIds
         : []
+      const findPhoneZaloMessagePhoneTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPhoneZaloMessagePhoneTargetCampaignIds)
+        ? campaign.extraSettings.findPhoneZaloMessagePhoneTargetCampaignIds
+        : []
       const findZaloGroupLinkWebTargetCampaignIds = Array.isArray(campaign.extraSettings?.findZaloGroupLinkWebTargetCampaignIds)
         ? campaign.extraSettings.findZaloGroupLinkWebTargetCampaignIds
+        : []
+      const findZaloGroupLinkJoinTargetCampaignIds = Array.isArray(campaign.extraSettings?.findZaloGroupLinkJoinTargetCampaignIds)
+        ? campaign.extraSettings.findZaloGroupLinkJoinTargetCampaignIds
         : []
       const findPhoneAkaBizDesktopTargetCampaignIds = Array.isArray(campaign.extraSettings?.findPhoneAkaBizDesktopTargetCampaignIds)
         ? campaign.extraSettings.findPhoneAkaBizDesktopTargetCampaignIds
@@ -4691,9 +4708,12 @@ export class CampaignScheduler {
             findPostLinkTargetCampaignIds,
             findFacebookGroupPostTargetCampaignIds,
             findFacebookGroupCommentTargetCampaignIds,
+            findFacebookGroupJoinTargetCampaignIds,
             findPhoneSmsTargetCampaignIds,
             findPhoneZaloWebTargetCampaignIds,
+            findPhoneZaloMessagePhoneTargetCampaignIds,
             findZaloGroupLinkWebTargetCampaignIds,
+            findZaloGroupLinkJoinTargetCampaignIds,
             findPhoneAkaBizDesktopTargetCampaignIds,
             findZaloGroupLinkAkaBizDesktopTargetCampaignIds,
             error: isSuccess ? undefined : errMsg,
@@ -4734,7 +4754,8 @@ export class CampaignScheduler {
           pushedCount: newFacebookGroupsForInternal.length,
           hasTarget: [
             ...this.getFindDataConfiguredTargetCampaignIds(findFacebookGroupPostTargetCampaignIds, campaign.id),
-            ...this.getFindDataConfiguredTargetCampaignIds(findFacebookGroupCommentTargetCampaignIds, campaign.id)
+            ...this.getFindDataConfiguredTargetCampaignIds(findFacebookGroupCommentTargetCampaignIds, campaign.id),
+            ...this.getFindDataConfiguredTargetCampaignIds(findFacebookGroupJoinTargetCampaignIds, campaign.id)
           ].length > 0
         })
         await this.logFindDataDuplicatePushSummary(campaign, {
@@ -4744,6 +4765,7 @@ export class CampaignScheduler {
           hasTarget: [
             ...this.getFindDataConfiguredTargetCampaignIds(findPhoneSmsTargetCampaignIds, campaign.id),
             ...this.getFindDataConfiguredTargetCampaignIds(findPhoneZaloWebTargetCampaignIds, campaign.id),
+            ...this.getFindDataConfiguredTargetCampaignIds(findPhoneZaloMessagePhoneTargetCampaignIds, campaign.id),
             ...this.getFindDataConfiguredTargetCampaignIds(findPhoneAkaBizDesktopTargetCampaignIds, campaign.id)
           ].length > 0
         })
@@ -4753,6 +4775,7 @@ export class CampaignScheduler {
           pushedCount: newZaloGroupLinksForExternal.length,
           hasTarget: [
             ...this.getFindDataConfiguredTargetCampaignIds(findZaloGroupLinkWebTargetCampaignIds, campaign.id),
+            ...this.getFindDataConfiguredTargetCampaignIds(findZaloGroupLinkJoinTargetCampaignIds, campaign.id),
             ...this.getFindDataConfiguredTargetCampaignIds(findZaloGroupLinkAkaBizDesktopTargetCampaignIds, campaign.id)
           ].length > 0
         })
@@ -4761,7 +4784,9 @@ export class CampaignScheduler {
         await this.pushFoundFacebookGroupsToTargetCampaigns(campaign, newFacebookGroupsForInternal)
         await this.pushFoundPhonesToSmsCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
         await this.pushFoundPhonesToZaloWebCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
+        await this.pushFoundPhonesToZaloMessagePhoneCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
         await this.pushFoundZaloGroupLinksToZaloWebCampaigns(campaign, newZaloGroupLinksForExternal)
+        await this.pushFoundZaloGroupLinksToJoinCampaigns(campaign, newZaloGroupLinksForExternal)
         await this.pushFoundPhonesToAkaBizDesktopCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
         await this.pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(campaign, newZaloGroupLinksForExternal)
       }
@@ -5419,6 +5444,14 @@ export class CampaignScheduler {
         ),
         actionId: COMMENT_SEEDING_FEED_ACTION_ID,
         label: 'chiến dịch comment seeding'
+      },
+      {
+        ids: this.getFindDataConfiguredTargetCampaignIds(
+          sourceCampaign.extraSettings.findFacebookGroupJoinTargetCampaignIds,
+          sourceCampaign.id
+        ),
+        actionId: FACEBOOK_JOIN_GROUP_ACTION_ID,
+        label: 'chiến dịch tham gia group'
       }
     ]
     const hasTarget = targetConfigs.some(config => config.ids.length > 0)
@@ -5846,11 +5879,16 @@ export class CampaignScheduler {
     return Array.from(result.values())
   }
 
-  private getPhoneProfileNameMap(profiles: FindDataPhoneProfile[]): Map<string, string> {
+  private getPhoneProfileNameMap(
+    profiles: FindDataPhoneProfile[],
+    normalizePhone: (value: unknown) => string = value => String(value || '').trim()
+  ): Map<string, string> {
     const map = new Map<string, string>()
     for (const profile of profiles) {
-      const key = this.normalizeExternalValueForCompare(profile.phone)
-      if (key && profile.name && !map.has(key)) map.set(key, profile.name)
+      const key = this.normalizeExternalValueForCompare(normalizePhone(profile.phone))
+      const name = String(profile.name || '').trim()
+      if (!key || !name || map.has(key)) continue
+      map.set(key, name)
     }
     return map
   }
@@ -6107,6 +6145,52 @@ export class CampaignScheduler {
     }
   }
 
+  private async pushFoundPhonesToZaloMessagePhoneCampaigns(sourceCampaign: Campaign, rawPhones: string[], phoneProfiles: FindDataPhoneProfile[] = []): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindPhone) return
+
+    const targetCampaignIds = this.getFindDataConfiguredTargetCampaignIds(
+      sourceCampaign.extraSettings.findPhoneZaloMessagePhoneTargetCampaignIds,
+      sourceCampaign.id
+    )
+    if (targetCampaignIds.length === 0) return
+
+    const phoneMap = new Map<string, string>()
+    for (const rawPhone of rawPhones) {
+      const phone = this.normalizeVietnamMobilePhone(rawPhone)
+      const key = this.normalizeExternalValueForCompare(phone)
+      if (phone && key && !phoneMap.has(key)) phoneMap.set(key, phone)
+    }
+    const phones = Array.from(phoneMap.values())
+    if (phones.length === 0) return
+    const phoneNameByValue = this.getPhoneProfileNameMap(phoneProfiles, value => this.normalizeVietnamMobilePhone(value))
+
+    for (const targetCampaignId of targetCampaignIds) {
+      try {
+        const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
+        if (!targetCampaign || targetCampaign.actionId !== ZALO_MESSAGE_PHONE_ACTION_ID) continue
+
+        for (const phone of phones) {
+          const phoneKey = this.normalizeExternalValueForCompare(phone)
+          await this.supabase.createCampaignInputData({
+            campaignId: targetCampaign.id,
+            name: phoneNameByValue.get(phoneKey) || undefined,
+            phone,
+            status: 'chờ xử lý',
+            note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
+          })
+        }
+
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${phones.length} SĐT từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+        if (targetCampaign.status === 'hoàn thành') {
+          await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
+        }
+      } catch (err) {
+        console.error('Failed to push found phones to Zalo phone campaign:', err)
+      }
+    }
+  }
+
   private async pushFoundZaloGroupLinksToZaloWebCampaigns(sourceCampaign: Campaign, rawLinks: string[]): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindLinkGroupZalo) return
 
@@ -6140,6 +6224,43 @@ export class CampaignScheduler {
       } catch (err) {
         console.error('Failed to push found Zalo group links to akaBiz Zalo Web campaign:', err)
         await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy link group Zalo sang ${targetCampaignName}`, err)
+      }
+    }
+  }
+
+  private async pushFoundZaloGroupLinksToJoinCampaigns(sourceCampaign: Campaign, rawLinks: string[]): Promise<void> {
+    if (!sourceCampaign.extraSettings?.isFindLinkGroupZalo) return
+
+    const targetCampaignIds = this.getFindDataConfiguredTargetCampaignIds(
+      sourceCampaign.extraSettings.findZaloGroupLinkJoinTargetCampaignIds,
+      sourceCampaign.id
+    )
+    if (targetCampaignIds.length === 0) return
+
+    const links = this.uniqueExternalValues(rawLinks)
+    if (links.length === 0) return
+
+    for (const targetCampaignId of targetCampaignIds) {
+      try {
+        const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
+        if (!targetCampaign || targetCampaign.actionId !== ZALO_JOIN_GROUP_LINK_ACTION_ID) continue
+
+        for (const link of links) {
+          await this.supabase.createCampaignInputData({
+            campaignId: targetCampaign.id,
+            uid: link,
+            status: 'chờ xử lý',
+            note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
+          })
+        }
+
+        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${links.length} link group Zalo sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${links.length} link group Zalo từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+        if (targetCampaign.status === 'hoàn thành') {
+          await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
+        }
+      } catch (err) {
+        console.error('Failed to push found Zalo group links to join campaign:', err)
       }
     }
   }

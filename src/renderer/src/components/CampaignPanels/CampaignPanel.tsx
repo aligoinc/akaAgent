@@ -229,8 +229,11 @@ const POST_SEARCH_LOG_EVENT_TYPES = ['extract_post_data', 'comment_seeding_post_
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
   'findPostLinkTargetCampaignIds',
+  'findPhoneZaloMessagePhoneTargetCampaignIds',
+  'findZaloGroupLinkJoinTargetCampaignIds',
   'findFacebookGroupPostTargetCampaignIds',
-  'findFacebookGroupCommentTargetCampaignIds'
+  'findFacebookGroupCommentTargetCampaignIds',
+  'findFacebookGroupJoinTargetCampaignIds'
 ] as const
 
 const CAMPAIGN_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUSES.map(status => ({
