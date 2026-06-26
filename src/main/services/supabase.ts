@@ -107,6 +107,7 @@ export class SupabaseService {
     return campaignRepo.addCampaignInputDataToCampaign(request)
   }
   resetCampaignInputDataForRerun(campaignId: number) { return campaignRepo.resetCampaignInputDataForRerun(campaignId) }
+  clearCampaignInputData(campaignId: number) { return campaignRepo.clearCampaignInputData(campaignId) }
   deleteCampaignInputData(id: number) { return campaignRepo.deleteCampaignInputData(id) }
 
   // =========== CAMPAIGN DETAILS (per-milestone log) ===========

@@ -224,6 +224,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_message_stranger: 'Nhắn tin người lạ',
   zalo_add_friend: 'Kết bạn',
   zalo_join_group_link: 'Tham gia group',
+  zalo_cancel_sent_friend_request: 'Huỷ lời mời kết bạn',
   zalo_tag_contact: 'Gắn tag Zalo',
   zalo_change_alias: 'Đổi tên Zalo'
 }
@@ -294,6 +295,12 @@ const normalizeZaloFriendRecommendationCount = (value: unknown): number => {
   return Math.max(1, parsed)
 }
 
+const normalizeZaloCancelFriendRequestLimit = (value: unknown): number => {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed)) return 10
+  return Math.max(1, parsed)
+}
+
 const WEEKDAYS = [
   { value: '2', label: 'Thứ 2' },
   { value: '3', label: 'Thứ 3' },
@@ -329,6 +336,7 @@ const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_cu
 const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
+const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const ZALO_FRIEND_TARGET_MODES: Array<{ value: ZaloFriendTargetMode; label: string }> = [
   { value: 'selected', label: 'Chọn bạn bè để gửi' },
@@ -1197,6 +1205,7 @@ export default function CampaignFormModal({
     suggestedFriendsCount: campaign?.extraSettings?.suggestedFriendsCount ?? 10,
     friendRequestMessage: campaign?.extraSettings?.friendRequestMessage || '',
     zaloFriendRecommendationCount: campaign?.extraSettings?.zaloFriendRecommendationCount ?? 10,
+    zaloCancelFriendRequestLimit: campaign?.extraSettings?.zaloCancelFriendRequestLimit ?? 10,
     zaloRealtimeTriggers: normalizeZaloRealtimeTriggers(campaign?.extraSettings?.zaloRealtimeTriggers),
     zaloRealtimeGroupIds: Array.isArray(campaign?.extraSettings?.zaloRealtimeGroupIds)
       ? campaign.extraSettings.zaloRealtimeGroupIds.map(id => String(id || '').trim()).filter(Boolean)
@@ -1357,6 +1366,7 @@ export default function CampaignFormModal({
   const isZaloMessageFriendRecommendationCampaign = formData.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
   const isZaloMessageGroupCampaign = formData.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
   const isZaloJoinGroupLinkCampaign = formData.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
+  const isZaloCancelSentFriendRequestCampaign = formData.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
   const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
@@ -1377,9 +1387,11 @@ export default function CampaignFormModal({
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const hasZaloFriendRecommendationMaterialized = isZaloMessageFriendRecommendationCampaign && isEditingSavedCampaign && Boolean(campaign?.extraSettings?.zaloFriendRecommendationDataMaterializedAt)
   const zaloFriendRecommendationMaterializedCount = campaign?.extraSettings?.zaloFriendRecommendationMaterializedCount ?? 0
+  const hasZaloCancelFriendRequestMaterialized = isZaloCancelSentFriendRequestCampaign && isEditingSavedCampaign && Boolean(campaign?.extraSettings?.zaloCancelFriendRequestDataMaterializedAt)
+  const zaloCancelFriendRequestMaterializedCount = campaign?.extraSettings?.zaloCancelFriendRequestMaterializedCount ?? 0
   const isSuggestedFriendsUidCampaign = isMessageUidCampaign && formData.useSuggestedFriends
   const isZaloFriendAutoDataMode = isZaloMessageFriendCampaign && formData.zaloFriendTargetMode !== 'selected'
-  const hideDetailsSection = (isSuggestedFriendsUidCampaign && !isEditingSavedCampaign) || isZaloFriendAutoDataMode || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageFriendRecommendationCampaign
+  const hideDetailsSection = (isSuggestedFriendsUidCampaign && !isEditingSavedCampaign) || isZaloFriendAutoDataMode || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageFriendRecommendationCampaign || isZaloCancelSentFriendRequestCampaign
   const targetFindDataField = getFindDataTargetCampaignField(formData.actionId)
   const findDataSourceSectionLabel = getFindDataSourceSectionLabel(formData.actionId)
   const findDataSourceStep = getFindDataSourceStep(findDataSourceSectionLabel)
@@ -1398,9 +1410,9 @@ export default function CampaignFormModal({
   const canPickZaloRemarketingCustomers = isZaloMessageRemarketingCustomerCampaign
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
-  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign
-  const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign || isZaloJoinGroupLinkCampaign
-  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign
+  const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && !isZaloCancelSentFriendRequestCampaign
+  const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign || isZaloJoinGroupLinkCampaign || isZaloCancelSentFriendRequestCampaign
+  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign || isZaloCancelSentFriendRequestCampaign
   const needsZaloLabels =
     ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag) ||
     (isZaloMessageFriendCampaign && ((!isZaloShareMessageMode && formData.enableZaloTag) || formData.zaloFriendTargetMode === 'tagged_friends'))
@@ -1466,7 +1478,8 @@ export default function CampaignFormModal({
     (!isZaloMessageGroupRealtimeCampaign || formData.enableMessage) &&
     (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage) &&
     (!isZaloMessageFriendRecommendationCampaign || formData.enableMessage) &&
-    !isZaloJoinGroupLinkCampaign
+    !isZaloJoinGroupLinkCampaign &&
+    !isZaloCancelSentFriendRequestCampaign
   const hasMainContentText = formData.content.trim().length > 0
   const hasSelectedMainMedia = formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
@@ -1561,6 +1574,7 @@ export default function CampaignFormModal({
     !isFindDataCampaign &&
     !isNewsfeedInteractionCampaign &&
     !isZaloJoinGroupLinkCampaign &&
+    !isZaloCancelSentFriendRequestCampaign &&
     (!isMessageUidCampaign || formData.enableMessage) &&
     (!isZaloMessagePhoneCampaign || formData.enableMessage) &&
     (!isZaloMessageGroupMemberCampaign || formData.enableMessage) &&
@@ -2573,6 +2587,9 @@ export default function CampaignFormModal({
       case 'foundDataHandling': return true
       case 'findDataSources': return true
       case 'messageActions':
+        if (isZaloCancelSentFriendRequestCampaign) {
+          return normalizeZaloCancelFriendRequestLimit(formData.zaloCancelFriendRequestLimit) >= 1
+        }
         return isMessageFriendCampaign || (
           (formData.enableMessage || formData.enableAddFriend) &&
           (!isZaloMessageGroupRealtimeCampaign ||
@@ -3030,7 +3047,9 @@ export default function CampaignFormModal({
           scheduleDays: normalizedScheduleDays,
           scheduleWeekDays: normalizedScheduleWeekDays,
           continueNextDay: (isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign) ? false : formData.continueNextDay,
-          refreshData: isZaloMessageBirthdayCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData),
+          refreshData: (isZaloMessageBirthdayCampaign || isZaloMessageFriendRecommendationCampaign || isZaloCancelSentFriendRequestCampaign)
+            ? true
+            : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData),
           content: formData.content,
           extraSettings: {
             sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
@@ -3113,6 +3132,15 @@ export default function CampaignFormModal({
               : null,
             zaloFriendRecommendationMaterializedCount: isZaloMessageFriendRecommendationCampaign && !cloneFromId
               ? (campaign?.extraSettings?.zaloFriendRecommendationMaterializedCount ?? 0)
+              : 0,
+            zaloCancelFriendRequestLimit: isZaloCancelSentFriendRequestCampaign
+              ? normalizeZaloCancelFriendRequestLimit(formData.zaloCancelFriendRequestLimit)
+              : 10,
+            zaloCancelFriendRequestDataMaterializedAt: isZaloCancelSentFriendRequestCampaign && !cloneFromId
+              ? (campaign?.extraSettings?.zaloCancelFriendRequestDataMaterializedAt ?? null)
+              : null,
+            zaloCancelFriendRequestMaterializedCount: isZaloCancelSentFriendRequestCampaign && !cloneFromId
+              ? (campaign?.extraSettings?.zaloCancelFriendRequestMaterializedCount ?? 0)
               : 0,
             zaloFriendTargetMode: isZaloMessageFriendCampaign ? formData.zaloFriendTargetMode : 'selected',
             zaloFriendSourceTagIds: selectedZaloFriendSourceTagIds,
@@ -3311,6 +3339,10 @@ export default function CampaignFormModal({
     }
     if (isZaloMessageGroupCampaign && supportsAkaBizContactTags && formData.enableAkaBizTag && getCampaignIdList(formData.akaBizTagIds).length === 0) {
       showAlert('Vui lòng chọn tag akaBiz cần gắn.', 'error')
+      return
+    }
+    if (isZaloCancelSentFriendRequestCampaign && normalizeZaloCancelFriendRequestLimit(formData.zaloCancelFriendRequestLimit) < 1) {
+      showAlert('Vui lòng nhập số lời mời cần huỷ lớn hơn 0.', 'error')
       return
     }
     if (showContentSection && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
@@ -5114,7 +5146,6 @@ export default function CampaignFormModal({
             type="number"
             min={1}
             value={formData.zaloFriendRecommendationCount}
-            disabled={hasZaloFriendRecommendationMaterialized}
             onChange={e => setFormData(p => ({
               ...p,
               zaloFriendRecommendationCount: normalizeZaloFriendRecommendationCount(e.target.value)
@@ -5123,7 +5154,7 @@ export default function CampaignFormModal({
           />
           {hasZaloFriendRecommendationMaterialized && (
             <div className="schedule-hint" style={{ marginTop: 6 }}>
-              Đã lấy {zaloFriendRecommendationMaterializedCount} đề xuất, không đổi số lượng khi sửa chiến dịch.
+              Lượt hiện tại đã lấy {zaloFriendRecommendationMaterializedCount} đề xuất. Số mới sẽ áp dụng ở lượt lấy đề xuất tiếp theo.
             </div>
           )}
         </div>
@@ -5204,6 +5235,30 @@ export default function CampaignFormModal({
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 
       {renderAkaBizContactTagOption()}
+    </>
+  )
+
+  const renderZaloCancelSentFriendRequestActionOptions = () => (
+    <>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Cấu hình huỷ lời mời</div>
+      <div className="stepper-form-group" style={{ maxWidth: 260 }}>
+        <label>Số lời mời cần huỷ</label>
+        <input
+          type="number"
+          min={1}
+          value={formData.zaloCancelFriendRequestLimit}
+          onChange={e => setFormData(p => ({
+            ...p,
+            zaloCancelFriendRequestLimit: normalizeZaloCancelFriendRequestLimit(e.target.value)
+          }))}
+          className="stepper-input"
+        />
+        {hasZaloCancelFriendRequestMaterialized && (
+          <div className="schedule-hint" style={{ marginTop: 6 }}>
+            Lượt hiện tại đã lấy {zaloCancelFriendRequestMaterializedCount} lời mời. Số mới sẽ áp dụng ở lượt lấy snapshot tiếp theo.
+          </div>
+        )}
+      </div>
     </>
   )
 
@@ -8062,6 +8117,8 @@ export default function CampaignFormModal({
                           {renderZaloMessagePhoneActionOptions()}
                         </>
                       )
+                      : isZaloCancelSentFriendRequestCampaign
+                        ? renderZaloCancelSentFriendRequestActionOptions()
                       : isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign
                       ? renderZaloMessagePhoneActionOptions()
                       : isZaloMessageFriendCampaign
@@ -8295,7 +8352,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
+                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
