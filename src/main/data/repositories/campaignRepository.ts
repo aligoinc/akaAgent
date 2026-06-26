@@ -57,6 +57,8 @@ const ZALO_REMARKETING_MESSAGE_ACTION_CODES = ['zalo_message_stranger', 'zalo_me
 const ZALO_REMARKETING_DETAIL_FETCH_CHUNK = 1000
 const ZALO_REMARKETING_PAGE_DEFAULT_LIMIT = 100
 const ZALO_REMARKETING_PAGE_MAX_LIMIT = 20000
+const CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK = 1000
+const CAMPAIGN_LIST_PROGRESS_ID_CHUNK = 100
 const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
   '0162': '032',
   '0163': '033',
@@ -108,6 +110,10 @@ const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
+type CampaignInputDataProgress = {
+  completed: number
+  total: number
+}
 
 export interface ZaloRealtimeGroupCampaignSnapshot {
   campaign: Campaign
@@ -719,6 +725,64 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
   return mapCampaignFromDB(data)
 }
 
+const chunkNumbers = (values: number[], chunkSize: number): number[][] => {
+  const chunks: number[][] = []
+  for (let i = 0; i < values.length; i += chunkSize) {
+    chunks.push(values.slice(i, i + chunkSize))
+  }
+  return chunks
+}
+
+async function loadCampaignInputDataProgress(campaignIds: number[]): Promise<Map<number, CampaignInputDataProgress>> {
+  const progressByCampaign = new Map<number, CampaignInputDataProgress>()
+  const ids = Array.from(new Set(campaignIds.filter(id => Number.isFinite(id) && id > 0)))
+  ids.forEach(id => progressByCampaign.set(id, { completed: 0, total: 0 }))
+  if (ids.length === 0) return progressByCampaign
+
+  for (const idChunk of chunkNumbers(ids, CAMPAIGN_LIST_PROGRESS_ID_CHUNK)) {
+    let from = 0
+
+    while (true) {
+      const { data, error } = await client()
+        .from('auto_campaign_input_data')
+        .select('campaign_id, status')
+        .in('campaign_id', idChunk)
+        .eq('is_delete', false)
+        .order('id', { ascending: true })
+        .range(from, from + CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK - 1)
+
+      if (error) throw new Error(`Failed to load campaign input progress: ${error.message}`)
+
+      const page = (data || []) as Array<{ campaign_id: number; status: string | null }>
+      for (const row of page) {
+        const campaignId = Number(row.campaign_id)
+        const progress = progressByCampaign.get(campaignId)
+        if (!progress) continue
+        progress.total += 1
+        if (row.status === 'hoàn thành') progress.completed += 1
+      }
+
+      if (page.length < CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK) break
+      from += CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK
+    }
+  }
+
+  return progressByCampaign
+}
+
+async function attachCampaignInputDataProgress(campaigns: Campaign[]): Promise<Campaign[]> {
+  if (campaigns.length === 0) return campaigns
+  const progressByCampaign = await loadCampaignInputDataProgress(campaigns.map(campaign => campaign.id))
+  return campaigns.map(campaign => {
+    const progress = progressByCampaign.get(campaign.id)
+    return {
+      ...campaign,
+      inputDataCompletedCount: progress?.completed ?? 0,
+      inputDataTotalCount: progress?.total ?? 0
+    }
+  })
+}
+
 export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
@@ -730,7 +794,8 @@ export async function listCampaigns(): Promise<Campaign[]> {
 
   if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
   const entitlements = await loadCurrentUserEffectiveEntitlements()
-  return filterCampaignsByEntitlements((data || []).map(row => mapCampaignFromDB(row)), entitlements)
+  const campaigns = filterCampaignsByEntitlements((data || []).map(row => mapCampaignFromDB(row)), entitlements)
+  return attachCampaignInputDataProgress(campaigns)
 }
 
 export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloRealtimeGroupCampaignSnapshot[]> {

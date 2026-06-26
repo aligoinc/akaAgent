@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles } from 'lucide-react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, MoreHorizontal, Eye, LogIn, Info, History } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -7,13 +7,15 @@ import {
   CAMPAIGN_STATUSES,
   getCampaignInputDataRequirement,
   type AddCampaignInputDataToCampaignRequest,
+  type AutoAccount,
   type Campaign,
   type CampaignAction,
   type CampaignDetail,
   type CampaignInputData,
   type CampaignInputStatus,
   type CampaignRelationSummary,
-  type CampaignRunEvent
+  type CampaignRunEvent,
+  type ZaloLoginQrEvent
 } from '../../../../shared/types'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
@@ -56,6 +58,18 @@ interface DetailPopoverPosition {
   bottom?: number
   left: number
   width: number
+}
+
+interface CampaignActionMenuPosition {
+  top: number
+  left: number
+  maxHeight: number
+}
+
+interface CampaignActionMenuAnchorRect {
+  top: number
+  right: number
+  bottom: number
 }
 
 interface RunLogEntry {
@@ -221,6 +235,11 @@ const DETAIL_OPTION_HEIGHT = 30
 const DETAIL_OPTION_GAP = 4
 const DETAIL_POPOVER_PADDING_Y = 16
 const DETAIL_CUSTOM_DATE_GRID_HEIGHT = 92
+const CAMPAIGN_ACTION_MENU_WIDTH = 230
+const CAMPAIGN_ACTION_MENU_GAP = 6
+const CAMPAIGN_ACTION_MENU_MARGIN = 8
+const CAMPAIGN_ACTION_MENU_FALLBACK_HEIGHT = 260
+const CAMPAIGN_ACTION_MENU_MIN_MAX_HEIGHT = 80
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FIND_DATA_ACTION_IDS = new Set([FIND_DATA_GROUP_ACTION_ID, FIND_DATA_SEARCH_ACTION_ID])
@@ -827,6 +846,43 @@ const getDetailPopoverPosition = (
   return { top: rect.bottom + DETAIL_POPOVER_GAP, left, width }
 }
 
+const getCampaignActionMenuAnchorRect = (rect: DOMRect): CampaignActionMenuAnchorRect => ({
+  top: rect.top,
+  right: rect.right,
+  bottom: rect.bottom
+})
+
+const getCampaignActionMenuPosition = (
+  anchor: CampaignActionMenuAnchorRect,
+  menuSize: { width?: number; height?: number } = {}
+): CampaignActionMenuPosition => {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+  const menuWidth = Math.max(CAMPAIGN_ACTION_MENU_WIDTH, menuSize.width || CAMPAIGN_ACTION_MENU_WIDTH)
+  const expectedHeight = Math.max(0, menuSize.height || CAMPAIGN_ACTION_MENU_FALLBACK_HEIGHT)
+  const maxLeft = Math.max(CAMPAIGN_ACTION_MENU_MARGIN, viewportWidth - menuWidth - CAMPAIGN_ACTION_MENU_MARGIN)
+  const left = Math.min(
+    Math.max(CAMPAIGN_ACTION_MENU_MARGIN, anchor.right - menuWidth),
+    maxLeft
+  )
+  const spaceBelow = Math.max(0, viewportHeight - anchor.bottom - CAMPAIGN_ACTION_MENU_GAP - CAMPAIGN_ACTION_MENU_MARGIN)
+  const spaceAbove = Math.max(0, anchor.top - CAMPAIGN_ACTION_MENU_GAP - CAMPAIGN_ACTION_MENU_MARGIN)
+  const opensAbove = expectedHeight > spaceBelow && spaceAbove > spaceBelow
+  const availableHeight = Math.max(
+    CAMPAIGN_ACTION_MENU_MIN_MAX_HEIGHT,
+    opensAbove ? spaceAbove : spaceBelow
+  )
+  const renderedHeight = Math.min(expectedHeight, availableHeight)
+  const top = opensAbove
+    ? Math.max(CAMPAIGN_ACTION_MENU_MARGIN, anchor.top - CAMPAIGN_ACTION_MENU_GAP - renderedHeight)
+    : Math.min(
+      Math.max(CAMPAIGN_ACTION_MENU_MARGIN, anchor.bottom + CAMPAIGN_ACTION_MENU_GAP),
+      Math.max(CAMPAIGN_ACTION_MENU_MARGIN, viewportHeight - renderedHeight - CAMPAIGN_ACTION_MENU_MARGIN)
+    )
+
+  return { top, left, maxHeight: availableHeight }
+}
+
 const normalizeCampaignPlatform = (value: string | undefined | null) => {
   const raw = String(value || '').trim().toLowerCase()
   if (!raw) return ''
@@ -853,6 +909,19 @@ const normalizeFilterText = (value: string | undefined | null) => (
     .toLowerCase()
     .trim()
 )
+
+const getCampaignListScheduleTypeLabel = (type: Campaign['scheduleType'] | undefined) => {
+  if (type === 'weekly') return 'Hàng tuần'
+  if (type === 'monthly') return 'Hàng tháng'
+  return '1 lần'
+}
+
+const getCampaignInputProgress = (campaign: Campaign) => {
+  const total = Math.max(0, Number(campaign.inputDataTotalCount ?? 0))
+  const completed = Math.min(Math.max(0, Number(campaign.inputDataCompletedCount ?? 0)), total)
+  const percentage = total > 0 ? Math.round((completed / total) * 100) : 0
+  return { completed, total, percentage }
+}
 
 const getCampaignTimeSortValue = (value: string | undefined | null) => {
   if (!value) return Number.POSITIVE_INFINITY
@@ -1244,6 +1313,11 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
   const [inputDataActionLoading, setInputDataActionLoading] = useState(false)
   const [openInputDataActionMenu, setOpenInputDataActionMenu] = useState(false)
+  const [openCampaignActionMenuId, setOpenCampaignActionMenuId] = useState<number | null>(null)
+  const [campaignActionMenuPosition, setCampaignActionMenuPosition] = useState<CampaignActionMenuPosition | null>(null)
+  const [zaloLoginAccount, setZaloLoginAccount] = useState<AutoAccount | null>(null)
+  const [zaloLoginEvent, setZaloLoginEvent] = useState<ZaloLoginQrEvent | null>(null)
+  const [zaloLoginStarting, setZaloLoginStarting] = useState(false)
   const [detailDockHeight, setDetailDockHeight] = useState<number | null>(null)
   const [foundDataExportKinds, setFoundDataExportKinds] = useState<Set<FoundDataKind>>(
     () => new Set(FOUND_DATA_EXPORT_OPTIONS.map(option => option.kind))
@@ -1275,6 +1349,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const findDataLogXScrollRef = useRef<HTMLDivElement>(null)
   const filterPanelRef = useRef<HTMLDivElement>(null)
   const inputDataActionMenuRef = useRef<HTMLDivElement>(null)
+  const campaignActionMenuAnchorRef = useRef<CampaignActionMenuAnchorRect | null>(null)
+  const campaignActionMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -1288,6 +1364,26 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
       isMounted = false
     }
   }, [loadCampaigns, loadCampaignActions, loadAccounts])
+
+  useEffect(() => {
+    if (!window.electronAPI?.onZaloLoginQrEvent) return
+    return window.electronAPI.onZaloLoginQrEvent((event) => {
+      const activeAccountId = zaloLoginAccount?.id
+      if (!activeAccountId || event.accountId !== activeAccountId) return
+
+      setZaloLoginEvent(event)
+      if (event.status === 'success') {
+        setZaloLoginAccount(null)
+        setZaloLoginEvent(null)
+        loadAccounts()
+        loadCampaigns()
+        showAlert(event.message || 'Đăng nhập Zalo thành công', 'success')
+      } else if (event.status === 'error') {
+        loadAccounts()
+        showAlert(event.message || 'Đăng nhập Zalo thất bại', 'error')
+      }
+    })
+  }, [zaloLoginAccount?.id, loadAccounts, loadCampaigns, showAlert])
 
   // Load only the data needed by the active campaign detail tab.
   useEffect(() => {
@@ -1418,9 +1514,62 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
   }, [openInputDataActionMenu])
 
+  useEffect(() => {
+    if (!openCampaignActionMenuId) return
+
+    const closeOpenCampaignActionMenu = () => {
+      setOpenCampaignActionMenuId(null)
+      setCampaignActionMenuPosition(null)
+      campaignActionMenuAnchorRef.current = null
+    }
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Element) || !target.closest('.campaign-action-dropdown, .campaign-action-menu')) {
+        closeOpenCampaignActionMenu()
+      }
+    }
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeOpenCampaignActionMenu()
+    }
+
+    document.addEventListener('mousedown', handleDocumentMouseDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
+    document.addEventListener('scroll', closeOpenCampaignActionMenu, true)
+    window.addEventListener('resize', closeOpenCampaignActionMenu)
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown)
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+      document.removeEventListener('scroll', closeOpenCampaignActionMenu, true)
+      window.removeEventListener('resize', closeOpenCampaignActionMenu)
+    }
+  }, [openCampaignActionMenuId])
+
+  useLayoutEffect(() => {
+    if (!openCampaignActionMenuId || !campaignActionMenuAnchorRef.current || !campaignActionMenuRef.current) return
+    const menuRect = campaignActionMenuRef.current.getBoundingClientRect()
+    const nextPosition = getCampaignActionMenuPosition(campaignActionMenuAnchorRef.current, {
+      width: menuRect.width,
+      height: campaignActionMenuRef.current.scrollHeight
+    })
+    setCampaignActionMenuPosition(current => {
+      if (
+        current &&
+        Math.abs(current.top - nextPosition.top) < 1 &&
+        Math.abs(current.left - nextPosition.left) < 1 &&
+        Math.abs(current.maxHeight - nextPosition.maxHeight) < 1
+      ) {
+        return current
+      }
+      return nextPosition
+    })
+  }, [openCampaignActionMenuId])
+
   // Clear bulk selection when any list filter changes.
   useEffect(() => {
     setSelectedIds(new Set())
+    setOpenCampaignActionMenuId(null)
+    setCampaignActionMenuPosition(null)
+    campaignActionMenuAnchorRef.current = null
   }, [filterAccountId, timePreset, dateFrom, dateTo, campaignNameSearch, statusFilters, platformFilters, actionFilters])
 
   useEffect(() => {
@@ -1739,6 +1888,24 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
 
   const handleInputDataActionMenuToggle = () => {
     setOpenInputDataActionMenu(prev => !prev)
+  }
+
+  const closeCampaignActionMenu = () => {
+    setOpenCampaignActionMenuId(null)
+    setCampaignActionMenuPosition(null)
+    campaignActionMenuAnchorRef.current = null
+  }
+
+  const handleCampaignActionMenuToggle = (campaignId: number, event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (openCampaignActionMenuId === campaignId) {
+      closeCampaignActionMenu()
+      return
+    }
+
+    const anchor = getCampaignActionMenuAnchorRect(event.currentTarget.getBoundingClientRect())
+    campaignActionMenuAnchorRef.current = anchor
+    setCampaignActionMenuPosition(getCampaignActionMenuPosition(anchor))
+    setOpenCampaignActionMenuId(campaignId)
   }
 
   const handleCreateCampaignFromInputData = () => {
@@ -2558,6 +2725,59 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
     onAskAssistant?.(campaign.id)
   }
 
+  const openCampaignDetailTab = (campaign: Campaign, tab: DetailTab) => {
+    setSelectedCampaignId(campaign.id)
+    setDetailTab(tab)
+    setDetailDockOpen(true)
+    if (tab === 'actions') loadCampaignDetails(campaign.id)
+  }
+
+  const handleZaloLoginQr = async (campaign: Campaign, account: AutoAccount | undefined) => {
+    if (!account) {
+      showAlert('Không tìm thấy tài khoản của chiến dịch.', 'error')
+      return
+    }
+    if (!canUsePlatform('zalo', entitlements)) {
+      showAlert('Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.', 'error')
+      return
+    }
+    if (!window.electronAPI?.startZaloLoginQr) {
+      showAlert('Tính năng này cần Electron API.', 'error')
+      return
+    }
+
+    setOpenCampaignActionMenuId(null)
+    setSelectedCampaignId(campaign.id)
+    setZaloLoginAccount(account)
+    setZaloLoginEvent({ accountId: account.id, status: 'qr', message: 'Đang tạo mã QR...' })
+    setZaloLoginStarting(true)
+    try {
+      const result = await window.electronAPI.startZaloLoginQr(account.id)
+      if (!result.success) {
+        setZaloLoginAccount(null)
+        setZaloLoginEvent(null)
+        showAlert(result.reason || 'Không thể bắt đầu đăng nhập Zalo.', 'error')
+      }
+    } catch (err) {
+      setZaloLoginAccount(null)
+      setZaloLoginEvent(null)
+      showAlert(formatIpcErrorMessage(err, 'Không thể bắt đầu đăng nhập Zalo.'), 'error')
+    } finally {
+      setZaloLoginStarting(false)
+    }
+  }
+
+  const handleCloseZaloLogin = async () => {
+    const accountId = zaloLoginAccount?.id
+    const shouldCancel = !!accountId && zaloLoginEvent?.status !== 'success' && zaloLoginEvent?.status !== 'error'
+    setZaloLoginAccount(null)
+    setZaloLoginEvent(null)
+    setZaloLoginStarting(false)
+    if (shouldCancel) {
+      await window.electronAPI?.cancelZaloLoginQr?.(accountId).catch(() => {})
+    }
+  }
+
   const actionById = useMemo(
     () => new Map(campaignActions.map(action => [action.id, action])),
     [campaignActions]
@@ -2922,6 +3142,35 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           </div>
         </div>
       )}
+      {zaloLoginAccount && (
+        <div className="campaign-zalo-login-overlay">
+          <div className="campaign-zalo-login-modal">
+            <div className="campaign-zalo-login-header">
+              <div>
+                <strong>Đăng nhập Zalo</strong>
+                <div>{zaloLoginAccount.name}</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={handleCloseZaloLogin}>Đóng</button>
+            </div>
+            <div className="campaign-zalo-login-body">
+              {zaloLoginEvent?.qrImage ? (
+                <img src={zaloLoginEvent.qrImage} alt="Zalo QR" className="campaign-zalo-login-qr" />
+              ) : (
+                <div className="campaign-zalo-login-placeholder">
+                  {zaloLoginStarting && <RefreshCw size={18} className="spin" />}
+                </div>
+              )}
+              {zaloLoginEvent?.avatarUrl && (
+                <img src={zaloLoginEvent.avatarUrl} alt="" className="campaign-zalo-login-avatar" />
+              )}
+              <div className="campaign-zalo-login-message">
+                {zaloLoginEvent?.displayName && <strong>{zaloLoginEvent.displayName}</strong>}
+                <span>{zaloLoginEvent?.message || 'Đang chờ trạng thái đăng nhập Zalo...'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="campaign-panel-top">
         <div className="campaign-panel-header">
           <span className="campaign-panel-title">Chiến dịch</span>
@@ -3112,22 +3361,25 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
           ) : (
             <div className="campaign-table">
               <div className="campaign-table-header">
-                <div className="campaign-col col-checkbox">
+                <div className="campaign-col col-campaign">
                   <input
+                    className="campaign-list-select-checkbox"
+                    aria-label="Chọn tất cả chiến dịch"
                     type="checkbox"
                     checked={!showCampaignTableLoading && filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
                     disabled={showCampaignTableLoading}
                     ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
                     onChange={toggleSelectAll}
                   />
+                  <span>Chiến dịch</span>
                 </div>
-                <div className="campaign-col col-name">Tên</div>
-                <div className="campaign-col col-action">Hành động</div>
+                <div className="campaign-col col-toggle">Dừng/Chạy</div>
+                <div className="campaign-col col-progress">Trạng thái</div>
+                <div className="campaign-col col-assistant">Trợ lý aka</div>
+                <div className="campaign-col col-actions">Hành động</div>
                 <div className="campaign-col col-account">Tài khoản</div>
-                <div className="campaign-col col-status">Trạng thái</div>
-                <div className="campaign-col col-schedule">Lịch chạy</div>
-                <div className="campaign-col col-note">Ghi chú</div>
-                <div className="campaign-col col-ops"></div>
+                <div className="campaign-col col-send-date">Ngày gửi</div>
+                <div className="campaign-col col-update-date">Ngày update</div>
               </div>
               {showCampaignTableLoading ? (
                 <div className="campaign-table-loading-row">
@@ -3135,9 +3387,18 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                   <span>Đang tải danh sách chiến dịch...</span>
                 </div>
               ) : filteredCampaigns.map(campaign => {
-                const actionLabel = campaign.actionName || campaign.actionId
-                const accountLabel = campaign.accountName || '-'
-                const scheduleLabel = campaign.schedule ? new Date(campaign.schedule).toLocaleString('vi-VN') : '-'
+                const actionLabel = campaign.actionName || actionById.get(campaign.actionId)?.name || campaign.actionId
+                const account = accountById.get(campaign.accountId)
+                const accountLabel = campaign.accountName || account?.name || '-'
+                const accountLoginStatus = account?.loginStatus || '-'
+                const campaignPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
+                  || normalizeCampaignPlatform(account?.flatformType)
+                  || inferCampaignPlatformFromActionId(campaign.actionId)
+                const isZaloCampaign = campaignPlatform === 'zalo'
+                const scheduleTypeLabel = getCampaignListScheduleTypeLabel(campaign.scheduleType)
+                const scheduleTimeLabel = formatCompactDateTime(campaign.schedule)
+                const updatedLabel = formatCompactDateTime(campaign.updatedAt)
+                const progress = getCampaignInputProgress(campaign)
 
                 return (
                   <div
@@ -3146,59 +3407,173 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                     onClick={() => handleRowClick(campaign)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <div className="campaign-col col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(campaign.id)}
-                        onChange={() => toggleSelectOne(campaign.id)}
-                      />
+                    <div className="campaign-col col-campaign" title={[campaign.name, actionLabel, campaign.note || ''].filter(Boolean).join('\n')}>
+                      <div className="campaign-row-select" onClick={e => e.stopPropagation()}>
+                        <input
+                          className="campaign-list-select-checkbox"
+                          aria-label={`Chọn chiến dịch ${campaign.name}`}
+                          type="checkbox"
+                          checked={selectedIds.has(campaign.id)}
+                          onChange={() => toggleSelectOne(campaign.id)}
+                        />
+                      </div>
+                      <div className="campaign-main-cell">
+                        <div className="campaign-name-line">{campaign.name}</div>
+                        <div className="campaign-meta-line">{actionLabel}</div>
+                        {campaign.note && <div className="campaign-note-line">{campaign.note}</div>}
+                      </div>
                     </div>
-                    <div className="campaign-col col-name" title={campaign.name}>
-                      <div>{campaign.name}</div>
-                    </div>
-                    <div className="campaign-col col-action" title={actionLabel}>{actionLabel}</div>
-                    <div className="campaign-col col-account" title={accountLabel}>{accountLabel}</div>
-                    <div className="campaign-col col-status" title={campaign.status}>
-                      <span className="status-badge">
-                        {campaign.status}
-                      </span>
-                    </div>
-                    <div className="campaign-col col-schedule" title={scheduleLabel}>
-                      {scheduleLabel}
-                    </div>
-                    <div className="campaign-col col-note" title={campaign.note || ''}>
-                      {campaign.note ? (
-                        <span className="campaign-note-text">{campaign.note}</span>
-                      ) : '-'}
-                    </div>
-                    <div className="campaign-col col-ops" onClick={e => e.stopPropagation()}>
-                      <button className="btn-icon assistant" onClick={() => handleAskAssistant(campaign)} title="Hỏi trợ lý">
-                        <Sparkles size={12} />
-                      </button>
-                      {canPauseCampaign(campaign.status) && (
-                        <button className="btn-icon" onClick={() => handlePause(campaign)} title="Tạm dừng">
-                          <Pause size={12} />
+                    <div className="campaign-col col-toggle" onClick={e => e.stopPropagation()}>
+                      {canPauseCampaign(campaign.status) ? (
+                        <button className="btn-icon campaign-control-button" onClick={() => handlePause(campaign)} title="Tạm dừng chiến dịch">
+                          <Pause size={14} />
                         </button>
-                      )}
-                      {canResumeCampaign(campaign.status) && (
-                        <button className="btn-icon" onClick={() => handleResume(campaign)} title="Tiếp tục">
-                          <Play size={12} />
+                      ) : canResumeCampaign(campaign.status) ? (
+                        <button className="btn-icon campaign-control-button" onClick={() => handleResume(campaign)} title="Tiếp tục chiến dịch">
+                          <Play size={14} />
                         </button>
+                      ) : (
+                        <span className="campaign-cell-muted">-</span>
                       )}
-                      <button className="btn-icon" onClick={() => handleClone(campaign)} title="Nhân bản">
-                        <Copy size={12} />
+                    </div>
+                    <div className="campaign-col col-progress" title={`${campaign.status}\n${progress.completed}/${progress.total}`}>
+                      <div className="campaign-status-stack">
+                        <span className="status-badge">{campaign.status}</span>
+                        <div className="campaign-progress-count">{progress.completed}/{progress.total}</div>
+                        <div className="campaign-progress-track" aria-label={`Tiến độ ${progress.completed}/${progress.total}`}>
+                          <span className="campaign-progress-fill" style={{ width: `${progress.percentage}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="campaign-col col-assistant" onClick={e => e.stopPropagation()}>
+                      <button className="btn-icon assistant campaign-control-button campaign-label-button" onClick={() => handleAskAssistant(campaign)} title="Hỏi trợ lý aka">
+                        <Sparkles size={14} />
+                        <span>Trợ lý</span>
                       </button>
-                      <button className="btn-icon" onClick={() => handleEdit(campaign)} title="Sửa">
-                        <Edit3 size={12} />
-                      </button>
-                      <button
-                        className="btn-icon"
-                        onClick={() => handleDelete(campaign)}
-                        disabled={!canDeleteCampaign(campaign.status)}
-                        title={canDeleteCampaign(campaign.status) ? 'Xoá' : 'Không thể xoá chiến dịch đang chạy'}
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                    </div>
+                    <div className="campaign-col col-actions" onClick={e => e.stopPropagation()}>
+                      <div className="campaign-action-dropdown">
+                        <button
+                          className="btn-icon campaign-control-button campaign-label-button"
+                          onClick={event => handleCampaignActionMenuToggle(campaign.id, event)}
+                          title="Mở hành động"
+                          aria-haspopup="menu"
+                          aria-expanded={openCampaignActionMenuId === campaign.id}
+                        >
+                          <MoreHorizontal size={15} />
+                          <span>Hành động</span>
+                        </button>
+                        {openCampaignActionMenuId === campaign.id && campaignActionMenuPosition && (
+                          <div ref={campaignActionMenuRef} className="campaign-action-menu" style={campaignActionMenuPosition} role="menu">
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                handleEdit(campaign)
+                              }}
+                              disabled={!canEditCampaign(campaign.status)}
+                              title={canEditCampaign(campaign.status) ? 'Sửa chiến dịch' : 'Chỉ sửa được chiến dịch chờ xử lý hoặc tạm dừng'}
+                              role="menuitem"
+                            >
+                              <Edit3 size={14} />
+                              <span>Sửa</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                handleClone(campaign)
+                              }}
+                              role="menuitem"
+                            >
+                              <Copy size={14} />
+                              <span>Nhân bản</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                openCampaignDetailTab(campaign, 'actions')
+                              }}
+                              role="menuitem"
+                            >
+                              <Eye size={14} />
+                              <span>Xem báo cáo chi tiết</span>
+                            </button>
+                            <div className="campaign-action-menu-separator" />
+                            {isZaloCampaign && (
+                              <button
+                                type="button"
+                                className="campaign-action-menu-item"
+                                onClick={() => handleZaloLoginQr(campaign, account)}
+                                role="menuitem"
+                              >
+                                <LogIn size={14} />
+                                <span>Đăng nhập lại Zalo</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                openCampaignDetailTab(campaign, 'accountInfo')
+                              }}
+                              role="menuitem"
+                            >
+                              <Info size={14} />
+                              <span>Thông tin tài khoản</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                openCampaignDetailTab(campaign, 'runLog')
+                              }}
+                              role="menuitem"
+                            >
+                              <History size={14} />
+                              <span>Lịch sử chạy</span>
+                            </button>
+                            <div className="campaign-action-menu-separator" />
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item danger"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                handleDelete(campaign)
+                              }}
+                              disabled={!canDeleteCampaign(campaign.status)}
+                              title={canDeleteCampaign(campaign.status) ? 'Xoá chiến dịch' : 'Không thể xoá chiến dịch đang chạy'}
+                              role="menuitem"
+                            >
+                              <Trash2 size={14} />
+                              <span>Xoá</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="campaign-col col-account" title={`${accountLabel}\n${accountLoginStatus}`}>
+                      <div className="campaign-two-line-cell">
+                        <div className="campaign-strong-line">{accountLabel}</div>
+                        <div className="campaign-meta-line">{accountLoginStatus}</div>
+                      </div>
+                    </div>
+                    <div className="campaign-col col-send-date" title={`${scheduleTypeLabel}\n${scheduleTimeLabel}`}>
+                      <div className="campaign-two-line-cell">
+                        <div className="campaign-strong-line">{scheduleTypeLabel}</div>
+                        <div className="campaign-meta-line">{scheduleTimeLabel}</div>
+                      </div>
+                    </div>
+                    <div className="campaign-col col-update-date" title={updatedLabel}>
+                      <div className="campaign-two-line-cell">
+                        <div className="campaign-strong-line">{updatedLabel}</div>
+                      </div>
                     </div>
                   </div>
                 )
