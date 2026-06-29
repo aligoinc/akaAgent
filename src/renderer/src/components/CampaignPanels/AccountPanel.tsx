@@ -7,6 +7,8 @@ import { AutoAccount, ZaloLoginQrEvent, EmailAccountConfig } from '../../../../s
 const EMPTY_EMAIL_CONFIG: EmailAccountConfig = {
   brandName: '', host: 'smtp.gmail.com', port: 587, secure: false, user: '', pass: '', fromEmail: '', replyTo: '', cc: ''
 }
+const ZALO_QR_TTL_MS = 100_000
+
 import AccountContextMenu from './AccountContextMenu'
 import AccountInfoModal from './AccountInfoModal'
 import AccountGroupAssignModal from './AccountGroupAssignModal'
@@ -65,6 +67,13 @@ const areEmailConfigsEqual = (
   )
 }
 
+const formatQrRemaining = (seconds: number): string => {
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const restSeconds = safeSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(restSeconds).padStart(2, '0')}`
+}
+
 export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
   const {
     accounts,
@@ -104,6 +113,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [zaloLoginAccount, setZaloLoginAccount] = useState<AutoAccount | null>(null)
   const [zaloLoginEvent, setZaloLoginEvent] = useState<ZaloLoginQrEvent | null>(null)
   const [zaloLoginStarting, setZaloLoginStarting] = useState(false)
+  const [zaloQrExpiresAt, setZaloQrExpiresAt] = useState<number | null>(null)
+  const [zaloQrRemainingSeconds, setZaloQrRemainingSeconds] = useState<number | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     flatformType: defaultAccountPlatform,
@@ -144,6 +155,14 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       setZaloLoginEvent(prev => {
         return event
       })
+      if (event.status === 'qr' && event.qrImage) {
+        const expiresAt = Date.now() + ZALO_QR_TTL_MS
+        setZaloQrExpiresAt(expiresAt)
+        setZaloQrRemainingSeconds(Math.ceil(ZALO_QR_TTL_MS / 1000))
+      } else if (event.status !== 'qr') {
+        setZaloQrExpiresAt(null)
+        setZaloQrRemainingSeconds(null)
+      }
       if (event.status === 'success') {
         loadAccounts()
         setZaloLoginAccount(null)
@@ -155,6 +174,16 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       }
     })
   }, [loadAccounts, zaloLoginAccount?.id])
+
+  useEffect(() => {
+    if (!zaloQrExpiresAt || !zaloLoginAccount) return
+    const updateCountdown = () => {
+      setZaloQrRemainingSeconds(Math.max(0, Math.ceil((zaloQrExpiresAt - Date.now()) / 1000)))
+    }
+    updateCountdown()
+    const intervalId = window.setInterval(updateCountdown, 1000)
+    return () => window.clearInterval(intervalId)
+  }, [zaloQrExpiresAt, zaloLoginAccount?.id])
 
   const resetForm = () => {
     setFormData({ name: '', flatformType: defaultAccountPlatform, accountGroupId: null, proxyId: null })
@@ -246,6 +275,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       }
 
       let accountId: number
+      let createdZaloAccount: AutoAccount | null = null
       if (editingAccount) {
         await updateAccount(editingAccount.id, payload)
         accountId = editingAccount.id
@@ -259,6 +289,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       } else {
         const created = await createAccount(payload)
         accountId = created.id
+        if (created.flatformType === 'zalo') {
+          createdZaloAccount = created
+        }
       }
 
       if (formData.flatformType === 'email') {
@@ -277,6 +310,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       setShowForm(false)
       setEditingAccount(null)
       resetForm()
+      if (createdZaloAccount) {
+        await handleZaloLoginQr(createdZaloAccount)
+      }
     } catch (err) {
       console.error('Failed to save account:', err)
       useUiStore.getState().showAlert(getErrorMessage(err, 'Không lưu được tài khoản'), 'error')
@@ -381,17 +417,23 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     }
     setZaloLoginAccount(account)
     setZaloLoginEvent({ accountId: account.id, status: 'qr', message: 'Đang tạo mã QR...' })
+    setZaloQrExpiresAt(null)
+    setZaloQrRemainingSeconds(null)
     setZaloLoginStarting(true)
     try {
       const result = await window.electronAPI.startZaloLoginQr(account.id)
       if (!result.success) {
         setZaloLoginAccount(null)
         setZaloLoginEvent(null)
+        setZaloQrExpiresAt(null)
+        setZaloQrRemainingSeconds(null)
         useUiStore.getState().showAlert(result.reason || 'Không thể bắt đầu đăng nhập Zalo', 'error')
       }
     } catch (err: any) {
       setZaloLoginAccount(null)
       setZaloLoginEvent(null)
+      setZaloQrExpiresAt(null)
+      setZaloQrRemainingSeconds(null)
       useUiStore.getState().showAlert(`Lỗi đăng nhập Zalo: ${err.message}`, 'error')
     } finally {
       setZaloLoginStarting(false)
@@ -400,9 +442,11 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   const handleCloseZaloLogin = async () => {
     const accountId = zaloLoginAccount?.id
-    const shouldCancel = zaloLoginEvent?.status !== 'success' && zaloLoginEvent?.status !== 'error'
+    const shouldCancel = !['success', 'error', 'expired', 'cancelled'].includes(zaloLoginEvent?.status || '')
     setZaloLoginAccount(null)
     setZaloLoginEvent(null)
+    setZaloQrExpiresAt(null)
+    setZaloQrRemainingSeconds(null)
     if (accountId && shouldCancel) {
       await window.electronAPI?.cancelZaloLoginQr?.(accountId).catch(() => {})
     }
@@ -736,17 +780,49 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
             <div style={zaloQrBodyStyle}>
               {zaloLoginEvent?.qrImage ? (
                 <img src={zaloLoginEvent.qrImage} alt="Zalo QR" style={zaloQrImageStyle} />
+              ) : zaloLoginEvent?.status === 'scanned' ? (
+                <div style={zaloScannedProfileStyle}>
+                  {zaloLoginEvent.avatarUrl ? (
+                    <img src={zaloLoginEvent.avatarUrl} alt="" style={zaloScannedAvatarStyle} />
+                  ) : (
+                    <div style={zaloScannedAvatarPlaceholderStyle}>
+                      {(zaloLoginEvent.displayName || zaloLoginAccount.name || 'Z').trim().charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div style={zaloScannedNameStyle}>{zaloLoginEvent.displayName || zaloLoginAccount.name}</div>
+                </div>
+              ) : zaloLoginEvent?.status === 'expired' ? (
+                <div style={zaloQrExpiredStyle}>
+                  <strong>Mã QR đã hết hạn</strong>
+                </div>
               ) : (
                 <div style={zaloQrPlaceholderStyle}>
                   {zaloLoginStarting && <Loader2 size={18} className="animate-spin" />}
                 </div>
               )}
-              {zaloLoginEvent?.avatarUrl && (
+              {zaloLoginEvent?.qrImage && zaloQrRemainingSeconds !== null && (
+                <div style={zaloQrCountdownStyle}>
+                  Mã QR hết hạn sau {formatQrRemaining(zaloQrRemainingSeconds)}
+                </div>
+              )}
+              {zaloLoginEvent?.avatarUrl && zaloLoginEvent.status !== 'scanned' && (
                 <img src={zaloLoginEvent.avatarUrl} alt="" style={zaloAvatarStyle} />
               )}
               <div style={zaloModalMessageStyle}>
-                {zaloLoginEvent?.displayName && <strong>{zaloLoginEvent.displayName}</strong>}
+                {zaloLoginEvent?.displayName && zaloLoginEvent.status !== 'scanned' && <strong>{zaloLoginEvent.displayName}</strong>}
                 <span>{zaloLoginEvent?.message || 'Đang chờ trạng thái đăng nhập Zalo...'}</span>
+                {zaloLoginEvent?.status === 'expired' && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleZaloLoginQr(zaloLoginAccount)}
+                    disabled={zaloLoginStarting}
+                    style={zaloRetryButtonStyle}
+                  >
+                    {zaloLoginStarting && <Loader2 size={14} className="animate-spin" />}
+                    {zaloLoginStarting ? 'Đang tạo QR...' : 'Đăng nhập lại'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -805,6 +881,13 @@ const zaloQrImageStyle: React.CSSProperties = {
   background: '#fff'
 }
 
+const zaloQrCountdownStyle: React.CSSProperties = {
+  color: 'var(--text-tertiary)',
+  fontSize: 12,
+  lineHeight: 1.4,
+  textAlign: 'center'
+}
+
 const zaloQrPlaceholderStyle: React.CSSProperties = {
   width: 220,
   height: 220,
@@ -816,11 +899,84 @@ const zaloQrPlaceholderStyle: React.CSSProperties = {
   background: 'var(--bg-secondary)'
 }
 
+const zaloQrExpiredStyle: React.CSSProperties = {
+  width: 220,
+  height: 220,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  padding: 18,
+  border: '1px solid var(--border-primary)',
+  borderRadius: 8,
+  background: 'var(--bg-secondary)',
+  color: 'var(--text-secondary)',
+  fontSize: 13,
+  lineHeight: 1.4,
+  textAlign: 'center'
+}
+
+const zaloScannedProfileStyle: React.CSSProperties = {
+  width: 220,
+  height: 220,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 10,
+  padding: 16,
+  border: '1px solid var(--border-primary)',
+  borderRadius: 8,
+  background: 'var(--bg-secondary)',
+  textAlign: 'center'
+}
+
+const zaloScannedAvatarStyle: React.CSSProperties = {
+  width: 76,
+  height: 76,
+  borderRadius: 38,
+  objectFit: 'cover',
+  border: '1px solid var(--border-primary)'
+}
+
+const zaloScannedAvatarPlaceholderStyle: React.CSSProperties = {
+  width: 76,
+  height: 76,
+  borderRadius: 38,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'var(--bg-tertiary)',
+  color: 'var(--text-primary)',
+  border: '1px solid var(--border-primary)',
+  fontSize: 28,
+  fontWeight: 700
+}
+
+const zaloScannedNameStyle: React.CSSProperties = {
+  maxWidth: '100%',
+  color: 'var(--text-primary)',
+  fontSize: 14,
+  fontWeight: 600,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+}
+
 const zaloAvatarStyle: React.CSSProperties = {
   width: 40,
   height: 40,
   borderRadius: 20,
   objectFit: 'cover'
+}
+
+const zaloRetryButtonStyle: React.CSSProperties = {
+  alignSelf: 'center',
+  marginTop: 4,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6
 }
 
 const zaloModalMessageStyle: React.CSSProperties = {

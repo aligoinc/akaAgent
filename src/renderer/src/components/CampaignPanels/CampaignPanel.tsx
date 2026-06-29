@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -3601,7 +3602,7 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                           <ListTodo size={15} />
                           <span>Hành động</span>
                         </button>
-                        {openCampaignActionMenuId === campaign.id && campaignActionMenuPosition && (
+                        {openCampaignActionMenuId === campaign.id && campaignActionMenuPosition && createPortal(
                           <div ref={campaignActionMenuRef} className="campaign-action-menu" style={campaignActionMenuPosition} role="menu">
                             <button
                               type="button"
@@ -3692,7 +3693,8 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
                               <Trash2 size={14} />
                               <span>Xoá</span>
                             </button>
-                          </div>
+                          </div>,
+                          document.body
                         )}
                       </div>
                     </div>
