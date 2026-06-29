@@ -6,6 +6,8 @@ import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResul
 export type ElectronAPI = typeof electronAPI
 
 const electronAPI = {
+  platform: process.platform,
+
   // Auth
   bootstrapAuth: (): Promise<AuthBootstrapResult> =>
     ipcRenderer.invoke(IPC_EVENTS.AUTH_BOOTSTRAP),

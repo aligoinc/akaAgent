@@ -325,9 +325,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_EVENTS.THEME_CHANGE, (_, theme: 'light' | 'dark') => {
     if (typeof mainWindow.setTitleBarOverlay !== 'function') return
     if (theme === 'light') {
-      mainWindow.setTitleBarOverlay({ color: '#7c3aed', symbolColor: '#ffffff' })
+      mainWindow.setTitleBarOverlay({ color: '#edf3fa', symbolColor: '#64748b' })
     } else {
-      mainWindow.setTitleBarOverlay({ color: '#0a0a0f', symbolColor: '#a0a0b0' })
+      mainWindow.setTitleBarOverlay({ color: '#0a0a0f', symbolColor: '#a0a0b8' })
     }
   })
 
