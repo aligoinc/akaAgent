@@ -9374,16 +9374,57 @@ button.btn-icon.campaign-control-button.assistant {
 }
 
 .data-scan-progress {
+  position: relative;
   min-height: 112px;
   max-height: 180px;
   overflow-y: auto;
-  padding: 8px 10px;
+  padding: 8px 38px 8px 10px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.5;
+}
+
+.data-scan-progress.is-collapsed {
+  min-height: 36px;
+  max-height: 36px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.data-scan-progress-messages {
+  min-width: 0;
+}
+
+.data-scan-progress.is-collapsed .data-scan-progress-messages {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.data-scan-progress-toggle {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.data-scan-progress-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
 }
 
 .data-scan-minimized-body {

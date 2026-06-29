@@ -1806,7 +1806,7 @@ async function upsertZaloGroupLinkContact(
       fullAvatar: normalizeNullableString(group.fullAvatar),
       totalMember: normalizeNullableNumber(group.totalMember)
     },
-    isJoined: existing?.isJoined === true,
+    isJoined: group.isJoined !== undefined ? group.isJoined : existing?.isJoined === true,
     zaloGroupId: zaloGroupMetaId
   }], { markMissingDeleted: false })
 }

@@ -933,7 +933,12 @@ export class ContactLoader {
         ? this.mapZaloGroupContact(accountId, {
           ...result.group,
           groupId: resultGroupId,
-          link: normalizedLink
+          link: normalizedLink,
+          ...(result.joinOutcome === 'joined' || result.joinOutcome === 'already_joined'
+            ? { isJoined: true }
+            : result.joinOutcome === 'pending_approval'
+              ? { isJoined: false }
+              : {})
         })
         : null
       if (mode === 'group_link' && !groupInput) {
@@ -1331,10 +1336,12 @@ export class ContactLoader {
     if (!zaloGroupId) return null
     const rawPayload = { ...raw }
     if (fallbackVersion && !rawPayload.gridVersion) rawPayload.gridVersion = fallbackVersion
+    const isJoined = typeof raw.isJoined === 'boolean' ? raw.isJoined : undefined
 
     return {
       accountId,
       zaloGroupId,
+      ...(isJoined !== undefined ? { isJoined } : {}),
       name: this.stringValue(raw.name),
       description: this.stringValue(raw.desc),
       link: this.stringValue(raw.link),
