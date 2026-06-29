@@ -312,9 +312,10 @@ export interface ZaloGroupMembersResult {
   group: Record<string, unknown>
   members: ZaloGroupMemberInfo[]
   usedProxy?: boolean
+  joinOutcome?: ZaloJoinGroupLinkOutcome
 }
 
-export type ZaloJoinGroupLinkOutcome = 'joined' | 'already_joined' | 'pending_approval'
+export type ZaloJoinGroupLinkOutcome = 'joined' | 'already_joined' | 'pending_approval' | 'unknown'
 
 export interface ZaloJoinGroupLinkResult {
   link: string
@@ -737,6 +738,7 @@ export class ZaloRuntimeService {
 
     const memberIds = uniqueStrings([
       ...toStringArray(group.memberIds),
+      ...toStringArray(group.memVerList),
       ...this.getCurrentMembersFromGroupLinkPage(group).map(member => normalizeZaloMemberId(member.id))
     ].map(normalizeZaloMemberId))
 
@@ -768,48 +770,188 @@ export class ZaloRuntimeService {
     const normalizedLink = normalizeZaloGroupLink(link)
     if (!normalizedLink) throw new Error('Link group Zalo không hợp lệ')
 
-    const directFirstPage = await api.getGroupLinkInfo({ link: normalizedLink, memberPage: 1 })
+    let joinResult: ZaloJoinGroupLinkResult | null = null
+    let joinError: unknown = null
+    let linkGroupAfterJoinError: Record<string, unknown> = {}
+    try {
+      joinResult = await this.joinGroupLinkForMemberScan(api, normalizedLink)
+    } catch (err) {
+      joinError = err
+      console.warn('[ZaloRuntime] Failed to join Zalo group link before member scan:', {
+        accountId,
+        link: normalizedLink,
+        message: this.getErrorMessage(err)
+      })
+      linkGroupAfterJoinError = await this.getGroupLinkInfoForMemberScan(api, normalizedLink)
+    }
+
+    const groupIdForJoinedScan = normalizeZaloGroupId(joinResult?.groupId || linkGroupAfterJoinError.groupId)
+    if (groupIdForJoinedScan) {
+      try {
+        const joinedMembers = await this.getJoinedGroupMembers(accountId, groupIdForJoinedScan)
+        if (joinedMembers.members.length > 0) {
+          const joinedScanResult = joinResult
+            ? joinResult
+            : {
+              link: normalizedLink,
+              group: linkGroupAfterJoinError,
+              groupId: groupIdForJoinedScan,
+              groupName: firstString(linkGroupAfterJoinError.name) || undefined,
+              outcome: 'unknown' as ZaloJoinGroupLinkOutcome,
+              zaloMessage: joinError ? this.getErrorMessage(joinError) : undefined
+            }
+          return this.withGroupLinkJoinMetadata(joinedMembers, normalizedLink, joinedScanResult)
+        }
+      } catch (err) {
+        console.warn('[ZaloRuntime] Failed to scan joined Zalo group members after link join:', {
+          accountId,
+          link: normalizedLink,
+          groupId: groupIdForJoinedScan,
+          message: this.getErrorMessage(err)
+        })
+      }
+    }
+
+    const fallback = await this.getGroupMembersByLinkFallback(
+      api,
+      normalizedLink,
+      joinResult?.outcome === 'pending_approval'
+        ? 'Tài khoản đã gửi yêu cầu tham gia group Zalo và chưa được duyệt. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
+        : joinError
+          ? 'Không tham gia được group Zalo từ link. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
+          : 'Không lấy được danh sách thành viên group Zalo sau khi tham gia. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
+    )
+    if (joinResult) {
+      return this.withGroupLinkJoinMetadata(
+        fallback,
+        normalizedLink,
+        joinResult
+      )
+    }
+    return fallback
+  }
+
+  private async getGroupLinkInfoForMemberScan(api: API, link: string): Promise<Record<string, unknown>> {
+    try {
+      const group = normalizeRecord(await api.getGroupLinkInfo({ link, memberPage: 1 }))
+      if (!group.link) group.link = link
+      return group
+    } catch (err) {
+      console.warn('[ZaloRuntime] Failed to get Zalo group link info for member scan:', {
+        link,
+        message: this.getErrorMessage(err)
+      })
+      return {}
+    }
+  }
+
+  private async joinGroupLinkForMemberScan(api: API, link: string): Promise<ZaloJoinGroupLinkResult> {
+    let outcome: ZaloJoinGroupLinkOutcome = 'joined'
+    let response: unknown
+    let zaloCode: string | undefined
+    let zaloMessage: string | undefined
+
+    try {
+      response = await api.joinGroupLink(link)
+    } catch (err) {
+      const code = this.getApiErrorCode(err)
+      if (code !== '178' && code !== '240') throw err
+      outcome = code === '178' ? 'already_joined' : 'pending_approval'
+      zaloCode = code
+      zaloMessage = this.getErrorMessage(err)
+    }
+
+    const group = await this.getGroupLinkInfoForMemberScan(api, link)
+
+    const groupId = normalizeZaloGroupId(group.groupId)
+    const groupName = firstString(group.name)
+    return {
+      link,
+      group,
+      groupId,
+      groupName: groupName || undefined,
+      outcome,
+      response,
+      zaloCode,
+      zaloMessage
+    }
+  }
+
+  private withGroupLinkJoinMetadata(
+    result: ZaloGroupMembersResult,
+    link: string,
+    joinResult: ZaloJoinGroupLinkResult
+  ): ZaloGroupMembersResult {
+    const scannedGroup = {
+      ...result.group,
+      groupId: result.group.groupId || joinResult.groupId,
+      name: result.group.name || joinResult.groupName,
+      link
+    }
+    return {
+      ...result,
+      group: mergeGroupLinkPage(
+        scannedGroup,
+        joinResult.group
+      ),
+      joinOutcome: joinResult.outcome
+    }
+  }
+
+  private async getGroupMembersByLinkDirect(
+    api: API,
+    link: string
+  ): Promise<ZaloGroupMembersResult> {
+    const directFirstPage = await api.getGroupLinkInfo({ link, memberPage: 1 })
     const firstGroup = normalizeRecord(directFirstPage)
     const firstMembers = this.getCurrentMembersFromGroupLinkPage(firstGroup)
     const firstTotalMember = nullableNumber(firstGroup.totalMember)
 
     if (firstTotalMember !== null && firstTotalMember > 0 && firstMembers.length === 0) {
-      return this.getGroupMembersByLinkFallback(
-        api,
-        normalizedLink,
-        'Zalo trả về group có thành viên nhưng không trả danh sách member. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
-      )
+      throw new Error('Zalo trả về group có thành viên nhưng không trả danh sách member')
     }
 
-    const collected = await this.collectGroupLinkMemberPages(api, normalizedLink, async (page) => (
+    const collected = await this.collectGroupLinkMemberPages(api, link, async (page) => (
       page === 1
         ? firstGroup
-        : normalizeRecord(await api.getGroupLinkInfo({ link: normalizedLink, memberPage: page }))
+        : normalizeRecord(await api.getGroupLinkInfo({ link, memberPage: page }))
     ))
 
     const totalMember = nullableNumber(collected.group.totalMember)
     if (collected.members.length === 0) {
-      return this.getGroupMembersByLinkFallback(
-        api,
-        normalizedLink,
-        'Zalo không trả danh sách member cho link group này. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
-      )
+      throw new Error('Zalo không trả danh sách member cho link group này')
     }
-    if (totalMember === null || totalMember <= 0) {
-      return this.getGroupMembersByLinkFallback(
-        api,
-        normalizedLink,
-        'Zalo không trả tổng số thành viên group. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
-      )
+    if (totalMember !== null && totalMember > 0 && collected.members.length * 100 <= totalMember * 70) {
+      throw new Error('Zalo trả danh sách member không đầy đủ')
     }
-    if (collected.members.length * 100 <= totalMember * 70) {
-      return this.getGroupMembersByLinkFallback(
-        api,
-        normalizedLink,
-        'Zalo trả danh sách member không đầy đủ. Vui lòng cấu hình proxy fallback cho quét link group Zalo.'
-      )
-    }
+
     return collected
+  }
+
+  private async getGroupMembersByLinkFallback(
+    api: API,
+    link: string,
+    messageIfMissingProxy: string
+  ): Promise<ZaloGroupMembersResult> {
+    const proxyUrl = await this.getGroupLinkGinfoProxyUrl()
+    if (proxyUrl) {
+      try {
+        const proxied = await this.getGroupMembersByLinkWithProxy(api, link, proxyUrl)
+        if (proxied.members.length > 0) return proxied
+      } catch (err) {
+        console.warn('[ZaloRuntime] Failed to scan Zalo group link members with proxy, trying direct ginfo:', {
+          link,
+          message: this.getErrorMessage(err)
+        })
+      }
+    }
+
+    try {
+      return await this.getGroupMembersByLinkDirect(api, link)
+    } catch (err) {
+      if (!proxyUrl) throw new Error(messageIfMissingProxy)
+      throw err
+    }
   }
 
   async findUserByPhone(accountId: number, phone: string): Promise<ZaloFoundUser | null> {
@@ -1862,16 +2004,6 @@ export class ZaloRuntimeService {
       this.getGroupLinkInfoWithProxyPage(api, link, memberPage, proxyUrl)
     ))
     return { ...collected, usedProxy: true }
-  }
-
-  private async getGroupMembersByLinkFallback(
-    api: API,
-    link: string,
-    messageIfMissingProxy: string
-  ): Promise<ZaloGroupMembersResult> {
-    const proxyUrl = await this.getGroupLinkGinfoProxyUrl()
-    if (!proxyUrl) throw new Error(messageIfMissingProxy)
-    return this.getGroupMembersByLinkWithProxy(api, link, proxyUrl)
   }
 
   private async getGroupLinkInfoWithProxyPage(

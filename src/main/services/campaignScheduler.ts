@@ -7512,8 +7512,12 @@ export class CampaignScheduler {
 
     try {
       const result = await this.zaloRuntime.joinGroupByLink(account.id, normalizedLink)
-      const isJoined = result.outcome !== 'pending_approval'
-      await this.upsertZaloJoinGroupLinkContact(account, result, isJoined)
+      const isConfirmedJoined = result.outcome === 'joined' || result.outcome === 'already_joined'
+      const isPendingApproval = result.outcome === 'pending_approval'
+      if (!isConfirmedJoined && !isPendingApproval) {
+        throw new Error(result.zaloMessage || 'Không xác định được kết quả tham gia group Zalo')
+      }
+      await this.upsertZaloJoinGroupLinkContact(account, result, isConfirmedJoined)
 
       const groupLabel = this.firstNonEmptyString(result.groupName, result.groupId, result.link)
       const target = this.normalizeZaloTargetFromInputData(

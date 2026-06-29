@@ -861,6 +861,7 @@ export default function DataScanModal({
   const [zaloTagContacts, setZaloTagContacts] = useState<AutoAccountContact[]>([])
   const [akaBizContactTags, setAkaBizContactTags] = useState<AkaBizContactTag[]>([])
   const [progressMessages, setProgressMessages] = useState<string[]>([])
+  const [progressExpanded, setProgressExpanded] = useState(true)
   const [minimized, setMinimized] = useState(false)
   const [contactGroups, setContactGroups] = useState<AutoAccountContactGroup[]>([])
   const [allContactGroups, setAllContactGroups] = useState<AutoAccountContactGroup[]>([])
@@ -2248,6 +2249,7 @@ export default function DataScanModal({
 
     setScanLoading(true)
     setProgressMessages([])
+    setProgressExpanded(true)
     const scanId = scanRunIdRef.current + 1
     scanRunIdRef.current = scanId
     stoppedScanIdsRef.current.delete(scanId)
@@ -2995,10 +2997,21 @@ export default function DataScanModal({
           </div>
 
           {progressMessages.length > 0 && (
-            <div className="data-scan-progress">
-              {progressMessages.map((message, index) => (
-                <div key={`${message}-${index}`}>{message}</div>
-              ))}
+            <div className={`data-scan-progress${progressExpanded ? '' : ' is-collapsed'}`}>
+              <button
+                type="button"
+                className="data-scan-progress-toggle"
+                onClick={() => setProgressExpanded(prev => !prev)}
+                title={progressExpanded ? 'Thu nhỏ nhật ký' : 'Phóng to nhật ký'}
+                aria-label={progressExpanded ? 'Thu nhỏ nhật ký' : 'Phóng to nhật ký'}
+              >
+                {progressExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </button>
+              <div className="data-scan-progress-messages">
+                {(progressExpanded ? progressMessages : progressMessages.slice(-1)).map((message, index) => (
+                  <div key={`${message}-${index}`}>{message}</div>
+                ))}
+              </div>
             </div>
           )}
 
