@@ -63,6 +63,9 @@
   --config-panel-width: 340px;
   --toolbar-height: 48px;
   --titlebar-height: 36px;
+  --utility-topbar-height: 36px;
+  --mac-titlebar-safe-left: 84px;
+  --windows-titlebar-control-width: 138px;
 
   /* Radius */
   --radius-sm: 6px;
@@ -203,7 +206,153 @@ body {
 }
 
 .app-layout-authenticated {
-  flex-direction: row;
+  flex-direction: column;
+}
+
+.app-window-drag-frame {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--titlebar-height);
+  z-index: 90;
+  background: var(--bg-topbar);
+  border-bottom: 1px solid var(--border-topbar);
+  -webkit-app-region: drag;
+}
+
+.platform-win32 .app-window-drag-frame,
+.platform-linux .app-window-drag-frame {
+  right: var(--windows-titlebar-control-width);
+}
+
+.app-utility-topbar {
+  position: relative;
+  z-index: 130;
+  flex: 0 0 var(--utility-topbar-height);
+  height: var(--utility-topbar-height);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-topbar);
+  background: var(--bg-topbar);
+  color: var(--text-topbar);
+  -webkit-app-region: drag;
+}
+
+.platform-darwin .app-utility-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--titlebar-height);
+  padding-left: var(--mac-titlebar-safe-left);
+  z-index: 150;
+}
+
+.app-utility-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: min(360px, calc(100% - 360px));
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  color: var(--text-topbar);
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.app-utility-actions {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.app-utility-version {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--border-topbar);
+  border-radius: var(--radius-sm);
+  color: var(--text-topbar-muted);
+  background: var(--bg-topbar-hover);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.app-utility-button {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--border-topbar);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-topbar);
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  -webkit-app-region: no-drag;
+}
+
+.app-utility-button:hover:not(:disabled) {
+  background: var(--bg-topbar-hover);
+  border-color: var(--border-hover);
+}
+
+.app-utility-button:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.app-utility-logout {
+  color: var(--accent-error);
+}
+
+.app-utility-logout:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: rgba(244, 63, 94, 0.24);
+}
+
+.app-utility-update-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.app-utility-update-icon svg {
+  position: absolute;
+  inset: 0;
+  color: currentColor;
+}
+
+.app-utility-update-icon svg:last-child {
+  inset: auto;
+}
+
+.app-content-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .app-main {

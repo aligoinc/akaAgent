@@ -36,8 +36,8 @@ function createWindow(): BrowserWindow {
     frame: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#7c3aed',
-      symbolColor: '#ffffff',
+      color: '#edf3fa',
+      symbolColor: '#64748b',
       height: 36
     },
     webPreferences: {

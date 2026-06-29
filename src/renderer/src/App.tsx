@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import TopBar from './components/TopBar/TopBar'
+import AppUtilityTopbar from './components/TopBar/AppUtilityTopbar'
 import CampaignPage from './pages/CampaignPage'
 import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
 import ReportPage from './pages/ReportPage'
@@ -33,6 +34,8 @@ export default function App() {
   const [showAccountProfile, setShowAccountProfile] = useState(false)
   const [localVersion, setLocalVersion] = useState('')
   const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const runtimePlatform = window.electronAPI?.platform || 'unknown'
+  const platformClass = `platform-${runtimePlatform}`
 
   // Bootstrap auth from DB-backed device login settings (or land on LoginPage).
   useEffect(() => {
@@ -165,9 +168,17 @@ export default function App() {
     }
   }, [theme])
 
+  useEffect(() => {
+    document.body.classList.add(platformClass)
+    return () => {
+      document.body.classList.remove(platformClass)
+    }
+  }, [platformClass])
+
   if (initializing) {
     return (
-      <div className="app-layout" style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <div className={`app-layout ${platformClass}`} style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div className="app-window-drag-frame" aria-hidden="true" />
         <div style={{ color: 'var(--text-secondary, #aaa)', fontSize: 13 }}>Đang khởi tạo…</div>
         <AlertModal />
         <ConfirmModal />
@@ -184,7 +195,8 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="app-layout">
+      <div className={`app-layout ${platformClass}`}>
+        <div className="app-window-drag-frame" aria-hidden="true" />
         <LoginPage />
         <AlertModal />
         <ConfirmModal />
@@ -200,49 +212,57 @@ export default function App() {
   }
 
   return (
-    <div className="app-layout app-layout-authenticated">
-      <TopBar
-        activePage={activePage}
-        onPageChange={setActivePage}
-        onOpenDataScan={() => setShowDataScan(true)}
-        onOpenAccountInfo={() => setShowAccountProfile(true)}
-        onOpenGeneralSettings={() => openGeneralSettings()}
-        onOpenChangePassword={() => setShowChangePassword(true)}
+    <div className={`app-layout app-layout-authenticated ${platformClass}`}>
+      <div className="app-window-drag-frame" aria-hidden="true" />
+      <AppUtilityTopbar
         currentVersion={localVersion}
         checkingUpdate={checkingUpdate}
         onCheckUpdate={() => { void handleCheckForUpdate(true) }}
       />
+      <div className="app-content-shell">
+        <TopBar
+          activePage={activePage}
+          onPageChange={setActivePage}
+          onOpenDataScan={() => setShowDataScan(true)}
+          onOpenAccountInfo={() => setShowAccountProfile(true)}
+          onOpenGeneralSettings={() => openGeneralSettings()}
+          onOpenChangePassword={() => setShowChangePassword(true)}
+          currentVersion={localVersion}
+          checkingUpdate={checkingUpdate}
+          onCheckUpdate={() => { void handleCheckForUpdate(true) }}
+        />
 
-      <div className="app-main">
-        <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <CampaignPage
-            onNavigateToBrowser={requestOpenBrowser}
-            onOpenGeneralSettings={openGeneralSettings}
-          />
-        </div>
-
-        <div style={activePage === 'browsers'
-          ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
-          : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
-        }>
-          <BrowserPage
-            openRequest={browserOpenRequest}
-            onRequestHandled={(requestId) => {
-              setBrowserOpenRequest(prev => prev?.requestId === requestId ? null : prev)
-            }}
-          />
-        </div>
-
-        <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <ReportPage isActive={activePage === 'reports'} />
-        </div>
-
-        {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}
-        {activePage === 'workflow-editor' && canOpenWorkflowEditor && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <WorkflowEditorV2 />
+        <div className="app-main">
+          <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <CampaignPage
+              onNavigateToBrowser={requestOpenBrowser}
+              onOpenGeneralSettings={openGeneralSettings}
+            />
           </div>
-        )}
+
+          <div style={activePage === 'browsers'
+            ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
+            : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
+          }>
+            <BrowserPage
+              openRequest={browserOpenRequest}
+              onRequestHandled={(requestId) => {
+                setBrowserOpenRequest(prev => prev?.requestId === requestId ? null : prev)
+              }}
+            />
+          </div>
+
+          <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <ReportPage isActive={activePage === 'reports'} />
+          </div>
+
+          {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}
+          {activePage === 'workflow-editor' && canOpenWorkflowEditor && (
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <WorkflowEditorV2 />
+            </div>
+          )}
+        </div>
       </div>
 
       <AlertModal />
