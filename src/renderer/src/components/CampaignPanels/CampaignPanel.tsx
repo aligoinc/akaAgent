@@ -27,6 +27,7 @@ import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import { canUsePlatform } from '../../utils/entitlements'
 
 interface CampaignPanelProps {
+  isActive: boolean
   filterAccountId?: number | null
   onClearFilter?: () => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
@@ -293,12 +294,14 @@ const CAMPAIGN_PLATFORM_SORT_ORDER = new Map<string, number>([
 const DETAIL_DOCK_MIN_HEIGHT = 220
 const DETAIL_DOCK_LIST_MIN_HEIGHT = 220
 const DETAIL_DOCK_MAX_HEIGHT_RESERVE = 16
+const CAMPAIGN_LIST_REFRESH_INTERVAL_MS = 10_000
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
 const canPauseCampaign = (status: string) => status === 'chờ xử lý' || status === 'đang chạy'
 const canResumeCampaign = (status: string) => status === 'tạm dừng'
 const canDeleteCampaign = (status: string) => status !== 'đang chạy'
+const isAppWindowVisible = () => document.visibilityState === 'visible'
 
 const formatIpcErrorMessage = (err: unknown, fallback: string): string => {
   const message = err instanceof Error
@@ -1328,7 +1331,7 @@ function AddInputDataToCampaignModal({
   )
 }
 
-export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGeneralSettings, onAskAssistant }: CampaignPanelProps) {
+export default function CampaignPanel({ isActive, filterAccountId, onClearFilter, onOpenGeneralSettings, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
@@ -1423,19 +1426,60 @@ export default function CampaignPanel({ filterAccountId, onClearFilter, onOpenGe
   const inputDataActionMenuRef = useRef<HTMLDivElement>(null)
   const campaignActionMenuAnchorRef = useRef<CampaignActionMenuAnchorRect | null>(null)
   const campaignActionMenuRef = useRef<HTMLDivElement | null>(null)
+  const initialCampaignLoadSettledRef = useRef(false)
 
   useEffect(() => {
-    let isMounted = true
-    loadCampaigns().finally(() => {
-      if (isMounted) setShowInitialCampaignLoading(false)
-    })
     loadCampaignActions()
     loadAccounts()
+  }, [loadCampaignActions, loadAccounts])
+
+  useEffect(() => {
+    if (!isActive) return
+
+    let isDisposed = false
+    let refreshInFlight = false
+
+    const markInitialCampaignLoadSettled = () => {
+      if (initialCampaignLoadSettledRef.current || isDisposed) return
+      initialCampaignLoadSettledRef.current = true
+      setShowInitialCampaignLoading(false)
+    }
+
+    const refreshCampaignsIfVisible = async () => {
+      if (isDisposed || refreshInFlight) return
+      if (!isAppWindowVisible()) {
+        markInitialCampaignLoadSettled()
+        return
+      }
+
+      refreshInFlight = true
+      try {
+        await loadCampaigns()
+      } finally {
+        refreshInFlight = false
+        markInitialCampaignLoadSettled()
+      }
+    }
+
+    void refreshCampaignsIfVisible()
+
+    const intervalId = window.setInterval(() => {
+      void refreshCampaignsIfVisible()
+    }, CAMPAIGN_LIST_REFRESH_INTERVAL_MS)
+
+    const handleVisibilityChange = () => {
+      if (isAppWindowVisible()) {
+        void refreshCampaignsIfVisible()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
-      isMounted = false
+      isDisposed = true
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [loadCampaigns, loadCampaignActions, loadAccounts])
+  }, [isActive, loadCampaigns])
 
   useEffect(() => {
     if (!window.electronAPI?.onZaloLoginQrEvent) return
