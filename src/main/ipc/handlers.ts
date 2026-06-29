@@ -22,6 +22,7 @@ import { registerAiHandlers } from './handlers/aiHandlers'
 import { registerAkaBizIntegrationHandlers } from './handlers/akaBizIntegrationHandlers'
 import { registerCampaignImportHandlers } from './handlers/campaignImportHandlers'
 import { registerContentTemplateHandlers } from './handlers/contentTemplateHandlers'
+import { registerMediaHandlers } from './handlers/mediaHandlers'
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { getCurrentUser, setCurrentUser } from '../data/currentUser'
@@ -380,6 +381,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAkaBizIntegrationHandlers()
   registerCampaignImportHandlers()
   registerContentTemplateHandlers(supabase)
+  registerMediaHandlers(supabase)
   registerEmailNotificationHandlers(supabase)
   registerReportHandlers(supabase)
   registerBrowserHandlers(webviewRegistry, pageRegistry)

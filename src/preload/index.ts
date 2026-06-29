@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContactListResult, PageInboxContactListQuery, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig } from '../shared/types'
+import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContactListResult, PageInboxContactListQuery, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, MediaFile, MediaStorageSettings, MediaUploadResult } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 
 export type ElectronAPI = typeof electronAPI
@@ -260,6 +260,24 @@ const electronAPI = {
 
   deleteContentTemplate: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CONTENT_TEMPLATE, id),
+
+  getMediaStorageSettings: (): Promise<MediaStorageSettings> =>
+    ipcRenderer.invoke(IPC_EVENTS.MEDIA_STORAGE_SETTINGS_GET),
+
+  saveMediaStorageSettings: (settings: Partial<MediaStorageSettings>): Promise<MediaStorageSettings> =>
+    ipcRenderer.invoke(IPC_EVENTS.MEDIA_STORAGE_SETTINGS_SAVE, settings),
+
+  testMediaStorageSettings: (settings?: Partial<MediaStorageSettings>): Promise<{ ok: boolean; cloudUrl?: string }> =>
+    ipcRenderer.invoke(IPC_EVENTS.MEDIA_STORAGE_SETTINGS_TEST, settings),
+
+  listMediaFiles: (): Promise<MediaFile[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.MEDIA_FILES_LIST),
+
+  uploadMediaFiles: (localPaths: string[]): Promise<MediaUploadResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.MEDIA_FILES_UPLOAD, localPaths),
+
+  deleteMediaFile: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_EVENTS.MEDIA_FILES_DELETE, id),
 
   // Email Notifications
   getEmailNotificationSettings: (): Promise<EmailNotificationSettings> =>

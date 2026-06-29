@@ -8,6 +8,7 @@ export type ContentPreviewSurface = 'post' | 'comment' | 'chat' | 'story' | 'ema
 export interface ContentPreviewMediaItem {
   path: string
   label?: string
+  mimeType?: string | null
 }
 
 export interface ContentPreviewModalData {
@@ -69,6 +70,11 @@ const isLikelyImagePath = (path: string) => {
   if (dotIndex < 0) return false
   return IMAGE_EXTENSIONS.has(cleanPath.slice(dotIndex).toLowerCase())
 }
+
+const isRemoteUrl = (path: string) => /^https?:\/\//i.test(path)
+
+const isImageMime = (mimeType?: string | null) =>
+  String(mimeType || '').toLowerCase().startsWith('image/')
 
 const getDataImageMimeType = (path: string) => {
   const match = path.match(/^data:([^;,]+)[;,]/i)
@@ -166,6 +172,7 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
     let disposed = false
     const initialItems: PreviewMediaState[] = selectedMedia.map((item, index) => {
       const label = item.label || getFileName(item.path, `Media ${index + 1}`)
+      const remoteImage = isRemoteUrl(item.path) && (isLikelyImagePath(item.path) || isImageMime(item.mimeType))
       if (item.path.startsWith('data:image/')) {
         return {
           key: mediaKey(item, index),
@@ -174,6 +181,15 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
           dataUrl: item.path,
           status: 'ready',
           message: getDataImageMimeType(item.path)
+        }
+      }
+      if (remoteImage) {
+        return {
+          key: mediaKey(item, index),
+          path: item.path,
+          label,
+          dataUrl: item.path,
+          status: 'ready'
         }
       }
       if (!isLikelyImagePath(item.path)) {

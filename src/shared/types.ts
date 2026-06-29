@@ -78,6 +78,59 @@ export interface EmailSessionCheckResult {
   account?: AutoAccount
 }
 
+export interface CampaignMediaSnapshot {
+  name: string
+  localPath?: string | null
+  cloudUrl?: string | null
+  mimeType?: string | null
+  sizeBytes?: number | null
+  provider?: string | null
+}
+
+export type CampaignMediaInput = string | CampaignMediaSnapshot
+
+export const MEDIA_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
+export const MEDIA_FILE_MAX_SIZE_BYTES = 25 * 1024 * 1024
+export const MEDIA_LIBRARY_MAX_FILES_PER_STAFF = 100
+
+export interface MediaFile {
+  id: number
+  provider: string
+  originalName: string
+  localPath?: string | null
+  cloudUrl: string
+  objectKey?: string | null
+  mimeType?: string | null
+  sizeBytes?: number | null
+  isDelete: boolean
+  staffId?: number
+  organizationId?: number | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface MediaStorageSettings {
+  provider: string
+  endpointUrl: string
+  accessKeyId: string
+  secretAccessKey?: string
+  bucket: string
+  publicBaseUrl: string
+  keyPrefix?: string
+  isConfigured?: boolean
+  secretAccessKeyMasked?: boolean
+}
+
+export interface MediaUploadFailure {
+  localPath: string
+  error: string
+}
+
+export interface MediaUploadResult {
+  files: MediaFile[]
+  failures: MediaUploadFailure[]
+}
+
 export interface ZaloLoginQrStartResult {
   success: boolean
   accountId: number
@@ -272,7 +325,7 @@ export interface CampaignExtraSettings {
   commentContent?: string        // nội dung comment
   rewriteCommentContentEachRun?: boolean // DB block viết lại nội dung comment bằng AI trước mỗi lượt comment seeding
   commentImageOption?: 'none' | 'all'
-  commentImages?: string[]        // tối đa 1 ảnh cho mỗi comment
+  commentImages?: CampaignMediaInput[]        // tối đa 1 ảnh cho mỗi comment
   enablePostLike?: boolean
   postsPerTarget?: number
   // Lướt newsfeed và tương tác
@@ -427,7 +480,7 @@ export interface Campaign {
   note?: string | null
   content?: string
   extraSettings?: CampaignExtraSettings
-  images?: string[]              // file paths or base64 strings
+  images?: CampaignMediaInput[]  // legacy file paths/data URIs or media snapshots
   isDelete: boolean
   staffId?: number
   organizationId?: number
@@ -1290,6 +1343,14 @@ export const IPC_EVENTS = {
   DB_CREATE_CONTENT_TEMPLATE: 'db:create-content-template',
   DB_UPDATE_CONTENT_TEMPLATE: 'db:update-content-template',
   DB_DELETE_CONTENT_TEMPLATE: 'db:delete-content-template',
+
+  // Media Library
+  MEDIA_STORAGE_SETTINGS_GET: 'media:storage-settings:get',
+  MEDIA_STORAGE_SETTINGS_SAVE: 'media:storage-settings:save',
+  MEDIA_STORAGE_SETTINGS_TEST: 'media:storage-settings:test',
+  MEDIA_FILES_LIST: 'media:files:list',
+  MEDIA_FILES_UPLOAD: 'media:files:upload',
+  MEDIA_FILES_DELETE: 'media:files:delete',
 
   // Email Notifications
   EMAIL_NOTIFICATION_SETTINGS_GET: 'email-notification-settings:get',

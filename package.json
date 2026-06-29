@@ -15,6 +15,7 @@
     "build:mac": "npm run build && electron-builder --mac dir --config.mac.identity=null --publish never && node scripts/sign-mac-adhoc.cjs dist/mac-arm64/akaBizAuto.app && electron-builder --mac dmg --prepackaged dist/mac-arm64 --config.mac.identity=null --publish never"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
     "@monaco-editor/react": "^4.7.0",
     "@supabase/supabase-js": "^2.49.1",
     "@tiptap/extension-link": "^3.26.1",

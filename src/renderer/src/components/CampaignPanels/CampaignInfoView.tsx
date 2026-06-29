@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { AutoAccount, Campaign, CampaignAction, CampaignExtraSettings } from '../../../../shared/types'
+import type { AutoAccount, Campaign, CampaignAction, CampaignExtraSettings, CampaignMediaInput } from '../../../../shared/types'
 
 interface CampaignInfoViewProps {
   campaign: Campaign
@@ -150,22 +150,30 @@ const formatMonthDays = (value?: string) => {
   return days.length > 0 ? `Ngày ${days.join(', ')}` : '-'
 }
 
-const formatImageSummary = (images?: string[]) => {
-  const list = Array.isArray(images) ? images.filter(Boolean) : []
-  if (list.length === 0) return 'Không có'
-  const names = list.slice(0, 5).map((image, index) => {
-    const value = String(image || '').trim()
+const getMediaDisplayName = (media: CampaignMediaInput, index: number): string => {
+  if (typeof media === 'string') {
+    const value = String(media || '').trim()
     if (!value || value.startsWith('data:image/')) return `Ảnh ${index + 1}`
     return value.split(/[\\/]/).pop() || `Ảnh ${index + 1}`
-  })
-  return `${list.length} ảnh: ${names.join(', ')}${list.length > names.length ? '...' : ''}`
+  }
+  return media.name ||
+    media.localPath?.split(/[\\/]/).pop() ||
+    media.cloudUrl?.split('/').pop()?.split('?')[0] ||
+    `Media ${index + 1}`
 }
 
-const formatImageOption = (extra: CampaignExtraSettings, images?: string[]) => {
-  if ((images || []).length === 0 && !extra.imageOption) return 'Không dùng ảnh'
-  if (extra.imageOption === 'random') return `Ngẫu nhiên ${extra.randomImageCount || '-'} ảnh`
-  if (extra.imageOption === 'all') return 'Dùng tất cả ảnh'
-  return 'Không dùng ảnh'
+const formatImageSummary = (images?: CampaignMediaInput[]) => {
+  const list = Array.isArray(images) ? images.filter(Boolean) : []
+  if (list.length === 0) return 'Không có'
+  const names = list.slice(0, 5).map(getMediaDisplayName)
+  return `${list.length} media: ${names.join(', ')}${list.length > names.length ? '...' : ''}`
+}
+
+const formatImageOption = (extra: CampaignExtraSettings, images?: CampaignMediaInput[]) => {
+  if ((images || []).length === 0 && !extra.imageOption) return 'Không dùng media'
+  if (extra.imageOption === 'random') return `Ngẫu nhiên ${extra.randomImageCount || '-'} media`
+  if (extra.imageOption === 'all') return 'Dùng tất cả media'
+  return 'Không dùng media'
 }
 
 const formatCampaignRefs = (ids: unknown, campaigns: Campaign[]) => {
