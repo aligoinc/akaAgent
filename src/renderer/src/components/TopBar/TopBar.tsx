@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Database,
   Globe,
+  Images,
   Info,
   KeyRound,
   Layers,
@@ -31,6 +32,7 @@ interface TopBarProps {
   activePage: AppPage
   onPageChange: (page: AppPage) => void
   onOpenDataScan: () => void
+  onOpenMediaLibrary: () => void
   onOpenAccountInfo: () => void
   onOpenGeneralSettings: () => void
   onOpenChangePassword: () => void
@@ -60,6 +62,7 @@ export default function TopBar({
   activePage,
   onPageChange,
   onOpenDataScan,
+  onOpenMediaLibrary,
   onOpenAccountInfo,
   onOpenGeneralSettings,
   onOpenChangePassword,
@@ -118,6 +121,12 @@ export default function TopBar({
         onClick: onOpenDataScan
       },
       {
+        key: 'media',
+        label: 'Media',
+        icon: <Images size={18} />,
+        onClick: onOpenMediaLibrary
+      },
+      {
         key: 'reports',
         label: 'Báo cáo',
         icon: <BarChart3 size={18} />,
@@ -137,7 +146,7 @@ export default function TopBar({
     }
 
     return items
-  }, [activePage, canOpenWorkflowEditor, onOpenDataScan, onPageChange])
+  }, [activePage, canOpenWorkflowEditor, onOpenDataScan, onOpenMediaLibrary, onPageChange])
 
   const closeAccountMenu = () => setAccountMenuOpen(false)
 

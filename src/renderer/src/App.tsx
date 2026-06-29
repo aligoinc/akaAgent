@@ -17,6 +17,7 @@ import DataScanModal from './components/DataScan/DataScanModal'
 import GeneralSettingsModal, { type GeneralSettingsMenu } from './components/Settings/GeneralSettingsModal'
 import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 import AccountProfileModal from './components/Settings/AccountProfileModal'
+import MediaLibraryModal from './components/Media/MediaLibraryModal'
 
 export default function App() {
   const { user, initializing, rehydrateFromStorage, handleSessionExpired, handleUserUpdated } = useAuthStore()
@@ -28,6 +29,7 @@ export default function App() {
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null)
   const browserOpenRequestSeq = useRef(0)
   const [showDataScan, setShowDataScan] = useState(false)
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
   const [showChangePassword, setShowChangePassword] = useState(false)
@@ -224,6 +226,7 @@ export default function App() {
           activePage={activePage}
           onPageChange={setActivePage}
           onOpenDataScan={() => setShowDataScan(true)}
+          onOpenMediaLibrary={() => setShowMediaLibrary(true)}
           onOpenAccountInfo={() => setShowAccountProfile(true)}
           onOpenGeneralSettings={() => openGeneralSettings()}
           onOpenChangePassword={() => setShowChangePassword(true)}
@@ -270,6 +273,9 @@ export default function App() {
       <ConfirmModal />
       {showDataScan && (
         <DataScanModal onClose={() => setShowDataScan(false)} />
+      )}
+      {showMediaLibrary && (
+        <MediaLibraryModal onClose={() => setShowMediaLibrary(false)} />
       )}
       {showGeneralSettings && (
         <GeneralSettingsModal

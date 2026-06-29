@@ -1061,6 +1061,8 @@ export class PageController {
         const tmp = pathJoin(tmpdir(), `upload_${Date.now()}_${i}.${ext}`)
         writeFileSync(tmp, buf)
         out.push(tmp)
+      } else if (/^https?:\/\//i.test(fp)) {
+        throw new Error('URL media phải được resolve/download trước khi upload file.')
       } else {
         if (!existsSync(fp)) console.warn(`[PageController] file not found: ${fp}`)
         out.push(fp)

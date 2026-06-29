@@ -1,8 +1,10 @@
 import { BrowserWindow } from 'electron'
-import { existsSync } from 'fs'
+import { existsSync, unlinkSync, writeFileSync } from 'fs'
+import { extname, join } from 'path'
+import { tmpdir } from 'os'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -123,6 +125,16 @@ interface BlockScreenshotProgressLog {
   storedMessage: string
   realtimeMessage: string
   action: CampaignLogAction
+}
+
+class CampaignMediaResolveError extends Error {
+  constructor(
+    public readonly mediaName: string,
+    public readonly reason: string
+  ) {
+    super(`Không dùng được media "${mediaName}": ${reason}`)
+    this.name = 'CampaignMediaResolveError'
+  }
 }
 
 interface SuggestedFriendProfile {
@@ -1514,242 +1526,255 @@ export class CampaignScheduler {
         await this.logCampaignProgress(campaign.id, `🔗 Link nguồn #${sourceIdx + 1}/${sourceLinks.length}${targetLabel}: ${currentSourceLink}`)
       }
 
-      // Build variables
-      const variables = {
-        ...this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval),
-        ...(campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
-          ? {
-            allowNewsfeedLike: newsfeedAvailability?.allowLike ?? true,
-            allowNewsfeedComment: newsfeedAvailability?.allowComment ?? true
-          }
-          : {})
-      }
-
-      // Update detail status running
-      if (detail) {
-        await this.supabase.updateCampaignInputData(detail.id, {
-          status: 'đang chạy',
-          dateAction: new Date().toISOString()
-        })
-        const inputDataName = this.getInputDataDisplayName(campaign, detail)
-        await this.logCampaignProgress(campaign.id, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
-        if (groupPostApproval.skipPostByKnownApproval) {
-          const message = `Bỏ qua đăng bài vào "${inputDataName}" vì group đã biết cần duyệt bài`
-          await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
-        }
-      }
-
       // Run engine v2
-      const abort = new AbortController()
-      let accountStopReason: string | null = null
       let shouldStopAfterTarget = false
       let shouldCompletePauseAfterTarget = false
-      const accountGuard = setInterval(() => {
-        void (async () => {
-          if (accountStopReason || abort.signal.aborted) return
-          const reason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
-          if (reason) {
-            accountStopReason = reason
-            abort.abort()
-          }
-        })().catch(err => {
-          console.error('Account run guard error:', err)
-        })
-      }, 5000)
-      this.activeV2Aborts.set(campaign.id, abort)
-      if (automationPage.source === 'background' && page) {
-        this.startBackgroundPreview(account.id, campaign.id, page)
-      }
-      const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
+      const mediaTempPaths: string[] = []
       try {
-        const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page)
-        const result = await this.engineV2.run(workflowId, variables, page, {
-          organizationId: campaign.organizationId ?? account.organizationId ?? null,
-          accountId: account.id,
-          campaignId: campaign.id,
-          campaignInputId: detail?.inputId ?? null,
-          campaignInputDataId: detail?.id,
-          signal: abort.signal,
-          persist: true,
-          runtimeHelpers,
-          onBlockScreenshot: async (request, screenshotPage) => {
-            const progressLog = await this.recordBlockScreenshotEvent(account, campaign, detail, request, screenshotPage)
-            if (progressLog) screenshotProgressLogs.push(progressLog)
-          },
-          onStepProgress: (step: RunStepV2) => {
-            try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
-            if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
-              void this.logNewsfeedMilestoneStep(campaign, detail, account.id, step)
+        // Build variables
+        const baseVariables = await this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval, mediaTempPaths)
+        const variables = {
+          ...baseVariables,
+          ...(campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+            ? {
+              allowNewsfeedLike: newsfeedAvailability?.allowLike ?? true,
+              allowNewsfeedComment: newsfeedAvailability?.allowComment ?? true
             }
-          },
-          onLog: (entry) => {
-            try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
-          }
-        })
-
-        // Per-milestone logging — scan steps theo block_name
-        const milestoneSummary = await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed', screenshotProgressLogs)
-
-        const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
-        const pauseCancelledRun = campaignPauseRequested && !accountStopReason && result.status === 'cancelled'
-        let runtimeStopTriggered = false
-
-        if (accountStopReason) {
-          if (detail) {
-            await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: accountStopReason })
-          }
-          await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
-          shouldStopAfterTarget = true
+            : {})
         }
 
-        if (detail && !accountStopReason) {
-          if (result.status === 'completed') {
-            if (milestoneSummary.resetInputToPending) {
-              await this.supabase.updateCampaignInputData(detail.id, {
-                status: 'chờ xử lý',
-                note: milestoneSummary.pendingNote || ''
-              })
-            } else {
-              await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
-              await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
-            }
-          } else if (pauseCancelledRun) {
-            await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: CAMPAIGN_PAUSE_PENDING_NOTE })
-          } else {
-            // campaign_input_data enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở campaign_details)
-            const errMsg = result.error || 'Lỗi không xác định'
-            await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
-            await this.logCampaignProgress(campaign.id, `❌ Lỗi "${this.getInputDataDisplayName(campaign, detail)}": ${errMsg}`)
-          }
-        }
-
-        if (!accountStopReason && !pauseCancelledRun) {
-          const runtimeError = result.status !== 'completed'
-            ? this.normalizeRuntimeError(campaign, result.steps, result.error)
-            : null
-
-          if (runtimeError && this.isNewsfeedDailyCampaign(campaign)) {
-            await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
-            runtimeStopTriggered = true
-            shouldStopAfterTarget = true
-          } else if (runtimeError) {
-            const handled = await this.handleCampaignBadTarget(
-              account,
-              campaign,
-              detail?.id,
-              runtimeError.errorCode,
-              runtimeError.actionCode,
-              {
-                message: runtimeError.message,
-                runId: result.runId ? String(result.runId) : undefined
-              }
-            )
-            runtimeStopTriggered = handled.triggered
-            shouldStopAfterTarget = handled.triggered
-          } else if (
-            milestoneSummary.hasError ||
-            milestoneSummary.hasHardFailure ||
-            (milestoneSummary.hasFailure && !milestoneSummary.hasSuccess)
-          ) {
-            const handled = await this.handleCampaignBadTarget(
-              account,
-              campaign,
-              detail?.id,
-              'err_undefined',
-              executableTargetActionDescriptors[0]?.code,
-              {
-                message: this.getMilestoneBadReason(milestoneSummary),
-                thresholdReason: this.getMilestoneBadRootReason(milestoneSummary),
-                runId: result.runId ? String(result.runId) : undefined
-              }
-            )
-            runtimeStopTriggered = handled.triggered
-            shouldStopAfterTarget = handled.triggered
-          } else if (milestoneSummary.hasSuccess) {
-            await this.resetCampaignBadTargetCount(campaign)
-          }
-        }
-
-        if (milestoneSummary.stopAfterTarget) {
-          const latestCampaign = await this.supabase.getCampaign(campaign.id).catch(() => null)
-          if (!latestCampaign || latestCampaign.status === 'đang chạy') {
-            await this.updateCampaignAndBroadcast(campaign.id, {
-              status: 'chờ xử lý',
-              note: milestoneSummary.pendingNote || 'Tài khoản Zalo cần kiểm tra lại trước khi chạy tiếp'
-            })
-          }
-          shouldStopAfterTarget = true
-        }
-
-        if (campaignPauseRequested) {
-          if (!accountStopReason && !runtimeStopTriggered) {
-            shouldCompletePauseAfterTarget = true
-            shouldStopAfterTarget = true
-          } else {
-            this.pauseRequests.delete(campaign.id)
-          }
-        }
-      } catch (err: any) {
-        const errMsg = err?.message || String(err)
-        const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
-        const pauseAbortTriggered = campaignPauseRequested && !accountStopReason && abort.signal.aborted
-        let runtimeStopTriggered = false
+        // Update detail status running
         if (detail) {
           await this.supabase.updateCampaignInputData(detail.id, {
-            status: accountStopReason || pauseAbortTriggered ? 'chờ xử lý' : 'hoàn thành',
-            note: accountStopReason || (pauseAbortTriggered ? CAMPAIGN_PAUSE_PENDING_NOTE : errMsg)
+            status: 'đang chạy',
+            dateAction: new Date().toISOString()
           })
-        }
-        if (pauseAbortTriggered) {
-          shouldCompletePauseAfterTarget = true
-          shouldStopAfterTarget = true
-        } else if (accountStopReason) {
-          await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
-          shouldStopAfterTarget = true
-        } else {
-          const runtimeError = this.normalizeRuntimeError(campaign, [], errMsg)
-          if (this.isNewsfeedDailyCampaign(campaign)) {
-            await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
-            runtimeStopTriggered = true
-            shouldStopAfterTarget = true
-          } else {
-            const handled = await this.handleCampaignBadTarget(
-              account,
-              campaign,
-              detail?.id,
-              runtimeError.errorCode,
-              runtimeError.actionCode,
-              { message: runtimeError.message }
-            )
-            runtimeStopTriggered = handled.triggered
-            shouldStopAfterTarget = handled.triggered
+          const inputDataName = this.getInputDataDisplayName(campaign, detail)
+          await this.logCampaignProgress(campaign.id, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
+          if (groupPostApproval.skipPostByKnownApproval) {
+            const message = `Bỏ qua đăng bài vào "${inputDataName}" vì group đã biết cần duyệt bài`
+            await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
           }
         }
-        if (!pauseAbortTriggered) {
-          await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
-          while (screenshotProgressLogs.length > 0) {
-            const progressLog = screenshotProgressLogs.shift()
-            if (!progressLog) continue
-            await this.logCampaignProgress(campaign.id, progressLog.storedMessage, {
-              realtimeMessage: progressLog.realtimeMessage,
-              realtimeAction: progressLog.action
+
+        const abort = new AbortController()
+        let accountStopReason: string | null = null
+        const accountGuard = setInterval(() => {
+          void (async () => {
+            if (accountStopReason || abort.signal.aborted) return
+            const reason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+            if (reason) {
+              accountStopReason = reason
+              abort.abort()
+            }
+          })().catch(err => {
+            console.error('Account run guard error:', err)
+          })
+        }, 5000)
+        this.activeV2Aborts.set(campaign.id, abort)
+        if (automationPage.source === 'background' && page) {
+          this.startBackgroundPreview(account.id, campaign.id, page)
+        }
+        const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
+        try {
+          const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page)
+          const result = await this.engineV2.run(workflowId, variables, page, {
+            organizationId: campaign.organizationId ?? account.organizationId ?? null,
+            accountId: account.id,
+            campaignId: campaign.id,
+            campaignInputId: detail?.inputId ?? null,
+            campaignInputDataId: detail?.id,
+            signal: abort.signal,
+            persist: true,
+            runtimeHelpers,
+            onBlockScreenshot: async (request, screenshotPage) => {
+              const progressLog = await this.recordBlockScreenshotEvent(account, campaign, detail, request, screenshotPage)
+              if (progressLog) screenshotProgressLogs.push(progressLog)
+            },
+            onStepProgress: (step: RunStepV2) => {
+              try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+              if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
+                void this.logNewsfeedMilestoneStep(campaign, detail, account.id, step)
+              }
+            },
+            onLog: (entry) => {
+              try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+            }
+          })
+
+          // Per-milestone logging — scan steps theo block_name
+          const milestoneSummary = await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed', screenshotProgressLogs)
+
+          const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
+          const pauseCancelledRun = campaignPauseRequested && !accountStopReason && result.status === 'cancelled'
+          let runtimeStopTriggered = false
+
+          if (accountStopReason) {
+            if (detail) {
+              await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: accountStopReason })
+            }
+            await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+            shouldStopAfterTarget = true
+          }
+
+          if (detail && !accountStopReason) {
+            if (result.status === 'completed') {
+              if (milestoneSummary.resetInputToPending) {
+                await this.supabase.updateCampaignInputData(detail.id, {
+                  status: 'chờ xử lý',
+                  note: milestoneSummary.pendingNote || ''
+                })
+              } else {
+                await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
+                await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
+              }
+            } else if (pauseCancelledRun) {
+              await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: CAMPAIGN_PAUSE_PENDING_NOTE })
+            } else {
+              // campaign_input_data enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở campaign_details)
+              const errMsg = result.error || 'Lỗi không xác định'
+              await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
+              await this.logCampaignProgress(campaign.id, `❌ Lỗi "${this.getInputDataDisplayName(campaign, detail)}": ${errMsg}`)
+            }
+          }
+
+          if (!accountStopReason && !pauseCancelledRun) {
+            const runtimeError = result.status !== 'completed'
+              ? this.normalizeRuntimeError(campaign, result.steps, result.error)
+              : null
+
+            if (runtimeError && this.isNewsfeedDailyCampaign(campaign)) {
+              await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
+              runtimeStopTriggered = true
+              shouldStopAfterTarget = true
+            } else if (runtimeError) {
+              const handled = await this.handleCampaignBadTarget(
+                account,
+                campaign,
+                detail?.id,
+                runtimeError.errorCode,
+                runtimeError.actionCode,
+                {
+                  message: runtimeError.message,
+                  runId: result.runId ? String(result.runId) : undefined
+                }
+              )
+              runtimeStopTriggered = handled.triggered
+              shouldStopAfterTarget = handled.triggered
+            } else if (
+              milestoneSummary.hasError ||
+              milestoneSummary.hasHardFailure ||
+              (milestoneSummary.hasFailure && !milestoneSummary.hasSuccess)
+            ) {
+              const handled = await this.handleCampaignBadTarget(
+                account,
+                campaign,
+                detail?.id,
+                'err_undefined',
+                executableTargetActionDescriptors[0]?.code,
+                {
+                  message: this.getMilestoneBadReason(milestoneSummary),
+                  thresholdReason: this.getMilestoneBadRootReason(milestoneSummary),
+                  runId: result.runId ? String(result.runId) : undefined
+                }
+              )
+              runtimeStopTriggered = handled.triggered
+              shouldStopAfterTarget = handled.triggered
+            } else if (milestoneSummary.hasSuccess) {
+              await this.resetCampaignBadTargetCount(campaign)
+            }
+          }
+
+          if (milestoneSummary.stopAfterTarget) {
+            const latestCampaign = await this.supabase.getCampaign(campaign.id).catch(() => null)
+            if (!latestCampaign || latestCampaign.status === 'đang chạy') {
+              await this.updateCampaignAndBroadcast(campaign.id, {
+                status: 'chờ xử lý',
+                note: milestoneSummary.pendingNote || 'Tài khoản Zalo cần kiểm tra lại trước khi chạy tiếp'
+              })
+            }
+            shouldStopAfterTarget = true
+          }
+
+          if (campaignPauseRequested) {
+            if (!accountStopReason && !runtimeStopTriggered) {
+              shouldCompletePauseAfterTarget = true
+              shouldStopAfterTarget = true
+            } else {
+              this.pauseRequests.delete(campaign.id)
+            }
+          }
+        } catch (err: any) {
+          const errMsg = err?.message || String(err)
+          const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
+          const pauseAbortTriggered = campaignPauseRequested && !accountStopReason && abort.signal.aborted
+          let runtimeStopTriggered = false
+          if (detail) {
+            await this.supabase.updateCampaignInputData(detail.id, {
+              status: accountStopReason || pauseAbortTriggered ? 'chờ xử lý' : 'hoàn thành',
+              note: accountStopReason || (pauseAbortTriggered ? CAMPAIGN_PAUSE_PENDING_NOTE : errMsg)
             })
           }
-        }
-        if (campaignPauseRequested && !pauseAbortTriggered) {
-          if (!accountStopReason && !runtimeStopTriggered) {
+          if (pauseAbortTriggered) {
             shouldCompletePauseAfterTarget = true
             shouldStopAfterTarget = true
+          } else if (accountStopReason) {
+            await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+            shouldStopAfterTarget = true
           } else {
-            this.pauseRequests.delete(campaign.id)
+            const runtimeError = this.normalizeRuntimeError(campaign, [], errMsg)
+            if (this.isNewsfeedDailyCampaign(campaign)) {
+              await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
+              runtimeStopTriggered = true
+              shouldStopAfterTarget = true
+            } else {
+              const handled = await this.handleCampaignBadTarget(
+                account,
+                campaign,
+                detail?.id,
+                runtimeError.errorCode,
+                runtimeError.actionCode,
+                { message: runtimeError.message }
+              )
+              runtimeStopTriggered = handled.triggered
+              shouldStopAfterTarget = handled.triggered
+            }
           }
+          if (!pauseAbortTriggered) {
+            await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
+            while (screenshotProgressLogs.length > 0) {
+              const progressLog = screenshotProgressLogs.shift()
+              if (!progressLog) continue
+              await this.logCampaignProgress(campaign.id, progressLog.storedMessage, {
+                realtimeMessage: progressLog.realtimeMessage,
+                realtimeAction: progressLog.action
+              })
+            }
+          }
+          if (campaignPauseRequested && !pauseAbortTriggered) {
+            if (!accountStopReason && !runtimeStopTriggered) {
+              shouldCompletePauseAfterTarget = true
+              shouldStopAfterTarget = true
+            } else {
+              this.pauseRequests.delete(campaign.id)
+            }
+          }
+        } finally {
+          clearInterval(accountGuard)
+          if (automationPage.source === 'background' && page) {
+            this.stopBackgroundPreview(account.id, campaign.id)
+          }
+          this.activeV2Aborts.delete(campaign.id)
+        }
+      } catch (err) {
+        if (this.isCampaignMediaResolveError(err)) {
+          await this.pauseCampaignForMediaError(campaign, detail, err)
+          shouldStopAfterTarget = true
+        } else {
+          throw err
         }
       } finally {
-        clearInterval(accountGuard)
-        if (automationPage.source === 'background' && page) {
-          this.stopBackgroundPreview(account.id, campaign.id)
-        }
-        this.activeV2Aborts.delete(campaign.id)
+        this.cleanupCampaignMediaTempFiles(mediaTempPaths)
       }
 
       if (shouldCompletePauseAfterTarget) {
@@ -1818,175 +1843,187 @@ export class CampaignScheduler {
   ): Promise<void> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
 
-    const extra = campaign.extraSettings || {}
-    const actionDescriptor = this.getZaloShareMessageActionDescriptor(campaign, executableActionDescriptors)
-    const shouldCheckQuota = quotaActionDescriptors.some(action => action.code === actionDescriptor.code)
-    const baseMessage = this.cycleVariant(this.splitContentVariants(campaign.content), 0)
-    const attachments = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
-    const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
-    const targetKindLabel = isGroup ? 'group Zalo' : 'bạn bè Zalo'
+    const mediaTempPaths: string[] = []
+    try {
+      const extra = campaign.extraSettings || {}
+      const actionDescriptor = this.getZaloShareMessageActionDescriptor(campaign, executableActionDescriptors)
+      const shouldCheckQuota = quotaActionDescriptors.some(action => action.code === actionDescriptor.code)
+      const baseMessage = this.cycleVariant(this.splitContentVariants(campaign.content), 0)
+      const attachments = await this.resolveMediaSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3, mediaTempPaths)
+      const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+      const targetKindLabel = isGroup ? 'group Zalo' : 'bạn bè Zalo'
 
-    if (!baseMessage.trim() && attachments.length === 0) {
-      const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
-      await this.releaseRunningAccount(account.id)
-      return
-    }
-
-    if (details.length === 0) {
-      const note = `Không có ${targetKindLabel} để gửi tin`
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
-      await this.releaseRunningAccount(account.id)
-      return
-    }
-
-    let zaloFriendBlocklistSkippedCount = 0
-    if (zaloFriendBlocklist && campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
-      const now = new Date()
-      const remainingDetails: CampaignInputData[] = []
-      for (const detail of details) {
-        if (
-          detail.status === 'chờ xử lý' &&
-          !this.getFutureInputSchedule(detail, now) &&
-          this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)
-        ) {
-          await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist, { logProgress: false })
-          zaloFriendBlocklistSkippedCount += 1
-          continue
-        }
-        remainingDetails.push(detail)
-      }
-      details = remainingDetails
-    }
-
-    const limitConfig = extra.actionLimits
-    let stoppedBeforeCompletion = false
-    let earliestFutureInputSchedule: Date | null = null
-    let index = 0
-
-    while (index < details.length) {
-      const cur = await this.supabase.getCampaign(campaign.id)
-      if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
-        return
-      }
-
-      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
-      if (accountBlockReason) {
-        stoppedBeforeCompletion = true
-        await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
+      if (!baseMessage.trim() && attachments.length === 0) {
+        const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+        await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
         await this.releaseRunningAccount(account.id)
         return
       }
 
-      const capacity = await this.getZaloShareMessageBatchCapacity(
-        account,
-        campaign,
-        actionDescriptor,
-        shouldCheckQuota,
-        limitConfig
-      )
-      if (!capacity.ok || capacity.capacity < 1) {
-        stoppedBeforeCompletion = true
-        await this.handleLimitStatus(account, campaign, capacity.limitStatus || {
-          ok: false,
-          actionCode: actionDescriptor.code,
-          actionName: actionDescriptor.name,
-          reason: `Hành động "${actionDescriptor.name}" đang đạt giới hạn`
-        })
-        break
+      if (details.length === 0) {
+        const note = `Không có ${targetKindLabel} để gửi tin`
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+        await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+        await this.releaseRunningAccount(account.id)
+        return
       }
 
-      const batch: ZaloShareMessageTarget[] = []
-      let stopAfterInvalidTarget = false
-
-      while (index < details.length && batch.length < capacity.capacity) {
-        const detail = details[index]
-        index += 1
-
-        if (detail.status !== 'chờ xử lý') continue
-        const futureSchedule = this.getFutureInputSchedule(detail, new Date())
-        if (futureSchedule) {
-          if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
-            earliestFutureInputSchedule = futureSchedule
+      let zaloFriendBlocklistSkippedCount = 0
+      if (zaloFriendBlocklist && campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
+        const now = new Date()
+        const remainingDetails: CampaignInputData[] = []
+        for (const detail of details) {
+          if (
+            detail.status === 'chờ xử lý' &&
+            !this.getFutureInputSchedule(detail, now) &&
+            this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)
+          ) {
+            await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist, { logProgress: false })
+            zaloFriendBlocklistSkippedCount += 1
+            continue
           }
-          continue
+          remainingDetails.push(detail)
+        }
+        details = remainingDetails
+      }
+
+      const limitConfig = extra.actionLimits
+      let stoppedBeforeCompletion = false
+      let earliestFutureInputSchedule: Date | null = null
+      let index = 0
+
+      while (index < details.length) {
+        const cur = await this.supabase.getCampaign(campaign.id)
+        if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
+          await this.releaseRunningAccount(account.id)
+          await this.completeCampaignPause(campaign)
+          return
         }
 
-        if (this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)) {
-          await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!, { logProgress: false })
-          zaloFriendBlocklistSkippedCount += 1
-          continue
+        const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+        if (accountBlockReason) {
+          stoppedBeforeCompletion = true
+          await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
+          await this.releaseRunningAccount(account.id)
+          return
         }
 
-        await this.supabase.updateCampaignInputData(detail.id, {
-          status: 'đang chạy',
-          dateAction: new Date().toISOString()
-        })
-
-        const target = this.createZaloShareMessageTarget(campaign, detail)
-        if (!target) {
-          stopAfterInvalidTarget = await this.handleInvalidZaloShareMessageTarget(account, campaign, detail, actionDescriptor)
-          if (stopAfterInvalidTarget) break
-          continue
+        const capacity = await this.getZaloShareMessageBatchCapacity(
+          account,
+          campaign,
+          actionDescriptor,
+          shouldCheckQuota,
+          limitConfig
+        )
+        if (!capacity.ok || capacity.capacity < 1) {
+          stoppedBeforeCompletion = true
+          await this.handleLimitStatus(account, campaign, capacity.limitStatus || {
+            ok: false,
+            actionCode: actionDescriptor.code,
+            actionName: actionDescriptor.name,
+            reason: `Hành động "${actionDescriptor.name}" đang đạt giới hạn`
+          })
+          break
         }
-        if (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
-          const resolvedTarget = await this.resolveZaloFriendMessageTarget(account, target.target)
-          await this.upsertZaloResolvedProfileTarget(account, resolvedTarget, campaign.actionId)
-          batch.push({ ...target, target: resolvedTarget })
+
+        const batch: ZaloShareMessageTarget[] = []
+        let stopAfterInvalidTarget = false
+
+        while (index < details.length && batch.length < capacity.capacity) {
+          const detail = details[index]
+          index += 1
+
+          if (detail.status !== 'chờ xử lý') continue
+          const futureSchedule = this.getFutureInputSchedule(detail, new Date())
+          if (futureSchedule) {
+            if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
+              earliestFutureInputSchedule = futureSchedule
+            }
+            continue
+          }
+
+          if (this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)) {
+            await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!, { logProgress: false })
+            zaloFriendBlocklistSkippedCount += 1
+            continue
+          }
+
+          await this.supabase.updateCampaignInputData(detail.id, {
+            status: 'đang chạy',
+            dateAction: new Date().toISOString()
+          })
+
+          const target = this.createZaloShareMessageTarget(campaign, detail)
+          if (!target) {
+            stopAfterInvalidTarget = await this.handleInvalidZaloShareMessageTarget(account, campaign, detail, actionDescriptor)
+            if (stopAfterInvalidTarget) break
+            continue
+          }
+          if (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
+            const resolvedTarget = await this.resolveZaloFriendMessageTarget(account, target.target)
+            await this.upsertZaloResolvedProfileTarget(account, resolvedTarget, campaign.actionId)
+            batch.push({ ...target, target: resolvedTarget })
+          } else {
+            batch.push(target)
+          }
+        }
+
+        if (stopAfterInvalidTarget) {
+          stoppedBeforeCompletion = true
+          break
+        }
+        if (batch.length === 0) continue
+
+        const message = await this.getZaloShareMessageForBatch(account, campaign, baseMessage)
+        const stopAfterBatch = await this.processZaloShareMessageBatch(
+          account,
+          campaign,
+          batch,
+          actionDescriptor,
+          message,
+          attachments
+        )
+        if (stopAfterBatch) {
+          stoppedBeforeCompletion = true
+          break
+        }
+
+        if (index < details.length) {
+          const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
+          if (sleepTime > 0) {
+            const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime)
+            if (sleepResult === 'paused') {
+              await this.releaseRunningAccount(account.id)
+              await this.completeCampaignPause(campaign)
+              return
+            }
+          }
+        }
+      }
+
+      if (zaloFriendBlocklistSkippedCount > 0) {
+        await this.logCampaignProgress(campaign.id, `🚫 Đã bỏ qua ${zaloFriendBlocklistSkippedCount} bạn bè Zalo trong danh sách không gửi tin`)
+      }
+
+      if (!stoppedBeforeCompletion) {
+        if (earliestFutureInputSchedule) {
+          await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
         } else {
-          batch.push(target)
+          await this.handleCampaignCompletion(campaign)
         }
       }
-
-      if (stopAfterInvalidTarget) {
-        stoppedBeforeCompletion = true
-        break
+      await this.releaseRunningAccount(account.id)
+    } catch (err) {
+      if (this.isCampaignMediaResolveError(err)) {
+        await this.pauseCampaignForMediaError(campaign, null, err)
+        await this.releaseRunningAccount(account.id)
+        return
       }
-      if (batch.length === 0) continue
-
-      const message = await this.getZaloShareMessageForBatch(account, campaign, baseMessage)
-      const stopAfterBatch = await this.processZaloShareMessageBatch(
-        account,
-        campaign,
-        batch,
-        actionDescriptor,
-        message,
-        attachments
-      )
-      if (stopAfterBatch) {
-        stoppedBeforeCompletion = true
-        break
-      }
-
-      if (index < details.length) {
-        const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
-        if (sleepTime > 0) {
-          const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime)
-          if (sleepResult === 'paused') {
-            await this.releaseRunningAccount(account.id)
-            await this.completeCampaignPause(campaign)
-            return
-          }
-        }
-      }
+      throw err
+    } finally {
+      this.cleanupCampaignMediaTempFiles(mediaTempPaths)
     }
-
-    if (zaloFriendBlocklistSkippedCount > 0) {
-      await this.logCampaignProgress(campaign.id, `🚫 Đã bỏ qua ${zaloFriendBlocklistSkippedCount} bạn bè Zalo trong danh sách không gửi tin`)
-    }
-
-    if (!stoppedBeforeCompletion) {
-      if (earliestFutureInputSchedule) {
-        await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
-      } else {
-        await this.handleCampaignCompletion(campaign)
-      }
-    }
-    await this.releaseRunningAccount(account.id)
   }
 
   private async getZaloShareMessageBatchCapacity(
@@ -4016,7 +4053,7 @@ export class CampaignScheduler {
   }
 
   /** Build variables object inject vào engine v2. */
-  private buildVariablesV2(
+  private async buildVariablesV2(
     campaign: Campaign,
     detail: CampaignInputData | null,
     accountId: number,
@@ -4026,22 +4063,20 @@ export class CampaignScheduler {
       skipPostByKnownApproval?: boolean
       requiresPostApproval?: boolean | null
       source?: string
-    }
-  ): Record<string, unknown> {
+    },
+    mediaTempPaths: string[] = []
+  ): Promise<Record<string, unknown>> {
     const extra = campaign.extraSettings || {}
     const canUseFindDataPostContentConditions =
       extra.isFindInPost === true || extra.isFindInComment === true || extra.isFindPostLink === true
     const canUseFindDataCommentContentConditions = extra.isFindInComment === true
     const canUseCommentSeedingPostContentConditions = campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID
     const canUsePostContentConditions = canUseFindDataPostContentConditions || canUseCommentSeedingPostContentConditions
-    const validImages = this.resolveImageSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3)
-    const validCommentImages = (extra.commentImages || []).filter(fp => this.isUsableImagePath(fp)).slice(0, 1)
     const pagePostMode = extra.pagePostMode || 'api'
     const postWithBackground = extra.postWithBackground === true && (
       campaign.actionId === 'facebook_timeline_post' ||
       (campaign.actionId === PAGE_POST_ACTION_ID && pagePostMode === 'ui')
     )
-    const validPostImages = postWithBackground ? [] : validImages
 
     // Comment iterations
     const enableComment = extra.enableComment ?? false
@@ -4060,7 +4095,14 @@ export class CampaignScheduler {
     const selectedPostContent = this.cycleVariant(postVariants, detailIndex)
     const storedCommentImageOption = String(extra.commentImageOption || 'none')
     const commentImageOption = storedCommentImageOption === 'none' ? 'none' : 'all'
-    const selectedCommentImages = commentImageOption === 'all' ? validCommentImages : []
+    const shouldUseCommentImages = enableComment && commentImageOption === 'all'
+    const validPostImages = postWithBackground
+      ? []
+      : await this.resolveMediaSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3, mediaTempPaths)
+    const validCommentImages = shouldUseCommentImages
+      ? await this.resolveMediaSelection(extra.commentImages || [], 'all', 1, mediaTempPaths)
+      : []
+    const selectedCommentImages = shouldUseCommentImages ? validCommentImages : []
     const commentBatchCount = Math.max(commentIndices.length, Number(extra.postsPerTarget ?? commentCount), 1)
     const commentImageBatches = Array.from({ length: commentBatchCount }, () =>
       [...selectedCommentImages]
@@ -4091,7 +4133,7 @@ export class CampaignScheduler {
       commentVariants,
       commentImages: commentImageBatches[0] || [],
       commentImageBatches,
-      commentImageOption,
+      commentImageOption: enableComment ? commentImageOption : 'none',
       enablePostLike: extra.enablePostLike ?? false,
       postsPerTarget: extra.postsPerTarget ?? commentCount,
       isFindPostByKeywords: canUsePostContentConditions ? (extra.isFindPostByKeywords ?? false) : false,
@@ -8494,28 +8536,150 @@ export class CampaignScheduler {
     await this.updateAccountAndBroadcast(accountId, { status: 'chờ xử lý' })
   }
 
-  private resolveImageSelection(
-    availableImages: string[],
+  private async resolveMediaSelection(
+    availableMedia: CampaignMediaInput[],
     option: 'none' | 'all' | 'random',
-    randomCount: number
-  ): string[] {
-    const validImages = availableImages.filter(fp => this.isUsableImagePath(fp))
-    return this.selectImagesFromValid(validImages, option, randomCount)
-  }
-
-  private selectImagesFromValid(
-    validImages: string[],
-    option: 'none' | 'all' | 'random',
-    randomCount: number
-  ): string[] {
+    randomCount: number,
+    mediaTempPaths: string[] = []
+  ): Promise<string[]> {
     if (option === 'none') return []
-    if (option === 'all') return [...validImages]
-    const count = Math.max(1, randomCount || 1)
-    return [...validImages].sort(() => 0.5 - Math.random()).slice(0, count)
+    const declaredMedia = (Array.isArray(availableMedia) ? availableMedia : [])
+      .filter(item => this.hasDeclaredMediaSource(item))
+    const candidateLimit = option === 'random'
+      ? Math.max(1, randomCount || 1)
+      : Number.MAX_SAFE_INTEGER
+    const candidates = option === 'random'
+      ? [...declaredMedia].sort(() => 0.5 - Math.random()).slice(0, candidateLimit)
+      : declaredMedia
+    const resolved: string[] = []
+
+    for (const item of candidates) {
+      resolved.push(await this.resolveCampaignMediaSource(item, mediaTempPaths))
+    }
+
+    return resolved
   }
 
-  private isUsableImagePath(path: string): boolean {
-    return typeof path === 'string' && (path.startsWith('data:') || existsSync(path))
+  private hasDeclaredMediaSource(item: CampaignMediaInput): boolean {
+    if (typeof item === 'string') {
+      const value = item.trim()
+      return Boolean(value)
+    }
+    if (!item || typeof item !== 'object') return false
+    const localPath = String(item.localPath || '').trim()
+    const cloudUrl = String(item.cloudUrl || '').trim()
+    return Boolean(localPath || cloudUrl)
+  }
+
+  private async resolveCampaignMediaSource(item: CampaignMediaInput, mediaTempPaths: string[] = []): Promise<string> {
+    const mediaName = this.getCampaignMediaName(item)
+
+    if (typeof item === 'string') {
+      const value = item.trim()
+      if (!value) throw new CampaignMediaResolveError(mediaName, 'không có local path hoặc cloud URL hợp lệ')
+      if (value.startsWith('data:')) return value
+      if (/^https?:\/\//i.test(value)) return this.downloadCampaignMediaUrl(value, mediaName, mediaTempPaths)
+      if (existsSync(value)) return value
+      throw new CampaignMediaResolveError(mediaName, 'local path không tồn tại và không có cloud URL fallback')
+    }
+
+    const localPath = String(item?.localPath || '').trim()
+    const localMissingReason = localPath ? 'local path không tồn tại' : 'không có local path'
+    if (localPath) {
+      if (localPath.startsWith('data:') || existsSync(localPath)) return localPath
+    }
+
+    const cloudUrl = String(item?.cloudUrl || '').trim()
+    if (cloudUrl) {
+      try {
+        return await this.downloadCampaignMediaUrl(cloudUrl, mediaName, mediaTempPaths)
+      } catch (err) {
+        if (this.isCampaignMediaResolveError(err)) {
+          throw new CampaignMediaResolveError(mediaName, `${localMissingReason} và ${err.reason}`)
+        }
+        throw err
+      }
+    }
+
+    if (localPath) {
+      throw new CampaignMediaResolveError(mediaName, `${localMissingReason} và không có cloud URL fallback`)
+    }
+    throw new CampaignMediaResolveError(mediaName, 'không có local path hoặc cloud URL hợp lệ')
+  }
+
+  private async downloadCampaignMediaUrl(url: string, mediaName: string, mediaTempPaths: string[] = []): Promise<string> {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(60000)
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const contentType = response.headers.get('content-type') || 'application/octet-stream'
+      const buf = Buffer.from(await response.arrayBuffer())
+      const ext = this.getMediaDownloadExtension(url, contentType, mediaName)
+      const tempPath = join(tmpdir(), `campaign-media-${Date.now()}-${Math.floor(Math.random() * 1e6)}${ext}`)
+      writeFileSync(tempPath, buf)
+      mediaTempPaths.push(tempPath)
+      return tempPath
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new CampaignMediaResolveError(mediaName, `cloud URL không tải được (${message})`)
+    }
+  }
+
+  private getMediaDownloadExtension(url: string, contentType: string, mediaName: string): string {
+    try {
+      const ext = extname(new URL(url).pathname)
+      if (ext) return ext
+    } catch {}
+
+    const nameExt = extname(mediaName)
+    if (nameExt) return nameExt
+
+    const normalizedType = contentType.split(';')[0].trim().toLowerCase()
+    switch (normalizedType) {
+      case 'image/jpeg': return '.jpg'
+      case 'image/png': return '.png'
+      case 'image/gif': return '.gif'
+      case 'image/webp': return '.webp'
+      case 'image/avif': return '.avif'
+      case 'application/pdf': return '.pdf'
+      case 'text/plain': return '.txt'
+      default: return '.bin'
+    }
+  }
+
+  private getCampaignMediaName(item: CampaignMediaInput): string {
+    if (typeof item === 'string') return item.split(/[\\/]/).pop() || item || 'media'
+    return item?.name ||
+      item?.localPath?.split(/[\\/]/).pop() ||
+      item?.cloudUrl?.split('/').pop()?.split('?')[0] ||
+      'media'
+  }
+
+  private isCampaignMediaResolveError(err: unknown): err is CampaignMediaResolveError {
+    return err instanceof CampaignMediaResolveError
+  }
+
+  private async pauseCampaignForMediaError(campaign: Campaign, detail: CampaignInputData | null, error: CampaignMediaResolveError): Promise<void> {
+    const note = error.message
+    console.warn(`[CampaignScheduler] ${note}`)
+    if (detail) {
+      await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note })
+    }
+    await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note })
+    await this.logCampaignProgress(campaign.id, `❌ Tạm dừng chiến dịch "${campaign.name}": ${note}`)
+  }
+
+  private cleanupCampaignMediaTempFiles(paths: string[]): void {
+    const uniquePaths = Array.from(new Set(paths.map(path => String(path || '').trim()).filter(Boolean)))
+    paths.length = 0
+    for (const path of uniquePaths) {
+      try {
+        unlinkSync(path)
+      } catch {}
+    }
   }
 
   /**

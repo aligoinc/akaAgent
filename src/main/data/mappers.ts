@@ -1,4 +1,4 @@
-import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ZaloAccount } from '../../shared/types'
+import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, MediaFile, ZaloAccount } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   return {
@@ -175,7 +175,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     refreshData: (row.refresh_data as boolean) ?? false,
     content: (row.content as string) || '',
     extraSettings: (row.extra_settings as Campaign['extraSettings']) || {},
-    images: (row.images as string[]) || [],
+    images: (row.images as Campaign['images']) || [],
     log: (row.log as string) || '',
     note: (row.note as string | null) ?? null,
     isDelete: row.is_delete as boolean,
@@ -296,6 +296,24 @@ export function mapContentTemplateFromDB(row: Record<string, unknown>): ContentT
     organizationId: row.organization_id as number | undefined,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
+  }
+}
+
+export function mapMediaFileFromDB(row: Record<string, unknown>): MediaFile {
+  return {
+    id: row.id as number,
+    provider: (row.provider as string | null | undefined) || 'r2',
+    originalName: (row.original_name as string | null | undefined) || '',
+    localPath: (row.local_path as string | null | undefined) ?? null,
+    cloudUrl: (row.cloud_url as string | null | undefined) || '',
+    objectKey: (row.object_key as string | null | undefined) ?? null,
+    mimeType: (row.mime_type as string | null | undefined) ?? null,
+    sizeBytes: row.size_bytes === null || row.size_bytes === undefined ? null : Number(row.size_bytes),
+    isDelete: (row.is_delete as boolean | null | undefined) ?? false,
+    staffId: row.staff_id as number | undefined,
+    organizationId: (row.organization_id as number | null | undefined) ?? null,
+    createdAt: row.created_at as string | undefined,
+    updatedAt: row.updated_at as string | undefined
   }
 }
 

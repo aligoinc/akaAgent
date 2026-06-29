@@ -14,6 +14,8 @@ import {
   CampaignAction,
   CampaignImportPlatform,
   CampaignInputData,
+  CampaignMediaInput,
+  CampaignMediaSnapshot,
   CampaignExtraSettings,
   ContentTemplate,
   isValidEmailInputDataValue,
@@ -26,6 +28,7 @@ import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
+import MediaLibraryModal from '../Media/MediaLibraryModal'
 import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
 import ContentPreviewModal, {
   type ContentPreviewMediaItem,
@@ -674,6 +677,67 @@ const isDataImagePath = (path: string): boolean => path.trim().startsWith('data:
 
 const getImageDisplayName = (path: string): string => path.split(/[\\/]/).pop() || path
 
+const isCampaignMediaSnapshot = (item: CampaignMediaInput): item is CampaignMediaSnapshot =>
+  typeof item === 'object' && item !== null
+
+const getCampaignMediaDisplayName = (item: CampaignMediaInput): string => {
+  if (typeof item === 'string') return getImageDisplayName(item)
+  return item.name ||
+    getImageDisplayName(item.localPath || '') ||
+    getImageDisplayName((item.cloudUrl || '').split('?')[0]) ||
+    'Media'
+}
+
+const getCampaignMediaLocalPath = (item: CampaignMediaInput): string =>
+  typeof item === 'string' ? item : (item.localPath || '')
+
+const getCampaignMediaCloudUrl = (item: CampaignMediaInput): string =>
+  typeof item === 'string' ? '' : (item.cloudUrl || '')
+
+const getCampaignMediaMimeType = (item: CampaignMediaInput): string =>
+  typeof item === 'string' ? '' : (item.mimeType || '')
+
+const isCampaignMediaLocalAvailable = (path: string): boolean => {
+  const trimmed = String(path || '').trim()
+  if (!trimmed) return false
+  if (isDataImagePath(trimmed)) return true
+  try {
+    return window.electronAPI.fileExists(trimmed)
+  } catch {
+    return false
+  }
+}
+
+const isCampaignMediaUsingCloudFallback = (item: CampaignMediaInput): boolean => {
+  if (!isCampaignMediaSnapshot(item)) return false
+  const cloudUrl = getCampaignMediaCloudUrl(item).trim()
+  if (!cloudUrl) return false
+  const localPath = getCampaignMediaLocalPath(item).trim()
+  return !localPath || !isCampaignMediaLocalAvailable(localPath)
+}
+
+const getCampaignMediaPreviewPath = (item: CampaignMediaInput): string => {
+  if (typeof item === 'string') return item
+  const localPath = getCampaignMediaLocalPath(item).trim()
+  if (localPath && isCampaignMediaLocalAvailable(localPath)) return localPath
+  return getCampaignMediaCloudUrl(item) || localPath
+}
+
+const getCampaignMediaStableKey = (item: CampaignMediaInput): string => {
+  if (typeof item === 'string') return item
+  return item.cloudUrl || item.localPath || item.name
+}
+
+const isCampaignMediaImage = (item: CampaignMediaInput): boolean => {
+  if (isCampaignMediaSnapshot(item)) {
+    const mimeType = String(item.mimeType || '').toLowerCase()
+    if (mimeType) return mimeType.startsWith('image/')
+    const candidate = item.localPath || item.cloudUrl || item.name || ''
+    return /\.(apng|avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(candidate)
+  }
+  return isDataImagePath(item) || /\.(apng|avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(item)
+}
+
 const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
   '0162': '032',
   '0163': '033',
@@ -1196,9 +1260,9 @@ export default function CampaignFormModal({
     ) as Record<string, ActionLimitForm>,
     imageOption: (campaign?.extraSettings?.imageOption || 'none') as 'none' | 'all' | 'random',
     randomImageCount: campaign?.extraSettings?.randomImageCount || 3,
-    images: campaign?.images || [] as string[],
+    images: (campaign?.images || []) as CampaignMediaInput[],
     commentImageOption: savedCommentImageOption,
-    commentImages: savedCommentImages,
+    commentImages: savedCommentImages as CampaignMediaInput[],
     splitDataAcrossAccounts: false,
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
@@ -1313,8 +1377,7 @@ export default function CampaignFormModal({
     findFacebookGroupCommentTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || [] as number[],
     findFacebookGroupJoinTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || [] as number[]
   })
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const commentImageInputRef = useRef<HTMLInputElement>(null)
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<'post' | 'comment' | null>(null)
   const [handleFoundUidData, setHandleFoundUidData] = useState(() =>
     draftRequiredTargetField === 'findUidTargetCampaignIds' || (campaign?.extraSettings?.findUidTargetCampaignIds || []).length > 0
   )
@@ -2774,7 +2837,11 @@ export default function CampaignFormModal({
       return {
         media: formData.commentImageOption === 'none'
           ? []
-          : formData.commentImages.slice(0, 1).map(path => ({ path, label: getImageDisplayName(path) })),
+          : formData.commentImages.slice(0, 1).map(item => ({
+            path: getCampaignMediaPreviewPath(item),
+            label: getCampaignMediaDisplayName(item),
+            mimeType: getCampaignMediaMimeType(item)
+          })),
         mediaMode: formData.commentImageOption
       }
     }
@@ -2783,7 +2850,11 @@ export default function CampaignFormModal({
       return {
         media: formData.imageOption === 'none'
           ? []
-          : formData.images.map(path => ({ path, label: getImageDisplayName(path) })),
+          : formData.images.map(item => ({
+            path: getCampaignMediaPreviewPath(item),
+            label: getCampaignMediaDisplayName(item),
+            mimeType: getCampaignMediaMimeType(item)
+          })),
         mediaMode: formData.imageOption,
         randomCount: formData.randomImageCount
       }
@@ -3110,21 +3181,21 @@ export default function CampaignFormModal({
     )
   }
 
-  const isUsableImagePath = (path: string): boolean => {
-    const trimmed = path.trim()
-    if (!trimmed) return false
-    if (isDataImagePath(trimmed)) return true
-    return window.electronAPI.fileExists(trimmed)
+  const isUsableCampaignMedia = (item: CampaignMediaInput): boolean => {
+    const cloudUrl = getCampaignMediaCloudUrl(item).trim()
+    if (cloudUrl) return true
+    const trimmed = getCampaignMediaLocalPath(item).trim()
+    return isCampaignMediaLocalAvailable(trimmed)
   }
 
-  const validateSelectedImages = (label: string, option: string, images: string[]): boolean => {
+  const validateSelectedImages = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
     if (option === 'none' || images.length === 0) return true
-    const missingImages = images.filter(path => !isUsableImagePath(path))
+    const missingImages = images.filter(item => !isUsableCampaignMedia(item))
     if (missingImages.length === 0) return true
 
-    const names = missingImages.slice(0, 3).map(getImageDisplayName).join(', ')
+    const names = missingImages.slice(0, 3).map(getCampaignMediaDisplayName).join(', ')
     const suffix = missingImages.length > 3 ? ` và ${missingImages.length - 3} file khác` : ''
-    showAlert(`${label} có file không còn tồn tại hoặc đã bị xoá: ${names}${suffix}. Vui lòng xoá file lỗi hoặc chọn lại.`, 'error')
+    showAlert(`${label} có file không còn tồn tại và không có cloud URL fallback: ${names}${suffix}. Vui lòng xoá file lỗi hoặc chọn lại.`, 'error')
     return false
   }
 
@@ -4554,31 +4625,20 @@ export default function CampaignFormModal({
     })
   }
 
-  const handleImagePickerChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    target: 'post' | 'comment'
-  ) => {
-    const files = Array.from(e.target.files || [])
-    const paths = files
-      .map(f => {
-        try {
-          return window.electronAPI.getPathForFile(f)
-        } catch {
-          return ''
-        }
-      })
-      .filter(Boolean)
-
-    if (paths.length < files.length) {
-      showAlert('Một số file không xác định được đường dẫn và đã bị bỏ qua.', 'error')
-    }
-    if (paths.length > 0) {
-      setFormData(p => target === 'comment'
-        ? ({ ...p, commentImages: paths.slice(0, 1), commentImageOption: 'all' })
-        : ({ ...p, images: [...p.images, ...paths] })
-      )
-    }
-    e.target.value = ''
+  const handleMediaPickerConfirm = (items: CampaignMediaSnapshot[]) => {
+    if (!mediaPickerTarget || items.length === 0) return
+    const acceptedItems = mediaPickerTarget === 'comment' || !(isZaloMessageCampaign || isEmailCampaign)
+      ? items.filter(isCampaignMediaImage)
+      : items
+    if (acceptedItems.length === 0) return
+    setFormData(p => {
+      if (mediaPickerTarget === 'comment') {
+        return { ...p, commentImages: acceptedItems.slice(0, 1), commentImageOption: 'all' }
+      }
+      const currentKeys = new Set(p.images.map(getCampaignMediaStableKey))
+      const nextItems = acceptedItems.filter(item => !currentKeys.has(getCampaignMediaStableKey(item)))
+      return { ...p, images: [...p.images, ...nextItems] }
+    })
   }
 
   const renderNewsfeedInteractionSettings = () => (
@@ -4966,7 +5026,6 @@ export default function CampaignFormModal({
     const option = isComment ? formData.commentImageOption : formData.imageOption
     const randomCount = formData.randomImageCount
     const images = isComment ? formData.commentImages : formData.images
-    const inputRef = isComment ? commentImageInputRef : imageInputRef
     const radioName = isComment ? 'commentImageOption' : 'imageOption'
 
     const setOption = (value: ImageOption) => {
@@ -5007,20 +5066,12 @@ export default function CampaignFormModal({
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => inputRef.current?.click()}
+              onClick={() => setMediaPickerTarget(target)}
               style={{ width: 'fit-content', opacity: option === 'none' ? 0.6 : 1 }}
               disabled={option === 'none'}
             >
-              {isEmailAttachment ? 'Tải hoặc chọn tệp đính kèm' : isZaloMedia ? 'Tải hoặc chọn file' : 'Tải hoặc chọn ảnh'}
+              {isEmailAttachment ? 'Chọn tệp đính kèm' : isZaloMedia ? 'Chọn file' : 'Chọn ảnh'}
             </button>
-            <input
-              type="file"
-              ref={inputRef}
-              style={{ display: 'none' }}
-              accept={isFileMedia ? undefined : 'image/*'}
-              multiple={!isComment}
-              onChange={e => handleImagePickerChange(e, target)}
-            />
 
             <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
               <label className="schedule-radio-label">
@@ -5085,23 +5136,34 @@ export default function CampaignFormModal({
                       </td>
                     </tr>
                   ) : (
-                    images.map((img, idx) => (
-                      <tr key={`${target}-${idx}-${img}`}>
-                        <td className="text-center">{idx + 1}</td>
-                        <td className="text-truncate" style={{ maxWidth: 200 }} title={img}>{img.split(/[\\/]/).pop() || img}</td>
-                        <td className="text-center">
-                          <button
-                            type="button"
-                            className="btn-icon text-error action-btn"
-                            style={{ display: 'inline-flex' }}
-                            onClick={() => removeImage(idx)}
-                            title="Xóa"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    images.map((img, idx) => {
+                      const localPath = getCampaignMediaLocalPath(img)
+                      const cloudUrl = getCampaignMediaCloudUrl(img)
+	                      const usingCloudFallback = isCampaignMediaUsingCloudFallback(img)
+	                      const mediaTitle = [localPath, cloudUrl].filter(Boolean).join('\n') || getCampaignMediaDisplayName(img)
+	                      return (
+	                        <tr key={`${target}-${idx}-${getCampaignMediaStableKey(img)}`}>
+	                          <td className="text-center">{idx + 1}</td>
+	                          <td className="text-truncate" style={{ maxWidth: 200 }} title={mediaTitle}>
+	                            {getCampaignMediaDisplayName(img)}
+	                            {usingCloudFallback && (
+	                              <span className="media-inline-source">cloud</span>
+	                            )}
+	                          </td>
+                          <td className="text-center">
+                            <button
+                              type="button"
+                              className="btn-icon text-error action-btn"
+                              style={{ display: 'inline-flex' }}
+                              onClick={() => removeImage(idx)}
+                              title="Xóa"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -9935,6 +9997,14 @@ export default function CampaignFormModal({
         <ContentPreviewModal
           data={contentPreviewModal}
           onClose={() => setContentPreviewModal(null)}
+        />
+      )}
+      {mediaPickerTarget && (
+        <MediaLibraryModal
+          pickerMode={mediaPickerTarget === 'post' && (isZaloMessageCampaign || isEmailCampaign) ? 'file' : 'image'}
+          maxSelect={mediaPickerTarget === 'comment' ? 1 : undefined}
+          onConfirm={handleMediaPickerConfirm}
+          onClose={() => setMediaPickerTarget(null)}
         />
       )}
       {editingSourceCampaign && (

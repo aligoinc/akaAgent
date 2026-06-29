@@ -1,4 +1,4 @@
-import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery } from '../../shared/types'
+import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaStorageSettings } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -9,6 +9,7 @@ import * as accountContactRepo from '../data/repositories/accountContactReposito
 import * as accountActionRepo from '../data/repositories/accountActionRepository'
 import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
 import * as contentTemplateRepo from '../data/repositories/contentTemplateRepository'
+import * as mediaFileRepo from '../data/repositories/mediaFileRepository'
 import * as contactTagRepo from '../data/repositories/contactTagRepository'
 import * as emailNotificationRepo from '../data/repositories/emailNotificationRepository'
 import * as reportRepo from '../data/repositories/reportRepository'
@@ -137,6 +138,14 @@ export class SupabaseService {
   createContentTemplate(template: Partial<ContentTemplate>) { return contentTemplateRepo.createContentTemplate(template) }
   updateContentTemplate(id: number, updates: Partial<ContentTemplate>) { return contentTemplateRepo.updateContentTemplate(id, updates) }
   deleteContentTemplate(id: number) { return contentTemplateRepo.deleteContentTemplate(id) }
+
+  // =========== MEDIA LIBRARY ===========
+  getMediaStorageSettings() { return mediaFileRepo.getMediaStorageSettings() }
+  saveMediaStorageSettings(settings: Partial<MediaStorageSettings>) { return mediaFileRepo.saveMediaStorageSettings(settings) }
+  testMediaStorageSettings(settings?: Partial<MediaStorageSettings>) { return mediaFileRepo.testMediaStorageSettings(settings) }
+  listMediaFiles() { return mediaFileRepo.listMediaFiles() }
+  uploadMediaFiles(localPaths: string[]) { return mediaFileRepo.uploadMediaFiles(localPaths) }
+  deleteMediaFile(id: number) { return mediaFileRepo.deleteMediaFile(id) }
 
   // =========== EMAIL NOTIFICATIONS ===========
   getEmailNotificationSettings() { return emailNotificationRepo.getEmailNotificationSettings() }

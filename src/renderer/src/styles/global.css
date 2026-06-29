@@ -1322,6 +1322,227 @@ button.btn-icon:not(.btn):disabled {
   }
 }
 
+/* =========== MEDIA LIBRARY MODAL =========== */
+.media-library-overlay {
+  z-index: 3300;
+}
+
+.media-library-modal {
+  width: min(1180px, calc(100vw - 32px));
+  height: min(860px, calc(100vh - 32px));
+  max-height: min(860px, calc(100vh - 32px));
+}
+
+.media-library-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.media-library-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.media-library-list-section {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.media-library-section-title,
+.media-library-toolbar,
+.media-library-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.media-library-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.media-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.media-settings-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.media-library-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.media-library-toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.media-library-toolbar-main,
+.media-library-toolbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.media-library-toolbar-main {
+  flex: 0 0 auto;
+}
+
+.media-library-toolbar-tools {
+  flex: 1 1 460px;
+  justify-content: flex-end;
+}
+
+.media-library-upload-button {
+  min-height: 34px;
+  padding-inline: 14px;
+}
+
+.media-library-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(520px, 100%);
+  min-width: 280px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.media-library-search:focus-within {
+  border-color: var(--border-active);
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 2px var(--bg-accent-subtle);
+}
+
+.media-library-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.media-library-quota {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.media-library-quota strong {
+  color: var(--text-primary);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.media-library-refresh {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  color: var(--text-secondary);
+}
+
+.media-library-refresh:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.media-library-modal .media-library-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.media-library-grid .campaign-grid tr.selected td {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.media-library-name-cell {
+  min-width: 160px;
+  color: var(--text-primary);
+}
+
+.media-library-name-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-url-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.media-url-cell > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-inline-source {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 14px;
+  vertical-align: middle;
+}
+
+@media (max-width: 860px) {
+  .media-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .media-library-toolbar-main,
+  .media-library-toolbar-tools {
+    width: 100%;
+  }
+
+  .media-library-toolbar-tools {
+    flex-basis: 100%;
+  }
+
+  .media-library-search {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .general-settings-modal {
   width: min(1480px, calc(100vw - 32px));
   height: min(740px, calc(100vh - 32px));
