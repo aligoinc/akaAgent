@@ -5,11 +5,12 @@ import LogPanel from '../components/CampaignPanels/LogPanel'
 import type { GeneralSettingsMenu } from '../components/Settings/GeneralSettingsModal'
 
 interface CampaignPageProps {
+  isActive: boolean
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
 }
 
-export default function CampaignPage({ onNavigateToBrowser, onOpenGeneralSettings }: CampaignPageProps) {
+export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const [assistantOpenRequest, setAssistantOpenRequest] = useState<{ campaignId: number; requestedAt: number } | null>(null)
@@ -78,6 +79,7 @@ export default function CampaignPage({ onNavigateToBrowser, onOpenGeneralSetting
       {/* Campaign Panel (takes remaining space) */}
       <div className="campaign-page-panel" style={{ flex: 1, minWidth: 300 }}>
         <CampaignPanel
+          isActive={isActive}
           filterAccountId={filterAccountId}
           onClearFilter={() => setFilterAccountId(null)}
           onOpenGeneralSettings={onOpenGeneralSettings}

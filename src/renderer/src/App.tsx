@@ -235,6 +235,7 @@ export default function App() {
         <div className="app-main">
           <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <CampaignPage
+              isActive={activePage === 'campaigns'}
               onNavigateToBrowser={requestOpenBrowser}
               onOpenGeneralSettings={openGeneralSettings}
             />
