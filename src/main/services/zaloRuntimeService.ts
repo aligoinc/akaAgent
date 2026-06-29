@@ -12,6 +12,7 @@ interface ActiveQrLogin {
   accountId: number
   abort?: () => unknown
   cancelRequested: boolean
+  expired?: boolean
 }
 
 interface CachedZaloApi {
@@ -1282,7 +1283,7 @@ export class ZaloRuntimeService {
         zaloUid: zaloAccount.zaloUid
       })
     } catch (err) {
-      if (active.cancelRequested) return
+      if (active.cancelRequested || active.expired) return
       this.logLoginQrFailure(account.id, err)
       const message = this.getErrorMessage(err)
       await this.supabase.markAccountZaloSessionCheck(account.id, { ok: false, error: message }).catch(() => {})
@@ -1319,12 +1320,14 @@ export class ZaloRuntimeService {
         })
         return null
       case LoginQRCallbackEventType.QRCodeExpired:
+        active.expired = true
+        active.cancelRequested = true
         this.emitLoginQrEvent({
           accountId,
           status: 'expired',
-          message: 'Mã QR đã hết hạn, đang tạo lại mã mới'
+          message: 'Mã QR đã hết hạn. Vui lòng đăng nhập lại nếu cần.'
         })
-        try { event.actions.retry() } catch {}
+        try { event.actions.abort() } catch {}
         return null
       case LoginQRCallbackEventType.QRCodeScanned:
         this.emitLoginQrEvent({
