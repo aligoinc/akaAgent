@@ -821,6 +821,8 @@ export default function DataScanModal({
   const pageInboxPageUidRef = useRef('')
   const zaloQrFileInputRef = useRef<HTMLInputElement | null>(null)
   const zaloRemarketingActionDropdownRef = useRef<HTMLDivElement | null>(null)
+  const zaloTagFilterDropdownRef = useRef<HTMLDivElement | null>(null)
+  const akaBizTagFilterDropdownRef = useRef<HTMLDivElement | null>(null)
   const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions, entitlements))
   const [accountId, setAccountId] = useState<number | ''>(initialAccountId || '')
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
@@ -860,6 +862,12 @@ export default function DataScanModal({
   const [zaloQrReading, setZaloQrReading] = useState(false)
   const [zaloTagContacts, setZaloTagContacts] = useState<AutoAccountContact[]>([])
   const [akaBizContactTags, setAkaBizContactTags] = useState<AkaBizContactTag[]>([])
+  const [zaloTagFilterIds, setZaloTagFilterIds] = useState<string[]>([])
+  const [akaBizTagFilterIds, setAkaBizTagFilterIds] = useState<number[]>([])
+  const [zaloNoTagFilter, setZaloNoTagFilter] = useState(false)
+  const [akaBizNoTagFilter, setAkaBizNoTagFilter] = useState(false)
+  const [zaloTagFilterDropdownOpen, setZaloTagFilterDropdownOpen] = useState(false)
+  const [akaBizTagFilterDropdownOpen, setAkaBizTagFilterDropdownOpen] = useState(false)
   const [progressMessages, setProgressMessages] = useState<string[]>([])
   const [progressExpanded, setProgressExpanded] = useState(true)
   const [minimized, setMinimized] = useState(false)
@@ -945,6 +953,38 @@ export default function DataScanModal({
     }
     return map
   }, [zaloTagContacts])
+  const zaloTagFilterOptions = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const tag of zaloTagContacts) {
+      const id = String(tag.uid || '').trim()
+      const name = String(tag.name || id).trim()
+      if (id && !byId.has(id)) byId.set(id, name || id)
+    }
+    return Array.from(byId.entries()).map(([id, name]) => ({ id, name }))
+  }, [zaloTagContacts])
+  const akaBizTagFilterOptions = useMemo(
+    () => akaBizContactTags.map(tag => ({ id: tag.id, name: tag.name })),
+    [akaBizContactTags]
+  )
+  const hasZaloTagFilters = actionDef.platform === 'zalo'
+  const zaloTagFilterLabel = useMemo(() => {
+    const selectedCount = zaloTagFilterIds.length + (zaloNoTagFilter ? 1 : 0)
+    if (selectedCount === 0) return 'Tất cả'
+    if (selectedCount === 1 && zaloNoTagFilter) return 'Chưa gắn tag'
+    if (selectedCount === 1) {
+      return zaloTagFilterOptions.find(option => option.id === zaloTagFilterIds[0])?.name || '1 tag đã chọn'
+    }
+    return `${selectedCount} lựa chọn`
+  }, [zaloNoTagFilter, zaloTagFilterIds, zaloTagFilterOptions])
+  const akaBizTagFilterLabel = useMemo(() => {
+    const selectedCount = akaBizTagFilterIds.length + (akaBizNoTagFilter ? 1 : 0)
+    if (selectedCount === 0) return 'Tất cả'
+    if (selectedCount === 1 && akaBizNoTagFilter) return 'Chưa gắn tag'
+    if (selectedCount === 1) {
+      return akaBizTagFilterOptions.find(option => option.id === akaBizTagFilterIds[0])?.name || '1 tag đã chọn'
+    }
+    return `${selectedCount} lựa chọn`
+  }, [akaBizNoTagFilter, akaBizTagFilterIds, akaBizTagFilterOptions])
   const zaloRemarketingActionFilterLabel = useMemo(() => {
     if (zaloRemarketingActionIds.length === 0) return 'Chọn hành động'
     if (zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length) {
@@ -1017,6 +1057,44 @@ export default function DataScanModal({
   }, [zaloRemarketingActionDropdownOpen])
 
   useEffect(() => {
+    if (!zaloTagFilterDropdownOpen && !akaBizTagFilterDropdownOpen) return
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (zaloTagFilterDropdownOpen && !zaloTagFilterDropdownRef.current?.contains(target)) {
+        setZaloTagFilterDropdownOpen(false)
+      }
+      if (akaBizTagFilterDropdownOpen && !akaBizTagFilterDropdownRef.current?.contains(target)) {
+        setAkaBizTagFilterDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentMouseDown)
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
+  }, [akaBizTagFilterDropdownOpen, zaloTagFilterDropdownOpen])
+
+  useEffect(() => {
+    if (actionDef.platform !== 'zalo') {
+      setZaloTagFilterIds([])
+      setAkaBizTagFilterIds([])
+      setZaloNoTagFilter(false)
+      setAkaBizNoTagFilter(false)
+      setZaloTagFilterDropdownOpen(false)
+      setAkaBizTagFilterDropdownOpen(false)
+    }
+  }, [actionDef.platform])
+
+  useEffect(() => {
+    const availableIds = new Set(zaloTagFilterOptions.map(option => option.id))
+    setZaloTagFilterIds(prev => prev.filter(id => availableIds.has(id)))
+  }, [zaloTagFilterOptions])
+
+  useEffect(() => {
+    const availableIds = new Set(akaBizTagFilterOptions.map(option => option.id))
+    setAkaBizTagFilterIds(prev => prev.filter(id => availableIds.has(id)))
+  }, [akaBizTagFilterOptions])
+
+  useEffect(() => {
     if (accountId !== '') return
     const preferred = initialAccountId
       ? accounts.find(account => account.id === initialAccountId && account.flatformType === actionDef.platform)
@@ -1044,22 +1122,25 @@ export default function DataScanModal({
     statusFilter: hasStatusFilter ? statusFilter : 'all',
     search,
     sourcePostUrl: isPostCommentersAction ? normalizedPostCommentersUrl : undefined,
+    ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [actionDef.contactType, hasStatusFilter, isPostCommentersAction, normalizedPostCommentersUrl, search, statusFilter])
+  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, hasStatusFilter, hasZaloTagFilters, isPostCommentersAction, normalizedPostCommentersUrl, search, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
 
   const getZaloGroupMemberListQuery = useCallback((overrides: Partial<ZaloGroupMemberContactListQuery> = {}): ZaloGroupMemberContactListQuery => ({
     zaloGroupId: zaloGroupMemberGroupId,
     search,
+    ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [search, zaloGroupMemberGroupId])
+  }), [akaBizNoTagFilter, akaBizTagFilterIds, hasZaloTagFilters, search, zaloGroupMemberGroupId, zaloNoTagFilter, zaloTagFilterIds])
 
   const getZaloRemarketingListQuery = useCallback((overrides: Partial<ZaloRemarketingCustomerListQuery> = {}): ZaloRemarketingCustomerListQuery => ({
     campaignActionIds: zaloRemarketingActionIds,
     dateFrom: zaloRemarketingDateFrom,
     dateTo: zaloRemarketingDateTo,
     search,
+    ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [search, zaloRemarketingActionIds, zaloRemarketingDateFrom, zaloRemarketingDateTo])
+  }), [akaBizNoTagFilter, akaBizTagFilterIds, hasZaloTagFilters, search, zaloRemarketingActionIds, zaloRemarketingDateFrom, zaloRemarketingDateTo, zaloNoTagFilter, zaloTagFilterIds])
 
   const resetPagedContactSelection = useCallback(() => {
     setSelectedIds(new Set())
@@ -1162,6 +1243,22 @@ export default function DataScanModal({
       prev.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length
         ? []
         : [...DEFAULT_ZALO_REMARKETING_ACTION_IDS]
+    ))
+  }, [])
+
+  const toggleZaloTagFilter = useCallback((tagId: string) => {
+    setZaloTagFilterIds(prev => (
+      prev.includes(tagId)
+        ? prev.filter(id => id !== tagId)
+        : [...prev, tagId]
+    ))
+  }, [])
+
+  const toggleAkaBizTagFilter = useCallback((tagId: number) => {
+    setAkaBizTagFilterIds(prev => (
+      prev.includes(tagId)
+        ? prev.filter(id => id !== tagId)
+        : [...prev, tagId]
     ))
   }, [])
 
@@ -1461,10 +1558,14 @@ export default function DataScanModal({
     setSelectedIds(new Set())
   }, [
     accountId,
+    akaBizNoTagFilter,
+    akaBizTagFilterIds,
     isZaloRemarketingCustomersAction,
     zaloRemarketingActionIds,
     zaloRemarketingDateFrom,
-    zaloRemarketingDateTo
+    zaloRemarketingDateTo,
+    zaloNoTagFilter,
+    zaloTagFilterIds
   ])
 
   useEffect(() => {
@@ -1477,10 +1578,14 @@ export default function DataScanModal({
     search,
     statusFilter,
     normalizedPostCommentersUrl,
+    akaBizNoTagFilter,
+    akaBizTagFilterIds,
     zaloGroupMemberGroupId,
     zaloRemarketingActionIds,
     zaloRemarketingDateFrom,
-    zaloRemarketingDateTo
+    zaloRemarketingDateTo,
+    zaloNoTagFilter,
+    zaloTagFilterIds
   ])
 
   useEffect(() => {
@@ -2530,405 +2635,187 @@ export default function DataScanModal({
         ) : (
         <>
         <div className={`data-scan-body ${isPageInboxAction ? 'is-page-inbox' : ''}`}>
-          <div className="data-scan-controls">
-            <div className="stepper-form-group">
-              <label>Hành động</label>
-              <select
-                className="stepper-input"
-                value={action}
-                onChange={event => setAction(event.target.value as DataScanAction)}
-                disabled={scanLoading || (lockAction && !canSwitchLockedAction)}
-              >
-                {availableActions.map(item => (
-                  <option key={item.id} value={item.id}>{item.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="stepper-form-group">
-              <label>Tài khoản</label>
-              <select
-                className="stepper-input"
-                value={accountId}
-                onChange={event => setAccountId(event.target.value ? Number(event.target.value) : '')}
-                disabled={scanLoading || lockAccount}
-              >
-                <option value="">Chọn tài khoản</option>
-                {platformAccounts.map(account => (
-                  <option key={account.id} value={account.id}>{account.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="stepper-form-group">
-              <label>Loại tài khoản</label>
-              <input className="stepper-input" value={selectedAccount?.flatformType || ''} disabled />
-            </div>
-
-            {hasStatusFilter && (
-              <div className="stepper-form-group">
-                <label>Hiển thị</label>
-                <select
-                  className="stepper-input"
-                  value={statusFilter}
-                  onChange={event => setStatusFilter(event.target.value as ContactStatusFilter)}
-                >
-                  {statusFilterOptions.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {isPostCommentersAction && (
-            <div className="data-scan-post-commenters-controls">
-              <div className="stepper-form-group">
-                <label>Link bài post</label>
-                <input
-                  className="stepper-input"
-                  value={postCommentersUrl}
-                  onChange={event => setPostCommentersUrl(event.target.value)}
-                  placeholder="Dán link bài post Facebook..."
-                  disabled={scanLoading}
-                />
-              </div>
-
-              <div className="stepper-form-group">
-                <label>Số lượng</label>
-                <input
-                  type="number"
-                  min={1}
-                  className="stepper-input"
-                  value={postCommentersLimit}
-                  onChange={event => setPostCommentersLimit(normalizePositiveNumber(event.target.value))}
-                  disabled={scanLoading}
-                />
-              </div>
-            </div>
-          )}
-
-          {isPageInboxAction && (
-            <>
-              <div className="data-scan-page-inbox-controls">
+          <div className="data-scan-load-section">
+            <div className="data-scan-load-fields">
+              <div className="data-scan-controls">
                 <div className="stepper-form-group">
-                  <label>Page</label>
+                  <label>Hành động</label>
                   <select
                     className="stepper-input"
-                    value={pageInboxPageUid}
-                    onChange={event => handlePageInboxPageChange(event.target.value)}
-                    disabled={scanLoading || pageInboxPages.length === 0}
+                    value={action}
+                    onChange={event => setAction(event.target.value as DataScanAction)}
+                    disabled={scanLoading || (lockAction && !canSwitchLockedAction)}
                   >
-                    {pageInboxPages.length === 0 ? (
-                      <option value="">Chưa có page đã quét</option>
-                    ) : (
-                      pageInboxPages.map(page => (
-                        <option key={page.id} value={page.uid || ''}>
-                          {page.name || page.uid}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-
-                <div className="stepper-form-group">
-                  <label>Số điện thoại</label>
-                  <select
-                    className="stepper-input"
-                    value={pageInboxPhoneFilter}
-                    onChange={event => setPageInboxPhoneFilter(event.target.value as PageInboxPhoneFilter)}
-                  >
-                    <option value="all">Tất cả</option>
-                    <option value="has_phone">Có SĐT</option>
-                    <option value="no_phone">Không có SĐT</option>
-                  </select>
-                </div>
-
-                <div className="stepper-form-group">
-                  <label>Thời gian nhắn tin gần nhất</label>
-                  <select
-                    className="stepper-input"
-                    value={pageInboxTimePreset}
-                    onChange={event => handlePageInboxTimePresetChange(event.target.value as PageInboxTimePreset)}
-                  >
-                    {PAGE_INBOX_TIME_PRESETS.map(option => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                    {availableActions.map(item => (
+                      <option key={item.id} value={item.id}>{item.label}</option>
                     ))}
                   </select>
                 </div>
 
-                {pageInboxTimePreset === 'all' ? (
-                  <div className="stepper-form-group data-scan-page-inbox-time-status">
-                    <label>Khoảng thời gian</label>
-                    <div className="stepper-input data-scan-readonly-field" aria-readonly="true">
-                      Không giới hạn thời gian
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="stepper-form-group">
-                      <label>Từ ngày</label>
-                      <input
-                        type="date"
-                        className="stepper-input"
-                        value={pageInboxDateFrom}
-                        onChange={event => setPageInboxDateFrom(event.target.value)}
-                      />
-                    </div>
-
-                    <div className="stepper-form-group">
-                      <label>Đến ngày</label>
-                      <input
-                        type="date"
-                        className="stepper-input"
-                        value={pageInboxDateTo}
-                        onChange={event => setPageInboxDateTo(event.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
+                <div className="stepper-form-group">
+                  <label>Tài khoản</label>
+                  <select
+                    className="stepper-input"
+                    value={accountId}
+                    onChange={event => setAccountId(event.target.value ? Number(event.target.value) : '')}
+                    disabled={scanLoading || lockAccount}
+                  >
+                    <option value="">Chọn tài khoản</option>
+                    {platformAccounts.map(account => (
+                      <option key={account.id} value={account.id}>{account.name}</option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="stepper-form-group">
-                  <label>Nội dung</label>
-                  <select
-                    className="stepper-input"
-                    value={pageInboxMessageFilterMode}
-                    onChange={event => setPageInboxMessageFilterMode(event.target.value as PageInboxMessageFilterMode)}
-                  >
-                    <option value="all">Tất cả</option>
-                    <option value="contain_all">Chứa tất cả từ khoá</option>
-                    <option value="contain_any">Chứa một trong các từ khoá</option>
-                    <option value="not_contain_all">Không chứa tất cả từ khoá</option>
-                    <option value="not_contain_any">Không chứa một trong các từ khoá</option>
-                  </select>
-                </div>
-
-                <div className="stepper-form-group data-scan-page-inbox-keywords">
-                  <label>Từ khoá</label>
-                  <input
-                    className="stepper-input"
-                    value={pageInboxMessageKeywords}
-                    onChange={event => setPageInboxMessageKeywords(event.target.value)}
-                    placeholder="Mỗi từ khoá cách nhau bằng dấu phẩy"
-                    disabled={pageInboxMessageFilterMode === 'all'}
-                  />
+                  <label>Loại tài khoản</label>
+                  <input className="stepper-input" value={selectedAccount?.flatformType || ''} disabled />
                 </div>
               </div>
 
-              <div className="data-scan-page-inbox-note">
-                <Info size={15} />
-                <span>
-                  Facebook chỉ cho phép quét dữ liệu từ hôm nay trở về trước và không hỗ trợ bộ lọc khi quét. akaBiz sẽ quét tối đa là 100.000 data.
-                </span>
-              </div>
-            </>
-          )}
-
-          {isZaloGroupMembersAction && (
-            <div className="data-scan-zalo-group-member-controls">
-              <div className="stepper-form-group data-scan-zalo-member-mode">
-                <label>Tuỳ chọn</label>
-                <select
-                  className="stepper-input"
-                  value={zaloGroupMemberMode}
-                  onChange={event => handleZaloGroupMemberModeChange(event.target.value as ZaloGroupMemberScanMode)}
-                  disabled={scanLoading}
-                >
-                  <option value="joined_group">Group đã tham gia</option>
-                  <option value="group_link">Link group</option>
-                </select>
-              </div>
-
-              {zaloGroupMemberMode === 'joined_group' ? (
-                <div className="stepper-form-group data-scan-zalo-member-group">
-                  <label>Group Zalo</label>
-                  <select
-                    className="stepper-input"
-                    value={zaloGroupMemberGroupId}
-                    onChange={event => handleJoinedZaloGroupChange(event.target.value)}
-                    disabled={scanLoading || joinedZaloGroupOptions.length === 0}
-                  >
-                    {joinedZaloGroupOptions.length === 0 ? (
-                      <option value="">Chưa có group Zalo đã tham gia</option>
-                    ) : (
-                      joinedZaloGroupOptions.map(group => (
-                        <option key={group.id} value={group.uid || ''}>
-                          {getZaloGroupOptionLabel(group)}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-              ) : (
-                <div className="data-scan-zalo-member-link-row">
-                  <div className="stepper-form-group data-scan-zalo-member-linked-group">
-                    <label>Link group</label>
-                    <select
+              {isPostCommentersAction && (
+                <div className="data-scan-post-commenters-controls">
+                  <div className="stepper-form-group">
+                    <label>Link bài post</label>
+                    <input
                       className="stepper-input"
-                      value={zaloGroupMemberGroupId}
-                      onChange={event => handleLinkedZaloGroupChange(event.target.value)}
+                      value={postCommentersUrl}
+                      onChange={event => setPostCommentersUrl(event.target.value)}
+                      placeholder="Dán link bài post Facebook..."
                       disabled={scanLoading}
-                    >
-                      <option value="">Nhập link mới</option>
-                      {linkedZaloGroupOptions.map(group => (
-                        <option key={group.id} value={group.uid || ''}>
-                          {getZaloGroupOptionLabel(group)}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
 
-                  <div className="stepper-form-group data-scan-zalo-member-link">
-                    <label>Link group</label>
-                    <div className={`data-scan-zalo-link-input-wrap${scanLoading ? ' is-disabled' : ''}`}>
-                      <Link2 size={16} className="data-scan-zalo-link-icon" />
-                      <input
-                        className="data-scan-zalo-link-input"
-                        value={zaloGroupMemberLink}
-                        onChange={event => handleZaloGroupMemberLinkChange(event.target.value)}
-                        onPaste={handleZaloGroupLinkPaste}
-                        placeholder="https://zalo.me/g/..."
-                        disabled={scanLoading}
-                      />
-                      <button
-                        type="button"
-                        className="data-scan-zalo-qr-button"
-                        onClick={() => zaloQrFileInputRef.current?.click()}
-                        disabled={scanLoading || zaloQrReading}
-                        title="Đọc link group từ ảnh QR"
-                      >
-                        <QrCode size={15} />
-                        {zaloQrReading ? 'Đang đọc' : 'Từ QR'}
-                      </button>
-                      <input
-                        ref={zaloQrFileInputRef}
-                        className="data-scan-hidden-file-input"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleZaloQrFileChange}
-                      />
-                    </div>
+                  <div className="stepper-form-group">
+                    <label>Số lượng</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className="stepper-input"
+                      value={postCommentersLimit}
+                      onChange={event => setPostCommentersLimit(normalizePositiveNumber(event.target.value))}
+                      disabled={scanLoading}
+                    />
                   </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {isZaloRemarketingCustomersAction && (
-            <div className="data-scan-zalo-remarketing-controls">
-              <div className="stepper-form-group">
-                <label>Chọn hành động gửi tin nhắn</label>
-                <div className="data-scan-zalo-remarketing-action-dropdown" ref={zaloRemarketingActionDropdownRef}>
-                  <button
-                    type="button"
-                    className={`data-scan-zalo-remarketing-action-trigger${zaloRemarketingActionDropdownOpen ? ' is-open' : ''}`}
-                    onClick={() => setZaloRemarketingActionDropdownOpen(prev => !prev)}
-                    disabled={loading}
-                    aria-expanded={zaloRemarketingActionDropdownOpen}
-                    title={zaloRemarketingActionFilterLabel}
-                  >
-                    <span>{zaloRemarketingActionFilterLabel}</span>
-                    <ChevronDown size={15} />
-                  </button>
+              {isPageInboxAction && (
+                <div className="data-scan-page-inbox-load-controls">
+                  <div className="stepper-form-group">
+                    <label>Page</label>
+                    <select
+                      className="stepper-input"
+                      value={pageInboxPageUid}
+                      onChange={event => handlePageInboxPageChange(event.target.value)}
+                      disabled={scanLoading || pageInboxPages.length === 0}
+                    >
+                      {pageInboxPages.length === 0 ? (
+                        <option value="">Chưa có page đã quét</option>
+                      ) : (
+                        pageInboxPages.map(page => (
+                          <option key={page.id} value={page.uid || ''}>
+                            {page.name || page.uid}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                </div>
+              )}
 
-                  {zaloRemarketingActionDropdownOpen && (
-                    <div className="data-scan-zalo-remarketing-action-menu">
-                      <button
-                        type="button"
-                        className={`data-scan-zalo-remarketing-action-option is-all${zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length ? ' selected' : ''}`}
-                        onClick={toggleAllZaloRemarketingActionFilters}
-                        role="menuitemcheckbox"
-                        aria-checked={zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length}
+              {isZaloGroupMembersAction && (
+                <div className="data-scan-zalo-group-member-controls">
+                  <div className="stepper-form-group data-scan-zalo-member-mode">
+                    <label>Tuỳ chọn</label>
+                    <select
+                      className="stepper-input"
+                      value={zaloGroupMemberMode}
+                      onChange={event => handleZaloGroupMemberModeChange(event.target.value as ZaloGroupMemberScanMode)}
+                      disabled={scanLoading}
+                    >
+                      <option value="joined_group">Group đã tham gia</option>
+                      <option value="group_link">Link group</option>
+                    </select>
+                  </div>
+
+                  {zaloGroupMemberMode === 'joined_group' ? (
+                    <div className="stepper-form-group data-scan-zalo-member-group">
+                      <label>Group Zalo</label>
+                      <select
+                        className="stepper-input"
+                        value={zaloGroupMemberGroupId}
+                        onChange={event => handleJoinedZaloGroupChange(event.target.value)}
+                        disabled={scanLoading || joinedZaloGroupOptions.length === 0}
                       >
-                        <span className="data-scan-zalo-remarketing-action-check">
-                          {zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length && <Check size={14} />}
-                        </span>
-                        <span className="data-scan-zalo-remarketing-action-label">Tất cả</span>
-                      </button>
-                      <div className="data-scan-zalo-remarketing-action-divider" />
-                      {ZALO_REMARKETING_ACTION_FILTER_OPTIONS.map(option => {
-                        const selected = zaloRemarketingActionIds.includes(option.value)
-                        return (
+                        {joinedZaloGroupOptions.length === 0 ? (
+                          <option value="">Chưa có group Zalo đã tham gia</option>
+                        ) : (
+                          joinedZaloGroupOptions.map(group => (
+                            <option key={group.id} value={group.uid || ''}>
+                              {getZaloGroupOptionLabel(group)}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="data-scan-zalo-member-link-row">
+                      <div className="stepper-form-group data-scan-zalo-member-linked-group">
+                        <label>Link group</label>
+                        <select
+                          className="stepper-input"
+                          value={zaloGroupMemberGroupId}
+                          onChange={event => handleLinkedZaloGroupChange(event.target.value)}
+                          disabled={scanLoading}
+                        >
+                          <option value="">Nhập link mới</option>
+                          {linkedZaloGroupOptions.map(group => (
+                            <option key={group.id} value={group.uid || ''}>
+                              {getZaloGroupOptionLabel(group)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="stepper-form-group data-scan-zalo-member-link">
+                        <label>Link group</label>
+                        <div className={`data-scan-zalo-link-input-wrap${scanLoading ? ' is-disabled' : ''}`}>
+                          <Link2 size={16} className="data-scan-zalo-link-icon" />
+                          <input
+                            className="data-scan-zalo-link-input"
+                            value={zaloGroupMemberLink}
+                            onChange={event => handleZaloGroupMemberLinkChange(event.target.value)}
+                            onPaste={handleZaloGroupLinkPaste}
+                            placeholder="https://zalo.me/g/..."
+                            disabled={scanLoading}
+                          />
                           <button
-                            key={option.value}
                             type="button"
-                            className={`data-scan-zalo-remarketing-action-option${selected ? ' selected' : ''}`}
-                            onClick={() => toggleZaloRemarketingActionFilter(option.value)}
-                            role="menuitemcheckbox"
-                            aria-checked={selected}
+                            className="data-scan-zalo-qr-button"
+                            onClick={() => zaloQrFileInputRef.current?.click()}
+                            disabled={scanLoading || zaloQrReading}
+                            title="Đọc link group từ ảnh QR"
                           >
-                            <span className="data-scan-zalo-remarketing-action-check">
-                              {selected && <Check size={12} />}
-                            </span>
-                            <span className="data-scan-zalo-remarketing-action-label">{option.label}</span>
+                            <QrCode size={15} />
+                            {zaloQrReading ? 'Đang đọc' : 'Từ QR'}
                           </button>
-                        )
-                      })}
+                          <input
+                            ref={zaloQrFileInputRef}
+                            className="data-scan-hidden-file-input"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleZaloQrFileChange}
+                          />
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="stepper-form-group">
-                <label>Từ ngày</label>
-                <input
-                  type="date"
-                  className="stepper-input"
-                  value={zaloRemarketingDateFrom}
-                  onChange={event => setZaloRemarketingDateFrom(event.target.value)}
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="stepper-form-group">
-                <label>Đến ngày</label>
-                <input
-                  type="date"
-                  className="stepper-input"
-                  value={zaloRemarketingDateTo}
-                  onChange={event => setZaloRemarketingDateTo(event.target.value)}
-                  disabled={loading}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="data-scan-toolbar">
-            <div className="data-scan-range">
-              <span>Chọn từ STT</span>
-              <input
-                type="number"
-                min={1}
-                max={Math.max(1, currentTotalCount)}
-                value={rangeStart}
-                onChange={event => setRangeStart(Number(event.target.value) || 1)}
-                className="stepper-input"
-              />
-              <span>đến</span>
-              <input
-                type="number"
-                min={1}
-                max={Math.max(1, currentTotalCount)}
-                value={rangeEnd}
-                onChange={event => setRangeEnd(Number(event.target.value) || 1)}
-                className="stepper-input"
-              />
-              <button className="btn btn-secondary" onClick={selectRange} disabled={currentTotalCount === 0}>Tích chọn</button>
+              )}
             </div>
 
-            <div className="data-scan-toolbar-right">
-              <label className="data-scan-search">
-                <Search size={14} />
-                <input
-                  value={search}
-                  onChange={event => setSearch(event.target.value)}
-                  placeholder={
-                    isPageInboxAction
-                      ? 'Tìm theo tên, PSID hoặc SĐT...'
-                      : 'Tìm theo tên, UID hoặc SĐT...'
-                  }
-                />
-              </label>
+            <div className="data-scan-load-actions">
               {scanLoading ? (
                 <button
                   className="btn btn-danger data-scan-load-button"
@@ -2958,19 +2845,365 @@ export default function DataScanModal({
             </div>
           </div>
 
-          <div className="data-scan-options">
-            <label className="schedule-checkbox-label">
-              <input
-                type="checkbox"
-                checked={dedupeOnOutput}
-                onChange={event => setDedupeOnOutput(event.target.checked)}
-              />
-              <span>Lọc trùng dữ liệu khi chọn, xuất excel</span>
-            </label>
-            <span>
-              {`${formatCount(pagedSelectedCount)} đã tích chọn`}
-            </span>
-            {selectedGroupIds.size > 0 && <span>{selectedGroupIds.size} nhóm đã chọn</span>}
+          <div className="data-scan-filter-section">
+            <div className={`data-scan-filter-header${hasZaloTagFilters ? ' has-zalo-tags' : ''}${hasStatusFilter ? ' has-status-filter' : ''}`}>
+              <div className="stepper-form-group data-scan-search-group">
+                <label aria-hidden="true">&nbsp;</label>
+                <label className="data-scan-search">
+                  <Search size={14} />
+                  <input
+                    value={search}
+                    onChange={event => setSearch(event.target.value)}
+                    placeholder={
+                      isPageInboxAction
+                        ? 'Tìm theo tên, PSID hoặc SĐT...'
+                        : 'Tìm theo tên, UID hoặc SĐT...'
+                    }
+                  />
+                </label>
+              </div>
+              {hasZaloTagFilters && (
+                <>
+                  <div className="stepper-form-group">
+                    <label>Tag Zalo</label>
+                    <div className="data-scan-tag-filter-dropdown" ref={zaloTagFilterDropdownRef}>
+                      <button
+                        type="button"
+                        className={`data-scan-tag-filter-trigger${zaloTagFilterDropdownOpen ? ' is-open' : ''}`}
+                        onClick={() => setZaloTagFilterDropdownOpen(prev => !prev)}
+                        aria-expanded={zaloTagFilterDropdownOpen}
+                        title={zaloTagFilterLabel}
+                      >
+                        <span>{zaloTagFilterLabel}</span>
+                        <ChevronDown size={15} />
+                      </button>
+
+                      {zaloTagFilterDropdownOpen && (
+                        <div className="data-scan-tag-filter-menu">
+                          <button
+                            type="button"
+                            className={`data-scan-tag-filter-option is-all${zaloTagFilterIds.length === 0 && !zaloNoTagFilter ? ' selected' : ''}`}
+                            onClick={() => {
+                              setZaloTagFilterIds([])
+                              setZaloNoTagFilter(false)
+                            }}
+                            role="menuitemcheckbox"
+                            aria-checked={zaloTagFilterIds.length === 0 && !zaloNoTagFilter}
+                          >
+                            <span className="data-scan-tag-filter-check">
+                              {zaloTagFilterIds.length === 0 && !zaloNoTagFilter && <Check size={14} />}
+                            </span>
+                            <span className="data-scan-tag-filter-label">Tất cả</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`data-scan-tag-filter-option${zaloNoTagFilter ? ' selected' : ''}`}
+                            onClick={() => setZaloNoTagFilter(prev => !prev)}
+                            role="menuitemcheckbox"
+                            aria-checked={zaloNoTagFilter}
+                          >
+                            <span className="data-scan-tag-filter-check">
+                              {zaloNoTagFilter && <Check size={12} />}
+                            </span>
+                            <span className="data-scan-tag-filter-label">Chưa gắn tag</span>
+                          </button>
+                          {zaloTagFilterOptions.length > 0 && <div className="data-scan-tag-filter-divider" />}
+                          {zaloTagFilterOptions.map(option => {
+                            const selected = zaloTagFilterIds.includes(option.id)
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`data-scan-tag-filter-option${selected ? ' selected' : ''}`}
+                                onClick={() => toggleZaloTagFilter(option.id)}
+                                role="menuitemcheckbox"
+                                aria-checked={selected}
+                              >
+                                <span className="data-scan-tag-filter-check">
+                                  {selected && <Check size={12} />}
+                                </span>
+                                <span className="data-scan-tag-filter-label">{option.name}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="stepper-form-group">
+                    <label>Tag akaBiz</label>
+                    <div className="data-scan-tag-filter-dropdown" ref={akaBizTagFilterDropdownRef}>
+                      <button
+                        type="button"
+                        className={`data-scan-tag-filter-trigger${akaBizTagFilterDropdownOpen ? ' is-open' : ''}`}
+                        onClick={() => setAkaBizTagFilterDropdownOpen(prev => !prev)}
+                        aria-expanded={akaBizTagFilterDropdownOpen}
+                        title={akaBizTagFilterLabel}
+                      >
+                        <span>{akaBizTagFilterLabel}</span>
+                        <ChevronDown size={15} />
+                      </button>
+
+                      {akaBizTagFilterDropdownOpen && (
+                        <div className="data-scan-tag-filter-menu">
+                          <button
+                            type="button"
+                            className={`data-scan-tag-filter-option is-all${akaBizTagFilterIds.length === 0 && !akaBizNoTagFilter ? ' selected' : ''}`}
+                            onClick={() => {
+                              setAkaBizTagFilterIds([])
+                              setAkaBizNoTagFilter(false)
+                            }}
+                            role="menuitemcheckbox"
+                            aria-checked={akaBizTagFilterIds.length === 0 && !akaBizNoTagFilter}
+                          >
+                            <span className="data-scan-tag-filter-check">
+                              {akaBizTagFilterIds.length === 0 && !akaBizNoTagFilter && <Check size={14} />}
+                            </span>
+                            <span className="data-scan-tag-filter-label">Tất cả</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`data-scan-tag-filter-option${akaBizNoTagFilter ? ' selected' : ''}`}
+                            onClick={() => setAkaBizNoTagFilter(prev => !prev)}
+                            role="menuitemcheckbox"
+                            aria-checked={akaBizNoTagFilter}
+                          >
+                            <span className="data-scan-tag-filter-check">
+                              {akaBizNoTagFilter && <Check size={12} />}
+                            </span>
+                            <span className="data-scan-tag-filter-label">Chưa gắn tag</span>
+                          </button>
+                          {akaBizTagFilterOptions.length > 0 && <div className="data-scan-tag-filter-divider" />}
+                          {akaBizTagFilterOptions.map(option => {
+                            const selected = akaBizTagFilterIds.includes(option.id)
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`data-scan-tag-filter-option${selected ? ' selected' : ''}`}
+                                onClick={() => toggleAkaBizTagFilter(option.id)}
+                                role="menuitemcheckbox"
+                                aria-checked={selected}
+                              >
+                                <span className="data-scan-tag-filter-check">
+                                  {selected && <Check size={12} />}
+                                </span>
+                                <span className="data-scan-tag-filter-label">{option.name}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+              {hasStatusFilter && (
+                <div className="stepper-form-group data-scan-filter-status">
+                  <label>Hiển thị</label>
+                  <select
+                    className="stepper-input"
+                    value={statusFilter}
+                    onChange={event => setStatusFilter(event.target.value as ContactStatusFilter)}
+                  >
+                    {statusFilterOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {isPageInboxAction && (
+              <>
+                <div className="data-scan-page-inbox-controls">
+                  <div className="stepper-form-group">
+                    <label>Số điện thoại</label>
+                    <select
+                      className="stepper-input"
+                      value={pageInboxPhoneFilter}
+                      onChange={event => setPageInboxPhoneFilter(event.target.value as PageInboxPhoneFilter)}
+                    >
+                      <option value="all">Tất cả</option>
+                      <option value="has_phone">Có SĐT</option>
+                      <option value="no_phone">Không có SĐT</option>
+                    </select>
+                  </div>
+
+                  <div className="stepper-form-group">
+                    <label>Thời gian nhắn tin gần nhất</label>
+                    <select
+                      className="stepper-input"
+                      value={pageInboxTimePreset}
+                      onChange={event => handlePageInboxTimePresetChange(event.target.value as PageInboxTimePreset)}
+                    >
+                      {PAGE_INBOX_TIME_PRESETS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {pageInboxTimePreset === 'all' ? (
+                    <div className="stepper-form-group data-scan-page-inbox-time-status">
+                      <label>Khoảng thời gian</label>
+                      <div className="stepper-input data-scan-readonly-field" aria-readonly="true">
+                        Không giới hạn thời gian
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="stepper-form-group">
+                        <label>Từ ngày</label>
+                        <input
+                          type="date"
+                          className="stepper-input"
+                          value={pageInboxDateFrom}
+                          onChange={event => setPageInboxDateFrom(event.target.value)}
+                        />
+                      </div>
+
+                      <div className="stepper-form-group">
+                        <label>Đến ngày</label>
+                        <input
+                          type="date"
+                          className="stepper-input"
+                          value={pageInboxDateTo}
+                          onChange={event => setPageInboxDateTo(event.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="stepper-form-group">
+                    <label>Nội dung</label>
+                    <select
+                      className="stepper-input"
+                      value={pageInboxMessageFilterMode}
+                      onChange={event => setPageInboxMessageFilterMode(event.target.value as PageInboxMessageFilterMode)}
+                    >
+                      <option value="all">Tất cả</option>
+                      <option value="contain_all">Chứa tất cả từ khoá</option>
+                      <option value="contain_any">Chứa một trong các từ khoá</option>
+                      <option value="not_contain_all">Không chứa tất cả từ khoá</option>
+                      <option value="not_contain_any">Không chứa một trong các từ khoá</option>
+                    </select>
+                  </div>
+
+                  <div className="stepper-form-group data-scan-page-inbox-keywords">
+                    <label>Từ khoá</label>
+                    <input
+                      className="stepper-input"
+                      value={pageInboxMessageKeywords}
+                      onChange={event => setPageInboxMessageKeywords(event.target.value)}
+                      placeholder="Mỗi từ khoá cách nhau bằng dấu phẩy"
+                      disabled={pageInboxMessageFilterMode === 'all'}
+                    />
+                  </div>
+                </div>
+
+                <div className="data-scan-page-inbox-note">
+                  <Info size={15} />
+                  <span>
+                    Facebook chỉ cho phép quét dữ liệu từ hôm nay trở về trước và không hỗ trợ bộ lọc khi quét. akaBiz sẽ quét tối đa là 100.000 data.
+                  </span>
+                </div>
+              </>
+            )}
+
+            {isZaloRemarketingCustomersAction && (
+              <div className="data-scan-zalo-remarketing-controls">
+                <div className="stepper-form-group">
+                  <label>Chọn hành động gửi tin nhắn</label>
+                  <div className="data-scan-zalo-remarketing-action-dropdown" ref={zaloRemarketingActionDropdownRef}>
+                    <button
+                      type="button"
+                      className={`data-scan-zalo-remarketing-action-trigger${zaloRemarketingActionDropdownOpen ? ' is-open' : ''}`}
+                      onClick={() => setZaloRemarketingActionDropdownOpen(prev => !prev)}
+                      disabled={loading}
+                      aria-expanded={zaloRemarketingActionDropdownOpen}
+                      title={zaloRemarketingActionFilterLabel}
+                    >
+                      <span>{zaloRemarketingActionFilterLabel}</span>
+                      <ChevronDown size={15} />
+                    </button>
+
+                    {zaloRemarketingActionDropdownOpen && (
+                      <div className="data-scan-zalo-remarketing-action-menu">
+                        <button
+                          type="button"
+                          className={`data-scan-zalo-remarketing-action-option is-all${zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length ? ' selected' : ''}`}
+                          onClick={toggleAllZaloRemarketingActionFilters}
+                          role="menuitemcheckbox"
+                          aria-checked={zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length}
+                        >
+                          <span className="data-scan-zalo-remarketing-action-check">
+                            {zaloRemarketingActionIds.length === ZALO_REMARKETING_ACTION_FILTER_OPTIONS.length && <Check size={14} />}
+                          </span>
+                          <span className="data-scan-zalo-remarketing-action-label">Tất cả</span>
+                        </button>
+                        <div className="data-scan-zalo-remarketing-action-divider" />
+                        {ZALO_REMARKETING_ACTION_FILTER_OPTIONS.map(option => {
+                          const selected = zaloRemarketingActionIds.includes(option.value)
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={`data-scan-zalo-remarketing-action-option${selected ? ' selected' : ''}`}
+                              onClick={() => toggleZaloRemarketingActionFilter(option.value)}
+                              role="menuitemcheckbox"
+                              aria-checked={selected}
+                            >
+                              <span className="data-scan-zalo-remarketing-action-check">
+                                {selected && <Check size={12} />}
+                              </span>
+                              <span className="data-scan-zalo-remarketing-action-label">{option.label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="stepper-form-group">
+                  <label>Từ ngày</label>
+                  <input
+                    type="date"
+                    className="stepper-input"
+                    value={zaloRemarketingDateFrom}
+                    onChange={event => setZaloRemarketingDateFrom(event.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="stepper-form-group">
+                  <label>Đến ngày</label>
+                  <input
+                    type="date"
+                    className="stepper-input"
+                    value={zaloRemarketingDateTo}
+                    onChange={event => setZaloRemarketingDateTo(event.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="data-scan-options">
+              <label className="schedule-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={dedupeOnOutput}
+                  onChange={event => setDedupeOnOutput(event.target.checked)}
+                />
+                <span>Lọc trùng dữ liệu khi chọn, xuất excel</span>
+              </label>
+              <span>
+                {`${formatCount(pagedSelectedCount)} đã tích chọn`}
+              </span>
+              {selectedGroupIds.size > 0 && <span>{selectedGroupIds.size} nhóm đã chọn</span>}
+            </div>
           </div>
 
           <div className="data-scan-pagination">
@@ -3231,25 +3464,48 @@ export default function DataScanModal({
             </table>
           </div>
 
-          {supportsContactGroups && (
-            <div className="data-scan-below-actions">
-              <button
-                className="btn btn-secondary data-scan-group-action-button"
-                onClick={() => setShowGroupPanel(true)}
-              >
-                <Folder size={14} />
-                Xem nhóm data
-              </button>
-              <button
-                className="btn btn-secondary data-scan-group-action-button"
-                onClick={handleOpenAddGroupModal}
-                disabled={scanLoading}
-              >
-                <Folder size={14} />
-                Thêm vào nhóm
-              </button>
+          <div className="data-scan-below-actions">
+            <div className="data-scan-range">
+              <span>Chọn từ STT</span>
+              <input
+                type="number"
+                min={1}
+                max={Math.max(1, currentTotalCount)}
+                value={rangeStart}
+                onChange={event => setRangeStart(Number(event.target.value) || 1)}
+                className="stepper-input"
+              />
+              <span>đến</span>
+              <input
+                type="number"
+                min={1}
+                max={Math.max(1, currentTotalCount)}
+                value={rangeEnd}
+                onChange={event => setRangeEnd(Number(event.target.value) || 1)}
+                className="stepper-input"
+              />
+              <button className="btn btn-secondary" onClick={selectRange} disabled={currentTotalCount === 0}>Tích chọn</button>
             </div>
-          )}
+            {supportsContactGroups && (
+              <div className="data-scan-group-actions">
+                <button
+                  className="btn btn-secondary data-scan-group-action-button"
+                  onClick={() => setShowGroupPanel(true)}
+                >
+                  <Folder size={14} />
+                  Xem nhóm data
+                </button>
+                <button
+                  className="btn btn-secondary data-scan-group-action-button"
+                  onClick={handleOpenAddGroupModal}
+                  disabled={scanLoading}
+                >
+                  <Folder size={14} />
+                  Thêm vào nhóm
+                </button>
+              </div>
+            )}
+          </div>
 
         </div>
 
