@@ -340,12 +340,14 @@ export interface CampaignExtraSettings {
   actionLimits?: CampaignActionLimitSettings // giới hạn gửi theo action_code; top-level là fallback cho campaign cũ
   emailSubject?: string          // Tiêu đề email (chiến dịch email_send)
   emailBodyIsHtml?: boolean      // Nội dung email là HTML (chiến dịch email_send)
+  emailCheckLinkClicks?: boolean // Kiểm tra click vào link (chỉ lưu cấu hình email_send)
   imageOption?: 'none' | 'all' | 'random'
   randomImageCount?: number
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
   autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
   skipPostIfGroupRequiresApproval?: boolean // Không đăng bài vào group đã biết cần duyệt bài; vẫn có thể kiêm comment
+  enableGroupPostShareToJoinedGroups?: boolean // Đăng bài group dạng chia sẻ thêm vào 3 nhóm đã tham gia (chỉ lưu cấu hình)
   enablePostBump?: boolean                 // Sau khi đăng group thành công, thêm link bài vào campaign comment-post để up tin
   postBumpCount?: number                   // Tổng số lượt up tối đa cho mỗi bài post, max 10
   postBumpInitialDelayMinutes?: number     // Số phút chờ sau khi đăng thành công trước lượt up đầu tiên
