@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import TopBar from './components/TopBar/TopBar'
 import AppUtilityTopbar from './components/TopBar/AppUtilityTopbar'
 import CampaignPage from './pages/CampaignPage'
-import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
+import BrowserPage, { type BrowserOpenRequest, type BrowserOpenResult } from './pages/BrowserPage'
 import ReportPage from './pages/ReportPage'
 import LoginPage from './pages/LoginPage'
 import WorkflowEditorV2 from './components/v2/WorkflowEditorV2'
@@ -28,6 +28,10 @@ export default function App() {
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null)
   const browserOpenRequestSeq = useRef(0)
+  const browserOpenResolvers = useRef(new Map<number, {
+    accountId: number
+    resolve: (result: BrowserOpenResult) => void
+  }>())
   const [showDataScan, setShowDataScan] = useState(false)
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
@@ -122,13 +126,31 @@ export default function App() {
   }
 
   const requestOpenBrowser = useCallback((request: { accountId: number; reloadAfterOpen?: boolean }) => {
+    browserOpenResolvers.current.forEach((pending, requestId) => {
+      pending.resolve({
+        requestId,
+        accountId: pending.accountId,
+        success: false,
+        reason: 'Yêu cầu hiển thị đã được thay thế'
+      })
+    })
+    browserOpenResolvers.current.clear()
+
     browserOpenRequestSeq.current += 1
+    const requestId = browserOpenRequestSeq.current
     setBrowserOpenRequest({
-      requestId: browserOpenRequestSeq.current,
+      requestId,
       accountId: request.accountId,
+      requestedAt: Date.now(),
       reloadAfterOpen: request.reloadAfterOpen === true
     })
     setActivePage('browsers')
+    return new Promise<BrowserOpenResult>(resolve => {
+      browserOpenResolvers.current.set(requestId, {
+        accountId: request.accountId,
+        resolve
+      })
+    })
   }, [])
 
   // Auto-check for updates once on app start (non-blocking).
@@ -250,8 +272,13 @@ export default function App() {
           }>
             <BrowserPage
               openRequest={browserOpenRequest}
-              onRequestHandled={(requestId) => {
-                setBrowserOpenRequest(prev => prev?.requestId === requestId ? null : prev)
+              onRequestHandled={(result) => {
+                setBrowserOpenRequest(prev => prev?.requestId === result.requestId ? null : prev)
+                const pending = browserOpenResolvers.current.get(result.requestId)
+                if (pending) {
+                  pending.resolve(result)
+                  browserOpenResolvers.current.delete(result.requestId)
+                }
               }}
             />
           </div>

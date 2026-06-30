@@ -10,16 +10,37 @@ const PLATFORM_URLS: Record<string, string> = {
   instagram: 'https://www.instagram.com',
 }
 const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email'])
+const OPEN_REQUEST_SETTLE_MS = 900
 
 export interface BrowserOpenRequest {
   requestId: number
   accountId: number
+  requestedAt: number
   reloadAfterOpen?: boolean
+}
+
+export interface BrowserOpenResult {
+  requestId: number
+  accountId: number
+  success: boolean
+  reason?: string
+}
+
+interface WebviewEventHandlers {
+  domReady: EventListener
+  didFinishLoad: EventListener
+  didFailLoad: EventListener
+}
+
+interface WebviewReadyState {
+  domReady: boolean
+  didFinishLoad: boolean
+  lastError?: string
 }
 
 interface BrowserPageProps {
   openRequest?: BrowserOpenRequest | null
-  onRequestHandled?: (requestId: number) => void
+  onRequestHandled?: (result: BrowserOpenResult) => void
 }
 
 export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPageProps) {
@@ -37,7 +58,8 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     timestamp: string
   }>>(new Map())
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
-  const webviewDomReadyHandlers = useRef<Map<number, EventListener>>(new Map())
+  const webviewEventHandlers = useRef<Map<number, WebviewEventHandlers>>(new Map())
+  const webviewReadyState = useRef<Map<number, WebviewReadyState>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
   const preparingSessionKeys = useRef<Set<string>>(new Set())
 
@@ -88,6 +110,24 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     await window.electronAPI.prepareAccountBrowserSession(account.id)
     markAccountPrepared(account.id, proxyKey)
   }, [markAccountPrepared])
+
+  const removeWebviewEventHandlers = useCallback((accountId: number, wv?: Electron.WebviewTag) => {
+    const handlers = webviewEventHandlers.current.get(accountId)
+    const target = wv || webviewRefs.current.get(accountId)
+    if (handlers && target) {
+      target.removeEventListener('dom-ready', handlers.domReady)
+      target.removeEventListener('did-finish-load', handlers.didFinishLoad)
+      target.removeEventListener('did-fail-load', handlers.didFailLoad)
+    }
+    webviewEventHandlers.current.delete(accountId)
+    webviewReadyState.current.delete(accountId)
+  }, [])
+
+  const updateWebviewReadyState = useCallback((accountId: number, patch: Partial<WebviewReadyState>) => {
+    const prev = webviewReadyState.current.get(accountId) || { domReady: false, didFinishLoad: false }
+    webviewReadyState.current.set(accountId, { ...prev, ...patch })
+    setWebviewReadyVersion(version => version + 1)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -149,31 +189,27 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     const browserAccountIds = new Set(browserAccounts.map(account => account.id))
     Array.from(registeredIds.current).forEach((accountId) => {
       if (!browserAccountIds.has(accountId)) {
-        const wv = webviewRefs.current.get(accountId)
-        const handler = webviewDomReadyHandlers.current.get(accountId)
-        if (wv && handler) wv.removeEventListener('dom-ready', handler)
+        removeWebviewEventHandlers(accountId)
         webviewRefs.current.delete(accountId)
-        webviewDomReadyHandlers.current.delete(accountId)
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
         registeredIds.current.delete(accountId)
       }
     })
-  }, [browserAccounts])
+  }, [browserAccounts, removeWebviewEventHandlers])
 
   // Cleanup: unregister all webviews on unmount
   useEffect(() => {
     return () => {
       registeredIds.current.forEach((accountId) => {
-        const wv = webviewRefs.current.get(accountId)
-        const handler = webviewDomReadyHandlers.current.get(accountId)
-        if (wv && handler) wv.removeEventListener('dom-ready', handler)
+        removeWebviewEventHandlers(accountId)
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
       })
       registeredIds.current.clear()
-      webviewDomReadyHandlers.current.clear()
+      webviewEventHandlers.current.clear()
+      webviewReadyState.current.clear()
       webviewRefs.current.clear()
     }
-  }, [])
+  }, [removeWebviewEventHandlers])
 
   const getInitialUrl = (account: AutoAccount) => {
     return PLATFORM_URLS[account.flatformType] || 'about:blank'
@@ -183,9 +219,9 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     return `persist:account_${accountId}`
   }
 
-  const markRequestHandled = useCallback((requestId: number) => {
-    setPendingOpenRequest(prev => prev?.requestId === requestId ? null : prev)
-    onRequestHandled?.(requestId)
+  const markRequestHandled = useCallback((result: BrowserOpenResult) => {
+    setPendingOpenRequest(prev => prev?.requestId === result.requestId ? null : prev)
+    onRequestHandled?.(result)
   }, [onRequestHandled])
 
   const registerWebviewNow = useCallback((accountId: number, wv: Electron.WebviewTag) => {
@@ -205,6 +241,52 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     }
     return false
   }, [])
+
+  const inspectVisibleWebview = useCallback((account: AutoAccount): { ready: boolean; reason?: string } => {
+    if (activeAccountId !== account.id) {
+      return { ready: false, reason: 'Chưa chọn được tab quan sát' }
+    }
+
+    const wv = webviewRefs.current.get(account.id)
+    if (!wv) {
+      return { ready: false, reason: 'Tab trình duyệt chưa được mở' }
+    }
+
+    const element = wv as unknown as HTMLElement
+    if (!element.isConnected) {
+      return { ready: false, reason: 'Tab trình duyệt không còn gắn vào giao diện' }
+    }
+
+    const rect = element.getBoundingClientRect()
+    if (rect.width < 8 || rect.height < 8) {
+      return { ready: false, reason: 'Tab trình duyệt chưa hiển thị trong vùng quan sát' }
+    }
+
+    let webContentsId: number | undefined
+    try {
+      webContentsId = (wv as any).getWebContentsId?.()
+    } catch {}
+    if (!webContentsId) {
+      return { ready: false, reason: 'Tab trình duyệt chưa được mở' }
+    }
+
+    const state = webviewReadyState.current.get(account.id)
+    if (state?.lastError) {
+      return { ready: false, reason: state.lastError }
+    }
+    if (state?.domReady || state?.didFinishLoad) {
+      return { ready: true }
+    }
+
+    try {
+      const url = (wv as any).getURL?.()
+      if (typeof url === 'string' && url.trim() && url !== 'about:blank') {
+        return { ready: true }
+      }
+    } catch {}
+
+    return { ready: false, reason: 'Tab trình duyệt chưa sẵn sàng' }
+  }, [activeAccountId])
 
   const handleReload = async () => {
     if (!activeAccountId) return
@@ -234,24 +316,59 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
 
   useEffect(() => {
     if (!pendingOpenRequest) return
+    const timer = window.setTimeout(() => {
+      setWebviewReadyVersion(version => version + 1)
+    }, OPEN_REQUEST_SETTLE_MS)
+    return () => window.clearTimeout(timer)
+  }, [pendingOpenRequest])
+
+  useEffect(() => {
+    if (!pendingOpenRequest) return
+    const requestSettled = Date.now() - pendingOpenRequest.requestedAt >= OPEN_REQUEST_SETTLE_MS
 
     const account = browserAccounts.find(item => item.id === pendingOpenRequest.accountId)
     if (!account) {
       const knownAccount = accounts.some(item => item.id === pendingOpenRequest.accountId)
       if (knownAccount || (accountsLoadAttempted && !loadingAccounts)) {
-        markRequestHandled(pendingOpenRequest.requestId)
+        markRequestHandled({
+          requestId: pendingOpenRequest.requestId,
+          accountId: pendingOpenRequest.accountId,
+          success: false,
+          reason: knownAccount ? 'Tài khoản này không có tab trình duyệt quan sát' : 'Không tìm thấy tài khoản'
+        })
       }
       return
     }
 
     if (activeAccountId !== account.id) {
       setActiveAccountId(account.id)
+      return
     }
 
-    if (!isBrowserSessionPrepared(account)) return
+    if (!isBrowserSessionPrepared(account)) {
+      if (requestSettled) {
+        markRequestHandled({
+          requestId: pendingOpenRequest.requestId,
+          accountId: pendingOpenRequest.accountId,
+          success: false,
+          reason: 'Tab trình duyệt chưa được mở'
+        })
+      }
+      return
+    }
 
     const wv = webviewRefs.current.get(account.id)
-    if (!wv) return
+    if (!wv) {
+      if (requestSettled) {
+        markRequestHandled({
+          requestId: pendingOpenRequest.requestId,
+          accountId: pendingOpenRequest.accountId,
+          success: false,
+          reason: 'Tab trình duyệt chưa được mở'
+        })
+      }
+      return
+    }
 
     registerWebviewNow(account.id, wv)
 
@@ -263,13 +380,31 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
       }
     }
 
-    markRequestHandled(pendingOpenRequest.requestId)
+    const visibleStatus = inspectVisibleWebview(account)
+    if (visibleStatus.ready) {
+      markRequestHandled({
+        requestId: pendingOpenRequest.requestId,
+        accountId: pendingOpenRequest.accountId,
+        success: true
+      })
+      return
+    }
+
+    if (requestSettled) {
+      markRequestHandled({
+        requestId: pendingOpenRequest.requestId,
+        accountId: pendingOpenRequest.accountId,
+        success: false,
+        reason: visibleStatus.reason || 'Tab trình duyệt chưa sẵn sàng'
+      })
+    }
   }, [
     activeAccountId,
     accounts,
     accountsLoadAttempted,
     browserAccounts,
     loadingAccounts,
+    inspectVisibleWebview,
     markRequestHandled,
     pendingOpenRequest,
     preparedProxyByAccountId,
@@ -287,22 +422,45 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
       return
     }
 
-    const previousHandler = webviewDomReadyHandlers.current.get(account.id)
-    if (existing && previousHandler) {
-      existing.removeEventListener('dom-ready', previousHandler)
+    if (existing) {
+      removeWebviewEventHandlers(account.id, existing)
     }
 
     webviewRefs.current.set(account.id, wv)
+    webviewReadyState.current.set(account.id, { domReady: false, didFinishLoad: false })
     setWebviewReadyVersion(version => version + 1)
 
     const onDomReady = () => {
+      updateWebviewReadyState(account.id, { domReady: true, lastError: undefined })
       registerWebviewNow(account.id, wv)
     }
-    webviewDomReadyHandlers.current.set(account.id, onDomReady)
+    const onDidFinishLoad = () => {
+      updateWebviewReadyState(account.id, { didFinishLoad: true, lastError: undefined })
+      registerWebviewNow(account.id, wv)
+    }
+    const onDidFailLoad = (event: Event) => {
+      const detail = event as any
+      if (detail.isMainFrame === false) return
+      const errorCode = Number(detail.errorCode)
+      if (errorCode === -3) return
+      const description = String(detail.errorDescription || detail.validatedURL || detail.errorCode || 'lỗi không xác định')
+      updateWebviewReadyState(account.id, {
+        domReady: false,
+        didFinishLoad: false,
+        lastError: `Tab trình duyệt tải lỗi: ${description}`
+      })
+    }
+    webviewEventHandlers.current.set(account.id, {
+      domReady: onDomReady,
+      didFinishLoad: onDidFinishLoad,
+      didFailLoad: onDidFailLoad
+    })
 
     registerWebviewNow(account.id, wv)
     wv.addEventListener('dom-ready', onDomReady)
-  }, [registerWebviewNow])
+    wv.addEventListener('did-finish-load', onDidFinishLoad)
+    wv.addEventListener('did-fail-load', onDidFailLoad)
+  }, [registerWebviewNow, removeWebviewEventHandlers, updateWebviewReadyState])
 
   return (
     <div className="browser-page">

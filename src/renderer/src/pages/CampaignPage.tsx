@@ -4,9 +4,11 @@ import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
 import type { GeneralSettingsMenu } from '../components/Settings/GeneralSettingsModal'
 
+type BrowserNavigationResult = { success: boolean; reason?: string }
+
 interface CampaignPageProps {
   isActive: boolean
-  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
+  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => Promise<BrowserNavigationResult> | BrowserNavigationResult | void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
 }
 

@@ -8,7 +8,6 @@ const EMPTY_EMAIL_CONFIG: EmailAccountConfig = {
   brandName: '', host: 'smtp.gmail.com', port: 587, secure: false, user: '', pass: '', fromEmail: '', replyTo: '', cc: ''
 }
 const ZALO_QR_TTL_MS = 100_000
-const VIEW_BROWSER_STATUS_SETTLE_MS = 800
 
 import AccountContextMenu from './AccountContextMenu'
 import AccountInfoModal from './AccountInfoModal'
@@ -18,8 +17,10 @@ import ProxyManagerModal from './ProxyManagerModal'
 import { useUiStore } from '../../stores/uiStore'
 import { canUsePlatform, getFirstAllowedPlatform } from '../../utils/entitlements'
 
+type BrowserNavigationResult = { success: boolean; reason?: string }
+
 interface AccountPanelProps {
-  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
+  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => Promise<BrowserNavigationResult> | BrowserNavigationResult | void
   onFilterCampaigns?: (accountId: number | null) => void
 }
 
@@ -30,8 +31,6 @@ const getErrorMessage = (err: unknown, fallback: string) => {
   }
   return fallback
 }
-
-const waitForBrowserStatusSettle = () => new Promise<void>(resolve => setTimeout(resolve, VIEW_BROWSER_STATUS_SETTLE_MS))
 
 const getViewBrowserErrorMessage = (reason: string) => (
   `Không thể mở tab quan sát: ${reason}\nVui lòng load lại trang web.`
@@ -372,17 +371,13 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const handleViewBrowser = async (accountId: number) => {
     const requestSeq = viewBrowserRequestSeq.current + 1
     viewBrowserRequestSeq.current = requestSeq
-    onNavigateToBrowser?.({ accountId, reloadAfterOpen: false })
-
-    if (!window.electronAPI?.getWebviewStatus) return
 
     try {
-      await waitForBrowserStatusSettle()
-      const status = await window.electronAPI.getWebviewStatus(accountId)
+      const result = await onNavigateToBrowser?.({ accountId, reloadAfterOpen: false })
       if (viewBrowserRequestSeq.current !== requestSeq) return
-      if (!status.connected) {
+      if (result && result.success === false) {
         useUiStore.getState().showAlert(
-          getViewBrowserErrorMessage(status.reason || 'Tab trình duyệt chưa được mở'),
+          getViewBrowserErrorMessage(result.reason || 'Tab trình duyệt chưa được mở'),
           'error'
         )
       }
