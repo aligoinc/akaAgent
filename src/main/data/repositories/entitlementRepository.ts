@@ -77,6 +77,7 @@ interface OrganizationProductRow {
   expiration_date?: string | null
   package_type?: string | null
   max_sends_per_day?: number | string | null
+  max_accounts?: number | string | null
 }
 
 export function emptyAuthEntitlements(): AuthEntitlements {
@@ -86,6 +87,12 @@ export function emptyAuthEntitlements(): AuthEntitlements {
     email: false,
     zalo: false,
     dailySendLimits: {
+      facebookCore: null,
+      facebookFanpage: null,
+      email: null,
+      zalo: null
+    },
+    accountLimits: {
       facebookCore: null,
       facebookFanpage: null,
       email: null,
@@ -104,6 +111,10 @@ function normalizeAuthEntitlements(entitlements?: Partial<AuthEntitlements> | nu
     dailySendLimits: {
       ...empty.dailySendLimits,
       ...(entitlements?.dailySendLimits || {})
+    },
+    accountLimits: {
+      ...empty.accountLimits,
+      ...(entitlements?.accountLimits || {})
     }
   }
 }
@@ -134,6 +145,14 @@ function getDemoDailySendLimit(rows: OrganizationProductRow[]): number | null {
   return normalizePositiveInteger(activeRows[0]?.max_sends_per_day) ?? DEFAULT_DEMO_DAILY_SEND_LIMIT
 }
 
+function getFeatureAccountLimit(rows: OrganizationProductRow[]): number | null {
+  const limits = rows
+    .filter(row => isExpirationActive(row.expiration_date))
+    .map(row => normalizePositiveInteger(row.max_accounts))
+    .filter((limit): limit is number => limit !== null)
+  return limits.length > 0 ? Math.max(...limits) : null
+}
+
 function hasAnyEntitlement(entitlements: Partial<AuthEntitlements> | null | undefined): boolean {
   return !!(
     entitlements?.facebookCore ||
@@ -151,7 +170,7 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
   const entitlements = emptyAuthEntitlements()
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('product_id, expiration_date, package_type, max_sends_per_day')
+    .select('product_id, expiration_date, package_type, max_sends_per_day, max_accounts')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)
@@ -168,6 +187,7 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
     const featureRows = rows.filter(row => Number(row.product_id) === productId)
     entitlements[feature] = featureRows.some(row => isExpirationActive(row.expiration_date))
     entitlements.dailySendLimits[feature] = getDemoDailySendLimit(featureRows)
+    entitlements.accountLimits[feature] = getFeatureAccountLimit(featureRows)
   }
 
   return entitlements
@@ -176,7 +196,7 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
 export async function loadOrganizationAccountProducts(organizationId: number): Promise<AuthAccountProduct[]> {
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('product_id, product_name, package_name, package_type, expiration_date')
+    .select('product_id, product_name, package_name, package_type, expiration_date, max_accounts')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)
@@ -202,6 +222,7 @@ export async function loadOrganizationAccountProducts(organizationId: number): P
       displayName: productCatalogItem?.label || productName || packageName || 'Sản phẩm',
       displayOrder: productCatalogItem?.order ?? 99,
       expirationDate: row.expiration_date || null,
+      maxAccounts: normalizePositiveInteger(row.max_accounts),
       isActive: isExpirationActive(row.expiration_date)
     }
   })
@@ -284,6 +305,23 @@ export function getFeatureDailySendLimit(
   feature: EntitlementFeature
 ): number | null {
   return normalizePositiveInteger(entitlements?.dailySendLimits?.[feature])
+}
+
+export function getAccountPlatformLimit(
+  flatformType: string | null | undefined,
+  entitlements: Partial<AuthEntitlements> | null | undefined
+): number | null {
+  const platform = String(flatformType || '').trim().toLowerCase()
+  if (platform === 'email') return entitlements?.email ? normalizePositiveInteger(entitlements?.accountLimits?.email) : null
+  if (platform === 'zalo') return entitlements?.zalo ? normalizePositiveInteger(entitlements?.accountLimits?.zalo) : null
+  if (platform === 'facebook') {
+    const limits: Array<number | null> = []
+    if (entitlements?.facebookCore) limits.push(normalizePositiveInteger(entitlements?.accountLimits?.facebookCore))
+    if (entitlements?.facebookFanpage) limits.push(normalizePositiveInteger(entitlements?.accountLimits?.facebookFanpage))
+    if (limits.length === 0 || limits.some(limit => limit === null)) return null
+    return Math.max(...limits.filter((limit): limit is number => limit !== null))
+  }
+  return null
 }
 
 export function getCampaignActionDailySendLimit(

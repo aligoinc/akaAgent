@@ -89,7 +89,11 @@ function authEntitlementsEqual(
     (left?.dailySendLimits?.facebookCore ?? null) === (right?.dailySendLimits?.facebookCore ?? null) &&
     (left?.dailySendLimits?.facebookFanpage ?? null) === (right?.dailySendLimits?.facebookFanpage ?? null) &&
     (left?.dailySendLimits?.email ?? null) === (right?.dailySendLimits?.email ?? null) &&
-    (left?.dailySendLimits?.zalo ?? null) === (right?.dailySendLimits?.zalo ?? null)
+    (left?.dailySendLimits?.zalo ?? null) === (right?.dailySendLimits?.zalo ?? null) &&
+    (left?.accountLimits?.facebookCore ?? null) === (right?.accountLimits?.facebookCore ?? null) &&
+    (left?.accountLimits?.facebookFanpage ?? null) === (right?.accountLimits?.facebookFanpage ?? null) &&
+    (left?.accountLimits?.email ?? null) === (right?.accountLimits?.email ?? null) &&
+    (left?.accountLimits?.zalo ?? null) === (right?.accountLimits?.zalo ?? null)
 }
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {

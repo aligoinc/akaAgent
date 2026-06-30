@@ -7,6 +7,13 @@ const DEFAULT_DAILY_SEND_LIMITS: AuthEntitlements['dailySendLimits'] = {
   zalo: null
 }
 
+const DEFAULT_ACCOUNT_LIMITS: AuthEntitlements['accountLimits'] = {
+  facebookCore: null,
+  facebookFanpage: null,
+  email: null,
+  zalo: null
+}
+
 export const FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS = new Set([
   'facebook_page_post',
   'facebook_page_to_message'
@@ -53,6 +60,10 @@ export function normalizeEntitlements(entitlements?: Partial<AuthEntitlements> |
     dailySendLimits: {
       ...DEFAULT_DAILY_SEND_LIMITS,
       ...(entitlements?.dailySendLimits || {})
+    },
+    accountLimits: {
+      ...DEFAULT_ACCOUNT_LIMITS,
+      ...(entitlements?.accountLimits || {})
     }
   }
 }

@@ -9,6 +9,7 @@ import {
   ensureCurrentUserCanUseAccountPlatform,
   ensureCurrentUserEmailFeatureActive,
   ensureCurrentUserFeatureActive,
+  getAccountPlatformLimit,
   loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
 
@@ -64,6 +65,39 @@ export interface ZaloAccountUpsertInput {
 function normalizeRateLimitMinutes(value: unknown): number {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
+}
+
+function getPlatformDisplayName(flatformType: string | null | undefined): string {
+  const platform = String(flatformType || '').trim().toLowerCase()
+  if (platform === 'facebook') return 'Facebook'
+  if (platform === 'zalo') return 'Zalo'
+  if (platform === 'email') return 'Email'
+  return String(flatformType || 'nền tảng').trim() || 'nền tảng'
+}
+
+async function countStaffAccountsByPlatform(staffId: number, flatformType: string): Promise<number> {
+  const { count, error } = await client()
+    .from('auto_accounts')
+    .select('id', { count: 'exact', head: true })
+    .eq('staff_id', staffId)
+    .eq('flatform_type', flatformType)
+    .eq('is_delete', false)
+
+  if (error) throw new Error(`Failed to count accounts: ${error.message}`)
+  return count || 0
+}
+
+async function ensureAccountQuotaAvailable(staffId: number, flatformType: string): Promise<void> {
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const limit = getAccountPlatformLimit(flatformType, entitlements)
+  if (limit === null) return
+
+  const used = await countStaffAccountsByPlatform(staffId, flatformType)
+  if (used < limit) return
+
+  throw new Error(
+    `Đã đạt giới hạn tài khoản ${getPlatformDisplayName(flatformType)} của gói hiện tại (${used}/${limit}). Vui lòng xoá tài khoản không dùng hoặc nâng cấp gói để tạo thêm.`
+  )
 }
 
 export async function getAccount(id: number): Promise<AutoAccount | null> {
@@ -140,6 +174,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
   const u = requireCurrentUser()
   const flatformType = account.flatformType || 'facebook'
   await ensureCurrentUserCanUseAccountPlatform(flatformType)
+  await ensureAccountQuotaAvailable(u.staffId, flatformType)
   const accountGroupId = await accountGroupRepo.validateAccountGroupForAccount(account.accountGroupId, flatformType)
   const proxyId = await proxyRepo.validateProxyForAccount(account.proxyId)
   const payload = {
@@ -173,6 +208,9 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
   const targetFlatformType = updates.flatformType ?? current.flatformType
   await ensureCurrentUserCanUseAccountPlatform(targetFlatformType)
   await ensureCurrentUserCanUseAccountPlatform(current.flatformType)
+  if (updates.flatformType !== undefined && targetFlatformType !== current.flatformType) {
+    await ensureAccountQuotaAvailable(u.staffId, targetFlatformType)
+  }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.flatformType !== undefined) payload.flatform_type = updates.flatformType
   if (updates.loginStatus !== undefined) payload.login_status = updates.loginStatus

@@ -17,6 +17,12 @@ function formatDate(value?: string | null): string {
   })
 }
 
+function formatAccountLimit(value?: number | null): string {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? `${value} tài khoản`
+    : 'Không giới hạn'
+}
+
 export default function AccountProfileModal({ onClose }: AccountProfileModalProps) {
   const user = useAuthStore(state => state.user)
   const products = useMemo(
@@ -81,6 +87,12 @@ export default function AccountProfileModal({ onClose }: AccountProfileModalProp
                           <span>Hết hạn:</span>
                           <span className={`account-profile-product-date-chip ${product.isActive ? 'is-active' : 'is-expired'}`}>
                             {formatDate(product.expirationDate)}
+                          </span>
+                        </span>
+                        <span className="account-profile-product-expiration">
+                          <span>Giới hạn tài khoản:</span>
+                          <span className="account-profile-product-limit-chip">
+                            {formatAccountLimit(product.maxAccounts)}
                           </span>
                         </span>
                       </div>

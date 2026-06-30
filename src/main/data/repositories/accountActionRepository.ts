@@ -152,6 +152,12 @@ export async function listAccountActions(flatformType?: string, includeRestricte
         facebookFanpage: null,
         email: null,
         zalo: null
+      },
+      accountLimits: {
+        facebookCore: null,
+        facebookFanpage: null,
+        email: null,
+        zalo: null
       }
     }
     : await loadCurrentUserEffectiveEntitlements()
