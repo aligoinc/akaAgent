@@ -19,6 +19,14 @@ import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 import AccountProfileModal from './components/Settings/AccountProfileModal'
 import MediaLibraryModal from './components/Media/MediaLibraryModal'
 
+type UpdatePromptSource = 'startup' | 'manual'
+
+interface UpdateInfo {
+  localVersion: string
+  remoteVersion: string
+  source: UpdatePromptSource
+}
+
 export default function App() {
   const { user, initializing, rehydrateFromStorage, handleSessionExpired, handleUserUpdated } = useAuthStore()
   const { theme } = useThemeStore()
@@ -36,12 +44,16 @@ export default function App() {
   const [showAccountProfile, setShowAccountProfile] = useState(false)
   const [localVersion, setLocalVersion] = useState('')
   const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const authBootstrapStarted = useRef(false)
+  const startupUpdateCheckStarted = useRef(false)
   const runtimePlatform = window.electronAPI?.platform || 'unknown'
   const platformClass = `platform-${runtimePlatform}`
 
-  // Bootstrap auth from DB-backed device login settings (or land on LoginPage).
-  useEffect(() => {
-    rehydrateFromStorage()
+  const startAuthBootstrap = useCallback(() => {
+    if (authBootstrapStarted.current) return
+    authBootstrapStarted.current = true
+    void rehydrateFromStorage()
   }, [rehydrateFromStorage])
 
   useEffect(() => {
@@ -68,8 +80,6 @@ export default function App() {
     }
   }, [canOpenWorkflowEditor, activePage])
 
-  const [updateInfo, setUpdateInfo] = useState<{ localVersion: string; remoteVersion: string } | null>(null)
-
   useEffect(() => {
     if (!window.electronAPI?.getAppVersion) return
     let cancelled = false
@@ -83,10 +93,13 @@ export default function App() {
     }
   }, [])
 
-  const handleCheckForUpdate = useCallback(async (manual = true) => {
+  const handleCheckForUpdate = useCallback(async (
+    manual = true,
+    source: UpdatePromptSource = manual ? 'manual' : 'startup'
+  ): Promise<boolean> => {
     if (!window.electronAPI?.checkForUpdate) {
       if (manual) useUiStore.getState().showAlert('Chức năng cập nhật chưa sẵn sàng.', 'error')
-      return
+      return false
     }
 
     setCheckingUpdate(true)
@@ -94,7 +107,8 @@ export default function App() {
       const res = await window.electronAPI.checkForUpdate()
       setLocalVersion(res.localVersion)
       if (res.hasUpdate) {
-        setUpdateInfo({ localVersion: res.localVersion, remoteVersion: res.remoteVersion })
+        setUpdateInfo({ localVersion: res.localVersion, remoteVersion: res.remoteVersion, source })
+        return true
       } else if (manual) {
         if (res.error) {
           useUiStore.getState().showAlert(`Không kiểm tra được cập nhật: ${res.error}`, 'error')
@@ -104,6 +118,7 @@ export default function App() {
       } else if (res.error) {
         console.warn('Update check error:', res.error)
       }
+      return false
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (manual) {
@@ -111,10 +126,30 @@ export default function App() {
       } else {
         console.warn('Update check failed:', err)
       }
+      return false
     } finally {
       setCheckingUpdate(false)
     }
   }, [])
+
+  // Check startup updates before auth bootstrap so auto-login cannot start scheduler first.
+  useEffect(() => {
+    if (startupUpdateCheckStarted.current) return
+    startupUpdateCheckStarted.current = true
+
+    void (async () => {
+      const hasUpdate = await handleCheckForUpdate(false, 'startup')
+      if (!hasUpdate) startAuthBootstrap()
+    })()
+  }, [handleCheckForUpdate, startAuthBootstrap])
+
+  const handleCloseUpdateModal = useCallback(() => {
+    const source = updateInfo?.source
+    setUpdateInfo(null)
+    if (source === 'startup') {
+      startAuthBootstrap()
+    }
+  }, [startAuthBootstrap, updateInfo?.source])
 
   const openGeneralSettings = (menu: GeneralSettingsMenu = 'akabiz') => {
     setGeneralSettingsInitialMenu(menu)
@@ -130,14 +165,6 @@ export default function App() {
     })
     setActivePage('browsers')
   }, [])
-
-  // Auto-check for updates once on app start (non-blocking).
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      await handleCheckForUpdate(false)
-    }, 3000)
-    return () => clearTimeout(timer)
-  }, [handleCheckForUpdate])
 
   // Listen for auto-check login status updates from main process
   useEffect(() => {
@@ -181,14 +208,16 @@ export default function App() {
     return (
       <div className={`app-layout ${platformClass}`} style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div className="app-window-drag-frame" aria-hidden="true" />
-        <div style={{ color: 'var(--text-secondary, #aaa)', fontSize: 13 }}>Đang khởi tạo…</div>
+        <div style={{ color: 'var(--text-secondary, #aaa)', fontSize: 13 }}>
+          {checkingUpdate ? 'Đang kiểm tra cập nhật…' : 'Đang khởi tạo…'}
+        </div>
         <AlertModal />
         <ConfirmModal />
         {updateInfo && (
           <UpdateModal
             localVersion={updateInfo.localVersion}
             remoteVersion={updateInfo.remoteVersion}
-            onClose={() => setUpdateInfo(null)}
+            onClose={handleCloseUpdateModal}
           />
         )}
       </div>
@@ -206,7 +235,7 @@ export default function App() {
           <UpdateModal
             localVersion={updateInfo.localVersion}
             remoteVersion={updateInfo.remoteVersion}
-            onClose={() => setUpdateInfo(null)}
+            onClose={handleCloseUpdateModal}
           />
         )}
       </div>
@@ -293,7 +322,7 @@ export default function App() {
         <UpdateModal
           localVersion={updateInfo.localVersion}
           remoteVersion={updateInfo.remoteVersion}
-          onClose={() => setUpdateInfo(null)}
+          onClose={handleCloseUpdateModal}
         />
       )}
     </div>
