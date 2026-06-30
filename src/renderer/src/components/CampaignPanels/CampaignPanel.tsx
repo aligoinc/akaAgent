@@ -18,6 +18,7 @@ import {
   type CampaignRunEvent,
   type ZaloLoginQrEvent
 } from '../../../../shared/types'
+import { parseCampaignLogLine } from '../../../../shared/campaignLogFormat'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -1036,12 +1037,12 @@ const parseCampaignRunLog = (log: string): RunLogEntry[] => {
       if (lastEntry) lastEntry.message = `${lastEntry.message}\n`
       continue
     }
-    const match = text.match(/^\[([^\]]+)\]\s*(.*)$/)
-    if (match) {
-      const parsedMessage = stripScreenshotEventMarker(match[2])
+    const parsedLine = parseCampaignLogLine(text)
+    if (parsedLine?.timestamp || (parsedLine && entries.length === 0)) {
+      const parsedMessage = stripScreenshotEventMarker(parsedLine.message)
       entries.push({
         key: `${index}-${text}`,
-        timestamp: match[1],
+        timestamp: parsedLine.timestamp,
         message: parsedMessage.message,
         screenshotEventId: parsedMessage.screenshotEventId
       })
