@@ -20,6 +20,7 @@ import * as errorPolicyRepo from '../../data/repositories/errorPolicyRepository'
 import * as runV2Repo from '../../data/repositories/runV2Repository'
 import { getSettingValue, listActiveSystemSettingsByKeys } from '../../data/repositories/systemSettingsRepository'
 import { callAiUsing } from '../../services/aiRuntimeService'
+import { parseCampaignLogLine } from '../../../shared/campaignLogFormat'
 
 const VIETNAM_UTC_OFFSET = '+07:00'
 const MAX_CONTENT_CHARS = 8000
@@ -117,14 +118,14 @@ function parseCampaignProgressLogs(logText: string, dayKey: string, limit: numbe
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index].trim()
     if (!line) continue
-    const match = line.match(/^\[([^\]]+)\]\s*(.*)$/)
-    if (!match) continue
-    const dateKey = parseVietnamLogDateKey(match[1])
+    const parsedLine = parseCampaignLogLine(line)
+    if (!parsedLine?.timestamp) continue
+    const dateKey = parseVietnamLogDateKey(parsedLine.timestamp)
     entries.push({
       order: index + 1,
-      time: match[1],
+      time: parsedLine.timestamp,
       dateKey,
-      message: sanitizeTextForAssistant(match[2] || '')
+      message: sanitizeTextForAssistant(parsedLine.message || '')
     })
   }
 

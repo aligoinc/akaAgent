@@ -5,6 +5,7 @@ import { tmpdir } from 'os'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
+import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -6727,14 +6728,19 @@ export class CampaignScheduler {
     message: string,
     options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } = {}
   ): Promise<void> {
+    let realtimeMessage = options.realtimeMessage ?? message
     try {
       const updated = await this.supabase.appendCampaignLog(campaignId, message)
       this.broadcastCampaignUpdate(updated)
+      realtimeMessage = formatCampaignLogMessage(realtimeMessage, {
+        accountName: updated.accountName,
+        campaignName: updated.name
+      })
     } catch (err) {
       console.error('Failed append campaign progress log:', err)
     }
     if (options.emitRealtime !== false) {
-      this.sendLog(options.realtimeMessage ?? message, options.realtimeAction)
+      this.sendLog(realtimeMessage, options.realtimeAction)
     }
   }
 

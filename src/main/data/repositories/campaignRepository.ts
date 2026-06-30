@@ -24,6 +24,7 @@ import {
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
+import { formatStoredCampaignLogLine } from '../../../shared/campaignLogFormat'
 import * as accountActionRepo from './accountActionRepository'
 import * as errorPolicyRepo from './errorPolicyRepository'
 import {
@@ -1082,14 +1083,19 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
 }
 
 export async function appendCampaignLog(campaignId: number, logText: string): Promise<Campaign> {
-  const { data: current } = await client()
+  const { data: current, error: currentError } = await client()
     .from('auto_campaigns')
-    .select('log')
+    .select('log, name, auto_accounts(name)')
     .eq('id', campaignId)
     .single()
 
-  const timestamp = new Date().toLocaleString('vi-VN')
-  const newLog = `[${timestamp}] ${logText}`
+  if (currentError) throw new Error(`Failed to load campaign log: ${currentError.message}`)
+  if (!current) throw new Error('Campaign not found')
+
+  const newLog = formatStoredCampaignLogLine(logText, {
+    campaignName: (current as any)?.name,
+    accountName: (current as any)?.auto_accounts?.name
+  })
   const fullLog = current?.log ? `${current.log}\n${newLog}` : newLog
 
   const { data, error } = await client()
