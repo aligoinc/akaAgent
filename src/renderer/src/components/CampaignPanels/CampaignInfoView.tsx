@@ -351,6 +351,10 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || getFindDataSourceLabels(extra).length > 0
     || !!extra.findDataGoalModeEnabled
     || linkedSourceCampaigns.length > 0
+  const hasEmailSettings = actionId === 'email_send'
+    || !!extra.emailSubject
+    || extra.emailBodyIsHtml === true
+    || extra.emailCheckLinkClicks === true
   const supportsRerunAfterCompletion = ['facebook_find_data_group', 'facebook_find_data_search', 'facebook_comment_seeding'].includes(actionId)
   const supportsMultiDailyTimeSlots = ['facebook_timeline_post', 'facebook_page_post', 'zalo_message_friend', 'zalo_message_group'].includes(actionId)
   const hasPostBump = actionId === 'facebook_group_post' || !!extra.enablePostBump
@@ -384,10 +388,17 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   ]
 
   const groupPostRows: InfoRow[] = [
+    { label: 'Đăng bài dạng chia sẻ', value: onOff(extra.enableGroupPostShareToJoinedGroups) },
     { label: 'Rời group khi chờ duyệt', value: onOff(extra.leaveGroupOnPendingApproval) },
     { label: 'Tự tham gia group sau đăng', value: onOff(extra.autoJoinGroupAfterPost) },
     { label: 'Xáo trộn danh sách group', value: onOff(extra.shuffleGroupList) },
     { label: 'Bỏ đăng group đã biết cần duyệt', value: onOff(extra.skipPostIfGroupRequiresApproval) }
+  ]
+
+  const emailRows: InfoRow[] = [
+    { label: 'Tiêu đề email', value: textOrDash(extra.emailSubject), fullWidth: true },
+    { label: 'Nội dung HTML', value: onOff(extra.emailBodyIsHtml) },
+    { label: 'Kiểm tra click vào link', value: onOff(extra.emailCheckLinkClicks) }
   ]
 
   const postBumpRows: InfoRow[] = [
@@ -533,6 +544,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           { label: 'Ảnh bài đăng', value: formatImageSummary(campaign.images) },
           { label: 'Cách dùng ảnh', value: formatImageOption(extra, campaign.images) },
           { label: 'AI viết lại nội dung', value: onOff(extra.rewriteContentEachRun) },
+          ...emailRows.map(row => ({ ...row, hidden: row.hidden || !hasEmailSettings })),
           ...sourceRows.map(row => ({ ...row, hidden: row.hidden || !hasSourceSettings }))
         ])}
 

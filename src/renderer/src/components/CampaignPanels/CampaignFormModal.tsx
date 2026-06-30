@@ -1226,6 +1226,7 @@ export default function CampaignFormModal({
     // Email
     emailSubject: campaign?.extraSettings?.emailSubject || '',
     emailBodyIsHtml: campaign?.extraSettings?.emailBodyIsHtml ?? false,
+    emailCheckLinkClicks: campaign?.extraSettings?.emailCheckLinkClicks ?? false,
     // Extra settings
     sharePost: campaign?.extraSettings?.sharePost ?? false,
     postWithBackground: campaign?.extraSettings?.postWithBackground ?? false,
@@ -1268,6 +1269,7 @@ export default function CampaignFormModal({
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
     skipPostIfGroupRequiresApproval: campaign?.extraSettings?.skipPostIfGroupRequiresApproval ?? false,
+    enableGroupPostShareToJoinedGroups: campaign?.extraSettings?.enableGroupPostShareToJoinedGroups ?? false,
     enablePostBump: campaign?.extraSettings?.enablePostBump ?? false,
     postBumpCount: clampPostBumpCount(campaign?.extraSettings?.postBumpCount ?? DEFAULT_POST_BUMP_COUNT),
     postBumpInitialDelayMinutes: normalizeMinuteValue(
@@ -1702,7 +1704,8 @@ export default function CampaignFormModal({
       actionId: '',
       accountIds: [],
       emailSubject: '',
-      emailBodyIsHtml: false
+      emailBodyIsHtml: false,
+      emailCheckLinkClicks: false
     }))
   }, [entitlements, formData.actionId, selectedActionPlatform])
   const isLimitActionVisible = (actionCode: string) => {
@@ -2016,6 +2019,7 @@ export default function CampaignFormModal({
             ...step,
             fields: [
               { key: 'skipPostIfGroupRequiresApproval', label: 'Không đăng bài vào group bị duyệt bài' },
+              { key: 'enableGroupPostShareToJoinedGroups', label: 'Đăng bài dạng chia sẻ' },
               { key: 'leaveGroupOnPendingApproval', label: 'Rời group chờ duyệt' },
               { key: 'autoJoinGroupAfterPost', label: 'Tự tham gia group' },
               { key: 'shuffleGroupList', label: 'Xáo trộn danh sách group' }
@@ -2798,6 +2802,7 @@ export default function CampaignFormModal({
       case 'enableComment': return true  // optional
       case 'enablePostBump': return true  // optional
       case 'skipPostIfGroupRequiresApproval': return true
+      case 'enableGroupPostShareToJoinedGroups': return true
       case 'leaveGroupOnPendingApproval': return true
       case 'autoJoinGroupAfterPost': return true
       case 'shuffleGroupList': return true
@@ -3459,6 +3464,7 @@ export default function CampaignFormModal({
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
             skipPostIfGroupRequiresApproval: formData.skipPostIfGroupRequiresApproval,
+            enableGroupPostShareToJoinedGroups: isFacebookGroupPostCampaign ? formData.enableGroupPostShareToJoinedGroups : false,
             enablePostBump: formData.enablePostBump,
             postBumpCount: clampPostBumpCount(formData.postBumpCount),
             postBumpInitialDelayMinutes: normalizeMinuteValue(
@@ -3483,6 +3489,7 @@ export default function CampaignFormModal({
             suggestedFriendsCount: effectiveSuggestedFriendsCount,
             emailSubject: isEmailCampaign ? formData.emailSubject.trim() : '',
             emailBodyIsHtml: isEmailCampaign ? formData.emailBodyIsHtml : false,
+            emailCheckLinkClicks: isEmailCampaign ? formData.emailCheckLinkClicks : false,
             friendRequestMessage: (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) ? formData.friendRequestMessage.trim() : '',
             zaloRealtimeTriggers: isZaloMessageGroupRealtimeCampaign ? getZaloRealtimeTriggersForSave() : [],
             zaloRealtimeGroupIds: selectedZaloRealtimeGroupIds,
@@ -9474,6 +9481,16 @@ export default function CampaignFormModal({
                           <span>Nội dung dạng HTML</span>
                         </label>
                       </div>
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.emailCheckLinkClicks}
+                            onChange={e => setFormData(p => ({ ...p, emailCheckLinkClicks: e.target.checked }))}
+                          />
+                          <span>Kiểm tra click vào link</span>
+                        </label>
+                      </div>
                     </>
                   )}
                   {isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
@@ -9587,6 +9604,17 @@ export default function CampaignFormModal({
 
                   {isFacebookGroupPostCampaign && (
                     <>
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.enableGroupPostShareToJoinedGroups}
+                            onChange={e => setFormData(p => ({ ...p, enableGroupPostShareToJoinedGroups: e.target.checked }))}
+                          />
+                          <span>Đăng bài dạng chia sẻ <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(mỗi lần đăng thì chia sẻ thêm cho 3 nhóm) - Chỉ dành cho nhóm mà bạn đã tham gia</em></span>
+                        </label>
+                      </div>
+
                       <div className="stepper-form-group">
                         <label className="schedule-checkbox-label">
                           <input
