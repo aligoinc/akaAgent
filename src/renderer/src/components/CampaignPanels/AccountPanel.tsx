@@ -23,7 +23,18 @@ interface AccountPanelProps {
 }
 
 const getErrorMessage = (err: unknown, fallback: string) => {
-  if (err instanceof Error) return err.message
+  const rawMessage = err instanceof Error
+    ? err.message
+    : typeof err === 'object' && err && 'message' in err
+      ? String((err as { message?: unknown }).message || '')
+      : ''
+
+  const message = rawMessage
+    .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim()
+
+  if (message) return message
   if (typeof err === 'object' && err && 'message' in err) {
     return String((err as { message?: unknown }).message || fallback)
   }

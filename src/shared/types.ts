@@ -1046,6 +1046,7 @@ export interface EmailNotificationSettings {
 export type AuthEntitlementFeature = 'facebookCore' | 'facebookFanpage' | 'email' | 'zalo'
 
 export type AuthDailySendLimits = Record<AuthEntitlementFeature, number | null>
+export type AuthAccountLimits = Record<AuthEntitlementFeature, number | null>
 
 export interface AuthEntitlements {
   facebookCore: boolean
@@ -1053,6 +1054,7 @@ export interface AuthEntitlements {
   email: boolean
   zalo: boolean
   dailySendLimits: AuthDailySendLimits
+  accountLimits: AuthAccountLimits
 }
 
 export interface AuthSessionExpiredPayload {
@@ -1068,6 +1070,7 @@ export interface AuthAccountProduct {
   displayName: string
   displayOrder: number
   expirationDate: string | null
+  maxAccounts: number | null
   isActive: boolean
 }
 
