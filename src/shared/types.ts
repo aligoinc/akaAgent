@@ -218,6 +218,7 @@ export interface CampaignAction {
   isActive: boolean
   workflowId?: number       // engine v2 (BIGINT, FK auto_workflows.id)
   testWorkflowId?: number   // engine v2 test workflow (BIGINT, FK auto_workflows.id)
+  allowMultipleAccounts: boolean
   // Candidate action codes for daily/window quota checks, not for action-disable enforcement.
   limitCheckActionCodes: string[]
   isDelete: boolean
