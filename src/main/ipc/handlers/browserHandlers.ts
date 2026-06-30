@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, webContents } from 'electron'
 import { IPC_EVENTS } from '../../../shared/types'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import { PageControllerRegistry } from '../../v2/runtime/pageController'
@@ -17,7 +17,6 @@ export function registerBrowserHandlers(
     webviewRegistry.register(accountId, webContentsId)
 
     try {
-      const { webContents } = require('electron')
       const wc = webContents.fromId(webContentsId)
       if (wc && !wc.isDestroyed()) {
         wc.setBackgroundThrottling(false)
@@ -36,6 +35,18 @@ export function registerBrowserHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.WEBVIEW_STATUS, (_, accountId: number) => {
-    return { connected: webviewRegistry.isRegistered(accountId) }
+    const webContentsId = webviewRegistry.getWebContentsId(accountId)
+    if (!webContentsId) {
+      return { connected: false, reason: 'Tab trình duyệt chưa được mở' }
+    }
+
+    const wc = webContents.fromId(webContentsId)
+    if (!wc || wc.isDestroyed()) {
+      webviewRegistry.unregister(accountId)
+      pageRegistry.unregister(accountId)
+      return { connected: false, reason: 'Tab trình duyệt không khả dụng' }
+    }
+
+    return { connected: true }
   })
 }

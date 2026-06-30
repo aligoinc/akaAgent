@@ -107,7 +107,7 @@ const electronAPI = {
   unregisterWebview: (accountId: number): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_EVENTS.WEBVIEW_UNREGISTER, accountId),
 
-  getWebviewStatus: (accountId: number): Promise<{ connected: boolean }> =>
+  getWebviewStatus: (accountId: number): Promise<{ connected: boolean; reason?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.WEBVIEW_STATUS, accountId),
 
   // Auto Accounts

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { FolderCog, Loader2, Plus, ServerCog } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -8,6 +8,7 @@ const EMPTY_EMAIL_CONFIG: EmailAccountConfig = {
   brandName: '', host: 'smtp.gmail.com', port: 587, secure: false, user: '', pass: '', fromEmail: '', replyTo: '', cc: ''
 }
 const ZALO_QR_TTL_MS = 100_000
+const VIEW_BROWSER_STATUS_SETTLE_MS = 800
 
 import AccountContextMenu from './AccountContextMenu'
 import AccountInfoModal from './AccountInfoModal'
@@ -29,6 +30,12 @@ const getErrorMessage = (err: unknown, fallback: string) => {
   }
   return fallback
 }
+
+const waitForBrowserStatusSettle = () => new Promise<void>(resolve => setTimeout(resolve, VIEW_BROWSER_STATUS_SETTLE_MS))
+
+const getViewBrowserErrorMessage = (reason: string) => (
+  `Không thể mở tab quan sát: ${reason}\nVui lòng load lại trang web.`
+)
 
 const normalizeEmailConfig = (config?: Partial<EmailAccountConfig> | null): EmailAccountConfig => {
   const merged = { ...EMPTY_EMAIL_CONFIG, ...(config || {}) }
@@ -124,6 +131,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [emailConfig, setEmailConfig] = useState<EmailAccountConfig>({ ...EMPTY_EMAIL_CONFIG })
   const [originalEmailConfig, setOriginalEmailConfig] = useState<EmailAccountConfig | null>(null)
   const [verifyingEmail, setVerifyingEmail] = useState(false)
+  const viewBrowserRequestSeq = useRef(0)
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -361,11 +369,34 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     )
   }
 
-  const handleViewBrowser = (accountId: number) => {
+  const handleViewBrowser = async (accountId: number) => {
+    const requestSeq = viewBrowserRequestSeq.current + 1
+    viewBrowserRequestSeq.current = requestSeq
     onNavigateToBrowser?.({ accountId, reloadAfterOpen: false })
+
+    if (!window.electronAPI?.getWebviewStatus) return
+
+    try {
+      await waitForBrowserStatusSettle()
+      const status = await window.electronAPI.getWebviewStatus(accountId)
+      if (viewBrowserRequestSeq.current !== requestSeq) return
+      if (!status.connected) {
+        useUiStore.getState().showAlert(
+          getViewBrowserErrorMessage(status.reason || 'Tab trình duyệt chưa được mở'),
+          'error'
+        )
+      }
+    } catch (err) {
+      if (viewBrowserRequestSeq.current !== requestSeq) return
+      useUiStore.getState().showAlert(
+        getViewBrowserErrorMessage(getErrorMessage(err, 'Lỗi không xác định')),
+        'error'
+      )
+    }
   }
 
   const handleReloadPage = async (account: AutoAccount) => {
+    viewBrowserRequestSeq.current += 1
     if (!window.electronAPI?.reloadAccountPage) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
