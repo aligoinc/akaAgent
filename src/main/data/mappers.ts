@@ -94,6 +94,7 @@ export function mapCampaignActionFromDB(row: Record<string, unknown>): CampaignA
     isActive: row.is_active as boolean,
     workflowId: row.workflow_id as number | undefined,
     testWorkflowId: row.test_workflow_id as number | undefined,
+    allowMultipleAccounts: typeof row.allow_multiple_accounts === 'boolean' ? row.allow_multiple_accounts : false,
     limitCheckActionCodes: Array.isArray(row.limit_check_action_codes) ? row.limit_check_action_codes as string[] : [],
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string

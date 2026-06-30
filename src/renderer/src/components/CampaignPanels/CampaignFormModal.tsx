@@ -1125,7 +1125,7 @@ export default function CampaignFormModal({
   onClose
 }: CampaignFormModalProps) {
   const {
-    accounts, campaignActions, campaigns, loadCampaigns,
+    accounts, accountGroups, campaignActions, campaigns, loadAccountGroups, loadCampaigns,
     createCampaign, updateCampaign,
     createCampaignInputData
   } = useCampaignStore()
@@ -1526,7 +1526,6 @@ export default function CampaignFormModal({
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
   const canUseOtherDataSources = isZaloMessagePhoneCampaign && !isEditingSavedCampaign
   const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && !isZaloCancelSentFriendRequestCampaign
-  const requiresSingleAccount = isPageInboxMessageCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageGroupCampaign || isZaloJoinGroupLinkCampaign || isZaloCancelSentFriendRequestCampaign
   const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign || isZaloCancelSentFriendRequestCampaign
   const needsZaloLabels =
     ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag) ||
@@ -1612,6 +1611,7 @@ export default function CampaignFormModal({
   )
   const selectedCampaignAction = availableCampaignActions.find(action => action.id === formData.actionId)
   const selectedActionPlatform = selectedCampaignAction?.flatformType || ''
+  const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false
   const campaignDailyLimitCap = getCampaignActionDailySendLimit(
     selectedCampaignAction || (formData.actionId ? { id: formData.actionId, flatformType: selectedActionPlatform } : null),
     entitlements
@@ -1623,9 +1623,75 @@ export default function CampaignFormModal({
     ...limit,
     dailyLimit: clampDailyLimitToEntitlement(limit.dailyLimit, getActionDailyLimitCap(actionCode))
   })
-  const selectableAccounts = selectedActionPlatform
-    ? accounts.filter(account => account.flatformType === selectedActionPlatform)
-    : accounts
+  const selectableAccounts = useMemo(
+    () => selectedActionPlatform
+      ? accounts.filter(account => account.flatformType === selectedActionPlatform)
+      : accounts,
+    [accounts, selectedActionPlatform]
+  )
+  const selectableAccountGroups = useMemo(
+    () => accountGroups.filter(group => !selectedActionPlatform || group.flatformType === selectedActionPlatform),
+    [accountGroups, selectedActionPlatform]
+  )
+  const groupedSelectableAccounts = useMemo(() => {
+    const byGroup = new Map<number, typeof selectableAccounts>()
+    const ungrouped: typeof selectableAccounts = []
+    const visibleGroupIds = new Set(selectableAccountGroups.map(group => group.id))
+
+    for (const account of selectableAccounts) {
+      if (account.accountGroupId && visibleGroupIds.has(account.accountGroupId)) {
+        const groupAccounts = byGroup.get(account.accountGroupId) || []
+        groupAccounts.push(account)
+        byGroup.set(account.accountGroupId, groupAccounts)
+      } else {
+        ungrouped.push(account)
+      }
+    }
+
+    return { byGroup, ungrouped }
+  }, [selectableAccounts, selectableAccountGroups])
+  const isSingleAccountSelection = Boolean((campaign && campaign.id) || requiresSingleAccount)
+  const selectedAccountIdsSet = useMemo(() => new Set(formData.accountIds), [formData.accountIds])
+  const selectedAllSelectableAccounts = selectableAccounts.length > 0 && selectableAccounts.every(account => selectedAccountIdsSet.has(account.id))
+  const toggleSelectableAccounts = (accountIds: number[]) => {
+    if (isSingleAccountSelection || accountIds.length === 0) return
+    setFormData(prev => {
+      const selectedIds = new Set(prev.accountIds)
+      const allSelected = accountIds.every(id => selectedIds.has(id))
+      for (const id of accountIds) {
+        if (allSelected) selectedIds.delete(id)
+        else selectedIds.add(id)
+      }
+      return { ...prev, accountIds: Array.from(selectedIds) }
+    })
+  }
+  const toggleSelectableAccount = (accountId: number, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      accountIds: checked
+        ? Array.from(new Set([...prev.accountIds, accountId]))
+        : prev.accountIds.filter(id => id !== accountId)
+    }))
+  }
+  const selectSingleAccount = (accountId: number) => {
+    setFormData(prev => ({ ...prev, accountIds: [accountId] }))
+    setIsAccountDropdownOpen(false)
+  }
+  const getAccountLoginStatusClass = (status: string) => {
+    const normalized = status.trim().toLowerCase()
+    if (normalized === 'đã đăng nhập') return 'is-success'
+    if (!normalized || normalized === '-') return 'is-muted'
+    if (normalized.includes('checkpoint')) return 'is-warning'
+    if (
+      normalized.includes('chưa') ||
+      normalized.includes('đăng xuất') ||
+      normalized.includes('hết hạn') ||
+      normalized.includes('lỗi')
+    ) {
+      return 'is-danger'
+    }
+    return 'is-muted'
+  }
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
 
@@ -2190,6 +2256,10 @@ export default function CampaignFormModal({
   }, [campaigns.length, loadCampaigns])
 
   useEffect(() => {
+    void loadAccountGroups()
+  }, [loadAccountGroups])
+
+  useEffect(() => {
     if (findDataSourceSelectionScopeRef.current !== sourceSelectionScopeKey) {
       findDataSourceSelectionScopeRef.current = sourceSelectionScopeKey
       findDataSourceSelectionTouchedRef.current = false
@@ -2197,9 +2267,9 @@ export default function CampaignFormModal({
   }, [sourceSelectionScopeKey])
 
   useEffect(() => {
-    if (!requiresSingleAccount || formData.accountIds.length <= 1) return
+    if (!isSingleAccountSelection || formData.accountIds.length <= 1) return
     setFormData(prev => ({ ...prev, accountIds: prev.accountIds.slice(0, 1) }))
-  }, [requiresSingleAccount, formData.accountIds.length])
+  }, [isSingleAccountSelection, formData.accountIds.length])
 
   useEffect(() => {
     if (!isZaloMessageGroupRealtimeCampaign || formData.scheduleType === 'daily') return
@@ -3567,9 +3637,7 @@ export default function CampaignFormModal({
     }
     if (requiresSingleAccount && formData.accountIds.length !== 1) {
       showAlert(
-        isPageInboxMessageCampaign
-          ? 'Chiến dịch gửi tin khách inbox Page chỉ hỗ trợ chọn 1 tài khoản.'
-          : 'Chiến dịch Zalo này chỉ hỗ trợ chọn 1 tài khoản.',
+        'Hành động chiến dịch này chỉ hỗ trợ chọn 1 tài khoản.',
         'error'
       )
       return
@@ -8757,14 +8825,13 @@ export default function CampaignFormModal({
                           className="btn btn-ghost"
                           style={{ padding: '2px 8px', fontSize: '12px', height: 'auto' }}
                           onClick={() => {
-                            const allSelected = selectableAccounts.length > 0 && formData.accountIds.length === selectableAccounts.length;
                             setFormData(p => ({
                               ...p,
-                              accountIds: allSelected ? [] : selectableAccounts.map(a => a.id)
+                              accountIds: selectedAllSelectableAccounts ? [] : selectableAccounts.map(a => a.id)
                             }));
                           }}
                         >
-                          {formData.accountIds.length === selectableAccounts.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                          {selectedAllSelectableAccounts ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                         </button>
                       )}
                     </div>
@@ -8786,36 +8853,88 @@ export default function CampaignFormModal({
 
                       {isAccountDropdownOpen && (
                         <div className="account-select-menu">
-                          <div className="account-checkbox-list">
-                            {selectableAccounts.map(a => (
-                              <label key={a.id} className="account-checkbox-option">
-                                <input
-                                  type={(campaign && campaign.id) || requiresSingleAccount ? "radio" : "checkbox"}
-                                  name={(campaign && campaign.id) || requiresSingleAccount ? "account-selection" : undefined}
-                                  checked={formData.accountIds.includes(a.id)}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    if ((campaign && campaign.id) || requiresSingleAccount) {
-                                      setFormData(p => ({
-                                        ...p,
-                                        accountIds: [a.id]
-                                      }))
-                                      setIsAccountDropdownOpen(false) // auto close if it is a radio select
-                                    } else {
-                                      setFormData(p => ({
-                                        ...p,
-                                        accountIds: checked
-                                          ? [...p.accountIds, a.id]
-                                          : p.accountIds.filter(id => id !== a.id)
-                                      }))
-                                    }
-                                  }}
-                                />
-                                <span title={`${a.name} (${a.flatformType})`}>
-                                  {a.name} ({a.flatformType}){a.accountGroupName ? ` - ${a.accountGroupName}` : ''}
-                                </span>
-                              </label>
-                            ))}
+                          <div className="account-checkbox-list account-select-tree">
+                            {selectableAccountGroups.map(group => {
+                              const groupAccounts = groupedSelectableAccounts.byGroup.get(group.id) || []
+                              if (groupAccounts.length === 0) return null
+                              const groupSelected = groupAccounts.every(account => selectedAccountIdsSet.has(account.id))
+                              return (
+                                <div className="account-select-group" key={group.id}>
+                                  <label className="account-checkbox-option account-select-group-row">
+                                    {!isSingleAccountSelection && (
+                                      <input
+                                        type="checkbox"
+                                        checked={groupSelected}
+                                        onChange={() => toggleSelectableAccounts(groupAccounts.map(account => account.id))}
+                                      />
+                                    )}
+                                    <span title={`${group.name} (${groupAccounts.length})`}>{group.name} ({groupAccounts.length})</span>
+                                  </label>
+                                  <div className="account-select-group-items">
+                                    {groupAccounts.map(a => (
+                                      <label key={a.id} className="account-checkbox-option account-select-account-row">
+                                        <input
+                                          type={isSingleAccountSelection ? "radio" : "checkbox"}
+                                          name={isSingleAccountSelection ? "account-selection" : undefined}
+                                          checked={selectedAccountIdsSet.has(a.id)}
+                                          onChange={(e) => {
+                                            if (isSingleAccountSelection) {
+                                              selectSingleAccount(a.id)
+                                            } else {
+                                              toggleSelectableAccount(a.id, e.target.checked)
+                                            }
+                                          }}
+                                        />
+                                        <span className="account-select-account-label" title={`${a.name} (${a.loginStatus || '-'})`}>
+                                          <span className="account-select-account-name">{a.name}</span>
+                                          <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
+                                            {' '}({a.loginStatus || '-'})
+                                          </span>
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            {groupedSelectableAccounts.ungrouped.length > 0 && (
+                              <div className="account-select-group">
+                                <label className="account-checkbox-option account-select-group-row">
+                                  {!isSingleAccountSelection && (
+                                    <input
+                                      type="checkbox"
+                                      checked={groupedSelectableAccounts.ungrouped.every(account => selectedAccountIdsSet.has(account.id))}
+                                      onChange={() => toggleSelectableAccounts(groupedSelectableAccounts.ungrouped.map(account => account.id))}
+                                    />
+                                  )}
+                                  <span>Chưa có nhóm ({groupedSelectableAccounts.ungrouped.length})</span>
+                                </label>
+                                <div className="account-select-group-items">
+                                  {groupedSelectableAccounts.ungrouped.map(a => (
+                                    <label key={a.id} className="account-checkbox-option account-select-account-row">
+                                      <input
+                                        type={isSingleAccountSelection ? "radio" : "checkbox"}
+                                        name={isSingleAccountSelection ? "account-selection" : undefined}
+                                        checked={selectedAccountIdsSet.has(a.id)}
+                                        onChange={(e) => {
+                                          if (isSingleAccountSelection) {
+                                            selectSingleAccount(a.id)
+                                          } else {
+                                            toggleSelectableAccount(a.id, e.target.checked)
+                                          }
+                                        }}
+                                      />
+                                      <span className="account-select-account-label" title={`${a.name} (${a.loginStatus || '-'})`}>
+                                        <span className="account-select-account-name">{a.name}</span>
+                                        <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
+                                          {' '}({a.loginStatus || '-'})
+                                        </span>
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             {selectableAccounts.length === 0 && (
                               <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>
                                 {selectedActionPlatform ? 'Chưa có tài khoản phù hợp với nền tảng chiến dịch' : 'Chưa có tài khoản nào'}

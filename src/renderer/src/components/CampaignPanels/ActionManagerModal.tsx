@@ -17,6 +17,7 @@ interface ActionFormData {
   workflowId: number | ''
   testWorkflowId: number | ''
   limitCheckActionCodes: string[]
+  allowMultipleAccounts: boolean
   isActive: boolean
 }
 
@@ -27,6 +28,7 @@ const emptyForm: ActionFormData = {
   workflowId: '',
   testWorkflowId: '',
   limitCheckActionCodes: [],
+  allowMultipleAccounts: false,
   isActive: true
 }
 
@@ -93,6 +95,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       workflowId: action.workflowId ?? '',
       testWorkflowId: action.testWorkflowId ?? '',
       limitCheckActionCodes: action.limitCheckActionCodes || [],
+      allowMultipleAccounts: action.allowMultipleAccounts ?? false,
       isActive: action.isActive
     })
     setIsEditing(true)
@@ -175,6 +178,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       isActive: formData.isActive,
       workflowId: Number(formData.workflowId),
       testWorkflowId: Number(formData.testWorkflowId),
+      allowMultipleAccounts: formData.allowMultipleAccounts,
       limitCheckActionCodes: formData.limitCheckActionCodes
     }
 
@@ -251,6 +255,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                       <span className={action.isActive ? 'text-success' : 'text-muted'}>
                         {action.isActive ? 'Bật' : 'Tắt'}
                       </span>
+                      <span>{action.allowMultipleAccounts === false ? '1 tài khoản' : 'Nhiều tài khoản'}</span>
                     </div>
                     <div className="action-manager-code-line">
                       {formatActionCodes(action.limitCheckActionCodes)}
@@ -348,14 +353,25 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                     </div>
                   </div>
 
-                  <label className="action-manager-toggle">
-                    <input
-                      type="checkbox"
-                      checked={formData.isActive}
-                      onChange={e => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
-                    />
-                    <span>Đang hoạt động</span>
-                  </label>
+                  <div className="action-manager-toggle-group">
+                    <label className="action-manager-toggle">
+                      <input
+                        type="checkbox"
+                        checked={formData.isActive}
+                        onChange={e => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                      />
+                      <span>Đang hoạt động</span>
+                    </label>
+
+                    <label className="action-manager-toggle">
+                      <input
+                        type="checkbox"
+                        checked={formData.allowMultipleAccounts}
+                        onChange={e => setFormData(prev => ({ ...prev, allowMultipleAccounts: e.target.checked }))}
+                      />
+                      <span>Cho phép chọn nhiều tài khoản</span>
+                    </label>
+                  </div>
 
                   <div className="action-code-picker-block">
                     <div className="action-code-picker-title">
