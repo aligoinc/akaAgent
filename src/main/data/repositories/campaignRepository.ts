@@ -1560,6 +1560,7 @@ interface ZaloRemarketingLookup {
   isFriendByUid: Map<string, boolean>
   genderByUid: Map<string, number | string | null>
   akaBizTagIdsByUid: Map<string, number[]>
+  extraDataByUid: Map<string, Record<string, unknown>>
 }
 
 async function loadZaloRemarketingLookup(
@@ -1578,7 +1579,8 @@ async function loadZaloRemarketingLookup(
     recipientStatusByUid: new Map<string, string>(),
     isFriendByUid: new Map<string, boolean>(),
     genderByUid: new Map<string, number | string | null>(),
-    akaBizTagIdsByUid: new Map<string, number[]>()
+    akaBizTagIdsByUid: new Map<string, number[]>(),
+    extraDataByUid: new Map<string, Record<string, unknown>>()
   }
   if (normalizedUids.length === 0) return empty
 
@@ -1591,6 +1593,7 @@ async function loadZaloRemarketingLookup(
   const isFriendByUid = new Map<string, boolean>()
   const genderByUid = new Map<string, number | string | null>()
   const akaBizTagIdsByUid = new Map<string, number[]>()
+  const extraDataByUid = new Map<string, Record<string, unknown>>()
   const chunkSize = 100
 
   for (let i = 0; i < normalizedUids.length; i += chunkSize) {
@@ -1655,6 +1658,7 @@ async function loadZaloRemarketingLookup(
       if (uid && phone && !phoneByUid.has(uid)) phoneByUid.set(uid, phone)
       if (uid && groupId && !contactGroupIdByUid.has(uid)) contactGroupIdByUid.set(uid, groupId)
       if (uid && akaBizTagIds.length > 0) akaBizTagIdsByUid.set(uid, akaBizTagIds)
+      if (uid) extraDataByUid.set(uid, extra)
       if (uid && typeof isFriend === 'boolean') {
         if (isFriend) {
           isFriendByUid.set(uid, true)
@@ -1700,7 +1704,8 @@ async function loadZaloRemarketingLookup(
     recipientStatusByUid,
     isFriendByUid,
     genderByUid,
-    akaBizTagIdsByUid
+    akaBizTagIdsByUid,
+    extraDataByUid
   }
 
   const groupNameById = new Map<string, string>()
@@ -1734,7 +1739,8 @@ async function loadZaloRemarketingLookup(
     recipientStatusByUid,
     isFriendByUid,
     genderByUid,
-    akaBizTagIdsByUid
+    akaBizTagIdsByUid,
+    extraDataByUid
   }
 }
 
@@ -1796,6 +1802,80 @@ function normalizeZaloRemarketingIds(values: unknown): number[] {
   ))
 }
 
+function normalizeZaloRemarketingZaloTagIds(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+  return Array.from(new Set(
+    values
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+  ))
+}
+
+function extractZaloRemarketingZaloTagIdsFromValue(value: unknown): string[] {
+  if (value === null || value === undefined) return []
+  if (Array.isArray(value)) return value.flatMap(item => extractZaloRemarketingZaloTagIdsFromValue(item))
+  if (typeof value === 'object') {
+    const item = normalizeRecord(value) || {}
+    const id = textValue(item.id || item.labelId || item.label_id || item.tagId || item.tag_id)
+    return id ? [id] : []
+  }
+  const raw = textValue(value)
+  return raw ? [raw] : []
+}
+
+function getZaloRemarketingContactZaloTagIds(contact: AutoAccountContact): string[] {
+  const extra = normalizeRecord(contact.extraData) || {}
+  const rawPayload = normalizeRecord(extra.rawPayload) || {}
+  const tagIds = [
+    extra.zaloTagIds,
+    extra.zalo_tag_ids,
+    extra.labelIds,
+    extra.label_ids,
+    extra.tagIds,
+    extra.tag_ids,
+    rawPayload.labelIds,
+    rawPayload.label_ids,
+    rawPayload.tagIds,
+    rawPayload.tag_ids
+  ].flatMap(value => normalizeZaloRemarketingZaloTagIds(value))
+
+  tagIds.push(
+    ...extractZaloRemarketingZaloTagIdsFromValue(extra.labels),
+    ...extractZaloRemarketingZaloTagIdsFromValue(extra.tags),
+    ...extractZaloRemarketingZaloTagIdsFromValue(rawPayload.labels),
+    ...extractZaloRemarketingZaloTagIdsFromValue(rawPayload.tags)
+  )
+
+  const tagObjects = [
+    Array.isArray(extra.zaloTags) ? extra.zaloTags : [],
+    Array.isArray(extra.zalo_tags) ? extra.zalo_tags : [],
+    Array.isArray(rawPayload.zaloTags) ? rawPayload.zaloTags : [],
+    Array.isArray(rawPayload.zalo_tags) ? rawPayload.zalo_tags : []
+  ].flat()
+
+  for (const rawTag of tagObjects) {
+    const tag = normalizeRecord(rawTag)
+    const id = textValue(tag?.id || tag?.labelId || tag?.label_id || tag?.tagId || tag?.tag_id)
+    if (id) tagIds.push(id)
+  }
+
+  return Array.from(new Set(tagIds))
+}
+
+function zaloRemarketingContactMatchesZaloTagFilter(contact: AutoAccountContact, tagIds: string[], includeNoTag: boolean): boolean {
+  if (tagIds.length === 0 && !includeNoTag) return true
+  const contactTagIds = new Set(getZaloRemarketingContactZaloTagIds(contact))
+  if (includeNoTag && contactTagIds.size === 0) return true
+  return tagIds.some(tagId => contactTagIds.has(tagId))
+}
+
+function zaloRemarketingContactMatchesAkaBizTagFilter(contact: AutoAccountContact, tagIds: number[], includeNoTag: boolean): boolean {
+  if (tagIds.length === 0 && !includeNoTag) return true
+  const contactTagIds = new Set(normalizeAkaBizTagIds(contact.akaBizTagIds))
+  if (includeNoTag && contactTagIds.size === 0) return true
+  return tagIds.some(tagId => contactTagIds.has(tagId))
+}
+
 function zaloRemarketingContactMatchesSearch(contact: AutoAccountContact, search: string): boolean {
   if (!search) return true
   const extra = contact.extraData || {}
@@ -1818,10 +1898,17 @@ function filterZaloRemarketingContacts(
   const idSet = ids.length > 0 ? new Set(ids) : null
   const excludeIds = new Set(normalizeZaloRemarketingIds(query.excludeIds))
   const search = textValue(query.search).toLocaleLowerCase('vi-VN')
+  const zaloTagIds = normalizeZaloRemarketingZaloTagIds(query.zaloTagIds)
+  const akaBizTagIds = normalizeAkaBizTagIds(query.akaBizTagIds)
+  const includeNoZaloTag = query.zaloNoTag === true
+  const includeNoAkaBizTag = query.akaBizNoTag === true
   return contacts.filter(contact => {
     if (idSet && !idSet.has(contact.id)) return false
     if (excludeIds.has(contact.id)) return false
-    return zaloRemarketingContactMatchesSearch(contact, search)
+    if (!zaloRemarketingContactMatchesSearch(contact, search)) return false
+    if (!zaloRemarketingContactMatchesZaloTagFilter(contact, zaloTagIds, includeNoZaloTag)) return false
+    if (!zaloRemarketingContactMatchesAkaBizTagFilter(contact, akaBizTagIds, includeNoAkaBizTag)) return false
+    return true
   })
 }
 
@@ -1942,8 +2029,10 @@ async function buildZaloRemarketingCustomers(
     const isFriend = lookup.isFriendByUid.get(uid)
     const gender = lookup.genderByUid.has(uid) ? lookup.genderByUid.get(uid) ?? null : null
     const akaBizTagIds = lookup.akaBizTagIdsByUid.get(uid) || []
+    const contactExtraData = lookup.extraDataByUid.get(uid) || {}
     const existing = rowsByUid.get(key)
     if (existing) {
+      existing.extraData = { ...contactExtraData, ...existing.extraData }
       existing.extraData.sentCount = Number(existing.extraData.sentCount || 0) + 1
       if ((!textValue(existing.name) || existing.name === existing.uid) && name && name !== existing.uid) {
         existing.name = name
@@ -1983,6 +2072,7 @@ async function buildZaloRemarketingCustomers(
       uid,
       url: '',
       extraData: {
+        ...contactExtraData,
         source: 'zalo_remarketing_customers',
         phone,
         groupName,

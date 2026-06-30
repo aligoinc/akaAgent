@@ -582,6 +582,59 @@ function contactMatchesSearch(contact: AutoAccountContact, search: string): bool
   return haystack.includes(search)
 }
 
+function extractZaloTagIdsFromValue(value: unknown): string[] {
+  if (value === null || value === undefined) return []
+  if (Array.isArray(value)) return value.flatMap(item => extractZaloTagIdsFromValue(item))
+  if (typeof value === 'object') {
+    const item = toRecord(value)
+    const id = normalizeNullableString(item.id || item.labelId || item.label_id || item.tagId || item.tag_id)
+    return id ? [id] : []
+  }
+  const raw = normalizeNullableString(value)
+  return raw ? [raw] : []
+}
+
+function getContactZaloTagIds(contact: AutoAccountContact): string[] {
+  const extra = toRecord(contact.extraData)
+  const rawPayload = toRecord(extra.rawPayload)
+  return normalizeZaloTagIdList([
+    ...toStringArray(extra.zaloTagIds),
+    ...toStringArray(extra.zalo_tag_ids),
+    ...toStringArray(extra.labelIds),
+    ...toStringArray(extra.label_ids),
+    ...toStringArray(extra.tagIds),
+    ...toStringArray(extra.tag_ids),
+    ...extractZaloTagsFromExtra(extra).map(tag => tag.id),
+    ...extractZaloTagIdsFromValue(extra.labels),
+    ...extractZaloTagIdsFromValue(extra.tags),
+    ...toStringArray(rawPayload.labelIds),
+    ...toStringArray(rawPayload.label_ids),
+    ...toStringArray(rawPayload.tagIds),
+    ...toStringArray(rawPayload.tag_ids),
+    ...extractZaloTagsFromExtra(rawPayload).map(tag => tag.id),
+    ...extractZaloTagIdsFromValue(rawPayload.labels),
+    ...extractZaloTagIdsFromValue(rawPayload.tags)
+  ])
+}
+
+function contactMatchesZaloTagFilter(contact: AutoAccountContact, tagIds: string[], includeNoTag: boolean): boolean {
+  if (tagIds.length === 0 && !includeNoTag) return true
+  const contactTagIds = new Set(getContactZaloTagIds(contact))
+  if (includeNoTag && contactTagIds.size === 0) return true
+  return tagIds.some(tagId => contactTagIds.has(tagId))
+}
+
+function contactMatchesAkaBizTagFilter(contact: AutoAccountContact, tagIds: number[], includeNoTag: boolean): boolean {
+  if (tagIds.length === 0 && !includeNoTag) return true
+  const contactTagIds = new Set(
+    (contact.akaBizTagIds || [])
+      .map(id => Number(id))
+      .filter(id => Number.isFinite(id) && id > 0)
+  )
+  if (includeNoTag && contactTagIds.size === 0) return true
+  return tagIds.some(tagId => contactTagIds.has(tagId))
+}
+
 function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   const ids = normalizeContactIdList(query.ids)
   const excludeIds = normalizeContactIdList(query.excludeIds)
@@ -589,6 +642,10 @@ function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   if (ids.length > 0 || excludeIds.length > 0) return false
   if (normalizeSearchText(query.search)) return false
   if (String(query.sourcePostUrl || '').trim()) return false
+  if (normalizeZaloTagIdList(query.zaloTagIds).length > 0) return false
+  if (query.zaloNoTag) return false
+  if (normalizeContactIdList(query.akaBizTagIds).length > 0) return false
+  if (query.akaBizNoTag) return false
   if (statusFilter !== 'all' && !query.contactType) return false
   return true
 }
@@ -697,6 +754,10 @@ async function filterContactsForList(
   const excludeIds = new Set(normalizeContactIdList(query.excludeIds))
   const search = normalizeSearchText(query.search)
   const normalizedPostUrl = normalizeFacebookPostUrlForCompare(query.sourcePostUrl)
+  const zaloTagIds = normalizeZaloTagIdList(query.zaloTagIds)
+  const akaBizTagIds = normalizeContactIdList(query.akaBizTagIds)
+  const includeNoZaloTag = query.zaloNoTag === true
+  const includeNoAkaBizTag = query.akaBizNoTag === true
   const contacts = await fetchContactRowsForList(accountId, staffId, query.contactType, ids)
 
   return contacts.filter(contact => {
@@ -704,6 +765,8 @@ async function filterContactsForList(
     if (!contactMatchesStatusFilter(contact, query.statusFilter)) return false
     if (!contactMatchesSourcePostUrl(contact, normalizedPostUrl)) return false
     if (!contactMatchesSearch(contact, search)) return false
+    if (!contactMatchesZaloTagFilter(contact, zaloTagIds, includeNoZaloTag)) return false
+    if (!contactMatchesAkaBizTagFilter(contact, akaBizTagIds, includeNoAkaBizTag)) return false
     return true
   })
 }
@@ -2014,11 +2077,18 @@ async function fetchZaloGroupMemberContactsForList(
   const idSet = ids.length > 0 ? new Set(ids) : null
   const excludeIds = new Set(normalizeContactIdList(query.excludeIds))
   const search = normalizeSearchText(query.search)
+  const zaloTagIds = normalizeZaloTagIdList(query.zaloTagIds)
+  const akaBizTagIds = normalizeContactIdList(query.akaBizTagIds)
+  const includeNoZaloTag = query.zaloNoTag === true
+  const includeNoAkaBizTag = query.akaBizNoTag === true
 
   return result.filter(contact => {
     if (idSet && !idSet.has(contact.id)) return false
     if (excludeIds.has(contact.id)) return false
-    return contactMatchesSearch(contact, search)
+    if (!contactMatchesSearch(contact, search)) return false
+    if (!contactMatchesZaloTagFilter(contact, zaloTagIds, includeNoZaloTag)) return false
+    if (!contactMatchesAkaBizTagFilter(contact, akaBizTagIds, includeNoAkaBizTag)) return false
+    return true
   })
 }
 
@@ -2094,6 +2164,10 @@ function canUseDbPagedZaloGroupMemberContacts(query: ZaloGroupMemberContactListQ
   if (normalizeContactIdList(query.ids).length > 0) return false
   if (normalizeContactIdList(query.excludeIds).length > 0) return false
   if (normalizeSearchText(query.search)) return false
+  if (normalizeZaloTagIdList(query.zaloTagIds).length > 0) return false
+  if (query.zaloNoTag) return false
+  if (normalizeContactIdList(query.akaBizTagIds).length > 0) return false
+  if (query.akaBizNoTag) return false
   return true
 }
 

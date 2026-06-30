@@ -889,6 +889,10 @@ export interface AccountContactListQuery {
   statusFilter?: ContactStatusFilter
   search?: string
   sourcePostUrl?: string
+  zaloTagIds?: Array<number | string>
+  zaloNoTag?: boolean
+  akaBizTagIds?: number[]
+  akaBizNoTag?: boolean
   ids?: number[]
   excludeIds?: number[]
   offset?: number
@@ -910,6 +914,10 @@ export interface ZaloRemarketingCustomerListQuery {
   dateFrom?: string
   dateTo?: string
   search?: string
+  zaloTagIds?: Array<number | string>
+  zaloNoTag?: boolean
+  akaBizTagIds?: number[]
+  akaBizNoTag?: boolean
   ids?: number[]
   excludeIds?: number[]
   offset?: number
