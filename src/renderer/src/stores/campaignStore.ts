@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry } from '../../../shared/types'
+import { AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -69,6 +69,12 @@ interface CampaignStore {
   campaignDetails: CampaignDetail[]
   loadingCampaignDetails: boolean
   loadCampaignDetails: (campaignId: number) => Promise<void>
+
+  // Email campaign link tracking
+  emailCampaignLinkTrackings: EmailCampaignLinkTrackingSummary[]
+  emailCampaignLinkTrackingCampaignId: number | null
+  loadingEmailCampaignLinkTrackings: boolean
+  loadEmailCampaignLinkTrackings: (campaignId: number) => Promise<void>
 
   // Campaign run events (fine-grained workflow log)
   campaignRunEvents: CampaignRunEvent[]
@@ -452,6 +458,32 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       console.error('Failed to load campaign details:', err)
     } finally {
       set({ loadingCampaignDetails: false })
+    }
+  },
+
+  // =========== EMAIL CAMPAIGN LINK TRACKINGS ===========
+  emailCampaignLinkTrackings: [],
+  emailCampaignLinkTrackingCampaignId: null,
+  loadingEmailCampaignLinkTrackings: false,
+
+  loadEmailCampaignLinkTrackings: async (campaignId) => {
+    if (!window.electronAPI) return
+    set({
+      emailCampaignLinkTrackings: [],
+      emailCampaignLinkTrackingCampaignId: campaignId,
+      loadingEmailCampaignLinkTrackings: true
+    })
+    try {
+      const links = await window.electronAPI.listEmailCampaignLinkTrackings(campaignId)
+      if (get().emailCampaignLinkTrackingCampaignId === campaignId) {
+        set({ emailCampaignLinkTrackings: links })
+      }
+    } catch (err) {
+      console.error('Failed to load email campaign link trackings:', err)
+    } finally {
+      if (get().emailCampaignLinkTrackingCampaignId === campaignId) {
+        set({ loadingEmailCampaignLinkTrackings: false })
+      }
     }
   },
 

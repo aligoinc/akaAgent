@@ -61,7 +61,13 @@ const ZALO_REMARKETING_PAGE_MAX_LIMIT = 20000
 const CAMPAIGN_INPUT_DATA_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_ID_CHUNK = 100
-const CAMPAIGN_RELATION_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'thất bại', 'lỗi', 'không tồn tại']
+const CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']
+const CAMPAIGN_RELATION_DETAIL_STATUSES: CampaignDetailStatus[] = [
+  ...CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES,
+  'thất bại',
+  'lỗi',
+  'không tồn tại'
+]
 const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
   '0162': '032',
   '0163': '033',
@@ -2269,7 +2275,7 @@ export async function listCampaignRelationSummaries(campaignIds: number[]): Prom
     if (!summary) continue
 
     const actionName = String(detail.action_name || '').trim() || 'Không rõ'
-    if (detail.status === 'thành công') {
+    if (CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES.includes(detail.status)) {
       summary.successCount += 1
       incrementRelationBreakdown(summary.successBreakdown, actionName, detail.status)
     } else {

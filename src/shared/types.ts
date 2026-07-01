@@ -340,7 +340,7 @@ export interface CampaignExtraSettings {
   actionLimits?: CampaignActionLimitSettings // giới hạn gửi theo action_code; top-level là fallback cho campaign cũ
   emailSubject?: string          // Tiêu đề email (chiến dịch email_send)
   emailBodyIsHtml?: boolean      // Nội dung email là HTML (chiến dịch email_send)
-  emailCheckLinkClicks?: boolean // Kiểm tra click vào link (chỉ lưu cấu hình email_send)
+  emailCheckLinkClicks?: boolean // Kiểm tra click vào link trong email_send
   imageOption?: 'none' | 'all' | 'random'
   randomImageCount?: number
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
@@ -724,6 +724,17 @@ export interface CampaignRunEventInput {
   message?: string | null
   extractedData?: Record<string, unknown> | null
   debugData?: Record<string, unknown> | null
+}
+
+export interface EmailCampaignLinkTrackingSummary {
+  url: string
+  emailCount: number
+  linkCount: number
+  clickCount: number
+  firstClickedAt?: string | null
+  lastClickedAt?: string | null
+  firstTrackedAt?: string | null
+  lastTrackedAt?: string | null
 }
 
 export interface CampaignRunEventListOptions {
@@ -1348,6 +1359,7 @@ export const IPC_EVENTS = {
   // Database Campaign Details (per-milestone log)
   DB_LIST_CAMPAIGN_DETAILS_BY_INPUT_DATA: 'db:list-campaign-details',
   DB_LIST_CAMPAIGN_DETAILS_BY_CAMPAIGN: 'db:list-campaign-details-by-campaign',
+  DB_LIST_EMAIL_CAMPAIGN_LINK_TRACKINGS: 'db:list-email-campaign-link-trackings',
   DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
   DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
   DB_LIST_CAMPAIGN_RUN_EVENTS_BY_CAMPAIGN: 'db:list-campaign-run-events-by-campaign',

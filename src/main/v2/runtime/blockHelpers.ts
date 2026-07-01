@@ -201,6 +201,7 @@ export interface EmailSendMessageOptions {
   subject?: string
   body?: string
   isHtml?: boolean
+  enableClickTracking?: boolean
   attachments?: unknown[]
   inputData?: Record<string, unknown>
   targetName?: string
@@ -210,6 +211,7 @@ export interface EmailActionHelperResult {
   ok: boolean
   skipped?: boolean
   message?: string
+  emailTrackingMessageId?: number
   // Reuse the generic action-detail shape consumed by the run-step processor.
   detail?: ZaloActionDetailOutput | null
 }

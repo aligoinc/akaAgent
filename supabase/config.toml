@@ -4,6 +4,12 @@ verify_jwt = false
 [functions.aka-agent-email-notification-worker]
 verify_jwt = false
 
+[functions.email-open]
+verify_jwt = false
+
+[functions.email-click]
+verify_jwt = false
+
 [functions.insert_aka_customer]
 verify_jwt = false
 
