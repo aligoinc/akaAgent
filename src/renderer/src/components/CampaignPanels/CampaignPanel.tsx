@@ -33,6 +33,7 @@ interface CampaignPanelProps {
   filterAccountId?: number | null
   onClearFilter?: () => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
+  onOpenContentTemplates?: () => void
   onAskAssistant?: (campaignId: number) => void
 }
 
@@ -1338,7 +1339,7 @@ function AddInputDataToCampaignModal({
   )
 }
 
-export default function CampaignPanel({ isActive, filterAccountId, onClearFilter, onOpenGeneralSettings, onAskAssistant }: CampaignPanelProps) {
+export default function CampaignPanel({ isActive, filterAccountId, onClearFilter, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
@@ -3571,6 +3572,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
             lockedActionId={campaignFormInitialActionId}
             initialDetails={campaignFormInitialDetails}
             onOpenGeneralSettings={onOpenGeneralSettings}
+            onOpenContentTemplates={onOpenContentTemplates}
             onClose={() => {
               setShowForm(false)
               setEditingCampaign(null)

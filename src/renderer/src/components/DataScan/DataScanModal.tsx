@@ -5,7 +5,7 @@ import { utils, writeFile } from 'xlsx'
 import { AccountContactListQuery, AkaBizContactTag, AutoAccountContact, AutoAccountContactGroup, ContactStatusFilter, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanMode, ZaloRemarketingCustomerListQuery } from '../../../../shared/types'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
-import DataScanGroupManagementModal from './DataScanGroupManagementModal'
+import DataGroupManagerModal from './DataGroupManagerModal'
 import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
@@ -1451,6 +1451,40 @@ export default function DataScanModal({
     setGroupContactCache(prev => ({ ...prev, [groupId]: data }))
     return data
   }, [groupContactCache])
+
+  const handleManagedContactGroupsChanged = useCallback(async () => {
+    if (!window.electronAPI || !accountId || !supportsContactGroups) {
+      setSelectedGroupIds(new Set())
+      setGroupContactCache({})
+      await loadContactGroups()
+      return
+    }
+
+    setGroupsLoading(true)
+    try {
+      const [groups, allGroups] = await Promise.all([
+        window.electronAPI.listContactGroups(accountId, actionDef.contactType),
+        window.electronAPI.listContactGroups(accountId)
+      ])
+      const currentGroupIds = new Set(groups.map(group => group.id))
+      const nextSelectedGroupIds = Array.from(selectedGroupIds).filter(groupId => currentGroupIds.has(groupId))
+      const nextGroupContactCache: Record<number, AutoAccountContact[]> = {}
+      await Promise.all(nextSelectedGroupIds.map(async groupId => {
+        nextGroupContactCache[groupId] = await window.electronAPI.listContactGroupContacts(groupId)
+      }))
+
+      setContactGroups(groups)
+      setAllContactGroups(allGroups)
+      setActiveGroupId(prev => prev && allGroups.some(group => group.id === prev) ? prev : allGroups[0]?.id || null)
+      setSelectedGroupIds(new Set(nextSelectedGroupIds))
+      setGroupContactCache(nextGroupContactCache)
+    } catch (err: any) {
+      console.error('Failed to refresh managed contact groups:', err)
+      showAlert(err?.message || 'Không thể tải lại nhóm data sau khi cập nhật.', 'error')
+    } finally {
+      setGroupsLoading(false)
+    }
+  }, [accountId, actionDef.contactType, loadContactGroups, selectedGroupIds, showAlert, supportsContactGroups])
 
   useEffect(() => {
     pageInboxPageUidRef.current = pageInboxPageUid
@@ -3510,23 +3544,16 @@ export default function DataScanModal({
         </div>
 
         {supportsContactGroups && showGroupPanel && (
-          <DataScanGroupManagementModal
-            activeContactType={activeGroupContactType}
-            platform={selectedPlatform}
-            groupsLoading={groupsLoading}
-            contactGroups={allContactGroups}
-            activeGroupId={activeGroupId}
-            groupContactsLoading={groupContactsLoading}
-            filteredGroupContacts={filteredGroupContacts}
-            groupContactsByStatusCount={groupContactsByStatus.length}
-            groupTableColSpan={groupTableColSpan}
+          <DataGroupManagerModal
+            initialAccountId={typeof accountId === 'number' ? accountId : null}
+            initialGroupId={activeContactGroup?.contactType === actionDef.contactType ? activeGroupId : null}
+            initialPlatform={selectedPlatform}
+            initialContactType={actionDef.contactType}
+            lockContext
             zaloTagNameById={zaloTagNameById}
             akaBizTagNameById={akaBizTagNameById}
+            onGroupsChanged={handleManagedContactGroupsChanged}
             onClose={() => setShowGroupPanel(false)}
-            onActivateGroup={handleActivateGroup}
-            onRenameGroup={handleRenameContactGroup}
-            onDeleteGroup={handleDeleteContactGroup}
-            onRemoveContacts={handleRemoveFromActiveGroup}
           />
         )}
 

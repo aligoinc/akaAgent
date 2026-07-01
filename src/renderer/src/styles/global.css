@@ -1623,6 +1623,15 @@ button.btn-icon:not(.btn):disabled {
   padding: 18px;
 }
 
+.content-template-manager-modal {
+  width: min(1120px, calc(100vw - 32px));
+}
+
+.content-template-manager-content {
+  flex: 1;
+  min-height: 0;
+}
+
 .general-settings-content.zalo-blocklist-content {
   display: flex;
   flex-direction: column;
@@ -10543,6 +10552,10 @@ button.btn-icon.campaign-control-button.assistant {
   background: rgba(0, 0, 0, 0.5);
 }
 
+.data-group-manager-backdrop {
+  z-index: 3450;
+}
+
 .data-scan-group-modal {
   width: min(520px, 100%);
   max-height: min(620px, calc(100vh - 40px));
@@ -10617,6 +10630,58 @@ button.btn-icon.campaign-control-button.assistant {
 
 .data-scan-groups-management-modal .data-scan-group-table-wrap {
   max-height: 430px;
+}
+
+.data-group-manager-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.7fr) minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-primary);
+}
+
+.data-group-manager-field {
+  min-width: 0;
+}
+
+.data-group-manager-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.data-group-manager-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.data-group-manager-search svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.data-group-manager-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 12px;
+  outline: none;
 }
 
 .data-scan-group-modal-list {
@@ -10805,6 +10870,10 @@ button.btn-icon.campaign-control-button.assistant {
 
   .data-scan-groups-management-body {
     overflow-y: auto;
+  }
+
+  .data-group-manager-toolbar {
+    grid-template-columns: 1fr;
   }
 
   .data-scan-group-action-button,

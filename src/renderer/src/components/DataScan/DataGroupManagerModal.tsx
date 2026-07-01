@@ -1,27 +1,60 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Check, Pencil, Trash2, X } from 'lucide-react'
-import { AutoAccountContact, AutoAccountContactGroup, ContactType } from '../../../../shared/types'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Check, Pencil, RefreshCw, Search, Trash2, X } from 'lucide-react'
+import { AutoAccount, AutoAccountContact, AutoAccountContactGroup, ContactType } from '../../../../shared/types'
+import { useCampaignStore } from '../../stores/campaignStore'
+import { useUiStore } from '../../stores/uiStore'
 
-interface DataScanGroupManagementModalProps {
-  activeContactType: ContactType
-  platform?: string
-  groupsLoading: boolean
-  contactGroups: AutoAccountContactGroup[]
-  activeGroupId: number | null
-  groupContactsLoading: boolean
-  filteredGroupContacts: AutoAccountContact[]
-  groupContactsByStatusCount: number
-  groupTableColSpan: number
+type DataGroupPlatform = 'facebook' | 'zalo'
+type DataGroupContactType = Extract<ContactType, 'person' | 'group' | 'page'>
+
+interface DataGroupManagerModalProps {
+  initialAccountId?: number | null
+  initialGroupId?: number | null
+  initialPlatform?: DataGroupPlatform | string
+  initialContactType?: DataGroupContactType | ContactType
+  lockContext?: boolean
   zaloTagNameById?: Map<string, string>
   akaBizTagNameById?: Map<number, string>
+  onGroupsChanged?: () => void | Promise<void>
   onClose: () => void
-  onActivateGroup: (groupId: number) => void
-  onRenameGroup: (group: AutoAccountContactGroup, name: string) => void | Promise<void>
-  onDeleteGroup: (group: AutoAccountContactGroup) => void
-  onRemoveContacts: (contacts: AutoAccountContact[], onSuccess?: () => void) => void
+}
+
+const EMPTY_ZALO_TAG_NAME_BY_ID = new Map<string, string>()
+const EMPTY_AKABIZ_TAG_NAME_BY_ID = new Map<number, string>()
+
+const CONTACT_TYPE_OPTIONS: Record<DataGroupPlatform, Array<{ value: DataGroupContactType; label: string }>> = {
+  facebook: [
+    { value: 'person', label: 'User Facebook' },
+    { value: 'group', label: 'Group Facebook' },
+    { value: 'page', label: 'Page Facebook' }
+  ],
+  zalo: [
+    { value: 'person', label: 'User Zalo' },
+    { value: 'group', label: 'Group Zalo' }
+  ]
+}
+
+const isDataGroupPlatform = (value: unknown): value is DataGroupPlatform => value === 'facebook' || value === 'zalo'
+
+const normalizePlatform = (value?: string | null): DataGroupPlatform => (
+  isDataGroupPlatform(value) ? value : 'facebook'
+)
+
+const normalizeContactType = (
+  value: unknown,
+  platform: DataGroupPlatform
+): DataGroupContactType => {
+  const allowed = CONTACT_TYPE_OPTIONS[platform].map(option => option.value)
+  return allowed.includes(value as DataGroupContactType)
+    ? value as DataGroupContactType
+    : allowed[0]
 }
 
 const getContactStatusLabel = (contact: AutoAccountContact) => {
+  if (contact.contactType === 'person' && contact.extraData?.source === 'facebook_post_commenters') {
+    return contact.isFriend ? 'Bạn bè' : 'Chưa xác định'
+  }
   if (contact.contactType === 'person') return contact.isFriend ? 'Bạn bè' : 'Không còn bạn bè'
   if (contact.contactType === 'group') return contact.isJoined ? 'Đã tham gia' : 'Chưa tham gia'
   return ''
@@ -37,7 +70,8 @@ const getContactTypeLabel = (contactType: ContactType, platform: string = 'faceb
   const isZalo = platform === 'zalo'
   if (contactType === 'person') return isZalo ? 'User Zalo' : 'User Facebook'
   if (contactType === 'group') return isZalo ? 'Group Zalo' : 'Group Facebook'
-  return 'Page Facebook'
+  if (contactType === 'page') return 'Page Facebook'
+  return 'Data'
 }
 
 const getContactAvatarUrl = (contact: AutoAccountContact) => {
@@ -68,9 +102,6 @@ const renderContactAvatar = (contact: AutoAccountContact) => {
     </div>
   )
 }
-
-const EMPTY_ZALO_TAG_NAME_BY_ID = new Map<string, string>()
-const EMPTY_AKABIZ_TAG_NAME_BY_ID = new Map<number, string>()
 
 const toRecord = (value: unknown): Record<string, unknown> => (
   value && typeof value === 'object' && !Array.isArray(value)
@@ -227,6 +258,11 @@ const getContactZaloTagLabels = (
   return labels
 }
 
+const formatContactZaloTags = (
+  contact: AutoAccountContact,
+  tagNameById: Map<string, string>
+) => getContactZaloTagLabels(contact, tagNameById).join(', ')
+
 const renderZaloTagCell = (
   contact: AutoAccountContact,
   tagNameById: Map<string, string>
@@ -260,6 +296,11 @@ const getContactAkaBizTagLabels = (
   tagNameById: Map<number, string>
 ) => normalizeContactAkaBizTagIds(contact).map(id => tagNameById.get(id) || `#${id}`)
 
+const formatContactAkaBizTags = (
+  contact: AutoAccountContact,
+  tagNameById: Map<number, string>
+) => getContactAkaBizTagLabels(contact, tagNameById).join(', ')
+
 const renderAkaBizTagCell = (
   contact: AutoAccountContact,
   tagNameById: Map<number, string>
@@ -278,28 +319,179 @@ const renderAkaBizTagCell = (
   )
 }
 
-export default function DataScanGroupManagementModal({
-  activeContactType,
-  platform = 'facebook',
-  groupsLoading,
-  contactGroups,
-  activeGroupId,
-  groupContactsLoading,
-  filteredGroupContacts,
-  groupContactsByStatusCount,
-  groupTableColSpan,
+const getAccountPlatform = (account: AutoAccount | null | undefined): DataGroupPlatform => (
+  normalizePlatform(account?.flatformType)
+)
+
+export default function DataGroupManagerModal({
+  initialAccountId,
+  initialGroupId,
+  initialPlatform = 'facebook',
+  initialContactType = 'person',
+  lockContext = false,
   zaloTagNameById = EMPTY_ZALO_TAG_NAME_BY_ID,
   akaBizTagNameById = EMPTY_AKABIZ_TAG_NAME_BY_ID,
-  onClose,
-  onActivateGroup,
-  onRenameGroup,
-  onDeleteGroup,
-  onRemoveContacts
-}: DataScanGroupManagementModalProps) {
+  onGroupsChanged,
+  onClose
+}: DataGroupManagerModalProps) {
+  const { accounts, loadAccounts } = useCampaignStore()
+  const showAlert = useUiStore(state => state.showAlert)
+  const showConfirm = useUiStore(state => state.showConfirm)
+  const groupsLoadSeqRef = useRef(0)
+  const [accountId, setAccountId] = useState<number | ''>(initialAccountId || '')
+  const [platform, setPlatform] = useState<DataGroupPlatform>(() => normalizePlatform(initialPlatform))
+  const [contactType, setContactType] = useState<DataGroupContactType>(() => normalizeContactType(initialContactType, normalizePlatform(initialPlatform)))
+  const [groupsLoading, setGroupsLoading] = useState(false)
+  const [contactGroups, setContactGroups] = useState<AutoAccountContactGroup[]>([])
+  const [activeGroupId, setActiveGroupId] = useState<number | null>(initialGroupId || null)
+  const [groupContacts, setGroupContacts] = useState<AutoAccountContact[]>([])
+  const [groupContactsLoading, setGroupContactsLoading] = useState(false)
+  const [search, setSearch] = useState('')
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null)
   const [editingGroupName, setEditingGroupName] = useState('')
   const [renamingGroupId, setRenamingGroupId] = useState<number | null>(null)
   const [selectedContactIds, setSelectedContactIds] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    void loadAccounts()
+  }, [loadAccounts])
+
+  const selectedAccount = useMemo(
+    () => accounts.find(account => account.id === accountId) || null,
+    [accountId, accounts]
+  )
+
+  const availableAccounts = useMemo(
+    () => accounts.filter(account => account.flatformType === 'facebook' || account.flatformType === 'zalo'),
+    [accounts]
+  )
+
+  useEffect(() => {
+    if (accountId || availableAccounts.length === 0) return
+    const fallback = availableAccounts.find(account => getAccountPlatform(account) === platform) || availableAccounts[0]
+    if (fallback) setAccountId(fallback.id)
+  }, [accountId, availableAccounts, platform])
+
+  useEffect(() => {
+    if (!selectedAccount) {
+      setPlatform(normalizePlatform(initialPlatform))
+      setContactType(prev => normalizeContactType(prev, normalizePlatform(initialPlatform)))
+      return
+    }
+    const nextPlatform = getAccountPlatform(selectedAccount)
+    setPlatform(nextPlatform)
+    setContactType(prev => normalizeContactType(prev, nextPlatform))
+  }, [initialPlatform, selectedAccount])
+
+  const notifyGroupsChanged = useCallback(async () => {
+    await onGroupsChanged?.()
+  }, [onGroupsChanged])
+
+  const loadContactGroups = useCallback(async () => {
+    if (!window.electronAPI || !accountId) {
+      groupsLoadSeqRef.current += 1
+      setContactGroups([])
+      setActiveGroupId(null)
+      setGroupsLoading(false)
+      return
+    }
+    const loadSeq = ++groupsLoadSeqRef.current
+    setGroupsLoading(true)
+    try {
+      const groups = await window.electronAPI.listContactGroups(accountId, contactType)
+      if (loadSeq !== groupsLoadSeqRef.current) return
+      setContactGroups(groups)
+      setActiveGroupId(prev => prev && groups.some(group => group.id === prev) ? prev : groups[0]?.id || null)
+    } catch (err: any) {
+      console.error('Failed to load contact groups:', err)
+      if (loadSeq === groupsLoadSeqRef.current) {
+        showAlert(err?.message || 'Không thể tải danh sách nhóm data.', 'error')
+      }
+    } finally {
+      if (loadSeq === groupsLoadSeqRef.current) {
+        setGroupsLoading(false)
+      }
+    }
+  }, [accountId, contactType, showAlert])
+
+  useEffect(() => {
+    if (!initialGroupId) return
+    const initialPlatformValue = normalizePlatform(initialPlatform)
+    const initialContactTypeValue = normalizeContactType(initialContactType, initialPlatformValue)
+    if (initialAccountId && accountId !== initialAccountId) return
+    if (contactType !== initialContactTypeValue) return
+
+    setActiveGroupId(initialGroupId)
+    void loadContactGroups()
+  }, [accountId, contactType, initialAccountId, initialContactType, initialGroupId, initialPlatform, loadContactGroups])
+
+  useEffect(() => {
+    setGroupContacts([])
+    setSelectedContactIds(new Set())
+    setEditingGroupId(null)
+    setEditingGroupName('')
+    void loadContactGroups()
+  }, [loadContactGroups])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadContacts = async () => {
+      if (!window.electronAPI || !activeGroupId) {
+        setGroupContacts([])
+        return
+      }
+      setGroupContactsLoading(true)
+      try {
+        const data = await window.electronAPI.listContactGroupContacts(activeGroupId)
+        if (!cancelled) setGroupContacts(data)
+      } catch (err: any) {
+        console.error('Failed to load contact group contacts:', err)
+        if (!cancelled) showAlert(err?.message || 'Không thể tải data trong nhóm.', 'error')
+      } finally {
+        if (!cancelled) setGroupContactsLoading(false)
+      }
+    }
+    void loadContacts()
+    return () => {
+      cancelled = true
+    }
+  }, [activeGroupId, showAlert])
+
+  const activeContactType = useMemo(
+    () => contactGroups.find(group => group.id === activeGroupId)?.contactType || contactType,
+    [activeGroupId, contactGroups, contactType]
+  )
+  const showGroupApprovalColumn = activeContactType === 'group' && platform === 'facebook'
+  const showAvatarColumn = platform === 'zalo'
+  const showLinkColumn = platform === 'facebook' || (activeContactType === 'group' && platform === 'zalo')
+  const showPhoneColumn = platform === 'zalo'
+  const showZaloTagColumn = platform === 'zalo'
+  const showAkaBizTagColumn = platform === 'zalo'
+
+  const filteredGroupContacts = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('vi-VN')
+    if (!query) return groupContacts
+    return groupContacts.filter(contact => [
+      contact.name,
+      contact.uid,
+      getContactPhoneText(contact),
+      contact.url,
+      getContactStatusLabel(contact),
+      contact.contactType === 'group' && platform === 'facebook' ? getGroupApprovalStatus(contact) : '',
+      showZaloTagColumn ? formatContactZaloTags(contact, zaloTagNameById) : '',
+      showAkaBizTagColumn ? formatContactAkaBizTags(contact, akaBizTagNameById) : ''
+    ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
+  }, [akaBizTagNameById, groupContacts, platform, search, showAkaBizTagColumn, showZaloTagColumn, zaloTagNameById])
+
+  const groupTableColSpan = 4
+    + (showAvatarColumn ? 1 : 0)
+    + (showPhoneColumn ? 1 : 0)
+    + (activeContactType === 'person' ? 1 : 0)
+    + (activeContactType === 'group' ? 1 : 0)
+    + (showGroupApprovalColumn ? 1 : 0)
+    + (showLinkColumn ? 1 : 0)
+    + (showZaloTagColumn ? 1 : 0)
+    + (showAkaBizTagColumn ? 1 : 0)
 
   const visibleContactIds = useMemo(
     () => filteredGroupContacts.map(contact => contact.id),
@@ -310,12 +502,6 @@ export default function DataScanGroupManagementModal({
     () => filteredGroupContacts.filter(contact => selectedContactIds.has(contact.id)),
     [filteredGroupContacts, selectedContactIds]
   )
-  const showGroupApprovalColumn = activeContactType === 'group' && platform === 'facebook'
-  const showAvatarColumn = platform === 'zalo'
-  const showLinkColumn = platform === 'facebook' || (activeContactType === 'group' && platform === 'zalo')
-  const showPhoneColumn = platform === 'zalo'
-  const showZaloTagColumn = platform === 'zalo'
-  const showAkaBizTagColumn = platform === 'zalo'
 
   useEffect(() => {
     setSelectedContactIds(new Set())
@@ -341,19 +527,44 @@ export default function DataScanGroupManagementModal({
 
   const submitRenameGroup = async (group: AutoAccountContactGroup) => {
     const name = editingGroupName.trim()
-    if (!name || name === group.name) {
+    if (!window.electronAPI || !name || name === group.name) {
       cancelRenameGroup()
       return
     }
     setRenamingGroupId(group.id)
     try {
-      await onRenameGroup(group, name)
+      const updated = await window.electronAPI.updateContactGroup(group.id, name)
+      setContactGroups(prev => prev.map(item => item.id === group.id ? { ...item, ...updated } : item))
+      showAlert('Đã đổi tên nhóm data.', 'success')
       cancelRenameGroup()
-    } catch {
-      // Parent shows the user-facing error; keep the input open so the name can be adjusted.
+      await notifyGroupsChanged()
+    } catch (err: any) {
+      console.error('Failed to rename contact group:', err)
+      showAlert(err?.message || 'Không thể đổi tên nhóm data.', 'error')
     } finally {
       setRenamingGroupId(null)
     }
+  }
+
+  const handleDeleteGroup = (group: AutoAccountContactGroup) => {
+    if (!window.electronAPI) return
+    showConfirm(
+      `Xoá nhóm "${group.name}"? Data gốc sẽ không bị xoá.`,
+      async () => {
+        try {
+          await window.electronAPI.deleteContactGroup(group.id)
+          setContactGroups(prev => prev.filter(item => item.id !== group.id))
+          setActiveGroupId(prev => prev === group.id ? null : prev)
+          if (activeGroupId === group.id) setGroupContacts([])
+          showAlert('Đã xoá nhóm data.', 'success')
+          await notifyGroupsChanged()
+        } catch (err: any) {
+          console.error('Failed to delete contact group:', err)
+          showAlert(err?.message || 'Không thể xoá nhóm data.', 'error')
+        }
+      },
+      { title: 'Xoá nhóm data', confirmText: 'Xoá', variant: 'danger' }
+    )
   }
 
   const toggleContact = (contactId: number) => {
@@ -377,21 +588,117 @@ export default function DataScanGroupManagementModal({
     })
   }
 
-  const removeSelectedContacts = () => {
-    if (selectedContacts.length === 0) return
-    onRemoveContacts(selectedContacts, () => setSelectedContactIds(new Set()))
+  const handleRemoveContacts = (contactsToRemove: AutoAccountContact[], onSuccess?: () => void) => {
+    if (!window.electronAPI || !activeGroupId) return
+    const contactIds = Array.from(new Set(contactsToRemove.map(contact => contact.id)))
+    if (contactIds.length === 0) return
+    const label = contactIds.length === 1
+      ? `"${contactsToRemove[0]?.name || contactsToRemove[0]?.uid || 'data'}"`
+      : `${contactIds.length} data đã chọn`
+    showConfirm(
+      `Xoá ${label} khỏi nhóm? Data gốc sẽ không bị xoá.`,
+      async () => {
+        try {
+          await window.electronAPI.removeContactsFromGroup(activeGroupId, contactIds)
+          const contactIdSet = new Set(contactIds)
+          setGroupContacts(prev => prev.filter(item => !contactIdSet.has(item.id)))
+          await loadContactGroups()
+          onSuccess?.()
+          showAlert('Đã xoá data khỏi nhóm.', 'success')
+          await notifyGroupsChanged()
+        } catch (err: any) {
+          console.error('Failed to remove contact from group:', err)
+          showAlert(err?.message || 'Không thể xoá data khỏi nhóm.', 'error')
+        }
+      },
+      { title: 'Xoá data khỏi nhóm', confirmText: 'Xoá', variant: 'danger' }
+    )
   }
 
-  return (
-    <div className="data-scan-group-modal-backdrop" onClick={onClose}>
+  const removeSelectedContacts = () => {
+    if (selectedContacts.length === 0) return
+    handleRemoveContacts(selectedContacts, () => setSelectedContactIds(new Set()))
+  }
+
+  const handleAccountChange = (nextAccountId: number | '') => {
+    setAccountId(nextAccountId)
+    setActiveGroupId(null)
+    setGroupContacts([])
+    const nextAccount = accounts.find(account => account.id === nextAccountId)
+    if (nextAccount) {
+      const nextPlatform = getAccountPlatform(nextAccount)
+      setPlatform(nextPlatform)
+      setContactType(prev => normalizeContactType(prev, nextPlatform))
+    }
+  }
+
+  const handleContactTypeChange = (nextContactType: DataGroupContactType) => {
+    setContactType(nextContactType)
+    setActiveGroupId(null)
+    setGroupContacts([])
+  }
+
+  return createPortal(
+    <div className="data-scan-group-modal-backdrop data-group-manager-backdrop" onClick={onClose}>
       <div className="data-scan-groups-management-modal" onClick={event => event.stopPropagation()}>
         <div className="data-scan-group-modal-header">
           <div>
             <div className="data-scan-group-modal-title">Nhóm data</div>
-            <div className="data-scan-group-modal-subtitle">Nhóm theo tài khoản và loại data đang chọn</div>
+            <div className="data-scan-group-modal-subtitle">
+              {lockContext ? 'Mở từ quét data, có thể đổi tài khoản hoặc loại data' : 'Quản lý nhóm data theo từng tài khoản'}
+            </div>
           </div>
           <button className="btn-icon" onClick={onClose} title="Đóng">
             <X size={16} />
+          </button>
+        </div>
+
+        <div className="data-group-manager-toolbar">
+          <div className="data-group-manager-field">
+            <label>Tài khoản</label>
+            <select
+              className="stepper-input"
+              value={accountId}
+              onChange={event => handleAccountChange(event.target.value ? Number(event.target.value) : '')}
+            >
+              <option value="">Chọn tài khoản</option>
+              {availableAccounts.map(account => (
+                <option key={account.id} value={account.id}>
+                  {account.name} ({account.flatformType})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="data-group-manager-field">
+            <label>Loại data</label>
+            <select
+              className="stepper-input"
+              value={contactType}
+              onChange={event => handleContactTypeChange(event.target.value as DataGroupContactType)}
+              disabled={!accountId}
+            >
+              {CONTACT_TYPE_OPTIONS[platform].map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="data-group-manager-search">
+            <Search size={15} />
+            <input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Tìm data trong nhóm"
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => void loadContactGroups()}
+            disabled={!accountId || groupsLoading}
+            title="Load lại nhóm data"
+          >
+            <RefreshCw size={13} className={groupsLoading ? 'animate-spin' : undefined} />
+            Load lại
           </button>
         </div>
 
@@ -400,17 +707,18 @@ export default function DataScanGroupManagementModal({
             <div className="data-scan-group-grid">
               <div className="data-scan-group-list">
                 <div className="data-scan-group-list-title">Danh sách nhóm</div>
-                {groupsLoading ? (
+                {!accountId ? (
+                  <div className="data-scan-group-empty">Chọn tài khoản để xem nhóm data.</div>
+                ) : groupsLoading ? (
                   <div className="data-scan-group-empty">Đang tải nhóm data...</div>
                 ) : contactGroups.length === 0 ? (
                   <div className="data-scan-group-empty">Chưa có nhóm data.</div>
                 ) : (
-                  contactGroups.map(group => {
-                    return (
+                  contactGroups.map(group => (
                     <div
                       key={group.id}
                       className={`data-scan-group-row ${activeGroupId === group.id ? 'is-active' : ''}`}
-                      onClick={() => onActivateGroup(group.id)}
+                      onClick={() => setActiveGroupId(group.id)}
                     >
                       <div className="data-scan-group-row-main">
                         {editingGroupId === group.id ? (
@@ -420,7 +728,7 @@ export default function DataScanGroupManagementModal({
                             onChange={event => setEditingGroupName(event.target.value)}
                             onClick={event => event.stopPropagation()}
                             onKeyDown={event => {
-                              if (event.key === 'Enter') submitRenameGroup(group)
+                              if (event.key === 'Enter') void submitRenameGroup(group)
                               if (event.key === 'Escape') cancelRenameGroup()
                             }}
                             disabled={renamingGroupId === group.id}
@@ -441,7 +749,7 @@ export default function DataScanGroupManagementModal({
                             className="btn-icon"
                             onClick={event => {
                               event.stopPropagation()
-                              submitRenameGroup(group)
+                              void submitRenameGroup(group)
                             }}
                             disabled={renamingGroupId === group.id}
                             title="Lưu tên nhóm"
@@ -476,15 +784,14 @@ export default function DataScanGroupManagementModal({
                         className="btn-icon text-error"
                         onClick={event => {
                           event.stopPropagation()
-                          onDeleteGroup(group)
+                          handleDeleteGroup(group)
                         }}
                         title="Xoá nhóm"
                       >
                         <Trash2 size={13} />
                       </button>
                     </div>
-                    )
-                  })
+                  ))
                 )}
               </div>
 
@@ -495,7 +802,7 @@ export default function DataScanGroupManagementModal({
                     {activeGroupId && (
                       <span>
                         {' '}
-                        ({filteredGroupContacts.length}/{groupContactsByStatusCount})
+                        ({filteredGroupContacts.length}/{groupContacts.length})
                       </span>
                     )}
                   </span>
@@ -599,7 +906,7 @@ export default function DataScanGroupManagementModal({
                             <td>
                               <button
                                 className="btn-icon text-error"
-                                onClick={() => onRemoveContacts([contact])}
+                                onClick={() => handleRemoveContacts([contact])}
                                 title="Xoá khỏi nhóm"
                               >
                                 <Trash2 size={13} />
@@ -616,6 +923,7 @@ export default function DataScanGroupManagementModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

@@ -8,9 +8,10 @@ interface CampaignPageProps {
   isActive: boolean
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
+  onOpenContentTemplates?: () => void
 }
 
-export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings }: CampaignPageProps) {
+export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const [assistantOpenRequest, setAssistantOpenRequest] = useState<{ campaignId: number; requestedAt: number } | null>(null)
@@ -83,6 +84,7 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
           filterAccountId={filterAccountId}
           onClearFilter={() => setFilterAccountId(null)}
           onOpenGeneralSettings={onOpenGeneralSettings}
+          onOpenContentTemplates={onOpenContentTemplates}
           onAskAssistant={handleAskAssistant}
         />
       </div>
