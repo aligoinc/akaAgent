@@ -58,6 +58,7 @@ const ZALO_REMARKETING_MESSAGE_ACTION_CODES = ['zalo_message_stranger', 'zalo_me
 const ZALO_REMARKETING_DETAIL_FETCH_CHUNK = 1000
 const ZALO_REMARKETING_PAGE_DEFAULT_LIMIT = 100
 const ZALO_REMARKETING_PAGE_MAX_LIMIT = 20000
+const CAMPAIGN_INPUT_DATA_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_ID_CHUNK = 100
 const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
@@ -1423,12 +1424,42 @@ export async function deleteCampaignInput(id: number): Promise<void> {
 // =========== CAMPAIGN INPUT DATA (việc-cần-làm) ===========
 
 export async function listCampaignInputData(campaignId: number): Promise<CampaignInputData[]> {
+  const rows: CampaignInputData[] = []
+  let from = 0
+
+  while (true) {
+    const { data, error } = await client()
+      .from('auto_campaign_input_data')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .eq('is_delete', false)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + CAMPAIGN_INPUT_DATA_FETCH_CHUNK - 1)
+
+    if (error) throw new Error(`Failed to list campaign input data: ${error.message}`)
+
+    const page = data || []
+    rows.push(...page.map(row => mapCampaignInputDataFromDB(row)))
+    if (page.length < CAMPAIGN_INPUT_DATA_FETCH_CHUNK) break
+    from += CAMPAIGN_INPUT_DATA_FETCH_CHUNK
+  }
+
+  return rows
+}
+
+export async function listCampaignInputDataPreview(campaignId: number, limit: number): Promise<CampaignInputData[]> {
+  const normalizedLimit = Math.floor(Number(limit))
+  if (!Number.isFinite(normalizedLimit) || normalizedLimit <= 0) return []
+
   const { data, error } = await client()
     .from('auto_campaign_input_data')
     .select('*')
     .eq('campaign_id', campaignId)
     .eq('is_delete', false)
     .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(normalizedLimit)
 
   if (error) throw new Error(`Failed to list campaign input data: ${error.message}`)
   return (data || []).map(row => mapCampaignInputDataFromDB(row))

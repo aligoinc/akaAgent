@@ -254,7 +254,7 @@ async function buildCampaignAssistantContext(campaignId: number, settings: Assis
     accountRepo.getAccount(campaign.accountId),
     campaignActionRepo.getCampaignAction(campaign.actionId),
     campaignRepo.getCampaignInputDataStatusCounts(campaign.id),
-    campaignRepo.listCampaignInputData(campaign.id),
+    campaignRepo.listCampaignInputDataPreview(campaign.id, settings.maxContextRows),
     campaignRepo.listAllCampaignDetailsByCampaign(campaign.id),
     campaignRepo.listCampaignDetailsByCreatedAtRange(campaign.id, dayRange.startIso, dayRange.endIso, settings.maxContextRows)
   ])

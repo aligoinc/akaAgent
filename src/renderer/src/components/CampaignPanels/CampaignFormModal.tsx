@@ -264,6 +264,12 @@ const formatIpcErrorMessage = (err: unknown, fallback: string): string => {
     .trim() || fallback
 }
 
+const formatCampaignDataCreationErrorNote = (err: unknown): string => {
+  const message = formatIpcErrorMessage(err, 'Lỗi không xác định')
+  const note = `Tạo data chiến dịch chưa hoàn tất: ${message}`
+  return note.length > 240 ? note.slice(0, 240) : note
+}
+
 const toActionLimitForm = (
   config?: ActionLimitConfig,
   fallback: ActionLimitForm = DEFAULT_ACTION_LIMIT
@@ -1601,10 +1607,10 @@ export default function CampaignFormModal({
   const hasSelectedMainMedia = formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
   const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
-    ? (isEditingSavedCampaign ? 1 : 2)
+    ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
-      ? (isEditingSavedCampaign ? 3 : 4)
-      : (isEditingSavedCampaign ? 4 : 5)
+      ? (isEditingSavedCampaign ? 4 : 5)
+      : (isEditingSavedCampaign ? 5 : 6)
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
@@ -4032,6 +4038,54 @@ export default function CampaignFormModal({
       const saveBundleItems = buildCampaignSaveBundleItems(validDetails)
       const savedCampaignIds: number[] = []
       const savedCampaignPayloadById = new Map<number, Partial<Campaign>>()
+      const stagedCampaignFinalStatusById = new Map<number, string>()
+
+      const createCampaignWithInputDataSafely = async (
+        campaignPayload: Partial<Campaign>,
+        campaignDetails: Partial<CampaignInputData>[]
+      ): Promise<Campaign> => {
+        const finalStatus = campaignPayload.status ?? 'chờ xử lý'
+        const savedCampaign = await createCampaign({
+          ...campaignPayload,
+          status: 'tạm dừng'
+        })
+
+        try {
+          for (const detail of campaignDetails) {
+            await createCampaignInputData({
+              ...detail,
+              id: undefined,
+              campaignId: savedCampaign.id
+            })
+          }
+
+          stagedCampaignFinalStatusById.set(savedCampaign.id, finalStatus)
+          return savedCampaign
+        } catch (err) {
+          try {
+            await updateCampaign(savedCampaign.id, {
+              note: formatCampaignDataCreationErrorNote(err)
+            })
+          } catch (noteErr) {
+            console.error('Failed to mark campaign data creation error:', noteErr)
+          }
+
+          throw err
+        }
+      }
+
+      const resumeStagedCampaigns = async () => {
+        const stagedCampaigns: Array<{ campaignId: number; finalStatus: string }> = []
+        stagedCampaignFinalStatusById.forEach((finalStatus, campaignId) => {
+          stagedCampaigns.push({ campaignId, finalStatus })
+        })
+
+        for (const stagedCampaign of stagedCampaigns) {
+          if (stagedCampaign.finalStatus !== 'tạm dừng') {
+            await updateCampaign(stagedCampaign.campaignId, { status: stagedCampaign.finalStatus })
+          }
+        }
+      }
 
       const persistDraftCampaign = async (
         draft: InternalCampaignDraft,
@@ -4051,19 +4105,11 @@ export default function CampaignFormModal({
             ]))
           }
 
-          const savedDraftCampaign = await createCampaign({
+          const savedDraftCampaign = await createCampaignWithInputDataSafely({
             ...draftItem.campaignPayload,
             extraSettings: payloadExtraSettings
-          })
+          }, draftItem.details)
           createdIds.push(savedDraftCampaign.id)
-
-          for (const draftDetail of draftItem.details) {
-            await createCampaignInputData({
-              ...draftDetail,
-              id: undefined,
-              campaignId: savedDraftCampaign.id
-            })
-          }
         }
 
         return createdIds
@@ -4144,15 +4190,7 @@ export default function CampaignFormModal({
             }
           }
         } else {
-          savedCampaign = await createCampaign(campaignPayload)
-
-          for (const d of currentDetails) {
-            await createCampaignInputData({
-              ...d,
-              id: undefined,
-              campaignId: savedCampaign.id
-            })
-          }
+          savedCampaign = await createCampaignWithInputDataSafely(campaignPayload, currentDetails)
         }
 
         savedCampaignIds.push(savedCampaign.id)
@@ -4188,6 +4226,8 @@ export default function CampaignFormModal({
           await persistDraftByTempId(tempId, savedCampaignIds, targetFindDataField)
         }
       }
+
+      await resumeStagedCampaigns()
 
       showAlert('Lưu chiến dịch thành công!', 'success')
       // Delay closing to let user see the toast
@@ -10003,11 +10043,13 @@ export default function CampaignFormModal({
                         <thead>
                           {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
                             <tr>
+                              <th className="campaign-grid-index-col">STT</th>
                               <th>{isFindDataSearchCampaign ? 'Từ khóa' : isFacebookJoinGroupCampaign ? 'Group URL/UID' : isZaloJoinGroupLinkCampaign ? 'Link group Zalo' : 'Link bài post'}</th>
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           ) : isPagePostCampaign ? (
                             <tr>
+                              <th className="campaign-grid-index-col">STT</th>
                               <th>Tên fanpage</th>
                               <th>Page ID</th>
                               <th>Link</th>
@@ -10015,6 +10057,7 @@ export default function CampaignFormModal({
                             </tr>
                           ) : (
                             <tr>
+                              <th className="campaign-grid-index-col">STT</th>
                               <th>Tên</th>
                               <th>Số điện thoại</th>
                               <th>Uid</th>
@@ -10031,6 +10074,7 @@ export default function CampaignFormModal({
                           ) : (
                             details.map((d, i) => (
                               <tr key={d.id || `new-${i}`}>
+                                <td className="campaign-grid-index-col">{i + 1}</td>
                                 {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
                                   <td>
                                     <input
