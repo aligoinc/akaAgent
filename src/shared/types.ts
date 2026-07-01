@@ -1139,6 +1139,13 @@ export interface AiWriteMultiOtherContentRequest {
   countContent: number
 }
 
+export interface AiGenerateCampaignNameRequest {
+  actionId: string
+  actionName: string
+  accountId?: number
+  accountName?: string
+}
+
 export interface SystemSetting {
   id: number
   key: string
@@ -1295,6 +1302,7 @@ export const IPC_EVENTS = {
   // AI content tools
   AI_REWRITE_CONTENT: 'ai:rewrite-content',
   AI_WRITE_MULTI_OTHER_CONTENT: 'ai:write-multi-other-content',
+  AI_GENERATE_CAMPAIGN_NAME: 'ai:generate-campaign-name',
   AI_CAMPAIGN_ASSISTANT_CONTEXT: 'ai:campaign-assistant-context',
   AI_CAMPAIGN_ASSISTANT_CHAT: 'ai:campaign-assistant-chat',
 
