@@ -46,7 +46,7 @@ import {
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import { ZaloApiError } from 'zca-js'
 import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser, type ZaloFriendRecommendationProfile, type ZaloJoinGroupLinkResult, type ZaloSentFriendRequestProfile } from './zaloRuntimeService'
-import { EmailRuntimeService } from './emailRuntimeService'
+import { EmailRuntimeService, type EmailRecipientCheckResult } from './emailRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import type { ZaloGroupContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
 import { callAiUsing } from './aiRuntimeService'
@@ -326,6 +326,7 @@ const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
   '0199': '059'
 }
 const EMAIL_SEND_ACTION_ID = 'email_send'
+const EMAIL_RECIPIENT_NOT_FOUND_ERROR_CODE = 'err_email_recipient_not_found'
 const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
 const ZALO_FIND_PHONE_DEFAULT_LIMIT = 1000
 const ZALO_API_BUSINESS_FAILED_ERROR_CODE = 'err_zalo_api_business_failed'
@@ -8022,6 +8023,38 @@ export class CampaignScheduler {
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
+
+    const recipientCheck: EmailRecipientCheckResult = await this.emailRuntime
+      .checkRecipientExists(account.id, to)
+      .catch(err => ({
+        status: 'unknown' as const,
+        reason: err instanceof Error ? err.message : String(err)
+      }))
+    if (recipientCheck.status === 'not_found') {
+      return {
+        ok: false,
+        skipped: true,
+        detail: {
+          createDetail: true,
+          actionCode,
+          actionName,
+          status: 'không tồn tại',
+          errorCode: EMAIL_RECIPIENT_NOT_FOUND_ERROR_CODE,
+          log: `Email không tồn tại ${to}`,
+          data: {
+            to,
+            subject,
+            recipientCheck: {
+              status: recipientCheck.status,
+              reason: recipientCheck.reason || null,
+              ...(recipientCheck.data || {})
+            }
+          },
+          countsTowardLimit: false,
+          countsTowardBadTarget: false
+        }
+      }
+    }
 
     try {
       const result = await this.emailRuntime.sendEmail(account.id, {

@@ -270,7 +270,8 @@ const INPUT_DATA_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUS
 const CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = [
   { value: 'thành công', label: 'thành công' },
   { value: 'thất bại', label: 'thất bại' },
-  { value: 'lỗi', label: 'lỗi' }
+  { value: 'lỗi', label: 'lỗi' },
+  { value: 'không tồn tại', label: 'không tồn tại' }
 ]
 
 const CAMPAIGN_STATUS_SORT_ORDER = new Map<string, number>([
@@ -2107,6 +2108,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       // Result actions status (per-milestone)
       case 'thành công': return 'var(--accent-success)'
       case 'thất bại': return 'var(--accent-warning)'   // vàng — nghiệp vụ FB từ chối
+      case 'không tồn tại': return 'var(--accent-warning)'
       case 'lỗi': return 'var(--accent-error)'           // đỏ — exception/crash code
       default: return 'var(--text-tertiary)'
     }
@@ -2115,8 +2117,9 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const getDetailStatusLabel = (status: string) => (
     status === 'thành công' ? '✅ Thành công'
       : status === 'thất bại' ? '⚠️ Thất bại'
-        : status === 'lỗi' ? '❌ Lỗi'
-          : status
+        : status === 'không tồn tại' ? '⚠️ Không tồn tại'
+          : status === 'lỗi' ? '❌ Lỗi'
+            : status
   )
 
   const getCampaignStatusClass = (status: string) => {
