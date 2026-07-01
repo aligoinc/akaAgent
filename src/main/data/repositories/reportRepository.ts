@@ -25,6 +25,12 @@ const client = () => getSupabaseClient()
 const PAGE_SIZE = 1000
 const DETAIL_PAGE_SIZE = 100
 const MAX_DETAIL_PAGE_SIZE = 500
+const REPORT_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công']
+const REPORT_FAILURE_DETAIL_STATUSES: CampaignDetailStatus[] = ['thất bại', 'lỗi', 'không tồn tại']
+const REPORT_COUNT_DETAIL_STATUSES: CampaignDetailStatus[] = [
+  ...REPORT_SUCCESS_DETAIL_STATUSES,
+  ...REPORT_FAILURE_DETAIL_STATUSES
+]
 
 interface ReportDetailRow {
   account_id: number | null
@@ -205,7 +211,7 @@ function getStatusLabel(statusBucket: AccountActionReportStatusBucket): string {
 }
 
 function getDetailStatuses(statusBucket: AccountActionReportStatusBucket): CampaignDetailStatus[] {
-  return statusBucket === 'success' ? ['thành công'] : ['thất bại', 'lỗi']
+  return statusBucket === 'success' ? REPORT_SUCCESS_DETAIL_STATUSES : REPORT_FAILURE_DETAIL_STATUSES
 }
 
 function normalizeRecord(value: unknown): Record<string, unknown> | null {
@@ -464,7 +470,7 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
       .eq('is_delete', false)
       .in('account_id', accountIds)
       .in('action_code', actionCodes)
-      .in('status', ['thành công', 'thất bại', 'lỗi'])
+      .in('status', REPORT_COUNT_DETAIL_STATUSES)
       .gte('created_at', query.startIso)
       .lt('created_at', query.endIso)
       .order('id', { ascending: true })
