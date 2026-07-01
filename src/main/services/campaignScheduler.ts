@@ -7259,6 +7259,52 @@ export class CampaignScheduler {
       .replace(/#\{INFO5\}/g, getInput('info5'))
   }
 
+  private stripAiCodeFence(value: string): string {
+    const text = String(value || '').trim()
+    const match = text.match(/^```(?:text|txt)?\s*([\s\S]*?)\s*```$/i)
+    return match ? match[1].trim() : text
+  }
+
+  private async rewriteEmailPlainTextBodyForRun(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: EmailSendMessageOptions,
+    renderedBody: string
+  ): Promise<string> {
+    const body = String(renderedBody || '')
+    if (options.isHtml === true || campaign.extraSettings?.rewriteContentEachRun !== true || !body.trim()) {
+      return body
+    }
+
+    try {
+      const result = await callAiUsing('app_ai_rewrite_content', { content: body }, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? null,
+        accountId: account.id,
+        campaignId: campaign.id,
+        campaignInputDataId: Number(options.inputData?.id) || undefined,
+        blockName: 'email_send_message'
+      })
+      const rewritten = this.stripAiCodeFence(result.content)
+      if (result.ok && rewritten) return rewritten
+
+      console.warn('[CampaignScheduler] Email AI rewrite failed, using original body', {
+        campaignId: campaign.id,
+        accountId: account.id,
+        inputDataId: Number(options.inputData?.id) || null,
+        error: result.error || 'empty_ai_content'
+      })
+    } catch (err) {
+      console.warn('[CampaignScheduler] Email AI rewrite threw, using original body', {
+        campaignId: campaign.id,
+        accountId: account.id,
+        inputDataId: Number(options.inputData?.id) || null,
+        error: err instanceof Error ? err.message : String(err)
+      })
+    }
+
+    return body
+  }
+
   private async zaloFindPhoneUser(
     account: AutoAccount,
     campaign: Campaign,
@@ -8065,7 +8111,7 @@ export class CampaignScheduler {
     }
 
     const subject = this.renderZaloTemplate(options.subject, options.inputData).trim()
-    const body = this.renderZaloTemplate(options.body, options.inputData)
+    const renderedBody = this.renderZaloTemplate(options.body, options.inputData)
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
@@ -8103,6 +8149,7 @@ export class CampaignScheduler {
     }
 
     try {
+      const body = await this.rewriteEmailPlainTextBodyForRun(account, campaign, options, renderedBody)
       const result = await this.emailRuntime.sendEmail(account.id, {
         to,
         subject,

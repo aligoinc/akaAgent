@@ -543,7 +543,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           { label: 'Nội dung chính', value: textOrDash(campaign.content), fullWidth: true },
           { label: 'Ảnh bài đăng', value: formatImageSummary(campaign.images) },
           { label: 'Cách dùng ảnh', value: formatImageOption(extra, campaign.images) },
-          { label: 'AI viết lại nội dung', value: onOff(extra.rewriteContentEachRun) },
+          { label: 'AI viết lại nội dung', value: onOff(extra.rewriteContentEachRun), hidden: actionId === 'email_send' && extra.emailBodyIsHtml === true },
           ...emailRows.map(row => ({ ...row, hidden: row.hidden || !hasEmailSettings })),
           ...sourceRows.map(row => ({ ...row, hidden: row.hidden || !hasSourceSettings }))
         ])}
