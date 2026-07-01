@@ -75,9 +75,23 @@ const CAMPAIGN_ACTION_PLATFORM_ORDER: Record<string, number> = {
   email: 2
 }
 
+const CAMPAIGN_ACTION_PLATFORM_LABELS: Record<string, string> = {
+  facebook: 'Facebook',
+  zalo: 'Zalo',
+  email: 'Email'
+}
+
+const normalizeCampaignActionPlatform = (platform?: string | null): string =>
+  String(platform || '').trim().toLowerCase()
+
+const getCampaignActionPlatformLabel = (platform?: string | null): string => {
+  const normalized = normalizeCampaignActionPlatform(platform)
+  return CAMPAIGN_ACTION_PLATFORM_LABELS[normalized] || (normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Khác')
+}
+
 const compareCampaignActionsByPlatform = (left: CampaignAction, right: CampaignAction): number => {
-  const leftPlatform = String(left.flatformType || '').toLowerCase()
-  const rightPlatform = String(right.flatformType || '').toLowerCase()
+  const leftPlatform = normalizeCampaignActionPlatform(left.flatformType)
+  const rightPlatform = normalizeCampaignActionPlatform(right.flatformType)
   const leftOrder = CAMPAIGN_ACTION_PLATFORM_ORDER[leftPlatform] ?? Number.MAX_SAFE_INTEGER
   const rightOrder = CAMPAIGN_ACTION_PLATFORM_ORDER[rightPlatform] ?? Number.MAX_SAFE_INTEGER
   if (leftOrder !== rightOrder) return leftOrder - rightOrder
@@ -1032,7 +1046,7 @@ const ALL_STEPS: StepDef[] = [
     id: 'general',
     title: 'Cài đặt chung',
     fields: [
-      { key: 'actionId', label: 'Chiến dịch' },
+      { key: 'actionId', label: 'Hành động' },
       { key: 'accountIds', label: 'Tài khoản' },
       { key: 'name', label: 'Tên chiến dịch' }
     ]
@@ -1486,6 +1500,7 @@ export default function CampaignFormModal({
   } | null>(null)
   const [viewingSourceCampaign, setViewingSourceCampaign] = useState<Campaign | null>(null)
   const [editingSourceCampaign, setEditingSourceCampaign] = useState<Campaign | null>(null)
+  const [selectedActionPlatformFilter, setSelectedActionPlatformFilter] = useState('')
   const nextDraftCampaignTempIdRef = useRef(-1)
   const previousZaloAliasActionIdRef = useRef(initialActionId)
 
@@ -1643,8 +1658,35 @@ export default function CampaignFormModal({
       .sort(compareCampaignActionsByPlatform),
     [campaignActions, entitlements]
   )
+  const campaignActionPlatformOptions = useMemo(() => {
+    const platforms = new Set<string>()
+    for (const action of availableCampaignActions) {
+      const platform = normalizeCampaignActionPlatform(action.flatformType)
+      if (!platform) continue
+      platforms.add(platform)
+    }
+
+    return Array.from(platforms)
+      .map(value => ({
+        value,
+        label: getCampaignActionPlatformLabel(value)
+      }))
+      .sort((left, right) => {
+        const leftOrder = CAMPAIGN_ACTION_PLATFORM_ORDER[left.value] ?? Number.MAX_SAFE_INTEGER
+        const rightOrder = CAMPAIGN_ACTION_PLATFORM_ORDER[right.value] ?? Number.MAX_SAFE_INTEGER
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder
+        return left.label.localeCompare(right.label, 'vi', { sensitivity: 'base' })
+      })
+  }, [availableCampaignActions])
+  const filteredCampaignActions = useMemo(
+    () => selectedActionPlatformFilter
+      ? availableCampaignActions.filter(action => normalizeCampaignActionPlatform(action.flatformType) === selectedActionPlatformFilter)
+      : availableCampaignActions,
+    [availableCampaignActions, selectedActionPlatformFilter]
+  )
   const selectedCampaignAction = availableCampaignActions.find(action => action.id === formData.actionId)
-  const selectedActionPlatform = selectedCampaignAction?.flatformType || ''
+  const selectedActionPlatform = normalizeCampaignActionPlatform(selectedCampaignAction?.flatformType)
+  const actionPlatformForAccountSelection = selectedActionPlatform || selectedActionPlatformFilter
   const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false
   const campaignDailyLimitCap = getCampaignActionDailySendLimit(
     selectedCampaignAction || (formData.actionId ? { id: formData.actionId, flatformType: selectedActionPlatform } : null),
@@ -1658,14 +1700,14 @@ export default function CampaignFormModal({
     dailyLimit: clampDailyLimitToEntitlement(limit.dailyLimit, getActionDailyLimitCap(actionCode))
   })
   const selectableAccounts = useMemo(
-    () => selectedActionPlatform
-      ? accounts.filter(account => account.flatformType === selectedActionPlatform)
+    () => actionPlatformForAccountSelection
+      ? accounts.filter(account => normalizeCampaignActionPlatform(account.flatformType) === actionPlatformForAccountSelection)
       : accounts,
-    [accounts, selectedActionPlatform]
+    [accounts, actionPlatformForAccountSelection]
   )
   const selectableAccountGroups = useMemo(
-    () => accountGroups.filter(group => !selectedActionPlatform || group.flatformType === selectedActionPlatform),
-    [accountGroups, selectedActionPlatform]
+    () => accountGroups.filter(group => !actionPlatformForAccountSelection || normalizeCampaignActionPlatform(group.flatformType) === actionPlatformForAccountSelection),
+    [accountGroups, actionPlatformForAccountSelection]
   )
   const groupedSelectableAccounts = useMemo(() => {
     const byGroup = new Map<number, typeof selectableAccounts>()
@@ -1687,6 +1729,75 @@ export default function CampaignFormModal({
   const isSingleAccountSelection = Boolean((campaign && campaign.id) || requiresSingleAccount)
   const selectedAccountIdsSet = useMemo(() => new Set(formData.accountIds), [formData.accountIds])
   const selectedAllSelectableAccounts = selectableAccounts.length > 0 && selectableAccounts.every(account => selectedAccountIdsSet.has(account.id))
+  const getAccountIdsForPlatform = (accountIds: number[], platform: string): number[] => {
+    if (!platform) return accountIds
+    return accountIds.filter(id => {
+      const account = accounts.find(item => item.id === id)
+      return normalizeCampaignActionPlatform(account?.flatformType) === platform
+    })
+  }
+  const handleActionPlatformSelect = (platform: string) => {
+    const normalizedPlatform = normalizeCampaignActionPlatform(platform)
+    if (!normalizedPlatform || (draftMode && !!lockedActionId)) return
+
+    setSelectedActionPlatformFilter(normalizedPlatform)
+    setIsAccountDropdownOpen(false)
+    setFormData(prev => {
+      const currentAction = availableCampaignActions.find(action => action.id === prev.actionId)
+      const currentPlatform = normalizeCampaignActionPlatform(currentAction?.flatformType)
+      const keepCurrentAction = !!prev.actionId && currentPlatform === normalizedPlatform
+      const nextAccountIds = getAccountIdsForPlatform(prev.accountIds, normalizedPlatform)
+
+      if (
+        keepCurrentAction &&
+        nextAccountIds.length === prev.accountIds.length &&
+        nextAccountIds.every((id, index) => id === prev.accountIds[index])
+      ) {
+        return prev
+      }
+
+      return {
+        ...prev,
+        actionId: keepCurrentAction ? prev.actionId : '',
+        accountIds: nextAccountIds
+      }
+    })
+  }
+  const handleActionChange = (actionId: string) => {
+    const nextAction = availableCampaignActions.find(action => action.id === actionId)
+    const nextPlatform = normalizeCampaignActionPlatform(nextAction?.flatformType)
+    if (nextPlatform) setSelectedActionPlatformFilter(nextPlatform)
+    setFormData(prev => ({
+      ...prev,
+      actionId,
+      accountIds: getAccountIdsForPlatform(prev.accountIds, nextPlatform || selectedActionPlatformFilter)
+    }))
+    setIsAccountDropdownOpen(false)
+  }
+  const renderActionPlatformSwitcher = () => {
+    if (campaignActionPlatformOptions.length === 0) return null
+
+    return (
+      <div className="campaign-action-platform-tags" role="group" aria-label="Nền tảng hành động">
+        {campaignActionPlatformOptions.map(option => {
+          const isSelected = selectedActionPlatformFilter === option.value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={`campaign-action-platform-tag is-${option.value}${isSelected ? ' is-active' : ''}`}
+              onClick={() => handleActionPlatformSelect(option.value)}
+              disabled={draftMode && !!lockedActionId}
+              aria-pressed={isSelected}
+            >
+              <span className={`campaign-action-platform-mark is-${option.value}`} />
+              <span className="campaign-action-platform-name">{option.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
   const toggleSelectableAccounts = (accountIds: number[]) => {
     if (isSingleAccountSelection || accountIds.length === 0) return
     setFormData(prev => {
@@ -1728,6 +1839,25 @@ export default function CampaignFormModal({
   }
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
+
+  useEffect(() => {
+    if (selectedActionPlatform) {
+      if (selectedActionPlatformFilter !== selectedActionPlatform) {
+        setSelectedActionPlatformFilter(selectedActionPlatform)
+      }
+      return
+    }
+
+    if (campaignActionPlatformOptions.length === 0) {
+      if (selectedActionPlatformFilter) setSelectedActionPlatformFilter('')
+      return
+    }
+
+    const hasSelectedPlatform = campaignActionPlatformOptions.some(option => option.value === selectedActionPlatformFilter)
+    if (!selectedActionPlatformFilter || !hasSelectedPlatform) {
+      setSelectedActionPlatformFilter(campaignActionPlatformOptions[0].value)
+    }
+  }, [campaignActionPlatformOptions, selectedActionPlatform, selectedActionPlatformFilter])
 
   useEffect(() => {
     if (!formData.actionId || canUseCampaignAction({ id: formData.actionId, flatformType: selectedActionPlatform }, entitlements)) return
@@ -2318,7 +2448,7 @@ export default function CampaignFormModal({
   }, [isZaloMessageGroupRealtimeCampaign, formData.scheduleType])
 
   useEffect(() => {
-    if (!selectedActionPlatform) return
+    if (!actionPlatformForAccountSelection) return
     const allowedIds = new Set(selectableAccounts.map(account => account.id))
     setFormData(prev => {
       const nextAccountIds = prev.accountIds.filter(id => allowedIds.has(id))
@@ -2326,7 +2456,7 @@ export default function CampaignFormModal({
         ? prev
         : { ...prev, accountIds: nextAccountIds }
     })
-  }, [selectedActionPlatform, selectableAccounts.map(account => account.id).join(',')])
+  }, [actionPlatformForAccountSelection, selectableAccounts.map(account => account.id).join(',')])
 
   useEffect(() => {
     if (!needsZaloLabels || formData.accountIds.length === 0) {
@@ -8928,16 +9058,20 @@ export default function CampaignFormModal({
 
               {!collapsedSections['general'] && (
                 <div className="stepper-section-body">
+                  {renderActionPlatformSwitcher()}
+
                   <div className="stepper-form-group">
-                    <label>Chiến dịch <span className="required">*</span></label>
+                    <label>Hành động <span className="required">*</span></label>
                     <select
                       value={formData.actionId}
-                      onChange={e => setFormData(p => ({ ...p, actionId: e.target.value }))}
+                      onChange={e => handleActionChange(e.target.value)}
                       className="stepper-input"
                       disabled={draftMode && !!lockedActionId}
                     >
-                      <option value="">-- Chọn hành động --</option>
-                      {availableCampaignActions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      <option value="">
+                        {filteredCampaignActions.length === 0 ? 'Chưa có hành động cho nền tảng này' : '-- Chọn hành động --'}
+                      </option>
+                      {filteredCampaignActions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
                   </div>
 
@@ -9062,7 +9196,7 @@ export default function CampaignFormModal({
                             )}
                             {selectableAccounts.length === 0 && (
                               <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>
-                                {selectedActionPlatform ? 'Chưa có tài khoản phù hợp với nền tảng chiến dịch' : 'Chưa có tài khoản nào'}
+                                {actionPlatformForAccountSelection ? 'Chưa có tài khoản phù hợp với nền tảng chiến dịch' : 'Chưa có tài khoản nào'}
                               </div>
                             )}
                           </div>

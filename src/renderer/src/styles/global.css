@@ -6731,6 +6731,93 @@ button.btn-icon.campaign-control-button.assistant {
   margin-left: 2px;
 }
 
+.campaign-action-platform-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.campaign-action-platform-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.campaign-action-platform-tag:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.campaign-action-platform-tag.is-active {
+  border-color: rgba(56, 189, 248, 0.42);
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--text-primary);
+}
+
+.campaign-action-platform-tag.is-facebook.is-active {
+  border-color: rgba(92, 140, 252, 0.48);
+  background: rgba(92, 140, 252, 0.13);
+}
+
+.campaign-action-platform-tag.is-zalo.is-active {
+  border-color: rgba(56, 189, 248, 0.48);
+  background: rgba(56, 189, 248, 0.13);
+}
+
+.campaign-action-platform-tag.is-email.is-active {
+  border-color: rgba(52, 211, 153, 0.48);
+  background: rgba(52, 211, 153, 0.13);
+}
+
+.campaign-action-platform-tag:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.campaign-action-platform-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--accent-info);
+}
+
+.campaign-action-platform-mark.is-facebook {
+  background: var(--accent-secondary);
+}
+
+.campaign-action-platform-mark.is-zalo {
+  background: var(--accent-info);
+}
+
+.campaign-action-platform-mark.is-email {
+  background: var(--accent-success);
+}
+
+.campaign-action-platform-name {
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  .campaign-action-platform-tag {
+    flex: 1 0 auto;
+    justify-content: center;
+  }
+}
+
 .stepper-input {
   width: 100%;
   padding: 9px 12px;
