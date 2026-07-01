@@ -16,6 +16,7 @@ import {
   type CampaignInputStatus,
   type CampaignRelationSummary,
   type CampaignRunEvent,
+  type EmailCampaignLinkTrackingSummary,
   type ZaloLoginQrEvent
 } from '../../../../shared/types'
 import { parseCampaignLogLine } from '../../../../shared/campaignLogFormat'
@@ -35,7 +36,7 @@ interface CampaignPanelProps {
   onAskAssistant?: (campaignId: number) => void
 }
 
-type DetailTab = 'info' | 'data' | 'actions' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
+type DetailTab = 'info' | 'data' | 'actions' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
@@ -245,6 +246,7 @@ const CAMPAIGN_ACTION_MENU_MIN_MAX_HEIGHT = 80
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FIND_DATA_ACTION_IDS = new Set([FIND_DATA_GROUP_ACTION_ID, FIND_DATA_SEARCH_ACTION_ID])
+const EMAIL_SEND_ACTION_ID = 'email_send'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const POST_SEARCH_LOG_EVENT_TYPES = ['extract_post_data', 'comment_seeding_post_search_summary']
 const FIND_DATA_TARGET_FIELDS = [
@@ -269,6 +271,8 @@ const INPUT_DATA_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUS
 
 const CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = [
   { value: 'thành công', label: 'thành công' },
+  { value: 'đã xem', label: 'đã xem' },
+  { value: 'đã click', label: 'đã click' },
   { value: 'thất bại', label: 'thất bại' },
   { value: 'lỗi', label: 'lỗi' },
   { value: 'không tồn tại', label: 'không tồn tại' }
@@ -648,6 +652,7 @@ const getUniqueFoundDataItems = (items: FoundDataItem[]) => {
 }
 
 const formatDisplayDateTime = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
+const formatCount = (value: number) => new Intl.NumberFormat('vi-VN').format(value)
 
 const formatCompactDateTime = (value?: string | null): string => {
   if (!value) return '-'
@@ -1338,13 +1343,14 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
+    emailCampaignLinkTrackings, emailCampaignLinkTrackingCampaignId, loadingEmailCampaignLinkTrackings,
     campaignRunEvents, loadingCampaignRunEvents,
     campaignRelationSummaries, loadingCampaignRelationSummaries,
     loadCampaigns, loadCampaignActions, loadAccounts,
     updateCampaign, deleteCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign,
-    loadCampaignInputData, loadCampaignDetails, loadCampaignRunEvents, loadCampaignRelationSummaries
+    loadCampaignInputData, loadCampaignDetails, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
   const entitlements = useAuthStore(s => s.user?.entitlements)
@@ -1512,6 +1518,9 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     }
     if (detailTab === 'actions' || detailTab === 'foundData') {
       loadCampaignDetails(selectedCampaignId)
+      return
+    }
+    if (detailTab === 'emailLinks') {
       return
     }
     if (detailTab === 'runLog') {
@@ -2107,6 +2116,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       case 'tạm dừng': return 'var(--accent-error)'
       // Result actions status (per-milestone)
       case 'thành công': return 'var(--accent-success)'
+      case 'đã xem': return 'var(--accent-success)'
+      case 'đã click': return 'var(--accent-success)'
       case 'thất bại': return 'var(--accent-warning)'   // vàng — nghiệp vụ FB từ chối
       case 'không tồn tại': return 'var(--accent-warning)'
       case 'lỗi': return 'var(--accent-error)'           // đỏ — exception/crash code
@@ -2116,10 +2127,12 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
   const getDetailStatusLabel = (status: string) => (
     status === 'thành công' ? '✅ Thành công'
-      : status === 'thất bại' ? '⚠️ Thất bại'
-        : status === 'không tồn tại' ? '⚠️ Không tồn tại'
-          : status === 'lỗi' ? '❌ Lỗi'
-            : status
+      : status === 'đã xem' ? 'Đã xem'
+        : status === 'đã click' ? 'Đã click'
+          : status === 'thất bại' ? '⚠️ Thất bại'
+            : status === 'không tồn tại' ? '⚠️ Không tồn tại'
+              : status === 'lỗi' ? '❌ Lỗi'
+                : status
   )
 
   const getCampaignStatusClass = (status: string) => {
@@ -2156,6 +2169,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     ? campaignActions.find(action => action.id === selectedCampaign.actionId)
     : undefined
   const isSelectedFindDataCampaign = !!selectedCampaign && FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)
+  const isSelectedEmailCampaign = selectedCampaign?.actionId === EMAIL_SEND_ACTION_ID
+  const isSelectedEmailClickTrackingCampaign = isSelectedEmailCampaign && selectedCampaign?.extraSettings?.emailCheckLinkClicks === true
   const isSelectedCommentSeedingFeedCampaign = selectedCampaign?.actionId === COMMENT_SEEDING_FEED_ACTION_ID
   const filteredCampaignInputData = useMemo(() => {
     const dateStart = parseDateInputBoundary(inputDataFilters.dateFrom, 'start')
@@ -2322,6 +2337,19 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       .filter(event => POST_SEARCH_LOG_EVENT_TYPES.includes(event.eventType))
       .map(buildFindDataLogRow)
   ), [campaignRunEvents])
+  const selectedCampaignEmailLinkTrackings = useMemo(() => {
+    if (!selectedCampaignId || emailCampaignLinkTrackingCampaignId !== selectedCampaignId) return []
+    return emailCampaignLinkTrackings
+  }, [emailCampaignLinkTrackingCampaignId, emailCampaignLinkTrackings, selectedCampaignId])
+  const totalEmailLinkClicks = useMemo(
+    () => selectedCampaignEmailLinkTrackings.reduce((total, item) => total + item.clickCount, 0),
+    [selectedCampaignEmailLinkTrackings]
+  )
+  const emailLinkTabLoading = loadingEmailCampaignLinkTrackings || (
+    detailTab === 'emailLinks' &&
+    selectedCampaignId !== null &&
+    emailCampaignLinkTrackingCampaignId !== selectedCampaignId
+  )
 
   useEffect(() => {
     if (detailTab === 'foundData' && !isSelectedFindDataCampaign) {
@@ -2329,6 +2357,10 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       return
     }
     if (detailTab === 'findDataLog' && !isSelectedFindDataCampaign) {
+      setDetailTab('actions')
+      return
+    }
+    if (detailTab === 'emailLinks' && !isSelectedEmailClickTrackingCampaign) {
       setDetailTab('actions')
       return
     }
@@ -2343,7 +2375,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     if (detailTab === 'sourceCampaigns' && linkedFindDataTargetCampaignIds.length === 0) {
       setDetailTab('info')
     }
-  }, [detailTab, isSelectedFindDataCampaign, isSelectedCommentSeedingFeedCampaign, linkedFindDataSourceCampaignIds.length, linkedFindDataTargetCampaignIds.length])
+  }, [detailTab, isSelectedFindDataCampaign, isSelectedEmailClickTrackingCampaign, isSelectedCommentSeedingFeedCampaign, linkedFindDataSourceCampaignIds.length, linkedFindDataTargetCampaignIds.length])
 
   useEffect(() => {
     if (!selectedCampaignId) return
@@ -2778,6 +2810,30 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     }
   }
 
+  const handleLoadCampaignDetails = () => {
+    if (!selectedCampaignId) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    loadCampaignDetails(selectedCampaignId)
+  }
+
+  const handleLoadEmailCampaignLinks = () => {
+    if (!selectedCampaignId) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (!isSelectedEmailCampaign) {
+      showAlert('Tab Link email chỉ hỗ trợ chiến dịch email.', 'info')
+      return
+    }
+    if (!isSelectedEmailClickTrackingCampaign) {
+      showAlert('Chiến dịch email này chưa bật kiểm tra click vào link.', 'info')
+      return
+    }
+    loadEmailCampaignLinkTrackings(selectedCampaignId)
+  }
+
   const handleLoadFindDataLog = () => {
     if (!selectedCampaignId) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
@@ -2879,6 +2935,13 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     setDetailTab(tab)
     setDetailDockOpen(true)
     if (tab === 'actions') loadCampaignDetails(campaign.id)
+    if (
+      tab === 'emailLinks' &&
+      campaign.actionId === EMAIL_SEND_ACTION_ID &&
+      campaign.extraSettings?.emailCheckLinkClicks === true
+    ) {
+      loadEmailCampaignLinkTrackings(campaign.id)
+    }
   }
 
   const handleZaloLoginQr = async (campaign: Campaign, account: AutoAccount | undefined) => {
@@ -3825,6 +3888,17 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                 >
                   Kết quả chạy ({filteredCampaignDetails.length})
                 </button>
+                {isSelectedEmailClickTrackingCampaign && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'emailLinks' ? 'active' : ''}`}
+                    onClick={() => {
+                      setDetailTab('emailLinks')
+                      if (selectedCampaignId) loadEmailCampaignLinkTrackings(selectedCampaignId)
+                    }}
+                  >
+                    Link email
+                  </button>
+                )}
                 {isSelectedFindDataCampaign && (
                   <button
                     className={`detail-dock-tab ${detailTab === 'foundData' ? 'active' : ''}`}
@@ -4021,6 +4095,14 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                     <div className="detail-filter-actions">
                       <button
                         className="btn btn-secondary"
+                        onClick={handleLoadCampaignDetails}
+                        disabled={loadingCampaignDetails}
+                        title="Tải lại kết quả chạy"
+                      >
+                        <RefreshCw size={14} className={loadingCampaignDetails ? 'spin' : ''} /> Tải lại
+                      </button>
+                      <button
+                        className="btn btn-secondary"
                         onClick={handleExportCampaignDetails}
                         disabled={loadingCampaignDetails || filteredCampaignDetails.length === 0}
                         title="Xuất lịch sử hành động ra Excel"
@@ -4073,6 +4155,76 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                     </table>
                   )}
                 </>
+              )}
+
+              {/* Tab: Email link tracking */}
+              {detailTab === 'emailLinks' && (
+                <div className="find-data-log-panel">
+                  <div className="detail-export-bar detail-filter-bar find-data-log-toolbar">
+                    <div className="find-data-log-toolbar-left">
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleLoadEmailCampaignLinks}
+                        disabled={emailLinkTabLoading}
+                        title="Tải lại link email"
+                      >
+                        <RefreshCw size={14} className={emailLinkTabLoading ? 'spin' : ''} /> Tải lại
+                      </button>
+                    </div>
+                    <div className="detail-filter-actions">
+                      <span className="campaign-relation-breakdown-chip success">
+                        Tổng click: {formatCount(totalEmailLinkClicks)}
+                      </span>
+                    </div>
+                  </div>
+                  {emailLinkTabLoading ? (
+                    <div className="find-data-log-empty text-center text-secondary">Đang tải...</div>
+                  ) : selectedCampaignEmailLinkTrackings.length === 0 ? (
+                    <div className="find-data-log-empty text-center text-muted">Chưa có link email</div>
+                  ) : (
+                    <table className="campaign-grid" style={{ fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 48 }}>STT</th>
+                          <th>Link</th>
+                          <th>Số click</th>
+                          <th>Số email</th>
+                          <th>Số link</th>
+                          <th>Click đầu</th>
+                          <th>Click cuối</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedCampaignEmailLinkTrackings.map((item: EmailCampaignLinkTrackingSummary, index: number) => (
+                          <tr key={item.url}>
+                            <td>{index + 1}</td>
+                            <td className="find-data-log-link-cell" title={item.url}>
+                              <a
+                                className="find-data-log-link"
+                                href={item.url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {item.url}
+                              </a>
+                            </td>
+                            <td title={formatCount(item.clickCount)}>
+                              <strong>{formatCount(item.clickCount)}</strong>
+                            </td>
+                            <td title={formatCount(item.emailCount)}>{formatCount(item.emailCount)}</td>
+                            <td title={formatCount(item.linkCount)}>{formatCount(item.linkCount)}</td>
+                            <td title={formatDisplayDateTime(item.firstClickedAt || undefined)} style={{ whiteSpace: 'nowrap' }}>
+                              {formatDisplayDateTime(item.firstClickedAt || undefined)}
+                            </td>
+                            <td title={formatDisplayDateTime(item.lastClickedAt || undefined)} style={{ whiteSpace: 'nowrap' }}>
+                              {formatDisplayDateTime(item.lastClickedAt || undefined)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               )}
 
               {/* Tab: Find-data run events */}

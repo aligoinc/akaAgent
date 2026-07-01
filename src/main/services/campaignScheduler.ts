@@ -4245,6 +4245,7 @@ export class CampaignScheduler {
       targetEmail: detail?.email || '',
       emailSubject: extra.emailSubject || '',
       emailBodyIsHtml: extra.emailBodyIsHtml === true,
+      emailCheckLinkClicks: extra.emailCheckLinkClicks === true,
       friendRequestMessage: extra.friendRequestMessage || '',
       enableZaloTag: extra.enableZaloTag === true,
       zaloTagId: extra.zaloTagId ?? null,
@@ -4412,6 +4413,40 @@ export class CampaignScheduler {
         data: actionDetail.data || {},
         shouldCountAction: actionDetail.countsTowardLimit === true
       })
+
+      const output = (step.output || {}) as Record<string, unknown>
+      const trackingMessageId = Number(output.emailTrackingMessageId)
+      if (Number.isFinite(trackingMessageId) && trackingMessageId > 0) {
+        await this.supabase.linkEmailMessageTrackingToDetail(trackingMessageId, created.id).catch(err => {
+          const message = err instanceof Error ? err.message : String(err)
+          console.warn('[EmailRuntime] failed to link campaign detail to tracking row:', err)
+          return campaignRunEventRepo.createCampaignRunEvents([{
+            campaignId: campaign.id,
+            campaignActionId: campaign.actionId,
+            campaignInputId: detail?.inputId ?? null,
+            campaignInputDataId: detail?.id ?? null,
+            accountId,
+            runId: step.runId ?? null,
+            runStepId: step.id ?? null,
+            nodeId: step.nodeId ?? null,
+            blockId: step.blockId ?? null,
+            blockName: step.blockName ?? null,
+            eventType: 'email_tracking_link_failed',
+            eventName: 'email_tracking_link_failed',
+            targetType: 'email',
+            status: 'warning',
+            isUserVisible: false,
+            message: 'Email đã gửi nhưng không gắn được tracking với lịch sử hành động',
+            debugData: {
+              trackingMessageId,
+              campaignDetailId: created.id,
+              error: message
+            }
+          }]).catch(eventErr => {
+            console.warn('[EmailRuntime] failed to log email tracking link warning:', eventErr)
+          })
+        })
+      }
 
       if (actionDetail.countsTowardBadTarget !== false) {
         this.recordMilestoneSummary(
@@ -8073,17 +8108,28 @@ export class CampaignScheduler {
         subject,
         body,
         isHtml: options.isHtml === true,
-        attachments
+        attachments,
+        tracking: {
+          campaignId: campaign.id,
+          inputDataId: Number(options.inputData?.id) || null,
+          recipientName: options.targetName || null,
+          enableClickTracking: options.enableClickTracking === true
+        }
       })
       return {
         ok: true,
+        emailTrackingMessageId: result.trackingMessageId,
         detail: {
           createDetail: true,
           actionCode,
           actionName,
           status: 'thành công',
           log: `Đã gửi email đến ${to}`,
-          data: { to, subject, messageId: result.messageId },
+          data: {
+            to,
+            subject,
+            messageId: result.messageId
+          },
           countsTowardLimit: true,
           countsTowardBadTarget: false
         }

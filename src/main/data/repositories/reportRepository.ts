@@ -25,7 +25,7 @@ const client = () => getSupabaseClient()
 const PAGE_SIZE = 1000
 const DETAIL_PAGE_SIZE = 100
 const MAX_DETAIL_PAGE_SIZE = 500
-const REPORT_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công']
+const REPORT_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']
 const REPORT_FAILURE_DETAIL_STATUSES: CampaignDetailStatus[] = ['thất bại', 'lỗi', 'không tồn tại']
 const REPORT_COUNT_DETAIL_STATUSES: CampaignDetailStatus[] = [
   ...REPORT_SUCCESS_DETAIL_STATUSES,
@@ -487,7 +487,7 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
       if (!reportRow || !actionCodeSet.has(actionCode)) continue
 
       const cell = reportRow.countsByActionCode[actionCode] || makeEmptyCell()
-      if (detail.status === 'thành công') cell.successCount += 1
+      if (REPORT_SUCCESS_DETAIL_STATUSES.includes(detail.status)) cell.successCount += 1
       else cell.failureCount += 1
       reportRow.countsByActionCode[actionCode] = cell
     }

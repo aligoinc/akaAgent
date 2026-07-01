@@ -15,6 +15,7 @@ import * as emailNotificationRepo from '../data/repositories/emailNotificationRe
 import * as reportRepo from '../data/repositories/reportRepository'
 import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogRepository'
 import * as systemSettingsRepo from '../data/repositories/systemSettingsRepository'
+import * as emailTrackingRepo from '../data/repositories/emailTrackingRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -116,6 +117,24 @@ export class SupabaseService {
   listCampaignDetailsByCampaign(campaignId: number) { return campaignRepo.listCampaignDetailsByCampaign(campaignId) }
   createCampaignDetail(action: CreateCampaignDetailInput) { return campaignRepo.createCampaignDetail(action) }
   deleteCampaignDetail(id: number) { return campaignRepo.deleteCampaignDetail(id) }
+  createEmailMessageTracking(input: emailTrackingRepo.CreateEmailMessageTrackingInput) {
+    return emailTrackingRepo.createEmailMessageTracking(input)
+  }
+  createEmailLinkTrackings(rows: emailTrackingRepo.CreateEmailLinkTrackingInput[]) {
+    return emailTrackingRepo.createEmailLinkTrackings(rows)
+  }
+  markEmailMessageTrackingSent(messageTrackingId: number, messageId?: string | null) {
+    return emailTrackingRepo.markEmailMessageTrackingSent(messageTrackingId, messageId)
+  }
+  softDeleteEmailMessageTracking(messageTrackingId: number) {
+    return emailTrackingRepo.softDeleteEmailMessageTracking(messageTrackingId)
+  }
+  linkEmailMessageTrackingToDetail(messageTrackingId: number, campaignDetailId: number) {
+    return emailTrackingRepo.linkEmailMessageTrackingToDetail(messageTrackingId, campaignDetailId)
+  }
+  listEmailCampaignLinkTrackingSummaries(campaignId: number) {
+    return emailTrackingRepo.listEmailCampaignLinkTrackingSummaries(campaignId)
+  }
   listCampaignRunEventsByCampaign(campaignId: number, options?: CampaignRunEventListOptions) {
     return campaignRunEventRepo.listCampaignRunEventsByCampaign(campaignId, options)
   }

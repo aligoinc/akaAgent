@@ -31,3 +31,7 @@ export function getSupabaseClient(): SupabaseClient {
   }
   return _client
 }
+
+export function getSupabaseUrl(): string {
+  return SUPABASE_URL
+}

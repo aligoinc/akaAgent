@@ -181,6 +181,10 @@ export function registerCampaignHandlers(
     return supabase.listCampaignDetailsByCampaign(campaignId)
   })
 
+  ipcMain.handle(IPC_EVENTS.DB_LIST_EMAIL_CAMPAIGN_LINK_TRACKINGS, async (_, campaignId: number) => {
+    return supabase.listEmailCampaignLinkTrackingSummaries(campaignId)
+  })
+
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_RUN_EVENTS_BY_CAMPAIGN, async (
     _,
     campaignId: number,
