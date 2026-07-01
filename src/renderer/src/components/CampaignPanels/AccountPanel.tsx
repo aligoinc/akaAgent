@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { FolderCog, Loader2, Plus, ServerCog } from 'lucide-react'
+import { FolderCog, Loader2, Plus, ServerCog, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { AutoAccount, ZaloLoginQrEvent, EmailAccountConfig } from '../../../../shared/types'
@@ -202,6 +202,13 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setOriginalEmailConfig(null)
   }
 
+  const closeAccountForm = () => {
+    if (savingAccount) return
+    setShowForm(false)
+    setEditingAccount(null)
+    resetForm()
+  }
+
   const handleVerifyEmail = async () => {
     if (verifyingEmail) return
     if (!canUseEmailFeature) {
@@ -230,9 +237,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const openCreateForm = () => {
-    setShowForm(true)
     setEditingAccount(null)
     resetForm()
+    setShowForm(true)
   }
 
   const openGroupManager = (platform = formData.flatformType) => {
@@ -566,103 +573,170 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       </div>
 
       {showForm && (
-        <div className="panel-form">
-          <input
-            type="text"
-            placeholder="Tên tài khoản"
-            value={formData.name}
-            onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            className="panel-input"
-            autoFocus
-          />
-          <select
-            value={formData.flatformType}
-            onChange={e => setFormData(prev => ({ ...prev, flatformType: e.target.value, accountGroupId: null }))}
-            className="panel-input"
-            disabled={!!editingAccount}
-          >
-            {canUseFacebookAccount && <option value="facebook">Facebook</option>}
-            {canUseZaloFeature && <option value="zalo">Zalo</option>}
-            {canUseEmailFeature && <option value="email">Email</option>}
-          </select>
-
-          {canUseEmailFeature && formData.flatformType === 'email' && (
-            <div className="panel-email-config" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input className="panel-input" placeholder="Thương hiệu (tên người gửi)" value={emailConfig.brandName || ''} onChange={e => setEmailConfig(p => ({ ...p, brandName: e.target.value }))} />
-              <input className="panel-input" placeholder="Server name (SMTP host)" value={emailConfig.host} onChange={e => setEmailConfig(p => ({ ...p, host: e.target.value }))} />
-              <input className="panel-input" placeholder="Email gửi" value={emailConfig.fromEmail} onChange={e => setEmailConfig(p => ({ ...p, fromEmail: e.target.value }))} />
-              <input className="panel-input" placeholder="Email nhận phản hồi (Reply-To)" value={emailConfig.replyTo || ''} onChange={e => setEmailConfig(p => ({ ...p, replyTo: e.target.value }))} />
-              <input className="panel-input" placeholder="Email CC" value={emailConfig.cc || ''} onChange={e => setEmailConfig(p => ({ ...p, cc: e.target.value }))} />
-              <input className="panel-input" placeholder="Username" value={emailConfig.user} onChange={e => setEmailConfig(p => ({ ...p, user: e.target.value }))} />
-              <input className="panel-input" type="password" placeholder="Password" value={emailConfig.pass} onChange={e => setEmailConfig(p => ({ ...p, pass: e.target.value }))} />
-              <div className="panel-input-row" style={{ alignItems: 'center', gap: 12 }}>
-                <input className="panel-input" type="number" placeholder="Port" value={emailConfig.port} onChange={e => setEmailConfig(p => ({ ...p, port: Number(e.target.value) || 0 }))} />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                  <input type="checkbox" checked={emailConfig.secure} onChange={e => setEmailConfig(p => ({ ...p, secure: e.target.checked, port: e.target.checked ? 465 : 587 }))} />
-                  <span>SSL</span>
-                </label>
+        <div className="modal-overlay account-form-modal-overlay" onMouseDown={closeAccountForm}>
+          <div className="modal account-form-modal" onMouseDown={event => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">{editingAccount ? 'Sửa tài khoản' : 'Thêm tài khoản'}</div>
+                <div className="account-info-subtitle">
+                  {editingAccount ? editingAccount.name : 'Tạo tài khoản automation mới'}
+                </div>
               </div>
-              <button className="btn btn-secondary" onClick={handleVerifyEmail} disabled={verifyingEmail}>
-                {verifyingEmail && <Loader2 size={14} className="animate-spin" />}
-                {verifyingEmail ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={closeAccountForm}
+                title="Đóng"
+                disabled={savingAccount}
+                type="button"
+              >
+                <X size={16} />
               </button>
             </div>
-          )}
 
-          <div className="panel-input-row">
-            <select
-              value={formData.accountGroupId ?? ''}
-              onChange={e => setFormData(prev => ({
-                ...prev,
-                accountGroupId: e.target.value ? Number(e.target.value) : null
-              }))}
-              className="panel-input"
-            >
-              <option value="">Không thuộc nhóm</option>
-              {formAccountGroups.map(group => (
-                <option key={group.id} value={group.id}>{group.name}</option>
-              ))}
-            </select>
-            <button
-              className="btn btn-secondary btn-icon"
-              onClick={() => openGroupManager(formData.flatformType)}
-              title="Tạo hoặc sửa nhóm"
-            >
-              <FolderCog size={14} />
-            </button>
-          </div>
+            <div className="modal-body account-form-modal-body">
+              <div className="account-form-grid">
+                <div className="stepper-form-group">
+                  <label>Tên tài khoản <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    placeholder="Tên tài khoản"
+                    value={formData.name}
+                    onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    className="stepper-input"
+                    autoFocus
+                  />
+                </div>
 
-          <div className="panel-input-row">
-            <select
-              value={formData.proxyId ?? ''}
-              onChange={e => setFormData(prev => ({
-                ...prev,
-                proxyId: e.target.value ? Number(e.target.value) : null
-              }))}
-              className="panel-input"
-            >
-              <option value="">Không dùng proxy</option>
-              {activeProxies.map(proxy => (
-                <option key={proxy.id} value={proxy.id}>
-                  {proxy.name} ({proxy.protocol}://{proxy.host}:{proxy.port})
-                </option>
-              ))}
-            </select>
-            <button
-              className="btn btn-secondary btn-icon"
-              onClick={() => openProxyManager(formData.flatformType)}
-              title="Tạo hoặc sửa proxy"
-            >
-              <ServerCog size={14} />
-            </button>
-          </div>
+                <div className="stepper-form-group">
+                  <label>Nền tảng</label>
+                  <select
+                    value={formData.flatformType}
+                    onChange={e => setFormData(prev => ({ ...prev, flatformType: e.target.value, accountGroupId: null }))}
+                    className="stepper-input"
+                    disabled={!!editingAccount}
+                  >
+                    {canUseFacebookAccount && <option value="facebook">Facebook</option>}
+                    {canUseZaloFeature && <option value="zalo">Zalo</option>}
+                    {canUseEmailFeature && <option value="email">Email</option>}
+                  </select>
+                </div>
 
-          <div className="panel-form-actions">
-            <button className="btn btn-ghost" onClick={() => { setShowForm(false); setEditingAccount(null); resetForm() }}>Huỷ</button>
-            <button className="btn btn-primary" onClick={handleSubmit} disabled={savingAccount}>
-              {savingAccount && <Loader2 size={14} className="animate-spin" />}
-              {savingAccount ? 'Đang lưu...' : editingAccount ? 'Cập nhật' : 'Tạo'}
-            </button>
+                <div className="stepper-form-group">
+                  <label>Nhóm tài khoản</label>
+                  <div className="account-form-inline-field">
+                    <select
+                      value={formData.accountGroupId ?? ''}
+                      onChange={e => setFormData(prev => ({
+                        ...prev,
+                        accountGroupId: e.target.value ? Number(e.target.value) : null
+                      }))}
+                      className="stepper-input"
+                    >
+                      <option value="">Không thuộc nhóm</option>
+                      {formAccountGroups.map(group => (
+                        <option key={group.id} value={group.id}>{group.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="btn btn-secondary btn-icon"
+                      onClick={() => openGroupManager(formData.flatformType)}
+                      title="Tạo hoặc sửa nhóm"
+                      type="button"
+                    >
+                      <FolderCog size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="stepper-form-group">
+                  <label>Proxy</label>
+                  <div className="account-form-inline-field">
+                    <select
+                      value={formData.proxyId ?? ''}
+                      onChange={e => setFormData(prev => ({
+                        ...prev,
+                        proxyId: e.target.value ? Number(e.target.value) : null
+                      }))}
+                      className="stepper-input"
+                    >
+                      <option value="">Không dùng proxy</option>
+                      {activeProxies.map(proxy => (
+                        <option key={proxy.id} value={proxy.id}>
+                          {proxy.name} ({proxy.protocol}://{proxy.host}:{proxy.port})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="btn btn-secondary btn-icon"
+                      onClick={() => openProxyManager(formData.flatformType)}
+                      title="Tạo hoặc sửa proxy"
+                      type="button"
+                    >
+                      <ServerCog size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {canUseEmailFeature && formData.flatformType === 'email' && (
+                <div className="account-form-email-section">
+                  <div className="account-form-section-title">Cấu hình SMTP</div>
+                  <div className="account-form-email-grid">
+                    <div className="stepper-form-group">
+                      <label>Email gửi <span className="required">*</span></label>
+                      <input className="stepper-input" value={emailConfig.fromEmail} onChange={e => setEmailConfig(p => ({ ...p, fromEmail: e.target.value }))} />
+                    </div>
+                    <div className="stepper-form-group">
+                      <label>Thương hiệu</label>
+                      <input className="stepper-input" placeholder="Tên người gửi" value={emailConfig.brandName || ''} onChange={e => setEmailConfig(p => ({ ...p, brandName: e.target.value }))} />
+                    </div>
+                    <div className="stepper-form-group">
+                      <label>Username <span className="required">*</span></label>
+                      <input className="stepper-input" value={emailConfig.user} onChange={e => setEmailConfig(p => ({ ...p, user: e.target.value }))} />
+                    </div>
+                    <div className="stepper-form-group">
+                      <label>Password <span className="required">*</span></label>
+                      <input className="stepper-input" type="password" value={emailConfig.pass} onChange={e => setEmailConfig(p => ({ ...p, pass: e.target.value }))} />
+                    </div>
+                    <div className="stepper-form-group">
+                      <label>Reply-To</label>
+                      <input className="stepper-input" value={emailConfig.replyTo || ''} onChange={e => setEmailConfig(p => ({ ...p, replyTo: e.target.value }))} />
+                    </div>
+                    <div className="stepper-form-group">
+                      <label>Email CC</label>
+                      <input className="stepper-input" value={emailConfig.cc || ''} onChange={e => setEmailConfig(p => ({ ...p, cc: e.target.value }))} />
+                    </div>
+                    <div className="stepper-form-group">
+                      <label>Server name <span className="required">*</span></label>
+                      <input className="stepper-input" placeholder="SMTP host" value={emailConfig.host} onChange={e => setEmailConfig(p => ({ ...p, host: e.target.value }))} />
+                    </div>
+                    <div className="stepper-form-group">
+                      <label>Port</label>
+                      <div className="account-form-inline-field account-form-port-row">
+                        <input className="stepper-input" type="number" value={emailConfig.port} onChange={e => setEmailConfig(p => ({ ...p, port: Number(e.target.value) || 0 }))} />
+                        <label className="account-form-checkbox">
+                          <input type="checkbox" checked={emailConfig.secure} onChange={e => setEmailConfig(p => ({ ...p, secure: e.target.checked, port: e.target.checked ? 465 : 587 }))} />
+                          <span>SSL</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button className="btn btn-secondary account-form-test-button" onClick={handleVerifyEmail} disabled={verifyingEmail} type="button">
+                    {verifyingEmail && <Loader2 size={14} className="animate-spin" />}
+                    {verifyingEmail ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={closeAccountForm} disabled={savingAccount} type="button">Huỷ</button>
+              <button className="btn btn-primary" onClick={handleSubmit} disabled={savingAccount || !formData.name.trim()} type="button">
+                {savingAccount && <Loader2 size={14} className="animate-spin" />}
+                {savingAccount ? 'Đang lưu...' : editingAccount ? 'Cập nhật' : 'Tạo'}
+              </button>
+            </div>
           </div>
         </div>
       )}

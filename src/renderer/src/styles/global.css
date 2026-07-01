@@ -2658,6 +2658,103 @@ button.btn-icon:not(.btn):disabled {
   max-height: min(760px, calc(100vh - 48px));
 }
 
+.account-form-modal {
+  width: min(680px, calc(100vw - 48px));
+  max-height: min(780px, calc(100vh - 48px));
+}
+
+.account-form-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.account-form-grid,
+.account-form-email-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+
+.account-form-grid .stepper-form-group,
+.account-form-email-grid .stepper-form-group {
+  margin-bottom: 0;
+}
+
+.account-form-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.account-form-inline-field .stepper-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.account-form-inline-field .btn-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+}
+
+.account-form-email-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-default);
+}
+
+.account-form-section-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-form-port-row {
+  align-items: center;
+}
+
+.account-form-port-row .account-form-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: stretch;
+  min-width: 96px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.account-form-port-row .account-form-checkbox:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.account-form-port-row .account-form-checkbox input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent-primary);
+}
+
+.account-form-test-button {
+  align-self: flex-start;
+}
+
 .account-info-subtitle {
   margin-top: 3px;
   color: var(--text-secondary);
@@ -3340,6 +3437,11 @@ button.btn-icon:not(.btn):disabled {
 @media (max-width: 720px) {
   .account-info-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-form-grid,
+  .account-form-email-grid {
+    grid-template-columns: 1fr;
   }
 
   .account-group-modal-body,
