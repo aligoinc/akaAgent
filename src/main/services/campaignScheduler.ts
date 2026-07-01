@@ -266,6 +266,7 @@ const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const GROUP_POST_ACTION_ID = 'facebook_group_post'
 const GROUP_POST_FREQUENCY_LIMIT_ERROR_CODE = 'err_group_post_frequency_limit'
+const COMMENT_FREQUENCY_LIMIT_ERROR_CODE = 'err_comment_frequency_limit'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
@@ -1645,7 +1646,11 @@ export class CampaignScheduler {
               ? this.normalizeRuntimeError(campaign, result.steps, result.error)
               : null
 
-            if (runtimeError && this.isNewsfeedDailyCampaign(campaign)) {
+            if (
+              runtimeError &&
+              this.isNewsfeedDailyCampaign(campaign) &&
+              runtimeError.errorCode !== COMMENT_FREQUENCY_LIMIT_ERROR_CODE
+            ) {
               await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
               runtimeStopTriggered = true
               shouldStopAfterTarget = true
@@ -1725,7 +1730,10 @@ export class CampaignScheduler {
             shouldStopAfterTarget = true
           } else {
             const runtimeError = this.normalizeRuntimeError(campaign, [], errMsg)
-            if (this.isNewsfeedDailyCampaign(campaign)) {
+            if (
+              this.isNewsfeedDailyCampaign(campaign) &&
+              runtimeError.errorCode !== COMMENT_FREQUENCY_LIMIT_ERROR_CODE
+            ) {
               await this.completeNewsfeedDailyWithoutNextDay(campaign, runtimeError.message)
               runtimeStopTriggered = true
               shouldStopAfterTarget = true
@@ -3753,7 +3761,10 @@ export class CampaignScheduler {
     if (lowerMessage.includes('bạn đã đạt giới hạn về số tin nhắn đang chờ')) {
       return { errorCode: 'err_limit_waiting_message', actionCode, message }
     }
-    if (campaign.actionId === GROUP_POST_ACTION_ID && lowerMessage.includes('giới hạn tần suất bạn đăng bài')) {
+    if (lowerMessage.includes('giới hạn tần suất comment')) {
+      return { errorCode: COMMENT_FREQUENCY_LIMIT_ERROR_CODE, actionCode: 'fb_comment', message }
+    }
+    if (campaign.actionId === GROUP_POST_ACTION_ID && actionCode !== 'fb_comment' && lowerMessage.includes('giới hạn tần suất bạn đăng bài')) {
       return { errorCode: GROUP_POST_FREQUENCY_LIMIT_ERROR_CODE, actionCode, message }
     }
 
