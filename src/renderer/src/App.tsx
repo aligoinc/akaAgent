@@ -14,10 +14,13 @@ import AlertModal from './components/CampaignPanels/AlertModal'
 import ConfirmModal from './components/CampaignPanels/ConfirmModal'
 import UpdateModal from './components/UpdateModal/UpdateModal'
 import DataScanModal from './components/DataScan/DataScanModal'
+import DataGroupManagerModal from './components/DataScan/DataGroupManagerModal'
 import GeneralSettingsModal, { type GeneralSettingsMenu } from './components/Settings/GeneralSettingsModal'
+import ContentTemplateManagerModal from './components/Settings/ContentTemplateManagerModal'
 import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 import AccountProfileModal from './components/Settings/AccountProfileModal'
 import MediaLibraryModal from './components/Media/MediaLibraryModal'
+import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
 
 type UpdatePromptSource = 'startup' | 'manual'
 
@@ -30,7 +33,18 @@ interface UpdateInfo {
 export default function App() {
   const { user, initializing, rehydrateFromStorage, handleSessionExpired, handleUserUpdated } = useAuthStore()
   const { theme } = useThemeStore()
-  const { loadAccounts, loadCampaigns, loadCampaignActions, upsertCampaign } = useCampaignStore()
+  const {
+    accounts,
+    proxies,
+    loadAccounts,
+    loadProxies,
+    createProxy,
+    updateProxy,
+    deleteProxy,
+    loadCampaigns,
+    loadCampaignActions,
+    upsertCampaign
+  } = useCampaignStore()
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
   const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
@@ -38,6 +52,9 @@ export default function App() {
   const browserOpenRequestSeq = useRef(0)
   const [showDataScan, setShowDataScan] = useState(false)
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
+  const [showProxyManager, setShowProxyManager] = useState(false)
+  const [showContentTemplates, setShowContentTemplates] = useState(false)
+  const [showDataGroups, setShowDataGroups] = useState(false)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
   const [showChangePassword, setShowChangePassword] = useState(false)
@@ -156,6 +173,12 @@ export default function App() {
     setShowGeneralSettings(true)
   }
 
+  const openProxyManager = () => {
+    void loadAccounts()
+    void loadProxies()
+    setShowProxyManager(true)
+  }
+
   const requestOpenBrowser = useCallback((request: { accountId: number; reloadAfterOpen?: boolean }) => {
     browserOpenRequestSeq.current += 1
     setBrowserOpenRequest({
@@ -256,6 +279,9 @@ export default function App() {
           onPageChange={setActivePage}
           onOpenDataScan={() => setShowDataScan(true)}
           onOpenMediaLibrary={() => setShowMediaLibrary(true)}
+          onOpenProxyManager={openProxyManager}
+          onOpenContentTemplates={() => setShowContentTemplates(true)}
+          onOpenDataGroups={() => setShowDataGroups(true)}
           onOpenAccountInfo={() => setShowAccountProfile(true)}
           onOpenGeneralSettings={() => openGeneralSettings()}
           onOpenChangePassword={() => setShowChangePassword(true)}
@@ -270,6 +296,7 @@ export default function App() {
               isActive={activePage === 'campaigns'}
               onNavigateToBrowser={requestOpenBrowser}
               onOpenGeneralSettings={openGeneralSettings}
+              onOpenContentTemplates={() => setShowContentTemplates(true)}
             />
           </div>
 
@@ -305,6 +332,23 @@ export default function App() {
       )}
       {showMediaLibrary && (
         <MediaLibraryModal onClose={() => setShowMediaLibrary(false)} />
+      )}
+      {showProxyManager && (
+        <ProxyManagerModal
+          proxies={proxies}
+          accounts={accounts}
+          initialPlatform="facebook"
+          onClose={() => setShowProxyManager(false)}
+          onCreateProxy={createProxy}
+          onUpdateProxy={updateProxy}
+          onDeleteProxy={deleteProxy}
+        />
+      )}
+      {showContentTemplates && (
+        <ContentTemplateManagerModal onClose={() => setShowContentTemplates(false)} />
+      )}
+      {showDataGroups && (
+        <DataGroupManagerModal onClose={() => setShowDataGroups(false)} />
       )}
       {showGeneralSettings && (
         <GeneralSettingsModal

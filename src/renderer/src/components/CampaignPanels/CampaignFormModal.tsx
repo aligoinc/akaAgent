@@ -158,6 +158,7 @@ interface CampaignFormModalProps {
   campaign: Campaign | null
   cloneFromId?: number
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
+  onOpenContentTemplates?: () => void
   draftMode?: boolean
   draftTempId?: number
   lockedActionId?: string
@@ -1166,6 +1167,7 @@ export default function CampaignFormModal({
   campaign,
   cloneFromId,
   onOpenGeneralSettings,
+  onOpenContentTemplates,
   draftMode = false,
   draftTempId,
   lockedActionId,
@@ -3207,7 +3209,7 @@ export default function CampaignFormModal({
   }
 
   const openContentTemplateManager = () => {
-    onOpenGeneralSettings?.('templates')
+    onOpenContentTemplates?.()
   }
 
   const getPreviewContentValue = (target: ContentPreviewTarget): string => {
@@ -3436,8 +3438,8 @@ export default function CampaignFormModal({
         type="button"
         className="btn btn-ghost content-template-inline-button"
         onClick={openContentTemplateManager}
-        disabled={!onOpenGeneralSettings}
-        title={onOpenGeneralSettings ? 'Quản lý mẫu nội dung' : 'Không thể mở quản lý mẫu trong form này'}
+        disabled={!onOpenContentTemplates}
+        title={onOpenContentTemplates ? 'Quản lý mẫu nội dung' : 'Không thể mở quản lý mẫu trong form này'}
       >
         <Settings2 size={15} />
         <span>Quản lý mẫu</span>
@@ -10576,6 +10578,7 @@ export default function CampaignFormModal({
         <CampaignFormModal
           campaign={editingSourceCampaign}
           onOpenGeneralSettings={onOpenGeneralSettings}
+          onOpenContentTemplates={onOpenContentTemplates}
           modalZIndex={3200}
           submitLabel="Sửa"
           onClose={() => {
@@ -10595,6 +10598,7 @@ export default function CampaignFormModal({
           draftPickerSourceType={draftFormConfig.sourceType}
           draftRequiredTargetField={draftFormConfig.requiredTargetField}
           onOpenGeneralSettings={onOpenGeneralSettings}
+          onOpenContentTemplates={onOpenContentTemplates}
           onSaveDraft={handleDraftCampaignSaved}
           modalZIndex={3200}
           submitLabel={draftFormConfig.submitLabel}

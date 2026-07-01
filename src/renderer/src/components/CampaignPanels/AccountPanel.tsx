@@ -563,9 +563,6 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           <button className="btn btn-secondary btn-icon" onClick={() => openGroupManager()} title="Nhóm tài khoản">
             <FolderCog size={14} />
           </button>
-          <button className="btn btn-secondary btn-icon" onClick={() => openProxyManager()} title="Quản lý proxy">
-            <ServerCog size={14} />
-          </button>
           <button className="btn btn-primary btn-icon" onClick={openCreateForm} title="Thêm tài khoản">
             <Plus size={14} />
           </button>
