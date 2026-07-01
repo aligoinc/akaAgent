@@ -9169,6 +9169,14 @@ button.btn-icon.campaign-control-button.assistant {
   border-bottom: 1px solid var(--border-default);
 }
 
+.campaign-grid .campaign-grid-index-col {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
 .campaign-grid input {
   width: 100%;
   background: transparent;
