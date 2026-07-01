@@ -4,6 +4,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
 
 let mainWindow: BrowserWindow | null = null
+let quitRequested = false
+let relaunchRequested = false
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -17,12 +19,43 @@ function getAppIconPath(): string {
     : join(__dirname, '../../build/icon.png')
 }
 
-function focusMainWindow(): void {
-  const win = mainWindow || BrowserWindow.getAllWindows()[0]
-  if (!win || win.isDestroyed()) return
+function focusMainWindow(): boolean {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return false
   if (win.isMinimized()) win.restore()
   if (!win.isVisible()) win.show()
   win.focus()
+  return true
+}
+
+function requestAppQuit(): void {
+  if (quitRequested) return
+  quitRequested = true
+  app.quit()
+}
+
+function requestAppRelaunch(): void {
+  if (quitRequested || relaunchRequested) return
+  relaunchRequested = true
+  app.relaunch()
+  requestAppQuit()
+}
+
+function attachMainWindowLifecycle(window: BrowserWindow): void {
+  window.on('close', (event) => {
+    if (process.platform !== 'darwin' || quitRequested) return
+    event.preventDefault()
+    window.hide()
+  })
+
+  window.on('closed', () => {
+    if (mainWindow === window) {
+      mainWindow = null
+    }
+    if (process.platform !== 'darwin') {
+      requestAppQuit()
+    }
+  })
 }
 
 function createWindow(): BrowserWindow {
@@ -73,8 +106,16 @@ function loadRenderer(mainWindow: BrowserWindow): void {
 }
 
 if (gotSingleInstanceLock) {
+  app.on('before-quit', () => {
+    quitRequested = true
+  })
+
   app.on('second-instance', () => {
-    focusMainWindow()
+    if (quitRequested || focusMainWindow()) {
+      return
+    }
+
+    requestAppRelaunch()
   })
 
   app.whenReady().then(() => {
@@ -88,9 +129,7 @@ if (gotSingleInstanceLock) {
     })
 
     mainWindow = createWindow()
-    mainWindow.on('closed', () => {
-      mainWindow = null
-    })
+    attachMainWindowLifecycle(mainWindow)
 
     // Register IPC handlers
     try {
@@ -102,16 +141,11 @@ if (gotSingleInstanceLock) {
     loadRenderer(mainWindow)
 
     app.on('activate', () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        focusMainWindow()
+      if (quitRequested || focusMainWindow()) {
         return
       }
 
-      mainWindow = createWindow()
-      mainWindow.on('closed', () => {
-        mainWindow = null
-      })
-      loadRenderer(mainWindow)
+      requestAppRelaunch()
     })
   })
 
