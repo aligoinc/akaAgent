@@ -610,6 +610,16 @@ const formatDateTimeLocal = (date: Date): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+const getVietnamDayMonthLabel = (): string => {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit'
+  }).formatToParts(new Date())
+  const byType = Object.fromEntries(parts.map(part => [part.type, part.value])) as Record<string, string>
+  return `${byType.day || '01'}/${byType.month || '01'}`
+}
+
 const formatDateTimeLocalValue = (value?: string | null): string | null => {
   if (!value) return null
   const date = new Date(value)
@@ -1423,6 +1433,11 @@ export default function CampaignFormModal({
     findFacebookGroupCommentTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || [] as number[],
     findFacebookGroupJoinTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || [] as number[]
   })
+  const campaignNameValueRef = useRef(formData.name)
+  const campaignNameUserEditedRef = useRef(Boolean((campaign?.name || '').trim()))
+  const lastAiCampaignNameRef = useRef('')
+  const campaignNameAiRequestSeqRef = useRef(0)
+  const campaignNameAiCacheRef = useRef<Map<string, string>>(new Map())
   const [expandedRateLimitMinuteActions, setExpandedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
   const [editedRateLimitMinuteActions, setEditedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'post' | 'comment' | null>(null)
@@ -1705,6 +1720,12 @@ export default function CampaignFormModal({
       : accounts,
     [accounts, actionPlatformForAccountSelection]
   )
+  const selectedCampaignNameAccount = useMemo(() => {
+    if (formData.accountIds.length !== 1) return null
+    return accounts.find(account => account.id === formData.accountIds[0]) || null
+  }, [accounts, formData.accountIds])
+  const campaignNameAccountIdsKey = formData.accountIds.join(',')
+  const campaignNameCurrentDateLabel = getVietnamDayMonthLabel()
   const selectableAccountGroups = useMemo(
     () => accountGroups.filter(group => !actionPlatformForAccountSelection || normalizeCampaignActionPlatform(group.flatformType) === actionPlatformForAccountSelection),
     [accountGroups, actionPlatformForAccountSelection]
@@ -1736,9 +1757,24 @@ export default function CampaignFormModal({
       return normalizeCampaignActionPlatform(account?.flatformType) === platform
     })
   }
+  const invalidateCampaignNameAiRequest = () => {
+    campaignNameAiRequestSeqRef.current += 1
+  }
   const handleActionPlatformSelect = (platform: string) => {
     const normalizedPlatform = normalizeCampaignActionPlatform(platform)
     if (!normalizedPlatform || (draftMode && !!lockedActionId)) return
+
+    const currentAction = availableCampaignActions.find(action => action.id === formData.actionId)
+    const currentPlatform = normalizeCampaignActionPlatform(currentAction?.flatformType)
+    const keepCurrentAction = !!formData.actionId && currentPlatform === normalizedPlatform
+    const nextAccountIds = getAccountIdsForPlatform(formData.accountIds, normalizedPlatform)
+    if (
+      !keepCurrentAction ||
+      nextAccountIds.length !== formData.accountIds.length ||
+      !nextAccountIds.every((id, index) => id === formData.accountIds[index])
+    ) {
+      invalidateCampaignNameAiRequest()
+    }
 
     setSelectedActionPlatformFilter(normalizedPlatform)
     setIsAccountDropdownOpen(false)
@@ -1766,6 +1802,14 @@ export default function CampaignFormModal({
   const handleActionChange = (actionId: string) => {
     const nextAction = availableCampaignActions.find(action => action.id === actionId)
     const nextPlatform = normalizeCampaignActionPlatform(nextAction?.flatformType)
+    const nextAccountIds = getAccountIdsForPlatform(formData.accountIds, nextPlatform || selectedActionPlatformFilter)
+    if (
+      actionId !== formData.actionId ||
+      nextAccountIds.length !== formData.accountIds.length ||
+      !nextAccountIds.every((id, index) => id === formData.accountIds[index])
+    ) {
+      invalidateCampaignNameAiRequest()
+    }
     if (nextPlatform) setSelectedActionPlatformFilter(nextPlatform)
     setFormData(prev => ({
       ...prev,
@@ -1800,6 +1844,7 @@ export default function CampaignFormModal({
   }
   const toggleSelectableAccounts = (accountIds: number[]) => {
     if (isSingleAccountSelection || accountIds.length === 0) return
+    invalidateCampaignNameAiRequest()
     setFormData(prev => {
       const selectedIds = new Set(prev.accountIds)
       const allSelected = accountIds.every(id => selectedIds.has(id))
@@ -1811,6 +1856,7 @@ export default function CampaignFormModal({
     })
   }
   const toggleSelectableAccount = (accountId: number, checked: boolean) => {
+    invalidateCampaignNameAiRequest()
     setFormData(prev => ({
       ...prev,
       accountIds: checked
@@ -1819,6 +1865,9 @@ export default function CampaignFormModal({
     }))
   }
   const selectSingleAccount = (accountId: number) => {
+    if (formData.accountIds.length !== 1 || formData.accountIds[0] !== accountId) {
+      invalidateCampaignNameAiRequest()
+    }
     setFormData(prev => ({ ...prev, accountIds: [accountId] }))
     setIsAccountDropdownOpen(false)
   }
@@ -1861,6 +1910,7 @@ export default function CampaignFormModal({
 
   useEffect(() => {
     if (!formData.actionId || canUseCampaignAction({ id: formData.actionId, flatformType: selectedActionPlatform }, entitlements)) return
+    invalidateCampaignNameAiRequest()
     setFormData(prev => ({
       ...prev,
       actionId: '',
@@ -2340,6 +2390,103 @@ export default function CampaignFormModal({
   const accountDropdownRef = useRef<HTMLDivElement>(null)
   const otherDataSourceDropdownRef = useRef<HTMLDivElement>(null)
 
+  const canReplaceCampaignNameWithAI = (currentName: string, previousAiName: string): boolean => {
+    if (!currentName) return true
+    if (campaignNameUserEditedRef.current && currentName !== previousAiName) return false
+    return !!previousAiName && currentName === previousAiName
+  }
+
+  const applyAiCampaignName = (generatedName: string, previousAiName: string) => {
+    const nextName = generatedName.replace(/\s+/g, ' ').trim()
+    if (!nextName) return
+
+    setFormData(prev => {
+      const currentName = prev.name.trim()
+      if (!canReplaceCampaignNameWithAI(currentName, previousAiName)) return prev
+
+      lastAiCampaignNameRef.current = nextName
+      campaignNameUserEditedRef.current = false
+      return prev.name === nextName ? prev : { ...prev, name: nextName }
+    })
+  }
+
+  const handleCampaignNameChange = (value: string) => {
+    const currentAiName = lastAiCampaignNameRef.current.trim()
+    const nextName = value.trim()
+    campaignNameAiRequestSeqRef.current += 1
+    campaignNameUserEditedRef.current = nextName.length > 0 && nextName !== currentAiName
+    setFormData(prev => ({ ...prev, name: value }))
+  }
+
+  useEffect(() => {
+    campaignNameValueRef.current = formData.name
+  }, [formData.name])
+
+  useEffect(() => {
+    const requestSeq = campaignNameAiRequestSeqRef.current + 1
+    campaignNameAiRequestSeqRef.current = requestSeq
+
+    const actionId = String(formData.actionId || '').trim()
+    const actionName = String(selectedCampaignAction?.name || '').trim()
+    if (!actionId || !actionName || formData.accountIds.length === 0) return
+
+    const previousAiName = lastAiCampaignNameRef.current.trim()
+    if (!canReplaceCampaignNameWithAI(campaignNameValueRef.current.trim(), previousAiName)) return
+
+    const isSingleAccount = formData.accountIds.length === 1
+    if (isSingleAccount && !selectedCampaignNameAccount) return
+
+    const accountKey = isSingleAccount ? `account:${selectedCampaignNameAccount?.id}` : 'multi'
+    const cacheKey = `${actionId}|${accountKey}|${campaignNameCurrentDateLabel}`
+    const cachedName = campaignNameAiCacheRef.current.get(cacheKey)
+    if (cachedName) {
+      applyAiCampaignName(cachedName, previousAiName)
+      return
+    }
+
+    const generateCampaignNameWithAI = window.electronAPI?.generateCampaignNameWithAI
+    if (!generateCampaignNameWithAI) return
+
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          if (
+            requestSeq !== campaignNameAiRequestSeqRef.current ||
+            !canReplaceCampaignNameWithAI(campaignNameValueRef.current.trim(), previousAiName)
+          ) {
+            return
+          }
+
+          const generatedName = await generateCampaignNameWithAI({
+            actionId,
+            actionName,
+            accountId: isSingleAccount ? selectedCampaignNameAccount?.id : undefined,
+            accountName: isSingleAccount ? selectedCampaignNameAccount?.name : undefined
+          })
+          if (requestSeq !== campaignNameAiRequestSeqRef.current) return
+
+          const normalizedName = generatedName.replace(/\s+/g, ' ').trim()
+          if (!normalizedName) return
+          campaignNameAiCacheRef.current.set(cacheKey, normalizedName)
+          applyAiCampaignName(normalizedName, previousAiName)
+        } catch (err) {
+          if (requestSeq === campaignNameAiRequestSeqRef.current) {
+            console.warn('Failed to auto-generate campaign name:', err)
+          }
+        }
+      })()
+    }, 500)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [
+    formData.actionId,
+    campaignNameAccountIdsKey,
+    selectedCampaignAction?.name,
+    selectedCampaignNameAccount?.id,
+    selectedCampaignNameAccount?.name,
+    campaignNameCurrentDateLabel
+  ])
+
   useEffect(() => {
     setFormData(prev => {
       if (!prev.postWithBackground) return prev
@@ -2434,6 +2581,7 @@ export default function CampaignFormModal({
 
   useEffect(() => {
     if (!isSingleAccountSelection || formData.accountIds.length <= 1) return
+    invalidateCampaignNameAiRequest()
     setFormData(prev => ({ ...prev, accountIds: prev.accountIds.slice(0, 1) }))
   }, [isSingleAccountSelection, formData.accountIds.length])
 
@@ -2452,9 +2600,9 @@ export default function CampaignFormModal({
     const allowedIds = new Set(selectableAccounts.map(account => account.id))
     setFormData(prev => {
       const nextAccountIds = prev.accountIds.filter(id => allowedIds.has(id))
-      return nextAccountIds.length === prev.accountIds.length
-        ? prev
-        : { ...prev, accountIds: nextAccountIds }
+      if (nextAccountIds.length === prev.accountIds.length) return prev
+      invalidateCampaignNameAiRequest()
+      return { ...prev, accountIds: nextAccountIds }
     })
   }, [actionPlatformForAccountSelection, selectableAccounts.map(account => account.id).join(',')])
 
@@ -9084,10 +9232,11 @@ export default function CampaignFormModal({
                           className="btn btn-ghost"
                           style={{ padding: '2px 8px', fontSize: '12px', height: 'auto' }}
                           onClick={() => {
+                            invalidateCampaignNameAiRequest()
                             setFormData(p => ({
                               ...p,
                               accountIds: selectedAllSelectableAccounts ? [] : selectableAccounts.map(a => a.id)
-                            }));
+                            }))
                           }}
                         >
                           {selectedAllSelectableAccounts ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
@@ -9210,7 +9359,7 @@ export default function CampaignFormModal({
                     <input
                       type="text"
                       value={formData.name}
-                      onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
+                      onChange={e => handleCampaignNameChange(e.target.value)}
                       className="stepper-input"
                       placeholder="Nhập tên chiến dịch..."
                     />

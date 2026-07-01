@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import {
+  AiGenerateCampaignNameRequest,
   AiRewriteContentRequest,
   AiWriteMultiOtherContentRequest,
   Campaign,
@@ -28,6 +29,8 @@ const DEFAULT_MAX_MESSAGES = 30
 const DEFAULT_MAX_CONTEXT_ROWS = 30
 const MAX_CONTEXT_ROWS_CAP = 100
 const CAMPAIGN_ASSISTANT_AI_CODE = 'app_campaign_assistant_chat'
+const CAMPAIGN_NAME_AI_CODE = 'app_ai_generate_campaign_name'
+const MAX_CAMPAIGN_NAME_WORDS = 10
 
 const SYSTEM_SETTING_KEYS = {
   facebookCampaignMaxMessages: 'assistant.facebook.campaign.max_messages',
@@ -53,6 +56,42 @@ function requireContent(input: unknown): string {
     throw new Error('Vui lòng soạn 1 nội dung trong form nội dung.')
   }
   return content
+}
+
+function normalizeAiText(input: unknown, maxLength = 200): string {
+  const text = typeof input === 'string' || typeof input === 'number'
+    ? String(input).replace(/\s+/g, ' ').trim()
+    : ''
+  return text.length > maxLength ? text.slice(0, maxLength).trim() : text
+}
+
+function limitWords(input: string, maxWords = MAX_CAMPAIGN_NAME_WORDS): string {
+  return input.split(/\s+/).filter(Boolean).slice(0, maxWords).join(' ')
+}
+
+function sanitizeCampaignNameOutput(input: unknown): string {
+  const firstLine = String(input || '')
+    .replace(/\r/g, '\n')
+    .trim()
+    .split('\n')[0] || ''
+  const cleaned = firstLine
+    .replace(/^[`"'“”‘’]+|[`"'“”‘’]+$/gu, '')
+    .replace(/^(?:[-*•]|\d+[.)])\s*/u, '')
+    .replace(/^tên\s+chiến\s+dịch\s*:\s*/i, '')
+    .replace(/^[`"'“”‘’]+|[`"'“”‘’]+$/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return limitWords(cleaned)
+}
+
+function ensureCampaignNameDateLabel(name: string, currentDateLabel: string): string {
+  const cleaned = name.trim()
+  if (!cleaned || cleaned.includes(currentDateLabel)) return cleaned
+  const words = cleaned.split(/\s+/).filter(Boolean)
+  if (words.length >= MAX_CAMPAIGN_NAME_WORDS) {
+    return [...words.slice(0, MAX_CAMPAIGN_NAME_WORDS - 1), currentDateLabel].join(' ')
+  }
+  return [...words, currentDateLabel].join(' ')
 }
 
 function parsePositiveInt(value: string, fallback: number, cap: number): number {
@@ -103,6 +142,11 @@ function getVietnamDayRange(date = new Date()): VietnamDayRange {
   const start = new Date(`${key}T00:00:00${VIETNAM_UTC_OFFSET}`)
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
   return { key, startIso: start.toISOString(), endIso: end.toISOString() }
+}
+
+function getVietnamDayMonthLabel(date = new Date()): string {
+  const parts = getVietnamDateParts(date)
+  return `${pad2(parts.day)}/${pad2(parts.month)}`
 }
 
 function parseVietnamLogDateKey(value: string): string | null {
@@ -383,6 +427,35 @@ export function registerAiHandlers(): void {
     })
     if (!result.ok) throw new Error(result.error || 'AI không thể xử lý nội dung lúc này.')
     return result.content
+  })
+
+  ipcMain.handle(IPC_EVENTS.AI_GENERATE_CAMPAIGN_NAME, async (_, request: AiGenerateCampaignNameRequest): Promise<string> => {
+    const actionName = normalizeAiText(request?.actionName)
+    if (!actionName) {
+      throw new Error('Vui lòng chọn hành động trước khi tạo tên chiến dịch.')
+    }
+
+    const actionId = normalizeAiText(request?.actionId, 120)
+    const accountName = normalizeAiText(request?.accountName)
+    const accountId = Number(request?.accountId)
+    const currentDateLabel = getVietnamDayMonthLabel()
+
+    const currentUser = requireCurrentUser()
+    const result = await callAiUsing(CAMPAIGN_NAME_AI_CODE, {
+      actionId,
+      actionName,
+      accountId: Number.isFinite(accountId) && accountId > 0 ? accountId : '',
+      accountName,
+      currentDateLabel
+    }, {
+      organizationId: currentUser.organizationId,
+      accountId: Number.isFinite(accountId) && accountId > 0 ? accountId : undefined
+    })
+    if (!result.ok) throw new Error(result.error || 'AI không thể tạo tên chiến dịch lúc này.')
+
+    const name = ensureCampaignNameDateLabel(sanitizeCampaignNameOutput(result.content), currentDateLabel)
+    if (!name) throw new Error('AI không trả về tên chiến dịch hợp lệ.')
+    return name
   })
 
   ipcMain.handle(IPC_EVENTS.AI_CAMPAIGN_ASSISTANT_CONTEXT, async (_, campaignId: number): Promise<CampaignAssistantContextResult> => {
