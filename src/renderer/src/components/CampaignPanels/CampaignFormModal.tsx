@@ -3005,7 +3005,9 @@ export default function CampaignFormModal({
   const getContentPreviewNotes = (target: ContentPreviewTarget): string[] => {
     const notes: string[] = []
     if (target === 'content') {
-      if (formData.rewriteContentEachRun) notes.push('Bản xem trước chưa chạy AI viết lại; khi runtime chạy, nội dung có thể được AI viết lại.')
+      if (formData.rewriteContentEachRun && !(isEmailCampaign && formData.emailBodyIsHtml)) {
+        notes.push('Bản xem trước chưa chạy AI viết lại; khi runtime chạy, nội dung có thể được AI viết lại.')
+      }
       if (supportsSourceContent && formData.copyContentFromSource) notes.push('Bản xem trước chỉ hiển thị phần nội dung nhập trong form, chưa bao gồm nội dung copy từ nguồn.')
       if (supportsSourceSharePost && formData.sharePost) notes.push('Bản xem trước chưa hiển thị phần bài viết được chia sẻ từ nguồn.')
       if (formData.postAsReels) notes.push('Bản xem trước chưa mô phỏng giao diện Reels.')
@@ -3438,7 +3440,7 @@ export default function CampaignFormModal({
           extraSettings: {
             sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
             postWithBackground: isPostBackgroundActive,
-            rewriteContentEachRun: formData.rewriteContentEachRun,
+            rewriteContentEachRun: isEmailCampaign && formData.emailBodyIsHtml ? false : formData.rewriteContentEachRun,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
             commentType: formData.commentType,
@@ -8494,7 +8496,7 @@ export default function CampaignFormModal({
         />
       )}
       {showHint && !(isEmailCampaign && formData.emailBodyIsHtml) && renderCampaignContentHint()}
-      {showHint && !isFacebookJoinGroupCampaign && renderRewriteContentEachRunOption()}
+      {showHint && !isFacebookJoinGroupCampaign && !(isEmailCampaign && formData.emailBodyIsHtml) && renderRewriteContentEachRunOption()}
     </>
   )
 
@@ -9516,7 +9518,14 @@ export default function CampaignFormModal({
                           <input
                             type="checkbox"
                             checked={formData.emailBodyIsHtml}
-                            onChange={e => setFormData(p => ({ ...p, emailBodyIsHtml: e.target.checked }))}
+                            onChange={e => {
+                              const checked = e.target.checked
+                              setFormData(p => ({
+                                ...p,
+                                emailBodyIsHtml: checked,
+                                rewriteContentEachRun: checked ? false : p.rewriteContentEachRun
+                              }))
+                            }}
                           />
                           <span>Nội dung dạng HTML</span>
                         </label>
