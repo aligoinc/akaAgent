@@ -246,10 +246,34 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_join_group_link: 'Tham gia group',
   zalo_cancel_sent_friend_request: 'Huỷ lời mời kết bạn',
   zalo_tag_contact: 'Gắn tag Zalo',
-  zalo_change_alias: 'Đổi tên Zalo'
+  zalo_change_alias: 'Đổi tên Zalo',
+  email_send: 'Gửi email'
 }
 
 const getActionCodeLabel = (code: string) => ACTION_CODE_LABELS[code] || code
+
+const ACTION_LIMIT_UNITS: Record<string, string> = {
+  fb_post_group: 'bài đăng',
+  fb_post_my_profile: 'bài đăng',
+  fb_post_page: 'bài đăng',
+  fb_comment: 'comment',
+  fb_message_stranger: 'tin nhắn',
+  fb_message_friend: 'tin nhắn',
+  fb_message_page_inbox_customer: 'tin nhắn',
+  fb_add_friend: 'lời mời',
+  fb_like_post: 'like',
+  fb_join_group: 'group',
+  zalo_find_phone_user: 'SĐT',
+  zalo_message_friend: 'tin nhắn',
+  zalo_message_group: 'tin nhắn',
+  zalo_message_stranger: 'tin nhắn',
+  zalo_add_friend: 'lời mời',
+  zalo_join_group_link: 'group',
+  zalo_cancel_sent_friend_request: 'lời mời',
+  email_send: 'email'
+}
+
+const getActionLimitUnit = (code: string) => ACTION_LIMIT_UNITS[code] || 'lượt'
 
 const formatIpcErrorMessage = (err: unknown, fallback: string): string => {
   const message = err instanceof Error
@@ -1385,6 +1409,8 @@ export default function CampaignFormModal({
     findFacebookGroupCommentTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || [] as number[],
     findFacebookGroupJoinTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || [] as number[]
   })
+  const [expandedRateLimitMinuteActions, setExpandedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
+  const [editedRateLimitMinuteActions, setEditedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'post' | 'comment' | null>(null)
   const [handleFoundUidData, setHandleFoundUidData] = useState(() =>
     draftRequiredTargetField === 'findUidTargetCampaignIds' || (campaign?.extraSettings?.findUidTargetCampaignIds || []).length > 0
@@ -2845,6 +2871,9 @@ export default function CampaignFormModal({
   }
 
   const updateActionLimit = (actionCode: string, key: keyof ActionLimitForm, value: number) => {
+    if (key === 'rateLimitMinutes') {
+      setEditedRateLimitMinuteActions(prev => ({ ...prev, [actionCode]: true }))
+    }
     setFormData(prev => ({
       ...prev,
       actionLimitsByCode: {
@@ -3340,11 +3369,14 @@ export default function CampaignFormModal({
             ? getDefaultActionLimitForCode(code, defaultLimit)
             : (formData.actionLimitsByCode[code] || getDefaultActionLimitForCode(code, defaultLimit))
           const clampedLimit = clampActionLimitDailyLimit(code, limit)
+          const useFormRateLimitMinutes = Boolean(campaign?.id || cloneFromId) || editedRateLimitMinuteActions[code]
           return [
             code,
             {
               ...clampedLimit,
-              rateLimitMinutes: accountRateLimitMinutes
+              rateLimitMinutes: useFormRateLimitMinutes
+                ? normalizeRateLimitMinutes(clampedLimit.rateLimitMinutes)
+                : accountRateLimitMinutes
             }
           ]
         })
@@ -3461,7 +3493,7 @@ export default function CampaignFormModal({
               enabledActionCodes,
               dailyLimit: clampDailyLimitToEntitlement(formData.dailyLimit, campaignDailyLimitCap),
               rateLimitCount: formData.rateLimitCount,
-              rateLimitMinutes: accountRateLimitMinutes,
+              rateLimitMinutes: (campaign?.id || cloneFromId) ? normalizeRateLimitMinutes(formData.rateLimitMinutes) : accountRateLimitMinutes,
               byActionCode
             },
             imageOption: (isFacebookJoinGroupCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
@@ -8167,32 +8199,76 @@ export default function CampaignFormModal({
       rateLimitMinutes: formData.rateLimitMinutes
     })
     const dailyLimitCap = getActionDailyLimitCap(actionCode)
+    const hasSavedRateLimitMinutes = Boolean(campaign?.id || cloneFromId)
+    const hasEditedRateLimitMinutes = hasSavedRateLimitMinutes || editedRateLimitMinuteActions[actionCode]
+    const defaultRateLimitMinutes = selectedRateLimitMinuteValues.length === 1
+      ? selectedRateLimitMinuteValues[0]
+      : normalizeRateLimitMinutes(formData.rateLimitMinutes)
+    const actionRateLimitMinutes = hasEditedRateLimitMinutes
+      ? normalizeRateLimitMinutes(limit.rateLimitMinutes)
+      : defaultRateLimitMinutes
+    const actionRateLimitMinutesLabel = hasEditedRateLimitMinutes || selectedRateLimitMinuteValues.length === 1
+      ? String(actionRateLimitMinutes)
+      : rateLimitMinutesLabel
+    const isRateLimitMinuteEditorOpen = expandedRateLimitMinuteActions[actionCode] === true
+    const actionLimitUnit = getActionLimitUnit(actionCode)
 
     return (
       <div className="action-limit-card" key={actionCode}>
         <div className="action-limit-card-header">
           <strong>Giới hạn {getActionCodeLabel(actionCode)}</strong>
-          <span>{actionCode}</span>
         </div>
         <div className="stepper-form-row">
           <div className="stepper-form-group third">
             <label>Giới hạn trong ngày (đến 24h)</label>
-            <input
-              type="number"
-              max={dailyLimitCap ?? undefined}
-              value={limit.dailyLimit}
-              onChange={e => updateActionLimit(actionCode, 'dailyLimit', parseInt(e.target.value) || 0)}
-              className="stepper-input"
-            />
+            <div className="stepper-input-unit-wrap">
+              <input
+                type="number"
+                max={dailyLimitCap ?? undefined}
+                value={limit.dailyLimit}
+                onChange={e => updateActionLimit(actionCode, 'dailyLimit', parseInt(e.target.value) || 0)}
+                className="stepper-input stepper-input-with-unit"
+              />
+              <span className="stepper-input-unit">{actionLimitUnit}</span>
+            </div>
           </div>
-          <div className="stepper-form-group third">
-            <label>Giới hạn trong giờ ({rateLimitMinutesLabel} phút)</label>
-            <input
-              type="number"
-              value={limit.rateLimitCount}
-              onChange={e => updateActionLimit(actionCode, 'rateLimitCount', parseInt(e.target.value) || 0)}
-              className="stepper-input"
-            />
+          <div className="stepper-form-group third action-limit-hour-group">
+            <div className="action-limit-hour-label-row">
+              <label>Giới hạn trong giờ ({actionRateLimitMinutesLabel} phút)</label>
+              <button
+                type="button"
+                className="action-limit-minute-toggle"
+                onClick={() => setExpandedRateLimitMinuteActions(prev => ({
+                  ...prev,
+                  [actionCode]: !prev[actionCode]
+                }))}
+              >
+                Đổi số phút/giờ
+              </button>
+            </div>
+            <div className="stepper-input-unit-wrap">
+              <input
+                type="number"
+                value={limit.rateLimitCount}
+                onChange={e => updateActionLimit(actionCode, 'rateLimitCount', parseInt(e.target.value) || 0)}
+                className="stepper-input stepper-input-with-unit"
+              />
+              <span className="stepper-input-unit">{actionLimitUnit}</span>
+            </div>
+          </div>
+          <div className={`stepper-form-group third action-limit-minute-field${isRateLimitMinuteEditorOpen ? '' : ' is-hidden'}`}>
+            <label>Trong số phút:</label>
+            <div className="stepper-input-unit-wrap">
+              <input
+                type="number"
+                min={1}
+                value={actionRateLimitMinutes}
+                onChange={e => updateActionLimit(actionCode, 'rateLimitMinutes', parseInt(e.target.value) || 0)}
+                className="stepper-input stepper-input-with-unit"
+                disabled={!isRateLimitMinuteEditorOpen}
+              />
+              <span className="stepper-input-unit">phút</span>
+            </div>
           </div>
         </div>
       </div>
@@ -9367,13 +9443,16 @@ export default function CampaignFormModal({
                 <div className="stepper-section-body">
                   <div className="stepper-form-row">
                     <div className="stepper-form-group" style={{ maxWidth: 340 }}>
-                      <label>Thời gian nghỉ giữa 2 lần gửi (giây)</label>
-                      <input
-                        type="number"
-                        value={formData.sleepBetweenActions}
-                        onChange={e => setFormData(p => ({ ...p, sleepBetweenActions: parseInt(e.target.value) || 0 }))}
-                        className="stepper-input"
-                      />
+                      <label>Thời gian nghỉ giữa 2 lần gửi</label>
+                      <div className="stepper-input-unit-wrap">
+                        <input
+                          type="number"
+                          value={formData.sleepBetweenActions}
+                          onChange={e => setFormData(p => ({ ...p, sleepBetweenActions: parseInt(e.target.value) || 0 }))}
+                          className="stepper-input stepper-input-with-unit"
+                        />
+                        <span className="stepper-input-unit">giây</span>
+                      </div>
                     </div>
                   </div>
                   {selectedAccountGroupNames.length > 0 && (
@@ -9395,13 +9474,16 @@ export default function CampaignFormModal({
                   {isCommentSeedingFeedCampaign && (
                     <div className="stepper-form-group" style={{ maxWidth: 420, marginTop: 16 }}>
                       <label>Số bài cần comment trên mỗi group/page/profile</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={formData.postsPerTarget}
-                        onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
-                        className="stepper-input"
-                      />
+                      <div className="stepper-input-unit-wrap">
+                        <input
+                          type="number"
+                          min={1}
+                          value={formData.postsPerTarget}
+                          onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
+                          className="stepper-input stepper-input-with-unit"
+                        />
+                        <span className="stepper-input-unit">bài</span>
+                      </div>
                     </div>
                   )}
                 </div>

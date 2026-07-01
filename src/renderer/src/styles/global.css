@@ -7284,17 +7284,76 @@ button.btn-icon.campaign-control-button.assistant {
   font-size: 13px;
 }
 
-.action-limit-card-header span {
-  color: var(--text-tertiary);
-  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
-  font-size: 11px;
-}
-
 .action-limit-card-header .action-limit-check-text {
   color: var(--text-secondary);
   font-family: inherit;
   font-size: 12px;
   font-weight: 500;
+}
+
+.action-limit-hour-group {
+  flex: 1;
+}
+
+.action-limit-hour-label-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.action-limit-hour-label-row label {
+  margin-bottom: 0;
+}
+
+.action-limit-minute-toggle {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--accent-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+}
+
+.action-limit-minute-toggle:hover {
+  text-decoration: underline;
+}
+
+.action-limit-minute-field {
+  flex: 1;
+}
+
+.action-limit-minute-field.is-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.stepper-input-unit-wrap {
+  position: relative;
+}
+
+.stepper-input-with-unit {
+  padding-right: 88px;
+}
+
+.stepper-input-unit {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  max-width: 72px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  text-align: right;
+  text-overflow: ellipsis;
+  transform: translateY(-50%);
+  white-space: nowrap;
 }
 
 .newsfeed-settings-panel {
