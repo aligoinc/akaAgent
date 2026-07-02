@@ -11481,6 +11481,28 @@ button.btn-icon.campaign-control-button.assistant {
   overflow-wrap: anywhere;
 }
 
+.campaign-detail-sms-content-cell {
+  min-width: 160px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sms-detail-history-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sms-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
 .run-log-screenshot-button {
   display: inline-flex;
   align-items: center;
