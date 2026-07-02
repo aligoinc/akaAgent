@@ -11,6 +11,7 @@ export const FACEBOOK_CORE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookCore.pro
 export const FACEBOOK_FANPAGE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId
 export const EMAIL_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.email.productId
 export const ZALO_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.zalo.productId
+export const SMS_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.sms.productId
 export const AKA_AGENT_PRODUCT_ID = FACEBOOK_CORE_PRODUCT_ID
 export const DEFAULT_DEMO_DAILY_SEND_LIMIT = 30
 export const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
@@ -20,6 +21,7 @@ export const FACEBOOK_CORE_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Facebook c
 export const FACEBOOK_FANPAGE_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Facebook Fanpage chưa được kích hoạt hoặc đã hết hạn.'
 export const EMAIL_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Email chưa được kích hoạt hoặc đã hết hạn.'
 export const ZALO_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.'
+export const SMS_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng SMS chưa được kích hoạt hoặc đã hết hạn.'
 
 export const FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS = new Set([
   'facebook_page_post',
@@ -60,14 +62,16 @@ const FEATURE_PRODUCT_IDS: Record<EntitlementFeature, number> = {
   facebookCore: AUTH_PRODUCT_BY_FEATURE.facebookCore.productId,
   facebookFanpage: AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId,
   email: AUTH_PRODUCT_BY_FEATURE.email.productId,
-  zalo: AUTH_PRODUCT_BY_FEATURE.zalo.productId
+  zalo: AUTH_PRODUCT_BY_FEATURE.zalo.productId,
+  sms: AUTH_PRODUCT_BY_FEATURE.sms.productId
 }
 
 const FEATURE_UNAVAILABLE_MESSAGES: Record<EntitlementFeature, string> = {
   facebookCore: FACEBOOK_CORE_FEATURE_UNAVAILABLE_MESSAGE,
   facebookFanpage: FACEBOOK_FANPAGE_FEATURE_UNAVAILABLE_MESSAGE,
   email: EMAIL_FEATURE_UNAVAILABLE_MESSAGE,
-  zalo: ZALO_FEATURE_UNAVAILABLE_MESSAGE
+  zalo: ZALO_FEATURE_UNAVAILABLE_MESSAGE,
+  sms: SMS_FEATURE_UNAVAILABLE_MESSAGE
 }
 
 interface OrganizationProductRow {
@@ -86,17 +90,20 @@ export function emptyAuthEntitlements(): AuthEntitlements {
     facebookFanpage: false,
     email: false,
     zalo: false,
+    sms: false,
     dailySendLimits: {
       facebookCore: null,
       facebookFanpage: null,
       email: null,
-      zalo: null
+      zalo: null,
+      sms: null
     },
     accountLimits: {
       facebookCore: null,
       facebookFanpage: null,
       email: null,
-      zalo: null
+      zalo: null,
+      sms: null
     }
   }
 }
@@ -108,6 +115,7 @@ function normalizeAuthEntitlements(entitlements?: Partial<AuthEntitlements> | nu
     facebookFanpage: !!entitlements?.facebookFanpage,
     email: !!entitlements?.email,
     zalo: !!entitlements?.zalo,
+    sms: !!entitlements?.sms,
     dailySendLimits: {
       ...empty.dailySendLimits,
       ...(entitlements?.dailySendLimits || {})
@@ -135,14 +143,22 @@ function normalizePositiveInteger(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
-function getDemoDailySendLimit(rows: OrganizationProductRow[]): number | null {
+function getFeatureDailySendLimitFromProducts(rows: OrganizationProductRow[]): number | null {
   const activeRows = rows.filter(row => isExpirationActive(row.expiration_date))
   if (activeRows.length === 0) return null
 
-  const hasNonDemo = activeRows.some(row => String(row.package_type || '').trim().toLowerCase() !== 'demo')
-  if (hasNonDemo) return null
+  const paidRows = activeRows.filter(row => String(row.package_type || '').trim().toLowerCase() !== 'demo')
+  if (paidRows.length > 0) {
+    const paidLimits = paidRows
+      .map(row => normalizePositiveInteger(row.max_sends_per_day))
+      .filter((limit): limit is number => limit !== null)
+    return paidLimits.length > 0 ? Math.max(...paidLimits) : null
+  }
 
-  return normalizePositiveInteger(activeRows[0]?.max_sends_per_day) ?? DEFAULT_DEMO_DAILY_SEND_LIMIT
+  const demoLimits = activeRows
+    .map(row => normalizePositiveInteger(row.max_sends_per_day))
+    .filter((limit): limit is number => limit !== null)
+  return demoLimits.length > 0 ? Math.max(...demoLimits) : DEFAULT_DEMO_DAILY_SEND_LIMIT
 }
 
 function getFeatureAccountLimit(rows: OrganizationProductRow[]): number | null {
@@ -158,7 +174,8 @@ function hasAnyEntitlement(entitlements: Partial<AuthEntitlements> | null | unde
     entitlements?.facebookCore ||
     entitlements?.facebookFanpage ||
     entitlements?.email ||
-    entitlements?.zalo
+    entitlements?.zalo ||
+    entitlements?.sms
   )
 }
 
@@ -186,7 +203,7 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
   for (const [feature, productId] of Object.entries(FEATURE_PRODUCT_IDS) as Array<[EntitlementFeature, number]>) {
     const featureRows = rows.filter(row => Number(row.product_id) === productId)
     entitlements[feature] = featureRows.some(row => isExpirationActive(row.expiration_date))
-    entitlements.dailySendLimits[feature] = getDemoDailySendLimit(featureRows)
+    entitlements.dailySendLimits[feature] = getFeatureDailySendLimitFromProducts(featureRows)
     entitlements.accountLimits[feature] = getFeatureAccountLimit(featureRows)
   }
 
@@ -285,6 +302,7 @@ export async function ensureCurrentUserEmailFeatureActive(): Promise<void> {
 export function getCampaignActionFeature(actionId?: string | null, flatformType?: string | null): EntitlementFeature {
   const normalizedActionId = String(actionId || '').trim()
   const normalizedPlatform = String(flatformType || '').trim().toLowerCase()
+  if (normalizedActionId === 'sms_send' || normalizedPlatform === 'sms') return 'sms'
   if (normalizedActionId === 'email_send' || normalizedPlatform === 'email') return 'email'
   if (ZALO_CAMPAIGN_ACTION_IDS.has(normalizedActionId) || normalizedPlatform === 'zalo') return 'zalo'
   if (FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS.has(normalizedActionId)) return 'facebookFanpage'
@@ -294,6 +312,7 @@ export function getCampaignActionFeature(actionId?: string | null, flatformType?
 export function getAccountActionFeature(actionCode?: string | null, flatformType?: string | null): EntitlementFeature {
   const normalizedActionCode = String(actionCode || '').trim()
   const normalizedPlatform = String(flatformType || '').trim().toLowerCase()
+  if (normalizedPlatform === 'sms' || normalizedActionCode === 'sms_send') return 'sms'
   if (normalizedPlatform === 'email' || normalizedActionCode === 'email_send') return 'email'
   if (normalizedPlatform === 'zalo' || ZALO_ACCOUNT_ACTION_CODES.has(normalizedActionCode)) return 'zalo'
   if (FACEBOOK_FANPAGE_ACCOUNT_ACTION_CODES.has(normalizedActionCode)) return 'facebookFanpage'
@@ -312,6 +331,7 @@ export function getAccountPlatformLimit(
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): number | null {
   const platform = String(flatformType || '').trim().toLowerCase()
+  if (platform === 'sms') return entitlements?.sms ? normalizePositiveInteger(entitlements?.accountLimits?.sms) : null
   if (platform === 'email') return entitlements?.email ? normalizePositiveInteger(entitlements?.accountLimits?.email) : null
   if (platform === 'zalo') return entitlements?.zalo ? normalizePositiveInteger(entitlements?.accountLimits?.zalo) : null
   if (platform === 'facebook') {
@@ -347,6 +367,7 @@ export function canUseAccountPlatformWithEntitlements(
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): boolean {
   const platform = String(flatformType || '').trim().toLowerCase()
+  if (platform === 'sms') return !!entitlements?.sms
   if (platform === 'email') return !!entitlements?.email
   if (platform === 'zalo') return !!entitlements?.zalo
   if (platform === 'facebook') return !!entitlements?.facebookCore || !!entitlements?.facebookFanpage
@@ -367,6 +388,7 @@ export async function ensureCurrentUserCanUseAccountPlatform(flatformType?: stri
     }
     return
   }
+  if (platform === 'sms') return ensureCurrentUserFeatureActive('sms')
   if (platform === 'email') return ensureCurrentUserFeatureActive('email')
   if (platform === 'zalo') return ensureCurrentUserFeatureActive('zalo')
   throw new Error('Tính năng này chưa được kích hoạt hoặc đã hết hạn.')

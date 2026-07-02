@@ -36,6 +36,7 @@ const PLATFORM_OPTIONS = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'zalo', label: 'Zalo' },
   { value: 'email', label: 'Email' },
+  { value: 'sms', label: 'SMS' },
   { value: 'tiktok', label: 'TikTok' },
   { value: 'shopee', label: 'Shopee' },
   { value: 'other', label: 'Khác' }
@@ -79,6 +80,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
   }, [accountActions, formData.flatformType])
 
   const selectedCodeSet = useMemo(() => new Set(formData.limitCheckActionCodes), [formData.limitCheckActionCodes])
+  const isMobileManagedSmsAction = formData.id.trim() === 'sms_send'
 
   const openCreateForm = () => {
     setEditingAction(null)
@@ -162,11 +164,11 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       useUiStore.getState().showAlert('Vui lòng nhập ID và tên hành động.', 'error')
       return
     }
-    if (formData.workflowId === '') {
+    if (!isMobileManagedSmsAction && formData.workflowId === '') {
       useUiStore.getState().showAlert('Vui lòng chọn workflow chạy thật.', 'error')
       return
     }
-    if (formData.testWorkflowId === '') {
+    if (!isMobileManagedSmsAction && formData.testWorkflowId === '') {
       useUiStore.getState().showAlert('Vui lòng chọn workflow test.', 'error')
       return
     }
@@ -176,8 +178,8 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       name: formData.name.trim(),
       flatformType: formData.flatformType,
       isActive: formData.isActive,
-      workflowId: Number(formData.workflowId),
-      testWorkflowId: Number(formData.testWorkflowId),
+      workflowId: formData.workflowId === '' ? undefined : Number(formData.workflowId),
+      testWorkflowId: formData.testWorkflowId === '' ? undefined : Number(formData.testWorkflowId),
       allowMultipleAccounts: formData.allowMultipleAccounts,
       limitCheckActionCodes: formData.limitCheckActionCodes
     }

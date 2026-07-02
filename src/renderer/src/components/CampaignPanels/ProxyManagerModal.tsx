@@ -23,6 +23,7 @@ const PROTOCOL_OPTIONS: { value: ProxyProtocol; label: string }[] = [
 const PLATFORM_OPTIONS = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'zalo', label: 'Zalo' },
+  { value: 'sms', label: 'SMS' },
   { value: 'tiktok', label: 'TikTok' },
   { value: 'instagram', label: 'Instagram' },
   { value: 'other', label: 'Khác' }

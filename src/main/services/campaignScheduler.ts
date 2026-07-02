@@ -6,6 +6,7 @@ import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
+import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -285,6 +286,7 @@ const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recomm
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
+const SMS_SEND_ACTION_ID = 'sms_send'
 const ZALO_MESSAGE_SEND_MODE_SHARE = 'share'
 const ZALO_SHARE_MESSAGE_BATCH_SIZE = 50
 const ZALO_SHARE_MESSAGE_REWRITE_AI_CODE = 'fb_send_message_rewrite'
@@ -303,29 +305,6 @@ const ZALO_FRIEND_TARGET_MODES = new Set([
   ZALO_FRIEND_TARGET_MODE_TAGGED
 ])
 const ZALO_FRIEND_PAGE_SIZE = 500
-const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
-  '0162': '032',
-  '0163': '033',
-  '0164': '034',
-  '0165': '035',
-  '0166': '036',
-  '0167': '037',
-  '0168': '038',
-  '0169': '039',
-  '0120': '070',
-  '0121': '079',
-  '0122': '077',
-  '0126': '076',
-  '0128': '078',
-  '0123': '083',
-  '0124': '084',
-  '0125': '085',
-  '0127': '081',
-  '0129': '082',
-  '0186': '056',
-  '0188': '058',
-  '0199': '059'
-}
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const EMAIL_RECIPIENT_NOT_FOUND_ERROR_CODE = 'err_email_recipient_not_found'
 const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
@@ -577,6 +556,11 @@ export class CampaignScheduler {
       }
 
       for (const account of accounts) {
+        if (this.isSmsAccount(account)) {
+          await this.refreshDueSmsCampaignLimitNotes(account)
+          continue
+        }
+
         if (this.activeAccountRuns.has(account.id)) {
           continue
         }
@@ -625,6 +609,68 @@ export class CampaignScheduler {
       if (!this.running) break
       await this.executeCampaign(account, campaign)
     }
+  }
+
+  private isSmsAccount(account: AutoAccount): boolean {
+    return String(account.flatformType || '').trim().toLowerCase() === 'sms'
+  }
+
+  private async refreshDueSmsCampaignLimitNotes(account: AutoAccount): Promise<void> {
+    const campaigns = await this.supabase.getDueSmsCampaignsForLimitCheck(account.id)
+    for (const campaign of campaigns) {
+      try {
+        await this.refreshSmsCampaignLimitNote(account, campaign)
+      } catch (err) {
+        console.error(`Failed to refresh SMS campaign limit note for campaign ${campaign.id}:`, err)
+      }
+    }
+  }
+
+  private async refreshSmsCampaignLimitNote(account: AutoAccount, campaign: Campaign): Promise<void> {
+    if (campaign.actionId !== SMS_SEND_ACTION_ID) return
+
+    try {
+      await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
+    } catch (err) {
+      await this.updateCampaignPreflightNote(campaign, err instanceof Error ? err.message : String(err))
+      return
+    }
+
+    const action = await this.supabase.getCampaignAction(campaign.actionId)
+    if (!action) {
+      await this.updateCampaignPreflightNote(campaign, 'Không tìm thấy loại chiến dịch')
+      return
+    }
+
+    const executableActionDescriptors = this.getCampaignExecutableActionDescriptors(campaign, action)
+    const quotaActionDescriptors = this.getCampaignActionDescriptors(campaign, action)
+
+    const disabledStatus = await this.checkActionDisabled(account, executableActionDescriptors)
+    if (disabledStatus && !disabledStatus.ok) {
+      await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(disabledStatus))
+      return
+    }
+
+    const limitStatus = await this.checkActionLimits(
+      account,
+      campaign,
+      quotaActionDescriptors,
+      campaign.extraSettings?.actionLimits
+    )
+    if (limitStatus && !limitStatus.ok) {
+      await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(limitStatus))
+      return
+    }
+
+    if (this.isLimitNoteText(campaign.note)) {
+      await this.updateCampaignAndBroadcast(campaign.id, { note: null })
+    }
+  }
+
+  private isLimitNoteText(note: string | null | undefined): boolean {
+    const text = String(note || '').trim().toLowerCase()
+    if (!text) return false
+    return text.includes('giới hạn') || text.includes('tạm nghỉ')
   }
 
   /**
@@ -2681,23 +2727,7 @@ export class CampaignScheduler {
   }
 
   private normalizeVietnamMobilePhone(value: unknown): string {
-    let digits = this.phoneInputText(value).replace(/\D+/g, '')
-    if (!digits) return ''
-
-    if (digits.startsWith('0084') && digits.length >= 13) {
-      digits = `0${digits.slice(4)}`
-    } else if (digits.startsWith('84') && digits.length >= 11) {
-      digits = `0${digits.slice(2)}`
-    }
-    if (digits.length === 9 && /^[35789]/.test(digits)) {
-      digits = `0${digits}`
-    }
-    if (digits.length === 11) {
-      const mappedPrefix = OLD_VN_MOBILE_PREFIX_MAP[digits.slice(0, 4)]
-      if (mappedPrefix) digits = `${mappedPrefix}${digits.slice(4)}`
-    }
-
-    return /^0[35789]\d{8}$/.test(digits) ? digits : ''
+    return normalizeSharedVietnamMobilePhone(value)
   }
 
   private phoneInputText(value: unknown): string {

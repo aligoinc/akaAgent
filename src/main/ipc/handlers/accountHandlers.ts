@@ -16,7 +16,7 @@ const PLATFORM_URLS: Record<string, string> = {
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com'
 }
-const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email'])
+const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email', 'sms'])
 const BROWSERLESS_ACCOUNT_REASON = 'Tài khoản này không dùng trình duyệt trong phiên bản này'
 
 function mapZaloLabelContact(contact: AutoAccountContact): ZaloLabelOption {
@@ -186,6 +186,12 @@ export function registerAccountHandlers(
     const status = await supabase.enableAccountActionNow(accountId, actionCode)
     sendAccountStatusUpdated(mainWindow)
     return status
+  })
+
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_SMS_RESET_MOBILE_DEVICE, async (_, accountId: number) => {
+    const account = await supabase.clearAccountMobileDevice(accountId)
+    sendAccountStatusUpdated(mainWindow)
+    return account
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_START, async (_, accountId: number) => {

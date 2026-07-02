@@ -8,6 +8,7 @@ import {
   IPC_EVENTS,
   isValidEmailInputDataValue
 } from '../../../shared/types'
+import { normalizeVietnamMobilePhone } from '../../../shared/phone'
 import { requireCurrentUser } from '../../data/currentUser'
 import { callAiUsing } from '../../services/aiRuntimeService'
 
@@ -45,27 +46,6 @@ function firstText(...values: unknown[]): string {
   return ''
 }
 
-function normalizeVietnamMobilePhone(value: unknown): string {
-  let digits = toText(value).replace(/\D+/g, '')
-  if (!digits) return ''
-
-  if (digits.startsWith('0084') && digits.length >= 13) {
-    digits = `0${digits.slice(4)}`
-  } else if (digits.startsWith('84') && digits.length >= 11) {
-    digits = `0${digits.slice(2)}`
-  }
-  if (digits.length === 9 && /^[35789]/.test(digits)) {
-    digits = `0${digits}`
-  }
-  if (digits.length === 11) {
-    const withoutLeading = digits.replace(/^0+/, '')
-    if (withoutLeading.length === 9 && /^[35789]/.test(withoutLeading)) {
-      digits = `0${withoutLeading}`
-    }
-  }
-  return /^0[35789]\d{8}$/.test(digits) ? digits : ''
-}
-
 function normalizeUid(value: unknown): string {
   const text = toText(value).replace(/\s+/g, '')
   if (!text) return ''
@@ -100,7 +80,7 @@ function normalizeZaloGroupInviteLink(value: unknown): string {
 
 function normalizePlatform(value: unknown): CampaignImportPlatform {
   const platform = toText(value).toLowerCase()
-  if (platform === 'zalo' || platform === 'facebook' || platform === 'email') return platform
+  if (platform === 'zalo' || platform === 'facebook' || platform === 'email' || platform === 'sms') return platform
   throw new Error('Nền tảng import không hợp lệ.')
 }
 
@@ -303,7 +283,7 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
       item.phone = ''
       item.email = ''
       key = item.uid
-    } else if (platform === 'zalo') {
+    } else if (platform === 'zalo' || platform === 'sms') {
       item.phone = normalizeVietnamMobilePhone(firstText(record.phone, record.mobile, record.sdt, record.soDienThoai, record.value))
       key = item.phone
     } else if (platform === 'facebook') {

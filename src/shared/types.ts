@@ -1,3 +1,5 @@
+import { normalizeVietnamMobilePhone, type VietnamMobileCarrier } from './phone'
+
 // ============================================
 // Campaign Automation Types
 // ============================================
@@ -6,6 +8,12 @@ export interface AutoAccount {
   id: number
   name: string
   flatformType: string
+  username?: string | null
+  password?: string | null
+  mobileDeviceId?: string | null
+  mobileDeviceInfo?: Record<string, unknown> | null
+  mobileDeviceRegisteredAt?: string | null
+  mobileDeviceLastSeenAt?: string | null
   loginStatus: string
   status: string
   isActive: boolean
@@ -341,6 +349,8 @@ export interface CampaignExtraSettings {
   emailSubject?: string          // Tiêu đề email (chiến dịch email_send)
   emailBodyIsHtml?: boolean      // Nội dung email là HTML (chiến dịch email_send)
   emailCheckLinkClicks?: boolean // Kiểm tra click vào link trong email_send
+  smsUseUnicode?: boolean        // SMS giữ tiếng Việt có dấu; false thì bỏ dấu trước khi gửi
+  smsKeepNewLines?: boolean      // SMS giữ xuống dòng; false thì bỏ \r/\n trước khi gửi
   imageOption?: 'none' | 'all' | 'random'
   randomImageCount?: number
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
@@ -531,6 +541,7 @@ export interface CampaignInputData {
   inputId?: number | null    // nullable: NULL = user nhập trực tiếp; số = sinh từ campaign_inputs (e.g. member của group)
   name?: string
   phone?: string
+  phoneCarrier?: VietnamMobileCarrier | null
   uid?: string
   email?: string
   info1?: string
@@ -538,6 +549,7 @@ export interface CampaignInputData {
   info3?: string
   info4?: string
   info5?: string
+  content?: string
   status: CampaignInputStatus
   note?: string
   schedule?: string
@@ -572,6 +584,7 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   zalo_message_group: { field: 'uid', label: 'ID group Zalo' },
   zalo_join_group_link: { field: 'uid', label: 'Link group Zalo' },
   zalo_cancel_sent_friend_request: { field: 'uid', label: 'UID lời mời kết bạn Zalo đã gửi' },
+  sms_send: { field: 'phone', label: 'SĐT SMS' },
   email_send: { field: 'email', label: 'email người nhận' }
 }
 
@@ -608,6 +621,7 @@ export const isCampaignInputDataValidForAction = (
   if (!requirement) return false
   const value = String(row[requirement.field] || '').trim()
   if (actionId === 'email_send') return isValidEmailInputDataValue(value)
+  if (requirement.field === 'phone') return normalizeVietnamMobilePhone(value).length > 0
   return value.length > 0
 }
 
@@ -1056,7 +1070,7 @@ export interface EmailNotificationSettings {
 // Auth Types
 // ============================================
 
-export type AuthEntitlementFeature = 'facebookCore' | 'facebookFanpage' | 'email' | 'zalo'
+export type AuthEntitlementFeature = 'facebookCore' | 'facebookFanpage' | 'email' | 'zalo' | 'sms'
 
 export type AuthDailySendLimits = Record<AuthEntitlementFeature, number | null>
 export type AuthAccountLimits = Record<AuthEntitlementFeature, number | null>
@@ -1066,6 +1080,7 @@ export interface AuthEntitlements {
   facebookFanpage: boolean
   email: boolean
   zalo: boolean
+  sms: boolean
   dailySendLimits: AuthDailySendLimits
   accountLimits: AuthAccountLimits
 }
@@ -1206,11 +1221,12 @@ export interface CampaignAssistantChatResponse {
   usage?: unknown
 }
 
-export type CampaignImportPlatform = 'facebook' | 'zalo' | 'email'
+export type CampaignImportPlatform = 'facebook' | 'zalo' | 'email' | 'sms'
 
 export interface CampaignImportDataRow {
   name?: string
   phone?: string
+  phoneCarrier?: VietnamMobileCarrier | null
   uid?: string
   email?: string
   info1?: string
@@ -1415,6 +1431,7 @@ export const IPC_EVENTS = {
   ACCOUNT_STATUS_UPDATED: 'account:status-updated',
   ACCOUNT_ACTION_OVERVIEW: 'account:action-overview',
   ACCOUNT_ACTION_ENABLE_NOW: 'account:action-enable-now',
+  ACCOUNT_SMS_RESET_MOBILE_DEVICE: 'account:sms-reset-mobile-device',
   ZALO_LOGIN_QR_START: 'zalo:login-qr-start',
   ZALO_LOGIN_QR_CANCEL: 'zalo:login-qr-cancel',
   ZALO_LOGIN_QR_EVENT: 'zalo:login-qr-event',

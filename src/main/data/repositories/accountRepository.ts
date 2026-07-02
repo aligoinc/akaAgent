@@ -19,6 +19,12 @@ const ACCOUNT_SELECT = [
   'id',
   'name',
   'flatform_type',
+  'username',
+  'password',
+  'mobile_device_id',
+  'mobile_device_info',
+  'mobile_device_registered_at',
+  'mobile_device_last_seen_at',
   'login_status',
   'status',
   'is_active',
@@ -239,6 +245,35 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
     .single()
 
   if (error) throw new Error(`Failed to update account: ${error.message}`)
+  return mapAccountFromDB(toDbRow(data))
+}
+
+export async function clearAccountMobileDevice(id: number): Promise<AutoAccount> {
+  const u = requireCurrentUser()
+  const current = await getAccount(id)
+  if (!current) throw new Error('Không tìm thấy tài khoản')
+  await ensureCurrentUserCanUseAccountPlatform(current.flatformType)
+  if (current.flatformType !== 'sms') {
+    throw new Error('Chỉ tài khoản SMS mới có thể đổi điện thoại mobile.')
+  }
+
+  const { data, error } = await client()
+    .from('auto_accounts')
+    .update({
+      mobile_device_id: null,
+      mobile_device_info: {},
+      mobile_device_registered_at: null,
+      mobile_device_last_seen_at: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('flatform_type', 'sms')
+    .eq('is_delete', false)
+    .select(ACCOUNT_SELECT)
+    .single()
+
+  if (error) throw new Error(`Failed to clear account mobile device: ${error.message}`)
   return mapAccountFromDB(toDbRow(data))
 }
 
@@ -480,6 +515,7 @@ export async function resetRunningAccountStatuses(staffId: number): Promise<void
     .from('auto_accounts')
     .update({ status: 'ch\u1edd x\u1eed l\u00fd' })
     .eq('staff_id', staffId)
+    .neq('flatform_type', 'sms')
     .eq('status', '\u0111ang ch\u1ea1y')
 
   if (error) console.error('Failed to reset account statuses:', error.message)

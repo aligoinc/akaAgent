@@ -8550,6 +8550,56 @@ button.btn-icon.campaign-control-button.assistant {
   font-size: 12px;
 }
 
+.sms-content-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+
+.sms-content-counts {
+  display: flex;
+  align-items: center;
+  flex: 1 1 240px;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sms-content-count-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 71, 126, 0.12);
+  color: var(--accent-error);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.sms-content-options {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.sms-content-option {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.sms-content-option span {
+  white-space: nowrap;
+}
+
 .campaign-rewrite-run-toggle {
   margin-top: 8px;
 }
@@ -8588,6 +8638,10 @@ button.btn-icon.campaign-control-button.assistant {
 
 .message-personalization-dropdown.two-token-sections.no-excel-tokens::after {
   width: min(470px, calc(100vw - 56px));
+}
+
+.message-personalization-dropdown.single-token-section::after {
+  width: min(360px, calc(100vw - 56px));
 }
 
 .message-personalization-dropdown.field-token-dropdown::after {
@@ -8663,6 +8717,12 @@ button.btn-icon.campaign-control-button.assistant {
   background:
     linear-gradient(var(--border-default), var(--border-default)) calc(12px + (100% - 24px - 14px) * 0.447368) 12px / 1px calc(100% - 24px) no-repeat,
     var(--bg-secondary);
+}
+
+.message-personalization-popover.single-token-section {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(360px, calc(100vw - 56px));
+  background: var(--bg-secondary);
 }
 
 .message-personalization-dropdown.field-token-dropdown .message-personalization-popover {

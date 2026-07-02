@@ -3,6 +3,7 @@ import jsQR from 'jsqr'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, Info, Link2, Maximize2, Minimize2, Plus, QrCode, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
 import { AccountContactListQuery, AkaBizContactTag, AutoAccountContact, AutoAccountContactGroup, ContactStatusFilter, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanMode, ZaloRemarketingCustomerListQuery } from '../../../../shared/types'
+import { normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
 import DataGroupManagerModal from './DataGroupManagerModal'
@@ -633,63 +634,6 @@ const getPageInboxLastMessageAt = (contact: AutoAccountContact) => {
 const getExtraText = (contact: AutoAccountContact, key: string) => {
   const value = contact.extraData?.[key]
   return value === null || value === undefined ? '' : String(value).trim()
-}
-
-const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
-  '0162': '032',
-  '0163': '033',
-  '0164': '034',
-  '0165': '035',
-  '0166': '036',
-  '0167': '037',
-  '0168': '038',
-  '0169': '039',
-  '0120': '070',
-  '0121': '079',
-  '0122': '077',
-  '0126': '076',
-  '0128': '078',
-  '0123': '083',
-  '0124': '084',
-  '0125': '085',
-  '0127': '081',
-  '0129': '082',
-  '0186': '056',
-  '0188': '058',
-  '0199': '059'
-}
-
-const phoneInputText = (value: unknown): string => {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? Math.trunc(value).toString() : ''
-  }
-  const text = String(value).trim()
-  if (/^[+-]?\d+(?:\.\d+)?e[+-]?\d+$/i.test(text)) {
-    const parsed = Number(text)
-    return Number.isFinite(parsed) ? Math.trunc(parsed).toString() : text
-  }
-  return text
-}
-
-const normalizeVietnamMobilePhone = (value: unknown): string => {
-  let digits = phoneInputText(value).replace(/\D+/g, '')
-  if (!digits) return ''
-
-  if (digits.startsWith('0084') && digits.length >= 13) {
-    digits = `0${digits.slice(4)}`
-  } else if (digits.startsWith('84') && digits.length >= 11) {
-    digits = `0${digits.slice(2)}`
-  }
-  if (digits.length === 9 && /^[35789]/.test(digits)) {
-    digits = `0${digits}`
-  }
-  if (digits.length === 11) {
-    const mappedPrefix = OLD_VN_MOBILE_PREFIX_MAP[digits.slice(0, 4)]
-    if (mappedPrefix) digits = `${mappedPrefix}${digits.slice(4)}`
-  }
-
-  return /^0[35789]\d{8}$/.test(digits) ? digits : ''
 }
 
 const getContactPhoneText = (contact: AutoAccountContact) => {

@@ -364,6 +364,9 @@ const electronAPI = {
   enableAccountActionNow: (accountId: number, actionCode: string) =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, accountId, actionCode),
 
+  resetSmsAccountMobileDevice: (accountId: number): Promise<AutoAccount> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_SMS_RESET_MOBILE_DEVICE, accountId),
+
   startZaloLoginQr: (accountId: number): Promise<ZaloLoginQrStartResult> =>
     ipcRenderer.invoke(IPC_EVENTS.ZALO_LOGIN_QR_START, accountId),
 

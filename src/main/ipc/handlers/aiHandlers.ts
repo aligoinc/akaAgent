@@ -248,6 +248,9 @@ function buildRuleDiagnosis(campaign: Campaign, account: Awaited<ReturnType<type
   if (account.isActive === false) {
     return { reason: 'account_inactive', severity: 'blocking', message: 'Tài khoản đang tắt hoạt động.' }
   }
+  if (campaign.actionId === 'sms_send') {
+    return { reason: 'sms_mobile_managed', severity: 'info', message: 'Chiến dịch SMS được app mobile xử lý theo data đã tạo sẵn.' }
+  }
   if (account.loginStatus !== 'đã đăng nhập') {
     return { reason: 'account_login_required', severity: 'blocking', message: `Tài khoản đang ở trạng thái ${account.loginStatus}.` }
   }

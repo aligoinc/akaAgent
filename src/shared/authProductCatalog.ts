@@ -11,7 +11,8 @@ export const AUTH_PRODUCT_CATALOG: AuthProductCatalogItem[] = [
   { feature: 'facebookCore', productId: 3, label: 'Facebook', order: 1 },
   { feature: 'facebookFanpage', productId: 10, label: 'Fanpage', order: 2 },
   { feature: 'zalo', productId: 16, label: 'Zalo', order: 3 },
-  { feature: 'email', productId: 13, label: 'Email', order: 4 }
+  { feature: 'email', productId: 13, label: 'Email', order: 4 },
+  { feature: 'sms', productId: 17, label: 'akaAgent SMS', order: 5 }
 ]
 
 export const AUTH_PRODUCT_IDS = AUTH_PRODUCT_CATALOG.map(item => item.productId)

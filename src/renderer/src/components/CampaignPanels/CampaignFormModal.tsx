@@ -21,6 +21,7 @@ import {
   isValidEmailInputDataValue,
   ZaloLabelOption
 } from '../../../../shared/types'
+import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { read, utils } from 'xlsx'
 import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import { useUiStore } from '../../stores/uiStore'
@@ -42,6 +43,7 @@ import {
   getAccountActionDailySendLimit,
   getCampaignActionDailySendLimit
 } from '../../utils/entitlements'
+import { countSmsContentVariants } from '../../../../shared/smsContent'
 
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
@@ -72,13 +74,15 @@ type CampaignPickerSource =
 const CAMPAIGN_ACTION_PLATFORM_ORDER: Record<string, number> = {
   facebook: 0,
   zalo: 1,
-  email: 2
+  email: 2,
+  sms: 3
 }
 
 const CAMPAIGN_ACTION_PLATFORM_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   zalo: 'Zalo',
-  email: 'Email'
+  email: 'Email',
+  sms: 'SMS'
 }
 
 const normalizeCampaignActionPlatform = (platform?: string | null): string =>
@@ -262,7 +266,8 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_cancel_sent_friend_request: 'Huỷ lời mời kết bạn',
   zalo_tag_contact: 'Gắn tag Zalo',
   zalo_change_alias: 'Đổi tên Zalo',
-  email_send: 'Gửi email'
+  email_send: 'Gửi email',
+  sms_send: 'Gửi SMS'
 }
 
 const getActionCodeLabel = (code: string) => ACTION_CODE_LABELS[code] || code
@@ -285,7 +290,8 @@ const ACTION_LIMIT_UNITS: Record<string, string> = {
   zalo_add_friend: 'lời mời',
   zalo_join_group_link: 'group',
   zalo_cancel_sent_friend_request: 'lời mời',
-  email_send: 'email'
+  email_send: 'email',
+  sms_send: 'tin nhắn'
 }
 
 const getActionLimitUnit = (code: string) => ACTION_LIMIT_UNITS[code] || 'lượt'
@@ -404,6 +410,9 @@ const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const EMAIL_SEND_ACTION_ID = 'email_send'
+const SMS_SEND_ACTION_ID = 'sms_send'
+const DEFAULT_SLEEP_BETWEEN_ACTIONS = 30
+const DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS = 90
 const ZALO_FRIEND_TARGET_MODES: Array<{ value: ZaloFriendTargetMode; label: string }> = [
   { value: 'selected', label: 'Chọn bạn bè để gửi' },
   { value: 'all_friends', label: 'Gửi cho tất cả bạn bè' },
@@ -439,7 +448,8 @@ const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID,
   ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID,
   ZALO_MESSAGE_GROUP_ACTION_ID,
-  EMAIL_SEND_ACTION_ID
+  EMAIL_SEND_ACTION_ID,
+  SMS_SEND_ACTION_ID
 ])
 const ZALO_REALTIME_TRIGGER_OPTIONS: Array<{ value: ZaloRealtimeTrigger; label: string }> = [
   { value: 'join', label: 'Nhắn tin, kết bạn đến những người THAM GIA vào group theo thời gian thực' },
@@ -793,30 +803,6 @@ const isCampaignMediaImage = (item: CampaignMediaInput): boolean => {
   return isDataImagePath(item) || /\.(apng|avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(item)
 }
 
-const OLD_VN_MOBILE_PREFIX_MAP: Record<string, string> = {
-  '0162': '032',
-  '0163': '033',
-  '0164': '034',
-  '0165': '035',
-  '0166': '036',
-  '0167': '037',
-  '0168': '038',
-  '0169': '039',
-  '0120': '070',
-  '0121': '079',
-  '0122': '077',
-  '0126': '076',
-  '0128': '078',
-  '0123': '083',
-  '0124': '084',
-  '0125': '085',
-  '0127': '081',
-  '0129': '082',
-  '0186': '056',
-  '0188': '058',
-  '0199': '059'
-}
-
 const getExcelCellText = (value: unknown): string => {
   if (value === null || value === undefined) return ''
   if (typeof value === 'number') {
@@ -833,6 +819,17 @@ const getExcelCellText = (value: unknown): string => {
 const normalizeEmailAddress = (value: unknown): string => getExcelCellText(value).trim()
 
 const isValidEmailAddress = (value: unknown): boolean => isValidEmailInputDataValue(normalizeEmailAddress(value))
+
+const inferInputDataPhoneCarrier = (
+  phone: unknown,
+  carrier?: CampaignInputData['phoneCarrier']
+): CampaignInputData['phoneCarrier'] => (
+  carrier || getVietnamMobileCarrier(phone) || null
+)
+
+const formatInputDataPhoneCarrier = (row: Partial<CampaignInputData>): string => (
+  getVietnamMobileCarrierLabel(inferInputDataPhoneCarrier(row.phone, row.phoneCarrier)) || '-'
+)
 
 const normalizeCampaignImportUid = (value: unknown): string => {
   const text = getExcelCellText(value).replace(/\s+/g, '')
@@ -904,26 +901,6 @@ const buildFindDataSearchKeywordRows = (value: string): Partial<CampaignInputDat
     note: '',
     status: 'chờ xử lý'
   }))
-
-const normalizeVietnamMobilePhone = (value: unknown): string | null => {
-  let digits = getExcelCellText(value).replace(/\D+/g, '')
-  if (!digits) return null
-
-  if (digits.startsWith('0084') && digits.length >= 13) {
-    digits = `0${digits.slice(4)}`
-  } else if (digits.startsWith('84') && digits.length >= 11) {
-    digits = `0${digits.slice(2)}`
-  }
-  if (digits.length === 9 && /^[35789]/.test(digits)) {
-    digits = `0${digits}`
-  }
-  if (digits.length === 11) {
-    const mappedPrefix = OLD_VN_MOBILE_PREFIX_MAP[digits.slice(0, 4)]
-    if (mappedPrefix) digits = `${mappedPrefix}${digits.slice(4)}`
-  }
-
-  return /^0[35789]\d{8}$/.test(digits) ? digits : null
-}
 
 const formatPickerDateTime = (value?: string | null): string => {
   if (!value) return ''
@@ -1240,6 +1217,8 @@ export default function CampaignFormModal({
     : rawInitialActionId
   const initialIsZaloFriendRecommendationCampaign = initialActionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
   const initialIsFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(initialActionId)
+  const initialSleepBetweenActions = campaign?.extraSettings?.actionLimits?.sleepBetweenActions
+    ?? (initialActionId === SMS_SEND_ACTION_ID ? DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS : DEFAULT_SLEEP_BETWEEN_ACTIONS)
   const initialIsDraftFacebookGroupSource =
     draftRequiredTargetField === 'findFacebookGroupPostTargetCampaignIds' ||
     draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds' ||
@@ -1275,7 +1254,7 @@ export default function CampaignFormModal({
       ? false
       : (campaign?.continueNextDay ?? true),
     refreshData: campaign?.refreshData ?? true,
-    sleepBetweenActions: campaign?.extraSettings?.actionLimits?.sleepBetweenActions ?? 30,
+    sleepBetweenActions: initialSleepBetweenActions,
     multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
     multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
     content: campaign?.content || '',
@@ -1283,6 +1262,8 @@ export default function CampaignFormModal({
     emailSubject: campaign?.extraSettings?.emailSubject || '',
     emailBodyIsHtml: campaign?.extraSettings?.emailBodyIsHtml ?? false,
     emailCheckLinkClicks: campaign?.extraSettings?.emailCheckLinkClicks ?? false,
+    smsUseUnicode: campaign ? (campaign.extraSettings?.smsUseUnicode ?? false) : false,
+    smsKeepNewLines: campaign ? (campaign.extraSettings?.smsKeepNewLines ?? false) : false,
     // Extra settings
     sharePost: campaign?.extraSettings?.sharePost ?? false,
     postWithBackground: campaign?.extraSettings?.postWithBackground ?? false,
@@ -1525,6 +1506,21 @@ export default function CampaignFormModal({
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isMessageCampaign = MESSAGE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isEmailCampaign = formData.actionId === EMAIL_SEND_ACTION_ID
+  const isSmsCampaign = formData.actionId === SMS_SEND_ACTION_ID
+  const smsContentCounts = useMemo(
+    () => countSmsContentVariants(formData.content, {
+      useUnicode: formData.smsUseUnicode,
+      keepNewLines: formData.smsKeepNewLines
+    }),
+    [formData.content, formData.smsUseUnicode, formData.smsKeepNewLines]
+  )
+  const smsContentCountLabels = useMemo(
+    () => smsContentCounts.map((item, index) => {
+      const prefix = smsContentCounts.length > 1 ? `Mẫu ${index + 1}: ` : ''
+      return `${prefix}${item.countChar} ký tự, ${item.countSms} tin`
+    }),
+    [smsContentCounts]
+  )
   const isMessageFriendCampaign = formData.actionId === MESSAGE_FRIEND_ACTION_ID
   const isMessageUidCampaign = formData.actionId === MESSAGE_UID_ACTION_ID
   const isZaloMessagePhoneCampaign = formData.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
@@ -1538,6 +1534,7 @@ export default function CampaignFormModal({
   const isZaloJoinGroupLinkCampaign = formData.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
   const isZaloCancelSentFriendRequestCampaign = formData.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
   const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign
+  const isPhoneInputCampaign = isZaloMessagePhoneCampaign || isSmsCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
   const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
@@ -1662,13 +1659,15 @@ export default function CampaignFormModal({
     !isZaloJoinGroupLinkCampaign &&
     !isZaloCancelSentFriendRequestCampaign
   const hasMainContentText = formData.content.trim().length > 0
-  const hasSelectedMainMedia = formData.imageOption !== 'none' && formData.images.length > 0
+  const hasSelectedMainMedia = !isSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
   const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 4 : 5)
-      : (isEditingSavedCampaign ? 5 : 6)
+      : isSmsCampaign
+        ? (isEditingSavedCampaign ? 9 : 10)
+        : (isEditingSavedCampaign ? 5 : 6)
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
@@ -1816,7 +1815,16 @@ export default function CampaignFormModal({
     setFormData(prev => ({
       ...prev,
       actionId,
-      accountIds: getAccountIdsForPlatform(prev.accountIds, nextPlatform || selectedActionPlatformFilter)
+      accountIds: getAccountIdsForPlatform(prev.accountIds, nextPlatform || selectedActionPlatformFilter),
+      ...(actionId === SMS_SEND_ACTION_ID
+        ? {
+          imageOption: 'none' as const,
+          images: [],
+          commentImageOption: 'none' as const,
+          commentImages: [],
+          sleepBetweenActions: DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS
+        }
+        : {})
     }))
     setIsAccountDropdownOpen(false)
   }
@@ -1981,12 +1989,12 @@ export default function CampaignFormModal({
     (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage) &&
     (!isZaloMessageFriendRecommendationCampaign || formData.enableMessage)
   const visibleScheduleFields: StepDef['fields'] = [
-    { key: 'scheduleType', label: 'Loại lịch' },
+    ...(isSmsCampaign ? [] : [{ key: 'scheduleType', label: 'Loại lịch' }]),
     { key: 'schedule', label: 'Ngày chạy' },
-    ...(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
-    ...(formData.scheduleType === 'weekly' ? [{ key: 'scheduleWeekDays', label: 'Lịch tuần' }] : []),
-    ...(formData.scheduleType === 'monthly' ? [{ key: 'scheduleDays', label: 'Lịch tháng' }] : []),
-    { key: 'dailyStopTime', label: 'Giờ dừng' }
+    ...(isSmsCampaign || formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
+    ...(!isSmsCampaign && formData.scheduleType === 'weekly' ? [{ key: 'scheduleWeekDays', label: 'Lịch tuần' }] : []),
+    ...(!isSmsCampaign && formData.scheduleType === 'monthly' ? [{ key: 'scheduleDays', label: 'Lịch tháng' }] : []),
+    ...(isSmsCampaign ? [] : [{ key: 'dailyStopTime', label: 'Giờ dừng' }])
   ]
   const applyVisibleScheduleFields = (steps: StepDef[]) => steps.map(step => {
     if (step.id !== 'schedule') return step
@@ -2163,7 +2171,7 @@ export default function CampaignFormModal({
                 ]
                 : [
                   { key: 'content', label: 'Nội dung tin nhắn' },
-                  { key: 'images', label: 'Media' }
+                  ...(isSmsCampaign ? [] : [{ key: 'images', label: 'Media' }])
                 ]
             }
           }
@@ -2189,7 +2197,7 @@ export default function CampaignFormModal({
                   ? 'Danh sách bạn bè'
                   : isPageInboxMessageCampaign
                     ? 'Danh sách khách inbox Page'
-                : isZaloMessagePhoneCampaign
+                : isPhoneInputCampaign
                     ? 'Danh sách SĐT'
                 : isEmailCampaign
                     ? 'Danh sách email'
@@ -2208,7 +2216,7 @@ export default function CampaignFormModal({
                     ? 'Bạn bè'
                     : isPageInboxMessageCampaign
                       ? 'Khách inbox Page'
-                  : isZaloMessagePhoneCampaign
+                  : isPhoneInputCampaign
                       ? 'SĐT'
                   : isEmailCampaign
                       ? 'Email'
@@ -2337,6 +2345,7 @@ export default function CampaignFormModal({
   const normalizeInitialDetails = (rows: Partial<CampaignInputData>[] = []): Partial<CampaignInputData>[] => rows.map(row => ({
     name: row.name || '',
     phone: row.phone || '',
+    phoneCarrier: inferInputDataPhoneCarrier(row.phone, row.phoneCarrier),
     uid: row.uid || '',
     email: row.email || '',
     info1: row.info1 || '',
@@ -3273,6 +3282,7 @@ export default function CampaignFormModal({
     if (target === 'content') {
       if (isEmailCampaign) return 'email'
       if (isZaloMessageCampaign) return 'zalo'
+      if (isSmsCampaign) return 'generic'
       if (isMessageCampaign || isFacebookJoinGroupCampaign || isFacebookGroupPostCampaign || isTimelinePostCampaign || isPagePostCampaign) return 'facebook'
     }
     return 'generic'
@@ -3301,6 +3311,7 @@ export default function CampaignFormModal({
     if (target === 'content') {
       if (isEmailCampaign) return 'Email xem trước với dữ liệu mẫu'
       if (isZaloMessageCampaign) return 'Tin nhắn Zalo xem trước với dữ liệu mẫu'
+      if (isSmsCampaign) return 'Tin nhắn SMS xem trước với dữ liệu mẫu'
       if (isMessageCampaign) return 'Tin nhắn Facebook xem trước với dữ liệu mẫu'
       if (isFacebookJoinGroupCampaign) return 'Câu trả lời sẽ được xoay vòng theo biến thể'
       if (isPagePostCampaign) return 'Bài đăng fanpage xem trước với dữ liệu mẫu'
@@ -3593,22 +3604,26 @@ export default function CampaignFormModal({
 
   const normalizeCampaignInputDataForSave = (rows: Partial<CampaignInputData>[]): Partial<CampaignInputData>[] => {
     return rows
-      .map(row => ({
-        ...row,
-        name: String(row.name || '').trim(),
-        phone: isZaloMessagePhoneCampaign
+      .map(row => {
+        const phone = isPhoneInputCampaign
           ? (normalizeVietnamMobilePhone(row.phone) || '')
-          : String(row.phone || '').trim(),
-        uid: String(row.uid || '').trim(),
-        email: normalizeEmailAddress(row.email),
-        info1: String(row.info1 || '').trim(),
-        info2: String(row.info2 || '').trim(),
-        info3: String(row.info3 || '').trim(),
-        info4: String(row.info4 || '').trim(),
-        info5: String(row.info5 || '').trim(),
-        note: String(row.note || '').trim()
-      }))
-      .filter(row => isZaloMessagePhoneCampaign
+          : String(row.phone || '').trim()
+        return {
+          ...row,
+          name: String(row.name || '').trim(),
+          phone,
+          phoneCarrier: inferInputDataPhoneCarrier(phone, row.phoneCarrier),
+          uid: String(row.uid || '').trim(),
+          email: normalizeEmailAddress(row.email),
+          info1: String(row.info1 || '').trim(),
+          info2: String(row.info2 || '').trim(),
+          info3: String(row.info3 || '').trim(),
+          info4: String(row.info4 || '').trim(),
+          info5: String(row.info5 || '').trim(),
+          note: String(row.note || '').trim()
+        }
+      })
+      .filter(row => isPhoneInputCampaign
         ? row.phone.length > 0
         : isEmailCampaign
           ? isValidEmailAddress(row.email)
@@ -3692,10 +3707,10 @@ export default function CampaignFormModal({
         ? setDateTimeLocalTime(formData.schedule, normalizedMultiDailySlots[0])
         : formData.schedule
       const formSchedule = toIsoDateTimeValue(scheduleInput)
-      const normalizedScheduleEndDate = formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign
+      const normalizedScheduleEndDate = formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isSmsCampaign
         ? null
         : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null)
-      const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign ? 'daily' : formData.scheduleType
+      const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign || isSmsCampaign ? 'daily' : formData.scheduleType
       const normalizedScheduleDays = normalizedScheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
       const normalizedScheduleWeekDays = normalizedScheduleType === 'weekly' ? formData.scheduleWeekDays : ''
       const normalizedFindData = normalizeFindDataFlagState(formData, { isSearchCampaign: isFindDataSearchCampaign })
@@ -3741,18 +3756,18 @@ export default function CampaignFormModal({
           originalSchedule: formSchedule,
           scheduleType: normalizedScheduleType,
           scheduleEndDate: normalizedScheduleEndDate,
-          dailyStopTime: formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null,
+          dailyStopTime: isSmsCampaign ? null : (formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null),
           scheduleDays: normalizedScheduleDays,
           scheduleWeekDays: normalizedScheduleWeekDays,
-          continueNextDay: (isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign) ? false : formData.continueNextDay,
+          continueNextDay: isSmsCampaign ? true : ((isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign) ? false : formData.continueNextDay),
           refreshData: (isZaloMessageBirthdayCampaign || isZaloMessageFriendRecommendationCampaign || isZaloCancelSentFriendRequestCampaign)
             ? true
-            : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData),
+            : (isSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
           content: formData.content,
           extraSettings: {
             sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
             postWithBackground: isPostBackgroundActive,
-            rewriteContentEachRun: isEmailCampaign && formData.emailBodyIsHtml ? false : formData.rewriteContentEachRun,
+            rewriteContentEachRun: isSmsCampaign || (isEmailCampaign && formData.emailBodyIsHtml) ? false : formData.rewriteContentEachRun,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
             commentType: formData.commentType,
@@ -3776,7 +3791,7 @@ export default function CampaignFormModal({
               rateLimitMinutes: (campaign?.id || cloneFromId) ? normalizeRateLimitMinutes(formData.rateLimitMinutes) : accountRateLimitMinutes,
               byActionCode
             },
-            imageOption: (isFacebookJoinGroupCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
+            imageOption: (isSmsCampaign || isFacebookJoinGroupCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
             randomImageCount: formData.randomImageCount,
             commentImageOption: formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none',
             commentImages: formData.commentImages.slice(0, 1),
@@ -3810,6 +3825,8 @@ export default function CampaignFormModal({
             emailSubject: isEmailCampaign ? formData.emailSubject.trim() : '',
             emailBodyIsHtml: isEmailCampaign ? formData.emailBodyIsHtml : false,
             emailCheckLinkClicks: isEmailCampaign ? formData.emailCheckLinkClicks : false,
+            smsUseUnicode: isSmsCampaign ? formData.smsUseUnicode : undefined,
+            smsKeepNewLines: isSmsCampaign ? formData.smsKeepNewLines : undefined,
             friendRequestMessage: (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) ? formData.friendRequestMessage.trim() : '',
             zaloRealtimeTriggers: isZaloMessageGroupRealtimeCampaign ? getZaloRealtimeTriggersForSave() : [],
             zaloRealtimeGroupIds: selectedZaloRealtimeGroupIds,
@@ -3941,7 +3958,7 @@ export default function CampaignFormModal({
               ? getCampaignIdList(formData.findFacebookGroupJoinTargetCampaignIds)
               : []
           } as CampaignExtraSettings,
-          images: isFacebookJoinGroupCampaign ? [] : formData.images
+          images: isSmsCampaign || isFacebookJoinGroupCampaign ? [] : formData.images
         },
         details: (accountChunks[index] || []).map(detail => ({ ...detail }))
       }
@@ -4048,10 +4065,10 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập số lời mời cần huỷ lớn hơn 0.', 'error')
       return
     }
-    if (showContentSection && !isFacebookJoinGroupCampaign && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
+    if (!isSmsCampaign && showContentSection && !isFacebookJoinGroupCampaign && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
       return
     }
-    if (!validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
+    if (!isSmsCampaign && !validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
       return
     }
     if (isNewsfeedInteractionCampaign) {
@@ -4103,6 +4120,8 @@ export default function CampaignFormModal({
       showAlert(
         isEmailCampaign
           ? 'Vui lòng nhập nội dung email hoặc chọn ít nhất một tệp đính kèm.'
+        : isSmsCampaign
+          ? 'Vui lòng nhập nội dung tin nhắn SMS.'
         : isMessageCampaign
           ? `Vui lòng nhập nội dung tin nhắn hoặc chọn ít nhất một ${isZaloMessageCampaign ? 'file' : 'ảnh'}.`
           : 'Vui lòng nhập nội dung chiến dịch hoặc chọn ít nhất một ảnh.',
@@ -4255,7 +4274,7 @@ export default function CampaignFormModal({
           ? 'Vui lòng thêm ít nhất một UID vào danh sách data.'
           : isPageInboxMessageCampaign
             ? 'Vui lòng chọn ít nhất một khách inbox Page.'
-          : isZaloMessagePhoneCampaign
+          : isPhoneInputCampaign
             ? 'Vui lòng thêm ít nhất một SĐT hợp lệ vào danh sách data.'
           : isZaloMessageFriendCampaign
             ? 'Vui lòng chọn ít nhất một bạn bè Zalo.'
@@ -4488,12 +4507,13 @@ export default function CampaignFormModal({
           if (!isEditingSavedCampaign) {
             for (const d of currentDetails) {
               if (d.id) {
-                await updateCampaignInputData(d.id, {
-                  name: d.name,
-                  phone: d.phone,
-                  uid: d.uid,
-                  email: d.email,
-                  note: d.note,
+	                await updateCampaignInputData(d.id, {
+	                  name: d.name,
+	                  phone: d.phone,
+	                  phoneCarrier: inferInputDataPhoneCarrier(d.phone, d.phoneCarrier),
+	                  uid: d.uid,
+	                  email: d.email,
+	                  note: d.note,
                 })
               } else {
                 await createCampaignInputData({
@@ -4604,7 +4624,11 @@ export default function CampaignFormModal({
   const updateDetailRow = (index: number, field: keyof CampaignInputData, value: string) => {
     setDetails(prev => {
       const copy = [...prev]
-      copy[index] = { ...copy[index], [field]: value }
+      const nextRow = { ...copy[index], [field]: value }
+      if (field === 'phone') {
+        nextRow.phoneCarrier = inferInputDataPhoneCarrier(value)
+      }
+      copy[index] = nextRow
       return copy
     })
   }
@@ -4619,12 +4643,14 @@ export default function CampaignFormModal({
 
   const dataUploadPlatform: CampaignImportPlatform = selectedActionPlatform === 'zalo'
     ? 'zalo'
+    : selectedActionPlatform === 'sms'
+      ? 'sms'
     : selectedActionPlatform === 'email'
       ? 'email'
       : 'facebook'
 
   const getDetailDedupeKey = (row: Partial<CampaignInputData>): string => {
-    if (isZaloMessagePhoneCampaign) {
+    if (isPhoneInputCampaign) {
       return normalizeVietnamMobilePhone(row.phone) || ''
     }
     if (isEmailCampaign) {
@@ -4643,7 +4669,10 @@ export default function CampaignFormModal({
       const key = getDetailDedupeKey(row)
       if (key && seen.has(key)) continue
       if (key) seen.add(key)
-      uniqueRows.push(row)
+      uniqueRows.push({
+        ...row,
+        phoneCarrier: inferInputDataPhoneCarrier(row.phone, row.phoneCarrier)
+      })
     }
     if (uniqueRows.length > 0) {
       setDetails(prev => [...prev, ...uniqueRows])
@@ -4769,7 +4798,7 @@ export default function CampaignFormModal({
           continue
         }
 
-        if (isZaloMessagePhoneCampaign) {
+        if (isPhoneInputCampaign) {
           const normalizedPhone = normalizeVietnamMobilePhone(phone)
           if (!normalizedPhone) continue
           importedRows.push({ ...baseRow, phone: normalizedPhone })
@@ -5267,12 +5296,15 @@ export default function CampaignFormModal({
     const dateTokenName = MESSAGE_DATE_OPTIONS.find(opt => opt.value === messageDateOption)?.token || 'TODAY'
     const dateToken = `#{${dateTokenName}(${messageDateFormat})}`
     const selectedDateLabel = dateOptions.find(opt => opt.value === messageDateOption)?.label || dateOptions[0]?.label || ''
-    const excelTokens = ['INPUT_FULLNAME', 'PHONE', 'EMAIL', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
-    const showCustomerTokens = target === 'content' ? !isEmailCampaign : true
+    const excelTokens = isSmsCampaign
+      ? ['INPUT_FULLNAME', 'PHONE', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
+      : ['INPUT_FULLNAME', 'PHONE', 'EMAIL', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
+    const showCustomerTokens = isSmsCampaign ? false : (target === 'content' ? !isEmailCampaign : true)
     const showExcelTokens = target === 'content'
-      ? isZaloMessagePhoneCampaign || isEmailCampaign
+      ? isPhoneInputCampaign || isEmailCampaign
       : isZaloMessagePhoneCampaign
     const showZaloProfileTokens = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign
+    const showDateTokens = !isSmsCampaign
     const renderExcelTokens = () => (
       <div className="message-template-token-row">
         {excelTokens.map(token => (
@@ -5288,8 +5320,12 @@ export default function CampaignFormModal({
       </div>
     )
 
-    const sectionCount = (showCustomerTokens ? 1 : 0) + (showExcelTokens ? 1 : 0) + 1
-    const sectionLayoutClass = sectionCount >= 3 ? 'three-token-sections' : 'two-token-sections'
+    const sectionCount = (showCustomerTokens ? 1 : 0) + (showExcelTokens ? 1 : 0) + (showDateTokens ? 1 : 0)
+    const sectionLayoutClass = sectionCount >= 3
+      ? 'three-token-sections'
+      : sectionCount === 1
+        ? 'single-token-section'
+        : 'two-token-sections'
     const tokenAvailabilityClass = showExcelTokens ? 'has-excel-tokens' : 'no-excel-tokens'
     const placementClass = placement === 'field' ? 'field-token-dropdown' : ''
     const dropdownClassName = [
@@ -5368,80 +5404,82 @@ export default function CampaignFormModal({
             </div>
           )}
 
-          <div className="message-template-section">
-            <div className="message-template-section-title">
-              <Calendar size={16} />
-              <span>Chọn thời gian</span>
-            </div>
-            <div className="message-template-control-row">
-              <div className="message-template-control">
-                <label>Chọn ngày:</label>
-                <div className={`message-template-dropdown ${messageTemplateDropdownOpen === 'date' ? 'open' : ''}`}>
-                  <button
-                    type="button"
-                    className="message-template-dropdown-button"
-                    aria-expanded={messageTemplateDropdownOpen === 'date'}
-                    onClick={() => setMessageTemplateDropdownOpen(current => current === 'date' ? null : 'date')}
-                  >
-                    <span>{selectedDateLabel}</span>
-                    <ChevronDown size={14} />
-                  </button>
-                  <div className="message-template-dropdown-list">
-                    {dateOptions.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        className={`message-template-dropdown-item ${messageDateOption === opt.value ? 'active' : ''}`}
-                        onClick={() => {
-                          setMessageDateOption(opt.value)
-                          setMessageTemplateDropdownOpen(null)
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+          {showDateTokens && (
+            <div className="message-template-section">
+              <div className="message-template-section-title">
+                <Calendar size={16} />
+                <span>Chọn thời gian</span>
+              </div>
+              <div className="message-template-control-row">
+                <div className="message-template-control">
+                  <label>Chọn ngày:</label>
+                  <div className={`message-template-dropdown ${messageTemplateDropdownOpen === 'date' ? 'open' : ''}`}>
+                    <button
+                      type="button"
+                      className="message-template-dropdown-button"
+                      aria-expanded={messageTemplateDropdownOpen === 'date'}
+                      onClick={() => setMessageTemplateDropdownOpen(current => current === 'date' ? null : 'date')}
+                    >
+                      <span>{selectedDateLabel}</span>
+                      <ChevronDown size={14} />
+                    </button>
+                    <div className="message-template-dropdown-list">
+                      {dateOptions.map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`message-template-dropdown-item ${messageDateOption === opt.value ? 'active' : ''}`}
+                          onClick={() => {
+                            setMessageDateOption(opt.value)
+                            setMessageTemplateDropdownOpen(null)
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="message-template-control">
+                  <label>Chọn định dạng:</label>
+                  <div className={`message-template-dropdown ${messageTemplateDropdownOpen === 'format' ? 'open' : ''}`}>
+                    <button
+                      type="button"
+                      className="message-template-dropdown-button"
+                      aria-expanded={messageTemplateDropdownOpen === 'format'}
+                      onClick={() => setMessageTemplateDropdownOpen(current => current === 'format' ? null : 'format')}
+                    >
+                      <span>{messageDateFormat}</span>
+                      <ChevronDown size={14} />
+                    </button>
+                    <div className="message-template-dropdown-list">
+                      {MESSAGE_DATE_FORMATS.map(format => (
+                        <button
+                          key={format}
+                          type="button"
+                          className={`message-template-dropdown-item ${messageDateFormat === format ? 'active' : ''}`}
+                          onClick={() => {
+                            setMessageDateFormat(format)
+                            setMessageTemplateDropdownOpen(null)
+                          }}
+                        >
+                          {format}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="message-template-control">
-                <label>Chọn định dạng:</label>
-                <div className={`message-template-dropdown ${messageTemplateDropdownOpen === 'format' ? 'open' : ''}`}>
-                  <button
-                    type="button"
-                    className="message-template-dropdown-button"
-                    aria-expanded={messageTemplateDropdownOpen === 'format'}
-                    onClick={() => setMessageTemplateDropdownOpen(current => current === 'format' ? null : 'format')}
-                  >
-                    <span>{messageDateFormat}</span>
-                    <ChevronDown size={14} />
-                  </button>
-                  <div className="message-template-dropdown-list">
-                    {MESSAGE_DATE_FORMATS.map(format => (
-                      <button
-                        key={format}
-                        type="button"
-                        className={`message-template-dropdown-item ${messageDateFormat === format ? 'active' : ''}`}
-                        onClick={() => {
-                          setMessageDateFormat(format)
-                          setMessageTemplateDropdownOpen(null)
-                        }}
-                      >
-                        {format}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <label>Chèn định dạng ngày</label>
+              <button
+                type="button"
+                className="message-template-token"
+                onClick={() => insertCampaignContentToken(dateToken, target)}
+              >
+                {dateToken}
+              </button>
             </div>
-            <label>Chèn định dạng ngày</label>
-            <button
-              type="button"
-              className="message-template-token"
-              onClick={() => insertCampaignContentToken(dateToken, target)}
-            >
-              {dateToken}
-            </button>
-          </div>
+          )}
         </div>
       </div>
     )
@@ -8718,6 +8756,38 @@ export default function CampaignFormModal({
     </div>
   )
 
+  const renderSmsContentMeta = () => {
+    if (!isSmsCampaign) return null
+
+    return (
+      <div className="sms-content-meta">
+        <div className="sms-content-counts">
+          {smsContentCountLabels.map((label, index) => (
+            <span key={`${index}:${label}`} className="sms-content-count-chip">{label}</span>
+          ))}
+        </div>
+        <div className="sms-content-options">
+          <label className="schedule-checkbox-label sms-content-option">
+            <input
+              type="checkbox"
+              checked={formData.smsUseUnicode}
+              onChange={e => setFormData(p => ({ ...p, smsUseUnicode: e.target.checked }))}
+            />
+            <span>Tiếng Việt có dấu</span>
+          </label>
+          <label className="schedule-checkbox-label sms-content-option">
+            <input
+              type="checkbox"
+              checked={formData.smsKeepNewLines}
+              onChange={e => setFormData(p => ({ ...p, smsKeepNewLines: e.target.checked }))}
+            />
+            <span>Không loại bỏ xuống dòng</span>
+          </label>
+        </div>
+      </div>
+    )
+  }
+
   const renderRewriteContentEachRunOption = () => (
     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
       <input
@@ -8851,8 +8921,9 @@ export default function CampaignFormModal({
           rows={8}
         />
       )}
+      {showHint && renderSmsContentMeta()}
       {showHint && !(isEmailCampaign && formData.emailBodyIsHtml) && renderCampaignContentHint()}
-      {showHint && !isFacebookJoinGroupCampaign && !(isEmailCampaign && formData.emailBodyIsHtml) && renderRewriteContentEachRunOption()}
+      {showHint && !isSmsCampaign && !isFacebookJoinGroupCampaign && !(isEmailCampaign && formData.emailBodyIsHtml) && renderRewriteContentEachRunOption()}
     </>
   )
 
@@ -9281,28 +9352,34 @@ export default function CampaignFormModal({
                                     <span title={`${group.name} (${groupAccounts.length})`}>{group.name} ({groupAccounts.length})</span>
                                   </label>
                                   <div className="account-select-group-items">
-                                    {groupAccounts.map(a => (
-                                      <label key={a.id} className="account-checkbox-option account-select-account-row">
-                                        <input
-                                          type={isSingleAccountSelection ? "radio" : "checkbox"}
-                                          name={isSingleAccountSelection ? "account-selection" : undefined}
-                                          checked={selectedAccountIdsSet.has(a.id)}
-                                          onChange={(e) => {
-                                            if (isSingleAccountSelection) {
-                                              selectSingleAccount(a.id)
-                                            } else {
-                                              toggleSelectableAccount(a.id, e.target.checked)
-                                            }
-                                          }}
-                                        />
-                                        <span className="account-select-account-label" title={`${a.name} (${a.loginStatus || '-'})`}>
-                                          <span className="account-select-account-name">{a.name}</span>
-                                          <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
-                                            {' '}({a.loginStatus || '-'})
+                                    {groupAccounts.map(a => {
+                                      const isSmsAccount = a.flatformType === 'sms'
+
+                                      return (
+                                        <label key={a.id} className="account-checkbox-option account-select-account-row">
+                                          <input
+                                            type={isSingleAccountSelection ? "radio" : "checkbox"}
+                                            name={isSingleAccountSelection ? "account-selection" : undefined}
+                                            checked={selectedAccountIdsSet.has(a.id)}
+                                            onChange={(e) => {
+                                              if (isSingleAccountSelection) {
+                                                selectSingleAccount(a.id)
+                                              } else {
+                                                toggleSelectableAccount(a.id, e.target.checked)
+                                              }
+                                            }}
+                                          />
+                                          <span className="account-select-account-label" title={isSmsAccount ? a.name : `${a.name} (${a.loginStatus || '-'})`}>
+                                            <span className="account-select-account-name">{a.name}</span>
+                                            {!isSmsAccount && (
+                                              <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
+                                                {' '}({a.loginStatus || '-'})
+                                              </span>
+                                            )}
                                           </span>
-                                        </span>
-                                      </label>
-                                    ))}
+                                        </label>
+                                      )
+                                    })}
                                   </div>
                                 </div>
                               )
@@ -9320,28 +9397,34 @@ export default function CampaignFormModal({
                                   <span>Chưa có nhóm ({groupedSelectableAccounts.ungrouped.length})</span>
                                 </label>
                                 <div className="account-select-group-items">
-                                  {groupedSelectableAccounts.ungrouped.map(a => (
-                                    <label key={a.id} className="account-checkbox-option account-select-account-row">
-                                      <input
-                                        type={isSingleAccountSelection ? "radio" : "checkbox"}
-                                        name={isSingleAccountSelection ? "account-selection" : undefined}
-                                        checked={selectedAccountIdsSet.has(a.id)}
-                                        onChange={(e) => {
-                                          if (isSingleAccountSelection) {
-                                            selectSingleAccount(a.id)
-                                          } else {
-                                            toggleSelectableAccount(a.id, e.target.checked)
-                                          }
-                                        }}
-                                      />
-                                      <span className="account-select-account-label" title={`${a.name} (${a.loginStatus || '-'})`}>
-                                        <span className="account-select-account-name">{a.name}</span>
-                                        <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
-                                          {' '}({a.loginStatus || '-'})
+                                  {groupedSelectableAccounts.ungrouped.map(a => {
+                                    const isSmsAccount = a.flatformType === 'sms'
+
+                                    return (
+                                      <label key={a.id} className="account-checkbox-option account-select-account-row">
+                                        <input
+                                          type={isSingleAccountSelection ? "radio" : "checkbox"}
+                                          name={isSingleAccountSelection ? "account-selection" : undefined}
+                                          checked={selectedAccountIdsSet.has(a.id)}
+                                          onChange={(e) => {
+                                            if (isSingleAccountSelection) {
+                                              selectSingleAccount(a.id)
+                                            } else {
+                                              toggleSelectableAccount(a.id, e.target.checked)
+                                            }
+                                          }}
+                                        />
+                                        <span className="account-select-account-label" title={isSmsAccount ? a.name : `${a.name} (${a.loginStatus || '-'})`}>
+                                          <span className="account-select-account-name">{a.name}</span>
+                                          {!isSmsAccount && (
+                                            <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
+                                              {' '}({a.loginStatus || '-'})
+                                            </span>
+                                          )}
                                         </span>
-                                      </span>
-                                    </label>
-                                  ))}
+                                      </label>
+                                    )
+                                  })}
                                 </div>
                               </div>
                             )}
@@ -9528,8 +9611,7 @@ export default function CampaignFormModal({
 
               {!collapsedSections['schedule'] && (
                 <div className="stepper-section-body">
-                  {/* Schedule Type */}
-                  <div className="stepper-form-group">
+                  {!isSmsCampaign && <div className="stepper-form-group">
                     <label>Lịch</label>
                     <div className="schedule-radio-group">
                       {([['daily', 'Hàng ngày'], ['weekly', 'Theo tuần'], ['monthly', 'Theo tháng']] as const).map(([value, label]) => (
@@ -9546,7 +9628,7 @@ export default function CampaignFormModal({
                         </label>
                       ))}
                     </div>
-                  </div>
+                  </div>}
 
                   {/* Start date / End date */}
                   <div className="stepper-form-row schedule-run-row">
@@ -9568,7 +9650,7 @@ export default function CampaignFormModal({
                         className="stepper-input"
                       />
                     </div>
-                    {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && (
+                    {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && !isSmsCampaign && (
                       <div className="stepper-form-group schedule-end-date-field">
                         <label>Ngày kết thúc</label>
                         <input
@@ -9579,13 +9661,13 @@ export default function CampaignFormModal({
                         />
                       </div>
                     )}
-                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign) && (
+                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isSmsCampaign) && (
                       <div className="stepper-form-group schedule-end-date-field schedule-placeholder-field" aria-hidden="true" />
                     )}
                   </div>
 
                   {/* Monthly days */}
-                  {formData.scheduleType === 'monthly' && (
+                  {formData.scheduleType === 'monthly' && !isSmsCampaign && (
                     <div className="stepper-form-group">
                       <label>Lịch tháng</label>
                       <input
@@ -9600,7 +9682,7 @@ export default function CampaignFormModal({
                   )}
 
                   {/* Weekly days */}
-                  {formData.scheduleType === 'weekly' && (
+                  {formData.scheduleType === 'weekly' && !isSmsCampaign && (
                     <div className="stepper-form-group">
                       <label>Lịch tuần</label>
                       <div className="schedule-weekday-group">
@@ -9622,7 +9704,7 @@ export default function CampaignFormModal({
                   )}
 
                   {/* Conditional checkbox based on schedule type */}
-                  {formData.scheduleType === 'daily' && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
+                  {formData.scheduleType === 'daily' && !isSmsCampaign && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
@@ -9635,7 +9717,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
+                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isSmsCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
@@ -9648,7 +9730,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  <div className="stepper-form-group" style={{ maxWidth: 320 }}>
+                  {!isSmsCampaign && <div className="stepper-form-group" style={{ maxWidth: 320 }}>
                     <label className="schedule-checkbox-label">
                       <input
                         type="checkbox"
@@ -9669,7 +9751,7 @@ export default function CampaignFormModal({
                       disabled={!formData.useDailyStopTime}
                       title="Để trống nếu không giới hạn"
                     />
-                  </div>
+                  </div>}
 
                   {canUseRerunAfterCompletion && (
                     <div className="stepper-form-group" style={{ maxWidth: 360 }}>
@@ -9703,7 +9785,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {renderMultiDailyTimeSlotsSection()}
+                  {!isSmsCampaign && renderMultiDailyTimeSlotsSection()}
                 </div>
               )}
             </div>
@@ -9922,8 +10004,9 @@ export default function CampaignFormModal({
                               {renderCampaignContentTextarea(false)}
                             </div>
                           </div>
+                          {renderSmsContentMeta()}
                           {renderCampaignContentHint()}
-                          {renderRewriteContentEachRunOption()}
+                          {!isSmsCampaign && renderRewriteContentEachRunOption()}
                         </div>
                       ) : (
                         <div className="stepper-form-group">
@@ -9933,7 +10016,7 @@ export default function CampaignFormModal({
                         </div>
                       )}
 
-                      {!isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
+                      {!isSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
                     </>
                   )}
                 </div>
@@ -10436,8 +10519,21 @@ export default function CampaignFormModal({
                               <th className="campaign-grid-index-col">STT</th>
                               <th>Tên</th>
                               <th>Số điện thoại</th>
-                              <th>Uid</th>
-                              <th>Email</th>
+                              {isSmsCampaign ? (
+                                <>
+                                  <th>Nhà mạng</th>
+                                  <th>Info1</th>
+                                  <th>Info2</th>
+                                  <th>Info3</th>
+                                  <th>Info4</th>
+                                  <th>Info5</th>
+                                </>
+                              ) : (
+                                <>
+                                  <th>Uid</th>
+                                  <th>Email</th>
+                                </>
+                              )}
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           )}
@@ -10481,12 +10577,37 @@ export default function CampaignFormModal({
                                     <td>
                                       <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." disabled={isEditingSavedCampaign} />
                                     </td>
-                                    <td>
-                                      <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder={isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'UID hoặc link...'} disabled={isEditingSavedCampaign} />
-                                    </td>
-                                    <td>
-                                      <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />
-                                    </td>
+                                    {isSmsCampaign ? (
+                                      <>
+                                        <td title={formatInputDataPhoneCarrier(d)}>
+                                          <span>{formatInputDataPhoneCarrier(d)}</span>
+                                        </td>
+                                        <td>
+                                          <input type="text" value={d.info1 || ''} onChange={e => updateDetailRow(i, 'info1', e.target.value)} placeholder="Info1..." disabled={isEditingSavedCampaign} />
+                                        </td>
+                                        <td>
+                                          <input type="text" value={d.info2 || ''} onChange={e => updateDetailRow(i, 'info2', e.target.value)} placeholder="Info2..." disabled={isEditingSavedCampaign} />
+                                        </td>
+                                        <td>
+                                          <input type="text" value={d.info3 || ''} onChange={e => updateDetailRow(i, 'info3', e.target.value)} placeholder="Info3..." disabled={isEditingSavedCampaign} />
+                                        </td>
+                                        <td>
+                                          <input type="text" value={d.info4 || ''} onChange={e => updateDetailRow(i, 'info4', e.target.value)} placeholder="Info4..." disabled={isEditingSavedCampaign} />
+                                        </td>
+                                        <td>
+                                          <input type="text" value={d.info5 || ''} onChange={e => updateDetailRow(i, 'info5', e.target.value)} placeholder="Info5..." disabled={isEditingSavedCampaign} />
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <td>
+                                          <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder={isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'UID hoặc link...'} disabled={isEditingSavedCampaign} />
+                                        </td>
+                                        <td>
+                                          <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />
+                                        </td>
+                                      </>
+                                    )}
                                   </>
                                 )}
                                 {!isEditingSavedCampaign && (

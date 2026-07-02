@@ -20,12 +20,30 @@ const getRemainingMinutes = (value?: string | null) => {
   return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 60000))
 }
 
+const getMobileDeviceLabel = (account: AutoAccount): string => {
+  if (!account.mobileDeviceId) return 'Chưa đăng nhập'
+  const info = account.mobileDeviceInfo || {}
+  const deviceName = (
+    typeof info.deviceName === 'string' ? info.deviceName :
+      typeof info.name === 'string' ? info.name :
+        typeof info.model === 'string' ? info.model :
+          ''
+  ).trim()
+  const platform = (
+    typeof info.platform === 'string' ? info.platform :
+      typeof info.osName === 'string' ? info.osName :
+        ''
+  ).trim()
+  return [deviceName, platform].filter(Boolean).join(' - ') || account.mobileDeviceId
+}
+
 export default function AccountInfoView({ account, mode = 'modal', onClose }: AccountInfoViewProps) {
   const [rows, setRows] = useState<AccountActionOverview[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [enablingActionCode, setEnablingActionCode] = useState<string | null>(null)
   const isModal = mode === 'modal'
+  const isSmsAccount = account.flatformType === 'sms'
 
   const loadOverview = useCallback(async () => {
     if (!window.electronAPI?.getAccountActionOverview) return
@@ -96,14 +114,38 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
             <span>Nền tảng</span>
             <strong>{account.flatformType}</strong>
           </div>
-          <div className="account-info-field">
-            <span>Trạng thái tài khoản</span>
-            <strong>{account.status}</strong>
-          </div>
-          <div className="account-info-field">
-            <span>Trạng thái đăng nhập</span>
-            <strong>{account.loginStatus}</strong>
-          </div>
+          {isSmsAccount && (
+            <>
+              <div className="account-info-field">
+                <span>Tên đăng nhập</span>
+                <strong>{account.username || '-'}</strong>
+              </div>
+              <div className="account-info-field">
+                <span>Mật khẩu</span>
+                <strong>{account.password || '-'}</strong>
+              </div>
+              <div className="account-info-field">
+                <span>Điện thoại mobile</span>
+                <strong>{getMobileDeviceLabel(account)}</strong>
+              </div>
+              <div className="account-info-field">
+                <span>Lần dùng mobile</span>
+                <strong>{formatDateTime(account.mobileDeviceLastSeenAt || account.mobileDeviceRegisteredAt)}</strong>
+              </div>
+            </>
+          )}
+          {!isSmsAccount && (
+            <>
+              <div className="account-info-field">
+                <span>Trạng thái tài khoản</span>
+                <strong>{account.status}</strong>
+              </div>
+              <div className="account-info-field">
+                <span>Trạng thái đăng nhập</span>
+                <strong>{account.loginStatus}</strong>
+              </div>
+            </>
+          )}
           <div className="account-info-field">
             <span>Kích hoạt</span>
             <strong>{account.isActive ? 'Đang bật' : 'Đã tắt'}</strong>

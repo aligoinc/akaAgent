@@ -38,6 +38,7 @@ export class SupabaseService {
   listAccounts() { return accountRepo.listAccounts() }
   createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }
   updateAccount(id: number, updates: Partial<AutoAccount>) { return accountRepo.updateAccount(id, updates) }
+  clearAccountMobileDevice(id: number) { return accountRepo.clearAccountMobileDevice(id) }
   deleteAccount(id: number) { return accountRepo.deleteAccount(id) }
   getEligibleAccounts() { return accountRepo.getEligibleAccounts() }
   getAccountZaloSession(id: number) { return accountRepo.getAccountZaloSession(id) }
@@ -85,6 +86,7 @@ export class SupabaseService {
   cloneCampaign(id: number) { return campaignRepo.cloneCampaign(id) }
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }
   getPendingCampaigns(accountId: number) { return campaignRepo.getPendingCampaigns(accountId) }
+  getDueSmsCampaignsForLimitCheck(accountId: number) { return campaignRepo.getDueSmsCampaignsForLimitCheck(accountId) }
   maintainCampaignSchedules() { return campaignRepo.maintainCampaignSchedules() }
   listZaloRealtimeGroupCampaignSnapshots() { return campaignRepo.listZaloRealtimeGroupCampaignSnapshots() }
   enqueueZaloRealtimeGroupEvent(request: campaignRepo.EnqueueZaloRealtimeGroupEventRequest) {
