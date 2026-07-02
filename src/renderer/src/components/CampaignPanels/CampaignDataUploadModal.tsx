@@ -8,6 +8,7 @@ import {
   CampaignInputData,
   isValidEmailInputDataValue
 } from '../../../../shared/types'
+import { getVietnamMobileCarrier, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { useUiStore } from '../../stores/uiStore'
 
 type ImportTab = 'textbox' | 'image' | 'sheet' | 'excel'
@@ -55,27 +56,6 @@ const getCellText = (value: unknown): string => {
     return Number.isFinite(parsed) ? Math.trunc(parsed).toString() : text
   }
   return text
-}
-
-const normalizeVietnamMobilePhone = (value: unknown): string => {
-  let digits = getCellText(value).replace(/\D+/g, '')
-  if (!digits) return ''
-
-  if (digits.startsWith('0084') && digits.length >= 13) {
-    digits = `0${digits.slice(4)}`
-  } else if (digits.startsWith('84') && digits.length >= 11) {
-    digits = `0${digits.slice(2)}`
-  }
-  if (digits.length === 9 && /^[35789]/.test(digits)) {
-    digits = `0${digits}`
-  }
-  if (digits.length === 11) {
-    const withoutLeading = digits.replace(/^0+/, '')
-    if (withoutLeading.length === 9 && /^[35789]/.test(withoutLeading)) {
-      digits = `0${withoutLeading}`
-    }
-  }
-  return /^0[35789]\d{8}$/.test(digits) ? digits : ''
 }
 
 const normalizeUid = (value: unknown): string => {
@@ -199,10 +179,10 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
       ...INFO_FIELDS
     ]
   }
-  if (platform === 'zalo') {
+  if (platform === 'zalo' || platform === 'sms') {
     return [
       { key: 'name', label: 'Tên' },
-      { key: 'phone', label: 'Số điện thoại', required: true },
+      { key: 'phone', label: platform === 'sms' ? 'Số điện thoại SMS' : 'Số điện thoại', required: true },
       ...INFO_FIELDS
     ]
   }
@@ -314,8 +294,9 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
       info5: getCellText(row.info5)
     }
     let key = ''
-    if (platform === 'zalo') {
+    if (platform === 'zalo' || platform === 'sms') {
       item.phone = normalizeVietnamMobilePhone(row.phone)
+      item.phoneCarrier = getVietnamMobileCarrier(item.phone) || null
       key = item.phone
     } else if (platform === 'facebook') {
       item.uid = normalizeUid(row.uid)
@@ -411,7 +392,7 @@ const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlat
       uid: detectColumnFromHeader(rows, ['uid', 'url', 'link', 'group', 'facebook']) || detectNonWhitespaceColumn(rows)
     }
   }
-  if (platform === 'zalo') {
+  if (platform === 'zalo' || platform === 'sms') {
     return { phone: detectPhoneColumn(rows) }
   }
   if (platform === 'facebook') {
@@ -523,7 +504,7 @@ export default function CampaignDataUploadModal({
   const buildRowsFromText = (): CampaignImportDataRow[] => {
     return splitTextItems(textContent).map(value => {
       if (isZaloJoinGroupLinkAction(actionId)) return { uid: value }
-      if (platform === 'zalo') return { phone: value }
+      if (platform === 'zalo' || platform === 'sms') return { phone: value }
       if (platform === 'facebook') return { uid: value }
       return { email: value }
     })

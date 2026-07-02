@@ -30,6 +30,7 @@ const PLATFORM_OPTIONS = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'zalo', label: 'Zalo' },
   { value: 'email', label: 'Email' },
+  { value: 'sms', label: 'SMS' },
   { value: 'tiktok', label: 'TikTok' },
   { value: 'instagram', label: 'Instagram' },
   { value: 'other', label: 'Khác' }
@@ -463,19 +464,23 @@ export default function AccountGroupManagerModal({
                     {memberAccounts.length === 0 ? (
                       <div className="account-group-member-empty">Chưa có tài khoản trong nhóm</div>
                     ) : (
-                      memberAccounts.map(account => (
-                        <label key={account.id} className="account-group-member-option">
-                          <input
-                            type="checkbox"
-                            checked={selectedMemberIds.has(account.id)}
-                            onChange={() => toggleSelectedId(setSelectedMemberIds, account.id)}
-                          />
-                          <span>
-                            <strong>{account.name}</strong>
-                            <em>{account.status} - {account.loginStatus}</em>
-                          </span>
-                        </label>
-                      ))
+                      memberAccounts.map(account => {
+                        const isSmsAccount = account.flatformType === 'sms'
+
+                        return (
+                          <label key={account.id} className="account-group-member-option">
+                            <input
+                              type="checkbox"
+                              checked={selectedMemberIds.has(account.id)}
+                              onChange={() => toggleSelectedId(setSelectedMemberIds, account.id)}
+                            />
+                            <span>
+                              <strong>{account.name}</strong>
+                              {!isSmsAccount && <em>{account.status} - {account.loginStatus}</em>}
+                            </span>
+                          </label>
+                        )
+                      })
                     )}
                   </div>
 

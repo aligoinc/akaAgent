@@ -4,14 +4,16 @@ const DEFAULT_DAILY_SEND_LIMITS: AuthEntitlements['dailySendLimits'] = {
   facebookCore: null,
   facebookFanpage: null,
   email: null,
-  zalo: null
+  zalo: null,
+  sms: null
 }
 
 const DEFAULT_ACCOUNT_LIMITS: AuthEntitlements['accountLimits'] = {
   facebookCore: null,
   facebookFanpage: null,
   email: null,
-  zalo: null
+  zalo: null,
+  sms: null
 }
 
 export const FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS = new Set([
@@ -50,6 +52,7 @@ export const ZALO_ACCOUNT_ACTION_CODES = new Set([
 ])
 
 const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
+const SMS_SEND_ACTION_ID = 'sms_send'
 
 export function normalizeEntitlements(entitlements?: Partial<AuthEntitlements> | null): AuthEntitlements {
   return {
@@ -57,6 +60,7 @@ export function normalizeEntitlements(entitlements?: Partial<AuthEntitlements> |
     facebookFanpage: !!entitlements?.facebookFanpage,
     email: !!entitlements?.email,
     zalo: !!entitlements?.zalo,
+    sms: !!entitlements?.sms,
     dailySendLimits: {
       ...DEFAULT_DAILY_SEND_LIMITS,
       ...(entitlements?.dailySendLimits || {})
@@ -83,6 +87,8 @@ export function canUsePlatform(
       return normalized.email
     case 'zalo':
       return normalized.zalo
+    case 'sms':
+      return normalized.sms
     case 'facebook':
       return normalized.facebookCore || normalized.facebookFanpage
     default:
@@ -96,6 +102,7 @@ export function canUseCampaignAction(
 ): boolean {
   if (!action) return false
   const normalized = normalizeEntitlements(entitlements)
+  if (action.id === SMS_SEND_ACTION_ID || action.flatformType === 'sms') return normalized.sms
   if (action.id === 'email_send' || action.flatformType === 'email') return normalized.email
   if (ZALO_CAMPAIGN_ACTION_IDS.has(action.id) || action.flatformType === 'zalo') return normalized.zalo
   if (FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS.has(action.id)) return normalized.facebookFanpage
@@ -107,6 +114,7 @@ export function getCampaignActionFeature(
 ): AuthEntitlementFeature {
   const actionId = String(action?.id || '').trim()
   const flatformType = String(action?.flatformType || '').trim().toLowerCase()
+  if (actionId === SMS_SEND_ACTION_ID || flatformType === 'sms') return 'sms'
   if (actionId === 'email_send' || flatformType === 'email') return 'email'
   if (ZALO_CAMPAIGN_ACTION_IDS.has(actionId) || flatformType === 'zalo') return 'zalo'
   if (FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS.has(actionId)) return 'facebookFanpage'
@@ -119,6 +127,7 @@ export function getAccountActionFeature(
 ): AuthEntitlementFeature {
   const normalizedActionCode = String(actionCode || '').trim()
   const normalizedPlatform = String(flatformType || '').trim().toLowerCase()
+  if (normalizedPlatform === 'sms' || normalizedActionCode === SMS_SEND_ACTION_ID) return 'sms'
   if (normalizedPlatform === 'email' || normalizedActionCode === 'email_send') return 'email'
   if (normalizedPlatform === 'zalo' || ZALO_ACCOUNT_ACTION_CODES.has(normalizedActionCode)) return 'zalo'
   if (FACEBOOK_FANPAGE_ACCOUNT_ACTION_CODES.has(normalizedActionCode)) return 'facebookFanpage'

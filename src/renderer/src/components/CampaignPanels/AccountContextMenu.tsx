@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
-  Info, FolderCog, QrCode, LogOut
+  Info, FolderCog, QrCode, LogOut, Smartphone
 } from 'lucide-react'
 import { AutoAccount } from '../../../../shared/types'
 
@@ -13,7 +13,7 @@ const PLATFORM_URLS: Record<string, string> = {
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com',
 }
-const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email'])
+const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email', 'sms'])
 
 interface AccountContextMenuProps {
   account: AutoAccount
@@ -25,6 +25,7 @@ interface AccountContextMenuProps {
   onZaloLoginQr: (account: AutoAccount) => void
   onCheckZaloSession: (account: AutoAccount) => void
   onLogoutZalo: (account: AutoAccount) => void
+  onResetSmsMobileDevice: (account: AutoAccount) => void
   onResume: (account: AutoAccount) => void
   onPause: (account: AutoAccount) => void
   onEnable: (account: AutoAccount) => void
@@ -46,6 +47,7 @@ export default function AccountContextMenu({
   onZaloLoginQr,
   onCheckZaloSession,
   onLogoutZalo,
+  onResetSmsMobileDevice,
   onResume,
   onPause,
   onEnable,
@@ -98,6 +100,7 @@ export default function AccountContextMenu({
   const isPaused = account.status === 'tạm dừng'
   const isDisabled = !account.isActive
   const isZalo = account.flatformType === 'zalo'
+  const isSmsAccount = account.flatformType === 'sms'
   const isBrowserless = BROWSERLESS_PLATFORMS.has(account.flatformType)
 
   return (
@@ -174,8 +177,20 @@ export default function AccountContextMenu({
         )}
       </div>
 
+      {isSmsAccount && (
+        <div className="context-menu-group">
+          <button
+            className="context-menu-item"
+            onClick={() => handleAction(() => onResetSmsMobileDevice(account))}
+          >
+            <Smartphone size={14} />
+            <span>Đổi điện thoại</span>
+          </button>
+        </div>
+      )}
+
       {/* Status Group */}
-      {!isDisabled && (
+      {!isDisabled && !isSmsAccount && (
         <div className="context-menu-group">
           {isPaused ? (
             <button

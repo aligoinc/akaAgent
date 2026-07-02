@@ -85,6 +85,16 @@ const formatQrRemaining = (seconds: number): string => {
   return `${String(minutes).padStart(2, '0')}:${String(restSeconds).padStart(2, '0')}`
 }
 
+const getPlatformLabel = (platform: string): string => {
+  switch (platform) {
+    case 'facebook': return 'Facebook'
+    case 'zalo': return 'Zalo'
+    case 'email': return 'Email'
+    case 'sms': return 'SMS'
+    default: return platform
+  }
+}
+
 export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
   const {
     accounts,
@@ -376,6 +386,23 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       `Xoá tài khoản "${account.name}"?`,
       async () => { await deleteAccount(account.id) },
       { title: 'Xoá tài khoản', confirmText: 'Xoá', variant: 'danger' }
+    )
+  }
+
+  const handleResetSmsMobileDevice = (account: AutoAccount) => {
+    if (account.flatformType !== 'sms') return
+    useUiStore.getState().showConfirm(
+      `Đổi điện thoại cho tài khoản "${account.name}"? Điện thoại cũ sẽ không còn được giữ liên kết, app SMS trên điện thoại mới có thể đăng nhập lại bằng tài khoản này.`,
+      async () => {
+        if (!window.electronAPI?.resetSmsAccountMobileDevice) {
+          useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
+          return
+        }
+        await window.electronAPI.resetSmsAccountMobileDevice(account.id)
+        await loadAccounts()
+        useUiStore.getState().showAlert('Đã cho phép tài khoản SMS đăng nhập trên điện thoại mới.', 'success')
+      },
+      { title: 'Đổi điện thoại SMS', confirmText: 'Đổi điện thoại', variant: 'primary' }
     )
   }
 
@@ -742,36 +769,47 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         {accounts.length === 0 ? (
           <div className="empty-state"><div className="empty-state-text">Chưa có tài khoản</div></div>
         ) : (
-          accounts.map(account => (
-            <div 
-              key={account.id}
-              className={`account-card ${getAccountStatusClass(account.status)} ${!account.isActive ? 'disabled' : ''}`}
-              onContextMenu={(e) => handleContextMenu(e, account)}
-              title="Nhấn chuột phải để xem menu"
-            >
-              <div className="account-card-info">
-                <div className="account-card-name">
-                  <span className={`account-status-dot ${!account.isActive ? 'is-disabled' : getAccountStatusClass(account.status)}`} aria-hidden="true" />
-                  <span className="account-card-name-text" title={account.name}>{account.name}</span>
-                </div>
-                <div className="account-card-meta">
-                  <span className="account-tag" style={{ color: 'var(--accent-info)' }}>{account.flatformType}</span>
-                  <span style={{ color: getLoginColor(account.loginStatus), fontSize: '10px' }}>{account.loginStatus}</span>
-                </div>
-                <div className="account-card-meta">
-                  <span className="account-card-status">{account.status}</span>
-                  {account.accountGroupName && (
-                    <span className="account-group-tag" title={account.accountGroupName}>{account.accountGroupName}</span>
-                  )}
-                  {account.proxyName && (
-                    <span className="account-group-tag" title={`${account.proxyProtocol}://${account.proxyHost}:${account.proxyPort}`}>
-                      {account.proxyName}
-                    </span>
+          accounts.map(account => {
+            const isSmsAccount = account.flatformType === 'sms'
+            const showSecondaryMeta = !isSmsAccount || account.accountGroupName || account.proxyName
+
+            return (
+              <div
+                key={account.id}
+                className={`account-card ${isSmsAccount ? '' : getAccountStatusClass(account.status)} ${!account.isActive ? 'disabled' : ''}`}
+                onContextMenu={(e) => handleContextMenu(e, account)}
+                title="Nhấn chuột phải để xem menu"
+              >
+                <div className="account-card-info">
+                  <div className="account-card-name">
+                    {!isSmsAccount && (
+                      <span className={`account-status-dot ${!account.isActive ? 'is-disabled' : getAccountStatusClass(account.status)}`} aria-hidden="true" />
+                    )}
+                    <span className="account-card-name-text" title={account.name}>{account.name}</span>
+                  </div>
+                  <div className="account-card-meta">
+                    <span className="account-tag" style={{ color: 'var(--accent-info)' }}>{getPlatformLabel(account.flatformType)}</span>
+                    {!isSmsAccount && (
+                      <span style={{ color: getLoginColor(account.loginStatus), fontSize: '10px' }}>{account.loginStatus}</span>
+                    )}
+                  </div>
+                  {showSecondaryMeta && (
+                    <div className="account-card-meta">
+                      {!isSmsAccount && <span className="account-card-status">{account.status}</span>}
+                      {account.accountGroupName && (
+                        <span className="account-group-tag" title={account.accountGroupName}>{account.accountGroupName}</span>
+                      )}
+                      {account.proxyName && (
+                        <span className="account-group-tag" title={`${account.proxyProtocol}://${account.proxyHost}:${account.proxyPort}`}>
+                          {account.proxyName}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
 
@@ -787,6 +825,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           onZaloLoginQr={handleZaloLoginQr}
           onCheckZaloSession={handleCheckZaloSession}
           onLogoutZalo={handleLogoutZalo}
+          onResetSmsMobileDevice={handleResetSmsMobileDevice}
           onResume={handleResume}
           onPause={handlePause}
           onEnable={handleEnable}

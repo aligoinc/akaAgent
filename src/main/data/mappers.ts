@@ -1,10 +1,19 @@
 import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, MediaFile, ZaloAccount } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
+  const flatformType = row.flatform_type as string
+  const isSmsAccount = flatformType === 'sms'
+
   return {
     id: row.id as number,
     name: row.name as string,
-    flatformType: row.flatform_type as string,
+    flatformType,
+    username: isSmsAccount ? ((row.username as string | null | undefined) ?? null) : null,
+    password: isSmsAccount ? ((row.password as string | null | undefined) ?? null) : null,
+    mobileDeviceId: (row.mobile_device_id as string | null | undefined) ?? null,
+    mobileDeviceInfo: (row.mobile_device_info as Record<string, unknown> | null | undefined) ?? null,
+    mobileDeviceRegisteredAt: (row.mobile_device_registered_at as string | null | undefined) ?? null,
+    mobileDeviceLastSeenAt: (row.mobile_device_last_seen_at as string | null | undefined) ?? null,
     loginStatus: row.login_status as string,
     status: row.status as string,
     isActive: row.is_active as boolean,
@@ -217,6 +226,7 @@ export function mapCampaignInputDataFromDB(row: Record<string, unknown>): Campai
     inputId: (row.input_id as number | null) ?? null,
     name: row.name as string | undefined,
     phone: row.phone as string | undefined,
+    phoneCarrier: (row.phone_carrier as CampaignInputData['phoneCarrier'] | null | undefined) ?? null,
     uid: row.uid as string | undefined,
     email: row.email as string | undefined,
     info1: row.info1 as string | undefined,
@@ -224,6 +234,7 @@ export function mapCampaignInputDataFromDB(row: Record<string, unknown>): Campai
     info3: row.info3 as string | undefined,
     info4: row.info4 as string | undefined,
     info5: row.info5 as string | undefined,
+    content: row.content as string | undefined,
     status: row.status as CampaignInputStatus,
     note: row.note as string | undefined,
     schedule: row.schedule as string | undefined,

@@ -20,6 +20,7 @@ import {
   type ZaloLoginQrEvent
 } from '../../../../shared/types'
 import { parseCampaignLogLine } from '../../../../shared/campaignLogFormat'
+import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -163,6 +164,7 @@ interface FindDataLogRow {
 
 const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
 const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
+const SMS_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung SMS', 'Lịch gửi']
 const BLOCK_SCREENSHOT_EVENT_TYPE = 'browser_screenshot'
 const FIND_DATA_LOG_EXPORT_HEADERS = [
   'Thời gian',
@@ -184,6 +186,10 @@ const FIND_DATA_LOG_EXPORT_HEADERS = [
   'Kết quả AI',
   'Kiểm tra ý nghĩa AI'
 ]
+
+const formatInputDataPhoneCarrier = (row: Partial<Pick<CampaignInputData, 'phone' | 'phoneCarrier'>>): string => (
+  getVietnamMobileCarrierLabel(row.phoneCarrier || getVietnamMobileCarrier(row.phone)) || '-'
+)
 const POST_SEARCH_LOG_EXPORT_HEADERS = [
   'Thời gian',
   'Hành động',
@@ -289,13 +295,15 @@ const CAMPAIGN_STATUS_SORT_ORDER = new Map<string, number>([
 const CAMPAIGN_PLATFORM_OPTIONS: CampaignFilterOption[] = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'zalo', label: 'Zalo' },
-  { value: 'email', label: 'Email' }
+  { value: 'email', label: 'Email' },
+  { value: 'sms', label: 'SMS' }
 ]
 
 const CAMPAIGN_PLATFORM_SORT_ORDER = new Map<string, number>([
   ['facebook', 0],
   ['zalo', 1],
-  ['email', 2]
+  ['email', 2],
+  ['sms', 3]
 ])
 
 const DETAIL_DOCK_MIN_HEIGHT = 220
@@ -677,8 +685,10 @@ const toIsoDateTimeValue = (value?: string | null): string | null => {
 const cloneInputDataForNewCampaign = (row: CampaignInputData): Partial<CampaignInputData> => ({
   name: row.name || '',
   phone: row.phone || '',
+  phoneCarrier: row.phoneCarrier || getVietnamMobileCarrier(row.phone) || null,
   uid: row.uid || '',
   email: row.email || '',
+  content: row.content || '',
   status: 'chờ xử lý',
   note: ''
 })
@@ -2171,6 +2181,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     : undefined
   const isSelectedFindDataCampaign = !!selectedCampaign && FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)
   const isSelectedEmailCampaign = selectedCampaign?.actionId === EMAIL_SEND_ACTION_ID
+  const isSelectedSmsCampaign = selectedCampaign?.actionId === 'sms_send'
   const isSelectedEmailClickTrackingCampaign = isSelectedEmailCampaign && selectedCampaign?.extraSettings?.emailCheckLinkClicks === true
   const isSelectedCommentSeedingFeedCampaign = selectedCampaign?.actionId === COMMENT_SEEDING_FEED_ACTION_ID
   const filteredCampaignInputData = useMemo(() => {
@@ -2889,32 +2900,62 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     }
 
     try {
-      const rows = [
-        CAMPAIGN_INPUT_DATA_EXPORT_HEADERS,
-        ...selectedInputDataRows.map(item => [
-          item.name || '',
-          item.uid || '',
-          item.phone || '',
-          item.email || '',
-          item.info1 || '',
-          item.info2 || '',
-          item.info3 || '',
-          item.info4 || '',
-          item.info5 || ''
-        ])
-      ]
+      const headers = isSelectedSmsCampaign ? SMS_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS : CAMPAIGN_INPUT_DATA_EXPORT_HEADERS
+      const rows = isSelectedSmsCampaign
+        ? [
+          headers,
+          ...selectedInputDataRows.map(item => [
+            item.name || '',
+            item.phone || '',
+            formatInputDataPhoneCarrier(item),
+            item.info1 || '',
+            item.info2 || '',
+            item.info3 || '',
+            item.info4 || '',
+            item.info5 || '',
+            item.content || '',
+            formatCompactDateTime(item.schedule)
+          ])
+        ]
+        : [
+          headers,
+          ...selectedInputDataRows.map(item => [
+            item.name || '',
+            item.uid || '',
+            item.phone || '',
+            item.email || '',
+            item.info1 || '',
+            item.info2 || '',
+            item.info3 || '',
+            item.info4 || '',
+            item.info5 || ''
+          ])
+        ]
       const sheet = utils.aoa_to_sheet(rows)
-      sheet['!cols'] = [
-        { wch: 24 },
-        { wch: 48 },
-        { wch: 18 },
-        { wch: 28 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 18 }
-      ]
+      sheet['!cols'] = isSelectedSmsCampaign
+        ? [
+          { wch: 24 },
+          { wch: 18 },
+          { wch: 16 },
+          { wch: 18 },
+          { wch: 18 },
+          { wch: 18 },
+          { wch: 18 },
+          { wch: 18 },
+          { wch: 48 },
+          { wch: 18 }
+        ]
+        : [
+          { wch: 24 },
+          { wch: 48 },
+          { wch: 18 },
+          { wch: 28 },
+          { wch: 18 },
+          { wch: 18 },
+          { wch: 18 },
+          { wch: 18 },
+          { wch: 18 }
+        ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Sheet1')
       const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
@@ -3640,13 +3681,14 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                 </div>
               ) : filteredCampaigns.map(campaign => {
                 const actionLabel = campaign.actionName || actionById.get(campaign.actionId)?.name || campaign.actionId
-                const account = accountById.get(campaign.accountId)
-                const accountLabel = campaign.accountName || account?.name || '-'
-                const accountLoginStatus = account?.loginStatus || '-'
-                const campaignPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
-                  || normalizeCampaignPlatform(account?.flatformType)
-                  || inferCampaignPlatformFromActionId(campaign.actionId)
-                const isZaloCampaign = campaignPlatform === 'zalo'
+	                const account = accountById.get(campaign.accountId)
+	                const accountLabel = campaign.accountName || account?.name || '-'
+	                const campaignPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
+	                  || normalizeCampaignPlatform(account?.flatformType)
+	                  || inferCampaignPlatformFromActionId(campaign.actionId)
+	                const isSmsAccount = campaignPlatform === 'sms' || account?.flatformType === 'sms'
+	                const accountLoginStatus = isSmsAccount ? '' : (account?.loginStatus || '-')
+	                const isZaloCampaign = campaignPlatform === 'zalo'
                 const scheduleTypeLabel = getCampaignListScheduleTypeLabel(campaign.scheduleType)
                 const scheduleTimeLabel = formatCompactDateTime(campaign.schedule)
                 const updatedLabel = formatCompactDateTime(campaign.updatedAt)
@@ -3811,14 +3853,16 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                         )}
                       </div>
                     </div>
-                    <div className="campaign-col col-account" title={`${accountLabel}\n${accountLoginStatus}`}>
-                      <div className="campaign-two-line-cell">
-                        <div className="campaign-strong-line">{accountLabel}</div>
-                        <div className={`campaign-account-login-badge ${getAccountLoginStatusClass(accountLoginStatus)}`}>
-                          {accountLoginStatus}
-                        </div>
-                      </div>
-                    </div>
+	                    <div className="campaign-col col-account" title={isSmsAccount ? accountLabel : `${accountLabel}\n${accountLoginStatus}`}>
+	                      <div className="campaign-two-line-cell">
+	                        <div className="campaign-strong-line">{accountLabel}</div>
+	                        {!isSmsAccount && (
+	                          <div className={`campaign-account-login-badge ${getAccountLoginStatusClass(accountLoginStatus)}`}>
+	                            {accountLoginStatus}
+	                          </div>
+	                        )}
+	                      </div>
+	                    </div>
                     <div className="campaign-col col-send-date" title={`${scheduleTypeLabel}\n${scheduleTimeLabel}`}>
                       <div className="campaign-two-line-cell">
                         <div className="campaign-send-time-line">{scheduleTimeLabel}</div>
@@ -4036,7 +4080,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
                         <tr>
-                          <th style={{ width: 36 }}>
+	                          <th style={{ width: 36, minWidth: 36 }}>
                             <input
                               type="checkbox"
                               checked={filteredCampaignInputData.length > 0 && selectedFilteredInputDataCount === filteredCampaignInputData.length}
@@ -4046,12 +4090,28 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                               onChange={toggleSelectAllInputData}
                             />
                           </th>
-                          <th>Tên</th>
-                          <th>UID</th>
-                          <th>SĐT</th>
-                          <th>Email</th>
-                          <th>Trạng thái</th>
-                          <th>Ghi chú</th>
+	                          <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Tên</th>
+	                          {isSelectedSmsCampaign ? (
+	                            <>
+		                              <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>SĐT</th>
+		                              <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Nhà mạng</th>
+		                              <th style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info1</th>
+		                              <th style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info2</th>
+		                              <th style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info3</th>
+		                              <th style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info4</th>
+		                              <th style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info5</th>
+		                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung SMS</th>
+		                              <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Lịch gửi</th>
+	                            </>
+	                          ) : (
+	                            <>
+	                              <th style={{ minWidth: 180, whiteSpace: 'nowrap' }}>UID</th>
+	                              <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>SĐT</th>
+	                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Email</th>
+	                            </>
+	                          )}
+	                          <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Trạng thái</th>
+	                          <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Ghi chú</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -4064,14 +4124,30 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                                 onChange={() => toggleSelectInputData(d.id)}
                               />
                             </td>
-                            <td title={d.name || '-'}>{d.name || '-'}</td>
-                            <td title={d.uid || '-'} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
-                            <td title={d.phone || '-'}>{d.phone || '-'}</td>
-                            <td title={d.email || '-'}>{d.email || '-'}</td>
-                            <td title={d.status}>
-                              <span style={{ color: getStatusColor(d.status) }}>{d.status}</span>
-                            </td>
-                            <td title={d.note || '-'} style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '-'}</td>
+	                            <td title={d.name || '-'} style={{ minWidth: 120 }}>{d.name || '-'}</td>
+	                            {isSelectedSmsCampaign ? (
+	                              <>
+		                                <td title={d.phone || '-'} style={{ minWidth: 96 }}>{d.phone || '-'}</td>
+		                                <td title={formatInputDataPhoneCarrier(d)} style={{ minWidth: 88 }}>{formatInputDataPhoneCarrier(d)}</td>
+		                                <td title={d.info1 || '-'} style={{ minWidth: 64 }}>{d.info1 || '-'}</td>
+		                                <td title={d.info2 || '-'} style={{ minWidth: 64 }}>{d.info2 || '-'}</td>
+		                                <td title={d.info3 || '-'} style={{ minWidth: 64 }}>{d.info3 || '-'}</td>
+		                                <td title={d.info4 || '-'} style={{ minWidth: 64 }}>{d.info4 || '-'}</td>
+		                                <td title={d.info5 || '-'} style={{ minWidth: 64 }}>{d.info5 || '-'}</td>
+			                                <td title={d.content || '-'} style={{ minWidth: 160, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.content || '-'}</td>
+		                                <td title={formatCompactDateTime(d.schedule)} style={{ minWidth: 120, whiteSpace: 'nowrap' }}>{formatCompactDateTime(d.schedule)}</td>
+	                              </>
+	                            ) : (
+	                              <>
+	                                <td title={d.uid || '-'} style={{ minWidth: 180, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.uid || '-'}</td>
+	                                <td title={d.phone || '-'} style={{ minWidth: 96 }}>{d.phone || '-'}</td>
+	                                <td title={d.email || '-'} style={{ minWidth: 160 }}>{d.email || '-'}</td>
+	                              </>
+	                            )}
+	                            <td title={d.status} style={{ minWidth: 96, whiteSpace: 'nowrap' }}>
+	                              <span style={{ color: getStatusColor(d.status) }}>{d.status}</span>
+	                            </td>
+	                            <td title={d.note || '-'} style={{ minWidth: 120, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '-'}</td>
                           </tr>
                         ))}
                       </tbody>

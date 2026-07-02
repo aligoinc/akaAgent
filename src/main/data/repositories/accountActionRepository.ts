@@ -11,6 +11,7 @@ import {
 
 const client = () => getSupabaseClient()
 const DEFAULT_RATE_LIMIT_MINUTES = 65
+const SMS_SEND_ACTION_CODE = 'sms_send'
 const RATED_ACTION_STATUSES = ['thành công', 'thất bại']
 const TRANSIENT_RETRY_DELAY_MS = 300
 
@@ -22,6 +23,10 @@ export interface DisableAccountActionContext {
 function normalizeRateLimitMinutes(value: unknown): number {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
+}
+
+function isSmsActionCode(actionCode?: string | null): boolean {
+  return String(actionCode || '').trim() === SMS_SEND_ACTION_CODE
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -147,17 +152,20 @@ export async function listAccountActions(flatformType?: string, includeRestricte
       facebookFanpage: true,
       email: true,
       zalo: true,
+      sms: true,
       dailySendLimits: {
         facebookCore: null,
         facebookFanpage: null,
         email: null,
-        zalo: null
+        zalo: null,
+        sms: null
       },
       accountLimits: {
         facebookCore: null,
         facebookFanpage: null,
         email: null,
-        zalo: null
+        zalo: null,
+        sms: null
       }
     }
     : await loadCurrentUserEffectiveEntitlements()
@@ -259,6 +267,17 @@ async function loadWindowActionCounts(
   const counts = new Map<string, number>()
   for (const [actionCode, windowMinutes] of actionWindowMinutes.entries()) {
     const timeFrameStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
+    const buildLegacyWindowCountQuery = () => {
+      const query = client()
+        .from('auto_campaign_details')
+        .select('*', { count: 'exact', head: true })
+        .eq('account_id', accountId)
+        .eq('action_code', actionCode)
+        .is('counts_toward_limit', null)
+        .gte('created_at', timeFrameStart)
+      return isSmsActionCode(actionCode) ? query : query.in('status', RATED_ACTION_STATUSES)
+    }
+
     const [explicitResult, legacyResult] = await Promise.all([
       runOverviewQuery(
         'Failed to count explicit account action window',
@@ -272,14 +291,7 @@ async function loadWindowActionCounts(
       ),
       runOverviewQuery(
         'Failed to count legacy account action window',
-        () => client()
-          .from('auto_campaign_details')
-          .select('*', { count: 'exact', head: true })
-          .eq('account_id', accountId)
-          .eq('action_code', actionCode)
-          .is('counts_toward_limit', null)
-          .in('status', RATED_ACTION_STATUSES)
-          .gte('created_at', timeFrameStart)
+        buildLegacyWindowCountQuery
       )
     ])
     counts.set(actionCode, (explicitResult.count || 0) + (legacyResult.count || 0))

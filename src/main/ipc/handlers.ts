@@ -74,7 +74,8 @@ function hasAnyEntitlement(entitlements: Partial<AuthEntitlements> | null | unde
     entitlements?.facebookCore ||
     entitlements?.facebookFanpage ||
     entitlements?.email ||
-    entitlements?.zalo
+    entitlements?.zalo ||
+    entitlements?.sms
   )
 }
 
@@ -86,14 +87,17 @@ function authEntitlementsEqual(
     !!left?.facebookFanpage === !!right?.facebookFanpage &&
     !!left?.email === !!right?.email &&
     !!left?.zalo === !!right?.zalo &&
+    !!left?.sms === !!right?.sms &&
     (left?.dailySendLimits?.facebookCore ?? null) === (right?.dailySendLimits?.facebookCore ?? null) &&
     (left?.dailySendLimits?.facebookFanpage ?? null) === (right?.dailySendLimits?.facebookFanpage ?? null) &&
     (left?.dailySendLimits?.email ?? null) === (right?.dailySendLimits?.email ?? null) &&
     (left?.dailySendLimits?.zalo ?? null) === (right?.dailySendLimits?.zalo ?? null) &&
+    (left?.dailySendLimits?.sms ?? null) === (right?.dailySendLimits?.sms ?? null) &&
     (left?.accountLimits?.facebookCore ?? null) === (right?.accountLimits?.facebookCore ?? null) &&
     (left?.accountLimits?.facebookFanpage ?? null) === (right?.accountLimits?.facebookFanpage ?? null) &&
     (left?.accountLimits?.email ?? null) === (right?.accountLimits?.email ?? null) &&
-    (left?.accountLimits?.zalo ?? null) === (right?.accountLimits?.zalo ?? null)
+    (left?.accountLimits?.zalo ?? null) === (right?.accountLimits?.zalo ?? null) &&
+    (left?.accountLimits?.sms ?? null) === (right?.accountLimits?.sms ?? null)
 }
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {

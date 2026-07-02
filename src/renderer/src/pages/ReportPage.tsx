@@ -39,6 +39,15 @@ const RANGE_OPTIONS: Array<{ value: ReportRangePreset; label: string }> = [
 
 const DEFAULT_PLATFORM = 'facebook'
 
+function getPlatformLabel(platform: string): string {
+  const normalized = platform.trim().toLowerCase()
+  if (normalized === 'facebook') return 'Facebook'
+  if (normalized === 'zalo') return 'Zalo'
+  if (normalized === 'email') return 'Email'
+  if (normalized === 'sms') return 'SMS'
+  return platform || 'Tất cả'
+}
+
 function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
@@ -603,7 +612,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
               onClick={() => toggleDropdown('platform')}
               disabled={loadingOptions}
             >
-              <strong>{platform || 'Tất cả'}</strong>
+              <strong>{getPlatformLabel(platform)}</strong>
               <ChevronDown size={14} />
             </button>
             {openDropdown === 'platform' && (
@@ -614,7 +623,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                     className={`report-option-button ${platform === item ? 'selected' : ''}`}
                     onClick={() => handlePlatformChange(item)}
                   >
-                    {item}
+                    {getPlatformLabel(item)}
                   </button>
                 ))}
               </div>
