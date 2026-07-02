@@ -190,6 +190,72 @@ const FIND_DATA_LOG_EXPORT_HEADERS = [
 const formatInputDataPhoneCarrier = (row: Partial<Pick<CampaignInputData, 'phone' | 'phoneCarrier'>>): string => (
   getVietnamMobileCarrierLabel(row.phoneCarrier || getVietnamMobileCarrier(row.phone)) || '-'
 )
+
+interface SmsCampaignDetailInfo {
+  phone: string
+  carrier: string
+  carrierLabel: string
+  simSlot: string
+  content: string
+  providerMessageId: string
+  errorCode: string
+  errorMessage: string
+  sentAt: string
+  deliveredAt: string
+  deviceId: string
+}
+
+const readDetailText = (value: unknown): string => {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return ''
+}
+
+const readDetailDataText = (data: Record<string, unknown> | undefined, ...keys: string[]): string => {
+  if (!data) return ''
+  for (const key of keys) {
+    const value = readDetailText(data[key])
+    if (value) return value
+  }
+  return ''
+}
+
+const getSmsCampaignDetailInfo = (detail: CampaignDetail): SmsCampaignDetailInfo => {
+  const data = detail.data
+  const phone = readDetailDataText(data, 'phone', 'targetPhone')
+  const carrier = readDetailDataText(data, 'phoneCarrier', 'carrier')
+  const simSlot = readDetailDataText(data, 'simSlot')
+  return {
+    phone,
+    carrier,
+    carrierLabel: getVietnamMobileCarrierLabel(carrier) || carrier || '-',
+    simSlot: simSlot ? `SIM ${simSlot}` : '-',
+    content: readDetailDataText(data, 'content', 'messageContent'),
+    providerMessageId: readDetailDataText(data, 'providerMessageId'),
+    errorCode: readDetailDataText(data, 'errorCode'),
+    errorMessage: readDetailDataText(data, 'errorMessage'),
+    sentAt: readDetailDataText(data, 'sentAt'),
+    deliveredAt: readDetailDataText(data, 'deliveredAt'),
+    deviceId: readDetailDataText(data, 'deviceId')
+  }
+}
+
+const getSmsCampaignDetailTitle = (detail: CampaignDetail): string => {
+  const sms = getSmsCampaignDetailInfo(detail)
+  return [
+    detail.log || '',
+    sms.phone ? `SĐT: ${sms.phone}` : '',
+    sms.carrierLabel !== '-' ? `Nhà mạng: ${sms.carrierLabel}` : '',
+    sms.simSlot !== '-' ? `SIM: ${sms.simSlot}` : '',
+    sms.content ? `Nội dung: ${sms.content}` : '',
+    sms.sentAt ? `Đã gửi lúc: ${formatDisplayDateTime(sms.sentAt)}` : '',
+    sms.deliveredAt ? `Đã nhận lúc: ${formatDisplayDateTime(sms.deliveredAt)}` : '',
+    sms.errorMessage ? `Lỗi: ${sms.errorMessage}` : '',
+    sms.errorCode ? `Mã lỗi: ${sms.errorCode}` : '',
+    sms.providerMessageId ? `Provider ID: ${sms.providerMessageId}` : ''
+  ].filter(Boolean).join('\n') || '-'
+}
+
 const POST_SEARCH_LOG_EXPORT_HEADERS = [
   'Thời gian',
   'Hành động',
@@ -254,6 +320,7 @@ const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FIND_DATA_ACTION_IDS = new Set([FIND_DATA_GROUP_ACTION_ID, FIND_DATA_SEARCH_ACTION_ID])
 const EMAIL_SEND_ACTION_ID = 'email_send'
+const SMS_SEND_ACTION_ID = 'sms_send'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const POST_SEARCH_LOG_EVENT_TYPES = ['extract_post_data', 'comment_seeding_post_search_summary']
 const FIND_DATA_TARGET_FIELDS = [
@@ -278,6 +345,8 @@ const INPUT_DATA_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUS
 
 const CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = [
   { value: 'thành công', label: 'thành công' },
+  { value: 'đã gửi', label: 'đã gửi' },
+  { value: 'đã nhận', label: 'đã nhận' },
   { value: 'đã xem', label: 'đã xem' },
   { value: 'đã click', label: 'đã click' },
   { value: 'thất bại', label: 'thất bại' },
@@ -2127,6 +2196,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       case 'tạm dừng': return 'var(--accent-error)'
       // Result actions status (per-milestone)
       case 'thành công': return 'var(--accent-success)'
+      case 'đã gửi': return 'var(--accent-success)'
+      case 'đã nhận': return 'var(--accent-success)'
       case 'đã xem': return 'var(--accent-success)'
       case 'đã click': return 'var(--accent-success)'
       case 'thất bại': return 'var(--accent-warning)'   // vàng — nghiệp vụ FB từ chối
@@ -2138,12 +2209,14 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
   const getDetailStatusLabel = (status: string) => (
     status === 'thành công' ? '✅ Thành công'
-      : status === 'đã xem' ? 'Đã xem'
-        : status === 'đã click' ? 'Đã click'
-          : status === 'thất bại' ? '⚠️ Thất bại'
-            : status === 'không tồn tại' ? '⚠️ Không tồn tại'
-              : status === 'lỗi' ? '❌ Lỗi'
-                : status
+      : status === 'đã gửi' ? 'Đã gửi'
+        : status === 'đã nhận' ? 'Đã nhận'
+          : status === 'đã xem' ? 'Đã xem'
+            : status === 'đã click' ? 'Đã click'
+              : status === 'thất bại' ? '⚠️ Thất bại'
+                : status === 'không tồn tại' ? '⚠️ Không tồn tại'
+                  : status === 'lỗi' ? '❌ Lỗi'
+                    : status
   )
 
   const getCampaignStatusClass = (status: string) => {
@@ -2181,7 +2254,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     : undefined
   const isSelectedFindDataCampaign = !!selectedCampaign && FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)
   const isSelectedEmailCampaign = selectedCampaign?.actionId === EMAIL_SEND_ACTION_ID
-  const isSelectedSmsCampaign = selectedCampaign?.actionId === 'sms_send'
+  const isSelectedSmsCampaign = selectedCampaign?.actionId === SMS_SEND_ACTION_ID
   const isSelectedEmailClickTrackingCampaign = isSelectedEmailCampaign && selectedCampaign?.extraSettings?.emailCheckLinkClicks === true
   const isSelectedCommentSeedingFeedCampaign = selectedCampaign?.actionId === COMMENT_SEEDING_FEED_ACTION_ID
   const filteredCampaignInputData = useMemo(() => {
@@ -2230,6 +2303,16 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     actionDetailFilters.timePreset,
     campaignDetails
   ])
+  const actionDetailStatusOptions = useMemo<CampaignFilterOption[]>(() => {
+    const optionMap = new Map(CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS.map(option => [option.value, option]))
+    campaignDetails.forEach(detail => {
+      const status = String(detail.status || '').trim()
+      if (status && !optionMap.has(status)) {
+        optionMap.set(status, { value: status, label: status })
+      }
+    })
+    return Array.from(optionMap.values())
+  }, [campaignDetails])
   const linkedFindDataSourceCampaignIds = useMemo(() => {
     if (!selectedCampaign) return []
     return uniqueNumbers(
@@ -2468,6 +2551,23 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   }
 
   const renderCampaignDetailLog = (detail: CampaignDetail) => {
+    if (isSelectedSmsCampaign) {
+      const sms = getSmsCampaignDetailInfo(detail)
+      return (
+        <div className="sms-detail-history-cell">
+          <div className="campaign-detail-log-text">{detail.log || '-'}</div>
+          {(sms.sentAt || sms.deliveredAt || sms.errorMessage || sms.providerMessageId) && (
+            <div className="sms-detail-meta">
+              {sms.sentAt && <span>Gửi: {formatDisplayDateTime(sms.sentAt)}</span>}
+              {sms.deliveredAt && <span>Nhận: {formatDisplayDateTime(sms.deliveredAt)}</span>}
+              {sms.errorMessage && <span>Lỗi: {sms.errorMessage}</span>}
+              {sms.providerMessageId && <span>Provider: {sms.providerMessageId}</span>}
+            </div>
+          )}
+        </div>
+      )
+    }
+
     const payload = getFindDataPayload(detail)
     const postUrl = typeof detail.postUrl === 'string' ? detail.postUrl.trim() : ''
     const isFindDataDetail = isSelectedFindDataCampaign && detail.actionName === 'Tìm data'
@@ -2589,6 +2689,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   }
 
   const getCampaignDetailLogTitle = (detail: CampaignDetail) => {
+    if (isSelectedSmsCampaign) return getSmsCampaignDetailTitle(detail)
     const postUrl = typeof detail.postUrl === 'string' ? detail.postUrl.trim() : ''
     return [detail.log || '', postUrl].filter(Boolean).join('\n') || '-'
   }
@@ -2608,23 +2709,64 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     }
 
     try {
-      const rows = filteredCampaignDetails.map((detail, index) => ({
-        STT: index + 1,
-        'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
-        'Hành động': detail.actionName || '',
-        'Trạng thái': detail.status,
-        'Chi tiết': detail.log || '',
-        'Link bài viết': detail.postUrl || ''
-      }))
+      const rows = filteredCampaignDetails.map((detail, index) => {
+        if (isSelectedSmsCampaign) {
+          const sms = getSmsCampaignDetailInfo(detail)
+          return {
+            STT: index + 1,
+            'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
+            'SĐT': sms.phone,
+            'Nhà mạng': sms.carrierLabel === '-' ? '' : sms.carrierLabel,
+            'SIM': sms.simSlot === '-' ? '' : sms.simSlot,
+            'Hành động': detail.actionName || '',
+            'Trạng thái': detail.status,
+            'Nội dung SMS': sms.content,
+            'Chi tiết': detail.log || '',
+            'Đã gửi lúc': sms.sentAt ? new Date(sms.sentAt).toLocaleString('vi-VN') : '',
+            'Đã nhận lúc': sms.deliveredAt ? new Date(sms.deliveredAt).toLocaleString('vi-VN') : '',
+            'Mã lỗi': sms.errorCode,
+            'Lỗi': sms.errorMessage,
+            'Provider ID': sms.providerMessageId,
+            'Device ID': sms.deviceId
+          }
+        }
+
+        return {
+          STT: index + 1,
+          'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
+          'Hành động': detail.actionName || '',
+          'Trạng thái': detail.status,
+          'Chi tiết': detail.log || '',
+          'Link bài viết': detail.postUrl || ''
+        }
+      })
       const sheet = utils.json_to_sheet(rows)
-      sheet['!cols'] = [
-        { wch: 6 },
-        { wch: 22 },
-        { wch: 18 },
-        { wch: 14 },
-        { wch: 70 },
-        { wch: 40 }
-      ]
+      sheet['!cols'] = isSelectedSmsCampaign
+        ? [
+          { wch: 6 },
+          { wch: 22 },
+          { wch: 14 },
+          { wch: 14 },
+          { wch: 10 },
+          { wch: 18 },
+          { wch: 14 },
+          { wch: 70 },
+          { wch: 50 },
+          { wch: 22 },
+          { wch: 22 },
+          { wch: 18 },
+          { wch: 40 },
+          { wch: 30 },
+          { wch: 36 }
+        ]
+        : [
+          { wch: 6 },
+          { wch: 22 },
+          { wch: 18 },
+          { wch: 14 },
+          { wch: 70 },
+          { wch: 40 }
+        ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Lich su hanh dong')
       const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
@@ -4167,7 +4309,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                       handleActionDetailTimePresetChange,
                       value => setActionDetailFilters(prev => ({ ...prev, dateFrom: value })),
                       value => setActionDetailFilters(prev => ({ ...prev, dateTo: value })),
-                      CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS,
+                      actionDetailStatusOptions,
                       value => setActionDetailFilters(prev => ({ ...prev, status: value }))
                     )}
                     <div className="detail-filter-actions">
@@ -4198,31 +4340,63 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
-                        <tr>
-                          <th>Thời gian</th>
-                          <th>Hành động</th>
-                          <th>Trạng thái</th>
-                          <th>Chi tiết</th>
-                        </tr>
+                        {isSelectedSmsCampaign ? (
+                          <tr>
+                            <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
+                            <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>SĐT</th>
+                            <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Nhà mạng</th>
+                            <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>SIM</th>
+                            <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                            <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung SMS</th>
+                            <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
+                          </tr>
+                        ) : (
+                          <tr>
+                            <th>Thời gian</th>
+                            <th>Hành động</th>
+                            <th>Trạng thái</th>
+                            <th>Chi tiết</th>
+                          </tr>
+                        )}
                       </thead>
                       <tbody>
                         {filteredCampaignDetails.map(a => {
                           const createdAtLabel = formatDisplayDateTime(a.createdAt)
                           const statusLabel = getDetailStatusLabel(a.status)
                           const detailLogTitle = getCampaignDetailLogTitle(a)
+                          const smsDetail = isSelectedSmsCampaign ? getSmsCampaignDetailInfo(a) : null
                           return (
                             <tr key={a.id}>
                               <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
                                 {createdAtLabel}
                               </td>
-                              <td title={a.actionName || '-'}>
-                                <strong>{a.actionName}</strong>
-                              </td>
+                              {isSelectedSmsCampaign ? (
+                                <>
+                                  <td title={smsDetail?.phone || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                    {smsDetail?.phone || '-'}
+                                  </td>
+                                  <td title={smsDetail?.carrierLabel || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                    {smsDetail?.carrierLabel || '-'}
+                                  </td>
+                                  <td title={smsDetail?.simSlot || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                    {smsDetail?.simSlot || '-'}
+                                  </td>
+                                </>
+                              ) : (
+                                <td title={a.actionName || '-'}>
+                                  <strong>{a.actionName}</strong>
+                                </td>
+                              )}
                               <td title={statusLabel}>
                                 <span style={{ color: getStatusColor(a.status) }}>
                                   {statusLabel}
                                 </span>
                               </td>
+                              {isSelectedSmsCampaign && (
+                                <td className="campaign-detail-sms-content-cell" title={smsDetail?.content || '-'}>
+                                  {smsDetail?.content || '-'}
+                                </td>
+                              )}
                               <td className="campaign-detail-log-cell" title={detailLogTitle}>
                                 {renderCampaignDetailLog(a)}
                               </td>
