@@ -18,12 +18,19 @@ const UPDATE_CONFIGS: Record<string, PlatformUpdateConfig> = {
     versionUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_win.txt',
     installerUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.exe',
     installerFilename: 'akaAgent.exe'
-  },
-  darwin: {
-    versionUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_mac.txt',
-    installerUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.dmg',
-    installerFilename: 'akaAgent.dmg'
   }
+}
+
+const MAC_APPLE_SILICON_UPDATE_CONFIG: PlatformUpdateConfig = {
+  versionUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_mac.txt',
+  installerUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.dmg',
+  installerFilename: 'akaAgent.dmg'
+}
+
+const MAC_INTEL_UPDATE_CONFIG: PlatformUpdateConfig = {
+  versionUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_mac_intel.txt',
+  installerUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgentIntel.dmg',
+  installerFilename: 'akaAgentIntel.dmg'
 }
 
 export interface UpdateCheckResult {
@@ -57,6 +64,12 @@ function parseVersion(version: string): [number, number, number] | null {
 }
 
 function getUpdateConfig(): PlatformUpdateConfig | null {
+  if (process.platform === 'darwin') {
+    return process.arch === 'x64'
+      ? MAC_INTEL_UPDATE_CONFIG
+      : MAC_APPLE_SILICON_UPDATE_CONFIG
+  }
+
   return UPDATE_CONFIGS[process.platform] || null
 }
 

@@ -9,7 +9,8 @@ npm install              # Lần đầu — auto chạy electron-builder install
 npm run dev              # Dev mode (HMR cho renderer, watch cho main)
 npm run build            # Build production (out/main + out/preload + out/renderer)
 npm run build:win        # Build → đóng gói NSIS installer (Windows)
-npm run build:mac        # Build → đóng gói DMG (macOS)
+npm run build:mac        # Build → đóng gói DMG (macOS Apple Silicon)
+npm run build:mac:intel  # Build → đóng gói DMG (macOS Intel)
 npm run preview          # Preview production build
 
 # Typecheck — KHÔNG có lint/test commands
@@ -213,7 +214,7 @@ Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repositor
 
 ### Auto-update
 
-[src/main/services/updater.ts](src/main/services/updater.ts) đọc local version từ `resources/version.txt` (dev fallback `version.txt`/`app.getVersion()`) và chọn remote theo platform: Windows `version_win.txt`/`akaAgent.exe`, macOS `version_mac.txt`/`akaAgent.dmg`. Version phải dùng format `x.x.x`; compare numeric theo major/minor/patch.
+[src/main/services/updater.ts](src/main/services/updater.ts) đọc local version từ `resources/version.txt` (dev fallback `version.txt`/`app.getVersion()`) và chọn remote theo platform/arch: Windows `version_win.txt`/`akaAgent.exe`, macOS Apple Silicon `version_mac.txt`/`akaAgent.dmg`, macOS Intel `version_mac_intel.txt`/`akaAgentIntel.dmg`. Version phải dùng format `x.x.x`; compare numeric theo major/minor/patch.
 
 ### Renderer state (Zustand stores)
 

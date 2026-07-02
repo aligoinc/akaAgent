@@ -9,7 +9,8 @@ npm install              # Lần đầu — auto chạy electron-builder install
 npm run dev              # Dev mode (HMR cho renderer, watch cho main)
 npm run build            # Build production (out/main + out/preload + out/renderer)
 npm run build:win        # Build → đóng gói NSIS installer (Windows)
-npm run build:mac        # Build → đóng gói DMG (macOS)
+npm run build:mac        # Build → đóng gói DMG (macOS Apple Silicon)
+npm run build:mac:intel  # Build → đóng gói DMG (macOS Intel)
 npm run preview          # Preview production build
 
 # Typecheck — KHÔNG có lint/test commands
