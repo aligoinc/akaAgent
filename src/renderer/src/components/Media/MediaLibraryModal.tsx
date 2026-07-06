@@ -867,7 +867,7 @@ export default function MediaLibraryModal({
                         {isPicker && <th style={{ width: 44 }}></th>}
                         <th style={{ width: 56, textAlign: 'center' }}>STT</th>
                         <th style={{ width: canDeleteMedia ? 76 : 44 }}></th>
-                        <th style={{ width: 320 }}>Tên file</th>
+                        <th style={{ width: 240 }}>Tên file</th>
                         <th style={{ width: 132 }}>Loại</th>
                         <th style={{ width: 160, whiteSpace: 'nowrap' }}>Dung lượng</th>
                         <th style={{ width: 160 }}>Local path</th>
