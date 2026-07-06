@@ -9671,6 +9671,50 @@ button.btn-icon.campaign-control-button.assistant {
   color: var(--accent-warning);
 }
 
+.external-sms-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.external-sms-section-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.external-sms-section-note .btn {
+  flex-shrink: 0;
+}
+
+.external-sms-section-body .stepper-form-group {
+  margin-bottom: 0;
+}
+
+.external-sms-section-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.external-sms-option-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.external-sms-option-list.compact {
+  max-height: none;
+}
+
 .extra-image-upload {
   display: flex;
   align-items: center;

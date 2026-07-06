@@ -2,10 +2,13 @@ import {
   AkaBizCampaignListItem,
   AkaBizCampaignListKind,
   AkaBizIntegrationKind,
+  AkaBizSmsShopListItem,
   AkaBizStaffBasic
 } from '../../shared/types'
 
 const AKA_BIZ_API_BASE_URL = 'https://akabiz-api.vercel.app'
+const AKA_BIZ_LEGACY_API_BASE_URL = 'https://api.akaapp.vn'
+const AKA_BIZ_RUNTIME_API_BASE_URL = 'https://app.akabiz.net'
 
 interface AkaBizApiResponse<T = unknown> {
   status: number
@@ -36,12 +39,12 @@ export interface AkaBizZaloCampaignDetailInput {
   isAutomate?: boolean | null
 }
 
-function apiPath(path: string): string {
-  return `${AKA_BIZ_API_BASE_URL}${path}`
+function apiPath(path: string, baseUrl = AKA_BIZ_API_BASE_URL): string {
+  return `${baseUrl}${path}`
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiPath(path), {
+async function requestJson<T>(path: string, init?: RequestInit, baseUrl?: string): Promise<T> {
+  const response = await fetch(apiPath(path, baseUrl), {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -113,6 +116,15 @@ export async function listAkaBizCampaigns(kind: AkaBizCampaignListKind, staffId:
   }))
 }
 
+export async function listAkaBizSmsShops(staffId: number): Promise<AkaBizSmsShopListItem[]> {
+  const rows = await requestJson<AkaBizSmsShopListItem[]>(
+    `/api/Shop/get?staffId=${encodeURIComponent(String(staffId))}&shopTypes=smsmobile`,
+    undefined,
+    AKA_BIZ_LEGACY_API_BASE_URL
+  )
+  return Array.isArray(rows) ? rows : []
+}
+
 export async function getZaloCampaign(campaignId: number): Promise<AkaBizCampaignSummary> {
   return requestJson<AkaBizCampaignSummary>(`/api/zalo/campaigns/${encodeURIComponent(String(campaignId))}`)
 }
@@ -143,8 +155,13 @@ export async function addSmsCampaignDetail(input: {
   name: string
   content: string
 }): Promise<void> {
-  await requestJson('/api/sms/campaign-details', {
+  await requestJson('/api/Campaign/addDetailToSendSms', {
     method: 'POST',
-    body: JSON.stringify(input)
-  })
+    body: JSON.stringify({
+      shopId: input.shopId,
+      campaignId: input.campaignId,
+      phone: input.phone,
+      content: input.content
+    })
+  }, AKA_BIZ_RUNTIME_API_BASE_URL)
 }

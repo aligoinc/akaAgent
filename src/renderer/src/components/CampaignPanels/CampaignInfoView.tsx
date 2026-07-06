@@ -93,6 +93,11 @@ const COMMENT_ACTIONS = new Set(['facebook_group_post', 'facebook_comment_seedin
 const MESSAGE_ACTIONS = new Set(['facebook_message_friend', 'facebook_message_uid', 'facebook_page_to_message'])
 const ZALO_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
+const EXTERNAL_SMS_STATUS_LABELS: Record<string, string> = {
+  'thành công': 'Thành công',
+  'thất bại': 'Thất bại',
+  'không tồn tại': 'Không tồn tại'
+}
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
 
@@ -129,6 +134,13 @@ const getNumberList = (value: unknown): number[] => {
 const getStringList = (value: unknown): string[] => {
   if (!Array.isArray(value)) return []
   return value.map(item => String(item || '').trim()).filter(Boolean)
+}
+
+const formatExternalSmsStatuses = (value: unknown): string => {
+  const statuses = getStringList(value)
+    .map(status => status.toLocaleLowerCase('vi-VN'))
+    .map(status => EXTERNAL_SMS_STATUS_LABELS[status] || status)
+  return statuses.length > 0 ? statuses.join(', ') : '-'
 }
 
 const getActionCodeLabel = (code: string) => ACTION_CODE_LABELS[code] || code
@@ -346,6 +358,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || !!extra.zaloFriendRecommendationDataMaterializedAt
     || extra.zaloCancelFriendRequestLimit !== undefined
     || !!extra.zaloCancelFriendRequestDataMaterializedAt
+    || extra.externalSmsEnabled === true
   const hasFindDataSettings = actionId === 'facebook_find_data_group' || actionId === 'facebook_find_data_search'
     || getFindDataTypeLabels(extra).length > 0
     || getFindDataSourceLabels(extra).length > 0
@@ -436,6 +449,10 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     },
     { label: 'Không gửi tin theo danh sách', value: onOff(extra.zaloFriendBlocklistEnabled), hidden: actionId !== 'zalo_message_friend' && !extra.zaloFriendBlocklistEnabled },
     { label: 'Danh sách không gửi tin', value: textOrDash(extra.zaloFriendBlocklistName || extra.zaloFriendBlocklistId), hidden: actionId !== 'zalo_message_friend' || !extra.zaloFriendBlocklistEnabled },
+    { label: 'Gửi tin nhắn Sms', value: onOff(extra.externalSmsEnabled), hidden: !extra.externalSmsEnabled },
+    { label: 'Tài khoản Sms', value: textOrDash(getNumberList(extra.externalSmsShopIds).join(', ')), hidden: !extra.externalSmsEnabled },
+    { label: 'Trạng thái gửi Sms', value: formatExternalSmsStatuses(extra.externalSmsStatuses), hidden: !extra.externalSmsEnabled },
+    { label: 'Nội dung Sms', value: textOrDash(extra.externalSmsContent), fullWidth: true, hidden: !extra.externalSmsEnabled },
     { label: 'Page inbox', value: textOrDash(extra.pageInboxPageName || extra.pageInboxPageUid), hidden: actionId !== 'facebook_page_to_message' && !extra.pageInboxPageUid },
     { label: 'Page UID', value: textOrDash(extra.pageInboxPageUid), hidden: actionId !== 'facebook_page_to_message' && !extra.pageInboxPageUid }
   ]

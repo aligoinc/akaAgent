@@ -5,7 +5,7 @@ import {
   AkaBizStaffBasic,
   IPC_EVENTS
 } from '../../../shared/types'
-import { listAkaBizCampaigns, lookupAkaBizStaff } from '../../services/akaBizApiClient'
+import { listAkaBizCampaigns, listAkaBizSmsShops, lookupAkaBizStaff } from '../../services/akaBizApiClient'
 import {
   listAkaBizDesktopCampaigns,
   resolveAkaBizDesktopDbPath
@@ -73,5 +73,14 @@ export function registerAkaBizIntegrationHandlers(): void {
       throw new Error(kind === 'sms' ? 'Chưa tích hợp akaBiz Sms.' : 'Chưa tích hợp akaBiz Zalo Web.')
     }
     return listAkaBizCampaigns(kind, integration.staffId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.AKABIZ_SMS_SHOPS_LIST, async () => {
+    const integrations = await getAkaBizIntegrations()
+    const integration = integrations.sms
+    if (!integration?.staffId) {
+      throw new Error('Chưa tích hợp akaBiz Sms.')
+    }
+    return listAkaBizSmsShops(integration.staffId)
   })
 }
