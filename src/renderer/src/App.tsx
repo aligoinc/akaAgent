@@ -21,6 +21,7 @@ import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 import AccountProfileModal from './components/Settings/AccountProfileModal'
 import MediaLibraryModal from './components/Media/MediaLibraryModal'
 import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
+import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeedbackLauncher'
 
 type UpdatePromptSource = 'startup' | 'manual'
 
@@ -369,6 +370,7 @@ export default function App() {
           onClose={handleCloseUpdateModal}
         />
       )}
+      <CustomerFeedbackLauncher />
     </div>
   )
 }
