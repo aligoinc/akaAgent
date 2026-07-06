@@ -869,7 +869,7 @@ export default function MediaLibraryModal({
                         <th style={{ width: canDeleteMedia ? 76 : 44 }}></th>
                         <th style={{ width: 240 }}>Tên file</th>
                         <th style={{ width: 132 }}>Loại</th>
-                        <th style={{ width: 160, whiteSpace: 'nowrap' }}>Dung lượng</th>
+                        <th style={{ width: 104, whiteSpace: 'nowrap' }}>Dung lượng</th>
                         <th style={{ width: 160 }}>Local path</th>
                         <th style={{ width: 200 }}>Cloud URL</th>
                         <th style={{ width: 180, whiteSpace: 'nowrap' }}>Ngày upload</th>
@@ -933,7 +933,7 @@ export default function MediaLibraryModal({
                               </div>
                             </td>
                             <td className="media-library-type-cell" title={file.mimeType || ''}>{file.mimeType || '-'}</td>
-                            <td style={{ width: 160, whiteSpace: 'nowrap' }}>{formatBytes(file.sizeBytes)}</td>
+                            <td style={{ width: 104, whiteSpace: 'nowrap' }}>{formatBytes(file.sizeBytes)}</td>
                             <td className="media-library-path-cell" title={file.localPath || ''}>{file.localPath || '-'}</td>
                             <td className="media-library-url-cell" title={file.cloudUrl}>
                               {file.cloudUrl ? (

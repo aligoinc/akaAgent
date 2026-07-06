@@ -1988,7 +1988,7 @@ button.btn-icon:not(.btn):disabled {
 }
 
 .media-library-grid .campaign-grid {
-  min-width: 1240px;
+  min-width: 1184px;
   table-layout: fixed;
 }
 
