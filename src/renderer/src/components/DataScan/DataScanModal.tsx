@@ -12,7 +12,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
 import type { AuthEntitlements } from '../../../../shared/types'
 
-export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_profile_friends' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers'
+export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_post_likes' | 'facebook_profile_friends' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers'
 type DataScanPlatform = 'facebook' | 'zalo'
 type PageInboxTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 interface PageInboxAppliedFilters {
@@ -31,11 +31,13 @@ interface PageInboxSelectedRange {
 }
 
 const POST_COMMENTERS_ACTION_ID: DataScanAction = 'facebook_post_commenters'
+const POST_LIKES_ACTION_ID: DataScanAction = 'facebook_post_likes'
 const PROFILE_FRIENDS_ACTION_ID: DataScanAction = 'facebook_profile_friends'
 const PAGE_INBOX_CUSTOMERS_ACTION_ID: DataScanAction = 'facebook_page_inbox_customers'
 const ZALO_GROUP_MEMBERS_ACTION_ID: DataScanAction = 'zalo_group_members'
 const ZALO_REMARKETING_CUSTOMERS_ACTION_ID: DataScanAction = 'zalo_remarketing_customers'
 const DEFAULT_POST_COMMENTER_LIMIT = 100
+const DEFAULT_POST_LIKE_LIMIT = 1000
 const DEFAULT_PROFILE_FRIEND_LIMIT = 1000
 const PAGE_INBOX_PAGE_SIZE = 100
 const DEFAULT_PAGE_INBOX_TIME_PRESET: PageInboxTimePreset = '30_days'
@@ -112,6 +114,14 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
     contactType: 'person',
     emptyText: 'Nhập link bài post rồi tải data',
     loadingText: 'Đang tải người comment bài post...'
+  },
+  {
+    id: POST_LIKES_ACTION_ID,
+    label: 'Facebook - Lấy người like bài post',
+    platform: 'facebook',
+    contactType: 'person',
+    emptyText: 'Nhập link bài post rồi tải data',
+    loadingText: 'Đang tải người like bài post...'
   },
   {
     id: PROFILE_FRIENDS_ACTION_ID,
@@ -725,13 +735,11 @@ const getGroupApprovalStatus = (contact: AutoAccountContact) => {
 }
 
 const getContactStatusLabel = (contact: AutoAccountContact) => {
-  if (contact.contactType === 'person' && contact.extraData?.source === 'facebook_post_commenters') {
-    return contact.isFriend ? 'Bạn bè' : 'Chưa xác định'
+  if (contact.contactType === 'person') {
+    if (contact.isFriend === true) return 'Bạn bè'
+    if (contact.isFriend === false) return 'Người lạ'
+    return 'Chưa xác định'
   }
-  if (contact.contactType === 'person' && contact.extraData?.source === 'facebook_profile_friends') {
-    return contact.isFriend ? 'Bạn bè' : 'Bạn của profile'
-  }
-  if (contact.contactType === 'person') return contact.isFriend ? 'Bạn bè' : 'Không còn bạn bè'
   if (contact.contactType === 'group') return contact.isJoined ? 'Đã tham gia' : 'Chưa tham gia'
   return ''
 }
@@ -750,7 +758,7 @@ const getStatusFilterOptions = (contactType: ContactType): Array<{ value: Contac
   if (contactType === 'person') {
     return [
       { value: 'active', label: 'Bạn bè' },
-      { value: 'inactive', label: 'Không còn bạn bè' },
+      { value: 'inactive', label: 'Người lạ / chưa xác định' },
       { value: 'all', label: 'Tất cả' }
     ]
   }
@@ -830,6 +838,8 @@ export default function DataScanModal({
   const [rangeEnd, setRangeEnd] = useState(100)
   const [postCommentersUrl, setPostCommentersUrl] = useState('')
   const [postCommentersLimit, setPostCommentersLimit] = useState(DEFAULT_POST_COMMENTER_LIMIT)
+  const [postLikesUrl, setPostLikesUrl] = useState('')
+  const [postLikesLimit, setPostLikesLimit] = useState(DEFAULT_POST_LIKE_LIMIT)
   const [profileFriendsUrl, setProfileFriendsUrl] = useState('')
   const [profileFriendsLimit, setProfileFriendsLimit] = useState(DEFAULT_PROFILE_FRIEND_LIMIT)
   const [pageInboxPages, setPageInboxPages] = useState<AutoAccountContact[]>([])
@@ -891,6 +901,7 @@ export default function DataScanModal({
   )
   const canSwitchLockedAction = !!allowedActions?.length && availableActions.length > 1
   const isPostCommentersAction = action === POST_COMMENTERS_ACTION_ID
+  const isPostLikesAction = action === POST_LIKES_ACTION_ID
   const isProfileFriendsAction = action === PROFILE_FRIENDS_ACTION_ID
   const isPageInboxAction = action === PAGE_INBOX_CUSTOMERS_ACTION_ID
   const isZaloGroupMembersAction = action === ZALO_GROUP_MEMBERS_ACTION_ID
@@ -899,6 +910,10 @@ export default function DataScanModal({
   const normalizedPostCommentersUrl = useMemo(
     () => normalizeFacebookPostUrlForCompare(postCommentersUrl),
     [postCommentersUrl]
+  )
+  const normalizedPostLikesUrl = useMemo(
+    () => normalizeFacebookPostUrlForCompare(postLikesUrl),
+    [postLikesUrl]
   )
   const normalizedProfileFriendsUrl = useMemo(
     () => normalizeFacebookProfileUrlForCompare(profileFriendsUrl),
@@ -1121,11 +1136,20 @@ export default function DataScanModal({
     contactType: actionDef.contactType,
     statusFilter: hasStatusFilter ? statusFilter : 'all',
     search,
-    sourcePostUrl: isPostCommentersAction ? normalizedPostCommentersUrl : undefined,
+    source: isPostCommentersAction
+      ? 'facebook_post_commenters'
+      : isPostLikesAction
+        ? 'facebook_post_likes'
+        : undefined,
+    sourcePostUrl: isPostCommentersAction
+      ? normalizedPostCommentersUrl
+      : isPostLikesAction
+        ? normalizedPostLikesUrl
+        : undefined,
     sourceProfileUrl: isProfileFriendsAction ? normalizedProfileFriendsUrl : undefined,
     ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, hasStatusFilter, hasZaloTagFilters, isPostCommentersAction, isProfileFriendsAction, normalizedPostCommentersUrl, normalizedProfileFriendsUrl, search, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
+  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, hasStatusFilter, hasZaloTagFilters, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction, normalizedPostCommentersUrl, normalizedPostLikesUrl, normalizedProfileFriendsUrl, search, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
 
   const getZaloGroupMemberListQuery = useCallback((overrides: Partial<ZaloGroupMemberContactListQuery> = {}): ZaloGroupMemberContactListQuery => ({
     zaloGroupId: zaloGroupMemberGroupId,
@@ -1378,6 +1402,12 @@ export default function DataScanModal({
           setPageInboxTotal(0)
           return
         }
+        if (isPostLikesAction && !normalizedPostLikesUrl) {
+          if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
+          setContacts([])
+          setPageInboxTotal(0)
+          return
+        }
         if (isProfileFriendsAction && !normalizedProfileFriendsUrl) {
           if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
           setContacts([])
@@ -1412,10 +1442,12 @@ export default function DataScanModal({
     getZaloRemarketingListQuery,
     isPageInboxAction,
     isPostCommentersAction,
+    isPostLikesAction,
     isProfileFriendsAction,
     isZaloGroupMembersAction,
     isZaloRemarketingCustomersAction,
     normalizedPostCommentersUrl,
+    normalizedPostLikesUrl,
     normalizedProfileFriendsUrl,
     pageInboxAppliedFilters,
     pageInboxPage,
@@ -1562,7 +1594,7 @@ export default function DataScanModal({
     setSelectedIds(new Set())
     setSelectedGroupIds(new Set())
     setModalSelectedGroupIds(new Set())
-    setStatusFilter((isPostCommentersAction || isProfileFriendsAction) ? 'all' : (hasStatusFilter ? (initialStatusFilter || 'active') : 'all'))
+    setStatusFilter((isPostCommentersAction || isPostLikesAction || isProfileFriendsAction) ? 'all' : (hasStatusFilter ? (initialStatusFilter || 'active') : 'all'))
     setNewGroupName('')
     setShowNewGroupInput(false)
     setShowAddGroupModal(false)
@@ -1593,7 +1625,7 @@ export default function DataScanModal({
       setZaloRemarketingDateFrom(defaults.fromDate)
       setZaloRemarketingDateTo(defaults.toDate)
     }
-  }, [action, hasStatusFilter, initialShowGroupPanel, initialStatusFilter, isPostCommentersAction, isProfileFriendsAction])
+  }, [action, hasStatusFilter, initialShowGroupPanel, initialStatusFilter, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction])
 
   useEffect(() => {
     if (!isZaloRemarketingCustomersAction) return
@@ -1621,6 +1653,7 @@ export default function DataScanModal({
     search,
     statusFilter,
     normalizedPostCommentersUrl,
+    normalizedPostLikesUrl,
     normalizedProfileFriendsUrl,
     akaBizNoTagFilter,
     akaBizTagFilterIds,
@@ -1783,6 +1816,10 @@ export default function DataScanModal({
         const completedPostUrl = normalizeFacebookPostUrlForCompare(result.sourcePostUrl)
         if (!completedPostUrl || completedPostUrl !== normalizedPostCommentersUrl) return
       }
+      if (isPostLikesAction) {
+        const completedPostUrl = normalizeFacebookPostUrlForCompare(result.sourcePostUrl)
+        if (!completedPostUrl || completedPostUrl !== normalizedPostLikesUrl) return
+      }
       if (isProfileFriendsAction) {
         const completedProfileUrl = normalizeFacebookProfileUrlForCompare(result.sourceProfileUrl)
         if (!completedProfileUrl || completedProfileUrl !== normalizedProfileFriendsUrl) return
@@ -1792,6 +1829,9 @@ export default function DataScanModal({
       setMinimized(false)
       if (isPostCommentersAction && result.sourcePostUrl) {
         setPostCommentersUrl(String(result.sourcePostUrl))
+      }
+      if (isPostLikesAction && result.sourcePostUrl) {
+        setPostLikesUrl(String(result.sourcePostUrl))
       }
       if (isProfileFriendsAction && result.sourceProfileUrl) {
         setProfileFriendsUrl(String(result.sourceProfileUrl))
@@ -1825,6 +1865,7 @@ export default function DataScanModal({
     actionDef.contactType,
     isPageInboxAction,
     isPostCommentersAction,
+    isPostLikesAction,
     isProfileFriendsAction,
     isZaloGroupMembersAction,
     loadCachedContacts,
@@ -1834,6 +1875,7 @@ export default function DataScanModal({
     refreshPageInboxContactsAfterScan,
     resetPagedContactSelection,
     normalizedPostCommentersUrl,
+    normalizedPostLikesUrl,
     normalizedProfileFriendsUrl,
     showAlert
   ])
@@ -2389,6 +2431,20 @@ export default function DataScanModal({
         return
       }
     }
+    if (isPostLikesAction) {
+      if (!postLikesUrl.trim()) {
+        showAlert('Vui lòng nhập link bài post.', 'error')
+        return
+      }
+      if (!normalizeFacebookPostUrlForCompare(postLikesUrl)) {
+        showAlert('Link bài post Facebook không hợp lệ.', 'error')
+        return
+      }
+      if (postLikesLimit < 1) {
+        showAlert('Số lượng phải lớn hơn 0.', 'error')
+        return
+      }
+    }
     if (isProfileFriendsAction) {
       if (!profileFriendsUrl.trim()) {
         showAlert('Vui lòng nhập link profile.', 'error')
@@ -2434,6 +2490,8 @@ export default function DataScanModal({
     try {
       const result = isPostCommentersAction
         ? await window.electronAPI.loadPostCommenters(accountId, postCommentersUrl, postCommentersLimit)
+        : isPostLikesAction
+          ? await window.electronAPI.loadPostLikes(accountId, postLikesUrl, postLikesLimit)
         : isProfileFriendsAction
           ? await window.electronAPI.loadProfileFriends(accountId, profileFriendsUrl, profileFriendsLimit)
         : isPageInboxAction
@@ -2458,6 +2516,9 @@ export default function DataScanModal({
       setMinimized(false)
       if (isPostCommentersAction && result.sourcePostUrl) {
         setPostCommentersUrl(String(result.sourcePostUrl))
+      }
+      if (isPostLikesAction && result.sourcePostUrl) {
+        setPostLikesUrl(String(result.sourcePostUrl))
       }
       if (isProfileFriendsAction && result.sourceProfileUrl) {
         setProfileFriendsUrl(String(result.sourceProfileUrl))
@@ -2777,6 +2838,33 @@ export default function DataScanModal({
                 </div>
               )}
 
+              {isPostLikesAction && (
+                <div className="data-scan-post-commenters-controls">
+                  <div className="stepper-form-group">
+                    <label>Link bài post</label>
+                    <input
+                      className="stepper-input"
+                      value={postLikesUrl}
+                      onChange={event => setPostLikesUrl(event.target.value)}
+                      placeholder="Dán link bài post Facebook..."
+                      disabled={scanLoading}
+                    />
+                  </div>
+
+                  <div className="stepper-form-group">
+                    <label>Số lượng</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className="stepper-input"
+                      value={postLikesLimit}
+                      onChange={event => setPostLikesLimit(normalizePositiveNumber(event.target.value, DEFAULT_POST_LIKE_LIMIT))}
+                      disabled={scanLoading}
+                    />
+                  </div>
+                </div>
+              )}
+
               {isProfileFriendsAction && (
                 <div className="data-scan-post-commenters-controls">
                   <div className="stepper-form-group">
@@ -2937,6 +3025,7 @@ export default function DataScanModal({
                     ||
                     !accountId
                     || (isPostCommentersAction && !postCommentersUrl.trim())
+                    || (isPostLikesAction && !postLikesUrl.trim())
                     || (isProfileFriendsAction && !profileFriendsUrl.trim())
                     || (isPageInboxAction && !pageInboxPageUid)
                     || (isZaloGroupMembersAction && zaloGroupMemberMode === 'joined_group' && !zaloGroupMemberGroupId)
