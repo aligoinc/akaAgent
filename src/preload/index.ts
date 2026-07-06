@@ -455,6 +455,9 @@ const electronAPI = {
   loadProfileFriends: (accountId: number, profileUrl: string, maxFriends: number): Promise<ContactLoadResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_PROFILE_FRIENDS, accountId, profileUrl, maxFriends),
 
+  loadGroupMembers: (accountId: number, groupUrl: string, maxGroupMembers: number): Promise<ContactLoadResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_GROUP_MEMBERS, accountId, groupUrl, maxGroupMembers),
+
   loadPageInboxCustomers: (accountId: number, pageUid: string, pageName?: string): Promise<ContactLoadResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS, accountId, pageUid, pageName),
 
