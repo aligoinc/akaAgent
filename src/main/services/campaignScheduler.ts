@@ -381,6 +381,7 @@ export class CampaignScheduler {
   private activeV2Aborts = new Map<number, AbortController>()
   private pauseRequests = new Set<number>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
+  private internalSmsPushedDetailKeys = new Set<string>()
   private externalSmsPushedDetailKeys = new Set<string>()
   private backgroundPages = new BackgroundPageManager()
   private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
@@ -1295,7 +1296,7 @@ export class CampaignScheduler {
       await this.releaseRunningAccount(account.id)
       await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     } finally {
-      this.clearExternalSmsPushKeysForCampaign(campaign.id)
+      this.clearZaloSmsPushKeysForCampaign(campaign.id)
     }
   }
 
@@ -4526,7 +4527,7 @@ export class CampaignScheduler {
   ): Promise<MilestoneSummary> {
     const summary = this.createMilestoneSummary()
     const loggedBlocks = new Set<string>()
-    const externalSmsPushDetails: CampaignDetail[] = []
+    const smsPushDetails: CampaignDetail[] = []
 
     for (const step of steps) {
       const blockName = step.blockName || ''
@@ -4564,7 +4565,7 @@ export class CampaignScheduler {
         data: actionDetail.data || {},
         shouldCountAction: actionDetail.countsTowardLimit === true
       })
-      externalSmsPushDetails.push(created)
+      smsPushDetails.push(created)
 
       if (actionDetail.countsTowardBadTarget !== false) {
         this.recordMilestoneSummary(
@@ -4587,11 +4588,15 @@ export class CampaignScheduler {
       }
     }
 
-    for (const created of externalSmsPushDetails) {
+    for (const created of smsPushDetails) {
       try {
-        await this.pushZaloDetailToExternalSmsIfNeeded(campaign, detail, created)
+        if (campaign.extraSettings?.internalSmsEnabled === true) {
+          await this.pushZaloDetailToInternalSmsIfNeeded(campaign, detail, created)
+        } else {
+          await this.pushZaloDetailToExternalSmsIfNeeded(campaign, detail, created)
+        }
       } catch (err) {
-        console.error('Failed to process external SMS push for Zalo detail:', err)
+        console.error('Failed to process SMS push for Zalo detail:', err)
         await this.logExternalPushWarning(campaign, 'Không thể xử lý kiêm gửi SMS', err)
       }
     }
@@ -6253,6 +6258,42 @@ export class CampaignScheduler {
     }
   }
 
+  private getInternalSmsAccountIds(sourceCampaign: Campaign): number[] {
+    const raw = Array.isArray(sourceCampaign.extraSettings?.internalSmsAccountIds)
+      ? sourceCampaign.extraSettings.internalSmsAccountIds
+      : []
+    return Array.from(new Set(
+      raw
+        .map(item => Number(item))
+        .filter(item => Number.isFinite(item) && item > 0)
+    ))
+  }
+
+  private getInternalSmsStatuses(sourceCampaign: Campaign): Set<string> {
+    const raw = Array.isArray(sourceCampaign.extraSettings?.internalSmsStatuses)
+      ? sourceCampaign.extraSettings.internalSmsStatuses
+      : []
+    return new Set(
+      raw
+        .map(item => String(item || '').trim().toLocaleLowerCase('vi-VN'))
+        .filter(item => EXTERNAL_SMS_STATUS_VALUES.has(item))
+    )
+  }
+
+  private getInternalSmsCreatedCampaignIdMap(sourceCampaign: Campaign): Record<string, number> {
+    const raw = sourceCampaign.extraSettings?.internalSmsCreatedCampaignIdsByAccount
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+    const mapping: Record<string, number> = {}
+    for (const [key, value] of Object.entries(raw)) {
+      const accountId = Number(key)
+      const campaignId = Number(value)
+      if (Number.isFinite(accountId) && accountId > 0 && Number.isFinite(campaignId) && campaignId > 0) {
+        mapping[String(accountId)] = campaignId
+      }
+    }
+    return mapping
+  }
+
   private getExternalSmsShopIds(sourceCampaign: Campaign): number[] {
     const raw = Array.isArray(sourceCampaign.extraSettings?.externalSmsShopIds)
       ? sourceCampaign.extraSettings.externalSmsShopIds
@@ -6306,8 +6347,11 @@ export class CampaignScheduler {
     )
   }
 
-  private clearExternalSmsPushKeysForCampaign(campaignId: number): void {
+  private clearZaloSmsPushKeysForCampaign(campaignId: number): void {
     const prefix = `${campaignId}:`
+    for (const key of Array.from(this.internalSmsPushedDetailKeys)) {
+      if (key.startsWith(prefix)) this.internalSmsPushedDetailKeys.delete(key)
+    }
     for (const key of Array.from(this.externalSmsPushedDetailKeys)) {
       if (key.startsWith(prefix)) this.externalSmsPushedDetailKeys.delete(key)
     }
@@ -6347,8 +6391,8 @@ export class CampaignScheduler {
       .replace(/\[info5\]/g, this.firstNonEmptyString(inputData.info5))
   }
 
-  private getExternalSmsContentForZaloDetail(sourceCampaign: Campaign, inputData: CampaignInputData | null, created: CampaignDetail): string {
-    const variants = this.splitSmsContent(sourceCampaign.extraSettings?.externalSmsContent)
+  private getZaloSmsContentForDetail(contentMessage: string | null | undefined, inputData: CampaignInputData | null, created: CampaignDetail): string {
+    const variants = this.splitSmsContent(contentMessage)
     const index = variants.length > 0 ? Math.abs(Number(created.id) || 0) % variants.length : 0
     const data = created.data || {}
     const target = this.getRecordValue(data, 'target')
@@ -6367,6 +6411,146 @@ export class CampaignScheduler {
     }
     const rendered = this.renderZaloTemplate(variants[index] || '', mergedInputData, target as ZaloResolvedTarget | null)
     return this.renderExternalSmsLegacyTokens(rendered, mergedInputData, target)
+  }
+
+  private getInternalSmsContentForZaloDetail(sourceCampaign: Campaign, inputData: CampaignInputData | null, created: CampaignDetail): string {
+    return this.getZaloSmsContentForDetail(sourceCampaign.extraSettings?.internalSmsContent, inputData, created)
+  }
+
+  private getExternalSmsContentForZaloDetail(sourceCampaign: Campaign, inputData: CampaignInputData | null, created: CampaignDetail): string {
+    return this.getZaloSmsContentForDetail(sourceCampaign.extraSettings?.externalSmsContent, inputData, created)
+  }
+
+  private getZaloDetailSmsInputSnapshot(created: CampaignDetail, inputData: CampaignInputData | null, phone: string): Partial<CampaignInputData> {
+    const data = created.data || {}
+    const target = this.getRecordValue(data, 'target')
+    const detailInputData = this.getRecordValue(data, 'inputData')
+    return {
+      name: this.getZaloDetailSmsName(created, inputData),
+      phone,
+      uid: this.firstNonEmptyString(
+        this.getRecordValue(target, 'uid'),
+        this.getRecordValue(detailInputData, 'uid'),
+        inputData?.uid
+      ),
+      email: this.firstNonEmptyString(
+        this.getRecordValue(detailInputData, 'email'),
+        inputData?.email
+      ),
+      info1: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info1'), inputData?.info1),
+      info2: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info2'), inputData?.info2),
+      info3: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info3'), inputData?.info3),
+      info4: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info4'), inputData?.info4),
+      info5: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info5'), inputData?.info5)
+    }
+  }
+
+  private isUsableInternalSmsChildCampaign(childCampaign: Campaign | null, smsAccountId: number, sourceCampaign: Campaign): childCampaign is Campaign {
+    if (!childCampaign || childCampaign.isDelete) return false
+    if (childCampaign.actionId !== SMS_SEND_ACTION_ID) return false
+    if (Number(childCampaign.accountId) !== Number(smsAccountId)) return false
+    const sourceId = Number(childCampaign.extraSettings?.internalSmsSourceCampaignId)
+    return !Number.isFinite(sourceId) || sourceId === sourceCampaign.id
+  }
+
+  private async ensureInternalSmsChildCampaign(sourceCampaign: Campaign, smsAccountId: number, nowIso: string): Promise<Campaign> {
+    const smsAccount = await this.supabase.getAccount(smsAccountId)
+    if (!smsAccount || smsAccount.isDelete || smsAccount.flatformType !== 'sms') {
+      throw new Error(`Tài khoản Sms #${smsAccountId} không tồn tại hoặc không hợp lệ.`)
+    }
+
+    const mapping = this.getInternalSmsCreatedCampaignIdMap(sourceCampaign)
+    const mappedCampaignId = mapping[String(smsAccountId)]
+    if (mappedCampaignId) {
+      const existingCampaign = await this.supabase.getCampaign(mappedCampaignId)
+      if (this.isUsableInternalSmsChildCampaign(existingCampaign, smsAccountId, sourceCampaign)) {
+        if (existingCampaign.status === 'hoàn thành') {
+          return await this.updateCampaignAndBroadcast(existingCampaign.id, { status: 'chờ xử lý', note: null })
+        }
+        return existingCampaign
+      }
+    }
+
+    const createdCampaign = await this.supabase.createCampaign({
+      name: `Kiêm SMS - ${sourceCampaign.name} - ${smsAccount.name || smsAccount.username || `Sms #${smsAccount.id}`}`,
+      actionId: SMS_SEND_ACTION_ID,
+      accountId: smsAccount.id,
+      status: 'chờ xử lý',
+      schedule: nowIso,
+      originalSchedule: nowIso,
+      content: sourceCampaign.extraSettings?.internalSmsContent || '',
+      extraSettings: {
+        internalSmsSourceCampaignId: sourceCampaign.id,
+        internalSmsSourceCampaignName: sourceCampaign.name,
+        internalSmsSourceActionId: sourceCampaign.actionId
+      },
+      note: null
+    })
+
+    const nextMapping = { ...mapping, [String(smsAccount.id)]: createdCampaign.id }
+    const updatedSourceCampaign = await this.updateCampaignAndBroadcast(sourceCampaign.id, {
+      extraSettings: {
+        ...(sourceCampaign.extraSettings || {}),
+        internalSmsCreatedCampaignIdsByAccount: nextMapping
+      }
+    })
+    sourceCampaign.extraSettings = updatedSourceCampaign.extraSettings
+
+    return createdCampaign
+  }
+
+  private async pushZaloDetailToInternalSmsIfNeeded(
+    sourceCampaign: Campaign,
+    inputData: CampaignInputData | null,
+    created: CampaignDetail
+  ): Promise<void> {
+    if (!EXTERNAL_SMS_ZALO_ACTION_IDS.has(sourceCampaign.actionId)) return
+    if (sourceCampaign.extraSettings?.internalSmsEnabled !== true) return
+    if (!this.isExternalSmsZaloDetailEligible(created)) return
+
+    const statuses = this.getInternalSmsStatuses(sourceCampaign)
+    const detailStatus = String(created.status || '').trim().toLocaleLowerCase('vi-VN')
+    if (!statuses.has(detailStatus)) return
+
+    const accountIds = this.getInternalSmsAccountIds(sourceCampaign)
+    if (accountIds.length === 0) return
+
+    const phone = this.getZaloDetailSmsPhone(created, inputData)
+    if (!phone) {
+      await this.logExternalPushWarning(sourceCampaign, `Không thể kiêm gửi SMS vì thiếu SĐT cho ${this.getInputDataDisplayName(sourceCampaign, inputData, 'target')}`)
+      return
+    }
+
+    const pushKey = this.getExternalSmsPushKey(sourceCampaign, inputData, phone)
+    if (this.internalSmsPushedDetailKeys.has(pushKey)) return
+
+    const nowIso = new Date().toISOString()
+    const content = this.getInternalSmsContentForZaloDetail(sourceCampaign, inputData, created)
+    const inputSnapshot = this.getZaloDetailSmsInputSnapshot(created, inputData, phone)
+    let successCount = 0
+
+    for (const accountId of accountIds) {
+      try {
+        const childCampaign = await this.ensureInternalSmsChildCampaign(sourceCampaign, accountId, nowIso)
+        await this.supabase.createSmsCampaignInputDataSnapshot({
+          ...inputSnapshot,
+          campaignId: childCampaign.id,
+          status: 'chờ xử lý',
+          note: '',
+          schedule: nowIso,
+          content
+        })
+        successCount += 1
+      } catch (err) {
+        console.error('Failed to push Zalo detail to internal SMS campaign:', err)
+        await this.logExternalPushWarning(sourceCampaign, `Không thể kiêm gửi SMS sang tài khoản Sms #${accountId}`, err)
+      }
+    }
+
+    if (successCount > 0) {
+      this.internalSmsPushedDetailKeys.add(pushKey)
+      await this.logCampaignProgress(sourceCampaign.id, `✅ Đã kiêm gửi SMS cho ${phone} sang ${successCount} tài khoản Sms`)
+    }
   }
 
   private async pushZaloDetailToExternalSmsIfNeeded(

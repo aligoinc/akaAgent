@@ -259,10 +259,12 @@ const shouldSkipCloneCampaignInputData = (actionId: string, extraSettings: unkno
 }
 
 const sanitizeClonedCampaignExtraSettings = (actionId: string, extraSettings: unknown): unknown => {
-  if (!shouldSkipCloneCampaignInputData(actionId, extraSettings)) return extraSettings
+  if (!extraSettings || typeof extraSettings !== 'object' || Array.isArray(extraSettings)) return extraSettings
   const extra = extraSettings && typeof extraSettings === 'object'
     ? { ...(extraSettings as Record<string, unknown>) }
     : {}
+  delete extra.internalSmsCreatedCampaignIdsByAccount
+  if (!shouldSkipCloneCampaignInputData(actionId, extraSettings)) return extra
   delete extra.zaloFriendDataMaterializedAt
   delete extra.zaloFriendMaterializedCount
   delete extra.zaloBirthdayDataMaterializedDate
@@ -2530,6 +2532,48 @@ export async function createCampaignInputData(action: Partial<CampaignInputData>
     .single()
 
   if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
+  return mapCampaignInputDataFromDB(data)
+}
+
+export async function createSmsCampaignInputDataSnapshot(action: Partial<CampaignInputData>): Promise<CampaignInputData> {
+  const u = requireCurrentUser()
+  const campaignId = Number(action.campaignId)
+  const actionId = Number.isFinite(campaignId) && campaignId > 0
+    ? await getCampaignActionIdForCurrentUser(campaignId, u.staffId)
+    : null
+  if (actionId !== SMS_SEND_ACTION_ID) {
+    throw new Error('Campaign nhận SMS không phải chiến dịch gửi SMS nội bộ.')
+  }
+  await ensureCurrentUserCanUseCampaignAction(actionId)
+
+  const phone = normalizeVietnamMobilePhone(action.phone)
+  const schedule = action.schedule || new Date().toISOString()
+  const payload = {
+    campaign_id: campaignId,
+    input_id: action.inputId ?? null,
+    name: action.name || null,
+    phone: phone || null,
+    phone_carrier: normalizeCampaignInputPhoneCarrier(phone, action.phoneCarrier),
+    uid: action.uid || null,
+    email: action.email || null,
+    info1: action.info1 || null,
+    info2: action.info2 || null,
+    info3: action.info3 || null,
+    info4: action.info4 || null,
+    info5: action.info5 || null,
+    content: action.content ?? null,
+    status: action.status || 'chờ xử lý',
+    note: action.note || null,
+    schedule
+  }
+
+  const { data, error } = await client()
+    .from('auto_campaign_input_data')
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Failed to create SMS campaign input data snapshot: ${error.message}`)
   return mapCampaignInputDataFromDB(data)
 }
 
