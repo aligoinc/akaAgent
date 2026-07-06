@@ -770,11 +770,6 @@ export default function MediaLibraryModal({
                   mimeType={file.mimeType}
                   sizeBytes={file.sizeBytes}
                 />
-                <span className="media-library-name-cell">
-                  {isImageMime(file.mimeType) ? <Image size={16} /> : <FileText size={16} />}
-                  <span title={file.originalName}>{file.originalName}</span>
-                </span>
-                <span className="media-group-manage-meta">{formatBytes(file.sizeBytes)}</span>
                 <button
                   type="button"
                   className="btn-icon text-error"
@@ -784,6 +779,11 @@ export default function MediaLibraryModal({
                 >
                   <Trash2 size={14} />
                 </button>
+                <span className="media-library-name-cell">
+                  {isImageMime(file.mimeType) ? <Image size={16} /> : <FileText size={16} />}
+                  <span title={file.originalName}>{file.originalName}</span>
+                </span>
+                <span className="media-group-manage-meta">{formatBytes(file.sizeBytes)}</span>
               </div>
             ))}
           </div>
