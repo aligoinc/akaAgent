@@ -867,7 +867,7 @@ export default function MediaLibraryModal({
                         {isPicker && <th style={{ width: 44 }}></th>}
                         <th style={{ width: 56, textAlign: 'center' }}>STT</th>
                         <th style={{ width: canDeleteMedia ? 76 : 44 }}></th>
-                        <th>Tên file</th>
+                        <th style={{ width: 320 }}>Tên file</th>
                         <th style={{ width: 132 }}>Loại</th>
                         <th style={{ width: 160, whiteSpace: 'nowrap' }}>Dung lượng</th>
                         <th style={{ width: 160 }}>Local path</th>
@@ -926,7 +926,7 @@ export default function MediaLibraryModal({
                                 )}
                               </span>
                             </td>
-                            <td>
+                            <td className="media-library-file-name-cell">
                               <div className="media-library-name-cell">
                                 {isImageMime(file.mimeType) ? <Image size={16} /> : <FileText size={16} />}
                                 <span>{file.originalName}</span>

@@ -1988,7 +1988,7 @@ button.btn-icon:not(.btn):disabled {
 }
 
 .media-library-grid .campaign-grid {
-  min-width: 1120px;
+  min-width: 1320px;
   table-layout: fixed;
 }
 
@@ -2010,6 +2010,15 @@ button.btn-icon:not(.btn):disabled {
   justify-content: center;
   gap: 4px;
   white-space: nowrap;
+}
+
+.media-library-file-name-cell {
+  padding-right: 20px;
+}
+
+.media-library-grid .media-library-name-cell {
+  width: 100%;
+  min-width: 0;
 }
 
 .media-hover-preview {
