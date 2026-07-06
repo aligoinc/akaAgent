@@ -8,6 +8,7 @@ import {
   AkaBizCampaignListKind,
   AkaBizContactTag,
   AkaBizIntegrations,
+  AkaBizSmsShopListItem,
   AutoAccountContact,
   AutoAccountContactGroup,
   Campaign,
@@ -191,7 +192,7 @@ type PostBumpMode = 'select' | 'create'
 type MessageDateOption = 'today' | 'tomorrow' | 'yesterday'
 type MessageDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
 type MessageTemplateDropdown = 'date' | 'format' | null
-type MessagePersonalizationTarget = 'content' | 'friendRequestMessage' | 'zaloAliasTemplate'
+type MessagePersonalizationTarget = 'content' | 'friendRequestMessage' | 'zaloAliasTemplate' | 'externalSmsContent'
 type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
 type ContentPreviewTarget = AiContentTarget | 'friendRequestMessage' | 'newsfeedCommentContent'
 type AiContentAction = 'multi' | 'rewrite'
@@ -411,6 +412,11 @@ const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const EXTERNAL_SMS_STATUS_OPTIONS = [
+  { value: 'thành công', label: 'Thành công' },
+  { value: 'thất bại', label: 'Thất bại' },
+  { value: 'không tồn tại', label: 'Không tồn tại' }
+] as const
 const DEFAULT_SLEEP_BETWEEN_ACTIONS = 30
 const DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS = 90
 const ZALO_FRIEND_TARGET_MODES: Array<{ value: ZaloFriendTargetMode; label: string }> = [
@@ -1083,6 +1089,12 @@ const ALL_STEPS: StepDef[] = [
   }
 ]
 
+const EXTERNAL_SMS_STEP: StepDef = {
+  id: 'externalSms',
+  title: 'Gửi tin nhắn Sms',
+  fields: [{ key: 'externalSms', label: 'Gửi tin nhắn Sms' }]
+}
+
 const ACTION_OPTIONS_STEP: StepDef = {
   id: 'actionOptions',
   title: 'Tuỳ chọn hành động',
@@ -1171,6 +1183,7 @@ export default function CampaignFormModal({
   const contentRef = useRef<HTMLDivElement>(null)
   const campaignContentTextareaRef = useRef<HTMLTextAreaElement>(null)
   const friendRequestMessageTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const externalSmsContentTextareaRef = useRef<HTMLTextAreaElement>(null)
   const zaloAliasTemplateInputRef = useRef<HTMLInputElement>(null)
   const emailHtmlEditorRef = useRef<EmailHtmlEditorHandle | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -1264,6 +1277,12 @@ export default function CampaignFormModal({
     emailCheckLinkClicks: campaign?.extraSettings?.emailCheckLinkClicks ?? false,
     smsUseUnicode: campaign ? (campaign.extraSettings?.smsUseUnicode ?? false) : false,
     smsKeepNewLines: campaign ? (campaign.extraSettings?.smsKeepNewLines ?? false) : false,
+    externalSmsEnabled: campaign?.extraSettings?.externalSmsEnabled ?? false,
+    externalSmsShopIds: getCampaignIdList(campaign?.extraSettings?.externalSmsShopIds),
+    externalSmsContent: campaign?.extraSettings?.externalSmsContent || '',
+    externalSmsStatuses: Array.isArray(campaign?.extraSettings?.externalSmsStatuses)
+      ? campaign.extraSettings.externalSmsStatuses.map(status => String(status || '').trim().toLocaleLowerCase('vi-VN')).filter(Boolean)
+      : [] as string[],
     // Extra settings
     sharePost: campaign?.extraSettings?.sharePost ?? false,
     postWithBackground: campaign?.extraSettings?.postWithBackground ?? false,
@@ -1534,6 +1553,7 @@ export default function CampaignFormModal({
   const isZaloJoinGroupLinkCampaign = formData.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
   const isZaloCancelSentFriendRequestCampaign = formData.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
   const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign
+  const supportsExternalSmsPush = isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign
   const isPhoneInputCampaign = isZaloMessagePhoneCampaign || isSmsCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
@@ -2229,9 +2249,10 @@ export default function CampaignFormModal({
       const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign
         ? steps.flatMap(s => s.id === 'general' ? [s, ACTION_OPTIONS_STEP] : [s])
         : steps
-      return showFindDataSourceSection
+      const withFindDataSource = showFindDataSourceSection
         ? orderedSteps.flatMap(s => s.id === 'details' ? [findDataSourceStep, s] : [s])
         : orderedSteps
+      return supportsExternalSmsPush ? [...withFindDataSource, EXTERNAL_SMS_STEP] : withFindDataSource
     }
     if (isFacebookGroupPostCampaign) {
       const steps = ALL_STEPS.flatMap(step => {
@@ -2371,6 +2392,9 @@ export default function CampaignFormModal({
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [akabizIntegrations, setAkaBizIntegrations] = useState<AkaBizIntegrations | null>(null)
   const [akabizIntegrationsLoading, setAkaBizIntegrationsLoading] = useState(false)
+  const [externalSmsShops, setExternalSmsShops] = useState<AkaBizSmsShopListItem[]>([])
+  const [externalSmsShopsLoading, setExternalSmsShopsLoading] = useState(false)
+  const [externalSmsShopsLoaded, setExternalSmsShopsLoaded] = useState(false)
   const [externalCampaigns, setExternalCampaigns] = useState<Record<AkaBizCampaignListKind, AkaBizCampaignListItem[]>>({
     sms: [],
     zaloPhone: [],
@@ -2938,10 +2962,27 @@ export default function CampaignFormModal({
       setDesktopIntegrationInvalid(false)
       setExternalCampaigns({ sms: [], zaloPhone: [], zaloGroupLink: [], desktopZaloPhone: [], desktopZaloGroupLink: [] })
       setExternalCampaignLoaded({})
+      setExternalSmsShops([])
+      setExternalSmsShopsLoaded(false)
     } catch (err) {
       showAlert(formatIpcErrorMessage(err, 'Không thể tải tích hợp akaBiz.'), 'error')
     } finally {
       setAkaBizIntegrationsLoading(false)
+    }
+  }
+
+  const loadExternalSmsShops = async () => {
+    if (!window.electronAPI?.listAkaBizSmsShops) return
+    setExternalSmsShopsLoading(true)
+    try {
+      const rows = await window.electronAPI.listAkaBizSmsShops()
+      setExternalSmsShops(rows)
+      setExternalSmsShopsLoaded(true)
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể tải danh sách tài khoản akaBiz Sms.'), 'error')
+      setExternalSmsShopsLoaded(true)
+    } finally {
+      setExternalSmsShopsLoading(false)
     }
   }
 
@@ -2995,6 +3036,18 @@ export default function CampaignFormModal({
       void loadExternalCampaigns('sms')
     }
   }, [formData.isFindPhone, handleFoundPhoneSmsData, hasSmsIntegration, externalCampaignLoaded.sms, externalCampaignLoading.sms])
+
+  useEffect(() => {
+    if (
+      supportsExternalSmsPush &&
+      formData.externalSmsEnabled &&
+      hasSmsIntegration &&
+      !externalSmsShopsLoaded &&
+      !externalSmsShopsLoading
+    ) {
+      void loadExternalSmsShops()
+    }
+  }, [supportsExternalSmsPush, formData.externalSmsEnabled, hasSmsIntegration, externalSmsShopsLoaded, externalSmsShopsLoading])
 
   useEffect(() => {
     if (
@@ -3149,6 +3202,12 @@ export default function CampaignFormModal({
               !!formData.zaloRealtimeEndDate
             ))
         )
+      case 'externalSms':
+        if (!supportsExternalSmsPush || !formData.externalSmsEnabled) return true
+        return hasSmsIntegration &&
+          getCampaignIdList(formData.externalSmsShopIds).length > 0 &&
+          !!formData.externalSmsContent.trim() &&
+          formData.externalSmsStatuses.length > 0
       case 'details': return hideDetailsSection || detailEntryCount > 0 || hasSelectedFindDataSourceCampaign
       default: return false
     }
@@ -3745,6 +3804,11 @@ export default function CampaignFormModal({
       const selectedZaloRealtimeGroupNames = isZaloMessageGroupRealtimeCampaign
         ? getZaloRealtimeGroupNamesForSave(selectedZaloRealtimeGroupIds)
         : []
+      const selectedExternalSmsStatuses = supportsExternalSmsPush && formData.externalSmsEnabled
+        ? EXTERNAL_SMS_STATUS_OPTIONS
+          .map(option => option.value)
+          .filter(status => formData.externalSmsStatuses.includes(status))
+        : []
 
       return {
         campaignPayload: {
@@ -3827,6 +3891,10 @@ export default function CampaignFormModal({
             emailCheckLinkClicks: isEmailCampaign ? formData.emailCheckLinkClicks : false,
             smsUseUnicode: isSmsCampaign ? formData.smsUseUnicode : undefined,
             smsKeepNewLines: isSmsCampaign ? formData.smsKeepNewLines : undefined,
+            externalSmsEnabled: supportsExternalSmsPush ? formData.externalSmsEnabled : false,
+            externalSmsShopIds: supportsExternalSmsPush && formData.externalSmsEnabled ? getCampaignIdList(formData.externalSmsShopIds) : [],
+            externalSmsContent: supportsExternalSmsPush && formData.externalSmsEnabled ? formData.externalSmsContent.trim() : '',
+            externalSmsStatuses: selectedExternalSmsStatuses,
             friendRequestMessage: (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) ? formData.friendRequestMessage.trim() : '',
             zaloRealtimeTriggers: isZaloMessageGroupRealtimeCampaign ? getZaloRealtimeTriggersForSave() : [],
             zaloRealtimeGroupIds: selectedZaloRealtimeGroupIds,
@@ -4015,6 +4083,24 @@ export default function CampaignFormModal({
       if (!isZaloShareMessageMode && formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
         showAlert('Vui lòng nhập template đổi tên Zalo.', 'error')
         return
+      }
+      if (supportsExternalSmsPush && formData.externalSmsEnabled) {
+        if (!hasSmsIntegration) {
+          showAlert('Vui lòng tích hợp akaBiz Sms trước khi gửi tin nhắn Sms.', 'error')
+          return
+        }
+        if (getCampaignIdList(formData.externalSmsShopIds).length === 0) {
+          showAlert('Vui lòng chọn ít nhất một tài khoản akaBiz Sms.', 'error')
+          return
+        }
+        if (!formData.externalSmsContent.trim()) {
+          showAlert('Vui lòng nhập nội dung Sms.', 'error')
+          return
+        }
+        if (formData.externalSmsStatuses.length === 0) {
+          showAlert('Vui lòng chọn ít nhất một trạng thái để gửi tin nhắn Sms.', 'error')
+          return
+        }
       }
       if (isZaloMessageFriendRecommendationCampaign && normalizeZaloFriendRecommendationCount(formData.zaloFriendRecommendationCount) < 1) {
         showAlert('Vui lòng nhập số lượng đề xuất lớn hơn 0.', 'error')
@@ -5278,6 +5364,18 @@ export default function CampaignFormModal({
       return
     }
 
+    if (target === 'externalSmsContent') {
+      const textarea = externalSmsContentTextareaRef.current
+      const { nextValue, nextCursor } = getInsertedText(formData.externalSmsContent, token, textarea)
+
+      setFormData(p => ({ ...p, externalSmsContent: nextValue }))
+      window.requestAnimationFrame(() => {
+        textarea?.focus()
+        textarea?.setSelectionRange(nextCursor, nextCursor)
+      })
+      return
+    }
+
     const textarea = campaignContentTextareaRef.current
     const { nextValue, nextCursor } = getInsertedText(formData.content, token, textarea)
 
@@ -5302,7 +5400,9 @@ export default function CampaignFormModal({
     const showCustomerTokens = isSmsCampaign ? false : (target === 'content' ? !isEmailCampaign : true)
     const showExcelTokens = target === 'content'
       ? isPhoneInputCampaign || isEmailCampaign
-      : isZaloMessagePhoneCampaign
+      : target === 'externalSmsContent'
+        ? supportsExternalSmsPush
+        : isZaloMessagePhoneCampaign
     const showZaloProfileTokens = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign
     const showDateTokens = !isSmsCampaign
     const renderExcelTokens = () => (
@@ -5904,6 +6004,148 @@ export default function CampaignFormModal({
           </div>
         )}
       </>
+    )
+  }
+
+  const renderExternalSmsPushOption = () => {
+    if (!supportsExternalSmsPush) return null
+
+    const selectedShopIds = new Set(getCampaignIdList(formData.externalSmsShopIds))
+    const selectedStatuses = new Set(formData.externalSmsStatuses.map(status => String(status || '').trim().toLocaleLowerCase('vi-VN')).filter(Boolean))
+    const updateShopSelection = (id: number, checked: boolean) => {
+      const next = new Set(selectedShopIds)
+      if (checked) next.add(id)
+      else next.delete(id)
+      const ids = externalSmsShops
+        .map(shop => shop.id)
+        .filter(shopId => next.has(shopId))
+      setFormData(p => ({ ...p, externalSmsShopIds: ids }))
+    }
+    const updateStatusSelection = (status: string, checked: boolean) => {
+      const next = new Set(selectedStatuses)
+      if (checked) next.add(status)
+      else next.delete(status)
+      const statuses = EXTERNAL_SMS_STATUS_OPTIONS
+        .map(option => option.value)
+        .filter(optionStatus => next.has(optionStatus))
+      setFormData(p => ({ ...p, externalSmsStatuses: statuses }))
+    }
+
+    return (
+      <div className="external-sms-section-body">
+        <div className="external-sms-section-note">
+          <strong>Khách hàng cần có tài khoản của akaBiz Sms để sử dụng tính năng này</strong>
+          {!hasSmsIntegration && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => onOpenGeneralSettings?.('akabiz')}
+              disabled={!onOpenGeneralSettings}
+            >
+              <Settings2 size={14} />
+              <span>Tích hợp</span>
+            </button>
+          )}
+        </div>
+
+        <div className="stepper-form-group">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={formData.externalSmsEnabled}
+              onChange={e => setFormData(p => ({
+                ...p,
+                externalSmsEnabled: e.target.checked,
+                externalSmsShopIds: e.target.checked ? p.externalSmsShopIds : [],
+                externalSmsContent: e.target.checked ? p.externalSmsContent : '',
+                externalSmsStatuses: e.target.checked ? p.externalSmsStatuses : []
+              }))}
+            />
+            <span>Gửi tin nhắn Sms</span>
+          </label>
+        </div>
+
+        {formData.externalSmsEnabled && (
+          <div className="external-sms-section-fields">
+            {!hasSmsIntegration && (
+              <div className="schedule-hint" style={{ color: 'var(--text-error)' }}>Chưa tích hợp akaBiz Sms.</div>
+            )}
+
+            <div className="stepper-form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <label style={{ marginBottom: 0 }}>Chọn tài khoản Sms</label>
+                {hasSmsIntegration && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+                    disabled={externalSmsShopsLoading}
+                    onClick={() => void loadExternalSmsShops()}
+                  >
+                    {externalSmsShopsLoading ? <Loader2 size={14} /> : <RefreshCw size={14} />}
+                    <span>{externalSmsShopsLoading ? 'Đang tải' : 'Tải lại'}</span>
+                  </button>
+                )}
+              </div>
+              {externalSmsShopsLoading ? (
+                <div className="schedule-hint">Đang tải tài khoản akaBiz Sms...</div>
+              ) : !hasSmsIntegration ? (
+                <div className="schedule-hint">Bấm Tích hợp để kết nối tài khoản akaBiz Sms.</div>
+              ) : externalSmsShops.length === 0 ? (
+                <div className="schedule-hint">Chưa có tài khoản akaBiz Sms phù hợp.</div>
+              ) : (
+                <div
+                  className="external-sms-option-list"
+                >
+                  {externalSmsShops.map(shop => (
+                    <label key={shop.id} className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={selectedShopIds.has(shop.id)}
+                        disabled={externalSmsShopsLoading}
+                        onChange={e => updateShopSelection(shop.id, e.target.checked)}
+                      />
+                      <span>{shop.name || `Sms #${shop.id}`}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="stepper-form-group">
+              <div className="message-personalization-field-header">
+                <div className="message-personalization-field-title">
+                  <label>Nội dung</label>
+                  {renderMessagePersonalizationDropdown('externalSmsContent', 'field')}
+                </div>
+              </div>
+              <textarea
+                ref={externalSmsContentTextareaRef}
+                className="stepper-textarea"
+                rows={6}
+                value={formData.externalSmsContent}
+                onChange={e => setFormData(p => ({ ...p, externalSmsContent: e.target.value }))}
+              />
+            </div>
+
+            <div className="stepper-form-group">
+              <label>Gửi tin nhắn Sms khi trạng thái Zalo chứa 1 trong các điều kiện</label>
+              <div className="external-sms-option-list compact">
+                {EXTERNAL_SMS_STATUS_OPTIONS.map(option => (
+                  <label key={option.value} className="schedule-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedStatuses.has(option.value)}
+                      onChange={e => updateStatusSelection(option.value, e.target.checked)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -10625,6 +10867,30 @@ export default function CampaignFormModal({
                 </div>
               )}
             </div>}
+
+            {supportsExternalSmsPush && (
+              <div
+                className="stepper-section has-message-personalization"
+                ref={el => { sectionRefs.current['externalSms'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('externalSms')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('externalSms')}</span>
+                    <span className="stepper-section-title">Gửi tin nhắn Sms</span>
+                  </div>
+                  {collapsedSections['externalSms'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['externalSms'] && (
+                  <div className="stepper-section-body">
+                    {renderExternalSmsPushOption()}
+                  </div>
+                )}
+              </div>
+            )}
               </>
             )}
           </div>

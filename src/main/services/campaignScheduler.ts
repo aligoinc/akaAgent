@@ -287,6 +287,11 @@ const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const EXTERNAL_SMS_ZALO_ACTION_IDS = new Set([
+  ZALO_MESSAGE_PHONE_ACTION_ID,
+  ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
+])
+const EXTERNAL_SMS_STATUS_VALUES = new Set(['thành công', 'thất bại', 'không tồn tại'])
 const ZALO_MESSAGE_SEND_MODE_SHARE = 'share'
 const ZALO_SHARE_MESSAGE_BATCH_SIZE = 50
 const ZALO_SHARE_MESSAGE_REWRITE_AI_CODE = 'fb_send_message_rewrite'
@@ -376,6 +381,7 @@ export class CampaignScheduler {
   private activeV2Aborts = new Map<number, AbortController>()
   private pauseRequests = new Set<number>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
+  private externalSmsPushedDetailKeys = new Set<string>()
   private backgroundPages = new BackgroundPageManager()
   private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<string>()
@@ -1288,6 +1294,8 @@ export class CampaignScheduler {
       }
       await this.releaseRunningAccount(account.id)
       await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
+    } finally {
+      this.clearExternalSmsPushKeysForCampaign(campaign.id)
     }
   }
 
@@ -2728,6 +2736,14 @@ export class CampaignScheduler {
 
   private normalizeVietnamMobilePhone(value: unknown): string {
     return normalizeSharedVietnamMobilePhone(value)
+  }
+
+  private firstNormalizedVietnamMobilePhone(...values: unknown[]): string {
+    for (const value of values) {
+      const phone = this.normalizeVietnamMobilePhone(value)
+      if (phone) return phone
+    }
+    return ''
   }
 
   private phoneInputText(value: unknown): string {
@@ -4510,6 +4526,7 @@ export class CampaignScheduler {
   ): Promise<MilestoneSummary> {
     const summary = this.createMilestoneSummary()
     const loggedBlocks = new Set<string>()
+    const externalSmsPushDetails: CampaignDetail[] = []
 
     for (const step of steps) {
       const blockName = step.blockName || ''
@@ -4547,6 +4564,7 @@ export class CampaignScheduler {
         data: actionDetail.data || {},
         shouldCountAction: actionDetail.countsTowardLimit === true
       })
+      externalSmsPushDetails.push(created)
 
       if (actionDetail.countsTowardBadTarget !== false) {
         this.recordMilestoneSummary(
@@ -4566,6 +4584,15 @@ export class CampaignScheduler {
           actionName: created.actionName || actionDetail.actionName,
           log: created.log
         }))
+      }
+    }
+
+    for (const created of externalSmsPushDetails) {
+      try {
+        await this.pushZaloDetailToExternalSmsIfNeeded(campaign, detail, created)
+      } catch (err) {
+        console.error('Failed to process external SMS push for Zalo detail:', err)
+        await this.logExternalPushWarning(campaign, 'Không thể xử lý kiêm gửi SMS', err)
       }
     }
 
@@ -6226,6 +6253,179 @@ export class CampaignScheduler {
     }
   }
 
+  private getExternalSmsShopIds(sourceCampaign: Campaign): number[] {
+    const raw = Array.isArray(sourceCampaign.extraSettings?.externalSmsShopIds)
+      ? sourceCampaign.extraSettings.externalSmsShopIds
+      : []
+    return Array.from(new Set(
+      raw
+        .map(item => Number(item))
+        .filter(item => Number.isFinite(item) && item > 0)
+    ))
+  }
+
+  private getExternalSmsStatuses(sourceCampaign: Campaign): Set<string> {
+    const raw = Array.isArray(sourceCampaign.extraSettings?.externalSmsStatuses)
+      ? sourceCampaign.extraSettings.externalSmsStatuses
+      : []
+    return new Set(
+      raw
+        .map(item => String(item || '').trim().toLocaleLowerCase('vi-VN'))
+        .filter(item => EXTERNAL_SMS_STATUS_VALUES.has(item))
+    )
+  }
+
+  private getRecordValue(record: unknown, key: string): unknown {
+    return record && typeof record === 'object' && !Array.isArray(record)
+      ? (record as Record<string, unknown>)[key]
+      : undefined
+  }
+
+  private getZaloDetailSmsPhone(created: CampaignDetail, inputData: CampaignInputData | null): string {
+    const data = created.data || {}
+    const target = this.getRecordValue(data, 'target')
+    const detailInputData = this.getRecordValue(data, 'inputData')
+    return this.firstNormalizedVietnamMobilePhone(
+      this.getRecordValue(target, 'phone'),
+      this.getRecordValue(detailInputData, 'phone'),
+      inputData?.phone
+    )
+  }
+
+  private getZaloDetailSmsName(created: CampaignDetail, inputData: CampaignInputData | null): string {
+    const data = created.data || {}
+    const target = this.getRecordValue(data, 'target')
+    const detailInputData = this.getRecordValue(data, 'inputData')
+    return this.firstNonEmptyString(
+      this.getRecordValue(target, 'displayName'),
+      this.getRecordValue(target, 'originalName'),
+      this.getRecordValue(detailInputData, 'name'),
+      inputData?.name,
+      this.getRecordValue(target, 'uid'),
+      inputData?.uid
+    )
+  }
+
+  private clearExternalSmsPushKeysForCampaign(campaignId: number): void {
+    const prefix = `${campaignId}:`
+    for (const key of Array.from(this.externalSmsPushedDetailKeys)) {
+      if (key.startsWith(prefix)) this.externalSmsPushedDetailKeys.delete(key)
+    }
+  }
+
+  private getExternalSmsPushKey(sourceCampaign: Campaign, inputData: CampaignInputData | null, phone: string): string {
+    const inputDataId = Number(inputData?.id)
+    if (Number.isFinite(inputDataId) && inputDataId > 0) return `${sourceCampaign.id}:input:${inputDataId}`
+    return `${sourceCampaign.id}:phone:${phone || 'unknown'}`
+  }
+
+  private isExternalSmsZaloDetailEligible(created: CampaignDetail): boolean {
+    const actionCode = String(created.actionCode || '').trim()
+    const status = String(created.status || '').trim().toLocaleLowerCase('vi-VN')
+    if (actionCode === ZALO_FIND_PHONE_ACTION_CODE) return status === 'không tồn tại'
+    return actionCode === 'zalo_message_stranger' || actionCode === 'zalo_add_friend'
+  }
+
+  private renderExternalSmsLegacyTokens(content: string, inputData: Record<string, unknown>, target: unknown): string {
+    const targetRecord = target && typeof target === 'object' && !Array.isArray(target)
+      ? target as Record<string, unknown>
+      : {}
+    const displayName = this.firstNonEmptyString(targetRecord.displayName, inputData.name)
+    const originalName = this.firstNonEmptyString(targetRecord.originalName, displayName)
+    const phone = this.firstNormalizedVietnamMobilePhone(targetRecord.phone, inputData.phone)
+    return String(content || '')
+      .replace(/\[fullname_web\]/g, displayName)
+      .replace(/\[fullname_original\]/g, originalName)
+      .replace(/\[fullname\]/g, this.firstNonEmptyString(inputData.name, displayName))
+      .replace(/\[phone\]/g, phone)
+      .replace(/\[mobile\]/g, phone)
+      .replace(/\[email\]/g, this.firstNonEmptyString(inputData.email))
+      .replace(/\[info1\]/g, this.firstNonEmptyString(inputData.info1))
+      .replace(/\[info2\]/g, this.firstNonEmptyString(inputData.info2))
+      .replace(/\[info3\]/g, this.firstNonEmptyString(inputData.info3))
+      .replace(/\[info4\]/g, this.firstNonEmptyString(inputData.info4))
+      .replace(/\[info5\]/g, this.firstNonEmptyString(inputData.info5))
+  }
+
+  private getExternalSmsContentForZaloDetail(sourceCampaign: Campaign, inputData: CampaignInputData | null, created: CampaignDetail): string {
+    const variants = this.splitSmsContent(sourceCampaign.extraSettings?.externalSmsContent)
+    const index = variants.length > 0 ? Math.abs(Number(created.id) || 0) % variants.length : 0
+    const data = created.data || {}
+    const target = this.getRecordValue(data, 'target')
+    const detailInputData = this.getRecordValue(data, 'inputData')
+    const mergedInputData = {
+      id: inputData?.id,
+      name: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'name'), inputData?.name),
+      phone: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'phone'), inputData?.phone),
+      uid: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'uid'), inputData?.uid),
+      email: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'email'), inputData?.email),
+      info1: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info1'), inputData?.info1),
+      info2: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info2'), inputData?.info2),
+      info3: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info3'), inputData?.info3),
+      info4: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info4'), inputData?.info4),
+      info5: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info5'), inputData?.info5)
+    }
+    const rendered = this.renderZaloTemplate(variants[index] || '', mergedInputData, target as ZaloResolvedTarget | null)
+    return this.renderExternalSmsLegacyTokens(rendered, mergedInputData, target)
+  }
+
+  private async pushZaloDetailToExternalSmsIfNeeded(
+    sourceCampaign: Campaign,
+    inputData: CampaignInputData | null,
+    created: CampaignDetail
+  ): Promise<void> {
+    if (!EXTERNAL_SMS_ZALO_ACTION_IDS.has(sourceCampaign.actionId)) return
+    if (sourceCampaign.extraSettings?.externalSmsEnabled !== true) return
+    if (!this.isExternalSmsZaloDetailEligible(created)) return
+
+    const statuses = this.getExternalSmsStatuses(sourceCampaign)
+    const detailStatus = String(created.status || '').trim().toLocaleLowerCase('vi-VN')
+    if (!statuses.has(detailStatus)) return
+
+    const shopIds = this.getExternalSmsShopIds(sourceCampaign)
+    if (shopIds.length === 0) return
+
+    const phone = this.getZaloDetailSmsPhone(created, inputData)
+    if (!phone) {
+      await this.logExternalPushWarning(sourceCampaign, `Không thể kiêm gửi SMS vì thiếu SĐT cho ${this.getInputDataDisplayName(sourceCampaign, inputData, 'target')}`)
+      return
+    }
+
+    const pushKey = this.getExternalSmsPushKey(sourceCampaign, inputData, phone)
+    if (this.externalSmsPushedDetailKeys.has(pushKey)) return
+
+    const integrations = await this.loadAkaBizIntegrationsForCampaign(sourceCampaign)
+    if (!integrations?.sms?.staffId) {
+      await this.logExternalPushWarning(sourceCampaign, 'Chưa tích hợp akaBiz Sms nên không thể kiêm gửi SMS.')
+      return
+    }
+
+    const content = this.getExternalSmsContentForZaloDetail(sourceCampaign, inputData, created)
+    const name = this.getZaloDetailSmsName(created, inputData)
+    let successCount = 0
+
+    for (const shopId of shopIds) {
+      try {
+        await addSmsCampaignDetail({
+          shopId,
+          campaignId: sourceCampaign.id,
+          phone,
+          name,
+          content
+        })
+        successCount += 1
+      } catch (err) {
+        console.error('Failed to push Zalo detail to akaBiz Sms:', err)
+        await this.logExternalPushWarning(sourceCampaign, `Không thể kiêm gửi SMS sang tài khoản #${shopId}`, err)
+      }
+    }
+
+    if (successCount > 0) {
+      this.externalSmsPushedDetailKeys.add(pushKey)
+      await this.logCampaignProgress(sourceCampaign.id, `✅ Đã kiêm gửi SMS cho ${phone} sang ${successCount} tài khoản akaBiz Sms`)
+    }
+  }
+
   private async pushFoundPhonesToZaloWebCampaigns(sourceCampaign: Campaign, rawPhones: string[], phoneProfiles: FindDataPhoneProfile[] = []): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindPhone) return
 
@@ -7259,7 +7459,7 @@ export class CampaignScheduler {
 
     const input = inputData || {}
     const getInput = (key: string): string => String(input[key] ?? '').trim()
-    const renderPhone = (): string => this.normalizeVietnamMobilePhone(this.firstNonEmptyString(target?.phone, input.phone))
+    const renderPhone = (): string => this.firstNormalizedVietnamMobilePhone(target?.phone, input.phone)
     const renderSex = (body: string): string => {
       const [male = '', female = '', unknown = ''] = String(body || '').split('-')
       const gender = target?.gender

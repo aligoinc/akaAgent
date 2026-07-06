@@ -385,6 +385,10 @@ export interface CampaignExtraSettings {
   emailCheckLinkClicks?: boolean // Kiểm tra click vào link trong email_send
   smsUseUnicode?: boolean        // SMS giữ tiếng Việt có dấu; false thì bỏ dấu trước khi gửi
   smsKeepNewLines?: boolean      // SMS giữ xuống dòng; false thì bỏ \r/\n trước khi gửi
+  externalSmsEnabled?: boolean   // Zalo message phone/group member: kiêm gửi SMS qua akaBiz Sms ngoài hệ thống
+  externalSmsShopIds?: number[]
+  externalSmsContent?: string
+  externalSmsStatuses?: string[]
   imageOption?: 'none' | 'all' | 'random'
   randomImageCount?: number
   leaveGroupOnPendingApproval?: boolean   // Rời group nếu bài đang chờ duyệt (đã tham gia)
@@ -1315,6 +1319,12 @@ export interface AkaBizCampaignListItem {
   status?: string | null
 }
 
+export interface AkaBizSmsShopListItem {
+  id: number
+  name: string | null
+  shopType: string | null
+}
+
 export interface AkaBizDesktopPathValidationResult {
   installPath: string
   dbPath: string
@@ -1365,6 +1375,7 @@ export const IPC_EVENTS = {
   AKABIZ_INTEGRATION_LOOKUP: 'akabiz:integration:lookup',
   AKABIZ_INTEGRATION_SAVE: 'akabiz:integration:save',
   AKABIZ_EXTERNAL_CAMPAIGNS_LIST: 'akabiz:external-campaigns:list',
+  AKABIZ_SMS_SHOPS_LIST: 'akabiz:sms-shops:list',
   AKABIZ_DESKTOP_INSTALL_PATH_SELECT: 'akabiz:desktop-install-path:select',
   AKABIZ_DESKTOP_INSTALL_PATH_VALIDATE: 'akabiz:desktop-install-path:validate',
 
