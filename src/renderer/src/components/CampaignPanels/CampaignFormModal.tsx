@@ -2022,6 +2022,7 @@ export default function CampaignFormModal({
   const showContentSection =
     !isFindDataCampaign &&
     !isNewsfeedInteractionCampaign &&
+    !isFacebookJoinGroupCampaign &&
     !isZaloJoinGroupLinkCampaign &&
     !isZaloCancelSentFriendRequestCampaign &&
     (!isMessageUidCampaign || formData.enableMessage) &&
@@ -2189,11 +2190,6 @@ export default function CampaignFormModal({
     }
     if (isFacebookJoinGroupCampaign) {
       const generalStep = ALL_STEPS.find(s => s.id === 'general')!
-      const contentStep: StepDef = {
-        ...ALL_STEPS.find(s => s.id === 'content')!,
-        title: 'Câu trả lời câu hỏi group',
-        fields: [{ key: 'content', label: 'Câu trả lời câu hỏi group' }]
-      }
       const scheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
       const limitStep = ALL_STEPS.find(s => s.id === 'limits')!
       const detailsStep: StepDef = {
@@ -2201,7 +2197,7 @@ export default function CampaignFormModal({
         title: 'Danh sách group Facebook',
         fields: [{ key: 'details', label: 'Group URL/UID' }]
       }
-      return [generalStep, contentStep, scheduleStep, limitStep, detailsStep]
+      return [generalStep, scheduleStep, limitStep, detailsStep]
     }
     if (isMessageCampaign) {
       const steps = ALL_STEPS
@@ -3376,7 +3372,6 @@ export default function CampaignFormModal({
     if (target === 'content') {
       if (isEmailCampaign) return 'email'
       if (isMessageCampaign) return 'message'
-      if (isFacebookJoinGroupCampaign) return 'answer'
     }
     return 'post'
   }
@@ -3388,7 +3383,7 @@ export default function CampaignFormModal({
       if (isEmailCampaign) return 'email'
       if (isZaloMessageCampaign) return 'zalo'
       if (isSmsCampaign) return 'generic'
-      if (isMessageCampaign || isFacebookJoinGroupCampaign || isFacebookGroupPostCampaign || isTimelinePostCampaign || isPagePostCampaign) return 'facebook'
+      if (isMessageCampaign || isFacebookGroupPostCampaign || isTimelinePostCampaign || isPagePostCampaign) return 'facebook'
     }
     return 'generic'
   }
@@ -3399,7 +3394,6 @@ export default function CampaignFormModal({
     if (target === 'content') {
       if (isEmailCampaign) return 'email'
       if (isMessageCampaign) return 'chat'
-      if (isFacebookJoinGroupCampaign) return 'answer'
     }
     return 'post'
   }
@@ -3418,7 +3412,6 @@ export default function CampaignFormModal({
       if (isZaloMessageCampaign) return 'Tin nhắn Zalo xem trước với dữ liệu mẫu'
       if (isSmsCampaign) return 'Tin nhắn SMS xem trước với dữ liệu mẫu'
       if (isMessageCampaign) return 'Tin nhắn Facebook xem trước với dữ liệu mẫu'
-      if (isFacebookJoinGroupCampaign) return 'Câu trả lời sẽ được xoay vòng theo biến thể'
       if (isPagePostCampaign) return 'Bài đăng fanpage xem trước với dữ liệu mẫu'
       if (isTimelinePostCampaign) return 'Bài đăng trang cá nhân xem trước với dữ liệu mẫu'
       if (isFacebookGroupPostCampaign) return 'Bài đăng group xem trước với dữ liệu mẫu'
@@ -9192,9 +9185,7 @@ export default function CampaignFormModal({
 
   const renderCampaignContentHint = () => (
     <div className="campaign-content-hint">
-      {isFacebookJoinGroupCampaign
-        ? <>Mẹo: tách nhiều câu trả lời bằng dấu <code>|</code> — câu trả lời thứ N dùng cho group thứ N.</>
-        : <>Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).</>}
+      Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
     </div>
   )
 
@@ -9325,7 +9316,6 @@ export default function CampaignFormModal({
   const getCampaignContentLabel = (): string => {
     if (isEmailCampaign) return formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email'
     if (isMessageCampaign) return 'Nội dung tin nhắn'
-    if (isFacebookJoinGroupCampaign) return 'Câu trả lời câu hỏi group'
     return 'Nội dung chiến dịch'
   }
 
@@ -9338,9 +9328,6 @@ export default function CampaignFormModal({
     }
     if (isMessageCampaign) {
       return 'Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2...'
-    }
-    if (isFacebookJoinGroupCampaign) {
-      return 'Nhập câu trả lời câu hỏi group. Có thể để trống nếu group không hỏi; dùng dấu | để tách nhiều câu trả lời.'
     }
     return 'Nhập nội dung chiến dịch ở đây. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2...'
   }
@@ -10383,7 +10370,7 @@ export default function CampaignFormModal({
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('content')}</span>
                   <span className="stepper-section-title">
-                    {isEmailCampaign ? 'Nội dung email' : isMessageCampaign ? 'Nội dung tin nhắn' : isFacebookJoinGroupCampaign ? 'Câu trả lời câu hỏi group' : 'Nội dung'}
+                    {isEmailCampaign ? 'Nội dung email' : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung'}
                   </span>
                 </div>
                 {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
