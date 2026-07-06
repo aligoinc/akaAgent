@@ -183,6 +183,12 @@ interface PostBumpTarget {
   campaignId: number
 }
 
+interface GroupPostShareTarget {
+  id: number
+  name: string
+  uid?: string
+}
+
 interface FindDataSourceCounts {
   post: {
     phones: number
@@ -1482,6 +1488,7 @@ export class CampaignScheduler {
     let stoppedBeforeCompletion = false
     let earliestFutureInputSchedule: Date | null = null
     let zaloFriendBlocklistSkippedCount = 0
+    const consumedGroupPostInputDataIds = new Set<number>()
 
     for (let i = 0; i < targets.length; i++) {
       // Check pause
@@ -1501,6 +1508,7 @@ export class CampaignScheduler {
       }
 
       const detail = targets[i]
+      if (detail && consumedGroupPostInputDataIds.has(detail.id)) continue
       if (detail && detail.status !== 'chờ xử lý') continue
       if (detail) {
         const futureSchedule = this.getFutureInputSchedule(detail, new Date())
@@ -1593,9 +1601,25 @@ export class CampaignScheduler {
       const mediaTempPaths: string[] = []
       try {
         // Build variables
+        const groupPostShareMaxCount = await this.resolveGroupPostShareQuotaCapacity(
+          account,
+          campaign,
+          limitConfig,
+          groupPostApproval.skipPostByKnownApproval
+        )
+        const groupPostShareTargets = this.buildGroupPostShareTargets(
+          campaign,
+          details,
+          detail,
+          consumedGroupPostInputDataIds,
+          groupPostShareMaxCount
+        )
         const baseVariables = await this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval, mediaTempPaths)
         const variables = {
           ...baseVariables,
+          enableGroupPostShareToJoinedGroups: campaign.extraSettings?.enableGroupPostShareToJoinedGroups === true && groupPostShareMaxCount > 0 && groupPostShareTargets.length > 0,
+          groupPostShareTargets,
+          groupPostShareMaxCount,
           ...(campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
             ? {
               allowNewsfeedLike: newsfeedAvailability?.allowLike ?? true,
@@ -1664,7 +1688,15 @@ export class CampaignScheduler {
           })
 
           // Per-milestone logging — scan steps theo block_name
-          const milestoneSummary = await this.logMilestonesV2(campaign, detail, account.id, result.steps, result.status === 'completed', screenshotProgressLogs)
+          const milestoneSummary = await this.logMilestonesV2(
+            campaign,
+            detail,
+            account.id,
+            result.steps,
+            result.status === 'completed',
+            screenshotProgressLogs,
+            consumedGroupPostInputDataIds
+          )
 
           const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
           const pauseCancelledRun = campaignPauseRequested && !accountStopReason && result.status === 'cancelled'
@@ -1687,6 +1719,7 @@ export class CampaignScheduler {
                 })
               } else {
                 await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
+                consumedGroupPostInputDataIds.add(detail.id)
                 await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
               }
             } else if (pauseCancelledRun) {
@@ -1695,6 +1728,7 @@ export class CampaignScheduler {
               // campaign_input_data enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở campaign_details)
               const errMsg = result.error || 'Lỗi không xác định'
               await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
+              consumedGroupPostInputDataIds.add(detail.id)
               await this.logCampaignProgress(campaign.id, `❌ Lỗi "${this.getInputDataDisplayName(campaign, detail)}": ${errMsg}`)
             }
           }
@@ -1775,10 +1809,12 @@ export class CampaignScheduler {
           const pauseAbortTriggered = campaignPauseRequested && !accountStopReason && abort.signal.aborted
           let runtimeStopTriggered = false
           if (detail) {
+            const nextStatus = accountStopReason || pauseAbortTriggered ? 'chờ xử lý' : 'hoàn thành'
             await this.supabase.updateCampaignInputData(detail.id, {
-              status: accountStopReason || pauseAbortTriggered ? 'chờ xử lý' : 'hoàn thành',
+              status: nextStatus,
               note: accountStopReason || (pauseAbortTriggered ? CAMPAIGN_PAUSE_PENDING_NOTE : errMsg)
             })
+            if (nextStatus === 'hoàn thành') consumedGroupPostInputDataIds.add(detail.id)
           }
           if (pauseAbortTriggered) {
             shouldCompletePauseAfterTarget = true
@@ -2658,6 +2694,101 @@ export class CampaignScheduler {
     } catch (err) {
       console.error('Failed to resolve group post approval status:', err)
       return fallback
+    }
+  }
+
+  private normalizeGroupPostShareName(value: unknown): string {
+    return String(value || '').replace(/\s+/g, ' ').trim()
+  }
+
+  private getGroupPostShareNameKey(value: unknown): string {
+    return this.normalizeGroupPostShareName(value).toLocaleLowerCase('vi-VN')
+  }
+
+  private buildGroupPostShareTargets(
+    campaign: Campaign,
+    details: CampaignInputData[],
+    currentDetail: CampaignInputData | null,
+    consumedInputDataIds: Set<number>,
+    maxShareCount: number
+  ): GroupPostShareTarget[] {
+    if (
+      campaign.actionId !== GROUP_POST_ACTION_ID ||
+      campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true ||
+      maxShareCount <= 0
+    ) {
+      return []
+    }
+
+    const now = new Date()
+    const nameCounts = new Map<string, number>()
+    for (const detail of details) {
+      if (!detail || detail.isDelete) continue
+      const key = this.getGroupPostShareNameKey(detail.name)
+      if (!key) continue
+      nameCounts.set(key, (nameCounts.get(key) || 0) + 1)
+    }
+
+    const runnableDetails = details.filter(detail => {
+      if (!detail || detail.isDelete || detail.status !== 'chờ xử lý') return false
+      if (consumedInputDataIds.has(detail.id)) return false
+      if (this.getFutureInputSchedule(detail, now)) return false
+      return !!this.normalizeGroupPostShareName(detail.name)
+    })
+
+    const targets: GroupPostShareTarget[] = []
+    for (const detail of runnableDetails) {
+      if (currentDetail && detail.id === currentDetail.id) continue
+      const name = this.normalizeGroupPostShareName(detail.name)
+      const key = this.getGroupPostShareNameKey(name)
+      if (!key || (nameCounts.get(key) || 0) > 1) continue
+      targets.push({
+        id: detail.id,
+        name,
+        uid: String(detail.uid || '').trim() || undefined
+      })
+      if (targets.length >= 10) break
+    }
+    return targets
+  }
+
+  private async resolveGroupPostShareQuotaCapacity(
+    account: AutoAccount,
+    campaign: Campaign,
+    limitConfig: CampaignActionLimitSettings | undefined,
+    skipMainPost: boolean
+  ): Promise<number> {
+    if (
+      campaign.actionId !== GROUP_POST_ACTION_ID ||
+      campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true ||
+      skipMainPost
+    ) {
+      return 0
+    }
+
+    try {
+      const actionCode = 'fb_post_group'
+      const entitlements = await loadCurrentUserEffectiveEntitlements()
+      const actionLimitConfig = this.getActionLimitConfig(actionCode, limitConfig, account, entitlements)
+      const limitStatus = await this.supabase.getAccountRateLimitStatus(
+        account.id,
+        actionCode,
+        this.getAccountActionName(actionCode),
+        actionLimitConfig
+      )
+      if (!limitStatus.ok) return 0
+
+      const dailyLimit = Number(limitStatus.dailyLimit ?? actionLimitConfig?.dailyLimit ?? 30)
+      const dailyActionCount = Number(limitStatus.dailyActionCount ?? 0)
+      const windowLimit = Number(limitStatus.windowLimit ?? actionLimitConfig?.rateLimitCount ?? 9)
+      const windowActionCount = Number(limitStatus.windowActionCount ?? limitStatus.currentCount ?? 0)
+      const dailyRemaining = Number.isFinite(dailyLimit) ? Math.max(0, dailyLimit - dailyActionCount) : 4
+      const windowRemaining = Number.isFinite(windowLimit) ? Math.max(0, windowLimit - windowActionCount) : 4
+      const remainingAfterMainPost = Math.min(dailyRemaining, windowRemaining) - 1
+      return Math.min(3, Math.max(0, remainingAfterMainPost))
+    } catch (err) {
+      console.error('Failed to resolve group post share quota capacity:', err)
+      return 0
     }
   }
 
@@ -4219,6 +4350,9 @@ export class CampaignScheduler {
       skipGroupPostByKnownApproval: groupPostApproval?.skipPostByKnownApproval === true,
       groupPostRequiresPostApproval: groupPostApproval?.requiresPostApproval ?? null,
       groupPostApprovalSource: groupPostApproval?.source || '',
+      enableGroupPostShareToJoinedGroups: extra.enableGroupPostShareToJoinedGroups === true,
+      groupPostShareTargets: [],
+      groupPostShareMaxCount: 0,
       // Timeline post extras
       sharePost: postWithBackground ? false : (extra.sharePost ?? false),
       postWithBackground,
@@ -4625,7 +4759,8 @@ export class CampaignScheduler {
     accountId: number,
     steps: RunStepV2[],
     overallSuccess: boolean,
-    screenshotProgressLogs: BlockScreenshotProgressLog[] = []
+    screenshotProgressLogs: BlockScreenshotProgressLog[] = [],
+    consumedGroupPostInputDataIds?: Set<number>
   ): Promise<MilestoneSummary> {
     void overallSuccess
     const summary = this.createMilestoneSummary()
@@ -5222,6 +5357,51 @@ export class CampaignScheduler {
         })
         if (posted) {
           await this.syncGroupPostContactStatus(accountId, detail, requiresPostApproval)
+          const shareStep = [...steps].reverse().find(x => x.blockName === 'fb_select_group_post_share_targets' && x.status === 'success')
+          const shareOut = ((shareStep?.output as any) || {}) as { selectedTargets?: unknown }
+          const rawSelectedTargets = Array.isArray(shareOut.selectedTargets) ? shareOut.selectedTargets : []
+          const selectedShareTargets: GroupPostShareTarget[] = []
+          const seenShareTargetIds = new Set<number>()
+          for (const item of rawSelectedTargets) {
+            const record = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+            const id = Number(record.id)
+            if (!Number.isFinite(id) || id <= 0 || seenShareTargetIds.has(id)) continue
+            if (detail && id === detail.id) continue
+            const name = this.normalizeGroupPostShareName(record.name)
+            selectedShareTargets.push({
+              id,
+              name: name || `group #${id}`,
+              uid: String(record.uid || '').trim() || undefined
+            })
+            seenShareTargetIds.add(id)
+          }
+          for (const target of selectedShareTargets) {
+            try {
+              await createCampaignDetail({
+                inputDataId: target.id,
+                campaignId: campaign.id,
+                accountId,
+                actionCode: 'fb_post_group',
+                actionName: 'Đăng bài',
+                status: 'thành công',
+                log: `Đăng bài dạng chia sẻ vào ${target.name}`,
+                data: {
+                  shareMode: 'group_composer_add_group',
+                  sharedFromInputDataId: detail?.id ?? null,
+                  sharedFromName: inputDataName || undefined,
+                  targetUid: target.uid
+                }
+              })
+              await this.supabase.updateCampaignInputData(target.id, {
+                status: 'hoàn thành',
+                note: 'Đăng bài dạng chia sẻ'
+              })
+              consumedGroupPostInputDataIds?.add(target.id)
+              await this.logCampaignProgress(campaign.id, `🔁 Đã đăng bài dạng chia sẻ vào "${target.name}"`)
+            } catch (shareErr) {
+              console.error('Failed log group post share target:', shareErr)
+            }
+          }
           await this.logCampaignProgress(campaign.id, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
           await this.logCampaignProgress(campaign.id, pendingApprovalLog)
           if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)

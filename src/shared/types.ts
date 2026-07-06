@@ -403,7 +403,7 @@ export interface CampaignExtraSettings {
   autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
   skipPostIfGroupRequiresApproval?: boolean // Không đăng bài vào group đã biết cần duyệt bài; vẫn có thể kiêm comment
-  enableGroupPostShareToJoinedGroups?: boolean // Đăng bài group dạng chia sẻ thêm vào 3 nhóm đã tham gia (chỉ lưu cấu hình)
+  enableGroupPostShareToJoinedGroups?: boolean // Đăng bài group dạng chia sẻ thêm vào tối đa 3 nhóm khác trong campaign
   enablePostBump?: boolean                 // Sau khi đăng group thành công, thêm link bài vào campaign comment-post để up tin
   postBumpCount?: number                   // Tổng số lượt up tối đa cho mỗi bài post, max 10
   postBumpInitialDelayMinutes?: number     // Số phút chờ sau khi đăng thành công trước lượt up đầu tiên
