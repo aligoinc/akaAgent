@@ -301,7 +301,7 @@ const EXTERNAL_SMS_ZALO_ACTION_IDS = new Set([
 const EXTERNAL_SMS_STATUS_VALUES = new Set(['thành công', 'thất bại', 'không tồn tại'])
 const ZALO_MESSAGE_SEND_MODE_SHARE = 'share'
 const ZALO_SHARE_MESSAGE_BATCH_SIZE = 50
-const ZALO_SHARE_MESSAGE_REWRITE_AI_CODE = 'fb_send_message_rewrite'
+const ZALO_MESSAGE_REWRITE_AI_CODE = 'fb_send_message_rewrite'
 const MULTI_DAILY_TIME_SLOT_ACTION_IDS = new Set([
   'facebook_timeline_post',
   PAGE_POST_ACTION_ID,
@@ -2203,7 +2203,7 @@ export class CampaignScheduler {
     }
 
     try {
-      const result = await callAiUsing(ZALO_SHARE_MESSAGE_REWRITE_AI_CODE, {
+      const result = await callAiUsing(ZALO_MESSAGE_REWRITE_AI_CODE, {
         content,
         question: content,
         source: 'aka_agent'
@@ -7865,6 +7865,113 @@ export class CampaignScheduler {
       .replace(/#\{INFO5\}/g, getInput('info5'))
   }
 
+  private async logZaloAiRewriteRunEvent(
+    account: AutoAccount,
+    campaign: Campaign,
+    metadata: BlockRuntimeMetadata | undefined,
+    status: 'success' | 'warning',
+    message: string,
+    debugData?: Record<string, unknown>
+  ): Promise<void> {
+    if (!metadata?.runId && !metadata?.runStepId) return
+
+    try {
+      await campaignRunEventRepo.createCampaignRunEvents([{
+        campaignId: metadata.campaignId ?? campaign.id,
+        campaignActionId: campaign.actionId,
+        campaignInputId: metadata.campaignInputId ?? null,
+        campaignInputDataId: metadata.campaignInputDataId ?? null,
+        accountId: metadata.accountId ?? account.id,
+        runId: metadata.runId ?? null,
+        runStepId: metadata.runStepId ?? null,
+        nodeId: metadata.nodeId ?? null,
+        blockId: metadata.blockId ?? null,
+        blockName: metadata.blockName ?? null,
+        eventType: 'zalo_ai_rewrite',
+        eventName: status === 'success' ? 'zalo_ai_rewrite_success' : 'zalo_ai_rewrite_fallback',
+        targetType: 'zalo',
+        status,
+        isUserVisible: false,
+        message,
+        debugData
+      }])
+    } catch (err) {
+      console.warn('[CampaignScheduler] failed to log Zalo AI rewrite event', {
+        campaignId: campaign.id,
+        accountId: account.id,
+        error: err instanceof Error ? err.message : String(err)
+      })
+    }
+  }
+
+  private async rewriteZaloMessageForRun(
+    account: AutoAccount,
+    campaign: Campaign,
+    renderedMessage: string,
+    metadata?: BlockRuntimeMetadata
+  ): Promise<string> {
+    const original = String(renderedMessage || '')
+    const content = original.trim()
+    if (campaign.extraSettings?.rewriteContentEachRun !== true || !content) {
+      return original
+    }
+
+    try {
+      const result = await callAiUsing(ZALO_MESSAGE_REWRITE_AI_CODE, {
+        content,
+        question: content,
+        source: 'aka_agent'
+      }, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? metadata?.organizationId ?? null,
+        accountId: metadata?.accountId ?? account.id,
+        campaignId: metadata?.campaignId ?? campaign.id,
+        campaignInputId: metadata?.campaignInputId,
+        campaignInputDataId: metadata?.campaignInputDataId,
+        workflowId: metadata?.workflowId,
+        runId: metadata?.runId,
+        runStepId: metadata?.runStepId,
+        nodeId: metadata?.nodeId,
+        blockId: metadata?.blockId,
+        blockName: metadata?.blockName ?? 'zalo_send_message'
+      })
+
+      const rewritten = this.stripAiCodeFence(result.content)
+      if (result.ok && rewritten) {
+        await this.logZaloAiRewriteRunEvent(
+          account,
+          campaign,
+          metadata,
+          'success',
+          'Đã viết lại nội dung bằng AI'
+        )
+        return rewritten
+      }
+
+      throw new Error(result.error || 'AI trả về nội dung không hợp lệ.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const fallbackLog = `AI viết lại nội dung lỗi, dùng nội dung gốc: ${message}`
+      console.warn('[CampaignScheduler] Zalo AI rewrite failed, using original content', {
+        campaignId: campaign.id,
+        accountId: account.id,
+        campaignInputDataId: metadata?.campaignInputDataId ?? null,
+        blockName: metadata?.blockName ?? null,
+        message
+      })
+      await this.logZaloAiRewriteRunEvent(account, campaign, metadata, 'warning', fallbackLog, {
+        error: message
+      })
+      await this.logCampaignProgress(campaign.id, `⚠️ ${fallbackLog}`).catch(logErr => {
+        console.warn('[CampaignScheduler] failed to log Zalo AI rewrite fallback', {
+          campaignId: campaign.id,
+          accountId: account.id,
+          error: logErr instanceof Error ? logErr.message : String(logErr)
+        })
+      })
+      return original
+    }
+  }
+
   private stripAiCodeFence(value: string): string {
     const text = String(value || '').trim()
     const match = text.match(/^```(?:text|txt)?\s*([\s\S]*?)\s*```$/i)
@@ -8093,7 +8200,8 @@ export class CampaignScheduler {
   private async zaloSendPhoneMessage(
     account: AutoAccount,
     campaign: Campaign,
-    options: ZaloSendPhoneMessageOptions
+    options: ZaloSendPhoneMessageOptions,
+    metadata?: BlockRuntimeMetadata
   ): Promise<ZaloActionHelperResult> {
     if (!options.enabled) return { ok: true, skipped: true, zaloTarget: options.target ?? null }
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
@@ -8102,7 +8210,8 @@ export class CampaignScheduler {
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
-    const message = this.renderZaloTemplate(options.message, options.inputData, target)
+    const renderedMessage = this.renderZaloTemplate(options.message, options.inputData, target)
+    const message = await this.rewriteZaloMessageForRun(account, campaign, renderedMessage, metadata)
     const actionCode = 'zalo_message_stranger'
     const actionName = 'Nhắn tin người lạ'
 
@@ -8130,7 +8239,8 @@ export class CampaignScheduler {
   private async zaloSendFriendMessage(
     account: AutoAccount,
     campaign: Campaign,
-    options: ZaloSendDirectMessageOptions
+    options: ZaloSendDirectMessageOptions,
+    metadata?: BlockRuntimeMetadata
   ): Promise<ZaloActionHelperResult> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const uid = this.firstNonEmptyString(options.targetUid, options.inputData?.uid)
@@ -8159,7 +8269,8 @@ export class CampaignScheduler {
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
-    const message = this.renderZaloTemplate(options.message, options.inputData, target)
+    const renderedMessage = this.renderZaloTemplate(options.message, options.inputData, target)
+    const message = await this.rewriteZaloMessageForRun(account, campaign, renderedMessage, metadata)
 
     try {
       const response = await this.zaloRuntime.sendMessageToUser(account.id, target.uid, message, attachments)
@@ -8185,7 +8296,8 @@ export class CampaignScheduler {
   private async zaloSendGroupMessage(
     account: AutoAccount,
     campaign: Campaign,
-    options: ZaloSendDirectMessageOptions
+    options: ZaloSendDirectMessageOptions,
+    metadata?: BlockRuntimeMetadata
   ): Promise<ZaloActionHelperResult> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const groupId = this.firstNonEmptyString(options.targetUid, options.inputData?.uid)
@@ -8209,7 +8321,8 @@ export class CampaignScheduler {
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
-    const message = this.renderZaloTemplate(options.message, options.inputData, target)
+    const renderedMessage = this.renderZaloTemplate(options.message, options.inputData, target)
+    const message = await this.rewriteZaloMessageForRun(account, campaign, renderedMessage, metadata)
 
     try {
       const response = await this.zaloRuntime.sendMessageToGroup(account.id, groupId, message, attachments)
@@ -8680,9 +8793,9 @@ export class CampaignScheduler {
       zaloResolveGroupMemberTarget: (options) => this.zaloResolveGroupMemberTarget(account, campaign, options),
       zaloResolveRemarketingCustomerTarget: (options) => this.zaloResolveRemarketingCustomerTarget(account, campaign, options),
       zaloResolveFriendRecommendationTarget: (options) => this.zaloResolveFriendRecommendationTarget(account, campaign, options),
-      zaloSendPhoneMessage: (options) => this.zaloSendPhoneMessage(account, campaign, options),
-      zaloSendFriendMessage: (options) => this.zaloSendFriendMessage(account, campaign, options),
-      zaloSendGroupMessage: (options) => this.zaloSendGroupMessage(account, campaign, options),
+      zaloSendPhoneMessage: (options, metadata) => this.zaloSendPhoneMessage(account, campaign, options, metadata),
+      zaloSendFriendMessage: (options, metadata) => this.zaloSendFriendMessage(account, campaign, options, metadata),
+      zaloSendGroupMessage: (options, metadata) => this.zaloSendGroupMessage(account, campaign, options, metadata),
       zaloJoinGroupLink: (options) => this.zaloJoinGroupLink(account, campaign, options),
       zaloSendPhoneFriendRequest: (options) => this.zaloSendPhoneFriendRequest(account, campaign, options),
       zaloCancelSentFriendRequest: (options) => this.zaloCancelSentFriendRequest(account, campaign, options),
