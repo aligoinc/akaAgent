@@ -2093,6 +2093,7 @@ button.btn-icon:not(.btn):disabled {
   white-space: nowrap;
 }
 
+.media-library-type-cell,
 .media-library-path-cell,
 .media-library-url-cell {
   overflow: hidden;
