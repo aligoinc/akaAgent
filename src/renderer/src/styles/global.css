@@ -1987,6 +1987,11 @@ button.btn-icon:not(.btn):disabled {
   max-height: none;
 }
 
+.media-library-grid .campaign-grid {
+  min-width: 1120px;
+  table-layout: fixed;
+}
+
 .media-library-grid .campaign-grid tr.selected td {
   background: rgba(99, 102, 241, 0.12);
 }
@@ -2088,14 +2093,24 @@ button.btn-icon:not(.btn):disabled {
   white-space: nowrap;
 }
 
+.media-library-path-cell,
+.media-library-url-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .media-url-cell {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .media-url-cell > span {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
