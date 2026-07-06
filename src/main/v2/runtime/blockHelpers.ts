@@ -1,4 +1,5 @@
 import { resolveXpathByName } from '../../data/repositories/elementV2Repository'
+import { renderContentSpin, splitContentVariants } from '../../../shared/contentSpin'
 import type { CampaignRunEventInput } from '../../../shared/types'
 
 export interface BlockHelpers {
@@ -16,6 +17,8 @@ export interface BlockHelpers {
   splitVariants(content: string | undefined | null): string[]
   /** Cycle 1 biến thể theo index (modulo). Empty array → '' */
   cycleVariant(variants: string[], index: number): string
+  /** Render spintax `{a|b|c}` thành một lựa chọn ngẫu nhiên. */
+  renderSpin(content: string | undefined | null): string
   /** Lookup XPath snippet từ auto_elements bằng name. Throws nếu không tìm thấy. */
   element(name: string): Promise<string>
   /** Concat multiple XPath snippets bằng name + replace ${var} placeholder */
@@ -301,15 +304,17 @@ export function createBlockHelpers(
     },
 
     splitVariants(content: string | undefined | null): string[] {
-      if (!content) return []
-      if (!content.includes('|')) return [content]
-      return content.split('|').map(s => s.trim()).filter(s => s.length > 0)
+      return splitContentVariants(content)
     },
 
     cycleVariant(variants: string[], index: number): string {
       if (!variants || variants.length === 0) return ''
       const safeIdx = ((index % variants.length) + variants.length) % variants.length
-      return variants[safeIdx]
+      return renderContentSpin(variants[safeIdx])
+    },
+
+    renderSpin(content: string | undefined | null): string {
+      return renderContentSpin(content)
     },
 
     async element(name: string): Promise<string> {

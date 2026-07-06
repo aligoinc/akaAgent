@@ -1,3 +1,5 @@
+import { renderContentSpinMax, splitContentVariants } from './contentSpin'
+
 export interface SmsContentOptions {
   useUnicode: boolean
   keepNewLines: boolean
@@ -46,9 +48,8 @@ export function countSmsContentVariants(
   content: string | null | undefined,
   options: SmsContentOptions
 ): SmsContentCount[] {
-  const variants = String(content || '')
-    .split('|')
-    .map(item => normalizeSmsContentForSend(item, options))
+  const variants = splitContentVariants(content, { fallbackToRaw: true })
+    .map(item => normalizeSmsContentForSend(renderContentSpinMax(item), options))
     .filter(Boolean)
 
   if (variants.length === 0) return [{ countChar: 0, countSms: 0 }]

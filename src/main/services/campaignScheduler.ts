@@ -7,6 +7,7 @@ import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
+import { renderContentSpin, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -1952,7 +1953,8 @@ export class CampaignScheduler {
       const extra = campaign.extraSettings || {}
       const actionDescriptor = this.getZaloShareMessageActionDescriptor(campaign, executableActionDescriptors)
       const shouldCheckQuota = quotaActionDescriptors.some(action => action.code === actionDescriptor.code)
-      const baseMessage = this.cycleVariant(this.splitContentVariants(campaign.content), 0)
+      const messageVariants = this.splitContentVariants(campaign.content)
+      const baseMessage = this.cycleVariant(messageVariants, 0)
       const attachments = await this.resolveMediaSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3, mediaTempPaths)
       const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
       const targetKindLabel = isGroup ? 'group Zalo' : 'bạn bè Zalo'
@@ -1996,6 +1998,7 @@ export class CampaignScheduler {
       let stoppedBeforeCompletion = false
       let earliestFutureInputSchedule: Date | null = null
       let index = 0
+      let batchIndex = 0
 
       while (index < details.length) {
         const cur = await this.supabase.getCampaign(campaign.id)
@@ -2079,7 +2082,9 @@ export class CampaignScheduler {
         }
         if (batch.length === 0) continue
 
-        const message = await this.getZaloShareMessageForBatch(account, campaign, baseMessage)
+        const rawBatchMessage = this.cycleVariant(messageVariants, batchIndex)
+        batchIndex += 1
+        const message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage)
         const stopAfterBatch = await this.processZaloShareMessageBatch(
           account,
           campaign,
@@ -2191,7 +2196,7 @@ export class CampaignScheduler {
     campaign: Campaign,
     message: string
   ): Promise<string> {
-    const original = String(message || '')
+    const original = this.renderSpinContent(message)
     const content = original.trim()
     if (campaign.extraSettings?.rewriteContentEachRun !== true || !content) {
       return original
@@ -4285,8 +4290,13 @@ export class CampaignScheduler {
       else for (let i = 0; i < commentCount; i++) commentIndices.push(i + 2)
     }
     const postVariants = this.splitContentVariants(campaign.content)
-    const commentVariants = this.splitContentVariants(extra.commentContent)
-    const selectedPostContent = this.cycleVariant(postVariants, detailIndex)
+    const rawCommentVariants = this.splitContentVariants(extra.commentContent)
+    const selectedRawPostContent = this.cycleVariant(postVariants, detailIndex)
+    const selectedPostContent = campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
+      ? ''
+      : this.isBrowserlessCampaign(campaign)
+        ? selectedRawPostContent
+        : this.renderSpinContent(selectedRawPostContent)
     const storedCommentImageOption = String(extra.commentImageOption || 'none')
     const commentImageOption = storedCommentImageOption === 'none' ? 'none' : 'all'
     const shouldUseCommentImages = enableComment && commentImageOption === 'all'
@@ -4298,6 +4308,9 @@ export class CampaignScheduler {
       : []
     const selectedCommentImages = shouldUseCommentImages ? validCommentImages : []
     const commentBatchCount = Math.max(commentIndices.length, Number(extra.postsPerTarget ?? commentCount), 1)
+    const commentVariants = Array.from({ length: commentBatchCount }, (_, k) =>
+      this.renderSpinContent(this.cycleVariant(rawCommentVariants, k))
+    )
     const commentImageBatches = Array.from({ length: commentBatchCount }, () =>
       [...selectedCommentImages]
     )
@@ -6330,11 +6343,7 @@ export class CampaignScheduler {
   }
 
   private splitSmsContent(contentMessage: string | null | undefined): string[] {
-    const contents = String(contentMessage || '')
-      .split('|')
-      .map(item => item.trim())
-      .filter(Boolean)
-    return contents.length > 0 ? contents : ['']
+    return splitSharedContentVariants(contentMessage, { fallbackToRaw: true })
   }
 
   private getAkaBizStaffIdForCampaign(sourceCampaign: Campaign): number | null {
@@ -6428,7 +6437,7 @@ export class CampaignScheduler {
             campaignId: targetCampaignId,
             phone,
             name: phoneNameByValue.get(this.normalizeExternalValueForCompare(phone)) || '',
-            content: contentSms[iContentSms++]
+            content: this.renderSpinContent(contentSms[iContentSms++])
           })
           if (iContentSms === contentSms.length) iContentSms = 0
         }
@@ -7805,7 +7814,7 @@ export class CampaignScheduler {
     inputData: Record<string, unknown> | undefined,
     target?: ZaloResolvedTarget | null
   ): string {
-    const raw = String(template || '')
+    const raw = this.renderSpinContent(template)
     if (!raw) return ''
     const now = new Date()
     const formatDate = (format: string, offsetDays = 0): string => {
@@ -9428,9 +9437,7 @@ export class CampaignScheduler {
    * Dùng cho cả `content` và `commentContent`.
    */
   private splitContentVariants(raw: string | undefined | null): string[] {
-    if (!raw) return []
-    if (!raw.includes('|')) return [raw]
-    return raw.split('|').map(s => s.trim()).filter(s => s.length > 0)
+    return splitSharedContentVariants(raw)
   }
 
   /**
@@ -9441,5 +9448,9 @@ export class CampaignScheduler {
     if (variants.length === 0) return ''
     const safeIdx = ((index % variants.length) + variants.length) % variants.length
     return variants[safeIdx]
+  }
+
+  private renderSpinContent(raw: string | undefined | null): string {
+    return renderContentSpin(raw)
   }
 }

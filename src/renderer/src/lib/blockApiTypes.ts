@@ -76,6 +76,8 @@ interface BlockHelpers {
   splitVariants(content: string | undefined | null): string[];
   /** Cycle 1 biến thể theo index (modulo). Empty array → '' */
   cycleVariant(variants: string[], index: number): string;
+  /** Render spintax \`{a|b|c}\` thành một lựa chọn ngẫu nhiên. */
+  renderSpin(content: string | undefined | null): string;
   /** Lookup XPath snippet từ auto_elements bằng name. Throws nếu không tìm thấy. */
   element(name: string): Promise<string>;
   /** Concat XPath snippet với placeholder substitution: helpers.elementWith('xx', { n: 3 }) → replace \${n} với 3 */
