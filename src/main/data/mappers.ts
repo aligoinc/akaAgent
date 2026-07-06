@@ -1,4 +1,4 @@
-import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, MediaFile, ZaloAccount } from '../../shared/types'
+import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   const flatformType = row.flatform_type as string
@@ -321,6 +321,19 @@ export function mapMediaFileFromDB(row: Record<string, unknown>): MediaFile {
     objectKey: (row.object_key as string | null | undefined) ?? null,
     mimeType: (row.mime_type as string | null | undefined) ?? null,
     sizeBytes: row.size_bytes === null || row.size_bytes === undefined ? null : Number(row.size_bytes),
+    isDelete: (row.is_delete as boolean | null | undefined) ?? false,
+    staffId: row.staff_id as number | undefined,
+    organizationId: (row.organization_id as number | null | undefined) ?? null,
+    createdAt: row.created_at as string | undefined,
+    updatedAt: row.updated_at as string | undefined
+  }
+}
+
+export function mapMediaGroupFromDB(row: Record<string, unknown>): MediaGroup {
+  return {
+    id: row.id as number,
+    name: (row.name as string | null | undefined) || '',
+    fileCount: row.file_count === null || row.file_count === undefined ? undefined : Number(row.file_count),
     isDelete: (row.is_delete as boolean | null | undefined) ?? false,
     staffId: row.staff_id as number | undefined,
     organizationId: (row.organization_id as number | null | undefined) ?? null,
