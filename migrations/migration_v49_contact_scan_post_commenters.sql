@@ -343,7 +343,8 @@ const contacts = await page.evaluate(`
       extraData: {
         source: 'facebook_post_commenters',
         sourcePostUrl,
-        sourcePostUrls: sourcePostUrl ? [sourcePostUrl] : []
+        sourcePostUrls: sourcePostUrl ? [sourcePostUrl] : [],
+        sourcePostRefs: sourcePostUrl ? [{ source: 'facebook_post_commenters', url: sourcePostUrl }] : []
       }
     });
     if (rows.length >= limit) break;

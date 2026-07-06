@@ -55,6 +55,11 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
     return contactLoader.loadPostCommenters(accountId, postUrl, maxCommenters)
   })
 
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_POST_LIKES, async (_, accountId: number, postUrl: string, maxLikes: number) => {
+    await ensureContactAccess(supabase, accountId, 'person')
+    return contactLoader.loadPostLikes(accountId, postUrl, maxLikes)
+  })
+
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_PROFILE_FRIENDS, async (_, accountId: number, profileUrl: string, maxFriends: number) => {
     await ensureContactAccess(supabase, accountId, 'person')
     return contactLoader.loadProfileFriends(accountId, profileUrl, maxFriends)

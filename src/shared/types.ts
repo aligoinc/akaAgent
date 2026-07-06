@@ -973,6 +973,7 @@ export interface AccountContactListQuery {
   contactType?: ContactType
   statusFilter?: ContactStatusFilter
   search?: string
+  source?: string
   sourcePostUrl?: string
   sourceProfileUrl?: string
   zaloTagIds?: Array<number | string>
@@ -1018,6 +1019,7 @@ export interface ContactLoadResult {
   runKey?: string
   sourcePostUrl?: string
   maxCommenters?: number
+  maxLikes?: number
   sourceProfileUrl?: string
   sourceProfileUid?: string
   maxFriends?: number
@@ -1527,6 +1529,7 @@ export const IPC_EVENTS = {
   CONTACTS_LOAD_GROUPS: 'contacts:load-groups',
   CONTACTS_LOAD_PAGES: 'contacts:load-pages',
   CONTACTS_LOAD_POST_COMMENTERS: 'contacts:load-post-commenters',
+  CONTACTS_LOAD_POST_LIKES: 'contacts:load-post-likes',
   CONTACTS_LOAD_PROFILE_FRIENDS: 'contacts:load-profile-friends',
   CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS: 'contacts:load-page-inbox-customers',
   CONTACTS_LOAD_ZALO_GROUP_MEMBERS: 'contacts:load-zalo-group-members',

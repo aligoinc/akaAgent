@@ -38,6 +38,7 @@ const CONTACT_SCAN_WORKFLOWS: Partial<Record<ContactType, string>> = {
 }
 
 const POST_COMMENTERS_WORKFLOW = '[Built-in] Facebook - Quét người comment bài post'
+const POST_LIKES_WORKFLOW = '[Built-in] Facebook - Quét người like bài post'
 const PROFILE_FRIENDS_WORKFLOW = '[Built-in] Facebook - Quét bạn bè của profile'
 const PAGE_INBOX_CONTACT_TYPE: ContactType = 'page_inbox_customer'
 const FACEBOOK_GRAPH_API_BASE = 'https://graph.facebook.com/v25.0'
@@ -183,6 +184,38 @@ export class ContactLoader {
       resultMeta: {
         sourcePostUrl: normalizedPostUrl,
         maxCommenters: commenterLimit
+      }
+    })
+  }
+
+  async loadPostLikes(accountId: number, postUrl: string, maxLikes: number): Promise<ContactLoadResult> {
+    const normalizedPostUrl = this.normalizeFacebookPostUrl(postUrl)
+    const likeLimit = this.normalizePostLikeLimit(maxLikes)
+
+    if (!normalizedPostUrl) {
+      return this.completeLoad(accountId, 'person', {
+        success: false,
+        count: 0,
+        error: 'Vui lòng nhập link bài post Facebook hợp lệ',
+        maxLikes: likeLimit
+      })
+    }
+
+    return this.loadContacts(accountId, 'person', {
+      workflowName: POST_LIKES_WORKFLOW,
+      targetUrl: normalizedPostUrl,
+      runKeyLabel: 'post-likes',
+      typeName: 'người like',
+      previewTitle: 'Đang quét người like bài post',
+      markMissingDeleted: false,
+      preserveExistingFriendStatus: true,
+      variables: {
+        sourcePostUrl: normalizedPostUrl,
+        maxLikes: likeLimit
+      },
+      resultMeta: {
+        sourcePostUrl: normalizedPostUrl,
+        maxLikes: likeLimit
       }
     })
   }
@@ -1735,6 +1768,24 @@ export class ContactLoader {
     const existing = existingExtraData || {}
     const next = nextExtraData || {}
     const merged: Record<string, unknown> = { ...existing, ...next }
+    const sources = [
+      ...this.toStringArray(existing.sources),
+      existing.source,
+      ...this.toStringArray(next.sources),
+      next.source
+    ]
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+
+    if (sources.length > 0) {
+      merged.sources = Array.from(new Set(sources))
+    }
+
+    const sourcePostRefs = this.mergeSourcePostRefs(existing, next)
+    if (sourcePostRefs.length > 0) {
+      merged.sourcePostRefs = sourcePostRefs
+    }
+
     const sourcePostUrls = [
       ...this.toStringArray(existing.sourcePostUrls),
       existing.sourcePostUrl,
@@ -1764,6 +1815,50 @@ export class ContactLoader {
     return merged
   }
 
+  private mergeSourcePostRefs(
+    existing: Record<string, unknown>,
+    next: Record<string, unknown>
+  ): Array<{ source: string; url: string }> {
+    const byKey = new Map<string, { source: string; url: string }>()
+    for (const ref of [
+      ...this.toSourcePostRefs(existing.sourcePostRefs),
+      ...this.collectIncomingSourcePostRefs(existing),
+      ...this.toSourcePostRefs(next.sourcePostRefs),
+      ...this.collectIncomingSourcePostRefs(next)
+    ]) {
+      byKey.set(`${ref.source}\u0000${ref.url}`, ref)
+    }
+    return Array.from(byKey.values())
+  }
+
+  private toSourcePostRefs(value: unknown): Array<{ source: string; url: string }> {
+    if (!Array.isArray(value)) return []
+    return value
+      .map(item => {
+        const ref = item && typeof item === 'object' && !Array.isArray(item)
+          ? item as Record<string, unknown>
+          : {}
+        return {
+          source: String(ref.source || '').trim(),
+          url: String(ref.url || ref.sourcePostUrl || '').trim()
+        }
+      })
+      .filter(ref => !!ref.source && !!ref.url)
+  }
+
+  private collectIncomingSourcePostRefs(extra: Record<string, unknown>): Array<{ source: string; url: string }> {
+    const source = String(extra.source || '').trim()
+    if (!source) return []
+    const urls = [
+      extra.sourcePostUrl,
+      ...this.toStringArray(extra.sourcePostUrls)
+    ]
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+
+    return Array.from(new Set(urls)).map(url => ({ source, url }))
+  }
+
   private toStringArray(value: unknown): string[] {
     return Array.isArray(value) ? value.map(item => String(item || '').trim()).filter(Boolean) : []
   }
@@ -1775,6 +1870,11 @@ export class ContactLoader {
   private normalizeCommenterLimit(value: unknown): number {
     const parsed = Math.floor(Number(value))
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 100
+  }
+
+  private normalizePostLikeLimit(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1000
   }
 
   private normalizeProfileFriendLimit(value: unknown): number {

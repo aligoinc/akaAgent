@@ -236,6 +236,48 @@ function toStringArray(value: unknown): string[] {
     : []
 }
 
+function toSourcePostRefs(value: unknown): Array<{ source: string; url: string }> {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => {
+      const ref = toRecord(item)
+      return {
+        source: String(ref.source || '').trim(),
+        url: String(ref.url || ref.sourcePostUrl || '').trim()
+      }
+    })
+    .filter(ref => !!ref.source && !!ref.url)
+}
+
+function collectIncomingSourcePostRefs(extra: Record<string, unknown>): Array<{ source: string; url: string }> {
+  const source = String(extra.source || '').trim()
+  if (!source) return []
+  const urls = [
+    extra.sourcePostUrl,
+    ...toStringArray(extra.sourcePostUrls)
+  ]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+
+  return Array.from(new Set(urls)).map(url => ({ source, url }))
+}
+
+function mergeSourcePostRefs(
+  existing: Record<string, unknown>,
+  next: Record<string, unknown>
+): Array<{ source: string; url: string }> {
+  const byKey = new Map<string, { source: string; url: string }>()
+  for (const ref of [
+    ...toSourcePostRefs(existing.sourcePostRefs),
+    ...collectIncomingSourcePostRefs(existing),
+    ...toSourcePostRefs(next.sourcePostRefs),
+    ...collectIncomingSourcePostRefs(next)
+  ]) {
+    byKey.set(`${ref.source}\u0000${ref.url}`, ref)
+  }
+  return Array.from(byKey.values())
+}
+
 function normalizeNullableString(value: unknown): string | null {
   const trimmed = String(value || '').trim()
   return trimmed || null
@@ -331,6 +373,24 @@ function mergeContactExtraData(
   const existing = toRecord(existingExtraData)
   const next = toRecord(nextExtraData)
   const merged: Record<string, unknown> = { ...existing, ...next }
+  const sources = [
+    ...toStringArray(existing.sources),
+    existing.source,
+    ...toStringArray(next.sources),
+    next.source
+  ]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+
+  if (sources.length > 0) {
+    merged.sources = Array.from(new Set(sources))
+  }
+
+  const sourcePostRefs = mergeSourcePostRefs(existing, next)
+  if (sourcePostRefs.length > 0) {
+    merged.sourcePostRefs = sourcePostRefs
+  }
+
   const sourcePostUrls = [
     ...toStringArray(existing.sourcePostUrls),
     existing.sourcePostUrl,
@@ -574,6 +634,30 @@ function contactMatchesSourcePostUrl(contact: AutoAccountContact, normalizedPost
   return toStringArray(extra.sourcePostUrls).some(value => normalizeFacebookPostUrlForCompare(value) === normalizedPostUrl)
 }
 
+function contactMatchesSource(contact: AutoAccountContact, source: string): boolean {
+  if (!source) return true
+  const extra = toRecord(contact.extraData)
+  if (String(extra.source || '').trim() === source) return true
+  return toStringArray(extra.sources).some(value => String(value || '').trim() === source)
+}
+
+function contactMatchesSourcePostPair(contact: AutoAccountContact, source: string, normalizedPostUrl: string): boolean {
+  if (!source || !normalizedPostUrl) {
+    return contactMatchesSource(contact, source) && contactMatchesSourcePostUrl(contact, normalizedPostUrl)
+  }
+
+  const extra = toRecord(contact.extraData)
+  const refs = toSourcePostRefs(extra.sourcePostRefs)
+  if (refs.length > 0) {
+    return refs.some(ref => (
+      ref.source === source &&
+      normalizeFacebookPostUrlForCompare(ref.url) === normalizedPostUrl
+    ))
+  }
+
+  return contactMatchesSource(contact, source) && contactMatchesSourcePostUrl(contact, normalizedPostUrl)
+}
+
 function normalizeFacebookProfileUrlForCompare(value: unknown): string {
   const raw = String(value || '').trim().replace(/^@+/, '')
   if (!raw) return ''
@@ -697,6 +781,7 @@ function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   const statusFilter = query.statusFilter || 'all'
   if (ids.length > 0 || excludeIds.length > 0) return false
   if (normalizeSearchText(query.search)) return false
+  if (String(query.source || '').trim()) return false
   if (String(query.sourcePostUrl || '').trim()) return false
   if (String(query.sourceProfileUrl || '').trim()) return false
   if (normalizeZaloTagIdList(query.zaloTagIds).length > 0) return false
@@ -810,6 +895,7 @@ async function filterContactsForList(
   const ids = normalizeContactIdList(query.ids)
   const excludeIds = new Set(normalizeContactIdList(query.excludeIds))
   const search = normalizeSearchText(query.search)
+  const source = String(query.source || '').trim()
   const normalizedPostUrl = normalizeFacebookPostUrlForCompare(query.sourcePostUrl)
   const normalizedProfileUrl = normalizeFacebookProfileUrlForCompare(query.sourceProfileUrl)
   const zaloTagIds = normalizeZaloTagIdList(query.zaloTagIds)
@@ -821,7 +907,7 @@ async function filterContactsForList(
   return contacts.filter(contact => {
     if (excludeIds.has(contact.id)) return false
     if (!contactMatchesStatusFilter(contact, query.statusFilter)) return false
-    if (!contactMatchesSourcePostUrl(contact, normalizedPostUrl)) return false
+    if (!contactMatchesSourcePostPair(contact, source, normalizedPostUrl)) return false
     if (!contactMatchesSourceProfileUrl(contact, normalizedProfileUrl)) return false
     if (!contactMatchesSearch(contact, search)) return false
     if (!contactMatchesZaloTagFilter(contact, zaloTagIds, includeNoZaloTag)) return false
