@@ -385,6 +385,14 @@ export interface CampaignExtraSettings {
   emailCheckLinkClicks?: boolean // Kiểm tra click vào link trong email_send
   smsUseUnicode?: boolean        // SMS giữ tiếng Việt có dấu; false thì bỏ dấu trước khi gửi
   smsKeepNewLines?: boolean      // SMS giữ xuống dòng; false thì bỏ \r/\n trước khi gửi
+  internalSmsEnabled?: boolean   // Zalo message phone/group member: kiêm gửi SMS bằng campaign sms_send nội bộ
+  internalSmsAccountIds?: number[]
+  internalSmsContent?: string
+  internalSmsStatuses?: string[]
+  internalSmsCreatedCampaignIdsByAccount?: Record<string, number> // sms_account_id -> campaign sms_send con đã tạo
+  internalSmsSourceCampaignId?: number
+  internalSmsSourceCampaignName?: string
+  internalSmsSourceActionId?: string
   externalSmsEnabled?: boolean   // Zalo message phone/group member: kiêm gửi SMS qua akaBiz Sms ngoài hệ thống
   externalSmsShopIds?: number[]
   externalSmsContent?: string
