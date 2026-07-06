@@ -139,6 +139,40 @@ export interface MediaUploadResult {
   failures: MediaUploadFailure[]
 }
 
+export const CUSTOMER_FEEDBACK_MAX_IMAGES = 5
+
+export type CustomerFeedbackReportType = 'báo lỗi' | 'đề xuất tính năng'
+export type CustomerFeedbackProduct = 'sms' | 'zalo' | 'facebook' | 'email' | 'khác'
+
+export interface CustomerFeedbackImageInput {
+  name?: string | null
+  localPath?: string | null
+  dataUrl?: string | null
+  mimeType?: string | null
+  sizeBytes?: number | null
+}
+
+export type CustomerFeedbackSubmitRequest =
+  | {
+      kind: 'support_rating'
+      content: string
+      rating: number
+      images?: CustomerFeedbackImageInput[]
+    }
+  | {
+      kind: 'report_feature'
+      type: CustomerFeedbackReportType
+      product: CustomerFeedbackProduct
+      content: string
+      description?: string | null
+      images?: CustomerFeedbackImageInput[]
+    }
+
+export interface CustomerFeedbackSubmitResult {
+  success: boolean
+  imageUrls: string[]
+}
+
 export interface ZaloLoginQrStartResult {
   success: boolean
   accountId: number
@@ -1401,6 +1435,9 @@ export const IPC_EVENTS = {
   MEDIA_FILES_LIST: 'media:files:list',
   MEDIA_FILES_UPLOAD: 'media:files:upload',
   MEDIA_FILES_DELETE: 'media:files:delete',
+
+  // Customer Feedback
+  CUSTOMER_FEEDBACK_SUBMIT: 'customer-feedback:submit',
 
   // Email Notifications
   EMAIL_NOTIFICATION_SETTINGS_GET: 'email-notification-settings:get',

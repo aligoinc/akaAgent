@@ -102,7 +102,7 @@ function getSettingValue(settings: Map<string, string>, name: MediaSettingName):
   return normalizeText(settings.get(MEDIA_SETTING_KEYS[name]) ?? DEFAULT_SETTINGS[name])
 }
 
-async function resolveStorageSettings(): Promise<ResolvedMediaStorageSettings> {
+export async function resolveMediaStorageSettings(): Promise<ResolvedMediaStorageSettings> {
   const settings = await readSettingsMap()
   return {
     provider: getSettingValue(settings, 'provider') || 'r2',
@@ -168,7 +168,7 @@ async function upsertSetting(key: string, value: string, description: string, is
 
 export async function getMediaStorageSettings(): Promise<MediaStorageSettings> {
   const user = requireCurrentUser()
-  return toPublicSettings(await resolveStorageSettings(), user.isAdminAkabiz === true)
+  return toPublicSettings(await resolveMediaStorageSettings(), user.isAdminAkabiz === true)
 }
 
 function buildStorageSettingsInput(
@@ -192,7 +192,7 @@ function buildStorageSettingsInput(
 
 export async function saveMediaStorageSettings(settings: Partial<MediaStorageSettings>): Promise<MediaStorageSettings> {
   requireAdmin()
-  const current = await resolveStorageSettings()
+  const current = await resolveMediaStorageSettings()
   const next = buildStorageSettingsInput(settings, current)
 
   await upsertSetting(MEDIA_SETTING_KEYS.provider, next.provider, 'Cloud media storage provider.')
@@ -208,7 +208,7 @@ export async function saveMediaStorageSettings(settings: Partial<MediaStorageSet
 
 export async function testMediaStorageSettings(settings: Partial<MediaStorageSettings> = {}): Promise<{ ok: boolean; cloudUrl?: string }> {
   requireAdmin()
-  const current = await resolveStorageSettings()
+  const current = await resolveMediaStorageSettings()
   return mediaStorageService.test(buildStorageSettingsInput(settings, current))
 }
 
@@ -238,7 +238,7 @@ async function countActiveMediaFiles(staffId: number): Promise<number> {
 
 export async function uploadMediaFiles(localPaths: string[]): Promise<MediaUploadResult> {
   const user = requireCurrentUser()
-  const settings = await resolveStorageSettings()
+  const settings = await resolveMediaStorageSettings()
   const paths = Array.from(new Set(
     (Array.isArray(localPaths) ? localPaths : [])
       .map(path => normalizeText(path))

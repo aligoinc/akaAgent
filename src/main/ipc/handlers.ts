@@ -23,6 +23,7 @@ import { registerAkaBizIntegrationHandlers } from './handlers/akaBizIntegrationH
 import { registerCampaignImportHandlers } from './handlers/campaignImportHandlers'
 import { registerContentTemplateHandlers } from './handlers/contentTemplateHandlers'
 import { registerMediaHandlers } from './handlers/mediaHandlers'
+import { registerCustomerFeedbackHandlers } from './handlers/customerFeedbackHandlers'
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { getCurrentUser, setCurrentUser } from '../data/currentUser'
@@ -390,6 +391,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerCampaignImportHandlers()
   registerContentTemplateHandlers(supabase)
   registerMediaHandlers(supabase)
+  registerCustomerFeedbackHandlers()
   registerEmailNotificationHandlers(supabase)
   registerReportHandlers(supabase)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
