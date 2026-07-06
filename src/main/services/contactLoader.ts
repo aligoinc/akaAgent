@@ -40,6 +40,7 @@ const CONTACT_SCAN_WORKFLOWS: Partial<Record<ContactType, string>> = {
 const POST_COMMENTERS_WORKFLOW = '[Built-in] Facebook - Quét người comment bài post'
 const POST_LIKES_WORKFLOW = '[Built-in] Facebook - Quét người like bài post'
 const PROFILE_FRIENDS_WORKFLOW = '[Built-in] Facebook - Quét bạn bè của profile'
+const GROUP_MEMBERS_WORKFLOW = '[Built-in] Facebook - Quét thành viên group'
 const PAGE_INBOX_CONTACT_TYPE: ContactType = 'page_inbox_customer'
 const FACEBOOK_GRAPH_API_BASE = 'https://graph.facebook.com/v25.0'
 const PAGE_INBOX_BATCH_SIZE = 500
@@ -250,6 +251,43 @@ export class ContactLoader {
         sourceProfileUrl: profileTarget.sourceProfileUrl,
         sourceProfileUid: profileTarget.sourceProfileUid,
         maxFriends: friendLimit
+      }
+    })
+  }
+
+  async loadGroupMembers(accountId: number, groupUrl: string, maxGroupMembers: number): Promise<ContactLoadResult> {
+    const memberLimit = this.normalizeGroupMemberLimit(maxGroupMembers)
+    const groupTarget = this.normalizeFacebookGroupScanTarget(groupUrl)
+
+    if (!groupTarget) {
+      return this.completeLoad(accountId, 'person', {
+        success: false,
+        count: 0,
+        error: 'Vui lòng nhập link/UID group Facebook hợp lệ',
+        maxGroupMembers: memberLimit
+      })
+    }
+
+    return this.loadContacts(accountId, 'person', {
+      workflowName: GROUP_MEMBERS_WORKFLOW,
+      targetUrl: groupTarget.targetUrl,
+      runKeyLabel: 'group-members',
+      typeName: 'thành viên group',
+      previewTitle: 'Đang quét thành viên group',
+      markMissingDeleted: false,
+      preserveExistingFriendStatus: true,
+      variables: {
+        findDataGroupUrl: groupTarget.sourceGroupUrl,
+        sourceGroupUrl: groupTarget.sourceGroupUrl,
+        sourceGroupUid: groupTarget.sourceGroupUid,
+        isFindInGroupMembers: true,
+        isFindUid: true,
+        countGroupMemberFindData: memberLimit
+      },
+      resultMeta: {
+        sourceGroupUrl: groupTarget.sourceGroupUrl,
+        sourceGroupUid: groupTarget.sourceGroupUid,
+        maxGroupMembers: memberLimit
       }
     })
   }
@@ -1189,6 +1227,14 @@ export class ContactLoader {
         signal: loadState.controller.signal,
         persist: true,
         onStepProgress: (step: RunStepV2) => {
+          const stepMessage = this.formatWorkflowStepProgressMessage(step)
+          if (stepMessage) {
+            this.sendProgress(stepMessage, {
+              accountId,
+              contactType,
+              runKey: loadState.runKey
+            })
+          }
           try {
             this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, {
               runKey: loadState.runKey,
@@ -1676,6 +1722,48 @@ export class ContactLoader {
     } catch {}
   }
 
+  private formatWorkflowStepProgressMessage(step: RunStepV2): string {
+    const label = this.getWorkflowStepLabel(step.blockName || step.nodeId)
+    if (!label) return ''
+    if (step.status === 'running') return `Đang ${label}...`
+    if (step.status === 'success') return `Đã ${label}.`
+    if (step.status === 'error') {
+      const error = String(step.error || '').trim()
+      return error ? `Lỗi khi ${label}: ${error}` : `Lỗi khi ${label}.`
+    }
+    return ''
+  }
+
+  private getWorkflowStepLabel(blockName: string | undefined): string {
+    switch (blockName) {
+      case 'fb_scan_open_post':
+        return 'mở bài post'
+      case 'fb_scan_collect_post_commenters':
+        return 'đọc người comment bài post'
+      case 'fb_scan_collect_post_likes':
+        return 'đọc người like bài post'
+      case 'fb_scan_open_profile_friends':
+        return 'mở danh sách bạn bè profile'
+      case 'fb_scan_collect_profile_friends':
+        return 'đọc bạn bè profile'
+      case 'fb_open_group_members':
+        return 'mở trang thành viên group'
+      case 'fb_collect_group_members':
+      case 'fb_scan_collect_group_members':
+        return 'cuộn và đọc thành viên group'
+      case 'fb_scan_extract_group_members':
+        return 'chuẩn hoá thành viên group'
+      case 'fb_scan_contacts_summary':
+        return 'tổng kết data'
+      case 'fb_open_contacts':
+        return 'mở danh sách data'
+      case 'fb_scan_contacts':
+        return 'đọc danh sách data'
+      default:
+        return ''
+    }
+  }
+
   private completeLoad(
     accountId: number,
     contactType: ContactType,
@@ -1812,6 +1900,19 @@ export class ContactLoader {
       merged.sourceProfileUrls = Array.from(new Set(sourceProfileUrls))
     }
 
+    const sourceGroupUrls = [
+      ...this.toStringArray(existing.sourceGroupUrls),
+      existing.sourceGroupUrl,
+      ...this.toStringArray(next.sourceGroupUrls),
+      next.sourceGroupUrl
+    ]
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+
+    if (sourceGroupUrls.length > 0) {
+      merged.sourceGroupUrls = Array.from(new Set(sourceGroupUrls))
+    }
+
     return merged
   }
 
@@ -1880,6 +1981,56 @@ export class ContactLoader {
   private normalizeProfileFriendLimit(value: unknown): number {
     const parsed = Math.floor(Number(value))
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1000
+  }
+
+  private normalizeGroupMemberLimit(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1000
+  }
+
+  private normalizeFacebookGroupScanTarget(value: unknown): { targetUrl: string; sourceGroupUrl: string; sourceGroupUid: string } | null {
+    const raw = String(value || '').trim()
+    if (!raw) return null
+
+    if (!/facebook\.com|fb\.com/i.test(raw)) {
+      const cleaned = raw.replace(/^\/+|\/+$/g, '')
+      const parts = cleaned.split('/').filter(Boolean)
+      const groupKey = parts[0]?.toLowerCase() === 'groups' && parts[1] ? parts[1] : cleaned
+      if (!groupKey || !/^[a-zA-Z0-9._-]+$/.test(groupKey)) return null
+      const sourceGroupUrl = `https://www.facebook.com/groups/${groupKey}`
+      return {
+        targetUrl: `${sourceGroupUrl}/members`,
+        sourceGroupUrl,
+        sourceGroupUid: groupKey
+      }
+    }
+
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+      const host = url.hostname
+        .replace(/^www\./i, '')
+        .replace(/^web\./i, '')
+        .replace(/^m\./i, '')
+        .replace(/^mobile\./i, '')
+        .replace(/^mbasic\./i, '')
+        .toLowerCase()
+      if (host !== 'facebook.com' && host !== 'fb.com') return null
+
+      const parts = url.pathname.split('/').filter(Boolean)
+      const groupIndex = parts.findIndex(part => part.toLowerCase() === 'groups')
+      if (groupIndex < 0 || !parts[groupIndex + 1]) return null
+      const groupKey = decodeURIComponent(parts[groupIndex + 1] || '').trim()
+      if (!groupKey || !/^[a-zA-Z0-9._-]+$/.test(groupKey)) return null
+
+      const sourceGroupUrl = `https://www.facebook.com/groups/${groupKey}`
+      return {
+        targetUrl: `${sourceGroupUrl}/members`,
+        sourceGroupUrl,
+        sourceGroupUid: groupKey
+      }
+    } catch {
+      return null
+    }
   }
 
   private normalizeFacebookProfileScanTarget(value: unknown): { targetUrl: string; sourceProfileUrl: string; sourceProfileUid: string } | null {

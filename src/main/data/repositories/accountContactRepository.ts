@@ -417,6 +417,19 @@ function mergeContactExtraData(
     merged.sourceProfileUrls = Array.from(new Set(sourceProfileUrls))
   }
 
+  const sourceGroupUrls = [
+    ...toStringArray(existing.sourceGroupUrls),
+    existing.sourceGroupUrl,
+    ...toStringArray(next.sourceGroupUrls),
+    next.sourceGroupUrl
+  ]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+
+  if (sourceGroupUrls.length > 0) {
+    merged.sourceGroupUrls = Array.from(new Set(sourceGroupUrls))
+  }
+
   return merged
 }
 
@@ -701,6 +714,46 @@ function contactMatchesSourceProfileUrl(contact: AutoAccountContact, normalizedP
   return toStringArray(extra.sourceProfileUrls).some(value => normalizeFacebookProfileUrlForCompare(value) === normalizedProfileUrl)
 }
 
+function normalizeFacebookGroupUrlForCompare(value: unknown): string {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (!/facebook\.com|fb\.com/i.test(raw)) {
+    const cleaned = raw.replace(/^\/+|\/+$/g, '')
+    const parts = cleaned.split('/').filter(Boolean)
+    const groupKey = parts[0]?.toLowerCase() === 'groups' && parts[1] ? parts[1] : cleaned
+    return /^[a-zA-Z0-9._-]+$/.test(groupKey || '')
+      ? `https://www.facebook.com/groups/${groupKey}`.toLowerCase()
+      : ''
+  }
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+    const host = url.hostname
+      .replace(/^www\./i, '')
+      .replace(/^web\./i, '')
+      .replace(/^m\./i, '')
+      .replace(/^mobile\./i, '')
+      .replace(/^mbasic\./i, '')
+      .toLowerCase()
+    if (host !== 'facebook.com' && host !== 'fb.com') return ''
+    const parts = url.pathname.split('/').filter(Boolean)
+    const groupIndex = parts.findIndex(part => part.toLowerCase() === 'groups')
+    if (groupIndex < 0 || !parts[groupIndex + 1]) return ''
+    const groupKey = decodeURIComponent(parts[groupIndex + 1] || '').trim()
+    return groupKey && /^[a-zA-Z0-9._-]+$/.test(groupKey)
+      ? `https://www.facebook.com/groups/${groupKey}`.toLowerCase()
+      : ''
+  } catch {
+    return raw.replace(/\/+$/g, '').toLowerCase()
+  }
+}
+
+function contactMatchesSourceGroupUrl(contact: AutoAccountContact, normalizedGroupUrl: string): boolean {
+  if (!normalizedGroupUrl) return true
+  const extra = toRecord(contact.extraData)
+  if (normalizeFacebookGroupUrlForCompare(extra.sourceGroupUrl) === normalizedGroupUrl) return true
+  return toStringArray(extra.sourceGroupUrls).some(value => normalizeFacebookGroupUrlForCompare(value) === normalizedGroupUrl)
+}
+
 function contactMatchesStatusFilter(contact: AutoAccountContact, statusFilter: AccountContactListQuery['statusFilter']): boolean {
   if (!statusFilter || statusFilter === 'all') return true
   if (contact.contactType === 'person') {
@@ -784,6 +837,7 @@ function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   if (String(query.source || '').trim()) return false
   if (String(query.sourcePostUrl || '').trim()) return false
   if (String(query.sourceProfileUrl || '').trim()) return false
+  if (String(query.sourceGroupUrl || '').trim()) return false
   if (normalizeZaloTagIdList(query.zaloTagIds).length > 0) return false
   if (query.zaloNoTag) return false
   if (normalizeContactIdList(query.akaBizTagIds).length > 0) return false
@@ -898,6 +952,7 @@ async function filterContactsForList(
   const source = String(query.source || '').trim()
   const normalizedPostUrl = normalizeFacebookPostUrlForCompare(query.sourcePostUrl)
   const normalizedProfileUrl = normalizeFacebookProfileUrlForCompare(query.sourceProfileUrl)
+  const normalizedGroupUrl = normalizeFacebookGroupUrlForCompare(query.sourceGroupUrl)
   const zaloTagIds = normalizeZaloTagIdList(query.zaloTagIds)
   const akaBizTagIds = normalizeContactIdList(query.akaBizTagIds)
   const includeNoZaloTag = query.zaloNoTag === true
@@ -909,6 +964,7 @@ async function filterContactsForList(
     if (!contactMatchesStatusFilter(contact, query.statusFilter)) return false
     if (!contactMatchesSourcePostPair(contact, source, normalizedPostUrl)) return false
     if (!contactMatchesSourceProfileUrl(contact, normalizedProfileUrl)) return false
+    if (!contactMatchesSourceGroupUrl(contact, normalizedGroupUrl)) return false
     if (!contactMatchesSearch(contact, search)) return false
     if (!contactMatchesZaloTagFilter(contact, zaloTagIds, includeNoZaloTag)) return false
     if (!contactMatchesAkaBizTagFilter(contact, akaBizTagIds, includeNoAkaBizTag)) return false

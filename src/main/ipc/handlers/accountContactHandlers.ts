@@ -65,6 +65,11 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
     return contactLoader.loadProfileFriends(accountId, profileUrl, maxFriends)
   })
 
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_GROUP_MEMBERS, async (_, accountId: number, groupUrl: string, maxGroupMembers: number) => {
+    await ensureContactAccess(supabase, accountId, 'person')
+    return contactLoader.loadGroupMembers(accountId, groupUrl, maxGroupMembers)
+  })
+
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS, async (_, accountId: number, pageUid: string, pageName?: string) => {
     await ensureContactAccess(supabase, accountId, 'page_inbox_customer')
     return contactLoader.loadPageInboxCustomers(accountId, pageUid, pageName)
