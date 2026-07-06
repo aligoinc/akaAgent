@@ -1,4 +1,4 @@
-import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaStorageSettings } from '../../shared/types'
+import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaGroup, MediaStorageSettings } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -168,6 +168,13 @@ export class SupabaseService {
   listMediaFiles() { return mediaFileRepo.listMediaFiles() }
   uploadMediaFiles(localPaths: string[]) { return mediaFileRepo.uploadMediaFiles(localPaths) }
   deleteMediaFile(id: number) { return mediaFileRepo.deleteMediaFile(id) }
+  listMediaGroups() { return mediaFileRepo.listMediaGroups() }
+  createMediaGroup(group: Partial<MediaGroup>) { return mediaFileRepo.createMediaGroup(group) }
+  updateMediaGroup(id: number, updates: Partial<MediaGroup>) { return mediaFileRepo.updateMediaGroup(id, updates) }
+  deleteMediaGroup(id: number) { return mediaFileRepo.deleteMediaGroup(id) }
+  listMediaGroupFileIds(groupId: number) { return mediaFileRepo.listMediaGroupFileIds(groupId) }
+  addMediaGroupFiles(groupId: number, mediaFileIds: number[]) { return mediaFileRepo.addMediaGroupFiles(groupId, mediaFileIds) }
+  removeMediaGroupFiles(groupId: number, mediaFileIds: number[]) { return mediaFileRepo.removeMediaGroupFiles(groupId, mediaFileIds) }
 
   // =========== EMAIL NOTIFICATIONS ===========
   getEmailNotificationSettings() { return emailNotificationRepo.getEmailNotificationSettings() }

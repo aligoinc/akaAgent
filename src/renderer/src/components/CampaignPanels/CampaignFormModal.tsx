@@ -31,6 +31,7 @@ import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
+import MediaPreviewHover from '../Media/MediaPreviewHover'
 import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
 import ContentPreviewModal, {
   type ContentPreviewMediaItem,
@@ -767,6 +768,9 @@ const getCampaignMediaCloudUrl = (item: CampaignMediaInput): string =>
 
 const getCampaignMediaMimeType = (item: CampaignMediaInput): string =>
   typeof item === 'string' ? '' : (item.mimeType || '')
+
+const getCampaignMediaSizeBytes = (item: CampaignMediaInput): number | null =>
+  typeof item === 'string' ? null : (item.sizeBytes ?? null)
 
 const isCampaignMediaLocalAvailable = (path: string): boolean => {
   const trimmed = String(path || '').trim()
@@ -5774,6 +5778,7 @@ export default function CampaignFormModal({
                 <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr>
                     <th style={{ width: 50, textAlign: 'center' }}>STT</th>
+                    <th style={{ width: 44, textAlign: 'center' }}></th>
                     <th>Link</th>
                     <th style={{ width: 40, textAlign: 'center' }}></th>
                   </tr>
@@ -5781,7 +5786,7 @@ export default function CampaignFormModal({
                 <tbody>
                   {images.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="text-center text-muted" style={{ padding: '24px 0' }}>
+                      <td colSpan={4} className="text-center text-muted" style={{ padding: '24px 0' }}>
                         {isFileMedia ? 'Chưa có file nào được chọn' : 'Chưa có ảnh nào được chọn'}
                       </td>
                     </tr>
@@ -5789,17 +5794,25 @@ export default function CampaignFormModal({
                     images.map((img, idx) => {
                       const localPath = getCampaignMediaLocalPath(img)
                       const cloudUrl = getCampaignMediaCloudUrl(img)
-	                      const usingCloudFallback = isCampaignMediaUsingCloudFallback(img)
-	                      const mediaTitle = [localPath, cloudUrl].filter(Boolean).join('\n') || getCampaignMediaDisplayName(img)
-	                      return (
-	                        <tr key={`${target}-${idx}-${getCampaignMediaStableKey(img)}`}>
-	                          <td className="text-center">{idx + 1}</td>
-	                          <td className="text-truncate" style={{ maxWidth: 200 }} title={mediaTitle}>
-	                            {getCampaignMediaDisplayName(img)}
-	                            {usingCloudFallback && (
-	                              <span className="media-inline-source">cloud</span>
-	                            )}
-	                          </td>
+                      const usingCloudFallback = isCampaignMediaUsingCloudFallback(img)
+                      const mediaTitle = [localPath, cloudUrl].filter(Boolean).join('\n') || getCampaignMediaDisplayName(img)
+                      return (
+                        <tr key={`${target}-${idx}-${getCampaignMediaStableKey(img)}`}>
+                          <td className="text-center">{idx + 1}</td>
+                          <td className="text-center">
+                            <MediaPreviewHover
+                              name={getCampaignMediaDisplayName(img)}
+                              path={getCampaignMediaPreviewPath(img)}
+                              mimeType={getCampaignMediaMimeType(img)}
+                              sizeBytes={getCampaignMediaSizeBytes(img)}
+                            />
+                          </td>
+                          <td className="text-truncate" style={{ maxWidth: 200 }} title={mediaTitle}>
+                            {getCampaignMediaDisplayName(img)}
+                            {usingCloudFallback && (
+                              <span className="media-inline-source">cloud</span>
+                            )}
+                          </td>
                           <td className="text-center">
                             <button
                               type="button"

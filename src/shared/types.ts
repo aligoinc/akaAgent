@@ -117,6 +117,17 @@ export interface MediaFile {
   updatedAt?: string
 }
 
+export interface MediaGroup {
+  id: number
+  name: string
+  fileCount?: number
+  isDelete: boolean
+  staffId?: number
+  organizationId?: number | null
+  createdAt?: string
+  updatedAt?: string
+}
+
 export interface MediaStorageSettings {
   provider: string
   endpointUrl: string
@@ -1454,6 +1465,13 @@ export const IPC_EVENTS = {
   MEDIA_FILES_LIST: 'media:files:list',
   MEDIA_FILES_UPLOAD: 'media:files:upload',
   MEDIA_FILES_DELETE: 'media:files:delete',
+  MEDIA_GROUPS_LIST: 'media:groups:list',
+  MEDIA_GROUPS_CREATE: 'media:groups:create',
+  MEDIA_GROUPS_UPDATE: 'media:groups:update',
+  MEDIA_GROUPS_DELETE: 'media:groups:delete',
+  MEDIA_GROUP_FILE_IDS_LIST: 'media:group-file-ids:list',
+  MEDIA_GROUP_FILES_ADD: 'media:group-files:add',
+  MEDIA_GROUP_FILES_REMOVE: 'media:group-files:remove',
 
   // Customer Feedback
   CUSTOMER_FEEDBACK_SUBMIT: 'customer-feedback:submit',
