@@ -139,8 +139,8 @@ export default function MediaLibraryModal({
   const onlyImages = pickerMode === 'image'
   const activeMediaCount = files.length
   const selectedGroup = selectedGroupId ? groups.find(group => group.id === selectedGroupId) || null : null
-  const showMediaActionColumn = isPicker || selectedGroupId === null
-  const tableColSpan = isPicker ? 10 : showMediaActionColumn ? 9 : 8
+  const canDeleteMedia = !isPicker && selectedGroupId === null
+  const tableColSpan = isPicker ? 9 : 8
   const groupFileOrder = useMemo(
     () => new Map(Array.from(groupFileIds).map((id, index) => [id, index])),
     [groupFileIds]
@@ -770,6 +770,11 @@ export default function MediaLibraryModal({
                   mimeType={file.mimeType}
                   sizeBytes={file.sizeBytes}
                 />
+                <span className="media-library-name-cell">
+                  {isImageMime(file.mimeType) ? <Image size={16} /> : <FileText size={16} />}
+                  <span title={file.originalName}>{file.originalName}</span>
+                </span>
+                <span className="media-group-manage-meta">{formatBytes(file.sizeBytes)}</span>
                 <button
                   type="button"
                   className="btn-icon text-error"
@@ -779,11 +784,6 @@ export default function MediaLibraryModal({
                 >
                   <Trash2 size={14} />
                 </button>
-                <span className="media-library-name-cell">
-                  {isImageMime(file.mimeType) ? <Image size={16} /> : <FileText size={16} />}
-                  <span title={file.originalName}>{file.originalName}</span>
-                </span>
-                <span className="media-group-manage-meta">{formatBytes(file.sizeBytes)}</span>
               </div>
             ))}
           </div>
@@ -866,14 +866,13 @@ export default function MediaLibraryModal({
                       <tr>
                         {isPicker && <th style={{ width: 44 }}></th>}
                         <th style={{ width: 56, textAlign: 'center' }}>STT</th>
-                        <th style={{ width: 44 }}></th>
+                        <th style={{ width: canDeleteMedia ? 76 : 44 }}></th>
                         <th>Tên file</th>
                         <th style={{ width: 120 }}>Loại</th>
                         <th style={{ width: 160, whiteSpace: 'nowrap' }}>Dung lượng</th>
                         <th>Local path</th>
                         <th>Cloud URL</th>
                         <th style={{ width: 180, whiteSpace: 'nowrap' }}>Ngày upload</th>
-                        {showMediaActionColumn && <th style={{ width: 72 }}></th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -905,12 +904,27 @@ export default function MediaLibraryModal({
                             )}
                             <td className="text-center" style={{ width: 56 }}>{index + 1}</td>
                             <td className="text-center">
-                              <MediaPreviewHover
-                                name={file.originalName}
-                                path={getMediaFilePreviewPath(file)}
-                                mimeType={file.mimeType}
-                                sizeBytes={file.sizeBytes}
-                              />
+                              <span className="media-library-row-tools">
+                                <MediaPreviewHover
+                                  name={file.originalName}
+                                  path={getMediaFilePreviewPath(file)}
+                                  mimeType={file.mimeType}
+                                  sizeBytes={file.sizeBytes}
+                                />
+                                {canDeleteMedia && (
+                                  <button
+                                    type="button"
+                                    className="btn-icon text-error action-btn"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      handleDelete(file)
+                                    }}
+                                    title="Xoá"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </span>
                             </td>
                             <td>
                               <div className="media-library-name-cell">
@@ -932,13 +946,6 @@ export default function MediaLibraryModal({
                               ) : '-'}
                             </td>
                             <td style={{ width: 180, whiteSpace: 'nowrap' }}>{formatDateTime(file.createdAt)}</td>
-                            {showMediaActionColumn && (
-                              <td className="text-center">
-                                <button type="button" className="btn-icon text-error action-btn" onClick={() => handleDelete(file)} title="Xoá">
-                                  <Trash2 size={14} />
-                                </button>
-                              </td>
-                            )}
                           </tr>
                         )
                       })}

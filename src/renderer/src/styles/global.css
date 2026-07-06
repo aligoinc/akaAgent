@@ -1999,6 +1999,14 @@ button.btn-icon:not(.btn):disabled {
   color: var(--text-tertiary);
 }
 
+.media-library-row-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
 .media-hover-preview {
   display: inline-flex;
   align-items: center;
