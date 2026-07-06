@@ -974,6 +974,7 @@ export interface AccountContactListQuery {
   statusFilter?: ContactStatusFilter
   search?: string
   sourcePostUrl?: string
+  sourceProfileUrl?: string
   zaloTagIds?: Array<number | string>
   zaloNoTag?: boolean
   akaBizTagIds?: number[]
@@ -1017,6 +1018,9 @@ export interface ContactLoadResult {
   runKey?: string
   sourcePostUrl?: string
   maxCommenters?: number
+  sourceProfileUrl?: string
+  sourceProfileUid?: string
+  maxFriends?: number
   zaloGroupId?: string
   zaloGroupName?: string
   usedProxy?: boolean
@@ -1056,7 +1060,7 @@ export interface AutoAccountContact {
   akaBizTagIds?: number[]
   zaloUserId?: number | null
   zaloGroupId?: number | null
-  isFriend?: boolean
+  isFriend?: boolean | null
   requiresPostApproval?: boolean | null
   isJoined?: boolean
   isDelete: boolean
@@ -1523,6 +1527,7 @@ export const IPC_EVENTS = {
   CONTACTS_LOAD_GROUPS: 'contacts:load-groups',
   CONTACTS_LOAD_PAGES: 'contacts:load-pages',
   CONTACTS_LOAD_POST_COMMENTERS: 'contacts:load-post-commenters',
+  CONTACTS_LOAD_PROFILE_FRIENDS: 'contacts:load-profile-friends',
   CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS: 'contacts:load-page-inbox-customers',
   CONTACTS_LOAD_ZALO_GROUP_MEMBERS: 'contacts:load-zalo-group-members',
   CONTACTS_LIST_PAGE_INBOX: 'contacts:list-page-inbox',

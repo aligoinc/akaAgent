@@ -7,7 +7,7 @@ interface Contact {
   uid?: string
   url?: string
   type?: string
-  isFriend?: boolean
+  isFriend?: boolean | null
 }
 
 interface FriendPickerModalProps {

@@ -109,7 +109,7 @@ export interface ZaloResolvedTarget {
   displayName?: string
   originalName?: string
   gender?: number | string | null
-  isFriend?: boolean
+  isFriend?: boolean | null
   raw?: Record<string, unknown>
 }
 

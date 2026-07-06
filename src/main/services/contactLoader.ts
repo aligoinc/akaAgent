@@ -38,6 +38,7 @@ const CONTACT_SCAN_WORKFLOWS: Partial<Record<ContactType, string>> = {
 }
 
 const POST_COMMENTERS_WORKFLOW = '[Built-in] Facebook - Quét người comment bài post'
+const PROFILE_FRIENDS_WORKFLOW = '[Built-in] Facebook - Quét bạn bè của profile'
 const PAGE_INBOX_CONTACT_TYPE: ContactType = 'page_inbox_customer'
 const FACEBOOK_GRAPH_API_BASE = 'https://graph.facebook.com/v25.0'
 const PAGE_INBOX_BATCH_SIZE = 500
@@ -182,6 +183,40 @@ export class ContactLoader {
       resultMeta: {
         sourcePostUrl: normalizedPostUrl,
         maxCommenters: commenterLimit
+      }
+    })
+  }
+
+  async loadProfileFriends(accountId: number, profileUrl: string, maxFriends: number): Promise<ContactLoadResult> {
+    const friendLimit = this.normalizeProfileFriendLimit(maxFriends)
+    const profileTarget = this.normalizeFacebookProfileScanTarget(profileUrl)
+
+    if (!profileTarget) {
+      return this.completeLoad(accountId, 'person', {
+        success: false,
+        count: 0,
+        error: 'Vui lòng nhập link/UID profile Facebook hợp lệ',
+        maxFriends: friendLimit
+      })
+    }
+
+    return this.loadContacts(accountId, 'person', {
+      workflowName: PROFILE_FRIENDS_WORKFLOW,
+      targetUrl: profileTarget.targetUrl,
+      runKeyLabel: `profile-friends-${profileTarget.sourceProfileUid}`,
+      typeName: 'bạn bè của profile',
+      previewTitle: 'Đang quét bạn bè của profile',
+      markMissingDeleted: false,
+      variables: {
+        profileUrl: profileTarget.sourceProfileUrl,
+        sourceProfileUrl: profileTarget.sourceProfileUrl,
+        sourceProfileUid: profileTarget.sourceProfileUid,
+        maxFriends: friendLimit
+      },
+      resultMeta: {
+        sourceProfileUrl: profileTarget.sourceProfileUrl,
+        sourceProfileUid: profileTarget.sourceProfileUid,
+        maxFriends: friendLimit
       }
     })
   }
@@ -1173,6 +1208,7 @@ export class ContactLoader {
           runKey: loadState.runKey
         })
         return this.completeLoad(accountId, contactType, {
+          ...resultMeta,
           success: false,
           count: 0,
           error: `Không tìm thấy ${typeName} nào`
@@ -1649,7 +1685,11 @@ export class ContactLoader {
           url,
           extraData
         }
-        if (contactType === 'person') contact.isFriend = item.isFriend !== false
+        if (contactType === 'person') {
+          contact.isFriend = Object.prototype.hasOwnProperty.call(item, 'isFriend')
+            ? (item.isFriend === null ? null : item.isFriend !== false)
+            : true
+        }
         if (contactType === 'group') contact.isJoined = item.isJoined !== false
         return contact
       })
@@ -1673,9 +1713,16 @@ export class ContactLoader {
       const key = this.normalizeContactUid(contact.uid || contact.url || '')
       const existing = key ? existingByUid.get(key) : undefined
       const extraData = this.mergePersonExtraData(existing?.extraData, contact.extraData)
+      const hasIncomingFriendStatus = Object.prototype.hasOwnProperty.call(contact, 'isFriend')
+      const incomingFriendStatus = hasIncomingFriendStatus ? contact.isFriend ?? null : undefined
+      const nextFriendStatus = incomingFriendStatus === null && typeof existing?.isFriend === 'boolean'
+        ? existing.isFriend
+        : existing?.isFriend === true
+          ? true
+          : incomingFriendStatus
       return {
         ...contact,
-        isFriend: existing?.isFriend === true ? true : contact.isFriend === true,
+        isFriend: nextFriendStatus,
         extraData
       }
     })
@@ -1701,6 +1748,19 @@ export class ContactLoader {
       merged.sourcePostUrls = Array.from(new Set(sourcePostUrls))
     }
 
+    const sourceProfileUrls = [
+      ...this.toStringArray(existing.sourceProfileUrls),
+      existing.sourceProfileUrl,
+      ...this.toStringArray(next.sourceProfileUrls),
+      next.sourceProfileUrl
+    ]
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+
+    if (sourceProfileUrls.length > 0) {
+      merged.sourceProfileUrls = Array.from(new Set(sourceProfileUrls))
+    }
+
     return merged
   }
 
@@ -1715,6 +1775,66 @@ export class ContactLoader {
   private normalizeCommenterLimit(value: unknown): number {
     const parsed = Math.floor(Number(value))
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 100
+  }
+
+  private normalizeProfileFriendLimit(value: unknown): number {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1000
+  }
+
+  private normalizeFacebookProfileScanTarget(value: unknown): { targetUrl: string; sourceProfileUrl: string; sourceProfileUid: string } | null {
+    const raw = String(value || '').trim().replace(/^@+/, '')
+    if (!raw) return null
+
+    if (!/facebook\.com|fb\.com/i.test(raw)) {
+      if (!/^[a-zA-Z0-9._-]+$/.test(raw)) return null
+      const sourceProfileUrl = `https://www.facebook.com/${raw}`
+      return {
+        targetUrl: `${sourceProfileUrl}/friends`,
+        sourceProfileUrl,
+        sourceProfileUid: raw
+      }
+    }
+
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+      const host = url.hostname
+        .replace(/^www\./i, '')
+        .replace(/^web\./i, '')
+        .replace(/^m\./i, '')
+        .replace(/^mobile\./i, '')
+        .replace(/^mbasic\./i, '')
+        .toLowerCase()
+      if (host !== 'facebook.com' && host !== 'fb.com') return null
+
+      if (url.pathname === '/profile.php') {
+        const id = String(url.searchParams.get('id') || '').trim()
+        if (!id) return null
+        const sourceProfileUrl = `https://www.facebook.com/profile.php?id=${encodeURIComponent(id)}`
+        return {
+          targetUrl: `${sourceProfileUrl}&sk=friends`,
+          sourceProfileUrl,
+          sourceProfileUid: id
+        }
+      }
+
+      const parts = url.pathname.split('/').filter(Boolean)
+      while (parts.length > 0 && parts[parts.length - 1].toLowerCase() === 'friends') {
+        parts.pop()
+      }
+      if (parts.length !== 1) return null
+      const slug = decodeURIComponent(parts[0] || '').trim()
+      if (!slug || !/^[a-zA-Z0-9._-]+$/.test(slug)) return null
+
+      const sourceProfileUrl = `https://www.facebook.com/${slug}`
+      return {
+        targetUrl: `${sourceProfileUrl}/friends`,
+        sourceProfileUrl,
+        sourceProfileUid: slug
+      }
+    } catch {
+      return null
+    }
   }
 
   private normalizeFacebookPostUrl(value: unknown): string {

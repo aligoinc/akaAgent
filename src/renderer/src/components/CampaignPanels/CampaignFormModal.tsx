@@ -10769,7 +10769,11 @@ export default function CampaignFormModal({
                                 initialStatusFilter: 'active',
                                 allowedActions: ['zalo_friends']
                               }
-                              : { action: 'facebook_friends', mode: 'friends' })
+                              : {
+                                action: 'facebook_friends',
+                                mode: 'friends',
+                                allowedActions: ['facebook_friends']
+                              })
                           }}
                           title="Chọn bạn bè từ danh sách liên hệ"
                         >
@@ -10828,7 +10832,7 @@ export default function CampaignFormModal({
                               action: 'facebook_friends',
                               mode: 'users',
                               initialStatusFilter: 'all',
-                              allowedActions: ['facebook_friends', 'facebook_post_commenters']
+                              allowedActions: ['facebook_friends', 'facebook_post_commenters', 'facebook_profile_friends']
                             })
                           }}
                           title="Chọn data từ danh sách user Facebook"
