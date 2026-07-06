@@ -56,6 +56,9 @@ const getContactStatusLabel = (contact: AutoAccountContact) => {
   if (contact.contactType === 'person' && contact.extraData?.source === 'facebook_post_commenters') {
     return contact.isFriend ? 'Bạn bè' : 'Chưa xác định'
   }
+  if (contact.contactType === 'person' && contact.extraData?.source === 'facebook_profile_friends') {
+    return contact.isFriend ? 'Bạn bè' : 'Bạn của profile'
+  }
   if (contact.contactType === 'person') return contact.isFriend ? 'Bạn bè' : 'Không còn bạn bè'
   if (contact.contactType === 'group') return contact.isJoined ? 'Đã tham gia' : 'Chưa tham gia'
   return ''

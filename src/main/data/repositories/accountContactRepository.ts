@@ -344,6 +344,19 @@ function mergeContactExtraData(
     merged.sourcePostUrls = Array.from(new Set(sourcePostUrls))
   }
 
+  const sourceProfileUrls = [
+    ...toStringArray(existing.sourceProfileUrls),
+    existing.sourceProfileUrl,
+    ...toStringArray(next.sourceProfileUrls),
+    next.sourceProfileUrl
+  ]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+
+  if (sourceProfileUrls.length > 0) {
+    merged.sourceProfileUrls = Array.from(new Set(sourceProfileUrls))
+  }
+
   return merged
 }
 
@@ -561,6 +574,49 @@ function contactMatchesSourcePostUrl(contact: AutoAccountContact, normalizedPost
   return toStringArray(extra.sourcePostUrls).some(value => normalizeFacebookPostUrlForCompare(value) === normalizedPostUrl)
 }
 
+function normalizeFacebookProfileUrlForCompare(value: unknown): string {
+  const raw = String(value || '').trim().replace(/^@+/, '')
+  if (!raw) return ''
+  if (!/facebook\.com|fb\.com/i.test(raw)) {
+    return /^[a-zA-Z0-9._-]+$/.test(raw)
+      ? `https://www.facebook.com/${raw}`.toLowerCase()
+      : ''
+  }
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+    const host = url.hostname
+      .replace(/^www\./i, '')
+      .replace(/^web\./i, '')
+      .replace(/^m\./i, '')
+      .replace(/^mobile\./i, '')
+      .replace(/^mbasic\./i, '')
+      .toLowerCase()
+    if (host !== 'facebook.com' && host !== 'fb.com') return ''
+    if (url.pathname === '/profile.php') {
+      const id = String(url.searchParams.get('id') || '').trim()
+      return id ? `https://www.facebook.com/profile.php?id=${encodeURIComponent(id)}`.toLowerCase() : ''
+    }
+    const parts = url.pathname.split('/').filter(Boolean)
+    while (parts.length > 0 && parts[parts.length - 1].toLowerCase() === 'friends') {
+      parts.pop()
+    }
+    if (parts.length !== 1) return ''
+    const slug = decodeURIComponent(parts[0] || '').trim()
+    return slug && /^[a-zA-Z0-9._-]+$/.test(slug)
+      ? `https://www.facebook.com/${slug}`.toLowerCase()
+      : ''
+  } catch {
+    return raw.replace(/\/+$/g, '').toLowerCase()
+  }
+}
+
+function contactMatchesSourceProfileUrl(contact: AutoAccountContact, normalizedProfileUrl: string): boolean {
+  if (!normalizedProfileUrl) return true
+  const extra = toRecord(contact.extraData)
+  if (normalizeFacebookProfileUrlForCompare(extra.sourceProfileUrl) === normalizedProfileUrl) return true
+  return toStringArray(extra.sourceProfileUrls).some(value => normalizeFacebookProfileUrlForCompare(value) === normalizedProfileUrl)
+}
+
 function contactMatchesStatusFilter(contact: AutoAccountContact, statusFilter: AccountContactListQuery['statusFilter']): boolean {
   if (!statusFilter || statusFilter === 'all') return true
   if (contact.contactType === 'person') {
@@ -642,6 +698,7 @@ function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   if (ids.length > 0 || excludeIds.length > 0) return false
   if (normalizeSearchText(query.search)) return false
   if (String(query.sourcePostUrl || '').trim()) return false
+  if (String(query.sourceProfileUrl || '').trim()) return false
   if (normalizeZaloTagIdList(query.zaloTagIds).length > 0) return false
   if (query.zaloNoTag) return false
   if (normalizeContactIdList(query.akaBizTagIds).length > 0) return false
@@ -754,6 +811,7 @@ async function filterContactsForList(
   const excludeIds = new Set(normalizeContactIdList(query.excludeIds))
   const search = normalizeSearchText(query.search)
   const normalizedPostUrl = normalizeFacebookPostUrlForCompare(query.sourcePostUrl)
+  const normalizedProfileUrl = normalizeFacebookProfileUrlForCompare(query.sourceProfileUrl)
   const zaloTagIds = normalizeZaloTagIdList(query.zaloTagIds)
   const akaBizTagIds = normalizeContactIdList(query.akaBizTagIds)
   const includeNoZaloTag = query.zaloNoTag === true
@@ -764,6 +822,7 @@ async function filterContactsForList(
     if (excludeIds.has(contact.id)) return false
     if (!contactMatchesStatusFilter(contact, query.statusFilter)) return false
     if (!contactMatchesSourcePostUrl(contact, normalizedPostUrl)) return false
+    if (!contactMatchesSourceProfileUrl(contact, normalizedProfileUrl)) return false
     if (!contactMatchesSearch(contact, search)) return false
     if (!contactMatchesZaloTagFilter(contact, zaloTagIds, includeNoZaloTag)) return false
     if (!contactMatchesAkaBizTagFilter(contact, akaBizTagIds, includeNoAkaBizTag)) return false
@@ -1187,7 +1246,9 @@ export async function upsertContacts(
       if (c.contactType === 'group') {
         payload.is_joined = c.isJoined ?? true
       } else if (c.contactType === 'person') {
-        payload.is_friend = c.isFriend ?? true
+        payload.is_friend = Object.prototype.hasOwnProperty.call(c, 'isFriend')
+          ? c.isFriend ?? null
+          : true
       } else if (c.isJoined !== undefined) {
         payload.is_joined = c.isJoined
       }
