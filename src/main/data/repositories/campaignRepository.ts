@@ -23,6 +23,7 @@ import {
 } from '../../../shared/types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone, type VietnamMobileCarrier } from '../../../shared/phone'
 import { normalizeSmsContentForSend, type SmsContentOptions } from '../../../shared/smsContent'
+import { renderContentSpin, splitContentVariants } from '../../../shared/contentSpin'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -373,9 +374,7 @@ function isSmsCampaignAction(actionId?: string | null): boolean {
 }
 
 function splitSmsContentVariants(content: string | undefined | null): string[] {
-  const raw = String(content || '')
-  const variants = raw.split('|').map(item => item.trim()).filter(Boolean)
-  return variants.length > 0 ? variants : [raw]
+  return splitContentVariants(content, { fallbackToRaw: true })
 }
 
 function cycleSmsContentVariant(content: string | undefined | null, index: number): string {
@@ -419,7 +418,7 @@ function renderSmsInputContent(
   rowIndex: number,
   scheduleOverride?: string | null
 ): string {
-  const template = cycleSmsContentVariant(campaign.content, rowIndex)
+  const template = renderContentSpin(cycleSmsContentVariant(campaign.content, rowIndex))
   if (!template) return ''
   const baseDate = getSmsRenderBaseDate(scheduleOverride || row.schedule || campaign.schedule || campaign.originalSchedule)
   const getInput = (key: keyof CampaignInputData): string => String(row[key] ?? '').trim()

@@ -46,6 +46,7 @@ import {
   getCampaignActionDailySendLimit
 } from '../../utils/entitlements'
 import { countSmsContentVariants } from '../../../../shared/smsContent'
+import { renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
 
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
@@ -1554,6 +1555,10 @@ export default function CampaignFormModal({
       return `${prefix}${item.countChar} ký tự, ${item.countSms} tin`
     }),
     [smsContentCounts]
+  )
+  const friendRequestMessageMaxLength = useMemo(
+    () => renderContentSpinMax(formData.friendRequestMessage).length,
+    [formData.friendRequestMessage]
   )
   const isMessageFriendCampaign = formData.actionId === MESSAGE_FRIEND_ACTION_ID
   const isMessageUidCampaign = formData.actionId === MESSAGE_UID_ACTION_ID
@@ -3564,7 +3569,7 @@ export default function CampaignFormModal({
   )
 
   const splitAiContentVariants = (content: string): string[] =>
-    content.trim().split('|').map(item => item.trim()).filter(Boolean)
+    splitContentVariants(content)
 
   const getPostBackgroundValidationError = (): string | null => {
     if (!isPostBackgroundActive) return null
@@ -3572,7 +3577,7 @@ export default function CampaignFormModal({
     const variants = splitAiContentVariants(formData.content)
     if (variants.length === 0) return 'Vui lòng nhập nội dung để đăng bài với phông nền.'
 
-    const tooLongIndex = variants.findIndex(variant => variant.length > 130)
+    const tooLongIndex = variants.findIndex(variant => renderContentSpinMax(variant).length > 130)
     if (tooLongIndex >= 0) {
       return `Nội dung phông nền số ${tooLongIndex + 1} không được quá 130 ký tự.`
     }
@@ -4119,7 +4124,7 @@ export default function CampaignFormModal({
         showAlert('Vui lòng chọn ít nhất nhắn tin hoặc kết bạn.', 'error')
         return
       }
-      if (formData.friendRequestMessage.length > 150) {
+      if (friendRequestMessageMaxLength > 150) {
         showAlert('Nội dung kết bạn không được quá 150 ký tự.', 'error')
         return
       }
@@ -6551,17 +6556,16 @@ export default function CampaignFormModal({
               {renderMessagePersonalizationDropdown('friendRequestMessage', 'field')}
               {renderContentPreviewButton('friendRequestMessage')}
             </div>
-            <span className="message-personalization-field-count" style={{ color: formData.friendRequestMessage.length > 150 ? 'var(--text-error)' : 'var(--text-muted)' }}>
-              {formData.friendRequestMessage.length}/150
+            <span className="message-personalization-field-count" style={{ color: friendRequestMessageMaxLength > 150 ? 'var(--text-error)' : 'var(--text-muted)' }}>
+              {friendRequestMessageMaxLength}/150
             </span>
           </div>
           <textarea
             ref={friendRequestMessageTextareaRef}
             className="stepper-textarea"
             rows={3}
-            maxLength={150}
             value={formData.friendRequestMessage}
-            onChange={e => setFormData(p => ({ ...p, friendRequestMessage: e.target.value.slice(0, 150) }))}
+            onChange={e => setFormData(p => ({ ...p, friendRequestMessage: e.target.value }))}
             placeholder="Có thể để trống"
           />
         </div>
@@ -9185,7 +9189,7 @@ export default function CampaignFormModal({
 
   const renderCampaignContentHint = () => (
     <div className="campaign-content-hint">
-      Mẹo: tách nhiều nội dung bằng dấu <code>|</code> — nội dung thứ N sẽ đăng ở group/tin nhắn thứ N (lặp lại từ đầu khi hết biến thể).
+      Mẹo: dấu <code>|</code> ngoài cùng tách nhiều nội dung; dùng <code>{'{a|b|c}'}</code> để spin ngẫu nhiên trong một câu.
     </div>
   )
 

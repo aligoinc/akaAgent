@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { FileText, Image, Mail, MessageCircle, Paperclip, Send, Share2, ThumbsUp, X } from 'lucide-react'
+import { renderContentSpin, renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
 
 export type ContentPreviewKind = 'post' | 'comment' | 'message' | 'email' | 'answer' | 'friendRequest'
 export type ContentPreviewPlatform = 'facebook' | 'zalo' | 'email' | 'generic'
@@ -107,10 +108,7 @@ export const renderPreviewSampleTokens = (raw: string): string => (
 )
 
 const splitPreviewVariants = (content: string): string[] => {
-  const raw = String(content || '')
-  if (!raw.includes('|')) return [raw]
-  const variants = raw.split('|').map(item => item.trim()).filter(Boolean)
-  return variants.length > 0 ? variants : [raw]
+  return splitContentVariants(content, { fallbackToRaw: true })
 }
 
 const mediaKey = (item: ContentPreviewMediaItem, index: number) => `${index}-${item.path}`
@@ -148,8 +146,13 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
   }, [data.content])
 
   const selectedVariant = variants[Math.min(selectedVariantIndex, variants.length - 1)] || ''
-  const renderedContent = renderPreviewSampleTokens(selectedVariant)
-  const renderedSubject = renderPreviewSampleTokens(data.subject || '')
+  const selectedSpinSample = useMemo(
+    () => data.kind === 'friendRequest' ? renderContentSpinMax(selectedVariant) : renderContentSpin(selectedVariant),
+    [data.kind, selectedVariant]
+  )
+  const subjectSpinSample = useMemo(() => renderContentSpin(data.subject || ''), [data.subject])
+  const renderedContent = renderPreviewSampleTokens(selectedSpinSample)
+  const renderedSubject = renderPreviewSampleTokens(subjectSpinSample)
   const platform = data.platform || getFallbackPlatform(data.kind)
   const surface = data.surface || getFallbackSurface(data.kind)
   const isEmail = platform === 'email' || surface === 'email'
