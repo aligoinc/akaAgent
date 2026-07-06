@@ -1587,7 +1587,8 @@ export default function CampaignFormModal({
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
-  const canUseRerunAfterCompletion = isFindDataCampaign || isCommentSeedingFeedCampaign
+  const canUseRerunAfterCompletion = isFindDataCampaign || isCommentSeedingFeedCampaign || isNewsfeedInteractionCampaign
+  const canUseSleepBetweenActions = formData.actionId !== 'facebook_timeline_post' && !isNewsfeedInteractionCampaign
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const hasZaloFriendRecommendationMaterialized = isZaloMessageFriendRecommendationCampaign && isEditingSavedCampaign && Boolean(campaign?.extraSettings?.zaloFriendRecommendationDataMaterializedAt)
   const zaloFriendRecommendationMaterializedCount = campaign?.extraSettings?.zaloFriendRecommendationMaterializedCount ?? 0
@@ -2013,6 +2014,7 @@ export default function CampaignFormModal({
     ? visibleLimitActionCodes.filter(code => code !== 'fb_comment')
     : visibleLimitActionCodes
   const showGroupPostCommentLimit = isFacebookGroupPostCampaign && visibleLimitActionCodes.includes('fb_comment')
+  const showLimitsSection = canUseSleepBetweenActions || generalLimitActionCodes.length > 0 || isCommentSeedingFeedCampaign
   const showContentSection =
     !isFindDataCampaign &&
     !isNewsfeedInteractionCampaign &&
@@ -2032,16 +2034,32 @@ export default function CampaignFormModal({
     ...(!isSmsCampaign && formData.scheduleType === 'monthly' ? [{ key: 'scheduleDays', label: 'Lịch tháng' }] : []),
     ...(isSmsCampaign ? [] : [{ key: 'dailyStopTime', label: 'Giờ dừng' }])
   ]
-  const applyVisibleScheduleFields = (steps: StepDef[]) => steps.map(step => {
-    if (step.id !== 'schedule') return step
-    return {
-      ...step,
-      fields: canUseRerunAfterCompletion
-        ? [...visibleScheduleFields, { key: 'findDataRerun', label: 'Chạy lại sau mỗi' }]
-        : visibleScheduleFields
+  const visibleLimitFields: StepDef['fields'] = [
+    ...(canUseSleepBetweenActions ? [{ key: 'sleepBetweenActions', label: 'Nghỉ giữa 2 lần' }] : []),
+    { key: 'dailyLimit', label: 'Giới hạn trong ngày (đến 24h)' },
+    { key: 'rateLimitCount', label: 'Giới hạn trong giờ' }
+  ]
+  const applyVisibleStepFields = (steps: StepDef[]): StepDef[] => steps.flatMap(step => {
+    if (step.id === 'schedule') {
+      return [{
+        ...step,
+        fields: canUseRerunAfterCompletion
+          ? [...visibleScheduleFields, { key: 'findDataRerun', label: 'Chạy lại sau mỗi' }]
+          : visibleScheduleFields
+      }]
     }
+    if (step.id === 'limits') {
+      if (!showLimitsSection) return []
+      return [{
+        ...step,
+        fields: step.fields.some(field => field.key === 'postsPerTarget')
+          ? [...visibleLimitFields, { key: 'postsPerTarget', label: 'Số bài cần comment trên mỗi group/page/profile' }]
+          : visibleLimitFields
+      }]
+    }
+    return [step]
   })
-  const STEPS = applyVisibleScheduleFields((() => {
+  const STEPS = applyVisibleStepFields((() => {
     if (!hasSelectedCampaignAction) return ALL_STEPS.filter(s => s.id === 'general')
     if (isSimpleCampaign) {
       if (isNewsfeedInteractionCampaign) {
@@ -10191,7 +10209,9 @@ export default function CampaignFormModal({
                         disabled={!formData.findDataRerunEnabled}
                       />
                       <span className="schedule-hint">
-                        Khi chạy hết danh sách, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.
+                        {isNewsfeedInteractionCampaign
+                          ? 'Khi lướt xong, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.'
+                          : 'Khi chạy hết danh sách, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.'}
                       </span>
                     </div>
                   )}
@@ -10202,71 +10222,69 @@ export default function CampaignFormModal({
             </div>
 
             {/* Section 3: Giới hạn hành động */}
-            <div
-              className="stepper-section"
-              ref={el => { sectionRefs.current['limits'] = el }}
-            >
+            {showLimitsSection && (
               <div
-                className="stepper-section-header"
-                onClick={() => toggleSection('limits')}
+                className="stepper-section"
+                ref={el => { sectionRefs.current['limits'] = el }}
               >
-                <div className="stepper-section-header-left">
-                  <span className="stepper-section-num">{getSectionNumber('limits')}</span>
-                  <span className="stepper-section-title">Giới hạn hành động</span>
-                </div>
-                {collapsedSections['limits'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-              </div>
-
-              {!collapsedSections['limits'] && (
-                <div className="stepper-section-body">
-                  <div className="stepper-form-row">
-                    <div className="stepper-form-group" style={{ maxWidth: 340 }}>
-                      <label>Thời gian nghỉ giữa 2 lần gửi</label>
-                      <div className="stepper-input-unit-wrap">
-                        <input
-                          type="number"
-                          value={formData.sleepBetweenActions}
-                          onChange={e => setFormData(p => ({ ...p, sleepBetweenActions: parseInt(e.target.value) || 0 }))}
-                          className="stepper-input stepper-input-with-unit"
-                        />
-                        <span className="stepper-input-unit">giây</span>
-                      </div>
-                    </div>
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('limits')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('limits')}</span>
+                    <span className="stepper-section-title">Giới hạn hành động</span>
                   </div>
-                  {selectedAccountGroupNames.length > 0 && (
-                    <div className="account-group-campaign-note">
-                      Các tài khoản thuộc nhóm: {selectedAccountGroupNames.join(', ')}. Khi chạy, hệ thống ưu tiên thời gian nghỉ và giới hạn đã cài trong nhóm.
-                    </div>
-                  )}
-                  {generalLimitActionCodes.length === 0 ? (
-                    <div className="text-muted" style={{ fontSize: 12, marginTop: 12 }}>
-                      {checkedLimitActionCodes.length === 0
-                        ? 'Loại chiến dịch này không check quota ngày/khung giờ trước khi chạy.'
-                        : 'Một số giới hạn hành động đang dùng giá trị mặc định.'}
-                    </div>
-                  ) : (
-                    <div className="action-limit-card-list">
-                      {generalLimitActionCodes.map(actionCode => renderActionLimitCard(actionCode))}
-                    </div>
-                  )}
-                  {isCommentSeedingFeedCampaign && (
-                    <div className="stepper-form-group" style={{ maxWidth: 420, marginTop: 16 }}>
-                      <label>Số bài cần comment trên mỗi group/page/profile</label>
-                      <div className="stepper-input-unit-wrap">
-                        <input
-                          type="number"
-                          min={1}
-                          value={formData.postsPerTarget}
-                          onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
-                          className="stepper-input stepper-input-with-unit"
-                        />
-                        <span className="stepper-input-unit">bài</span>
-                      </div>
-                    </div>
-                  )}
+                  {collapsedSections['limits'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                 </div>
-              )}
-            </div>
+
+                {!collapsedSections['limits'] && (
+                  <div className="stepper-section-body">
+                    {canUseSleepBetweenActions && (
+                      <div className="stepper-form-row">
+                        <div className="stepper-form-group" style={{ maxWidth: 340 }}>
+                          <label>Thời gian nghỉ giữa 2 lần gửi</label>
+                          <div className="stepper-input-unit-wrap">
+                            <input
+                              type="number"
+                              value={formData.sleepBetweenActions}
+                              onChange={e => setFormData(p => ({ ...p, sleepBetweenActions: parseInt(e.target.value) || 0 }))}
+                              className="stepper-input stepper-input-with-unit"
+                            />
+                            <span className="stepper-input-unit">giây</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {selectedAccountGroupNames.length > 0 && (
+                      <div className="account-group-campaign-note">
+                        Các tài khoản thuộc nhóm: {selectedAccountGroupNames.join(', ')}. Khi chạy, hệ thống ưu tiên {canUseSleepBetweenActions ? 'thời gian nghỉ và giới hạn' : 'giới hạn'} đã cài trong nhóm.
+                      </div>
+                    )}
+                    {generalLimitActionCodes.length > 0 && (
+                      <div className="action-limit-card-list">
+                        {generalLimitActionCodes.map(actionCode => renderActionLimitCard(actionCode))}
+                      </div>
+                    )}
+                    {isCommentSeedingFeedCampaign && (
+                      <div className="stepper-form-group" style={{ maxWidth: 420, marginTop: 16 }}>
+                        <label>Số bài cần comment trên mỗi group/page/profile</label>
+                        <div className="stepper-input-unit-wrap">
+                          <input
+                            type="number"
+                            min={1}
+                            value={formData.postsPerTarget}
+                            onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
+                            className="stepper-input stepper-input-with-unit"
+                          />
+                          <span className="stepper-input-unit">bài</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {isCommentSeedingFeedCampaign && (
               <div

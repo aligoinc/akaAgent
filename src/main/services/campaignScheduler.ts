@@ -852,7 +852,8 @@ export class CampaignScheduler {
     const supportsRerunAfterCompletion =
       campaign.actionId === FIND_DATA_GROUP_ACTION_ID ||
       campaign.actionId === FIND_DATA_SEARCH_ACTION_ID ||
-      campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID
+      campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID ||
+      campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
     if (
       !supportsRerunAfterCompletion ||
       campaign.extraSettings?.findDataRerunEnabled !== true
@@ -880,15 +881,17 @@ export class CampaignScheduler {
       return true
     }
 
-    const details = await this.supabase.listCampaignInputData(campaign.id)
-    const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length
-    if (resettableCount === 0) {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại)`)
-      return true
-    }
+    if (campaign.actionId !== NEWSFEED_INTERACTION_ACTION_ID) {
+      const details = await this.supabase.listCampaignInputData(campaign.id)
+      const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length
+      if (resettableCount === 0) {
+        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
+        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại)`)
+        return true
+      }
 
-    await this.supabase.resetCampaignInputDataForRerun(campaign.id)
+      await this.supabase.resetCampaignInputDataForRerun(campaign.id)
+    }
     await this.updateCampaignAndBroadcast(campaign.id, {
       status: 'chờ xử lý',
       schedule: nextSchedule.toISOString(),
