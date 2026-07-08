@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -26,6 +26,7 @@ import { parseCampaignLogLine } from '../../../../shared/campaignLogFormat'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
+import { CampaignContentMediaUpdateModal, CampaignLimitUpdateModal } from './CampaignQuickEditModals'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
 import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
@@ -1971,6 +1972,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const [showActionManager, setShowActionManager] = useState(false)
   const [showAddInputDataModal, setShowAddInputDataModal] = useState(false)
   const [addDataCampaign, setAddDataCampaign] = useState<Campaign | null>(null)
+  const [limitUpdateCampaign, setLimitUpdateCampaign] = useState<Campaign | null>(null)
+  const [contentMediaUpdateCampaign, setContentMediaUpdateCampaign] = useState<Campaign | null>(null)
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [campaignFormInitialActionId, setCampaignFormInitialActionId] = useState<string | undefined>(undefined)
@@ -2384,6 +2387,22 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     setCloneFromId(campaign.id)
     setEditingCampaign(cloneData)
     setShowForm(true)
+  }
+
+  const handleOpenLimitUpdate = (campaign: Campaign) => {
+    if (!canEditCampaign(campaign.status)) {
+      showAlert('Chỉ có thể cập nhật giới hạn gửi khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
+      return
+    }
+    setLimitUpdateCampaign(campaign)
+  }
+
+  const handleOpenContentMediaUpdate = (campaign: Campaign) => {
+    if (!canEditCampaign(campaign.status)) {
+      showAlert('Chỉ có thể cập nhật nội dung + media khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
+      return
+    }
+    setContentMediaUpdateCampaign(campaign)
   }
 
   const handleRowClick = (campaign: Campaign) => {
@@ -4330,6 +4349,30 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           />
         )}
 
+        {limitUpdateCampaign && (
+          <CampaignLimitUpdateModal
+            campaign={limitUpdateCampaign}
+            action={actionById.get(limitUpdateCampaign.actionId)}
+            onClose={() => {
+              setLimitUpdateCampaign(null)
+              loadCampaigns()
+              if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
+            }}
+          />
+        )}
+
+        {contentMediaUpdateCampaign && (
+          <CampaignContentMediaUpdateModal
+            campaign={contentMediaUpdateCampaign}
+            action={actionById.get(contentMediaUpdateCampaign.actionId)}
+            onClose={() => {
+              setContentMediaUpdateCampaign(null)
+              loadCampaigns()
+              if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
+            }}
+          />
+        )}
+
         {showAddInputDataModal && (
           <AddInputDataToCampaignModal
             campaigns={campaigns}
@@ -4498,6 +4541,34 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                             >
                               <Copy size={14} />
                               <span>Nhân bản</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                handleOpenLimitUpdate(campaign)
+                              }}
+                              disabled={!canEditCampaign(campaign.status)}
+                              title={canEditCampaign(campaign.status) ? 'Cập nhật giới hạn gửi' : 'Chỉ cập nhật được chiến dịch chờ xử lý hoặc tạm dừng'}
+                              role="menuitem"
+                            >
+                              <SlidersHorizontal size={14} />
+                              <span>Cập nhật giới hạn gửi</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                handleOpenContentMediaUpdate(campaign)
+                              }}
+                              disabled={!canEditCampaign(campaign.status)}
+                              title={canEditCampaign(campaign.status) ? 'Cập nhật nội dung + media' : 'Chỉ cập nhật được chiến dịch chờ xử lý hoặc tạm dừng'}
+                              role="menuitem"
+                            >
+                              <FileText size={14} />
+                              <span>Cập nhật nội dung + media</span>
                             </button>
                             <button
                               type="button"
