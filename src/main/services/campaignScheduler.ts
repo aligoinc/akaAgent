@@ -338,6 +338,17 @@ const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_d
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
+const SCHEDULER_CONNECTIVITY_RETRY_LOG = '⚠️ Không kết nối được Internet hoặc máy chủ dữ liệu. Scheduler sẽ tự thử lại sau 30 giây.'
+const SCHEDULER_CONNECTIVITY_RECOVERED_LOG = '✅ Đã kết nối lại máy chủ dữ liệu. Scheduler tiếp tục kiểm tra chiến dịch.'
+const SCHEDULER_CONNECTIVITY_ERROR_PATTERNS = [
+  /fetch failed/,
+  /failed to fetch/,
+  /network is unreachable/,
+  /net::err_(internet_disconnected|network_changed|network_access_denied|address_unreachable)/,
+  /\b(enotfound|enetunreach|ehostunreach|econnreset|econnrefused|etimedout|eai_again)\b/,
+  /getaddrinfo/,
+  /\b(connect|request|operation) timed out\b/
+]
 
 type RawRunEventPayload = Record<string, unknown>
 
@@ -374,6 +385,29 @@ function eventJsonObject(payload: RawRunEventPayload, camelKey: string, snakeKey
     : {}
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return String(error.message || error.name || '').trim()
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message || '').trim()
+  }
+  return String(error || '').trim()
+}
+
+function getSchedulerErrorSearchText(error: unknown): string {
+  const parts = [getErrorMessage(error)]
+  if (error && typeof error === 'object') {
+    const { code, cause } = error as { code?: unknown; cause?: unknown }
+    if (code) parts.push(String(code))
+    if (cause) parts.push(getErrorMessage(cause))
+  }
+  return parts.join(' ').toLowerCase()
+}
+
+function isSchedulerConnectivityError(error: unknown): boolean {
+  const searchText = getSchedulerErrorSearchText(error)
+  return SCHEDULER_CONNECTIVITY_ERROR_PATTERNS.some(pattern => pattern.test(searchText))
+}
+
 /**
  * Campaign scheduler: every 30s, scan eligible accounts for due campaigns and
  * run their associated workflow v2 against the account browser session.
@@ -408,6 +442,7 @@ export class CampaignScheduler {
   private proxyRuntime?: ProxyRuntimeService
   private zaloRuntime?: ZaloRuntimeService
   private emailRuntime?: EmailRuntimeService
+  private schedulerConnectivityIssueActive = false
 
   constructor(
     supabase: SupabaseService,
@@ -473,6 +508,7 @@ export class CampaignScheduler {
   start(options: SchedulerStartOptions = {}): void {
     if (this.running) return
     this.running = true
+    this.schedulerConnectivityIssueActive = false
     const initialDelayMs = Math.max(0, options.initialDelayMs ?? 0)
     if (initialDelayMs > 0) {
       const seconds = Math.ceil(initialDelayMs / 1000)
@@ -489,6 +525,7 @@ export class CampaignScheduler {
 
   stop(): void {
     this.running = false
+    this.schedulerConnectivityIssueActive = false
     if (this.startDelayTimeoutId) {
       clearTimeout(this.startDelayTimeoutId)
       this.startDelayTimeoutId = null
@@ -576,9 +613,6 @@ export class CampaignScheduler {
 
       // 1. Get eligible accounts
       const accounts = await this.supabase.getEligibleAccounts()
-      if (accounts.length === 0) {
-        return
-      }
 
       for (const account of accounts) {
         if (this.isSmsAccount(account)) {
@@ -607,9 +641,21 @@ export class CampaignScheduler {
 
         this.startAccountCampaignQueue(account, campaigns)
       }
+
+      if (this.schedulerConnectivityIssueActive) {
+        this.schedulerConnectivityIssueActive = false
+        this.sendLog(SCHEDULER_CONNECTIVITY_RECOVERED_LOG)
+      }
     } catch (err) {
       console.error('Scheduler tick error:', err)
-      this.sendLog(`❌ Lỗi scheduler: ${err instanceof Error ? err.message : String(err)}`)
+      if (isSchedulerConnectivityError(err)) {
+        if (!this.schedulerConnectivityIssueActive) {
+          this.schedulerConnectivityIssueActive = true
+          this.sendLog(SCHEDULER_CONNECTIVITY_RETRY_LOG)
+        }
+        return
+      }
+      this.sendLog(`❌ Lỗi scheduler: ${getErrorMessage(err) || 'Lỗi không xác định'}`)
     } finally {
       this.dispatching = false
     }

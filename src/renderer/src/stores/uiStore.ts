@@ -3,6 +3,15 @@ import { create } from 'zustand'
 export type AlertType = 'success' | 'error' | 'info'
 export type ConfirmVariant = 'danger' | 'primary'
 
+export interface AlertAction {
+  label: string
+  onClick: () => void | Promise<void>
+}
+
+export interface AlertOptions {
+  action?: AlertAction | null
+}
+
 export interface ConfirmOptions {
   title?: string
   confirmText?: string
@@ -15,8 +24,9 @@ interface UiState {
     isOpen: boolean
     type: AlertType
     message: string
+    action?: AlertAction | null
   }
-  showAlert: (message: string, type?: AlertType) => void
+  showAlert: (message: string, type?: AlertType, options?: AlertOptions) => void
   closeAlert: () => void
 
   confirm: {
@@ -33,9 +43,9 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  alert: { isOpen: false, type: 'info', message: '' },
-  showAlert: (message, type = 'info') => set({ alert: { isOpen: true, type, message } }),
-  closeAlert: () => set((state) => ({ alert: { ...state.alert, isOpen: false } })),
+  alert: { isOpen: false, type: 'info', message: '', action: null },
+  showAlert: (message, type = 'info', options) => set({ alert: { isOpen: true, type, message, action: options?.action ?? null } }),
+  closeAlert: () => set((state) => ({ alert: { ...state.alert, isOpen: false, action: null } })),
 
   confirm: {
     isOpen: false,
