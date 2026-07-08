@@ -11951,7 +11951,18 @@ button.btn-icon.campaign-control-button.assistant {
   max-height: min(760px, calc(100vh - 40px));
 }
 
+.add-current-data-modal {
+  width: min(880px, calc(100vw - 40px));
+  max-height: min(820px, calc(100vh - 40px));
+}
+
 .add-input-data-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.add-current-data-modal-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -11960,6 +11971,55 @@ button.btn-icon.campaign-control-button.assistant {
 .add-input-data-selected-count {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.add-current-data-campaign-name {
+  color: var(--text-secondary);
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-current-data-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.add-current-data-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.add-current-data-preview-header > span {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.add-current-data-preview {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  max-height: min(320px, 42vh);
+  overflow: auto;
+}
+
+.add-current-data-preview .campaign-grid {
+  border: 0;
+}
+
+.add-current-data-checkbox {
+  margin-top: 2px;
+}
+
+.add-current-data-checkbox-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: -8px;
 }
 
 .add-input-data-grid {
@@ -11972,7 +12032,8 @@ button.btn-icon.campaign-control-button.assistant {
   margin-bottom: 0;
 }
 
-.add-input-data-modal .stepper-form-group > span {
+.add-input-data-modal .stepper-form-group > span,
+.add-current-data-modal .stepper-form-group > span {
   display: block;
   margin-bottom: 8px;
 }

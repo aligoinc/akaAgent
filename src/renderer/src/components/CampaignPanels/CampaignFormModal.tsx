@@ -4801,6 +4801,7 @@ export default function CampaignFormModal({
     mode: 'friends' | 'users' | 'groups' | 'pages' | 'pageInboxCustomers' | 'pageInboxPhones' | 'zaloRemarketingCustomers'
     initialStatusFilter?: 'active' | 'inactive' | 'all'
     allowedActions?: DataScanAction[]
+    lockAccount?: boolean
   } | null>(null)
   const [showDataUploadModal, setShowDataUploadModal] = useState(false)
 
@@ -10784,7 +10785,8 @@ export default function CampaignFormModal({
                                 action: 'zalo_friends',
                                 mode: 'friends',
                                 initialStatusFilter: 'active',
-                                allowedActions: ['zalo_friends']
+                                allowedActions: ['zalo_friends'],
+                                lockAccount: true
                               }
                               : {
                                 action: 'facebook_friends',
@@ -10809,7 +10811,8 @@ export default function CampaignFormModal({
                               action: 'zalo_group_members',
                               mode: 'users',
                               initialStatusFilter: 'all',
-                              allowedActions: ['zalo_group_members']
+                              allowedActions: ['zalo_group_members'],
+                              lockAccount: true
                             })
                           }}
                           title="Chọn thành viên group Zalo từ danh sách data đã quét"
@@ -10829,7 +10832,8 @@ export default function CampaignFormModal({
                               action: 'zalo_remarketing_customers',
                               mode: 'zaloRemarketingCustomers',
                               initialStatusFilter: 'all',
-                              allowedActions: ['zalo_remarketing_customers']
+                              allowedActions: ['zalo_remarketing_customers'],
+                              lockAccount: true
                             })
                           }}
                           title="Chọn khách hàng cũ Zalo từ lịch sử đã từng gửi tin"
@@ -10894,7 +10898,8 @@ export default function CampaignFormModal({
                                 action: 'zalo_groups',
                                 mode: 'groups',
                                 initialStatusFilter: 'active',
-                                allowedActions: ['zalo_groups']
+                                allowedActions: ['zalo_groups'],
+                                lockAccount: true
                               }
                               : {
                                 action: 'facebook_groups',
@@ -11128,7 +11133,7 @@ export default function CampaignFormModal({
           initialStatusFilter={dataScanPicker.initialStatusFilter}
           allowedActions={dataScanPicker.allowedActions}
           lockAction
-          lockAccount={dataScanPicker.mode === 'zaloRemarketingCustomers'}
+          lockAccount={!!dataScanPicker.lockAccount}
           onClose={() => setDataScanPicker(null)}
           onSelect={
             dataScanPicker.mode === 'friends'

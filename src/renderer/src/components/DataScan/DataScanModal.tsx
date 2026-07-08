@@ -77,9 +77,12 @@ interface DataScanModalProps {
   initialAccountId?: number
   initialShowGroupPanel?: boolean
   initialStatusFilter?: ContactStatusFilter
+  initialPageInboxPageUid?: string
+  initialPageInboxPageName?: string
   allowedActions?: DataScanAction[]
   lockAction?: boolean
   lockAccount?: boolean
+  lockPageInboxPage?: boolean
   onClose: () => void
   onSelect?: (contacts: AutoAccountContact[]) => void
 }
@@ -846,9 +849,12 @@ export default function DataScanModal({
   initialAccountId,
   initialShowGroupPanel = false,
   initialStatusFilter,
+  initialPageInboxPageUid,
+  initialPageInboxPageName,
   allowedActions,
   lockAction = false,
   lockAccount = false,
+  lockPageInboxPage = false,
   onClose,
   onSelect
 }: DataScanModalProps) {
@@ -861,6 +867,7 @@ export default function DataScanModal({
   const stoppedScanIdsRef = useRef<Set<number>>(new Set())
   const completedScanIdsRef = useRef<Set<number>>(new Set())
   const contactsLoadIdRef = useRef(0)
+  const lockedPageInboxPageUid = String(initialPageInboxPageUid || '').trim()
   const pageInboxOptionsAccountRef = useRef<number | ''>('')
   const pageInboxPageUidRef = useRef('')
   const zaloQrFileInputRef = useRef<HTMLInputElement | null>(null)
@@ -888,7 +895,7 @@ export default function DataScanModal({
   const [groupMembersUrl, setGroupMembersUrl] = useState('')
   const [groupMembersLimit, setGroupMembersLimit] = useState(DEFAULT_GROUP_MEMBER_LIMIT)
   const [pageInboxPages, setPageInboxPages] = useState<AutoAccountContact[]>([])
-  const [pageInboxPageUid, setPageInboxPageUid] = useState('')
+  const [pageInboxPageUid, setPageInboxPageUid] = useState(lockedPageInboxPageUid)
   const [pageInboxTimePreset, setPageInboxTimePreset] = useState<PageInboxTimePreset>(DEFAULT_PAGE_INBOX_TIME_PRESET)
   const [pageInboxPhoneFilter, setPageInboxPhoneFilter] = useState<PageInboxPhoneFilter>('all')
   const [pageInboxDateFrom, setPageInboxDateFrom] = useState(() => getPageInboxDateRange(DEFAULT_PAGE_INBOX_TIME_PRESET).fromDate)
@@ -996,6 +1003,7 @@ export default function DataScanModal({
     () => pageInboxPages.find(page => page.uid === pageInboxPageUid) || null,
     [pageInboxPageUid, pageInboxPages]
   )
+  const showLockedPageInboxPageOption = !!(lockPageInboxPage && pageInboxPageUid && !pageInboxPages.some(page => page.uid === pageInboxPageUid))
   const pageInboxPageCount = Math.max(1, Math.ceil(pageInboxTotal / PAGE_INBOX_PAGE_SIZE))
   const joinedZaloGroupOptions = useMemo(
     () => zaloGroupOptions.filter(group => group.isJoined === true),
@@ -1756,9 +1764,11 @@ export default function DataScanModal({
         setPageInboxPages(pages)
         const firstPageUid = pages[0]?.uid || ''
         const currentPageUid = pageInboxPageUidRef.current
-        const nextPageUid = !accountChanged && currentPageUid && pages.some(page => page.uid === currentPageUid)
-          ? currentPageUid
-          : firstPageUid
+        const nextPageUid = lockPageInboxPage && lockedPageInboxPageUid
+          ? lockedPageInboxPageUid
+          : !accountChanged && currentPageUid && pages.some(page => page.uid === currentPageUid)
+            ? currentPageUid
+            : firstPageUid
         setPageInboxPageUid(nextPageUid)
         setSelectedIds(new Set())
         setPageInboxSelectAllMatching(false)
@@ -1777,7 +1787,7 @@ export default function DataScanModal({
     return () => {
       cancelled = true
     }
-  }, [accountId, isPageInboxAction, showAlert])
+  }, [accountId, isPageInboxAction, lockPageInboxPage, lockedPageInboxPageUid, showAlert])
 
   const loadZaloGroupOptions = useCallback(async () => {
     if (!window.electronAPI || !accountId || !isZaloGroupMembersAction) {
@@ -3017,16 +3027,23 @@ export default function DataScanModal({
                       className="stepper-input"
                       value={pageInboxPageUid}
                       onChange={event => handlePageInboxPageChange(event.target.value)}
-                      disabled={scanLoading || pageInboxPages.length === 0}
+                      disabled={scanLoading || lockPageInboxPage || (pageInboxPages.length === 0 && !showLockedPageInboxPageOption)}
                     >
-                      {pageInboxPages.length === 0 ? (
+                      {pageInboxPages.length === 0 && !showLockedPageInboxPageOption ? (
                         <option value="">Chưa có page đã quét</option>
                       ) : (
-                        pageInboxPages.map(page => (
-                          <option key={page.id} value={page.uid || ''}>
-                            {page.name || page.uid}
-                          </option>
-                        ))
+                        <>
+                          {showLockedPageInboxPageOption && (
+                            <option value={pageInboxPageUid}>
+                              {initialPageInboxPageName || pageInboxPageUid}
+                            </option>
+                          )}
+                          {pageInboxPages.map(page => (
+                            <option key={page.id} value={page.uid || ''}>
+                              {page.name || page.uid}
+                            </option>
+                          ))}
+                        </>
                       )}
                     </select>
                   </div>

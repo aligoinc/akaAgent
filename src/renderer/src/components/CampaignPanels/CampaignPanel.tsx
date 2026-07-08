@@ -1,16 +1,19 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import {
   CAMPAIGN_STATUSES,
   getCampaignInputDataRequirement,
+  type AddCampaignInputDataRowsResult,
   type AddCampaignInputDataToCampaignRequest,
+  type AutoAccountContact,
   type AutoAccount,
   type Campaign,
   type CampaignAction,
+  type CampaignImportPlatform,
   type CampaignDetail,
   type CampaignInputData,
   type CampaignInputStatus,
@@ -20,12 +23,14 @@ import {
   type ZaloLoginQrEvent
 } from '../../../../shared/types'
 import { parseCampaignLogLine } from '../../../../shared/campaignLogFormat'
-import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel } from '../../../../shared/phone'
+import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
+import CampaignDataUploadModal from './CampaignDataUploadModal'
 import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
 import CampaignInfoView from './CampaignInfoView'
+import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import { canUsePlatform } from '../../utils/entitlements'
 
@@ -321,7 +326,26 @@ const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FIND_DATA_ACTION_IDS = new Set([FIND_DATA_GROUP_ACTION_ID, FIND_DATA_SEARCH_ACTION_ID])
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const FACEBOOK_GROUP_POST_ACTION_ID = 'facebook_group_post'
+const FACEBOOK_PAGE_POST_ACTION_ID = 'facebook_page_post'
+const FACEBOOK_MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
+const FACEBOOK_MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
+const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
+const FACEBOOK_PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
+const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
+const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
+const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
+const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
+const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
+const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
+const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
+const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
+const ADD_DATA_UNSUPPORTED_ACTION_IDS = new Set([
+  ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID,
+  ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
+])
 const POST_SEARCH_LOG_EVENT_TYPES = ['extract_post_data', 'comment_seeding_post_search_summary']
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
@@ -1418,6 +1442,511 @@ function AddInputDataToCampaignModal({
   )
 }
 
+type AddCampaignDataScanMode = 'friends' | 'users' | 'groups' | 'pages' | 'pageInboxCustomers' | 'pageInboxPhones' | 'zaloRemarketingCustomers'
+
+interface AddCampaignDataScanSource {
+  key: string
+  label: string
+  action: DataScanAction
+  mode: AddCampaignDataScanMode
+  initialStatusFilter?: 'active' | 'inactive' | 'all'
+  initialPageInboxPageUid?: string
+  initialPageInboxPageName?: string
+  allowedActions?: DataScanAction[]
+  lockAccount?: boolean
+  lockPageInboxPage?: boolean
+}
+
+interface AddDataToCurrentCampaignModalProps {
+  campaign: Campaign
+  campaignAction?: CampaignAction
+  account?: AutoAccount | null
+  onSubmit: (request: {
+    campaignId: number
+    rows: Partial<CampaignInputData>[]
+    campaignSchedule: string
+    campaignStatus: InputDataBatchStatus
+    skipExistingInCampaign: boolean
+  }) => Promise<AddCampaignInputDataRowsResult>
+  onClose: () => void
+}
+
+const isAddDataSupportedForCampaign = (campaign?: Campaign | null): boolean => (
+  !!campaign &&
+  !!getCampaignInputDataRequirement(campaign.actionId) &&
+  !ADD_DATA_UNSUPPORTED_ACTION_IDS.has(campaign.actionId)
+)
+
+const getAddDataImportPlatform = (campaign: Campaign, action?: CampaignAction): CampaignImportPlatform => {
+  if (campaign.actionId === SMS_SEND_ACTION_ID) return 'sms'
+  if (campaign.actionId === EMAIL_SEND_ACTION_ID) return 'email'
+  if (action?.flatformType === 'zalo') return 'zalo'
+  return 'facebook'
+}
+
+const canImportDataForCampaign = (campaign: Campaign, action?: CampaignAction): boolean => {
+  if (!isAddDataSupportedForCampaign(campaign)) return false
+  if (campaign.actionId === FACEBOOK_PAGE_INBOX_MESSAGE_ACTION_ID) return false
+  if ([
+    ZALO_MESSAGE_FRIEND_ACTION_ID,
+    ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID,
+    ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID,
+    ZALO_MESSAGE_GROUP_ACTION_ID
+  ].includes(campaign.actionId)) return false
+  if (campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID) return true
+  return action?.flatformType !== 'zalo' || campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
+}
+
+const getAddDataScanSources = (campaign: Campaign): AddCampaignDataScanSource[] => {
+  switch (campaign.actionId) {
+    case FACEBOOK_MESSAGE_FRIEND_ACTION_ID:
+      return [{
+        key: 'facebook_friends',
+        label: 'Chọn bạn bè',
+        action: 'facebook_friends',
+        mode: 'friends',
+        allowedActions: ['facebook_friends']
+      }]
+    case ZALO_MESSAGE_FRIEND_ACTION_ID:
+      return [{
+        key: 'zalo_friends',
+        label: 'Chọn bạn bè Zalo',
+        action: 'zalo_friends',
+        mode: 'friends',
+        initialStatusFilter: 'active',
+        allowedActions: ['zalo_friends'],
+        lockAccount: true
+      }]
+    case FACEBOOK_MESSAGE_UID_ACTION_ID:
+      return [{
+        key: 'facebook_users',
+        label: 'Chọn data',
+        action: 'facebook_friends',
+        mode: 'users',
+        initialStatusFilter: 'all',
+        allowedActions: ['facebook_friends', 'facebook_post_commenters', 'facebook_post_likes', 'facebook_profile_friends', 'facebook_group_members']
+      }]
+    case FACEBOOK_PAGE_INBOX_MESSAGE_ACTION_ID:
+      return [{
+        key: 'page_inbox_customers',
+        label: 'Chọn khách inbox Page',
+        action: 'facebook_page_inbox_customers',
+        mode: 'pageInboxCustomers',
+        initialStatusFilter: 'all',
+        initialPageInboxPageUid: String(campaign.extraSettings?.pageInboxPageUid || ''),
+        initialPageInboxPageName: String(campaign.extraSettings?.pageInboxPageName || ''),
+        allowedActions: ['facebook_page_inbox_customers'],
+        lockAccount: true,
+        lockPageInboxPage: true
+      }]
+    case ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID:
+      return [{
+        key: 'zalo_group_members',
+        label: 'Chọn thành viên group Zalo',
+        action: 'zalo_group_members',
+        mode: 'users',
+        initialStatusFilter: 'all',
+        allowedActions: ['zalo_group_members'],
+        lockAccount: true
+      }]
+    case ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID:
+      return [{
+        key: 'zalo_remarketing_customers',
+        label: 'Chọn khách hàng cũ Zalo',
+        action: 'zalo_remarketing_customers',
+        mode: 'zaloRemarketingCustomers',
+        initialStatusFilter: 'all',
+        allowedActions: ['zalo_remarketing_customers'],
+        lockAccount: true
+      }]
+    case ZALO_MESSAGE_GROUP_ACTION_ID:
+      return [{
+        key: 'zalo_groups',
+        label: 'Chọn group Zalo',
+        action: 'zalo_groups',
+        mode: 'groups',
+        initialStatusFilter: 'active',
+        allowedActions: ['zalo_groups'],
+        lockAccount: true
+      }]
+    case FACEBOOK_GROUP_POST_ACTION_ID:
+    case FACEBOOK_JOIN_GROUP_ACTION_ID:
+    case FIND_DATA_GROUP_ACTION_ID:
+    case COMMENT_SEEDING_FEED_ACTION_ID:
+      return [{
+        key: 'facebook_groups',
+        label: 'Chọn nhóm',
+        action: 'facebook_groups',
+        mode: 'groups',
+        initialStatusFilter: 'all',
+        allowedActions: ['facebook_groups']
+      }]
+    case FACEBOOK_PAGE_POST_ACTION_ID:
+      return [{
+        key: 'facebook_pages',
+        label: 'Chọn page',
+        action: 'facebook_pages',
+        mode: 'pages',
+        initialStatusFilter: 'all',
+        allowedActions: ['facebook_pages']
+      }]
+    case ZALO_MESSAGE_PHONE_ACTION_ID:
+    case SMS_SEND_ACTION_ID:
+      return [{
+        key: 'page_inbox_phones',
+        label: 'Từ người inbox fanpage',
+        action: 'facebook_page_inbox_customers',
+        mode: 'pageInboxPhones',
+        initialStatusFilter: 'all',
+        allowedActions: ['facebook_page_inbox_customers']
+      }]
+    default:
+      return []
+  }
+}
+
+function AddDataToCurrentCampaignModal({
+  campaign,
+  campaignAction,
+  account,
+  onSubmit,
+  onClose
+}: AddDataToCurrentCampaignModalProps) {
+  const showAlert = useUiStore(state => state.showAlert)
+  const [rows, setRows] = useState<Partial<CampaignInputData>[]>([])
+  const [showDataUploadModal, setShowDataUploadModal] = useState(false)
+  const [dataScanPicker, setDataScanPicker] = useState<AddCampaignDataScanSource | null>(null)
+  const [campaignSchedule, setCampaignSchedule] = useState(() => {
+    const date = new Date(campaign.schedule || campaign.originalSchedule || Date.now())
+    return formatDateTimeLocal(Number.isNaN(date.getTime()) ? new Date() : date)
+  })
+  const [campaignStatus, setCampaignStatus] = useState<InputDataBatchStatus>(
+    campaign.status === 'tạm dừng' ? 'tạm dừng' : 'chờ xử lý'
+  )
+  const [skipExistingInCampaign, setSkipExistingInCampaign] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+
+  const importPlatform = useMemo(() => getAddDataImportPlatform(campaign, campaignAction), [campaign, campaignAction])
+  const canImportData = useMemo(() => canImportDataForCampaign(campaign, campaignAction), [campaign, campaignAction])
+  const scanSources = useMemo(() => getAddDataScanSources(campaign), [campaign])
+
+  const appendRows = (nextRows: Partial<CampaignInputData>[]) => {
+    if (nextRows.length === 0) {
+      showAlert('Không có data hợp lệ để thêm.', 'error')
+      return
+    }
+    setRows(prev => [
+      ...prev,
+      ...nextRows.map(row => ({
+        ...row,
+        phoneCarrier: row.phoneCarrier || getVietnamMobileCarrier(row.phone) || null,
+        status: 'chờ xử lý' as CampaignInputStatus,
+        note: ''
+      }))
+    ])
+    showAlert(`Đã thêm ${nextRows.length} data vào danh sách chờ thêm.`, 'success')
+  }
+
+  const removeRow = (index: number) => {
+    setRows(prev => prev.filter((_, rowIndex) => rowIndex !== index))
+  }
+
+  const clearRows = () => {
+    if (rows.length === 0) return
+    setRows([])
+    showAlert('Đã xoá tất cả data chờ thêm.', 'success')
+  }
+
+  const validatePageInboxContacts = (contacts: AutoAccountContact[]): boolean => {
+    const campaignPageUid = String(campaign.extraSettings?.pageInboxPageUid || '').trim()
+    if (!campaignPageUid) {
+      showAlert('Chiến dịch này chưa có Page nhận inbox. Vui lòng kiểm tra lại cấu hình chiến dịch.', 'error')
+      return false
+    }
+    const pageUids = new Set(
+      contacts
+        .filter(contact => contact.contactType === 'page_inbox_customer')
+        .map(contact => String(contact.extraData?.pageUid || '').trim())
+        .filter(Boolean)
+    )
+    if (pageUids.size !== 1 || !pageUids.has(campaignPageUid)) {
+      showAlert('Vui lòng chỉ chọn khách inbox đúng Page của chiến dịch hiện tại.', 'error')
+      return false
+    }
+    return true
+  }
+
+  const handleScanSelected = (contacts: AutoAccountContact[]) => {
+    if (!dataScanPicker) return
+    if (dataScanPicker.mode === 'pageInboxCustomers' && !validatePageInboxContacts(contacts)) return
+
+    let nextRows: Partial<CampaignInputData>[] = []
+    if (dataScanPicker.mode === 'friends' || dataScanPicker.mode === 'users') {
+      nextRows = contacts
+        .filter(contact => contact.contactType === 'person')
+        .map(contact => ({
+          name: contact.name,
+          uid: dataScanPicker.action.startsWith('zalo_') ? (contact.uid || contact.url || '') : (contact.url || contact.uid || ''),
+          phone: String(contact.extraData?.phone || ''),
+          email: '',
+          note: '',
+          status: 'chờ xử lý' as CampaignInputStatus
+        }))
+    } else if (dataScanPicker.mode === 'groups') {
+      nextRows = contacts
+        .filter(contact => contact.contactType === 'group')
+        .map(contact => ({
+          name: contact.name,
+          uid: dataScanPicker.action.startsWith('zalo_')
+            ? (contact.uid || contact.url || '')
+            : (contact.url || (contact.uid ? `https://www.facebook.com/groups/${contact.uid}` : '')),
+          phone: '',
+          email: '',
+          note: '',
+          status: 'chờ xử lý' as CampaignInputStatus
+        }))
+    } else if (dataScanPicker.mode === 'pages') {
+      nextRows = contacts
+        .filter(contact => contact.contactType === 'page')
+        .map(contact => ({
+          name: contact.name,
+          uid: contact.uid || '',
+          phone: '',
+          email: contact.url || '',
+          note: '',
+          status: 'chờ xử lý' as CampaignInputStatus
+        }))
+    } else if (dataScanPicker.mode === 'pageInboxCustomers') {
+      nextRows = contacts
+        .filter(contact => contact.contactType === 'page_inbox_customer')
+        .map(contact => ({
+          name: contact.name,
+          uid: contact.uid || '',
+          phone: String(contact.extraData?.phone || ''),
+          email: '',
+          note: '',
+          status: 'chờ xử lý' as CampaignInputStatus
+        }))
+    } else if (dataScanPicker.mode === 'pageInboxPhones') {
+      nextRows = contacts
+        .filter(contact => contact.contactType === 'page_inbox_customer')
+        .map(contact => ({
+          name: contact.name,
+          uid: '',
+          phone: normalizeVietnamMobilePhone(contact.extraData?.phone),
+          email: '',
+          note: '',
+          status: 'chờ xử lý' as CampaignInputStatus
+        }))
+        .filter(row => !!row.phone)
+    } else if (dataScanPicker.mode === 'zaloRemarketingCustomers') {
+      nextRows = contacts
+        .filter(contact => contact.contactType === 'person')
+        .map(contact => ({
+          name: contact.name,
+          uid: contact.uid || contact.url || '',
+          phone: String(contact.extraData?.phone || '').trim(),
+          email: '',
+          note: '',
+          status: 'chờ xử lý' as CampaignInputStatus
+        }))
+    }
+
+    appendRows(nextRows)
+  }
+
+  const handleSubmit = async () => {
+    const scheduleIso = toIsoDateTimeValue(campaignSchedule)
+    if (!scheduleIso) {
+      showAlert('Lịch chạy không hợp lệ.', 'error')
+      return
+    }
+    if (rows.length === 0) {
+      showAlert('Vui lòng thêm ít nhất một data.', 'error')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const result = await onSubmit({
+        campaignId: campaign.id,
+        rows,
+        campaignSchedule: scheduleIso,
+        campaignStatus,
+        skipExistingInCampaign
+      })
+      const skippedParts = [
+        result.skippedBatchDuplicateCount > 0 ? `${result.skippedBatchDuplicateCount} trùng trong danh sách vừa chọn` : '',
+        result.skippedExistingCount > 0 ? `${result.skippedExistingCount} đã có trong chiến dịch` : '',
+        result.skippedInvalidCount > 0 ? `${result.skippedInvalidCount} không hợp lệ` : ''
+      ].filter(Boolean)
+      const skippedText = skippedParts.length > 0 ? ` Bỏ qua ${skippedParts.join(', ')}.` : ''
+      if (result.insertedCount === 0) {
+        showAlert(`Không có data nào được thêm.${skippedText}`, 'error')
+        return
+      }
+      showAlert(`Đã thêm ${result.insertedCount} data vào chiến dịch.${skippedText}`, 'success')
+      onClose()
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể thêm data vào chiến dịch.'), 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 2200 }} onMouseDown={onClose}>
+      <div className="modal add-current-data-modal" onMouseDown={event => event.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">Thêm data</div>
+          <button className="btn-icon" onClick={onClose} title="Đóng">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="modal-body add-current-data-modal-body">
+          <div className="add-current-data-campaign-name" title={campaign.name}>
+            Chiến dịch: <strong>{campaign.name}</strong>
+          </div>
+
+          <div className="add-current-data-source-row">
+            {canImportData && (
+              <button className="btn btn-secondary" type="button" onClick={() => setShowDataUploadModal(true)}>
+                <Upload size={14} /> Nhập/import data
+              </button>
+            )}
+            {scanSources.map(source => (
+              <button
+                key={source.key}
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => {
+                  if (!account?.id && source.mode !== 'pageInboxPhones') {
+                    showAlert('Chiến dịch chưa có tài khoản hợp lệ để chọn data.', 'error')
+                    return
+                  }
+                  setDataScanPicker(source)
+                }}
+              >
+                <Users size={14} /> {source.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="stepper-form-group">
+            <div className="add-current-data-preview-header">
+              <span>Data chờ thêm</span>
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={clearRows}
+                disabled={rows.length === 0}
+                title="Xoá tất cả data chờ thêm"
+              >
+                <Trash2 size={13} /> Xoá tất cả
+              </button>
+            </div>
+            <div className="add-current-data-preview">
+              {rows.length === 0 ? (
+                <div className="text-muted add-input-data-empty">Chưa có data nào. Hãy nhập/import hoặc chọn từ kho data đã quét.</div>
+              ) : (
+                <table className="campaign-grid">
+                  <thead>
+                    <tr>
+                      <th className="campaign-grid-index-col">STT</th>
+                      <th>Tên</th>
+                      <th>Số điện thoại</th>
+                      <th>UID/link</th>
+                      <th>Email</th>
+                      <th style={{ width: 40 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, index) => (
+                      <tr key={`${index}-${row.uid || row.phone || row.email || row.name || 'row'}`}>
+                        <td className="campaign-grid-index-col">{index + 1}</td>
+                        <td title={row.name || ''}>{row.name || '-'}</td>
+                        <td title={row.phone || ''}>{row.phone || '-'}</td>
+                        <td title={row.uid || ''}>{row.uid || '-'}</td>
+                        <td title={row.email || ''}>{row.email || '-'}</td>
+                        <td>
+                          <button className="btn-icon text-error" onClick={() => removeRow(index)} title="Xoá data">
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          <div className="add-input-data-grid">
+            <label className="stepper-form-group">
+              <span>Lịch chạy</span>
+              <input className="stepper-input" type="datetime-local" value={campaignSchedule} onChange={event => setCampaignSchedule(event.target.value)} />
+            </label>
+
+            <label className="stepper-form-group">
+              <span>Trạng thái chiến dịch</span>
+              <select className="stepper-input" value={campaignStatus} onChange={event => setCampaignStatus(event.target.value as InputDataBatchStatus)}>
+                <option value="chờ xử lý">chờ xử lý</option>
+                <option value="tạm dừng">tạm dừng</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="schedule-checkbox-label add-current-data-checkbox">
+            <input
+              type="checkbox"
+              checked={skipExistingInCampaign}
+              onChange={event => setSkipExistingInCampaign(event.target.checked)}
+            />
+            <span>Bỏ qua data đã có trong chiến dịch</span>
+          </label>
+          <div className="text-muted add-current-data-checkbox-hint">
+            Khi bật, hệ thống sẽ không thêm lại UID/SĐT/email/link đã tồn tại trong chiến dịch này. Khi tắt, chỉ lọc trùng trong danh sách data vừa chọn.
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Huỷ</button>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting || rows.length === 0}>
+            {submitting ? <RefreshCw size={14} className="spin" /> : <Plus size={14} />}
+            Thêm
+          </button>
+        </div>
+      </div>
+      {showDataUploadModal && (
+        <div onMouseDown={event => event.stopPropagation()}>
+          <CampaignDataUploadModal
+            platform={importPlatform}
+            actionId={campaign.actionId}
+            onClose={() => setShowDataUploadModal(false)}
+            onInsert={appendRows}
+          />
+        </div>
+      )}
+      {dataScanPicker && (account?.id || dataScanPicker.mode === 'pageInboxPhones') && (
+        <div onMouseDown={event => event.stopPropagation()}>
+          <DataScanModal
+            initialAction={dataScanPicker.action}
+            initialAccountId={dataScanPicker.mode === 'pageInboxPhones' ? undefined : account?.id}
+            initialStatusFilter={dataScanPicker.initialStatusFilter}
+            initialPageInboxPageUid={dataScanPicker.initialPageInboxPageUid}
+            initialPageInboxPageName={dataScanPicker.initialPageInboxPageName}
+            allowedActions={dataScanPicker.allowedActions}
+            lockAccount={dataScanPicker.lockAccount}
+            lockPageInboxPage={dataScanPicker.lockPageInboxPage}
+            onClose={() => setDataScanPicker(null)}
+            onSelect={handleScanSelected}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function CampaignPanel({ isActive, filterAccountId, onClearFilter, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
@@ -1429,7 +1958,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     loadCampaigns, loadCampaignActions, loadAccounts,
     updateCampaign, deleteCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
-    bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign,
+    bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign, addCampaignInputDataRows,
     loadCampaignInputData, loadCampaignDetails, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
@@ -1441,6 +1970,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const [showForm, setShowForm] = useState(false)
   const [showActionManager, setShowActionManager] = useState(false)
   const [showAddInputDataModal, setShowAddInputDataModal] = useState(false)
+  const [addDataCampaign, setAddDataCampaign] = useState<Campaign | null>(null)
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [campaignFormInitialActionId, setCampaignFormInitialActionId] = useState<string | undefined>(undefined)
@@ -2155,6 +2685,32 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     setShowAddInputDataModal(true)
   }
 
+  const handleOpenAddDataToCurrentCampaignModal = (campaign?: Campaign | null) => {
+    if (!campaign) {
+      showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (campaign.status === 'đang chạy') {
+      setOpenInputDataActionMenu(false)
+      closeCampaignActionMenu()
+      showAlert('Chiến dịch đang chạy, vui lòng tạm dừng trước khi thêm data.', 'error')
+      return
+    }
+    if (!isAddDataSupportedForCampaign(campaign)) {
+      setOpenInputDataActionMenu(false)
+      closeCampaignActionMenu()
+      showAlert('Loại chiến dịch này không hỗ trợ thêm data.', 'error')
+      return
+    }
+    setOpenInputDataActionMenu(false)
+    closeCampaignActionMenu()
+    setAddDataCampaign(campaign)
+  }
+
+  const handleAddDataToCurrentCampaignSubmit = async (request: Parameters<typeof addCampaignInputDataRows>[0]) => {
+    return await addCampaignInputDataRows(request)
+  }
+
   const handleAddInputDataToCampaignSubmit = async (data: AddInputDataModalSubmit) => {
     if (!selectedCampaign) {
       showAlert('Vui lòng chọn chiến dịch nguồn.', 'error')
@@ -2252,6 +2808,12 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const selectedCampaignAction = selectedCampaign
     ? campaignActions.find(action => action.id === selectedCampaign.actionId)
     : undefined
+  const addDataCampaignAction = addDataCampaign
+    ? campaignActions.find(action => action.id === addDataCampaign.actionId)
+    : undefined
+  const addDataCampaignAccount = addDataCampaign?.accountId
+    ? accounts.find(account => account.id === addDataCampaign.accountId) || null
+    : null
   const isSelectedFindDataCampaign = !!selectedCampaign && FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)
   const isSelectedEmailCampaign = selectedCampaign?.actionId === EMAIL_SEND_ACTION_ID
   const isSelectedSmsCampaign = selectedCampaign?.actionId === SMS_SEND_ACTION_ID
@@ -3779,6 +4341,16 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           />
         )}
 
+        {addDataCampaign && (
+          <AddDataToCurrentCampaignModal
+            campaign={addDataCampaign}
+            campaignAction={addDataCampaignAction}
+            account={addDataCampaignAccount}
+            onSubmit={handleAddDataToCurrentCampaignSubmit}
+            onClose={() => setAddDataCampaign(null)}
+          />
+        )}
+
         {showActionManager && canManageCampaignActions && (
           <ActionManagerModal onClose={() => {
             setShowActionManager(false)
@@ -3926,6 +4498,15 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                             >
                               <Copy size={14} />
                               <span>Nhân bản</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => handleOpenAddDataToCurrentCampaignModal(campaign)}
+                              role="menuitem"
+                            >
+                              <Plus size={14} />
+                              <span>Thêm data</span>
                             </button>
                             <button
                               type="button"
@@ -4200,6 +4781,9 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                             </button>
                             <button type="button" onClick={handleOpenAddInputDataModal}>
                               <Plus size={14} /> Thêm vào chiến dịch
+                            </button>
+                            <button type="button" onClick={() => handleOpenAddDataToCurrentCampaignModal(selectedCampaign)}>
+                              <Plus size={14} /> Thêm data
                             </button>
                             <button type="button" onClick={() => { setOpenInputDataActionMenu(false); handleExportCampaignInputData() }}>
                               <Download size={14} /> Xuất Excel

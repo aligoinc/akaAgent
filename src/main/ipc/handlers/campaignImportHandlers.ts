@@ -16,6 +16,7 @@ const IMPORT_IMAGE_AI_CODE = 'app_campaign_import_image_to_data'
 const SHEET_FETCH_TIMEOUT_MS = 30000
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
+const FACEBOOK_FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 
 function isZaloJoinGroupLinkAction(actionId?: string | null): boolean {
   return actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
@@ -23,6 +24,10 @@ function isZaloJoinGroupLinkAction(actionId?: string | null): boolean {
 
 function isFacebookJoinGroupAction(actionId?: string | null): boolean {
   return actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
+}
+
+function isFacebookFindDataSearchAction(actionId?: string | null): boolean {
+  return actionId === FACEBOOK_FIND_DATA_SEARCH_ACTION_ID
 }
 
 function toText(value: unknown): string {
@@ -51,6 +56,14 @@ function normalizeUid(value: unknown): string {
   if (!text) return ''
   const lower = text.toLowerCase()
   if (['uid', 'url', 'link', 'group', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
+  return text
+}
+
+function normalizeFindDataSearchKeyword(value: unknown): string {
+  const text = toText(value).replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  const lower = text.toLowerCase()
+  if (['keyword', 'keywords', 'tu khoa', 'từ khóa', 'search', 'tìm kiếm'].includes(lower)) return ''
   return text
 }
 
@@ -104,6 +117,12 @@ function isLikelyHeaderValue(value: string): boolean {
     'facebook',
     'facebook group',
     'facebook group link',
+    'keyword',
+    'keywords',
+    'tu khoa',
+    'từ khóa',
+    'search',
+    'tìm kiếm',
     'phone',
     'mobile',
     'sdt',
@@ -283,6 +302,23 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
       item.phone = ''
       item.email = ''
       key = item.uid
+    } else if (isFacebookFindDataSearchAction(actionId)) {
+      item.uid = normalizeFindDataSearchKeyword(firstText(
+        record.uid,
+        record.keyword,
+        record.keywords,
+        record.search,
+        record.query,
+        record.tuKhoa,
+        record['tu khoa'],
+        record['từ khóa'],
+        record.value,
+        record.name
+      ))
+      if (normalizeFindDataSearchKeyword(item.name).toLowerCase() === item.uid.toLowerCase()) item.name = ''
+      item.phone = ''
+      item.email = ''
+      key = item.uid.toLowerCase()
     } else if (platform === 'zalo' || platform === 'sms') {
       item.phone = normalizeVietnamMobilePhone(firstText(record.phone, record.mobile, record.sdt, record.soDienThoai, record.value))
       key = item.phone

@@ -11,6 +11,8 @@ import {
   CampaignDetailStatus,
   CreateCampaignDetailInput,
   CampaignRelationSummary,
+  AddCampaignInputDataRowsRequest,
+  AddCampaignInputDataRowsResult,
   AddCampaignInputDataToCampaignRequest,
   AddCampaignInputDataToCampaignResult,
   AutoAccountContact,
@@ -73,6 +75,11 @@ const CAMPAIGN_RELATION_DETAIL_STATUSES: CampaignDetailStatus[] = [
   'không tồn tại'
 ]
 const CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE = 500
+const APPEND_DATA_UNSUPPORTED_ACTION_IDS = new Set([
+  NEWSFEED_INTERACTION_ACTION_ID,
+  ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID,
+  ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
+])
 const LIMIT_COUNT_STATUSES = ['thành công', 'thất bại']
 const VIETNAM_MOBILE_CARRIER_CODES = new Set<VietnamMobileCarrier>([
   'viettel',
@@ -2651,6 +2658,188 @@ export async function bulkUpdateCampaignInputDataStatus(
   return {
     updatedCount,
     skippedCount: Math.max(0, inputDataIds.length - updatedCount)
+  }
+}
+
+function getAppendInputDataDedupeKey(row: Partial<CampaignInputData>, actionId?: string | null): string {
+  const requirement = getCampaignInputDataRequirement(actionId)
+  if (!requirement) return ''
+  const value = String(row[requirement.field] || '').trim()
+  if (actionId === 'email_send') return value.toLowerCase()
+  if (requirement.field === 'phone') return normalizeVietnamMobilePhone(value)
+  return value.replace(/\/+$/g, '').toLowerCase()
+}
+
+function normalizeAppendInputDataRow(row: Partial<CampaignInputData>, actionId: string): Partial<CampaignInputData> {
+  const requirement = getCampaignInputDataRequirement(actionId)
+  const shouldNormalizePhone = requirement?.field === 'phone' || isSmsCampaignAction(actionId)
+  const phone = shouldNormalizePhone
+    ? normalizeVietnamMobilePhone(row.phone)
+    : String(row.phone || '').trim()
+  return {
+    name: String(row.name || '').trim(),
+    phone,
+    phoneCarrier: normalizeCampaignInputPhoneCarrier(phone, row.phoneCarrier),
+    uid: String(row.uid || '').trim(),
+    email: actionId === 'email_send'
+      ? String(row.email || '').trim().toLowerCase()
+      : String(row.email || '').trim(),
+    info1: String(row.info1 || '').trim(),
+    info2: String(row.info2 || '').trim(),
+    info3: String(row.info3 || '').trim(),
+    info4: String(row.info4 || '').trim(),
+    info5: String(row.info5 || '').trim(),
+    content: String(row.content || '').trim(),
+    status: 'chờ xử lý',
+    note: ''
+  }
+}
+
+async function loadAppendInputDataExistingKeys(campaignId: number, actionId: string): Promise<Set<string>> {
+  const requirement = getCampaignInputDataRequirement(actionId)
+  if (!requirement) return new Set()
+
+  const keys = new Set<string>()
+  let offset = 0
+  while (true) {
+    const { data, error } = await client()
+      .from('auto_campaign_input_data')
+      .select(requirement.field)
+      .eq('campaign_id', campaignId)
+      .eq('is_delete', false)
+      .range(offset, offset + CAMPAIGN_INPUT_DATA_FETCH_CHUNK - 1)
+
+    if (error) throw new Error(`Failed to load existing campaign input data: ${error.message}`)
+
+    const rows = data || []
+    for (const row of rows) {
+      const key = getAppendInputDataDedupeKey(mapCampaignInputDataFromDB(row), actionId)
+      if (key) keys.add(key)
+    }
+    if (rows.length < CAMPAIGN_INPUT_DATA_FETCH_CHUNK) break
+    offset += CAMPAIGN_INPUT_DATA_FETCH_CHUNK
+  }
+
+  return keys
+}
+
+export async function addCampaignInputDataRows(
+  request: AddCampaignInputDataRowsRequest
+): Promise<AddCampaignInputDataRowsResult> {
+  const u = requireCurrentUser()
+  const campaignId = Number(request.campaignId)
+  const campaignStatus = request.campaignStatus
+  const scheduleDate = new Date(request.campaignSchedule)
+  const rows = Array.isArray(request.rows) ? request.rows : []
+
+  if (!Number.isFinite(campaignId) || campaignId <= 0) throw new Error('Chiến dịch không hợp lệ.')
+  if (rows.length === 0) throw new Error('Vui lòng thêm ít nhất một data.')
+  if (campaignStatus !== 'chờ xử lý' && campaignStatus !== 'tạm dừng') throw new Error('Trạng thái chiến dịch không hợp lệ.')
+  if (Number.isNaN(scheduleDate.getTime())) throw new Error('Schedule không hợp lệ.')
+
+  const { data: campaignRow, error: campaignError } = await client()
+    .from('auto_campaigns')
+    .select('*, auto_campaign_actions(name, is_active, is_delete), auto_accounts(name)')
+    .eq('id', campaignId)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (campaignError) throw new Error(`Failed to load campaign: ${campaignError.message}`)
+  if (!campaignRow) throw new Error('Không tìm thấy chiến dịch.')
+
+  const campaign = mapCampaignFromDB(campaignRow)
+  const actionRow = Array.isArray((campaignRow as any).auto_campaign_actions)
+    ? (campaignRow as any).auto_campaign_actions[0]
+    : (campaignRow as any).auto_campaign_actions
+  if (!actionRow || actionRow.is_active !== true || actionRow.is_delete === true) {
+    throw new Error('Loại chiến dịch này đã bị tắt hoặc đã xoá, không thể thêm data.')
+  }
+  await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
+
+  if (campaign.status === 'đang chạy') {
+    throw new Error('Chiến dịch đang chạy, vui lòng tạm dừng trước khi thêm data.')
+  }
+
+  const requirement = getCampaignInputDataRequirement(campaign.actionId)
+  if (!requirement || APPEND_DATA_UNSUPPORTED_ACTION_IDS.has(campaign.actionId)) {
+    throw new Error('Loại chiến dịch này không hỗ trợ thêm data.')
+  }
+
+  const existingKeys = request.skipExistingInCampaign
+    ? await loadAppendInputDataExistingKeys(campaignId, campaign.actionId)
+    : new Set<string>()
+  const batchKeys = new Set<string>()
+  const validRows: Partial<CampaignInputData>[] = []
+  let skippedInvalidCount = 0
+  let skippedBatchDuplicateCount = 0
+  let skippedExistingCount = 0
+
+  for (const rawRow of rows) {
+    const row = normalizeAppendInputDataRow(rawRow, campaign.actionId)
+    const key = getAppendInputDataDedupeKey(row, campaign.actionId)
+    if (!key || !isCampaignInputDataValidForAction(row, campaign.actionId)) {
+      skippedInvalidCount += 1
+      continue
+    }
+    if (batchKeys.has(key)) {
+      skippedBatchDuplicateCount += 1
+      continue
+    }
+    batchKeys.add(key)
+    if (request.skipExistingInCampaign && existingKeys.has(key)) {
+      skippedExistingCount += 1
+      continue
+    }
+    validRows.push(row)
+  }
+
+  const campaignSchedule = scheduleDate.toISOString()
+  const isSmsTarget = isSmsCampaignAction(campaign.actionId)
+  const smsRowIndexOffset = isSmsTarget && validRows.length > 0 ? await countActiveCampaignInputData(campaignId) : 0
+  const payload = validRows.map((row, rowIndex) => ({
+    campaign_id: campaignId,
+    input_id: null,
+    name: row.name || null,
+    phone: row.phone || null,
+    phone_carrier: isSmsTarget ? normalizeCampaignInputPhoneCarrier(row.phone, row.phoneCarrier) : null,
+    uid: row.uid || null,
+    email: row.email || null,
+    info1: row.info1 || null,
+    info2: row.info2 || null,
+    info3: row.info3 || null,
+    info4: row.info4 || null,
+    info5: row.info5 || null,
+    content: isSmsTarget ? renderSmsInputContent(campaign, row, smsRowIndexOffset + rowIndex, campaignSchedule) : (row.content || null),
+    status: 'chờ xử lý',
+    note: '',
+    schedule: isSmsTarget ? campaignSchedule : null
+  }))
+
+  let insertedCount = 0
+  for (const chunk of chunkArray(payload, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
+    const { data: insertedRows, error: insertError } = await client()
+      .from('auto_campaign_input_data')
+      .insert(chunk)
+      .select('id')
+
+    if (insertError) throw new Error(`Failed to add input data to campaign "${campaign.name}": ${insertError.message}`)
+    insertedCount += insertedRows?.length ?? chunk.length
+  }
+
+  if (insertedCount > 0) {
+    await updateCampaign(campaignId, {
+      schedule: campaignSchedule,
+      originalSchedule: campaignSchedule,
+      status: campaignStatus
+    })
+  }
+
+  return {
+    insertedCount,
+    skippedBatchDuplicateCount,
+    skippedExistingCount,
+    skippedInvalidCount
   }
 }
 

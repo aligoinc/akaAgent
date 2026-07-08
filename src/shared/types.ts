@@ -712,6 +712,21 @@ export interface AddCampaignInputDataToCampaignResult {
   targets: AddCampaignInputDataToCampaignTargetResult[]
 }
 
+export interface AddCampaignInputDataRowsRequest {
+  campaignId: number
+  rows: Partial<CampaignInputData>[]
+  campaignSchedule: string
+  campaignStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>
+  skipExistingInCampaign: boolean
+}
+
+export interface AddCampaignInputDataRowsResult {
+  insertedCount: number
+  skippedBatchDuplicateCount: number
+  skippedExistingCount: number
+  skippedInvalidCount: number
+}
+
 // Status cho campaign_details là open-ended để Zalo có thể lưu trạng thái như
 // 'không tồn tại', 'đã là bạn bè'. Facebook hiện vẫn dùng 'thành công' |
 // 'thất bại' | 'lỗi'.
@@ -1452,6 +1467,7 @@ export const IPC_EVENTS = {
   DB_UPDATE_CAMPAIGN_INPUT_DATA: 'db:update-campaign-input-data',
   DB_BULK_UPDATE_CAMPAIGN_INPUT_DATA_STATUS: 'db:bulk-update-campaign-input-data-status',
   DB_ADD_CAMPAIGN_INPUT_DATA_TO_CAMPAIGNS: 'db:add-campaign-input-data-to-campaigns',
+  DB_ADD_CAMPAIGN_INPUT_DATA_ROWS: 'db:add-campaign-input-data-rows',
   DB_DELETE_CAMPAIGN_INPUT_DATA: 'db:delete-campaign-input-data',
   DB_LIST_CAMPAIGN_RELATION_SUMMARIES: 'db:list-campaign-relation-summaries',
 
