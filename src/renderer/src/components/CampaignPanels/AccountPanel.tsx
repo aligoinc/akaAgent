@@ -304,6 +304,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
       let accountId: number
       let createdZaloAccount: AutoAccount | null = null
+      let createdFacebookAccount: AutoAccount | null = null
       if (editingAccount) {
         await updateAccount(editingAccount.id, payload)
         accountId = editingAccount.id
@@ -319,6 +320,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         accountId = created.id
         if (created.flatformType === 'zalo') {
           createdZaloAccount = created
+        } else if (created.flatformType === 'facebook') {
+          createdFacebookAccount = created
         }
       }
 
@@ -340,6 +343,19 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       resetForm()
       if (createdZaloAccount) {
         await handleZaloLoginQr(createdZaloAccount)
+      } else if (createdFacebookAccount) {
+        useUiStore.getState().showAlert(
+          `Đã thêm tài khoản Facebook "${createdFacebookAccount.name}" thành công.`,
+          'success',
+          onNavigateToBrowser
+            ? {
+              action: {
+                label: 'Đăng nhập FB',
+                onClick: () => onNavigateToBrowser({ accountId: createdFacebookAccount.id, reloadAfterOpen: true })
+              }
+            }
+            : undefined
+        )
       }
     } catch (err) {
       console.error('Failed to save account:', err)

@@ -5,6 +5,14 @@ export default function AlertModal() {
   const { alert, closeAlert } = useUiStore()
   if (!alert.isOpen) return null
 
+  const handleAction = () => {
+    const action = alert.action
+    closeAlert()
+    if (action) {
+      void action.onClick()
+    }
+  }
+
   return (
     <div className="modal-overlay" style={{ zIndex: 10000, position: 'fixed', top: 0, left: 0, width: '100%', height: '100%' }}>
       <div className="campaign-full-modal campaign-feedback-modal" style={{ width: '400px', height: 'auto', minHeight: 'unset', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', margin: 0 }}>
@@ -20,8 +28,10 @@ export default function AlertModal() {
         <div className="campaign-modal-body" style={{ padding: '24px 16px', fontSize: '14px', textAlign: 'center', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
           {alert.message}
         </div>
-        <div className="modal-footer" style={{ justifyContent: 'center', borderTop: 'none', paddingBottom: '24px' }}>
-          <button className="btn btn-primary" onClick={closeAlert} style={{ padding: '8px 32px' }}>Đóng</button>
+        <div className="modal-footer" style={{ justifyContent: 'center', gap: '8px', borderTop: 'none', paddingBottom: '24px' }}>
+          <button className="btn btn-primary" onClick={alert.action ? handleAction : closeAlert} style={{ padding: '8px 32px' }}>
+            {alert.action?.label || 'Đóng'}
+          </button>
         </div>
       </div>
     </div>
