@@ -8121,6 +8121,20 @@ button.btn-icon.campaign-control-button.assistant {
   font-weight: 500;
 }
 
+.action-limit-continue-option {
+  margin-top: 14px;
+}
+
+.action-limit-continue-option span {
+  color: var(--accent-danger, #ef4444);
+  font-weight: 700;
+}
+
+.action-limit-continue-note {
+  margin-left: 24px;
+  margin-top: 4px;
+}
+
 .action-limit-hour-group {
   flex: 1;
 }
@@ -9880,6 +9894,10 @@ button.btn-icon.campaign-control-button.assistant {
   color: var(--text-tertiary);
   font-size: 11px;
   font-style: italic;
+}
+
+.schedule-hint.action-limit-continue-note {
+  font-size: 13px;
 }
 
 .schedule-multi-window-panel {

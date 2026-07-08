@@ -329,6 +329,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const defaultActionCodes = getStringList(action?.limitCheckActionCodes)
   const limitCodes = Array.isArray(rawEnabledActionCodes) ? enabledActionCodes : defaultActionCodes
   const limitWindowMinutes = extra.actionLimits?.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES
+  const continueWhenActionLimitReached = extra.actionLimits?.continueWhenActionLimitReached === true
   const byActionCode = Object.entries(extra.actionLimits?.byActionCode || {})
   const hasSourceSettings = POST_ACTIONS_WITH_SOURCE.has(actionId)
     || !!extra.copyContentFromSource
@@ -519,6 +520,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
 
   const limitRows: InfoRow[] = [
     { label: 'Hành động kiểm tra quota ngày/giờ', value: formatActionCodeChips(limitCodes) },
+    { label: 'Khi một action đạt giới hạn', value: continueWhenActionLimitReached ? 'Tiếp tục chạy action còn quota' : 'Dừng khi một action đạt giới hạn' },
     { label: 'Nghỉ giữa actions', value: `${extra.actionLimits?.sleepBetweenActions ?? 0} giây` },
     ...byActionCode.map(([code, limit]) => ({
       label: `Giới hạn ${getActionCodeLabel(code)}`,

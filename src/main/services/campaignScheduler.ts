@@ -157,7 +157,16 @@ interface NewsfeedActionAvailability {
   allowLike: boolean
   allowComment: boolean
   blockedReasons: string[]
+  disabledStatus?: AccountActionLimitStatus
+  blockedLimitStatuses: AccountActionLimitStatus[]
   allCheckedActionsBlocked: boolean
+}
+
+interface ActionLimitContinuationResult {
+  limitStatus: AccountActionLimitStatus | null
+  runnableActionDescriptors: CampaignActionDescriptor[]
+  skippedActionDescriptors: CampaignActionDescriptor[]
+  skippedLimitStatuses: AccountActionLimitStatus[]
 }
 
 interface ZaloShareMessageTarget {
@@ -273,6 +282,8 @@ type FindDataTargetCampaignField =
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const GROUP_POST_ACTION_ID = 'facebook_group_post'
+const LIMIT_IN_DAY_ERROR_CODE = 'error_limit_in_day'
+const LIMIT_IN_HOUR_ERROR_CODE = 'error_limit_in_hour'
 const GROUP_POST_FREQUENCY_LIMIT_ERROR_CODE = 'err_group_post_frequency_limit'
 const COMMENT_FREQUENCY_LIMIT_ERROR_CODE = 'err_comment_frequency_limit'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
@@ -1271,14 +1282,14 @@ export class CampaignScheduler {
         await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(preflightDisabled))
         return
       }
-      const preflightLimit = await this.checkActionLimits(
+      const preflightLimit = await this.checkActionLimitsForContinuation(
         account,
         campaign,
         preflightQuotaActionDescriptors,
         campaign.extraSettings?.actionLimits
       )
-      if (preflightLimit && !preflightLimit.ok) {
-        await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(preflightLimit))
+      if (preflightLimit.limitStatus) {
+        await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(preflightLimit.limitStatus))
         return
       }
 
@@ -1490,6 +1501,7 @@ export class CampaignScheduler {
     let earliestFutureInputSchedule: Date | null = null
     let zaloFriendBlocklistSkippedCount = 0
     const consumedGroupPostInputDataIds = new Set<number>()
+    const loggedSkippedLimitActionCodes = new Set<string>()
 
     for (let i = 0; i < targets.length; i++) {
       // Check pause
@@ -1531,14 +1543,16 @@ export class CampaignScheduler {
       const executableTargetActionDescriptors = groupPostApproval.skipPostByKnownApproval
         ? executableActionDescriptors.filter(action => action.code !== 'fb_post_group')
         : executableActionDescriptors
-      const quotaTargetActionDescriptors = groupPostApproval.skipPostByKnownApproval
+      let quotaTargetActionDescriptors = groupPostApproval.skipPostByKnownApproval
         ? quotaActionDescriptors.filter(action => action.code !== 'fb_post_group')
         : quotaActionDescriptors
       let newsfeedAvailability: NewsfeedActionAvailability | undefined
+      let skippedLimitActionCodes = new Set<string>()
 
       // Check action disable/rate limit immediately before each target.
       try {
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+          const continueOnActionLimit = this.shouldContinueWhenActionLimitReached(limitConfig)
           newsfeedAvailability = await this.resolveNewsfeedActionAvailability(
             account,
             campaign,
@@ -1546,17 +1560,32 @@ export class CampaignScheduler {
             quotaTargetActionDescriptors,
             limitConfig
           )
+          if (newsfeedAvailability.disabledStatus) {
+            stoppedBeforeCompletion = true
+            await this.handleLimitStatus(account, campaign, newsfeedAvailability.disabledStatus)
+            break
+          }
+          if (!continueOnActionLimit && newsfeedAvailability.blockedLimitStatuses.length > 0) {
+            stoppedBeforeCompletion = true
+            await this.handleLimitStatus(account, campaign, newsfeedAvailability.blockedLimitStatuses[0])
+            break
+          }
           if (newsfeedAvailability.allCheckedActionsBlocked) {
             stoppedBeforeCompletion = true
+            const limitStatus = newsfeedAvailability.blockedLimitStatuses[0]
             const message = newsfeedAvailability.blockedReasons.join('; ') || 'Các hành động newsfeed đang đạt giới hạn'
             if (this.isNewsfeedDailyCampaign(campaign)) {
               await this.completeNewsfeedDailyWithoutNextDay(campaign, message)
+            } else if (limitStatus) {
+              await this.handleLimitStatus(account, campaign, limitStatus)
             } else {
               await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
               await this.logCampaignProgress(campaign.id, `⚠️ Tạm dừng "${campaign.name}": ${message}`)
             }
             break
           }
+          skippedLimitActionCodes = this.getSkippedLimitActionCodeSet(newsfeedAvailability.blockedLimitStatuses)
+          await this.logSkippedLimitActionsOnce(campaign, newsfeedAvailability.blockedLimitStatuses, loggedSkippedLimitActionCodes)
         } else {
           const disabledStatus = await this.checkActionDisabled(account, executableTargetActionDescriptors)
           if (disabledStatus && !disabledStatus.ok) {
@@ -1565,12 +1594,15 @@ export class CampaignScheduler {
             break
           }
 
-          const limitStatus = await this.checkActionLimits(account, campaign, quotaTargetActionDescriptors, limitConfig)
-          if (limitStatus && !limitStatus.ok) {
+          const limitResult = await this.checkActionLimitsForContinuation(account, campaign, quotaTargetActionDescriptors, limitConfig)
+          if (limitResult.limitStatus) {
             stoppedBeforeCompletion = true
-            await this.handleLimitStatus(account, campaign, limitStatus)
+            await this.handleLimitStatus(account, campaign, limitResult.limitStatus)
             break
           }
+          quotaTargetActionDescriptors = limitResult.runnableActionDescriptors
+          skippedLimitActionCodes = this.getSkippedLimitActionCodeSet(limitResult.skippedLimitStatuses)
+          await this.logSkippedLimitActionsOnce(campaign, limitResult.skippedLimitStatuses, loggedSkippedLimitActionCodes)
         }
       } catch (err) {
         console.error('Rate limit check error:', err)
@@ -1615,7 +1647,7 @@ export class CampaignScheduler {
           consumedGroupPostInputDataIds,
           groupPostShareMaxCount
         )
-        const baseVariables = await this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval, mediaTempPaths)
+        const baseVariables = await this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval, mediaTempPaths, skippedLimitActionCodes)
         const variables = {
           ...baseVariables,
           enableGroupPostShareToJoinedGroups: campaign.extraSettings?.enableGroupPostShareToJoinedGroups === true && groupPostShareMaxCount > 0 && groupPostShareTargets.length > 0,
@@ -3650,6 +3682,171 @@ export class CampaignScheduler {
     return null
   }
 
+  private shouldContinueWhenActionLimitReached(limitConfig?: CampaignActionLimitSettings): boolean {
+    return limitConfig?.continueWhenActionLimitReached === true
+  }
+
+  private isInternalQuotaLimitStatus(limitStatus: AccountActionLimitStatus): boolean {
+    return !limitStatus.isActionDisabled && (
+      limitStatus.errorCode === LIMIT_IN_DAY_ERROR_CODE ||
+      limitStatus.errorCode === LIMIT_IN_HOUR_ERROR_CODE
+    )
+  }
+
+  private isSkippableLimitAction(campaign: Campaign, actionCode: string): boolean {
+    if (actionCode === 'fb_comment') {
+      return (
+        campaign.actionId === GROUP_POST_ACTION_ID ||
+        campaign.actionId === 'facebook_timeline_post' ||
+        campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+      )
+    }
+    if (actionCode === 'fb_like_post') {
+      return (
+        campaign.actionId === GROUP_POST_ACTION_ID ||
+        campaign.actionId === 'facebook_timeline_post' ||
+        campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID ||
+        campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID ||
+        campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+      )
+    }
+    if (actionCode === 'fb_message_stranger' || actionCode === 'fb_add_friend') {
+      return campaign.actionId === MESSAGE_UID_ACTION_ID
+    }
+    if (actionCode === 'zalo_message_stranger' || actionCode === 'zalo_add_friend') {
+      return (
+        campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID ||
+        campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
+        campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID ||
+        campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
+        campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
+      )
+    }
+    return false
+  }
+
+  private getSkippedLimitActionCodeSet(limitStatuses: AccountActionLimitStatus[]): Set<string> {
+    return new Set(limitStatuses.map(status => status.actionCode).filter((code): code is string => !!code))
+  }
+
+  private getContinuableLimitActionCodes(campaign: Campaign): Set<string> | null {
+    if (campaign.actionId !== ZALO_MESSAGE_PHONE_ACTION_ID) return null
+
+    const extra = campaign.extraSettings || {}
+    const codes: string[] = []
+    if (extra.enableMessage === true) codes.push('zalo_message_stranger')
+    if (extra.enableAddFriend === true) codes.push('zalo_add_friend')
+    return new Set(codes)
+  }
+
+  private hasRunnableContinuableLimitAction(
+    campaign: Campaign,
+    runnableActionDescriptors: CampaignActionDescriptor[]
+  ): boolean {
+    const continuableCodes = this.getContinuableLimitActionCodes(campaign)
+    if (!continuableCodes) return runnableActionDescriptors.length > 0
+    if (continuableCodes.size === 0) return false
+    return runnableActionDescriptors.some(action => continuableCodes.has(action.code))
+  }
+
+  private shouldSkipMessageByLimit(campaign: Campaign, skippedActionCodes: Set<string>): boolean {
+    const messageCodes = [
+      this.getMessageActionCode(campaign),
+      'zalo_message_stranger',
+      'zalo_message_friend',
+      'zalo_message_group',
+      'email_send',
+      'sms_send'
+    ]
+    return messageCodes.some(code => skippedActionCodes.has(code))
+  }
+
+  private shouldSkipAddFriendByLimit(skippedActionCodes: Set<string>): boolean {
+    return skippedActionCodes.has('fb_add_friend') || skippedActionCodes.has('zalo_add_friend')
+  }
+
+  private async logSkippedLimitActionsOnce(
+    campaign: Campaign,
+    limitStatuses: AccountActionLimitStatus[],
+    loggedActionCodes: Set<string>
+  ): Promise<void> {
+    for (const status of limitStatuses) {
+      const actionCode = status.actionCode || status.actionName || ''
+      if (!actionCode || loggedActionCodes.has(actionCode)) continue
+      loggedActionCodes.add(actionCode)
+      const note = await this.buildLimitPreflightNote(status)
+      await this.logCampaignProgress(campaign.id, `⚠️ Bỏ qua ${this.getLimitActionName(status)} vì đã đạt giới hạn: ${note}`)
+    }
+  }
+
+  private async checkActionLimitsForContinuation(
+    account: AutoAccount,
+    campaign: Campaign,
+    actionDescriptors: CampaignActionDescriptor[],
+    limitConfig?: CampaignActionLimitSettings
+  ): Promise<ActionLimitContinuationResult> {
+    if (!this.shouldContinueWhenActionLimitReached(limitConfig)) {
+      const limitStatus = await this.checkActionLimits(account, campaign, actionDescriptors, limitConfig)
+      return {
+        limitStatus,
+        runnableActionDescriptors: actionDescriptors,
+        skippedActionDescriptors: [],
+        skippedLimitStatuses: []
+      }
+    }
+
+    const entitlements = await loadCurrentUserEffectiveEntitlements()
+    const runnableActionDescriptors: CampaignActionDescriptor[] = []
+    const skippedActionDescriptors: CampaignActionDescriptor[] = []
+    const skippedLimitStatuses: AccountActionLimitStatus[] = []
+
+    for (const action of actionDescriptors) {
+      const limitStatus = await this.supabase.getAccountRateLimitStatus(
+        account.id,
+        action.code,
+        action.name,
+        this.getActionLimitConfig(action.code, limitConfig, account, entitlements)
+      )
+      if (limitStatus.ok) {
+        runnableActionDescriptors.push(action)
+        continue
+      }
+
+      if (this.isInternalQuotaLimitStatus(limitStatus) && this.isSkippableLimitAction(campaign, action.code)) {
+        skippedActionDescriptors.push(action)
+        skippedLimitStatuses.push(limitStatus)
+        continue
+      }
+
+      return {
+        limitStatus,
+        runnableActionDescriptors,
+        skippedActionDescriptors,
+        skippedLimitStatuses
+      }
+    }
+
+    if (
+      actionDescriptors.length > 0 &&
+      !this.hasRunnableContinuableLimitAction(campaign, runnableActionDescriptors) &&
+      skippedLimitStatuses.length > 0
+    ) {
+      return {
+        limitStatus: skippedLimitStatuses[0],
+        runnableActionDescriptors,
+        skippedActionDescriptors,
+        skippedLimitStatuses
+      }
+    }
+
+    return {
+      limitStatus: null,
+      runnableActionDescriptors,
+      skippedActionDescriptors,
+      skippedLimitStatuses
+    }
+  }
+
   private async resolveNewsfeedActionAvailability(
     account: AutoAccount,
     campaign: Campaign,
@@ -3664,14 +3861,16 @@ export class CampaignScheduler {
     let allowLike = likeConfigured
     let allowComment = commentConfigured
     const blockedReasons: string[] = []
+    const blockedLimitStatuses: AccountActionLimitStatus[] = []
+    let disabledStatus: AccountActionLimitStatus | undefined
     const executableCodes = new Set(executableActionDescriptors.map(action => action.code))
     const quotaCodes = new Set(quotaActionDescriptors.map(action => action.code))
 
-    const checkDisabledOne = async (code: 'fb_like_post' | 'fb_comment', name: string): Promise<boolean> => {
-      const disabledStatus = await this.supabase.getAccountActionDisabledStatus(account.id, code, name)
-      if (disabledStatus.ok) return true
-      blockedReasons.push(await this.buildLimitPreflightNote(disabledStatus))
-      return false
+    const checkDisabledOne = async (code: 'fb_like_post' | 'fb_comment', name: string): Promise<AccountActionLimitStatus | null> => {
+      const status = await this.supabase.getAccountActionDisabledStatus(account.id, code, name)
+      if (status.ok) return null
+      blockedReasons.push(await this.buildLimitPreflightNote(status))
+      return status
     }
 
     const checkQuotaOne = async (code: 'fb_like_post' | 'fb_comment', name: string): Promise<boolean> => {
@@ -3683,18 +3882,27 @@ export class CampaignScheduler {
       )
       if (limitStatus.ok) return true
       blockedReasons.push(await this.buildLimitPreflightNote(limitStatus))
+      blockedLimitStatuses.push(limitStatus)
       return false
     }
 
     if (likeConfigured && executableCodes.has('fb_like_post')) {
-      allowLike = await checkDisabledOne('fb_like_post', this.getAccountActionName('fb_like_post'))
-      if (allowLike && quotaCodes.has('fb_like_post')) {
+      const status = await checkDisabledOne('fb_like_post', this.getAccountActionName('fb_like_post'))
+      if (status) {
+        disabledStatus = disabledStatus || status
+        allowLike = false
+      }
+      if (!status && quotaCodes.has('fb_like_post')) {
         allowLike = await checkQuotaOne('fb_like_post', this.getAccountActionName('fb_like_post'))
       }
     }
     if (commentConfigured && executableCodes.has('fb_comment')) {
-      allowComment = await checkDisabledOne('fb_comment', this.getAccountActionName('fb_comment'))
-      if (allowComment && quotaCodes.has('fb_comment')) {
+      const status = await checkDisabledOne('fb_comment', this.getAccountActionName('fb_comment'))
+      if (status) {
+        disabledStatus = disabledStatus || status
+        allowComment = false
+      }
+      if (!status && quotaCodes.has('fb_comment')) {
         allowComment = await checkQuotaOne('fb_comment', this.getAccountActionName('fb_comment'))
       }
     }
@@ -3703,6 +3911,8 @@ export class CampaignScheduler {
       allowLike,
       allowComment,
       blockedReasons,
+      disabledStatus,
+      blockedLimitStatuses,
       allCheckedActionsBlocked: blockedReasons.length > 0 && !allowLike && !allowComment
     }
   }
@@ -4263,9 +4473,13 @@ export class CampaignScheduler {
       requiresPostApproval?: boolean | null
       source?: string
     },
-    mediaTempPaths: string[] = []
+    mediaTempPaths: string[] = [],
+    skippedLimitActionCodes: Set<string> = new Set()
   ): Promise<Record<string, unknown>> {
     const extra = campaign.extraSettings || {}
+    const isActionSkippedByLimit = (actionCode: string) => skippedLimitActionCodes.has(actionCode)
+    const skipMessageByLimit = this.shouldSkipMessageByLimit(campaign, skippedLimitActionCodes)
+    const skipAddFriendByLimit = this.shouldSkipAddFriendByLimit(skippedLimitActionCodes)
     const canUseFindDataPostContentConditions =
       extra.isFindInPost === true || extra.isFindInComment === true || extra.isFindPostLink === true
     const canUseFindDataCommentContentConditions = extra.isFindInComment === true
@@ -4278,7 +4492,8 @@ export class CampaignScheduler {
     )
 
     // Comment iterations
-    const enableComment = extra.enableComment ?? false
+    const enableComment = (extra.enableComment ?? false) && !isActionSkippedByLimit('fb_comment')
+    const enablePostLike = (extra.enablePostLike ?? false) && !isActionSkippedByLimit('fb_like_post')
     const commentGroupMode = extra.commentGroupMode || 'all'
     const commentType = extra.commentType || 'own'
     const rawCommentCount = Math.floor(Number(extra.commentCount ?? 3))
@@ -4341,7 +4556,7 @@ export class CampaignScheduler {
       commentImages: commentImageBatches[0] || [],
       commentImageBatches,
       commentImageOption: enableComment ? commentImageOption : 'none',
-      enablePostLike: extra.enablePostLike ?? false,
+      enablePostLike,
       postsPerTarget: extra.postsPerTarget ?? commentCount,
       isFindPostByKeywords: canUsePostContentConditions ? (extra.isFindPostByKeywords ?? false) : false,
       postKeywords: canUsePostContentConditions ? (extra.postKeywords ?? '') : '',
@@ -4389,14 +4604,14 @@ export class CampaignScheduler {
         campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID ||
         campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID ||
         campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
-      ) ? true : (extra.enableMessage ?? false),
+      ) ? !skipMessageByLimit : ((extra.enableMessage ?? false) && !skipMessageByLimit),
       enableAddFriend: (
         campaign.actionId === MESSAGE_FRIEND_ACTION_ID ||
         campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID ||
         campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID ||
         campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID ||
         campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
-      ) ? false : (extra.enableAddFriend ?? false),
+      ) ? false : ((extra.enableAddFriend ?? false) && !skipAddFriendByLimit),
       pageInboxPageUid: extra.pageInboxPageUid || '',
       pageInboxPageName: extra.pageInboxPageName || '',
       // Find data in group extras
