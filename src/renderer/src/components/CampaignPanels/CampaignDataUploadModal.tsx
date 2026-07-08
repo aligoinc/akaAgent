@@ -42,8 +42,10 @@ const INFO_FIELDS: FieldDef[] = [
 ]
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
+const FACEBOOK_FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const isZaloJoinGroupLinkAction = (actionId?: string | null): boolean => actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
 const isFacebookJoinGroupAction = (actionId?: string | null): boolean => actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
+const isFacebookFindDataSearchAction = (actionId?: string | null): boolean => actionId === FACEBOOK_FIND_DATA_SEARCH_ACTION_ID
 
 const getCellText = (value: unknown): string => {
   if (value === null || value === undefined) return ''
@@ -62,6 +64,13 @@ const normalizeUid = (value: unknown): string => {
   const text = getCellText(value).replace(/\s+/g, '')
   const lower = text.toLowerCase()
   if (!text || ['uid', 'url', 'link', 'group', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
+  return text
+}
+
+const normalizeFindDataSearchKeyword = (value: unknown): string => {
+  const text = getCellText(value).replace(/\s+/g, ' ').trim()
+  const lower = text.toLowerCase()
+  if (!text || ['keyword', 'keywords', 'tu khoa', 'từ khóa', 'search', 'tìm kiếm'].includes(lower)) return ''
   return text
 }
 
@@ -179,6 +188,12 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
       ...INFO_FIELDS
     ]
   }
+  if (isFacebookFindDataSearchAction(actionId)) {
+    return [
+      { key: 'uid', label: 'Từ khóa', required: true },
+      ...INFO_FIELDS
+    ]
+  }
   if (platform === 'zalo' || platform === 'sms') {
     return [
       { key: 'name', label: 'Tên' },
@@ -222,6 +237,12 @@ const isLikelyHeaderValue = (value: string): boolean => {
     'facebook',
     'facebook group',
     'facebook group link',
+    'keyword',
+    'keywords',
+    'tu khoa',
+    'từ khóa',
+    'search',
+    'tìm kiếm',
     'phone',
     'mobile',
     'sdt',
@@ -280,6 +301,20 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
         name: normalizeUid(rawName) === uid ? '' : rawName,
         phone: '',
         uid,
+        email: ''
+      })
+      continue
+    }
+    if (isFacebookFindDataSearchAction(actionId)) {
+      const keyword = normalizeFindDataSearchKeyword(firstText(row.uid, row.name))
+      const key = keyword.toLowerCase()
+      if (!keyword || seen.has(key)) continue
+      seen.add(key)
+      output.push({
+        ...row,
+        name: '',
+        phone: '',
+        uid: keyword,
         email: ''
       })
       continue
@@ -381,6 +416,25 @@ const detectNonWhitespaceColumn = (rows: unknown[][]): string => {
   return bestIndex >= 0 ? numberToColumnLetter(bestIndex + 1) : ''
 }
 
+const detectTextColumn = (rows: unknown[][]): string => {
+  const maxCols = rows.reduce((max, row) => Math.max(max, row.length), 0)
+  const dataRows = rows.slice(1, 11)
+  let bestIndex = -1
+  let bestCount = 0
+
+  for (let colIndex = 0; colIndex < Math.min(maxCols, 26); colIndex += 1) {
+    const count = dataRows.reduce((total, row) => (
+      getCellText(row[colIndex]) ? total + 1 : total
+    ), 0)
+    if (count > bestCount) {
+      bestCount = count
+      bestIndex = colIndex
+    }
+  }
+
+  return bestIndex >= 0 ? numberToColumnLetter(bestIndex + 1) : ''
+}
+
 const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlatform, actionId: string): ColumnMap => {
   if (isZaloJoinGroupLinkAction(actionId)) {
     return {
@@ -390,6 +444,11 @@ const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlat
   if (isFacebookJoinGroupAction(actionId)) {
     return {
       uid: detectColumnFromHeader(rows, ['uid', 'url', 'link', 'group', 'facebook']) || detectNonWhitespaceColumn(rows)
+    }
+  }
+  if (isFacebookFindDataSearchAction(actionId)) {
+    return {
+      uid: detectColumnFromHeader(rows, ['keyword', 'keywords', 'từ khóa', 'tu khoa', 'search', 'tìm kiếm']) || detectTextColumn(rows)
     }
   }
   if (platform === 'zalo' || platform === 'sms') {

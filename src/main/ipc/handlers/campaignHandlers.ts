@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
+import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
 interface CampaignPauseController {
@@ -166,6 +166,13 @@ export function registerCampaignHandlers(
     request: AddCampaignInputDataToCampaignRequest
   ) => {
     return supabase.addCampaignInputDataToCampaign(request)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_ADD_CAMPAIGN_INPUT_DATA_ROWS, async (
+    _,
+    request: AddCampaignInputDataRowsRequest
+  ) => {
+    return supabase.addCampaignInputDataRows(request)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_CAMPAIGN_INPUT_DATA, async (_, id: number) => {

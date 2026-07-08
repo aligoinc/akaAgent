@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
+import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -63,6 +63,7 @@ interface CampaignStore {
   updateCampaignInputData: (id: number, updates: Partial<CampaignInputData>) => Promise<void>
   bulkUpdateCampaignInputDataStatus: (campaignId: number, ids: number[], status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>) => Promise<BulkUpdateCampaignInputDataStatusResult>
   addCampaignInputDataToCampaign: (request: AddCampaignInputDataToCampaignRequest) => Promise<AddCampaignInputDataToCampaignResult>
+  addCampaignInputDataRows: (request: AddCampaignInputDataRowsRequest) => Promise<AddCampaignInputDataRowsResult>
   deleteCampaignInputData: (id: number) => Promise<void>
 
   // Campaign Details (per-milestone log) — status: 'thành công' | 'thất bại' | 'lỗi'
@@ -431,6 +432,15 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   addCampaignInputDataToCampaign: async (request) => {
     if (!window.electronAPI) throw new Error('API not available')
     const result = await window.electronAPI.addCampaignInputDataToCampaign(request)
+    await get().loadCampaigns()
+    const { selectedCampaignId } = get()
+    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
+    return result
+  },
+
+  addCampaignInputDataRows: async (request) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    const result = await window.electronAPI.addCampaignInputDataRows(request)
     await get().loadCampaigns()
     const { selectedCampaignId } = get()
     if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
