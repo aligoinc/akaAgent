@@ -42,7 +42,7 @@ const DEFAULT_POST_LIKE_LIMIT = 1000
 const DEFAULT_PROFILE_FRIEND_LIMIT = 1000
 const DEFAULT_GROUP_MEMBER_LIMIT = 1000
 const PAGE_INBOX_PAGE_SIZE = 100
-const DEFAULT_PAGE_INBOX_TIME_PRESET: PageInboxTimePreset = '30_days'
+const DEFAULT_PAGE_INBOX_TIME_PRESET: PageInboxTimePreset = 'all'
 
 const ZALO_REMARKETING_ACTION_FILTER_OPTIONS = [
   { value: 'zalo_message_phone', label: 'Zalo - Gửi tin nhắn đến SĐT (Kiêm kết bạn)' },
@@ -294,6 +294,25 @@ const arePageInboxFiltersEqual = (a: PageInboxAppliedFilters, b: PageInboxApplie
   a.dateTo === b.dateTo &&
   a.messageFilterMode === b.messageFilterMode &&
   a.messageKeywords === b.messageKeywords
+)
+
+const areStringArraysEqual = (a: string[], b: string[]) => (
+  a.length === b.length && a.every((value, index) => value === b[index])
+)
+
+const areNumberArraysEqual = (a: number[], b: number[]) => (
+  a.length === b.length && a.every((value, index) => value === b[index])
+)
+
+const sortedStringValues = (values: unknown[] | undefined): string[] => (
+  (values || []).map(value => String(value || '').trim()).filter(Boolean).sort()
+)
+
+const sortedNumberValues = (values: unknown[] | undefined): number[] => (
+  (values || [])
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value))
+    .sort((a, b) => a - b)
 )
 
 const sanitizeFileSegment = (value: string) => {
@@ -867,6 +886,8 @@ export default function DataScanModal({
   const stoppedScanIdsRef = useRef<Set<number>>(new Set())
   const completedScanIdsRef = useRef<Set<number>>(new Set())
   const contactsLoadIdRef = useRef(0)
+  const lastLoadedQueryKeyRef = useRef('')
+  const lastAutoLoadBaseQueryKeyRef = useRef('')
   const lockedPageInboxPageUid = String(initialPageInboxPageUid || '').trim()
   const pageInboxOptionsAccountRef = useRef<number | ''>('')
   const pageInboxPageUidRef = useRef('')
@@ -1148,23 +1169,29 @@ export default function DataScanModal({
 
   useEffect(() => {
     if (actionDef.platform !== 'zalo') {
-      setZaloTagFilterIds([])
-      setAkaBizTagFilterIds([])
-      setZaloNoTagFilter(false)
-      setAkaBizNoTagFilter(false)
-      setZaloTagFilterDropdownOpen(false)
-      setAkaBizTagFilterDropdownOpen(false)
+      setZaloTagFilterIds(prev => prev.length === 0 ? prev : [])
+      setAkaBizTagFilterIds(prev => prev.length === 0 ? prev : [])
+      setZaloNoTagFilter(prev => prev ? false : prev)
+      setAkaBizNoTagFilter(prev => prev ? false : prev)
+      setZaloTagFilterDropdownOpen(prev => prev ? false : prev)
+      setAkaBizTagFilterDropdownOpen(prev => prev ? false : prev)
     }
   }, [actionDef.platform])
 
   useEffect(() => {
     const availableIds = new Set(zaloTagFilterOptions.map(option => option.id))
-    setZaloTagFilterIds(prev => prev.filter(id => availableIds.has(id)))
+    setZaloTagFilterIds(prev => {
+      const next = prev.filter(id => availableIds.has(id))
+      return areStringArraysEqual(prev, next) ? prev : next
+    })
   }, [zaloTagFilterOptions])
 
   useEffect(() => {
     const availableIds = new Set(akaBizTagFilterOptions.map(option => option.id))
-    setAkaBizTagFilterIds(prev => prev.filter(id => availableIds.has(id)))
+    setAkaBizTagFilterIds(prev => {
+      const next = prev.filter(id => availableIds.has(id))
+      return areNumberArraysEqual(prev, next) ? prev : next
+    })
   }, [akaBizTagFilterOptions])
 
   useEffect(() => {
@@ -1397,12 +1424,118 @@ export default function DataScanModal({
     zaloRemarketingDateTo
   ])
 
-  const loadCachedContacts = useCallback(async (pageOverride?: number, pageInboxFiltersOverride?: PageInboxAppliedFilters) => {
+  const clearCachedContactsForPendingQuery = useCallback(() => {
+    contactsLoadIdRef.current += 1
+    lastLoadedQueryKeyRef.current = ''
+    setContacts(prev => prev.length === 0 ? prev : [])
+    setPageInboxTotal(prev => prev === 0 ? prev : 0)
+    setLoading(prev => prev ? false : prev)
+  }, [])
+
+  const buildContactsLoadQueryKey = useCallback((
+    pageOverride?: number,
+    pageInboxFiltersOverride?: PageInboxAppliedFilters,
+    includePage = true
+  ): string | null => {
+    if (!window.electronAPI || !accountId) return null
+    const pageToLoad = pageOverride ?? pageInboxPage
+    const base = {
+      action,
+      accountId,
+      ...(includePage ? { page: pageToLoad } : {})
+    }
+
+    if (isPageInboxAction) {
+      const filters = pageInboxFiltersOverride || pageInboxAppliedFilters
+      if (pageInboxOptionsAccountRef.current !== accountId) return null
+      if (!filters.pageUid) return null
+      return JSON.stringify({
+        ...base,
+        mode: 'page_inbox',
+        filters
+      })
+    }
+
+    if (isZaloGroupMembersAction) {
+      if (!zaloGroupMemberGroupId) return null
+      const query = getZaloGroupMemberListQuery()
+      return JSON.stringify({
+        ...base,
+        mode: 'zalo_group_members',
+        query: {
+          ...query,
+          zaloTagIds: sortedStringValues(query.zaloTagIds),
+          akaBizTagIds: sortedNumberValues(query.akaBizTagIds)
+        }
+      })
+    }
+
+    if (isZaloRemarketingCustomersAction) {
+      const query = getZaloRemarketingListQuery()
+      return JSON.stringify({
+        ...base,
+        mode: 'zalo_remarketing_customers',
+        query: {
+          ...query,
+          campaignActionIds: sortedStringValues(query.campaignActionIds),
+          zaloTagIds: sortedStringValues(query.zaloTagIds),
+          akaBizTagIds: sortedNumberValues(query.akaBizTagIds)
+        }
+      })
+    }
+
+    if (isPostCommentersAction && !normalizedPostCommentersUrl) return null
+    if (isPostLikesAction && !normalizedPostLikesUrl) return null
+    if (isProfileFriendsAction && !normalizedProfileFriendsUrl) return null
+    if (isGroupMembersAction && !normalizedGroupMembersUrl) return null
+
+    const query = getAccountContactListQuery()
+    return JSON.stringify({
+      ...base,
+      mode: 'account_contacts',
+      query: {
+        ...query,
+        zaloTagIds: sortedStringValues(query.zaloTagIds),
+        akaBizTagIds: sortedNumberValues(query.akaBizTagIds)
+      }
+    })
+  }, [
+    accountId,
+    action,
+    getAccountContactListQuery,
+    getZaloGroupMemberListQuery,
+    getZaloRemarketingListQuery,
+    isGroupMembersAction,
+    isPageInboxAction,
+    isPostCommentersAction,
+    isPostLikesAction,
+    isProfileFriendsAction,
+    isZaloGroupMembersAction,
+    isZaloRemarketingCustomersAction,
+    normalizedGroupMembersUrl,
+    normalizedPostCommentersUrl,
+    normalizedPostLikesUrl,
+    normalizedProfileFriendsUrl,
+    pageInboxAppliedFilters,
+    pageInboxPage,
+    zaloGroupMemberGroupId
+  ])
+
+  const loadCachedContacts = useCallback(async (
+    pageOverride?: number,
+    pageInboxFiltersOverride?: PageInboxAppliedFilters,
+    options: { force?: boolean } = {}
+  ) => {
+    const queryKey = buildContactsLoadQueryKey(pageOverride, pageInboxFiltersOverride)
+    if (!queryKey) {
+      clearCachedContactsForPendingQuery()
+      return
+    }
+    if (!options.force && lastLoadedQueryKeyRef.current === queryKey) return
+    lastLoadedQueryKeyRef.current = queryKey
+
     if (!window.electronAPI || !accountId) {
-      contactsLoadIdRef.current += 1
-      setContacts([])
-      setPageInboxTotal(0)
-      setLoading(false)
+      clearCachedContactsForPendingQuery()
       return
     }
     const pageToLoad = pageOverride ?? pageInboxPage
@@ -1494,6 +1627,7 @@ export default function DataScanModal({
     } catch (err: any) {
       console.error('Failed to load scan contacts:', err)
       if (mountedRef.current && contactsLoadIdRef.current === loadId) {
+        lastLoadedQueryKeyRef.current = ''
         showAlert(err?.message || 'Không thể tải danh sách data.', 'error')
       }
     } finally {
@@ -1504,6 +1638,8 @@ export default function DataScanModal({
   }, [
     accountId,
     actionDef.contactType,
+    buildContactsLoadQueryKey,
+    clearCachedContactsForPendingQuery,
     getAccountContactListQuery,
     getZaloGroupMemberListQuery,
     getZaloRemarketingListQuery,
@@ -1632,7 +1768,7 @@ export default function DataScanModal({
 
   const refreshPageInboxContactsAfterScan = useCallback(async () => {
     const nextFilters = applyPageInboxDraftFilters()
-    await loadCachedContacts(1, nextFilters)
+    await loadCachedContacts(1, nextFilters, { force: true })
   }, [applyPageInboxDraftFilters, loadCachedContacts])
 
   useEffect(() => {
@@ -1663,7 +1799,10 @@ export default function DataScanModal({
     setSelectedIds(new Set())
     setSelectedGroupIds(new Set())
     setModalSelectedGroupIds(new Set())
-    setStatusFilter((isPostCommentersAction || isPostLikesAction || isProfileFriendsAction || isGroupMembersAction) ? 'all' : (hasStatusFilter ? (initialStatusFilter || 'active') : 'all'))
+    const nextStatusFilter = (isPostCommentersAction || isPostLikesAction || isProfileFriendsAction || isGroupMembersAction)
+      ? 'all'
+      : (hasStatusFilter ? (initialStatusFilter || 'active') : 'all')
+    setStatusFilter(prev => prev === nextStatusFilter ? prev : nextStatusFilter)
     setNewGroupName('')
     setShowNewGroupInput(false)
     setShowAddGroupModal(false)
@@ -1685,11 +1824,11 @@ export default function DataScanModal({
       setPageInboxDateTo(defaults.dateTo)
       setPageInboxMessageFilterMode(defaults.messageFilterMode)
       setPageInboxMessageKeywords(defaults.messageKeywords)
-      setPageInboxAppliedFilters(defaults)
+      setPageInboxAppliedFilters(prev => arePageInboxFiltersEqual(prev, defaults) ? prev : defaults)
     }
     if (action === ZALO_REMARKETING_CUSTOMERS_ACTION_ID) {
       const defaults = getPageInboxDateRange('7_days')
-      setZaloRemarketingActionIds([...DEFAULT_ZALO_REMARKETING_ACTION_IDS])
+      setZaloRemarketingActionIds(prev => areStringArraysEqual(prev, DEFAULT_ZALO_REMARKETING_ACTION_IDS) ? prev : [...DEFAULT_ZALO_REMARKETING_ACTION_IDS])
       setZaloRemarketingActionDropdownOpen(false)
       setZaloRemarketingDateFrom(defaults.fromDate)
       setZaloRemarketingDateTo(defaults.toDate)
@@ -1736,8 +1875,24 @@ export default function DataScanModal({
   ])
 
   useEffect(() => {
+    const baseQueryKey = buildContactsLoadQueryKey(undefined, undefined, false)
+    if (!baseQueryKey) {
+      lastAutoLoadBaseQueryKeyRef.current = ''
+      clearCachedContactsForPendingQuery()
+      return
+    }
+    if (
+      pageInboxPage !== 1 &&
+      lastAutoLoadBaseQueryKeyRef.current &&
+      lastAutoLoadBaseQueryKeyRef.current !== baseQueryKey
+    ) {
+      lastAutoLoadBaseQueryKeyRef.current = baseQueryKey
+      setPageInboxPage(1)
+      return
+    }
+    lastAutoLoadBaseQueryKeyRef.current = baseQueryKey
     loadCachedContacts()
-  }, [loadCachedContacts])
+  }, [buildContactsLoadQueryKey, clearCachedContactsForPendingQuery, loadCachedContacts, pageInboxPage])
 
   useEffect(() => {
     loadContactGroups()
@@ -1747,8 +1902,8 @@ export default function DataScanModal({
     let cancelled = false
     async function loadPageOptions() {
       if (!window.electronAPI || !accountId || !isPageInboxAction) {
-        setPageInboxPages([])
-        setPageInboxPageUid('')
+        setPageInboxPages(prev => prev.length === 0 ? prev : [])
+        setPageInboxPageUid(prev => prev === '' ? prev : '')
         pageInboxPageUidRef.current = ''
         pageInboxOptionsAccountRef.current = ''
         setPageInboxSelectAllMatching(false)
@@ -1769,13 +1924,15 @@ export default function DataScanModal({
           : !accountChanged && currentPageUid && pages.some(page => page.uid === currentPageUid)
             ? currentPageUid
             : firstPageUid
-        setPageInboxPageUid(nextPageUid)
+        setPageInboxPageUid(prev => prev === nextPageUid ? prev : nextPageUid)
         setSelectedIds(new Set())
         setPageInboxSelectAllMatching(false)
         setPageInboxSelectedRange(null)
         setPageInboxExcludedIds(new Set())
         setPageInboxPage(1)
-        setPageInboxAppliedFilters(prev => ({ ...prev, pageUid: nextPageUid }))
+        setPageInboxAppliedFilters(prev => (
+          prev.pageUid === nextPageUid ? prev : { ...prev, pageUid: nextPageUid }
+        ))
       } catch (err: any) {
         if (!cancelled) {
           console.error('Failed to load page options for inbox scan:', err)
@@ -1928,7 +2085,7 @@ export default function DataScanModal({
         loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
         void loadZaloGroupOptions()
       } else {
-        loadCachedContacts(result.success ? 1 : undefined)
+        loadCachedContacts(result.success ? 1 : undefined, undefined, { force: true })
       }
       loadContactGroups()
 
@@ -2640,7 +2797,7 @@ export default function DataScanModal({
         await loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
         await loadZaloGroupOptions()
       } else {
-        await loadCachedContacts(1)
+        await loadCachedContacts(1, undefined, { force: true })
       }
       await loadContactGroups()
       if (wasStopped) return
