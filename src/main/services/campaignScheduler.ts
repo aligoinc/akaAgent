@@ -5800,7 +5800,7 @@ export class CampaignScheduler {
       }
     }
 
-    // Nhắn tin — phân biệt 3 status: thành công / thất bại (FB block) / lỗi (exception)
+    // Nhắn tin — phân biệt thành công / target không tồn tại / thất bại nghiệp vụ / lỗi exception.
     const msgSteps = steps.filter(s =>
       (s.blockName === 'fb_send_message' || s.blockName === 'fb_send_page_inbox_message') &&
       (s.status === 'success' || s.status === 'error')
@@ -5810,11 +5810,28 @@ export class CampaignScheduler {
       const errMsg = out.error || s.error || 'Lỗi không xác định'
       const isPageInboxMessage = s.blockName === 'fb_send_page_inbox_message' || campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
       const actionName = isPageInboxMessage ? 'Nhắn tin khách inbox page' : 'Nhắn tin'
-      const status: 'thành công' | 'thất bại' | 'lỗi' =
+      const reason = String(out.reason || '').trim()
+      const isPageInboxTargetNotFound = isPageInboxMessage && s.status === 'success' && out.ok !== true && (
+        reason === 'not_found' || reason === 'wrong_conversation'
+      )
+      const status: CampaignDetailStatus =
         s.status === 'error' ? 'lỗi'
         : out.ok === true ? 'thành công'
+        : isPageInboxTargetNotFound ? 'không tồn tại'
         : 'thất bại'
       const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined
+      const failureData = status === 'thành công' ? undefined : {
+        error: errMsg,
+        ...(reason ? { reason } : {}),
+        ...(isPageInboxTargetNotFound && out.customerName ? { customerName: out.customerName } : {}),
+        ...(isPageInboxTargetNotFound && out.customerPsid ? { customerPsid: out.customerPsid } : {}),
+        ...(isPageInboxTargetNotFound && out.openedName ? { openedName: out.openedName } : {})
+      }
+      const logText = status === 'thành công'
+        ? `${actionName} thành công đến ${inputDataName}`
+        : status === 'không tồn tại'
+          ? `Không tìm thấy khách inbox page ${inputDataName}: ${errMsg}`
+          : `Lỗi ${actionName.toLowerCase()} đến ${inputDataName}: ${errMsg}`
       try {
         await createCampaignDetail({
           inputDataId: detail?.id,
@@ -5824,10 +5841,12 @@ export class CampaignScheduler {
           actionName,
           status,
           errorCode,
-          log: status === 'thành công' ? `${actionName} thành công đến ${inputDataName}` : `Lỗi ${actionName.toLowerCase()} đến ${inputDataName}: ${errMsg}`,
-          data: status === 'thành công' ? undefined : { error: errMsg }
+          log: logText,
+          data: failureData,
+          shouldCountAction: isPageInboxTargetNotFound ? false : undefined
         })
         if (status === 'thành công') await this.logCampaignProgress(campaign.id, `💬 ${actionName} thành công đến "${inputDataName}"`)
+        else if (status === 'không tồn tại') await this.logCampaignProgress(campaign.id, `⚠️ Không tìm thấy khách inbox page "${inputDataName}": ${errMsg}`)
         else await this.logCampaignProgress(campaign.id, `❌ Lỗi ${actionName.toLowerCase()} "${inputDataName}": ${errMsg}`)
         await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log message:', err) }
