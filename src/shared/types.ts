@@ -366,6 +366,7 @@ export interface CampaignActionLimitSettings extends ActionLimitConfig {
   // Chỉ điều khiển quota ngày/khung giờ; action disable vẫn luôn check theo action thực sự chạy.
   enabledActionCodes?: string[]
   byActionCode?: Record<string, ActionLimitConfig>
+  continueWhenActionLimitReached?: boolean
 }
 
 export interface CampaignExtraSettings {

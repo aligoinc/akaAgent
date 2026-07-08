@@ -1239,6 +1239,10 @@ export default function CampaignFormModal({
   const initialIsFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(initialActionId)
   const initialSleepBetweenActions = campaign?.extraSettings?.actionLimits?.sleepBetweenActions
     ?? (initialActionId === SMS_SEND_ACTION_ID ? DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS : DEFAULT_SLEEP_BETWEEN_ACTIONS)
+  const hasSavedContinueWhenActionLimitReached = typeof campaign?.extraSettings?.actionLimits?.continueWhenActionLimitReached === 'boolean'
+  const initialContinueWhenActionLimitReached = campaign
+    ? (hasSavedContinueWhenActionLimitReached ? campaign.extraSettings?.actionLimits?.continueWhenActionLimitReached === true : false)
+    : true
   const initialIsDraftFacebookGroupSource =
     draftRequiredTargetField === 'findFacebookGroupPostTargetCampaignIds' ||
     draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds' ||
@@ -1321,6 +1325,7 @@ export default function CampaignFormModal({
     dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
     rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
     rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES,
+    continueWhenActionLimitReached: initialContinueWhenActionLimitReached,
     actionLimitsByCode: Object.fromEntries(
       Object.entries(campaign?.extraSettings?.actionLimits?.byActionCode || {}).map(([code, limit]) => [
         code,
@@ -3902,6 +3907,7 @@ export default function CampaignFormModal({
               dailyLimit: clampDailyLimitToEntitlement(formData.dailyLimit, campaignDailyLimitCap),
               rateLimitCount: formData.rateLimitCount,
               rateLimitMinutes: (campaign?.id || cloneFromId) ? normalizeRateLimitMinutes(formData.rateLimitMinutes) : accountRateLimitMinutes,
+              continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
               byActionCode
             },
             imageOption: (isSmsCampaign || isFacebookJoinGroupCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
@@ -10270,6 +10276,17 @@ export default function CampaignFormModal({
                         {generalLimitActionCodes.map(actionCode => renderActionLimitCard(actionCode))}
                       </div>
                     )}
+                    <label className="schedule-checkbox-label action-limit-continue-option">
+                      <input
+                        type="checkbox"
+                        checked={formData.continueWhenActionLimitReached}
+                        onChange={e => setFormData(p => ({ ...p, continueWhenActionLimitReached: e.target.checked }))}
+                      />
+                      <span>Chiến dịch sẽ tiếp tục chạy khi 1 trong các hành động đạt giới hạn</span>
+                    </label>
+                    <div className="schedule-hint action-limit-continue-note">
+                      Mặc định là chỉ cần 1 trong các hành động đạt giới hạn là chiến dịch sẽ không chạy và tự động lại khi giới hạn được mở.
+                    </div>
                     {isCommentSeedingFeedCampaign && (
                       <div className="stepper-form-group" style={{ maxWidth: 420, marginTop: 16 }}>
                         <label>Số bài cần comment trên mỗi group/page/profile</label>
