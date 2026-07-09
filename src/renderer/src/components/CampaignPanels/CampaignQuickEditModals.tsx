@@ -1,15 +1,17 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { FileText, Image as ImageIcon, Save, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { Copy, FileText, Image as ImageIcon, Plus, Save, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import type {
   ActionLimitConfig,
   Campaign,
   CampaignAction,
+  CampaignAdvancedContentItem,
   CampaignExtraSettings,
   CampaignMediaInput,
   CampaignMediaSnapshot
 } from '../../../../shared/types'
 import { renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
+import { findInvalidAdvancedContentItemIndex, normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
 import { useAuthStore } from '../../stores/authStore'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -25,6 +27,7 @@ import EmailHtmlEditor from './EmailHtmlEditor'
 type ActionLimitForm = Required<Pick<ActionLimitConfig, 'dailyLimit' | 'rateLimitCount' | 'rateLimitMinutes'>>
 type ImageOption = 'none' | 'all' | 'random'
 type CommentImageOption = 'none' | 'all'
+type QuickMediaPickerTarget = 'post' | 'comment' | { kind: 'advanced'; itemId: string }
 
 interface CampaignQuickEditModalProps {
   campaign: Campaign
@@ -43,6 +46,8 @@ interface CampaignLimitFormState {
 
 interface CampaignContentFormState {
   content: string
+  advancedContentEnabled: boolean
+  advancedContentItems: CampaignAdvancedContentItem[]
   emailSubject: string
   emailBodyIsHtml: boolean
   emailCheckLinkClicks: boolean
@@ -272,6 +277,14 @@ const getCampaignMediaStableKey = (item: CampaignMediaInput): string => {
   return item.cloudUrl || item.localPath || item.name
 }
 
+const createAdvancedContentItem = (overrides: Partial<CampaignAdvancedContentItem> = {}): CampaignAdvancedContentItem => ({
+  id: overrides.id || `advanced-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  content: overrides.content || '',
+  mediaOption: overrides.mediaOption || 'none',
+  mediaItems: overrides.mediaItems ? [...overrides.mediaItems] : [],
+  randomMediaCount: overrides.randomMediaCount || 3
+})
+
 const isCampaignMediaImage = (item: CampaignMediaInput): boolean => {
   if (isCampaignMediaSnapshot(item)) {
     const mimeType = String(item.mimeType || '').toLowerCase()
@@ -378,6 +391,8 @@ const getInitialContentFormState = (campaign: Campaign): CampaignContentFormStat
     extra.commentImageOption && extra.commentImageOption !== 'none' && savedCommentImages.length > 0 ? 'all' : 'none'
   return {
     content: campaign.content || '',
+    advancedContentEnabled: extra.advancedContentEnabled ?? false,
+    advancedContentItems: normalizeAdvancedContentItems(extra.advancedContentItems),
     emailSubject: extra.emailSubject || '',
     emailBodyIsHtml: extra.emailBodyIsHtml ?? false,
     emailCheckLinkClicks: extra.emailCheckLinkClicks ?? false,
@@ -678,7 +693,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   const updateCampaign = useCampaignStore(state => state.updateCampaign)
   const showAlert = useUiStore(state => state.showAlert)
   const [saving, setSaving] = useState(false)
-  const [mediaPickerTarget, setMediaPickerTarget] = useState<'post' | 'comment' | null>(null)
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<QuickMediaPickerTarget | null>(null)
   const [formData, setFormData] = useState<CampaignContentFormState>(() => getInitialContentFormState(campaign))
   const actionId = campaign.actionId
   const extra = campaign.extraSettings || {}
@@ -731,6 +746,9 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
   ) && extra.enableAddFriend === true
   const hasAnyEditableField = showMainContentSection || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
+  const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
+  const canUseAdvancedContentMode = showMainContentSection && !isCommentSeedingCampaign && !isSmsCampaign
+  const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
 
   const validateSelectedMedia = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
     if (option === 'none' || images.length === 0) return true
@@ -743,8 +761,63 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     return false
   }
 
+  const validateAdvancedContentItems = (): boolean => {
+    if (!isAdvancedContentMode) return true
+    if (normalizedAdvancedContentItems.length === 0) {
+      showAlert('Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.', 'error')
+      return false
+    }
+
+    const invalidIndex = findInvalidAdvancedContentItemIndex(normalizedAdvancedContentItems, {
+      allowMediaOnly: !isSmsCampaign
+    })
+    if (invalidIndex < 0) return true
+
+    showAlert(
+      isSmsCampaign
+        ? `Nội dung nâng cao số ${invalidIndex + 1} chưa có nội dung SMS.`
+        : `Nội dung nâng cao số ${invalidIndex + 1} đang rỗng. Vui lòng nhập nội dung hoặc chọn media, hoặc xoá nội dung này.`,
+      'error'
+    )
+    return false
+  }
+
+  const validateAdvancedContentMedia = (): boolean => {
+    if (!isAdvancedContentMode || isSmsCampaign) return true
+
+    for (let index = 0; index < normalizedAdvancedContentItems.length; index += 1) {
+      const item = normalizedAdvancedContentItems[index]
+      if (!validateSelectedMedia(`Media nội dung nâng cao ${index + 1}`, item.mediaOption || 'none', item.mediaItems || [])) {
+        return false
+      }
+    }
+
+    return true
+  }
+
   const getPostBackgroundValidationError = (): string | null => {
     if (!isPostBackgroundActive) return null
+
+    if (isAdvancedContentMode) {
+      if (normalizedAdvancedContentItems.length === 0) return 'Vui lòng thêm ít nhất 1 nội dung nâng cao để đăng bài với phông nền.'
+
+      const tooLongIndex = normalizedAdvancedContentItems.findIndex(item => renderContentSpinMax(item.content).length > 130)
+      if (tooLongIndex >= 0) {
+        return `Nội dung phông nền nâng cao số ${tooLongIndex + 1} không được quá 130 ký tự.`
+      }
+
+      const tooManyLinesIndex = normalizedAdvancedContentItems.findIndex(item => String(item.content || '').split(/\r?\n/).length > 3)
+      if (tooManyLinesIndex >= 0) {
+        return `Nội dung phông nền nâng cao số ${tooManyLinesIndex + 1} chỉ được tối đa 3 dòng.`
+      }
+
+      const hasAdvancedMedia = normalizedAdvancedContentItems.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
+      if (hasAdvancedMedia) {
+        return 'Đăng bài với phông nền không thể gửi kèm ảnh. Vui lòng bỏ media trong nội dung nâng cao trước khi lưu.'
+      }
+
+      return null
+    }
 
     const variants = splitContentVariants(formData.content)
     if (variants.length === 0) return 'Vui lòng nhập nội dung để đăng bài với phông nền.'
@@ -768,13 +841,31 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
   const handleMediaPickerConfirm = (items: CampaignMediaSnapshot[]) => {
     if (!mediaPickerTarget || items.length === 0) return
-    const acceptedItems = mediaPickerTarget === 'comment' || !(isZaloMessageCampaign || isEmailCampaign)
+    const isAdvancedTarget = typeof mediaPickerTarget === 'object'
+    const isCommentTarget = mediaPickerTarget === 'comment'
+    const acceptedItems = isCommentTarget || !(isZaloMessageCampaign || isEmailCampaign)
       ? items.filter(isCampaignMediaImage)
       : items
     if (acceptedItems.length === 0) return
     setFormData(prev => {
-      if (mediaPickerTarget === 'comment') {
+      if (isCommentTarget) {
         return { ...prev, commentImages: acceptedItems.slice(0, 1), commentImageOption: 'all' }
+      }
+      if (isAdvancedTarget) {
+        return {
+          ...prev,
+          advancedContentItems: prev.advancedContentItems.map(item => {
+            if (item.id !== mediaPickerTarget.itemId) return item
+            const currentItems = item.mediaItems || []
+            const currentKeys = new Set(currentItems.map(getCampaignMediaStableKey))
+            const nextItems = acceptedItems.filter(media => !currentKeys.has(getCampaignMediaStableKey(media)))
+            return {
+              ...item,
+              mediaOption: item.mediaOption === 'none' ? 'all' : item.mediaOption,
+              mediaItems: [...currentItems, ...nextItems]
+            }
+          })
+        }
       }
       const currentKeys = new Set(prev.images.map(getCampaignMediaStableKey))
       const nextItems = acceptedItems.filter(item => !currentKeys.has(getCampaignMediaStableKey(item)))
@@ -787,6 +878,17 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       ? { ...prev, commentImages: prev.commentImages.filter((_, itemIndex) => itemIndex !== index) }
       : { ...prev, images: prev.images.filter((_, itemIndex) => itemIndex !== index) }
     )
+  }
+
+  const removeAdvancedContentMedia = (itemId: string, mediaIndex: number) => {
+    setFormData(prev => ({
+      ...prev,
+      advancedContentItems: prev.advancedContentItems.map(item => (
+        item.id === itemId
+          ? { ...item, mediaItems: (item.mediaItems || []).filter((_, index) => index !== mediaIndex) }
+          : item
+      ))
+    }))
   }
 
   const renderMediaPicker = (target: 'post' | 'comment', title: string) => {
@@ -925,6 +1027,294 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     )
   }
 
+  const setAdvancedContentItem = (itemId: string, patch: Partial<CampaignAdvancedContentItem>) => {
+    setFormData(prev => ({
+      ...prev,
+      advancedContentItems: prev.advancedContentItems.map(item => (
+        item.id === itemId ? { ...item, ...patch } : item
+      ))
+    }))
+  }
+
+  const addAdvancedContentItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      advancedContentItems: [...prev.advancedContentItems, createAdvancedContentItem()]
+    }))
+  }
+
+  const duplicateAdvancedContentItem = (item: CampaignAdvancedContentItem) => {
+    setFormData(prev => ({
+      ...prev,
+      advancedContentItems: [
+        ...prev.advancedContentItems,
+        createAdvancedContentItem({
+          content: item.content,
+          mediaOption: item.mediaOption || 'none',
+          mediaItems: [...(item.mediaItems || [])],
+          randomMediaCount: item.randomMediaCount || 3
+        })
+      ]
+    }))
+  }
+
+  const removeAdvancedContentItem = (itemId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      advancedContentItems: prev.advancedContentItems.filter(item => item.id !== itemId)
+    }))
+  }
+
+  const renderContentModeSegmented = () => {
+    if (!canUseAdvancedContentMode) return null
+
+    const note = formData.advancedContentEnabled
+      ? 'Tạo nhiều nội dung riêng, mỗi nội dung là một biến thể hoàn chỉnh với media riêng. Mỗi lượt chạy sẽ xoay vòng qua các nội dung trong danh sách.'
+      : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
+
+    return (
+      <div className="campaign-content-mode-row">
+        <div className="campaign-content-mode-segmented" role="group" aria-label="Chế độ nội dung">
+          <button
+            type="button"
+            className={!formData.advancedContentEnabled ? 'active' : ''}
+            onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: false }))}
+          >
+            Đơn giản
+          </button>
+          <button
+            type="button"
+            className={formData.advancedContentEnabled ? 'active' : ''}
+            onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: true }))}
+          >
+            Nâng cao
+          </button>
+        </div>
+        <div className="campaign-content-mode-note">{note}</div>
+      </div>
+    )
+  }
+
+  const renderSmsContentOptions = () => {
+    if (!isSmsCampaign) return null
+
+    return (
+      <div className="campaign-quick-toggle-row">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.smsUseUnicode}
+            onChange={event => setFormData(prev => ({ ...prev, smsUseUnicode: event.target.checked }))}
+          />
+          <span>Tiếng Việt có dấu</span>
+        </label>
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.smsKeepNewLines}
+            onChange={event => setFormData(prev => ({ ...prev, smsKeepNewLines: event.target.checked }))}
+          />
+          <span>Không loại bỏ xuống dòng</span>
+        </label>
+      </div>
+    )
+  }
+
+  const renderAdvancedContentItemMedia = (item: CampaignAdvancedContentItem) => {
+    if (isSmsCampaign) return null
+
+    const mediaItems = item.mediaItems || []
+    const mediaOption = item.mediaOption || 'none'
+    const isFileMedia = isZaloMessageCampaign || isEmailCampaign
+    const mediaTitle = isEmailCampaign ? 'Tệp đính kèm đã chọn' : isZaloMessageCampaign ? 'File đã chọn' : 'Ảnh đã chọn'
+    const mediaDisabled = isPostBackgroundActive
+    const radioName = `quick-advanced-media-${item.id}`
+
+    return (
+      <div className="campaign-advanced-media-panel">
+        {mediaDisabled && (
+          <div className="schedule-hint">Đăng bài với phông nền không hỗ trợ gửi media.</div>
+        )}
+        <div className="campaign-advanced-media-layout">
+          <div className="campaign-advanced-media-options">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setMediaPickerTarget({ kind: 'advanced', itemId: item.id })}
+              disabled={mediaOption === 'none' || mediaDisabled}
+            >
+              <ImageIcon size={14} />
+              <span>{isEmailCampaign ? 'Chọn tệp đính kèm' : isZaloMessageCampaign ? 'Chọn file' : 'Chọn ảnh'}</span>
+            </button>
+            <label className="schedule-radio-label">
+              <input
+                type="radio"
+                name={radioName}
+                checked={mediaOption === 'none'}
+                onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'none' })}
+              />
+              <span>{isEmailCampaign ? 'Không đính kèm file' : isZaloMessageCampaign ? 'Không gửi file' : 'Không gửi ảnh'}</span>
+            </label>
+            <label className="schedule-radio-label">
+              <input
+                type="radio"
+                name={radioName}
+                checked={mediaOption === 'all'}
+                onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'all' })}
+                disabled={mediaDisabled}
+              />
+              <span>{isEmailCampaign ? 'Đính kèm file đã chọn' : isZaloMessageCampaign ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
+            </label>
+            <div className="campaign-advanced-random-media-row">
+              <label className="schedule-radio-label">
+                <input
+                  type="radio"
+                  name={radioName}
+                  checked={mediaOption === 'random'}
+                  onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'random' })}
+                  disabled={mediaDisabled}
+                />
+                <span>{isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={item.randomMediaCount || 3}
+                onChange={event => setAdvancedContentItem(item.id, {
+                  randomMediaCount: normalizePositiveInteger(event.target.value, 1, 1)
+                })}
+                className="stepper-input"
+                disabled={mediaOption !== 'random' || mediaDisabled}
+              />
+            </div>
+          </div>
+          <div className="campaign-advanced-media-selected">
+            <div className="campaign-advanced-media-selected-title">{mediaTitle}</div>
+            <div className="stepper-grid-container campaign-advanced-media-table-wrap">
+              <table className="campaign-grid">
+                <thead>
+                  <tr>
+                    <th style={{ width: 50, textAlign: 'center' }}>STT</th>
+                    <th style={{ width: 44, textAlign: 'center' }}></th>
+                    <th>Media</th>
+                    <th style={{ width: 44, textAlign: 'center' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mediaItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="text-center text-muted">
+                        {isFileMedia ? 'Chưa có file nào được chọn' : 'Chưa có ảnh nào được chọn'}
+                      </td>
+                    </tr>
+                  ) : mediaItems.map((itemMedia, index) => {
+                    const localPath = getCampaignMediaLocalPath(itemMedia)
+                    const cloudUrl = getCampaignMediaCloudUrl(itemMedia)
+                    const titleText = [localPath, cloudUrl].filter(Boolean).join('\n') || getCampaignMediaDisplayName(itemMedia)
+                    return (
+                      <tr key={`quick-advanced-${item.id}-${index}-${getCampaignMediaStableKey(itemMedia)}`}>
+                        <td className="text-center">{index + 1}</td>
+                        <td className="text-center">
+                          <MediaPreviewHover
+                            name={getCampaignMediaDisplayName(itemMedia)}
+                            path={getCampaignMediaPreviewPath(itemMedia)}
+                            mimeType={getCampaignMediaMimeType(itemMedia)}
+                            sizeBytes={getCampaignMediaSizeBytes(itemMedia)}
+                          />
+                        </td>
+                        <td className="text-truncate" title={titleText}>
+                          {getCampaignMediaDisplayName(itemMedia)}
+                          {isCampaignMediaUsingCloudFallback(itemMedia) && (
+                            <span className="media-inline-source">cloud</span>
+                          )}
+                        </td>
+                        <td className="text-center">
+                          <button
+                            type="button"
+                            className="btn-icon text-error action-btn"
+                            onClick={() => removeAdvancedContentMedia(item.id, index)}
+                            title="Xóa media"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderAdvancedContentEditor = () => (
+    <div className="campaign-advanced-content-editor">
+      <div className="campaign-advanced-content-header">
+        <div>
+          <strong>Nội dung nâng cao</strong>
+          <span className="campaign-advanced-content-count">{normalizedAdvancedContentItems.length} nội dung</span>
+        </div>
+      </div>
+
+      {formData.advancedContentItems.length === 0 ? (
+        <div className="campaign-advanced-content-entry">
+          <div className="campaign-advanced-content-empty">Chưa có nội dung nâng cao.</div>
+          <div className="campaign-advanced-content-add-row">
+            <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
+              <Plus size={14} />
+              <span>Thêm nội dung</span>
+            </button>
+          </div>
+        </div>
+      ) : formData.advancedContentItems.map((item, index) => (
+        <div className="campaign-advanced-content-entry" key={item.id}>
+          <div className="campaign-advanced-content-card">
+            <div className="campaign-advanced-content-card-header">
+              <strong>Nội dung {index + 1}</strong>
+              <div className="campaign-advanced-content-actions">
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => duplicateAdvancedContentItem(item)}
+                  title="Nhân bản nội dung"
+                >
+                  <Copy size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="btn-icon text-error"
+                  onClick={() => removeAdvancedContentItem(item.id)}
+                  title="Xóa nội dung"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+            <textarea
+              className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
+              placeholder="Nhập nội dung..."
+              value={item.content}
+              onChange={event => setAdvancedContentItem(item.id, { content: event.target.value })}
+              rows={5}
+            />
+            {renderAdvancedContentItemMedia(item)}
+          </div>
+          {index === formData.advancedContentItems.length - 1 && (
+            <div className="campaign-advanced-content-add-row">
+              <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
+                <Plus size={14} />
+                <span>Thêm nội dung</span>
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+
   const handleSave = async () => {
     if (!hasAnyEditableField) {
       showAlert('Loại chiến dịch này không có nội dung hoặc media để cập nhật.', 'info')
@@ -935,8 +1325,12 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       return
     }
     if (showMainContentSection) {
-      const hasMainContentText = formData.content.trim().length > 0
-      const hasSelectedMainMedia = !isSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
+      const hasMainContentText = isAdvancedContentMode
+        ? normalizedAdvancedContentItems.some(item => String(item.content || '').trim().length > 0)
+        : formData.content.trim().length > 0
+      const hasSelectedMainMedia = isAdvancedContentMode
+        ? !isSmsCampaign && normalizedAdvancedContentItems.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
+        : !isSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
       if (!isUsingSourceContent && !hasMainContentText && !hasSelectedMainMedia) {
         showAlert(
           isEmailCampaign
@@ -973,7 +1367,9 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       showAlert(postBackgroundError, 'error')
       return
     }
-    if (showMainMedia && !validateSelectedMedia(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) return
+    if (showMainMedia && !isAdvancedContentMode && !validateSelectedMedia(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) return
+    if (!validateAdvancedContentItems()) return
+    if (!validateAdvancedContentMedia()) return
     if (showCommentContent && !validateSelectedMedia('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
 
     setSaving(true)
@@ -984,6 +1380,10 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       }
 
       if (showMainContentSection) {
+        nextExtraSettings.advancedContentEnabled = canUseAdvancedContentMode ? formData.advancedContentEnabled : false
+        nextExtraSettings.advancedContentItems = normalizedAdvancedContentItems.map(item => isSmsCampaign
+          ? { ...item, mediaOption: 'none' as const, mediaItems: [] }
+          : item)
         nextExtraSettings.rewriteContentEachRun = isSmsCampaign || (isEmailCampaign && formData.emailBodyIsHtml)
           ? false
           : formData.rewriteContentEachRun
@@ -1122,56 +1522,57 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
                 </>
               )}
 
-              <div className="stepper-form-group">
-                <label>{isEmailCampaign ? (formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email') : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
-                {isEmailCampaign && formData.emailBodyIsHtml ? (
-                  <EmailHtmlEditor
-                    value={formData.content}
-                    onChange={html => setFormData(prev => ({ ...prev, content: html }))}
-                  />
-                ) : (
-                  <textarea
-                    className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
-                    value={formData.content}
-                    onChange={event => setFormData(prev => ({ ...prev, content: event.target.value }))}
-                    rows={8}
-                  />
-                )}
-              </div>
+              {renderContentModeSegmented()}
+              {isAdvancedContentMode ? (
+                <>
+                  {renderAdvancedContentEditor()}
+                  {renderSmsContentOptions()}
+                  {!isSmsCampaign && !(isEmailCampaign && formData.emailBodyIsHtml) && (
+                    <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
+                      <input
+                        type="checkbox"
+                        checked={formData.rewriteContentEachRun}
+                        onChange={event => setFormData(prev => ({ ...prev, rewriteContentEachRun: event.target.checked }))}
+                      />
+                      <span>Viết nội dung cho mỗi lượt chạy</span>
+                    </label>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="stepper-form-group">
+                    <label>{isEmailCampaign ? (formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email') : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
+                    {isEmailCampaign && formData.emailBodyIsHtml ? (
+                      <EmailHtmlEditor
+                        value={formData.content}
+                        onChange={html => setFormData(prev => ({ ...prev, content: html }))}
+                      />
+                    ) : (
+                      <textarea
+                        className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
+                        value={formData.content}
+                        onChange={event => setFormData(prev => ({ ...prev, content: event.target.value }))}
+                        rows={8}
+                      />
+                    )}
+                  </div>
 
-              {isSmsCampaign && (
-                <div className="campaign-quick-toggle-row">
-                  <label className="schedule-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={formData.smsUseUnicode}
-                      onChange={event => setFormData(prev => ({ ...prev, smsUseUnicode: event.target.checked }))}
-                    />
-                    <span>Tiếng Việt có dấu</span>
-                  </label>
-                  <label className="schedule-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={formData.smsKeepNewLines}
-                      onChange={event => setFormData(prev => ({ ...prev, smsKeepNewLines: event.target.checked }))}
-                    />
-                    <span>Không loại bỏ xuống dòng</span>
-                  </label>
-                </div>
+                  {renderSmsContentOptions()}
+
+                  {!isSmsCampaign && !(isEmailCampaign && formData.emailBodyIsHtml) && (
+                    <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
+                      <input
+                        type="checkbox"
+                        checked={formData.rewriteContentEachRun}
+                        onChange={event => setFormData(prev => ({ ...prev, rewriteContentEachRun: event.target.checked }))}
+                      />
+                      <span>Viết nội dung cho mỗi lượt chạy</span>
+                    </label>
+                  )}
+
+                  {showMainMedia && renderMediaPicker('post', isEmailCampaign ? 'Tệp đính kèm' : 'Media')}
+                </>
               )}
-
-              {!isSmsCampaign && !(isEmailCampaign && formData.emailBodyIsHtml) && (
-                <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
-                  <input
-                    type="checkbox"
-                    checked={formData.rewriteContentEachRun}
-                    onChange={event => setFormData(prev => ({ ...prev, rewriteContentEachRun: event.target.checked }))}
-                  />
-                  <span>Viết nội dung cho mỗi lượt chạy</span>
-                </label>
-              )}
-
-              {showMainMedia && renderMediaPicker('post', isEmailCampaign ? 'Tệp đính kèm' : 'Media')}
             </div>
           </div>
         )}
@@ -1273,7 +1674,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
       {mediaPickerTarget && (
         <MediaLibraryModal
-          pickerMode={mediaPickerTarget === 'post' && (isZaloMessageCampaign || isEmailCampaign) ? 'file' : 'image'}
+          pickerMode={mediaPickerTarget !== 'comment' && (isZaloMessageCampaign || isEmailCampaign) ? 'file' : 'image'}
           maxSelect={mediaPickerTarget === 'comment' ? 1 : undefined}
           onConfirm={handleMediaPickerConfirm}
           onClose={() => setMediaPickerTarget(null)}
