@@ -429,6 +429,7 @@ const FACEBOOK_PAGE_POST_ACTION_ID = 'facebook_page_post'
 const FACEBOOK_MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
 const FACEBOOK_MESSAGE_UID_ACTION_ID = 'facebook_message_uid'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
+const FACEBOOK_GROUP_INVITE_ACTION_ID = 'facebook_group_invite'
 const FACEBOOK_PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
@@ -1587,6 +1588,7 @@ const canImportDataForCampaign = (campaign: Campaign, action?: CampaignAction): 
   if (!isAddDataSupportedForCampaign(campaign)) return false
   if (campaign.actionId === FACEBOOK_PAGE_INBOX_MESSAGE_ACTION_ID) return false
   if ([
+    FACEBOOK_GROUP_INVITE_ACTION_ID,
     ZALO_MESSAGE_FRIEND_ACTION_ID,
     ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID,
     ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID,
@@ -1598,6 +1600,16 @@ const canImportDataForCampaign = (campaign: Campaign, action?: CampaignAction): 
 
 const getAddDataScanSources = (campaign: Campaign): AddCampaignDataScanSource[] => {
   switch (campaign.actionId) {
+    case FACEBOOK_GROUP_INVITE_ACTION_ID:
+      return [{
+        key: 'facebook_group_invite_friends',
+        label: 'Chọn bạn bè cần mời',
+        action: 'facebook_friends',
+        mode: 'friends',
+        initialStatusFilter: 'active',
+        allowedActions: ['facebook_friends'],
+        lockAccount: true
+      }]
     case FACEBOOK_MESSAGE_FRIEND_ACTION_ID:
       return [{
         key: 'facebook_friends',
@@ -1800,7 +1812,7 @@ function AddDataToCurrentCampaignModal({
     let nextRows: Partial<CampaignInputData>[] = []
     if (dataScanPicker.mode === 'friends' || dataScanPicker.mode === 'users') {
       nextRows = contacts
-        .filter(contact => contact.contactType === 'person')
+        .filter(contact => contact.contactType === 'person' && (campaign.actionId !== FACEBOOK_GROUP_INVITE_ACTION_ID || contact.isFriend === true))
         .map(contact => ({
           name: contact.name,
           uid: dataScanPicker.action.startsWith('zalo_') ? (contact.uid || contact.url || '') : (contact.url || contact.uid || ''),
@@ -2891,6 +2903,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       case 'đã nhận': return 'var(--accent-success)'
       case 'đã xem': return 'var(--accent-success)'
       case 'đã click': return 'var(--accent-success)'
+      case 'đã gửi lời mời': return 'var(--accent-warning)'
+      case 'đã là thành viên': return 'var(--accent-warning)'
       case 'thất bại': return 'var(--accent-warning)'   // vàng — nghiệp vụ FB từ chối
       case 'không tồn tại': return 'var(--accent-warning)'
       case 'lỗi': return 'var(--accent-error)'           // đỏ — exception/crash code
@@ -2904,10 +2918,12 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
         : status === 'đã nhận' ? 'Đã nhận'
           : status === 'đã xem' ? 'Đã xem'
             : status === 'đã click' ? 'Đã click'
-              : status === 'thất bại' ? '⚠️ Thất bại'
-                : status === 'không tồn tại' ? '⚠️ Không tồn tại'
-                  : status === 'lỗi' ? '❌ Lỗi'
-                    : status
+              : status === 'đã gửi lời mời' ? 'Đã gửi lời mời'
+                : status === 'đã là thành viên' ? 'Đã là thành viên'
+                  : status === 'thất bại' ? '⚠️ Thất bại'
+                    : status === 'không tồn tại' ? '⚠️ Không tồn tại'
+                      : status === 'lỗi' ? '❌ Lỗi'
+                        : status
   )
 
   const getCampaignStatusClass = (status: string) => {
@@ -3322,7 +3338,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     total: number,
     breakdown: CampaignRelationSummary['successBreakdown'],
     includeStatus: boolean,
-    tone: 'success' | 'failure'
+    tone: 'success' | 'skipped' | 'failure'
   ) => {
     if (total === 0) return <span className="campaign-relation-count muted">0</span>
 
@@ -3363,6 +3379,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
             <th>Tài khoản</th>
             <th>Chờ gửi</th>
             <th>Thành công</th>
+            <th>Bỏ qua</th>
             <th>Thất bại</th>
           </tr>
         </thead>
@@ -3382,6 +3399,9 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                 </td>
                 <td>
                   {renderRelationBreakdownCell(summary.successCount, summary.successBreakdown, false, 'success')}
+                </td>
+                <td>
+                  {renderRelationBreakdownCell(summary.skippedCount, summary.skippedBreakdown, true, 'skipped')}
                 </td>
                 <td>
                   {renderRelationBreakdownCell(summary.failureCount, summary.failureBreakdown, true, 'failure')}

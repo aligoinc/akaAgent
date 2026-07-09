@@ -80,6 +80,7 @@ const COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const COMMENT_SEEDING_FEED_ACTION_ID = 'facebook_comment_seeding'
 const FACEBOOK_GROUP_POST_ACTION_ID = 'facebook_group_post'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
+const FACEBOOK_GROUP_INVITE_ACTION_ID = 'facebook_group_invite'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
@@ -131,6 +132,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   fb_add_friend: 'Kết bạn',
   fb_like_post: 'Like post',
   fb_join_group: 'Tham gia group',
+  fb_group_invite: 'Mời vào group',
   zalo_find_phone_user: 'Tìm SĐT',
   zalo_message_friend: 'Nhắn tin bạn bè',
   zalo_message_group: 'Nhắn tin group',
@@ -156,6 +158,7 @@ const ACTION_LIMIT_UNITS: Record<string, string> = {
   fb_add_friend: 'lời mời',
   fb_like_post: 'like',
   fb_join_group: 'group',
+  fb_group_invite: 'lời mời',
   zalo_find_phone_user: 'SĐT',
   zalo_message_friend: 'tin nhắn',
   zalo_message_group: 'tin nhắn',
@@ -480,7 +483,7 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
     action || { id: campaign.actionId, flatformType: actionPlatform },
     entitlements
   )
-  const canUseSleepBetweenActions = campaign.actionId !== 'facebook_timeline_post' && campaign.actionId !== NEWSFEED_INTERACTION_ACTION_ID
+  const canUseSleepBetweenActions = campaign.actionId !== 'facebook_timeline_post' && campaign.actionId !== NEWSFEED_INTERACTION_ACTION_ID && campaign.actionId !== FACEBOOK_GROUP_INVITE_ACTION_ID
 
   const getActionDailyLimitCap = (actionCode: string) => (
     getAccountActionDailySendLimit(actionCode, actionPlatform, entitlements)
@@ -705,6 +708,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   const isNewsfeedInteractionCampaign = actionId === NEWSFEED_INTERACTION_ACTION_ID
   const isFacebookGroupPostCampaign = actionId === FACEBOOK_GROUP_POST_ACTION_ID
   const isFacebookJoinGroupCampaign = actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
+  const isFacebookGroupInviteCampaign = actionId === FACEBOOK_GROUP_INVITE_ACTION_ID
   const isZaloMessageCampaign = [
     ZALO_MESSAGE_PHONE_ACTION_ID,
     ZALO_MESSAGE_FRIEND_ACTION_ID,
@@ -726,6 +730,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     !FIND_DATA_ACTION_IDS.has(actionId) &&
     !isNewsfeedInteractionCampaign &&
     !isFacebookJoinGroupCampaign &&
+    !isFacebookGroupInviteCampaign &&
     actionId !== ZALO_JOIN_GROUP_LINK_ACTION_ID &&
     actionId !== ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID &&
     (!isToggleableMessageContentCampaign || hasMessageEnabled) &&
@@ -736,7 +741,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     !extra.sharePost &&
     !extra.postAsReels
   const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground
-  const showMainMedia = showMainContentSection && !isSmsCampaign && !isFacebookJoinGroupCampaign
+  const showMainMedia = showMainContentSection && !isSmsCampaign && !isFacebookJoinGroupCampaign && !isFacebookGroupInviteCampaign
   const showCommentContent = isCommentSeedingCampaign || (isFacebookGroupPostCampaign && extra.enableComment === true)
   const showPostBumpContent = isFacebookGroupPostCampaign && extra.enablePostBump === true
   const showNewsfeedCommentContent = isNewsfeedInteractionCampaign && extra.enableComment === true
@@ -1389,7 +1394,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
         nextExtraSettings.rewriteContentEachRun = isSmsCampaign || (isEmailCampaign && formData.emailBodyIsHtml)
           ? false
           : formData.rewriteContentEachRun
-        nextExtraSettings.imageOption = (isSmsCampaign || isFacebookJoinGroupCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption
+        nextExtraSettings.imageOption = (isSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption
         nextExtraSettings.randomImageCount = formData.randomImageCount
       }
       if (isEmailCampaign) {
@@ -1430,7 +1435,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       await updateCampaign(campaign.id, {
         ...(showMainContentSection ? { content: formData.content } : {}),
         extraSettings: nextExtraSettings,
-        ...(showMainMedia ? { images: isSmsCampaign || isFacebookJoinGroupCampaign ? [] : formData.images } : {})
+        ...(showMainMedia ? { images: isSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
       })
       showAlert('Đã cập nhật nội dung và media.', 'success')
       shouldClose = true

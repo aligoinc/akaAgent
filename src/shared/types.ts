@@ -471,6 +471,9 @@ export interface CampaignExtraSettings {
   zaloAddGroupMemberTargetGroupId?: string
   zaloAddGroupMemberTargetGroupName?: string
   zaloAddGroupMemberUseShareMethod?: boolean
+  facebookGroupInviteTargetGroupUid?: string
+  facebookGroupInviteTargetGroupUrl?: string
+  facebookGroupInviteTargetGroupName?: string
   zaloRealtimeTriggers?: Array<'join' | 'leave' | 'interact'>
   zaloRealtimeGroupIds?: string[]
   zaloRealtimeGroupNames?: string[]
@@ -639,6 +642,7 @@ export interface CampaignInputDataRequirement {
 const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirement> = {
   facebook_group_post: { field: 'uid', label: 'group URL' },
   facebook_join_group: { field: 'uid', label: 'group URL/UID' },
+  facebook_group_invite: { field: 'uid', label: 'UID/link bạn bè' },
   facebook_page_post: { field: 'uid', label: 'Page ID' },
   facebook_message_friend: { field: 'uid', label: 'UID/link bạn bè' },
   facebook_message_uid: { field: 'uid', label: 'UID/link profile' },
@@ -881,9 +885,11 @@ export interface CampaignRelationSummary {
   accountName?: string
   pendingInputCount: number
   successCount: number
+  skippedCount: number
   failureCount: number
   errorCount: number
   successBreakdown: CampaignRelationActionBreakdown[]
+  skippedBreakdown: CampaignRelationActionBreakdown[]
   failureBreakdown: CampaignRelationActionBreakdown[]
 }
 
@@ -915,6 +921,7 @@ export interface AccountActionReportAction {
 
 export interface AccountActionReportCell {
   successCount: number
+  skippedCount: number
   failureCount: number
   pendingCount: number
 }
@@ -931,7 +938,7 @@ export interface AccountActionReportResult {
   generatedAt: string
 }
 
-export type AccountActionReportStatusBucket = 'pending' | 'success' | 'failure'
+export type AccountActionReportStatusBucket = 'pending' | 'success' | 'skipped' | 'failure'
 
 export interface AccountActionReportDetailQuery {
   flatformType?: string

@@ -4,6 +4,7 @@ import { utils, writeFile } from 'xlsx'
 import {
   AccountActionReportAccount,
   AccountActionReportAction,
+  AccountActionReportCell,
   AccountActionReportDetailResult,
   AccountActionReportDetailRow,
   AccountActionReportQuery,
@@ -111,7 +112,7 @@ function hasAnyCount(report: AccountActionReportResult | null): boolean {
   return report.rows.some(row =>
     report.actions.some(action => {
       const cell = row.countsByActionCode[action.code]
-      return (cell?.successCount || 0) > 0 || (cell?.failureCount || 0) > 0 || (cell?.pendingCount || 0) > 0
+      return (cell?.successCount || 0) > 0 || (cell?.skippedCount || 0) > 0 || (cell?.failureCount || 0) > 0 || (cell?.pendingCount || 0) > 0
     })
   )
 }
@@ -119,16 +120,18 @@ function hasAnyCount(report: AccountActionReportResult | null): boolean {
 function getStatusBucketLabel(statusBucket: AccountActionReportStatusBucket): string {
   if (statusBucket === 'pending') return 'Chờ xử lý'
   if (statusBucket === 'success') return 'Thành công'
+  if (statusBucket === 'skipped') return 'Bỏ qua'
   return 'Thất bại'
 }
 
 function getDetailCount(
-  cell: { pendingCount: number; successCount: number; failureCount: number } | undefined,
+  cell: AccountActionReportCell | undefined,
   statusBucket: AccountActionReportStatusBucket
 ): number {
   if (!cell) return 0
   if (statusBucket === 'pending') return cell.pendingCount || 0
   if (statusBucket === 'success') return cell.successCount || 0
+  if (statusBucket === 'skipped') return cell.skippedCount || 0
   return cell.failureCount || 0
 }
 
@@ -388,15 +391,15 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       const header1 = ['Danh sách hành động/danh sách tài khoản chọn']
       const header2 = ['Trạng thái']
       for (const action of report.actions) {
-        header1.push(action.name, '', '')
-        header2.push('Chờ xử lý', 'Thành công', 'Thất bại')
+        header1.push(action.name, '', '', '')
+        header2.push('Chờ xử lý', 'Thành công', 'Bỏ qua', 'Thất bại')
       }
 
       const rows = report.rows.map(row => {
         const values: Array<string | number> = [row.account.name]
         for (const action of report.actions) {
           const cell = row.countsByActionCode[action.code]
-          values.push(cell?.pendingCount || 0, cell?.successCount || 0, cell?.failureCount || 0)
+          values.push(cell?.pendingCount || 0, cell?.successCount || 0, cell?.skippedCount || 0, cell?.failureCount || 0)
         }
         return values
       })
@@ -405,13 +408,13 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       sheet['!merges'] = [
         { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
         ...report.actions.map((_, index) => ({
-          s: { r: 0, c: 1 + index * 3 },
-          e: { r: 0, c: 3 + index * 3 }
+          s: { r: 0, c: 1 + index * 4 },
+          e: { r: 0, c: 4 + index * 4 }
         }))
       ]
       sheet['!cols'] = [
         { wch: 34 },
-        ...report.actions.flatMap(() => [{ wch: 13 }, { wch: 13 }, { wch: 13 }])
+        ...report.actions.flatMap(() => [{ wch: 13 }, { wch: 13 }, { wch: 13 }, { wch: 13 }])
       ]
 
       const workbook = utils.book_new()
@@ -557,7 +560,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   const renderReportCount = (
     account: AccountActionReportAccount,
     action: AccountActionReportAction,
-    cell: { pendingCount: number; successCount: number; failureCount: number } | undefined,
+    cell: AccountActionReportCell | undefined,
     statusBucket: AccountActionReportStatusBucket
   ) => {
     const count = getDetailCount(cell, statusBucket)
@@ -821,7 +824,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                 <tr>
                   <th className="report-account-col" rowSpan={2}>Danh sách hành động/danh sách tài khoản chọn</th>
                   {report.actions.map(action => (
-                    <th className="report-action-col" key={action.code} colSpan={3} title={action.name}>{action.name}</th>
+                    <th className="report-action-col" key={action.code} colSpan={4} title={action.name}>{action.name}</th>
                   ))}
                 </tr>
                 <tr>
@@ -829,6 +832,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                     <Fragment key={`${action.code}-statuses`}>
                       <th key={`${action.code}-pending`} className="report-status-col pending">Chờ xử lý</th>
                       <th key={`${action.code}-success`} className="report-status-col success">Thành công</th>
+                      <th key={`${action.code}-skipped`} className="report-status-col skipped">Bỏ qua</th>
                       <th key={`${action.code}-failure`} className="report-status-col failure">Thất bại</th>
                     </Fragment>
                   ))}
@@ -847,6 +851,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                         <Fragment key={`${row.account.id}-${action.code}`}>
                           <td key={`${row.account.id}-${action.code}-pending`}>{renderReportCount(row.account, action, cell, 'pending')}</td>
                           <td key={`${row.account.id}-${action.code}-success`}>{renderReportCount(row.account, action, cell, 'success')}</td>
+                          <td key={`${row.account.id}-${action.code}-skipped`}>{renderReportCount(row.account, action, cell, 'skipped')}</td>
                           <td key={`${row.account.id}-${action.code}-failure`}>{renderReportCount(row.account, action, cell, 'failure')}</td>
                         </Fragment>
                       )

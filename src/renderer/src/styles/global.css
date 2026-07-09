@@ -5772,6 +5772,11 @@ td.report-account-col span {
   color: var(--accent-success);
 }
 
+.report-status-col.skipped,
+.report-count.skipped {
+  color: var(--accent-warning);
+}
+
 .report-status-col.failure,
 .report-count.failure {
   color: #ef4444;
@@ -5813,6 +5818,10 @@ td.report-account-col span {
 
 .report-count-button.success:hover {
   border-color: var(--accent-success);
+}
+
+.report-count-button.skipped:hover {
+  border-color: var(--accent-warning);
 }
 
 .report-count-button.failure:hover {
@@ -5955,6 +5964,10 @@ td.report-account-col span {
 
 .report-detail-status.success {
   color: var(--accent-success);
+}
+
+.report-detail-status.skipped {
+  color: var(--accent-warning);
 }
 
 .report-detail-status.failure {
@@ -7536,6 +7549,8 @@ button.btn-icon.campaign-control-button.assistant {
 
 .stepper-section.has-floating-dropdown {
   overflow: visible;
+  position: relative;
+  z-index: 20;
 }
 
 .stepper-section:hover {
@@ -7763,7 +7778,7 @@ button.btn-icon.campaign-control-button.assistant {
 
 .zalo-group-combobox-menu {
   position: absolute;
-  z-index: 220;
+  z-index: 3200;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
@@ -12743,6 +12758,10 @@ button.btn-icon.campaign-control-button.assistant {
   color: var(--accent-success);
 }
 
+.campaign-relation-count.skipped {
+  color: var(--accent-warning);
+}
+
 .campaign-relation-count.failure {
   color: var(--accent-warning);
 }
@@ -12780,6 +12799,11 @@ button.btn-icon.campaign-control-button.assistant {
 .campaign-relation-breakdown-chip.success {
   color: var(--accent-success);
   background: rgba(34, 197, 94, 0.1);
+}
+
+.campaign-relation-breakdown-chip.skipped {
+  color: var(--accent-warning);
+  background: rgba(245, 158, 11, 0.12);
 }
 
 .campaign-relation-breakdown-chip.failure {
