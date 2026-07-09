@@ -735,11 +735,13 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     actionId !== ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID &&
     (!isToggleableMessageContentCampaign || hasMessageEnabled) &&
     !isCommentSeedingCampaign
-  const canUsePostBackground = (actionId === 'facebook_timeline_post' || actionId === PAGE_POST_ACTION_ID) &&
-    !(actionId === PAGE_POST_ACTION_ID && extra.pagePostMode === 'api') &&
-    !extra.copyContentFromSource &&
-    !extra.sharePost &&
-    !extra.postAsReels
+  const isPostBackgroundCampaign = actionId === 'facebook_timeline_post' || actionId === PAGE_POST_ACTION_ID || actionId === FACEBOOK_GROUP_POST_ACTION_ID
+  const isPostBackgroundDisabled =
+    (actionId === PAGE_POST_ACTION_ID && extra.pagePostMode === 'api') ||
+    extra.copyContentFromSource === true ||
+    extra.sharePost === true ||
+    extra.postAsReels === true
+  const canUsePostBackground = isPostBackgroundCampaign && !isPostBackgroundDisabled
   const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground
   const showMainMedia = showMainContentSection && !isSmsCampaign && !isFacebookJoinGroupCampaign && !isFacebookGroupInviteCampaign
   const showCommentContent = isCommentSeedingCampaign || (isFacebookGroupPostCampaign && extra.enableComment === true)
@@ -1406,7 +1408,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
         nextExtraSettings.smsUseUnicode = formData.smsUseUnicode
         nextExtraSettings.smsKeepNewLines = formData.smsKeepNewLines
       }
-      if (canUsePostBackground) {
+      if (isPostBackgroundCampaign) {
         nextExtraSettings.postWithBackground = isPostBackgroundActive
         if (isPostBackgroundActive) {
           nextExtraSettings.copyContentFromSource = false
@@ -1480,12 +1482,13 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
               </div>
             </div>
             <div className="stepper-section-body">
-              {canUsePostBackground && (
+              {isPostBackgroundCampaign && (
                 <div className="stepper-form-group">
                   <label className="schedule-checkbox-label">
                     <input
                       type="checkbox"
-                      checked={formData.postWithBackground}
+                      checked={isPostBackgroundActive}
+                      disabled={isPostBackgroundDisabled}
                       onChange={event => setFormData(prev => ({ ...prev, postWithBackground: event.target.checked }))}
                     />
                     <span>Đăng bài với phông nền <em>(tối đa 130 ký tự, 3 dòng và không đăng ảnh)</em></span>
