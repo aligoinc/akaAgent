@@ -1738,7 +1738,8 @@ export default function CampaignFormModal({
     (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage) &&
     (!isZaloMessageFriendRecommendationCampaign || formData.enableMessage)
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
-  const isAdvancedContentMode = canShowContentSection && formData.advancedContentEnabled && !isCommentSeedingCampaign
+  const canUseAdvancedContentMode = canShowContentSection && !isCommentSeedingCampaign && !isSmsCampaign
+  const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
   const hasMainContentText = isAdvancedContentMode
     ? normalizedAdvancedContentItems.some(item => String(item.content || '').trim().length > 0)
     : formData.content.trim().length > 0
@@ -3975,7 +3976,7 @@ export default function CampaignFormModal({
             sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
             postWithBackground: isPostBackgroundActive,
             rewriteContentEachRun: isSmsCampaign || (isEmailCampaign && formData.emailBodyIsHtml) ? false : formData.rewriteContentEachRun,
-            advancedContentEnabled: canSaveAdvancedContent ? formData.advancedContentEnabled : false,
+            advancedContentEnabled: canUseAdvancedContentMode ? formData.advancedContentEnabled : false,
             advancedContentItems: advancedContentItemsForSave,
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
@@ -9533,24 +9534,35 @@ export default function CampaignFormModal({
     }))
   }
 
-  const renderContentModeSegmented = () => (
-    <div className="campaign-content-mode-segmented" role="group" aria-label="Chế độ nội dung">
-      <button
-        type="button"
-        className={!formData.advancedContentEnabled ? 'active' : ''}
-        onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: false }))}
-      >
-        Đơn giản
-      </button>
-      <button
-        type="button"
-        className={formData.advancedContentEnabled ? 'active' : ''}
-        onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: true }))}
-      >
-        Nâng cao
-      </button>
-    </div>
-  )
+  const renderContentModeSegmented = () => {
+    if (!canUseAdvancedContentMode) return null
+
+    const note = formData.advancedContentEnabled
+      ? 'Tạo nhiều nội dung riêng, mỗi nội dung là một biến thể hoàn chỉnh với media riêng. Mỗi lượt chạy sẽ xoay vòng qua các nội dung trong danh sách.'
+      : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
+
+    return (
+      <div className="campaign-content-mode-row">
+        <div className="campaign-content-mode-segmented" role="group" aria-label="Chế độ nội dung">
+          <button
+            type="button"
+            className={!formData.advancedContentEnabled ? 'active' : ''}
+            onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: false }))}
+          >
+            Đơn giản
+          </button>
+          <button
+            type="button"
+            className={formData.advancedContentEnabled ? 'active' : ''}
+            onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: true }))}
+          >
+            Nâng cao
+          </button>
+        </div>
+        <div className="campaign-content-mode-note">{note}</div>
+      </div>
+    )
+  }
 
   const renderAdvancedContentItemMedia = (item: CampaignAdvancedContentItem) => {
     if (isSmsCampaign) return null
@@ -10826,7 +10838,7 @@ export default function CampaignFormModal({
                   {isCommentSeedingCampaign ? renderCommentSeedingSettings() : (
                     <>
                       {renderContentModeSegmented()}
-                      {formData.advancedContentEnabled ? (
+                      {isAdvancedContentMode ? (
                         <>
                           {renderAdvancedContentEditor()}
                           {renderSmsContentMeta(false)}

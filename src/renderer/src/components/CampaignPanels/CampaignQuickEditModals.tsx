@@ -747,7 +747,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   ) && extra.enableAddFriend === true
   const hasAnyEditableField = showMainContentSection || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
-  const isAdvancedContentMode = showMainContentSection && formData.advancedContentEnabled && !isCommentSeedingCampaign
+  const canUseAdvancedContentMode = showMainContentSection && !isCommentSeedingCampaign && !isSmsCampaign
+  const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
 
   const validateSelectedMedia = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
     if (option === 'none' || images.length === 0) return true
@@ -1064,24 +1065,35 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     }))
   }
 
-  const renderContentModeSegmented = () => (
-    <div className="campaign-content-mode-segmented" role="group" aria-label="Chế độ nội dung">
-      <button
-        type="button"
-        className={!formData.advancedContentEnabled ? 'active' : ''}
-        onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: false }))}
-      >
-        Đơn giản
-      </button>
-      <button
-        type="button"
-        className={formData.advancedContentEnabled ? 'active' : ''}
-        onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: true }))}
-      >
-        Nâng cao
-      </button>
-    </div>
-  )
+  const renderContentModeSegmented = () => {
+    if (!canUseAdvancedContentMode) return null
+
+    const note = formData.advancedContentEnabled
+      ? 'Tạo nhiều nội dung riêng, mỗi nội dung là một biến thể hoàn chỉnh với media riêng. Mỗi lượt chạy sẽ xoay vòng qua các nội dung trong danh sách.'
+      : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
+
+    return (
+      <div className="campaign-content-mode-row">
+        <div className="campaign-content-mode-segmented" role="group" aria-label="Chế độ nội dung">
+          <button
+            type="button"
+            className={!formData.advancedContentEnabled ? 'active' : ''}
+            onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: false }))}
+          >
+            Đơn giản
+          </button>
+          <button
+            type="button"
+            className={formData.advancedContentEnabled ? 'active' : ''}
+            onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: true }))}
+          >
+            Nâng cao
+          </button>
+        </div>
+        <div className="campaign-content-mode-note">{note}</div>
+      </div>
+    )
+  }
 
   const renderSmsContentOptions = () => {
     if (!isSmsCampaign) return null
@@ -1368,7 +1380,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       }
 
       if (showMainContentSection) {
-        nextExtraSettings.advancedContentEnabled = formData.advancedContentEnabled
+        nextExtraSettings.advancedContentEnabled = canUseAdvancedContentMode ? formData.advancedContentEnabled : false
         nextExtraSettings.advancedContentItems = normalizedAdvancedContentItems.map(item => isSmsCampaign
           ? { ...item, mediaOption: 'none' as const, mediaItems: [] }
           : item)
@@ -1511,7 +1523,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
               )}
 
               {renderContentModeSegmented()}
-              {formData.advancedContentEnabled ? (
+              {isAdvancedContentMode ? (
                 <>
                   {renderAdvancedContentEditor()}
                   {renderSmsContentOptions()}

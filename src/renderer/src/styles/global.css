@@ -9336,12 +9336,19 @@ button.btn-icon.campaign-control-button.assistant {
   font-size: 12px;
 }
 
+.campaign-content-mode-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .campaign-content-mode-segmented {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   width: fit-content;
-  margin-bottom: 16px;
   padding: 3px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
@@ -9369,6 +9376,14 @@ button.btn-icon.campaign-control-button.assistant {
 
 .campaign-content-mode-segmented button:hover:not(.active) {
   color: var(--text-primary);
+}
+
+.campaign-content-mode-note {
+  color: var(--text-tertiary);
+  flex: 1 1 360px;
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 760px;
 }
 
 .campaign-advanced-content-editor {
