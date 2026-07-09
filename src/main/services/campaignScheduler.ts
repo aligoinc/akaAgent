@@ -1599,7 +1599,8 @@ export class CampaignScheduler {
     const sourcePagePostMode = extra.pagePostMode || 'api'
     const shouldPostWithBackground = extra.postWithBackground === true && (
       campaign.actionId === 'facebook_timeline_post' ||
-      (campaign.actionId === PAGE_POST_ACTION_ID && sourcePagePostMode === 'ui')
+      (campaign.actionId === PAGE_POST_ACTION_ID && sourcePagePostMode === 'ui') ||
+      campaign.actionId === GROUP_POST_ACTION_ID
     )
     const advancedContentError = this.getAdvancedContentConfigError(campaign, !shouldPostWithBackground)
     if (advancedContentError) {
@@ -5270,7 +5271,8 @@ export class CampaignScheduler {
     const pagePostMode = extra.pagePostMode || 'api'
     const postWithBackground = extra.postWithBackground === true && (
       campaign.actionId === 'facebook_timeline_post' ||
-      (campaign.actionId === PAGE_POST_ACTION_ID && pagePostMode === 'ui')
+      (campaign.actionId === PAGE_POST_ACTION_ID && pagePostMode === 'ui') ||
+      campaign.actionId === GROUP_POST_ACTION_ID
     )
 
     // Comment iterations
@@ -5362,7 +5364,7 @@ export class CampaignScheduler {
       enableGroupPostShareToJoinedGroups: extra.enableGroupPostShareToJoinedGroups === true,
       groupPostShareTargets: [],
       groupPostShareMaxCount: 0,
-      // Timeline post extras
+      // Timeline/page/group post extras
       sharePost: postWithBackground ? false : (extra.sharePost ?? false),
       postWithBackground,
       copyContentFromSource: postWithBackground ? false : (extra.copyContentFromSource ?? false),

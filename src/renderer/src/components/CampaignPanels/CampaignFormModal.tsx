@@ -1763,7 +1763,7 @@ export default function CampaignFormModal({
   const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
   const supportsSourceSharePost = isTimelinePostCampaign && !isPagePostCampaign
   const supportsSourceReels = isTimelinePostCampaign && !isPagePostCampaign
-  const isPostBackgroundCampaign = formData.actionId === 'facebook_timeline_post' || isPagePostCampaign
+  const isPostBackgroundCampaign = formData.actionId === 'facebook_timeline_post' || isPagePostCampaign || isFacebookGroupPostCampaign
   const isMultiDailyTimeSlotsCampaign =
     formData.actionId === 'facebook_timeline_post' ||
     isPagePostCampaign ||
@@ -2677,7 +2677,7 @@ export default function CampaignFormModal({
     setFormData(prev => {
       if (!prev.postWithBackground) return prev
 
-      const supported = prev.actionId === 'facebook_timeline_post' || prev.actionId === PAGE_POST_ACTION_ID
+      const supported = prev.actionId === 'facebook_timeline_post' || prev.actionId === PAGE_POST_ACTION_ID || prev.actionId === GROUP_POST_ACTION_ID
       const pageApiMode = prev.actionId === PAGE_POST_ACTION_ID && prev.pagePostMode === 'api'
       if (!supported || pageApiMode) {
         return { ...prev, postWithBackground: false }
