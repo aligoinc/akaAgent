@@ -1305,6 +1305,9 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
     .neq('action_id', SMS_SEND_ACTION_ID)
     .lte('schedule', now.toISOString())
     .or(`daily_stop_time.is.null,daily_stop_time.gte.${currentVietnamTime}`)
+    .order('schedule', { ascending: true })
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 
   if (error) throw new Error(`Failed to get pending campaigns: ${error.message}`)
   return (data || []).map(row => mapCampaignFromDB(row))
