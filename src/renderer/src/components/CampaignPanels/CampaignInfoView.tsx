@@ -37,6 +37,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   fb_add_friend: 'Kết bạn',
   fb_like_post: 'Like post',
   fb_join_group: 'Tham gia group',
+  fb_group_invite: 'Mời vào group',
   zalo_message_stranger: 'Zalo - Nhắn tin người lạ',
   zalo_message_friend: 'Zalo - Nhắn tin bạn bè',
   zalo_message_group: 'Zalo - Nhắn tin group',
@@ -89,6 +90,7 @@ const FIND_DATA_GOAL_PRIORITY_LABELS: Record<NonNullable<CampaignExtraSettings['
 
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const FACEBOOK_GROUP_INVITE_ACTION_ID = 'facebook_group_invite'
 const POST_ACTIONS_WITH_SOURCE = new Set(['facebook_timeline_post', 'facebook_page_post', 'facebook_group_post'])
 const COMMENT_ACTIONS = new Set(['facebook_group_post', 'facebook_comment_seeding', 'facebook_comment_seeding_post'])
 const MESSAGE_ACTIONS = new Set(['facebook_message_friend', 'facebook_message_uid', 'facebook_page_to_message'])
@@ -352,6 +354,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || actionId === ZALO_FRIEND_RECOMMENDATION_ACTION_ID
     || actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
     || actionId === 'zalo_add_group_member'
+    || actionId === FACEBOOK_GROUP_INVITE_ACTION_ID
     || extra.enableMessage !== undefined
     || extra.enableAddFriend !== undefined
     || !!extra.useSuggestedFriends
@@ -446,6 +449,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Số lời mời cần huỷ', value: extra.zaloCancelFriendRequestLimit ?? 10, hidden: actionId !== ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID && extra.zaloCancelFriendRequestLimit === undefined },
     { label: 'Group cần thêm thành viên', value: textOrDash(extra.zaloAddGroupMemberTargetGroupName || extra.zaloAddGroupMemberTargetGroupId), hidden: actionId !== 'zalo_add_group_member' && !extra.zaloAddGroupMemberTargetGroupId },
     { label: 'Thêm bằng chia sẻ group', value: onOff(extra.zaloAddGroupMemberUseShareMethod), hidden: actionId !== 'zalo_add_group_member' && extra.zaloAddGroupMemberUseShareMethod !== true },
+    { label: 'Group nhận lời mời', value: textOrDash(extra.facebookGroupInviteTargetGroupName || extra.facebookGroupInviteTargetGroupUrl || extra.facebookGroupInviteTargetGroupUid), hidden: actionId !== FACEBOOK_GROUP_INVITE_ACTION_ID && !extra.facebookGroupInviteTargetGroupUrl },
+    { label: 'Link group nhận lời mời', value: textOrDash(extra.facebookGroupInviteTargetGroupUrl), fullWidth: true, hidden: actionId !== FACEBOOK_GROUP_INVITE_ACTION_ID && !extra.facebookGroupInviteTargetGroupUrl },
     {
       label: 'Data lời mời đã lấy',
       value: extra.zaloCancelFriendRequestDataMaterializedAt
@@ -525,7 +530,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const limitRows: InfoRow[] = [
     { label: 'Hành động kiểm tra quota ngày/giờ', value: formatActionCodeChips(limitCodes) },
     { label: 'Khi một action đạt giới hạn', value: continueWhenActionLimitReached ? 'Tiếp tục chạy action còn quota' : 'Dừng khi một action đạt giới hạn' },
-    { label: 'Nghỉ giữa actions', value: `${extra.actionLimits?.sleepBetweenActions ?? 0} giây` },
+    { label: 'Nghỉ giữa actions', value: `${extra.actionLimits?.sleepBetweenActions ?? 0} giây`, hidden: actionId === FACEBOOK_GROUP_INVITE_ACTION_ID },
     ...byActionCode.map(([code, limit]) => ({
       label: `Giới hạn ${getActionCodeLabel(code)}`,
       value: formatLimitValue(limit, limitWindowMinutes)

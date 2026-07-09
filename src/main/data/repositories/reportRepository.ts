@@ -25,11 +25,18 @@ const client = () => getSupabaseClient()
 const PAGE_SIZE = 1000
 const DETAIL_PAGE_SIZE = 100
 const MAX_DETAIL_PAGE_SIZE = 500
+const FACEBOOK_GROUP_INVITE_ACTION_CODE = 'fb_group_invite'
 const REPORT_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']
 const REPORT_FAILURE_DETAIL_STATUSES: CampaignDetailStatus[] = ['thất bại', 'lỗi', 'không tồn tại']
+const REPORT_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên']
+const FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = [
+  ...REPORT_SKIPPED_DETAIL_STATUSES,
+  'không tồn tại'
+]
 const REPORT_COUNT_DETAIL_STATUSES: CampaignDetailStatus[] = [
   ...REPORT_SUCCESS_DETAIL_STATUSES,
-  ...REPORT_FAILURE_DETAIL_STATUSES
+  ...REPORT_FAILURE_DETAIL_STATUSES,
+  ...REPORT_SKIPPED_DETAIL_STATUSES
 ]
 
 interface ReportDetailRow {
@@ -147,7 +154,7 @@ function normalizeDetailQuery(query: AccountActionReportDetailQuery): AccountAct
     throw new Error('Hành động báo cáo không hợp lệ.')
   }
 
-  const statusBuckets: AccountActionReportStatusBucket[] = ['pending', 'success', 'failure']
+  const statusBuckets: AccountActionReportStatusBucket[] = ['pending', 'success', 'skipped', 'failure']
   if (!statusBuckets.includes(query.statusBucket)) {
     throw new Error('Trạng thái báo cáo không hợp lệ.')
   }
@@ -193,6 +200,7 @@ function mapAccountRow(row: Record<string, unknown>): AccountActionReportAccount
 function makeEmptyCell(): AccountActionReportCell {
   return {
     successCount: 0,
+    skippedCount: 0,
     failureCount: 0,
     pendingCount: 0
   }
@@ -207,11 +215,33 @@ function isWithinRange(iso: string | null | undefined, startMs: number, endMs: n
 function getStatusLabel(statusBucket: AccountActionReportStatusBucket): string {
   if (statusBucket === 'pending') return 'Chờ xử lý'
   if (statusBucket === 'success') return 'Thành công'
+  if (statusBucket === 'skipped') return 'Bỏ qua'
   return 'Thất bại'
 }
 
-function getDetailStatuses(statusBucket: AccountActionReportStatusBucket): CampaignDetailStatus[] {
-  return statusBucket === 'success' ? REPORT_SUCCESS_DETAIL_STATUSES : REPORT_FAILURE_DETAIL_STATUSES
+function getSkippedDetailStatuses(actionCode: string): CampaignDetailStatus[] {
+  return actionCode === FACEBOOK_GROUP_INVITE_ACTION_CODE
+    ? FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES
+    : REPORT_SKIPPED_DETAIL_STATUSES
+}
+
+function getFailureDetailStatuses(actionCode: string): CampaignDetailStatus[] {
+  return actionCode === FACEBOOK_GROUP_INVITE_ACTION_CODE
+    ? REPORT_FAILURE_DETAIL_STATUSES.filter(status => !FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES.includes(status))
+    : REPORT_FAILURE_DETAIL_STATUSES
+}
+
+function getDetailStatuses(statusBucket: AccountActionReportStatusBucket, actionCode: string): CampaignDetailStatus[] {
+  if (statusBucket === 'success') return REPORT_SUCCESS_DETAIL_STATUSES
+  if (statusBucket === 'skipped') return getSkippedDetailStatuses(actionCode)
+  return getFailureDetailStatuses(actionCode)
+}
+
+function getReportDetailBucket(actionCode: string, status: CampaignDetailStatus): AccountActionReportStatusBucket | null {
+  if (REPORT_SUCCESS_DETAIL_STATUSES.includes(status)) return 'success'
+  if (getSkippedDetailStatuses(actionCode).includes(status)) return 'skipped'
+  if (getFailureDetailStatuses(actionCode).includes(status)) return 'failure'
+  return null
 }
 
 function normalizeRecord(value: unknown): Record<string, unknown> | null {
@@ -487,8 +517,10 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
       if (!reportRow || !actionCodeSet.has(actionCode)) continue
 
       const cell = reportRow.countsByActionCode[actionCode] || makeEmptyCell()
-      if (REPORT_SUCCESS_DETAIL_STATUSES.includes(detail.status)) cell.successCount += 1
-      else cell.failureCount += 1
+      const bucket = getReportDetailBucket(actionCode, detail.status)
+      if (bucket === 'success') cell.successCount += 1
+      else if (bucket === 'skipped') cell.skippedCount += 1
+      else if (bucket === 'failure') cell.failureCount += 1
       reportRow.countsByActionCode[actionCode] = cell
     }
 
@@ -578,7 +610,7 @@ async function getCampaignDetailRows(
   action: AccountActionReportAction,
   staffId: number
 ): Promise<AccountActionReportDetailResult> {
-  const statuses = getDetailStatuses(query.statusBucket)
+  const statuses = getDetailStatuses(query.statusBucket, query.actionCode)
   const offset = ((query.page || 1) - 1) * (query.pageSize || DETAIL_PAGE_SIZE)
   const rows: CampaignDetailRecord[] = []
   let total = 0

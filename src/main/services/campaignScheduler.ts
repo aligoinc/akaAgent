@@ -189,6 +189,58 @@ interface ZaloShareMessageCapacity {
   limitStatus?: AccountActionLimitStatus
 }
 
+interface FacebookGroupInviteTarget {
+  detail: CampaignInputData
+  inputDataId: number
+  name: string
+  uid: string
+  url: string
+  inputData: Record<string, unknown>
+}
+
+interface FacebookGroupInviteCapacity {
+  ok: boolean
+  capacity: number
+  limitStatus?: AccountActionLimitStatus
+}
+
+type FacebookGroupInviteDetailStatus =
+  | 'thành công'
+  | 'đã gửi lời mời'
+  | 'đã là thành viên'
+  | 'không tồn tại'
+  | 'lỗi'
+
+interface FacebookGroupInviteBlockResult {
+  inputDataId?: number
+  name?: string
+  uid?: string
+  url?: string
+  status?: string
+  message?: string
+  selected?: boolean
+  countsTowardLimit?: boolean
+  error?: string
+}
+
+interface FacebookGroupInviteBlockOutput {
+  ok?: boolean
+  submitOk?: boolean
+  selectedCount?: number
+  processedCount?: number
+  quotaReached?: boolean
+  error?: string
+  message?: string
+  groupUrl?: string
+  groupName?: string
+  results?: FacebookGroupInviteBlockResult[]
+}
+
+interface FacebookGroupInviteBatchRunOutcome {
+  stop: boolean
+  paused?: boolean
+}
+
 interface ZaloFriendBlocklistContext {
   groupId: number
   groupName: string
@@ -301,6 +353,9 @@ const PAGE_INBOX_MESSAGE_ACTION_ID = 'facebook_page_to_message'
 const PAGE_POST_ACTION_ID = 'facebook_page_post'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
+const FACEBOOK_GROUP_INVITE_ACTION_ID = 'facebook_group_invite'
+const FACEBOOK_GROUP_INVITE_ACTION_CODE = 'fb_group_invite'
+const FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE = 1000
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
@@ -1520,6 +1575,18 @@ export class CampaignScheduler {
       return
     }
 
+    if (this.shouldUseFacebookGroupInviteBatch(campaign)) {
+      await this.executeFacebookGroupInviteBatchCampaign(
+        account,
+        campaign,
+        workflowId,
+        details,
+        executableActionDescriptors,
+        quotaActionDescriptors
+      )
+      return
+    }
+
     // Shuffle group list nếu enabled
     if (campaign.extraSettings?.shuffleGroupList && details.length > 1 && campaign.actionId === 'facebook_group_post') {
       for (let i = details.length - 1; i > 0; i--) {
@@ -2009,6 +2076,582 @@ export class CampaignScheduler {
       }
     }
     await this.releaseRunningAccount(account.id)
+  }
+
+  private shouldUseFacebookGroupInviteBatch(campaign: Campaign): boolean {
+    return campaign.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID
+  }
+
+  private getFacebookGroupInviteActionDescriptor(
+    actionDescriptors: CampaignActionDescriptor[]
+  ): CampaignActionDescriptor {
+    return actionDescriptors.find(action => action.code === FACEBOOK_GROUP_INVITE_ACTION_CODE) || {
+      code: FACEBOOK_GROUP_INVITE_ACTION_CODE,
+      name: this.getAccountActionName(FACEBOOK_GROUP_INVITE_ACTION_CODE)
+    }
+  }
+
+  private async executeFacebookGroupInviteBatchCampaign(
+    account: AutoAccount,
+    campaign: Campaign,
+    workflowId: number,
+    details: CampaignInputData[],
+    executableActionDescriptors: CampaignActionDescriptor[],
+    quotaActionDescriptors: CampaignActionDescriptor[]
+  ): Promise<void> {
+    const extra = campaign.extraSettings || {}
+    const groupUrl = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUrl, extra.facebookGroupInviteTargetGroupUid)
+    const groupName = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupName, groupUrl)
+    const groupUid = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUid)
+
+    if (!groupUrl) {
+      const note = 'Vui lòng chọn group nhận lời mời trước khi chạy chiến dịch'
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+      await this.releaseRunningAccount(account.id)
+      return
+    }
+
+    if (details.length === 0) {
+      const note = 'Không có bạn bè cần mời vào group'
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+      await this.releaseRunningAccount(account.id)
+      return
+    }
+
+    const actionDescriptor = this.getFacebookGroupInviteActionDescriptor(executableActionDescriptors)
+    const shouldCheckQuota = quotaActionDescriptors.some(action => action.code === actionDescriptor.code)
+    const limitConfig = extra.actionLimits
+    let stoppedBeforeCompletion = false
+    let earliestFutureInputSchedule: Date | null = null
+    let batchIndex = 0
+
+    while (true) {
+      const cur = await this.supabase.getCampaign(campaign.id)
+      if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
+        await this.releaseRunningAccount(account.id)
+        await this.completeCampaignPause(campaign)
+        return
+      }
+
+      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+      if (accountBlockReason) {
+        stoppedBeforeCompletion = true
+        await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
+        await this.releaseRunningAccount(account.id)
+        return
+      }
+
+      details = await this.supabase.listCampaignInputData(campaign.id)
+      const now = new Date()
+      const pendingTargets: FacebookGroupInviteTarget[] = []
+      earliestFutureInputSchedule = null
+      for (const detail of details) {
+        if (detail.status !== 'chờ xử lý') continue
+        const futureSchedule = this.getFutureInputSchedule(detail, now)
+        if (futureSchedule) {
+          if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
+            earliestFutureInputSchedule = futureSchedule
+          }
+          continue
+        }
+        pendingTargets.push(this.createFacebookGroupInviteTarget(detail))
+      }
+
+      if (pendingTargets.length === 0) break
+
+      const capacity = await this.getFacebookGroupInviteBatchCapacity(
+        account,
+        campaign,
+        actionDescriptor,
+        shouldCheckQuota,
+        limitConfig
+      )
+      if (!capacity.ok || capacity.capacity < 1) {
+        stoppedBeforeCompletion = true
+        await this.handleLimitStatus(account, campaign, capacity.limitStatus || {
+          ok: false,
+          actionCode: actionDescriptor.code,
+          actionName: actionDescriptor.name,
+          reason: `Hành động "${actionDescriptor.name}" đang đạt giới hạn`
+        })
+        break
+      }
+
+      const batch = pendingTargets.slice(0, FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE)
+      batchIndex += 1
+      const outcome = await this.runFacebookGroupInviteBatch(
+        account,
+        campaign,
+        workflowId,
+        batch,
+        actionDescriptor,
+        {
+          groupUrl,
+          groupName,
+          groupUid,
+          quotaCapacity: capacity.capacity,
+          batchIndex
+        }
+      )
+
+      if (outcome.paused) {
+        await this.releaseRunningAccount(account.id)
+        await this.completeCampaignPause(campaign)
+        return
+      }
+      if (outcome.stop) {
+        stoppedBeforeCompletion = true
+        break
+      }
+    }
+
+    if (!stoppedBeforeCompletion) {
+      if (earliestFutureInputSchedule) {
+        await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
+      } else {
+        await this.handleCampaignCompletion(campaign)
+      }
+    }
+    await this.releaseRunningAccount(account.id)
+  }
+
+  private createFacebookGroupInviteTarget(detail: CampaignInputData): FacebookGroupInviteTarget {
+    const uid = this.firstNonEmptyString(detail.uid)
+    const name = this.firstNonEmptyString(detail.name, uid)
+    return {
+      detail,
+      inputDataId: detail.id,
+      name,
+      uid,
+      url: uid,
+      inputData: {
+        id: detail.id,
+        name: detail.name || '',
+        phone: detail.phone || '',
+        uid: detail.uid || '',
+        email: detail.email || '',
+        info1: detail.info1 || '',
+        info2: detail.info2 || '',
+        info3: detail.info3 || '',
+        info4: detail.info4 || '',
+        info5: detail.info5 || ''
+      }
+    }
+  }
+
+  private async getFacebookGroupInviteBatchCapacity(
+    account: AutoAccount,
+    campaign: Campaign,
+    actionDescriptor: CampaignActionDescriptor,
+    shouldCheckQuota: boolean,
+    limitConfig?: CampaignActionLimitSettings
+  ): Promise<FacebookGroupInviteCapacity> {
+    const disabledStatus = await this.supabase.getAccountActionDisabledStatus(
+      account.id,
+      actionDescriptor.code,
+      actionDescriptor.name
+    )
+    if (!disabledStatus.ok) return { ok: false, capacity: 0, limitStatus: disabledStatus }
+    if (!shouldCheckQuota) return { ok: true, capacity: FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE }
+
+    const entitlements = await loadCurrentUserEffectiveEntitlements()
+    const actionLimitConfig = this.getActionLimitConfig(actionDescriptor.code, limitConfig, account, entitlements)
+    const limitStatus = await this.supabase.getAccountRateLimitStatus(
+      account.id,
+      actionDescriptor.code,
+      actionDescriptor.name,
+      actionLimitConfig
+    )
+    if (!limitStatus.ok) return { ok: false, capacity: 0, limitStatus }
+
+    const dailyLimit = limitStatus.dailyLimit ?? actionLimitConfig?.dailyLimit ?? 30
+    const dailyActionCount = limitStatus.dailyActionCount ?? 0
+    const windowLimit = limitStatus.windowLimit ?? actionLimitConfig?.rateLimitCount ?? 9
+    const windowActionCount = limitStatus.windowActionCount ?? 0
+    const dailyRemaining = Math.max(0, dailyLimit - dailyActionCount)
+    const windowRemaining = Math.max(0, windowLimit - windowActionCount)
+    const capacity = Math.min(FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE, dailyRemaining, windowRemaining)
+
+    if (capacity < 1) {
+      return {
+        ok: false,
+        capacity: 0,
+        limitStatus: {
+          ok: false,
+          actionCode: actionDescriptor.code,
+          actionName: actionDescriptor.name,
+          currentCount: Math.max(dailyActionCount, windowActionCount),
+          limit: Math.min(dailyLimit, windowLimit),
+          dailyActionCount,
+          dailyLimit,
+          windowActionCount,
+          windowLimit,
+          windowMinutes: limitStatus.windowMinutes,
+          reason: `Hành động "${actionDescriptor.name}" không còn quota để mời vào group`
+        }
+      }
+    }
+
+    return { ok: true, capacity }
+  }
+
+  private async runFacebookGroupInviteBatch(
+    account: AutoAccount,
+    campaign: Campaign,
+    workflowId: number,
+    batch: FacebookGroupInviteTarget[],
+    actionDescriptor: CampaignActionDescriptor,
+    options: {
+      groupUrl: string
+      groupName: string
+      groupUid: string
+      quotaCapacity: number
+      batchIndex: number
+    }
+  ): Promise<FacebookGroupInviteBatchRunOutcome> {
+    const automationPage = await this.getAutomationPage(account, campaign.id)
+    const page = automationPage.page
+    if (!page) throw new Error('Facebook - Mời vào group cần browser page')
+
+    await this.logCampaignProgress(
+      campaign.id,
+      `▶️ Đang mời ${batch.length} bạn bè vào group "${options.groupName}"`
+    )
+
+    const abort = new AbortController()
+    let accountStopReason: string | null = null
+    const accountGuard = setInterval(() => {
+      void (async () => {
+        if (accountStopReason || abort.signal.aborted) return
+        const reason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+        if (reason) {
+          accountStopReason = reason
+          abort.abort()
+        }
+      })().catch(err => {
+        console.error('Account run guard error:', err)
+      })
+    }, 5000)
+    this.activeV2Aborts.set(campaign.id, abort)
+    if (automationPage.source === 'background') {
+      this.startBackgroundPreview(account.id, campaign.id, page)
+    }
+
+    const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
+    try {
+      const variables = {
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        accountId: account.id,
+        facebookGroupInviteTargetGroupUrl: options.groupUrl,
+        facebookGroupInviteTargetGroupName: options.groupName,
+        facebookGroupInviteTargetGroupUid: options.groupUid,
+        facebookGroupInviteQuotaCapacity: options.quotaCapacity,
+        facebookGroupInviteTargets: batch.map(item => ({
+          inputDataId: item.inputDataId,
+          name: item.name,
+          uid: item.uid,
+          url: item.url,
+          inputData: item.inputData
+        }))
+      }
+      const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, null, page)
+      const result = await this.engineV2.run(workflowId, variables, page, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? null,
+        accountId: account.id,
+        campaignId: campaign.id,
+        signal: abort.signal,
+        persist: true,
+        runtimeHelpers,
+        onBlockScreenshot: async (request, screenshotPage) => {
+          const progressLog = await this.recordBlockScreenshotEvent(account, campaign, null, request, screenshotPage)
+          if (progressLog) screenshotProgressLogs.push(progressLog)
+        },
+        onStepProgress: (step: RunStepV2) => {
+          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+        },
+        onLog: (entry) => {
+          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+        }
+      })
+
+      const pauseCancelledRun = this.isCampaignPauseRequested(campaign.id) && !accountStopReason && result.status === 'cancelled'
+      if (pauseCancelledRun) return { stop: true, paused: true }
+      if (accountStopReason) {
+        await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+        return { stop: true }
+      }
+
+      const output = this.getFacebookGroupInviteOutput(result)
+      if (result.status !== 'completed' || !output) {
+        const errMsg = result.error || output?.error || 'Lỗi mời bạn bè vào group'
+        return await this.handleFacebookGroupInviteBatchRuntimeError(
+          account,
+          campaign,
+          actionDescriptor,
+          errMsg,
+          result.runId ? String(result.runId) : undefined,
+          options
+        )
+      }
+
+      return await this.processFacebookGroupInviteOutput(
+        account,
+        campaign,
+        batch,
+        actionDescriptor,
+        output,
+        result.runId ? String(result.runId) : undefined,
+        options
+      )
+    } catch (err: any) {
+      if (this.isCampaignPauseRequested(campaign.id) && abort.signal.aborted && !accountStopReason) {
+        return { stop: true, paused: true }
+      }
+      if (accountStopReason) {
+        await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+        return { stop: true }
+      }
+      const errMsg = err?.message || String(err)
+      return await this.handleFacebookGroupInviteBatchRuntimeError(
+        account,
+        campaign,
+        actionDescriptor,
+        errMsg,
+        undefined,
+        options
+      )
+    } finally {
+      clearInterval(accountGuard)
+      if (automationPage.source === 'background') {
+        this.stopBackgroundPreview(account.id, campaign.id)
+      }
+      this.activeV2Aborts.delete(campaign.id)
+      while (screenshotProgressLogs.length > 0) {
+        const progressLog = screenshotProgressLogs.shift()
+        if (!progressLog) continue
+        await this.logCampaignProgress(campaign.id, progressLog.storedMessage, {
+          realtimeMessage: progressLog.realtimeMessage,
+          realtimeAction: progressLog.action
+        })
+      }
+    }
+  }
+
+  private getFacebookGroupInviteOutput(result: Awaited<ReturnType<WorkflowEngineV2['run']>>): FacebookGroupInviteBlockOutput | null {
+    const stepOutput = [...result.steps]
+      .reverse()
+      .find(step => step.blockName === 'fb_group_invite' && step.status === 'success')
+      ?.output as FacebookGroupInviteBlockOutput | undefined
+    const output = (result.output && Object.keys(result.output).length > 0
+      ? result.output
+      : stepOutput) as FacebookGroupInviteBlockOutput | undefined
+    if (!output || typeof output !== 'object') return null
+    return output
+  }
+
+  private async handleFacebookGroupInviteBatchRuntimeError(
+    account: AutoAccount,
+    campaign: Campaign,
+    actionDescriptor: CampaignActionDescriptor,
+    message: string,
+    runId: string | undefined,
+    options: {
+      groupUrl: string
+      groupName: string
+      groupUid: string
+      quotaCapacity: number
+      batchIndex: number
+    }
+  ): Promise<FacebookGroupInviteBatchRunOutcome> {
+    const runtimeError = this.normalizeRuntimeError(campaign, [], message)
+    await this.supabase.createCampaignDetail({
+      campaignId: campaign.id,
+      accountId: account.id,
+      actionCode: actionDescriptor.code,
+      actionName: actionDescriptor.name,
+      status: 'lỗi',
+      errorCode: runtimeError.errorCode,
+      log: message,
+      data: {
+        groupUrl: options.groupUrl,
+        groupName: options.groupName,
+        groupUid: options.groupUid,
+        batchIndex: options.batchIndex,
+        runId
+      },
+      shouldCountAction: false
+    })
+    const note = message || 'Lỗi mở form mời vào group'
+    await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note })
+    await this.logCampaignProgress(campaign.id, `⏸ Tạm dừng chiến dịch "${campaign.name}" vì lỗi mời vào group: ${note}`)
+    return { stop: true }
+  }
+
+  private async processFacebookGroupInviteOutput(
+    account: AutoAccount,
+    campaign: Campaign,
+    batch: FacebookGroupInviteTarget[],
+    actionDescriptor: CampaignActionDescriptor,
+    output: FacebookGroupInviteBlockOutput,
+    runId: string | undefined,
+    options: {
+      groupUrl: string
+      groupName: string
+      groupUid: string
+      quotaCapacity: number
+      batchIndex: number
+    }
+  ): Promise<FacebookGroupInviteBatchRunOutcome> {
+    const targetById = new Map(batch.map(item => [item.inputDataId, item]))
+    const rawResults = Array.isArray(output.results) ? output.results : []
+    let processedCount = 0
+    let successCount = 0
+    let alreadyInvitedCount = 0
+    let alreadyMemberCount = 0
+    let notFoundCount = 0
+    let errorCount = 0
+    let retryPendingCount = 0
+    let submitErrorMessage = ''
+    let stop = false
+
+    for (const raw of rawResults) {
+      const inputDataId = Number(raw.inputDataId)
+      if (!Number.isFinite(inputDataId)) continue
+      const target = targetById.get(inputDataId)
+      if (!target) continue
+
+      const status = this.normalizeFacebookGroupInviteDetailStatus(raw, output)
+      const message = this.getFacebookGroupInviteDetailMessage(status, raw, target, options.groupName)
+      const shouldCountAction = status === 'thành công' && raw.countsTowardLimit !== false
+      const errorCode = status === 'lỗi' ? 'err_undefined' : undefined
+      const submitFailedSelected = output.submitOk === false && raw.selected === true
+
+      if (submitFailedSelected) {
+        submitErrorMessage = submitErrorMessage || message
+        await this.supabase.updateCampaignInputData(inputDataId, {
+          status: 'chờ xử lý',
+          note: message
+        })
+        retryPendingCount += 1
+        continue
+      }
+
+      await this.supabase.createCampaignDetail({
+        inputDataId,
+        campaignId: campaign.id,
+        accountId: account.id,
+        actionCode: actionDescriptor.code,
+        actionName: actionDescriptor.name,
+        status,
+        errorCode,
+        log: message,
+        data: {
+          groupUrl: options.groupUrl,
+          groupName: options.groupName,
+          groupUid: options.groupUid,
+          target: {
+            inputDataId,
+            name: target.name,
+            uid: target.uid,
+            url: target.url
+          },
+          selected: raw.selected === true,
+          submitOk: output.submitOk === true,
+          runId,
+          rawResult: raw as Record<string, unknown>
+        },
+        shouldCountAction
+      })
+      await this.supabase.updateCampaignInputData(inputDataId, {
+        status: 'hoàn thành',
+        dateAction: new Date().toISOString(),
+        note: status === 'thành công' ? '' : message
+      })
+
+      processedCount += 1
+      if (status === 'thành công') {
+        successCount += 1
+        await this.resetCampaignBadTargetCount(campaign)
+      } else if (status === 'đã gửi lời mời') {
+        alreadyInvitedCount += 1
+        await this.resetCampaignBadTargetCount(campaign)
+      } else if (status === 'đã là thành viên') {
+        alreadyMemberCount += 1
+        await this.resetCampaignBadTargetCount(campaign)
+      } else if (status === 'không tồn tại') {
+        notFoundCount += 1
+        await this.resetCampaignBadTargetCount(campaign)
+      } else {
+        errorCount += 1
+        const handled = await this.handleCampaignBadTarget(
+          account,
+          campaign,
+          inputDataId,
+          'err_undefined',
+          actionDescriptor.code,
+          { message, runId }
+        )
+        if (handled.triggered) stop = true
+      }
+    }
+
+    if (processedCount === 0 && retryPendingCount === 0) {
+      const message = output.error || output.message || 'Workflow mời vào group không trả về kết quả target'
+      await this.handleFacebookGroupInviteBatchRuntimeError(account, campaign, actionDescriptor, message, runId, options)
+      return { stop: true }
+    }
+
+    await this.logCampaignProgress(
+      campaign.id,
+      `📨 Kết quả mời vào group: tổng ${processedCount}, thành công ${successCount}, đã mời ${alreadyInvitedCount}, đã là thành viên ${alreadyMemberCount}, không tồn tại ${notFoundCount}, lỗi ${errorCount}, chờ xử lý lại ${retryPendingCount}`
+    )
+
+    if (retryPendingCount > 0 && output.submitOk === false) {
+      const message = output.error || output.message || submitErrorMessage || 'Lỗi submit lời mời vào group'
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: message })
+      await this.logCampaignProgress(campaign.id, `⏸ Tạm dừng chiến dịch "${campaign.name}" vì lỗi submit lời mời vào group: ${message}`)
+      stop = true
+    }
+
+    if (output.ok === false && errorCount > 0 && !stop) {
+      const message = output.error || output.message || 'Lỗi submit lời mời vào group'
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+      await this.logCampaignProgress(campaign.id, `❌ ${message}`)
+      stop = true
+    }
+
+    return { stop }
+  }
+
+  private normalizeFacebookGroupInviteDetailStatus(
+    raw: FacebookGroupInviteBlockResult,
+    output: FacebookGroupInviteBlockOutput
+  ): FacebookGroupInviteDetailStatus {
+    const status = String(raw.status || '').trim()
+    if (status === 'thành công') return 'thành công'
+    if (status === 'đã gửi lời mời') return 'đã gửi lời mời'
+    if (status === 'đã là thành viên') return 'đã là thành viên'
+    if (status === 'không tồn tại') return 'không tồn tại'
+    if (status === 'selected' && output.submitOk === true) return 'thành công'
+    return 'lỗi'
+  }
+
+  private getFacebookGroupInviteDetailMessage(
+    status: FacebookGroupInviteDetailStatus,
+    raw: FacebookGroupInviteBlockResult,
+    target: FacebookGroupInviteTarget,
+    groupName: string
+  ): string {
+    const rawMessage = String(raw.message || raw.error || '').trim()
+    if (rawMessage) return rawMessage
+    if (status === 'thành công') return `Đã gửi lời mời vào group "${groupName}" cho "${target.name}"`
+    if (status === 'đã gửi lời mời') return `"${target.name}" đã gửi lời mời trước đó`
+    if (status === 'đã là thành viên') return `"${target.name}" đã là thành viên của group`
+    if (status === 'không tồn tại') return `Không tìm thấy "${target.name}" trong form mời`
+    return `Lỗi mời "${target.name}" vào group`
   }
 
   private shouldUseZaloShareMessageBatch(campaign: Campaign): boolean {
@@ -4281,6 +4924,7 @@ export class CampaignScheduler {
     else if (errorStep?.blockName === 'fb_comment_at_position' || errorStep?.blockName === 'fb_comment_current_post') actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_click_like_current_post') actionCode = 'fb_like_post'
     else if (errorStep?.blockName === 'fb_join_group') actionCode = 'fb_join_group'
+    else if (errorStep?.blockName === 'fb_group_invite') actionCode = FACEBOOK_GROUP_INVITE_ACTION_CODE
     else if (errorStep?.blockName && errorStep.blockName.startsWith('fb_newsfeed_comment')) actionCode = 'fb_comment'
     else if (errorStep?.blockName === 'fb_newsfeed_like_post') actionCode = 'fb_like_post'
     else if (errorStep?.blockName === 'fb_click_post_button' || errorStep?.blockName === 'fb_verify_group_post_form_closed') actionCode = this.getPostActionCode(campaign) || undefined
@@ -9493,6 +10137,7 @@ export class CampaignScheduler {
     const blockName = String(request.blockName || '')
     if (blockName === 'fb_verify_group_post_form_closed' || blockName === 'fb_click_post_button') return 'Đăng bài'
     if (blockName === 'fb_join_group') return 'Tham gia group'
+    if (blockName === 'fb_group_invite') return 'Mời vào group'
     if (
       blockName === 'fb_page_post_api' ||
       blockName === 'fb_post_current_identity_ui' ||

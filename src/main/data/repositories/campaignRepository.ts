@@ -49,6 +49,7 @@ const client = () => getSupabaseClient()
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
+const FACEBOOK_GROUP_INVITE_ACTION_ID = 'facebook_group_invite'
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
@@ -73,8 +74,14 @@ const CAMPAIGN_INPUT_DATA_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_ID_CHUNK = 100
 const CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']
+const CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên']
+const FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = [
+  ...CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES,
+  'không tồn tại'
+]
 const CAMPAIGN_RELATION_DETAIL_STATUSES: CampaignDetailStatus[] = [
   ...CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES,
+  ...CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES,
   'thất bại',
   'lỗi',
   'không tồn tại'
@@ -2483,6 +2490,13 @@ const sortRelationBreakdown = (breakdown: CampaignRelationSummary['successBreakd
   )
 }
 
+const isCampaignRelationSkippedStatus = (actionId: string, status: CampaignDetailStatus): boolean => {
+  if (actionId === FACEBOOK_GROUP_INVITE_ACTION_ID) {
+    return FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES.includes(status)
+  }
+  return CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES.includes(status)
+}
+
 export async function listCampaignRelationSummaries(campaignIds: number[]): Promise<CampaignRelationSummary[]> {
   const u = requireCurrentUser()
   const ids = Array.from(new Set(
@@ -2518,9 +2532,11 @@ export async function listCampaignRelationSummaries(campaignIds: number[]): Prom
       accountName: campaign.accountName,
       pendingInputCount: pendingCounts[index] ?? 0,
       successCount: 0,
+      skippedCount: 0,
       failureCount: 0,
       errorCount: 0,
       successBreakdown: [],
+      skippedBreakdown: [],
       failureBreakdown: []
     })
   })
@@ -2535,6 +2551,9 @@ export async function listCampaignRelationSummaries(campaignIds: number[]): Prom
     if (CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES.includes(detail.status)) {
       summary.successCount += 1
       incrementRelationBreakdown(summary.successBreakdown, actionName, detail.status)
+    } else if (isCampaignRelationSkippedStatus(summary.actionId, detail.status)) {
+      summary.skippedCount += 1
+      incrementRelationBreakdown(summary.skippedBreakdown, actionName, detail.status)
     } else {
       summary.failureCount += 1
       if (detail.status === 'lỗi') summary.errorCount += 1
@@ -2544,6 +2563,7 @@ export async function listCampaignRelationSummaries(campaignIds: number[]): Prom
 
   for (const summary of summaryById.values()) {
     sortRelationBreakdown(summary.successBreakdown)
+    sortRelationBreakdown(summary.skippedBreakdown)
     sortRelationBreakdown(summary.failureBreakdown)
   }
 
