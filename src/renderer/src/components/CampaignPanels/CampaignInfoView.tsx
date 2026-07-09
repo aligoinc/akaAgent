@@ -41,6 +41,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_message_friend: 'Zalo - Nhắn tin bạn bè',
   zalo_message_group: 'Zalo - Nhắn tin group',
   zalo_add_friend: 'Zalo - Kết bạn',
+  zalo_add_group_member: 'Zalo - Thêm thành viên vào group',
   zalo_join_group_link: 'Zalo - Tham gia group',
   zalo_cancel_sent_friend_request: 'Zalo - Huỷ lời mời kết bạn',
   zalo_tag_contact: 'Zalo - Gắn tag',
@@ -350,6 +351,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const hasMessageSettings = MESSAGE_ACTIONS.has(actionId)
     || actionId === ZALO_FRIEND_RECOMMENDATION_ACTION_ID
     || actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
+    || actionId === 'zalo_add_group_member'
     || extra.enableMessage !== undefined
     || extra.enableAddFriend !== undefined
     || !!extra.useSuggestedFriends
@@ -429,7 +431,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   ]
 
   const messageRows: InfoRow[] = [
-    { label: 'Gửi tin nhắn', value: onOff(actionId === 'facebook_message_friend' || actionId === 'facebook_page_to_message' || extra.enableMessage) },
+    { label: 'Gửi tin nhắn', value: onOff(actionId === 'facebook_message_friend' || actionId === 'facebook_page_to_message' || extra.enableMessage), hidden: actionId === 'zalo_add_group_member' },
     { label: 'Kết bạn', value: onOff(extra.enableAddFriend), hidden: actionId !== 'facebook_message_uid' && !extra.enableAddFriend },
     { label: 'Dùng bạn bè đề xuất', value: onOff(extra.useSuggestedFriends), hidden: actionId !== 'facebook_message_uid' && !extra.useSuggestedFriends },
     { label: 'Số bạn bè đề xuất', value: extra.suggestedFriendsCount ?? '-', hidden: !extra.useSuggestedFriends },
@@ -442,6 +444,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
       hidden: actionId !== ZALO_FRIEND_RECOMMENDATION_ACTION_ID && !extra.zaloFriendRecommendationDataMaterializedAt
     },
     { label: 'Số lời mời cần huỷ', value: extra.zaloCancelFriendRequestLimit ?? 10, hidden: actionId !== ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID && extra.zaloCancelFriendRequestLimit === undefined },
+    { label: 'Group cần thêm thành viên', value: textOrDash(extra.zaloAddGroupMemberTargetGroupName || extra.zaloAddGroupMemberTargetGroupId), hidden: actionId !== 'zalo_add_group_member' && !extra.zaloAddGroupMemberTargetGroupId },
+    { label: 'Thêm bằng chia sẻ group', value: onOff(extra.zaloAddGroupMemberUseShareMethod), hidden: actionId !== 'zalo_add_group_member' && extra.zaloAddGroupMemberUseShareMethod !== true },
     {
       label: 'Data lời mời đã lấy',
       value: extra.zaloCancelFriendRequestDataMaterializedAt

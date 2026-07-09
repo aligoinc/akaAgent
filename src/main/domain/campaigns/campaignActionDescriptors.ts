@@ -21,6 +21,7 @@ const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const EMAIL_SEND_ACTION_ID = 'email_send'
@@ -60,6 +61,7 @@ export function getAccountActionName(actionCode: string): string {
     case 'zalo_message_stranger': return 'Nhắn tin người lạ'
     case 'zalo_add_friend': return 'Kết bạn'
     case 'zalo_cancel_sent_friend_request': return 'Huỷ lời mời kết bạn'
+    case 'zalo_add_group_member': return 'Thêm thành viên vào group'
     case 'zalo_join_group_link': return 'Tham gia group'
     case 'zalo_tag_contact': return 'Gắn tag Zalo'
     case 'zalo_change_alias': return 'Đổi tên Zalo'
@@ -115,6 +117,8 @@ function isActionCheckEnabledForCampaign(campaign: Campaign, actionCode: string)
       return campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
     case 'zalo_cancel_sent_friend_request':
       return campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
+    case 'zalo_add_group_member':
+      return campaign.actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID
     case 'zalo_message_stranger':
       return (
         campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID ||
@@ -255,6 +259,9 @@ function getDefaultCampaignActionDescriptors(campaign: Campaign): CampaignAction
       break
     case ZALO_MESSAGE_GROUP_ACTION_ID:
       actions.push({ code: 'zalo_message_group', name: 'Nhắn tin group' })
+      break
+    case ZALO_ADD_GROUP_MEMBER_ACTION_ID:
+      actions.push({ code: 'zalo_add_group_member', name: 'Thêm thành viên vào group' })
       break
     case ZALO_JOIN_GROUP_LINK_ACTION_ID:
       actions.push({ code: 'zalo_join_group_link', name: 'Tham gia group' })

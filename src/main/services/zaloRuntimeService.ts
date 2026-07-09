@@ -328,6 +328,20 @@ export interface ZaloJoinGroupLinkResult {
   zaloMessage?: string
 }
 
+export type ZaloAddGroupMemberMode = 'direct_add' | 'invite_user_to_groups' | 'share_group_link'
+
+export interface ZaloAddGroupMemberResult {
+  groupId: string
+  groupName?: string
+  groupType?: number | null
+  memberId: string
+  mode: ZaloAddGroupMemberMode
+  outcome: 'added' | 'invited' | 'link_sent' | 'already_member'
+  message: string
+  groupLink?: string
+  response?: unknown
+}
+
 const ZALO_GROUP_MEMBER_PROFILE_BATCH_SIZE = 300
 const ZALO_GROUP_LINK_MAX_MEMBER_PAGES = 500
 const ZALO_GROUP_LINK_GINFO_PROXY_SETTING_KEY = 'zalo.group_link.ginfo_proxy_url'
@@ -1014,6 +1028,127 @@ export class ZaloRuntimeService {
     attachments: string[] = []
   ): Promise<unknown> {
     return this.sendMessage(accountId, groupId, ThreadType.Group, message, attachments)
+  }
+
+  async addMemberToGroup(
+    accountId: number,
+    options: {
+      groupId: string
+      memberId: string
+      useShareMethod?: boolean
+    }
+  ): Promise<ZaloAddGroupMemberResult> {
+    const api = await this.ensureApi(accountId)
+    const groupId = normalizeZaloInviteGroupId(options.groupId)
+    const memberId = normalizeZaloMemberId(options.memberId)
+    if (!groupId) throw new Error('Group Zalo không hợp lệ')
+    if (!memberId) throw new Error('UID thành viên Zalo không hợp lệ')
+
+    const groupInfoResponse = await api.getGroupInfo(groupId)
+    const gridInfoMap = normalizeRecord((groupInfoResponse as any)?.gridInfoMap)
+    const groupInfo = normalizeRecord(
+      gridInfoMap[groupId] ||
+      gridInfoMap[`g${groupId}`] ||
+      gridInfoMap[normalizeZaloGroupId(options.groupId)]
+    )
+    const groupName = firstString(groupInfo.name, groupInfo.displayName)
+    const groupType = nullableNumber(groupInfo.type)
+
+    if (options.useShareMethod === true) {
+      const linkDetail = await api.getGroupLinkDetail(groupId)
+      const groupLink = firstString(linkDetail.link)
+      if (!groupLink) throw new Error('Không lấy được link group Zalo')
+      const linkEnabled = nullableNumber(linkDetail.enabled)
+      if (linkEnabled !== null && linkEnabled !== 1) throw new Error('Link group Zalo chưa được bật')
+
+      const response = await api.sendLink({ link: groupLink }, memberId, ThreadType.User)
+      return {
+        groupId,
+        groupName: groupName || undefined,
+        groupType,
+        memberId,
+        mode: 'share_group_link',
+        outcome: 'link_sent',
+        message: 'Gửi lời mời thành công',
+        groupLink,
+        response
+      }
+    }
+
+    if (groupType === 2) {
+      const response = await api.inviteUserToGroups(memberId, groupId)
+      const messageMap = normalizeRecord(response.grid_message_map)
+      const messageRow = normalizeRecord(messageMap[groupId] || messageMap[`g${groupId}`])
+      const rawCode = messageRow.error_code
+      const code = Number(rawCode)
+      if (code === 178) {
+        return {
+          groupId,
+          groupName: groupName || undefined,
+          groupType,
+          memberId,
+          mode: 'invite_user_to_groups',
+          outcome: 'already_member',
+          message: 'Đã là thành viên của group',
+          response
+        }
+      }
+      if (Object.keys(messageRow).length === 0 || code === 0 || code === 262 || code === 263) {
+        const added = code === 0
+        return {
+          groupId,
+          groupName: groupName || undefined,
+          groupType,
+          memberId,
+          mode: 'invite_user_to_groups',
+          outcome: added ? 'added' : 'invited',
+          message: added ? 'Đã thêm thành viên vào group' : 'Gửi lời mời thành công',
+          response
+        }
+      }
+
+      throw new ZaloApiError(
+        firstString(messageRow.error_message) || 'Không thêm được thành viên vào group Zalo',
+        Number.isFinite(code) ? code : undefined
+      )
+    }
+
+    let response: Awaited<ReturnType<API['addUserToGroup']>>
+    try {
+      response = await api.addUserToGroup(memberId, groupId)
+    } catch (err) {
+      const zaloCode = this.getApiErrorCode(err)
+      if (zaloCode === '178') {
+        return {
+          groupId,
+          groupName: groupName || undefined,
+          groupType,
+          memberId,
+          mode: 'direct_add',
+          outcome: 'already_member',
+          message: 'Đã là thành viên của group',
+          response: {
+            zaloCode,
+            zaloMessage: this.getErrorMessage(err)
+          }
+        }
+      }
+      throw err
+    }
+    const errorMembers = Array.isArray(response.errorMembers)
+      ? response.errorMembers.map(normalizeZaloMemberId)
+      : []
+    const isInviteOnly = errorMembers.includes(memberId)
+    return {
+      groupId,
+      groupName: groupName || undefined,
+      groupType,
+      memberId,
+      mode: 'direct_add',
+      outcome: isInviteOnly ? 'invited' : 'added',
+      message: isInviteOnly ? 'Đã gửi lời mời vào group' : 'Đã thêm thành viên vào group',
+      response
+    }
   }
 
   async joinGroupByLink(accountId: number, link: string): Promise<ZaloJoinGroupLinkResult> {
@@ -2306,6 +2441,10 @@ function nullableNumber(value: unknown): number | null {
 
 function normalizeZaloGroupId(value: unknown): string {
   return String(value || '').trim()
+}
+
+function normalizeZaloInviteGroupId(value: unknown): string {
+  return normalizeZaloGroupId(value).replace(/^g/i, '')
 }
 
 function normalizeZaloMemberId(value: unknown): string {

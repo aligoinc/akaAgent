@@ -7534,6 +7534,10 @@ button.btn-icon.campaign-control-button.assistant {
   overflow: visible;
 }
 
+.stepper-section.has-floating-dropdown {
+  overflow: visible;
+}
+
 .stepper-section:hover {
   border-color: var(--border-hover);
 }
@@ -7721,6 +7725,96 @@ button.btn-icon.campaign-control-button.assistant {
 
 .stepper-input::placeholder {
   color: var(--text-tertiary);
+}
+
+.zalo-group-combobox {
+  position: relative;
+  flex: 1 1 320px;
+  min-width: min(320px, 100%);
+}
+
+.zalo-group-combobox-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.zalo-group-combobox-search-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.zalo-group-combobox-input {
+  min-height: 38px;
+  padding-left: 34px;
+  padding-right: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zalo-group-combobox-toggle {
+  position: absolute;
+  right: 6px;
+  color: var(--text-secondary);
+}
+
+.zalo-group-combobox-menu {
+  position: absolute;
+  z-index: 220;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(280px, 36vh);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
+  scrollbar-gutter: stable;
+}
+
+.zalo-group-combobox-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zalo-group-combobox-option:hover,
+.zalo-group-combobox-option.is-selected {
+  background: var(--bg-hover);
+}
+
+.zalo-group-combobox-option.is-selected {
+  color: var(--accent-info);
+}
+
+.zalo-group-combobox-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zalo-group-combobox-empty {
+  padding: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .account-select-menu {
@@ -12557,6 +12651,17 @@ button.btn-icon.campaign-control-button.assistant {
   max-width: 360px;
   white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+.campaign-detail-target-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaign-detail-target-phone-cell {
+  max-width: 120px;
 }
 
 .campaign-detail-sms-content-cell {
