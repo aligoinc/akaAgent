@@ -8,6 +8,11 @@ import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, Aut
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import { renderContentSpin, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
+import {
+  findInvalidAdvancedContentItemIndex,
+  getAdvancedContentItems,
+  selectAdvancedContentItem
+} from '../../shared/advancedContent'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -1526,6 +1531,13 @@ export class CampaignScheduler {
       campaign.actionId === 'facebook_timeline_post' ||
       (campaign.actionId === PAGE_POST_ACTION_ID && sourcePagePostMode === 'ui')
     )
+    const advancedContentError = this.getAdvancedContentConfigError(campaign, !shouldPostWithBackground)
+    if (advancedContentError) {
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: advancedContentError })
+      await this.logCampaignProgress(campaign.id, `⚠️ ${advancedContentError}`)
+      await this.releaseRunningAccount(account.id)
+      return
+    }
     const shouldRotateSourceLink =
       !shouldPostWithBackground && (
         (campaign.actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
@@ -2031,18 +2043,29 @@ export class CampaignScheduler {
       const extra = campaign.extraSettings || {}
       const actionDescriptor = this.getZaloShareMessageActionDescriptor(campaign, executableActionDescriptors)
       const shouldCheckQuota = quotaActionDescriptors.some(action => action.code === actionDescriptor.code)
-      const messageVariants = this.splitContentVariants(campaign.content)
-      const baseMessage = this.cycleVariant(messageVariants, 0)
-      const attachments = await this.resolveMediaSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3, mediaTempPaths)
+      const usesAdvancedContent = this.shouldUseAdvancedContent(campaign)
+      let simpleAttachments: string[] | null = null
       const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
       const targetKindLabel = isGroup ? 'group Zalo' : 'bạn bè Zalo'
 
-      if (!baseMessage.trim() && attachments.length === 0) {
-        const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
-        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-        await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
-        await this.releaseRunningAccount(account.id)
-        return
+      if (usesAdvancedContent) {
+        const advancedContentError = this.getAdvancedContentConfigError(campaign, true)
+        if (advancedContentError) {
+          await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: advancedContentError })
+          await this.logCampaignProgress(campaign.id, `⚠️ ${advancedContentError}`)
+          await this.releaseRunningAccount(account.id)
+          return
+        }
+      } else {
+        const baseMessage = this.getRawCampaignContentForIndex(campaign, 0)
+        simpleAttachments = await this.resolveCampaignMediaForIndex(campaign, 0, false, mediaTempPaths)
+        if (!baseMessage.trim() && simpleAttachments.length === 0) {
+          const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
+          await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+          await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+          await this.releaseRunningAccount(account.id)
+          return
+        }
       }
 
       if (details.length === 0) {
@@ -2134,13 +2157,12 @@ export class CampaignScheduler {
             continue
           }
 
-          await this.supabase.updateCampaignInputData(detail.id, {
-            status: 'đang chạy',
-            dateAction: new Date().toISOString()
-          })
-
           const target = this.createZaloShareMessageTarget(campaign, detail)
           if (!target) {
+            await this.supabase.updateCampaignInputData(detail.id, {
+              status: 'đang chạy',
+              dateAction: new Date().toISOString()
+            })
             stopAfterInvalidTarget = await this.handleInvalidZaloShareMessageTarget(account, campaign, detail, actionDescriptor)
             if (stopAfterInvalidTarget) break
             continue
@@ -2160,16 +2182,26 @@ export class CampaignScheduler {
         }
         if (batch.length === 0) continue
 
-        const rawBatchMessage = this.cycleVariant(messageVariants, batchIndex)
+        const rawBatchMessage = this.getRawCampaignContentForIndex(campaign, batchIndex)
+        const batchAttachments = usesAdvancedContent
+          ? await this.resolveCampaignMediaForIndex(campaign, batchIndex, false, mediaTempPaths)
+          : (simpleAttachments || [])
         batchIndex += 1
         const message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage)
+        const batchStartedAt = new Date().toISOString()
+        for (const item of batch) {
+          await this.supabase.updateCampaignInputData(item.detail.id, {
+            status: 'đang chạy',
+            dateAction: batchStartedAt
+          })
+        }
         const stopAfterBatch = await this.processZaloShareMessageBatch(
           account,
           campaign,
           batch,
           actionDescriptor,
           message,
-          attachments
+          batchAttachments
         )
         if (stopAfterBatch) {
           stoppedBeforeCompletion = true
@@ -4550,9 +4582,8 @@ export class CampaignScheduler {
       else if (commentType === 'all') for (let i = 0; i < commentCount; i++) commentIndices.push(i + 1)
       else for (let i = 0; i < commentCount; i++) commentIndices.push(i + 2)
     }
-    const postVariants = this.splitContentVariants(campaign.content)
     const rawCommentVariants = this.splitContentVariants(extra.commentContent)
-    const selectedRawPostContent = this.cycleVariant(postVariants, detailIndex)
+    const selectedRawPostContent = this.getRawCampaignContentForIndex(campaign, detailIndex)
     const selectedPostContent = campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
       ? ''
       : this.isBrowserlessCampaign(campaign)
@@ -4563,7 +4594,7 @@ export class CampaignScheduler {
     const shouldUseCommentImages = enableComment && commentImageOption === 'all'
     const validPostImages = postWithBackground
       ? []
-      : await this.resolveMediaSelection(campaign.images || [], extra.imageOption || 'all', extra.randomImageCount || 3, mediaTempPaths)
+      : await this.resolveCampaignMediaForIndex(campaign, detailIndex, postWithBackground, mediaTempPaths)
     const validCommentImages = shouldUseCommentImages
       ? await this.resolveMediaSelection(extra.commentImages || [], 'all', 1, mediaTempPaths)
       : []
@@ -9640,6 +9671,91 @@ export class CampaignScheduler {
 
   private backgroundPreviewKey(accountId: number, campaignId: number): string {
     return `${accountId}:${campaignId}`
+  }
+
+  private isAdvancedContentEnabled(campaign: Campaign): boolean {
+    return campaign.extraSettings?.advancedContentEnabled === true
+  }
+
+  private shouldUseAdvancedContent(campaign: Campaign): boolean {
+    return this.isAdvancedContentEnabled(campaign) && this.campaignUsesMainContent(campaign)
+  }
+
+  private campaignUsesMainContent(campaign: Campaign): boolean {
+    const extra = campaign.extraSettings || {}
+    if (
+      campaign.actionId === FIND_DATA_GROUP_ACTION_ID ||
+      campaign.actionId === FIND_DATA_SEARCH_ACTION_ID ||
+      campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID ||
+      campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID ||
+      campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID ||
+      campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID ||
+      campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID ||
+      campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
+    ) {
+      return false
+    }
+    if (
+      campaign.actionId === MESSAGE_UID_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
+    ) {
+      return extra.enableMessage === true
+    }
+    return true
+  }
+
+  private getAdvancedContentConfigError(campaign: Campaign, allowMediaOnly: boolean): string | null {
+    if (!this.shouldUseAdvancedContent(campaign)) return null
+    const items = getAdvancedContentItems(campaign.extraSettings)
+    if (items.length === 0) {
+      return 'Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.'
+    }
+    const invalidIndex = findInvalidAdvancedContentItemIndex(items, { allowMediaOnly })
+    if (invalidIndex < 0) return null
+    return allowMediaOnly
+      ? `Nội dung nâng cao số ${invalidIndex + 1} đang rỗng. Vui lòng nhập nội dung hoặc chọn media.`
+      : `Nội dung nâng cao số ${invalidIndex + 1} chưa có nội dung.`
+  }
+
+  private getRawCampaignContentForIndex(campaign: Campaign, index: number): string {
+    if (this.shouldUseAdvancedContent(campaign)) {
+      return selectAdvancedContentItem(campaign.extraSettings, index)?.content || ''
+    }
+
+    const variants = this.splitContentVariants(campaign.content)
+    return this.cycleVariant(variants, index)
+  }
+
+  private async resolveCampaignMediaForIndex(
+    campaign: Campaign,
+    index: number,
+    postWithBackground: boolean,
+    mediaTempPaths: string[] = []
+  ): Promise<string[]> {
+    if (postWithBackground) return []
+
+    if (this.shouldUseAdvancedContent(campaign)) {
+      const advancedItem = selectAdvancedContentItem(campaign.extraSettings, index)
+      if (!advancedItem) return []
+      return this.resolveMediaSelection(
+        advancedItem.mediaItems || [],
+        advancedItem.mediaOption || 'none',
+        advancedItem.randomMediaCount || 3,
+        mediaTempPaths
+      )
+    }
+
+    const extra = campaign.extraSettings || {}
+    return this.resolveMediaSelection(
+      campaign.images || [],
+      extra.imageOption || 'all',
+      extra.randomImageCount || 3,
+      mediaTempPaths
+    )
   }
 
   /**

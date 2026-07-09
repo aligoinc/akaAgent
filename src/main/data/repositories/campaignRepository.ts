@@ -26,6 +26,11 @@ import {
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone, type VietnamMobileCarrier } from '../../../shared/phone'
 import { normalizeSmsContentForSend, type SmsContentOptions } from '../../../shared/smsContent'
 import { renderContentSpin, splitContentVariants } from '../../../shared/contentSpin'
+import {
+  findInvalidAdvancedContentItemIndex,
+  getAdvancedContentItems,
+  isAdvancedContentItemValid
+} from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -384,8 +389,25 @@ function splitSmsContentVariants(content: string | undefined | null): string[] {
   return splitContentVariants(content, { fallbackToRaw: true })
 }
 
-function cycleSmsContentVariant(content: string | undefined | null, index: number): string {
-  const variants = splitSmsContentVariants(content)
+function cycleSmsContentVariant(
+  campaign: Pick<Campaign, 'content'> & { extraSettings?: Campaign['extraSettings'] },
+  index: number
+): string {
+  if (campaign.extraSettings?.advancedContentEnabled === true) {
+    const items = getAdvancedContentItems(campaign.extraSettings)
+    if (items.length === 0) {
+      throw new Error('Nội dung nâng cao SMS chưa có nội dung nào.')
+    }
+    const invalidIndex = findInvalidAdvancedContentItemIndex(items, { allowMediaOnly: false })
+    if (invalidIndex >= 0) {
+      throw new Error(`Nội dung nâng cao SMS số ${invalidIndex + 1} chưa có nội dung.`)
+    }
+    const safeIndex = ((index % items.length) + items.length) % items.length
+    const item = items[safeIndex]
+    return isAdvancedContentItemValid(item, { allowMediaOnly: false }) ? item.content || '' : ''
+  }
+
+  const variants = splitSmsContentVariants(campaign.content)
   if (variants.length === 0) return ''
   const safeIndex = ((index % variants.length) + variants.length) % variants.length
   return variants[safeIndex] || ''
@@ -425,7 +447,7 @@ function renderSmsInputContent(
   rowIndex: number,
   scheduleOverride?: string | null
 ): string {
-  const template = renderContentSpin(cycleSmsContentVariant(campaign.content, rowIndex))
+  const template = renderContentSpin(cycleSmsContentVariant(campaign, rowIndex))
   if (!template) return ''
   const baseDate = getSmsRenderBaseDate(scheduleOverride || row.schedule || campaign.schedule || campaign.originalSchedule)
   const getInput = (key: keyof CampaignInputData): string => String(row[key] ?? '').trim()

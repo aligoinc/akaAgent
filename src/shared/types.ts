@@ -97,6 +97,14 @@ export interface CampaignMediaSnapshot {
 
 export type CampaignMediaInput = string | CampaignMediaSnapshot
 
+export interface CampaignAdvancedContentItem {
+  id: string
+  content: string
+  mediaOption?: 'none' | 'all' | 'random'
+  mediaItems?: CampaignMediaInput[]
+  randomMediaCount?: number
+}
+
 export const MEDIA_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
 export const MEDIA_FILE_MAX_SIZE_BYTES = 25 * 1024 * 1024
 export const MEDIA_LIBRARY_MAX_FILES_PER_STAFF = 100
@@ -373,6 +381,8 @@ export interface CampaignExtraSettings {
   sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
   postWithBackground?: boolean   // Đăng bài profile/page UI với phông nền Facebook
   rewriteContentEachRun?: boolean // Viết lại nội dung chính bằng AI trước mỗi lượt chạy; email chỉ áp dụng plain text
+  advancedContentEnabled?: boolean
+  advancedContentItems?: CampaignAdvancedContentItem[]
   enableComment?: boolean        // kiếm comment
   commentGroupMode?: 'all' | 'pending_only' | 'published_only' // group nào được comment sau khi đăng bài group
   commentType?: 'own' | 'others' | 'all' // comment vào bài mình / bài khác / tất cả
