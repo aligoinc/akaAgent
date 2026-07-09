@@ -271,6 +271,7 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_message_group: 'Nhắn tin group',
   zalo_message_stranger: 'Nhắn tin người lạ',
   zalo_add_friend: 'Kết bạn',
+  zalo_add_group_member: 'Thêm thành viên vào group',
   zalo_join_group_link: 'Tham gia group',
   zalo_cancel_sent_friend_request: 'Huỷ lời mời kết bạn',
   zalo_tag_contact: 'Gắn tag Zalo',
@@ -297,6 +298,7 @@ const ACTION_LIMIT_UNITS: Record<string, string> = {
   zalo_message_group: 'tin nhắn',
   zalo_message_stranger: 'tin nhắn',
   zalo_add_friend: 'lời mời',
+  zalo_add_group_member: 'thành viên',
   zalo_join_group_link: 'group',
   zalo_cancel_sent_friend_request: 'lời mời',
   email_send: 'email',
@@ -416,6 +418,7 @@ const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const EMAIL_SEND_ACTION_ID = 'email_send'
@@ -450,6 +453,21 @@ const normalizeZaloTagNameList = (value: unknown): string[] => {
 }
 const normalizeZaloRealtimeGroupId = (value: unknown): string =>
   String(value || '').trim().replace(/^g/i, '')
+const formatZaloGroupMemberCount = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return ''
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? new Intl.NumberFormat('vi-VN').format(parsed) : ''
+}
+const getZaloGroupDropdownLabel = (group: AutoAccountContact, fallbackId = ''): string => {
+  const name = group.name.trim() || fallbackId || '-'
+  const countLabel = formatZaloGroupMemberCount(group.extraData?.totalMember)
+  return countLabel ? `${name} (${countLabel})` : name
+}
+const getZaloGroupType = (group: AutoAccountContact): number | null => {
+  const parsed = Number(group.extraData?.groupType)
+  return Number.isFinite(parsed) ? parsed : null
+}
+const isZaloCommunityGroup = (group: AutoAccountContact): boolean => getZaloGroupType(group) === 2
 const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   MESSAGE_FRIEND_ACTION_ID,
   MESSAGE_UID_ACTION_ID,
@@ -1391,6 +1409,9 @@ export default function CampaignFormModal({
     friendRequestMessage: campaign?.extraSettings?.friendRequestMessage || '',
     zaloFriendRecommendationCount: campaign?.extraSettings?.zaloFriendRecommendationCount ?? 10,
     zaloCancelFriendRequestLimit: campaign?.extraSettings?.zaloCancelFriendRequestLimit ?? 10,
+    zaloAddGroupMemberTargetGroupId: campaign?.extraSettings?.zaloAddGroupMemberTargetGroupId || '',
+    zaloAddGroupMemberTargetGroupName: campaign?.extraSettings?.zaloAddGroupMemberTargetGroupName || '',
+    zaloAddGroupMemberUseShareMethod: campaign?.extraSettings?.zaloAddGroupMemberUseShareMethod ?? false,
     zaloRealtimeTriggers: normalizeZaloRealtimeTriggers(campaign?.extraSettings?.zaloRealtimeTriggers),
     zaloRealtimeGroupIds: Array.isArray(campaign?.extraSettings?.zaloRealtimeGroupIds)
       ? campaign.extraSettings.zaloRealtimeGroupIds.map(id => String(id || '').trim()).filter(Boolean)
@@ -1591,9 +1612,11 @@ export default function CampaignFormModal({
   const isZaloMessageRemarketingCustomerCampaign = formData.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
   const isZaloMessageFriendRecommendationCampaign = formData.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
   const isZaloMessageGroupCampaign = formData.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+  const isZaloAddGroupMemberCampaign = formData.actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID
   const isZaloJoinGroupLinkCampaign = formData.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
   const isZaloCancelSentFriendRequestCampaign = formData.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
   const isZaloMessageCampaign = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign
+  const isZaloGroupSelectionCampaign = isZaloMessageGroupRealtimeCampaign || isZaloAddGroupMemberCampaign
   const supportsExternalSmsPush = isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign
   const usesInternalSmsPush = supportsExternalSmsPush && canUseInternalSmsFeature
   const internalSmsAccounts = useMemo(
@@ -1601,6 +1624,7 @@ export default function CampaignFormModal({
     [accounts]
   )
   const isPhoneInputCampaign = isZaloMessagePhoneCampaign || isSmsCampaign
+  const isPhoneOrUidInputCampaign = isZaloAddGroupMemberCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
   const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
@@ -1650,13 +1674,14 @@ export default function CampaignFormModal({
   const canPickGroups = isGroupPostCampaign || isCommentSeedingFeedCampaign || isZaloMessageGroupCampaign
   const canPickPages = isPagePostCampaign
   const canPickFriends = isMessageFriendCampaign || (isZaloMessageFriendCampaign && formData.zaloFriendTargetMode === 'selected')
-  const canPickZaloGroupMembers = isZaloMessageGroupMemberCampaign
+  const canPickZaloGroupMembers = isZaloMessageGroupMemberCampaign || isZaloAddGroupMemberCampaign
+  const canPickZaloAddGroupMemberFriends = isZaloAddGroupMemberCampaign
   const canPickZaloRemarketingCustomers = isZaloMessageRemarketingCustomerCampaign
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
   const canUseOtherDataSources = isZaloMessagePhoneCampaign && !isEditingSavedCampaign
   const canUploadData = !isMessageFriendCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && !isZaloCancelSentFriendRequestCampaign
-  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign || isZaloCancelSentFriendRequestCampaign
+  const showActionOptionsSection = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign || isZaloAddGroupMemberCampaign || isZaloCancelSentFriendRequestCampaign
   const needsZaloLabels =
     ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag) ||
     (isZaloMessageFriendCampaign && ((!isZaloShareMessageMode && formData.enableZaloTag) || formData.zaloFriendTargetMode === 'tagged_friends'))
@@ -1723,12 +1748,14 @@ export default function CampaignFormModal({
     (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage) &&
     (!isZaloMessageFriendRecommendationCampaign || formData.enableMessage) &&
     !isFacebookJoinGroupCampaign &&
+    !isZaloAddGroupMemberCampaign &&
     !isZaloJoinGroupLinkCampaign &&
     !isZaloCancelSentFriendRequestCampaign
   const canShowContentSection =
     !isFindDataCampaign &&
     !isNewsfeedInteractionCampaign &&
     !isFacebookJoinGroupCampaign &&
+    !isZaloAddGroupMemberCampaign &&
     !isZaloJoinGroupLinkCampaign &&
     !isZaloCancelSentFriendRequestCampaign &&
     (!isMessageUidCampaign || formData.enableMessage) &&
@@ -2281,6 +2308,8 @@ export default function CampaignFormModal({
                   ? 'Danh sách khách hàng cũ Zalo'
                 : isZaloMessageGroupCampaign
                   ? 'Danh sách group Zalo'
+                : isZaloAddGroupMemberCampaign
+                  ? 'Danh sách thành viên cần thêm'
                 : isMessageFriendCampaign
                   ? 'Danh sách bạn bè'
                   : isPageInboxMessageCampaign
@@ -2300,6 +2329,8 @@ export default function CampaignFormModal({
                     ? 'Khách hàng cũ Zalo'
                   : isZaloMessageGroupCampaign
                     ? 'Group Zalo'
+                  : isZaloAddGroupMemberCampaign
+                    ? 'SĐT hoặc UID Zalo'
                   : isMessageFriendCampaign
                     ? 'Bạn bè'
                     : isPageInboxMessageCampaign
@@ -2314,7 +2345,7 @@ export default function CampaignFormModal({
           }
           return s
         })
-      const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign
+      const orderedSteps = isMessageUidCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign || isZaloAddGroupMemberCampaign
         ? steps.flatMap(s => s.id === 'general' ? [s, ACTION_OPTIONS_STEP] : [s])
         : steps
       const withFindDataSource = showFindDataSourceSection
@@ -2477,6 +2508,8 @@ export default function CampaignFormModal({
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
   const [isOtherDataSourceOpen, setIsOtherDataSourceOpen] = useState(false)
+  const [isZaloAddGroupMemberGroupDropdownOpen, setIsZaloAddGroupMemberGroupDropdownOpen] = useState(false)
+  const [zaloAddGroupMemberGroupSearch, setZaloAddGroupMemberGroupSearch] = useState('')
   const [messageDateOption, setMessageDateOption] = useState<MessageDateOption>('today')
   const [messageDateFormat, setMessageDateFormat] = useState<MessageDateFormat>('DD/MM/YYYY')
   const [messageTemplateDropdownOpen, setMessageTemplateDropdownOpen] = useState<MessageTemplateDropdown>(null)
@@ -2492,6 +2525,7 @@ export default function CampaignFormModal({
   })
   const accountDropdownRef = useRef<HTMLDivElement>(null)
   const otherDataSourceDropdownRef = useRef<HTMLDivElement>(null)
+  const zaloAddGroupMemberGroupDropdownRef = useRef<HTMLDivElement>(null)
 
   const canReplaceCampaignNameWithAI = (currentName: string, previousAiName: string): boolean => {
     if (!currentName) return true
@@ -2639,6 +2673,12 @@ export default function CampaignFormModal({
       }
       if (otherDataSourceDropdownRef.current && !otherDataSourceDropdownRef.current.contains(event.target as Node)) {
         setIsOtherDataSourceOpen(false)
+      }
+      if (
+        zaloAddGroupMemberGroupDropdownRef.current &&
+        !zaloAddGroupMemberGroupDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsZaloAddGroupMemberGroupDropdownOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -2893,7 +2933,7 @@ export default function CampaignFormModal({
 
   const loadZaloRealtimeGroupsFromLocal = async (options: { silent?: boolean } = {}) => {
     const accountId = formData.accountIds[0]
-    if (!isZaloMessageGroupRealtimeCampaign || !accountId) {
+    if (!isZaloGroupSelectionCampaign || !accountId) {
       setZaloRealtimeGroups([])
       if (!options.silent) showAlert('Vui lòng chọn tài khoản Zalo trước khi load group.', 'error')
       return
@@ -2917,7 +2957,7 @@ export default function CampaignFormModal({
 
   const syncZaloRealtimeGroupsFromZalo = async () => {
     const accountId = formData.accountIds[0]
-    if (!isZaloMessageGroupRealtimeCampaign || !accountId) {
+    if (!isZaloGroupSelectionCampaign || !accountId) {
       showAlert('Vui lòng chọn tài khoản Zalo trước khi tải group.', 'error')
       return
     }
@@ -2938,13 +2978,13 @@ export default function CampaignFormModal({
   }
 
   useEffect(() => {
-    if (!isZaloMessageGroupRealtimeCampaign || formData.accountIds.length !== 1) {
+    if (!isZaloGroupSelectionCampaign || formData.accountIds.length !== 1) {
       setZaloRealtimeGroups([])
       setZaloRealtimeGroupsLoading(false)
       return
     }
     void loadZaloRealtimeGroupsFromLocal({ silent: true })
-  }, [isZaloMessageGroupRealtimeCampaign, formData.accountIds.join(',')])
+  }, [isZaloGroupSelectionCampaign, formData.accountIds.join(',')])
 
   const handleSyncZaloLabels = async () => {
     const accountId = formData.accountIds[0]
@@ -3261,6 +3301,9 @@ export default function CampaignFormModal({
       case 'messageActions':
         if (isZaloCancelSentFriendRequestCampaign) {
           return normalizeZaloCancelFriendRequestLimit(formData.zaloCancelFriendRequestLimit) >= 1
+        }
+        if (isZaloAddGroupMemberCampaign) {
+          return normalizeZaloRealtimeGroupId(formData.zaloAddGroupMemberTargetGroupId).length > 0
         }
         return isMessageFriendCampaign || (
           (formData.enableMessage || formData.enableAddFriend) &&
@@ -3797,7 +3840,7 @@ export default function CampaignFormModal({
   const normalizeCampaignInputDataForSave = (rows: Partial<CampaignInputData>[]): Partial<CampaignInputData>[] => {
     return rows
       .map(row => {
-        const phone = isPhoneInputCampaign
+        const phone = isPhoneInputCampaign || isPhoneOrUidInputCampaign
           ? (normalizeVietnamMobilePhone(row.phone) || '')
           : String(row.phone || '').trim()
         return {
@@ -3817,9 +3860,11 @@ export default function CampaignFormModal({
       })
       .filter(row => isPhoneInputCampaign
         ? row.phone.length > 0
-        : isEmailCampaign
-          ? isValidEmailAddress(row.email)
-          : row.uid.length > 0)
+        : isPhoneOrUidInputCampaign
+          ? row.phone.length > 0 || row.uid.length > 0
+          : isEmailCampaign
+            ? isValidEmailAddress(row.email)
+            : row.uid.length > 0)
   }
 
   const buildCampaignSaveBundleItems = (detailRows: Partial<CampaignInputData>[] = details): CampaignSaveBundleItem[] => {
@@ -3937,6 +3982,12 @@ export default function CampaignFormModal({
       const selectedZaloRealtimeGroupNames = isZaloMessageGroupRealtimeCampaign
         ? getZaloRealtimeGroupNamesForSave(selectedZaloRealtimeGroupIds)
         : []
+      const selectedZaloAddGroupMemberGroupId = isZaloAddGroupMemberCampaign
+        ? normalizeZaloRealtimeGroupId(formData.zaloAddGroupMemberTargetGroupId)
+        : ''
+      const selectedZaloAddGroupMemberGroupName = isZaloAddGroupMemberCampaign
+        ? String(formData.zaloAddGroupMemberTargetGroupName || '').trim()
+        : ''
       const selectedInternalSmsStatuses = usesInternalSmsPush && formData.internalSmsEnabled
         ? EXTERNAL_SMS_STATUS_OPTIONS
           .map(option => option.value)
@@ -4050,6 +4101,9 @@ export default function CampaignFormModal({
             externalSmsContent: supportsExternalSmsPush && !usesInternalSmsPush && formData.externalSmsEnabled ? formData.externalSmsContent.trim() : '',
             externalSmsStatuses: supportsExternalSmsPush && !usesInternalSmsPush ? selectedExternalSmsStatuses : [],
             friendRequestMessage: (isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) ? formData.friendRequestMessage.trim() : '',
+            zaloAddGroupMemberTargetGroupId: selectedZaloAddGroupMemberGroupId,
+            zaloAddGroupMemberTargetGroupName: selectedZaloAddGroupMemberGroupName,
+            zaloAddGroupMemberUseShareMethod: isZaloAddGroupMemberCampaign ? formData.zaloAddGroupMemberUseShareMethod : false,
             zaloRealtimeTriggers: isZaloMessageGroupRealtimeCampaign ? getZaloRealtimeTriggersForSave() : [],
             zaloRealtimeGroupIds: selectedZaloRealtimeGroupIds,
             zaloRealtimeGroupNames: selectedZaloRealtimeGroupNames,
@@ -4214,6 +4268,16 @@ export default function CampaignFormModal({
         .find(account => account && account.flatformType !== selectedActionPlatform)
       if (invalidAccount) {
         showAlert('Tài khoản đã chọn không đúng nền tảng của chiến dịch.', 'error')
+        return
+      }
+    }
+    if (isZaloAddGroupMemberCampaign) {
+      if (formData.accountIds.length !== 1) {
+        showAlert('Chiến dịch thêm thành viên group Zalo chỉ hỗ trợ chọn 1 tài khoản.', 'error')
+        return
+      }
+      if (!normalizeZaloRealtimeGroupId(formData.zaloAddGroupMemberTargetGroupId)) {
+        showAlert('Vui lòng chọn group Zalo cần thêm thành viên.', 'error')
         return
       }
     }
@@ -4519,6 +4583,10 @@ export default function CampaignFormModal({
     }
     if (!isEditingSavedCampaign && isFacebookJoinGroupCampaign && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
+      return
+    }
+    if (!isEditingSavedCampaign && isZaloAddGroupMemberCampaign && validDetails.length === 0) {
+      showAlert('Vui lòng thêm ít nhất một SĐT hoặc UID Zalo vào danh sách data.', 'error')
       return
     }
     if (!isEditingSavedCampaign && isPagePostCampaign && validDetails.length === 0) {
@@ -4911,26 +4979,37 @@ export default function CampaignFormModal({
       ? 'email'
       : 'facebook'
 
-  const getDetailDedupeKey = (row: Partial<CampaignInputData>): string => {
+  const getDetailDedupeKeys = (row: Partial<CampaignInputData>): string[] => {
+    if (isPhoneOrUidInputCampaign) {
+      const uid = String(row.uid || '').trim().replace(/\/+$/g, '').toLowerCase()
+      const phone = normalizeVietnamMobilePhone(row.phone)
+      return [
+        uid ? `uid:${uid}` : '',
+        phone ? `phone:${phone}` : ''
+      ].filter(Boolean)
+    }
     if (isPhoneInputCampaign) {
-      return normalizeVietnamMobilePhone(row.phone) || ''
+      const phone = normalizeVietnamMobilePhone(row.phone)
+      return phone ? [phone] : []
     }
     if (isEmailCampaign) {
-      return normalizeEmailAddress(row.email).toLowerCase()
+      const email = normalizeEmailAddress(row.email).toLowerCase()
+      return email ? [email] : []
     }
-    return String(row.uid || '')
+    const uid = String(row.uid || '')
       .trim()
       .replace(/\/+$/g, '')
       .toLowerCase()
+    return uid ? [uid] : []
   }
 
   const appendUniqueDetails = (rows: Partial<CampaignInputData>[]): number => {
-    const seen = new Set(details.map(getDetailDedupeKey).filter(Boolean))
+    const seen = new Set(details.flatMap(getDetailDedupeKeys))
     const uniqueRows: Partial<CampaignInputData>[] = []
     for (const row of rows) {
-      const key = getDetailDedupeKey(row)
-      if (key && seen.has(key)) continue
-      if (key) seen.add(key)
+      const keys = getDetailDedupeKeys(row)
+      if (keys.some(key => seen.has(key))) continue
+      keys.forEach(key => seen.add(key))
       uniqueRows.push({
         ...row,
         phoneCarrier: inferInputDataPhoneCarrier(row.phone, row.phoneCarrier)
@@ -5064,6 +5143,22 @@ export default function CampaignFormModal({
           const normalizedPhone = normalizeVietnamMobilePhone(phone)
           if (!normalizedPhone) continue
           importedRows.push({ ...baseRow, phone: normalizedPhone })
+          continue
+        }
+
+        if (isPhoneOrUidInputCampaign) {
+          const normalizedPhone =
+            normalizeVietnamMobilePhone(phone) ||
+            normalizeVietnamMobilePhone(row[1]) ||
+            normalizeVietnamMobilePhone(name)
+          if (!normalizedPhone) continue
+          importedRows.push({
+            ...baseRow,
+            name: normalizeVietnamMobilePhone(name) === normalizedPhone ? '' : name,
+            uid: '',
+            phone: normalizedPhone,
+            email: ''
+          })
           continue
         }
 
@@ -6619,6 +6714,174 @@ export default function CampaignFormModal({
         <div style={{ fontStyle: 'italic', color: 'var(--text-secondary)', marginTop: 16 }}>
           Mỗi ngày chiến dịch sẽ lấy danh sách những người mới tham gia/rời/tương tác (nhắn tin, like, tim,...) trong group và sẽ gửi vào ngày hôm sau theo thời gian cài đặt
         </div>
+      </>
+    )
+  }
+
+  const renderZaloAddGroupMemberSettings = () => {
+    const selectedGroupId = normalizeZaloRealtimeGroupId(formData.zaloAddGroupMemberTargetGroupId)
+    const groupOptions = zaloRealtimeGroups.flatMap(group => {
+      const groupId = normalizeZaloRealtimeGroupId(group.uid || group.url)
+      if (!groupId) return []
+      const label = getZaloGroupDropdownLabel(group, groupId)
+      return [{
+        id: groupId,
+        group,
+        label,
+        searchText: `${label} ${groupId}`.toLowerCase()
+      }]
+    })
+    const loadedGroupIds = new Set(groupOptions.map(option => option.id))
+    const missingSelectedGroup = selectedGroupId && !loadedGroupIds.has(selectedGroupId)
+    const selectedGroupOption = groupOptions.find(option => option.id === selectedGroupId)
+    const selectedGroupLabel = selectedGroupOption?.label || formData.zaloAddGroupMemberTargetGroupName || selectedGroupId
+    const normalizedGroupSearch = zaloAddGroupMemberGroupSearch.trim().toLowerCase()
+    const filteredGroupOptions = normalizedGroupSearch
+      ? groupOptions.filter(option => option.searchText.includes(normalizedGroupSearch))
+      : groupOptions
+    const dropdownInputValue = isZaloAddGroupMemberGroupDropdownOpen
+      ? zaloAddGroupMemberGroupSearch
+      : selectedGroupLabel
+    const selectGroup = (group: AutoAccountContact) => {
+      const groupId = normalizeZaloRealtimeGroupId(group.uid || group.url)
+      if (!groupId) return
+      setFormData(p => ({
+        ...p,
+        zaloAddGroupMemberTargetGroupId: groupId,
+        zaloAddGroupMemberTargetGroupName: group.name || groupId,
+        zaloAddGroupMemberUseShareMethod: getZaloGroupType(group) === null
+          ? p.zaloAddGroupMemberUseShareMethod
+          : isZaloCommunityGroup(group)
+      }))
+      setZaloAddGroupMemberGroupSearch('')
+      setIsZaloAddGroupMemberGroupDropdownOpen(false)
+    }
+
+    return (
+      <>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Group thêm thành viên</div>
+        <div className="stepper-form-row" style={{ alignItems: 'flex-end' }}>
+          <div className="stepper-form-group" style={{ minWidth: 360, flex: '1 1 520px' }}>
+            <label>Chọn group đích</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <div className="zalo-group-combobox" ref={zaloAddGroupMemberGroupDropdownRef}>
+                <div className="zalo-group-combobox-input-wrap">
+                  <Search size={14} className="zalo-group-combobox-search-icon" />
+                  <input
+                    type="text"
+                    className="stepper-input zalo-group-combobox-input"
+                    value={dropdownInputValue}
+                    placeholder="Chọn hoặc tìm group Zalo"
+                    disabled={zaloRealtimeGroupsLoading || formData.accountIds.length !== 1}
+                    onFocus={() => {
+                      setZaloAddGroupMemberGroupSearch('')
+                      setIsZaloAddGroupMemberGroupDropdownOpen(true)
+                    }}
+                    onChange={e => {
+                      setZaloAddGroupMemberGroupSearch(e.target.value)
+                      setIsZaloAddGroupMemberGroupDropdownOpen(true)
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') {
+                        setZaloAddGroupMemberGroupSearch('')
+                        setIsZaloAddGroupMemberGroupDropdownOpen(false)
+                      }
+                      if (e.key === 'Enter' && isZaloAddGroupMemberGroupDropdownOpen && filteredGroupOptions.length > 0) {
+                        e.preventDefault()
+                        selectGroup(filteredGroupOptions[0].group)
+                      }
+                      if (e.key === 'ArrowDown') {
+                        setIsZaloAddGroupMemberGroupDropdownOpen(true)
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-icon zalo-group-combobox-toggle"
+                    disabled={zaloRealtimeGroupsLoading || formData.accountIds.length !== 1}
+                    title="Mở danh sách group"
+                    aria-label="Mở danh sách group"
+                    aria-expanded={isZaloAddGroupMemberGroupDropdownOpen}
+                    onClick={() => {
+                      const nextOpen = !isZaloAddGroupMemberGroupDropdownOpen
+                      setZaloAddGroupMemberGroupSearch('')
+                      setIsZaloAddGroupMemberGroupDropdownOpen(nextOpen)
+                    }}
+                  >
+                    <ChevronDown size={16} />
+                  </button>
+                </div>
+
+                {isZaloAddGroupMemberGroupDropdownOpen && (
+                  <div className="zalo-group-combobox-menu">
+                    {zaloRealtimeGroupsLoading ? (
+                      <div className="zalo-group-combobox-empty">Đang load group Zalo...</div>
+                    ) : groupOptions.length === 0 ? (
+                      <div className="zalo-group-combobox-empty">Chưa có group Zalo đã lưu.</div>
+                    ) : filteredGroupOptions.length === 0 ? (
+                      <div className="zalo-group-combobox-empty">Không tìm thấy group phù hợp.</div>
+                    ) : (
+                      filteredGroupOptions.map(option => {
+                        const isSelected = selectedGroupId === option.id
+                        return (
+                          <button
+                            key={option.group.id || option.id}
+                            type="button"
+                            className={`zalo-group-combobox-option${isSelected ? ' is-selected' : ''}`}
+                            onClick={() => selectGroup(option.group)}
+                            title={option.label}
+                          >
+                            <span className="zalo-group-combobox-option-label">{option.label}</span>
+                            {isSelected && <Check size={14} />}
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={zaloRealtimeGroupsLoading || formData.accountIds.length !== 1}
+                onClick={() => void loadZaloRealtimeGroupsFromLocal()}
+              >
+                {zaloRealtimeGroupsLoading ? <Loader2 size={14} /> : <RefreshCw size={14} />}
+                <span>Load</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={zaloRealtimeGroupsLoading || formData.accountIds.length !== 1}
+                onClick={() => void syncZaloRealtimeGroupsFromZalo()}
+              >
+                {zaloRealtimeGroupsLoading ? <Loader2 size={14} /> : <RefreshCw size={14} />}
+                <span>Tải group từ Zalo</span>
+              </button>
+            </div>
+            {formData.accountIds.length !== 1 && (
+              <div className="schedule-hint">Vui lòng chọn 1 tài khoản Zalo để load group.</div>
+            )}
+          </div>
+        </div>
+
+        {missingSelectedGroup && (
+          <div className="schedule-hint" style={{ marginTop: 8 }}>
+            Đang giữ group đã chọn trước đó: {formData.zaloAddGroupMemberTargetGroupName || selectedGroupId}
+          </div>
+        )}
+        {!selectedGroupId && (
+          <div style={{ color: 'var(--text-error)', fontSize: 12, marginTop: 8 }}>Vui lòng chọn group Zalo cần thêm thành viên.</div>
+        )}
+
+        <label className="schedule-checkbox-label" style={{ marginTop: 14 }}>
+          <input
+            type="checkbox"
+            checked={formData.zaloAddGroupMemberUseShareMethod}
+            onChange={e => setFormData(p => ({ ...p, zaloAddGroupMemberUseShareMethod: e.target.checked }))}
+          />
+          <span>Thêm bằng cách chia sẻ group</span>
+        </label>
       </>
     )
   }
@@ -10292,7 +10555,7 @@ export default function CampaignFormModal({
               <>
             {showActionOptionsSection && (
               <div
-                className={`stepper-section${isZaloMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}
+                className={`stepper-section${isZaloMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}${isZaloAddGroupMemberCampaign ? ' has-floating-dropdown' : ''}`}
                 ref={el => { sectionRefs.current['actionOptions'] = el }}
               >
                 <div
@@ -10318,6 +10581,8 @@ export default function CampaignFormModal({
                       )
                       : isZaloCancelSentFriendRequestCampaign
                         ? renderZaloCancelSentFriendRequestActionOptions()
+                      : isZaloAddGroupMemberCampaign
+                        ? renderZaloAddGroupMemberSettings()
                       : isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign
                       ? renderZaloMessagePhoneActionOptions()
                       : isZaloMessageFriendCampaign
@@ -11094,6 +11359,8 @@ export default function CampaignFormModal({
                                 ? 'Danh sách khách inbox Page'
                               : isZaloMessagePhoneCampaign
                                 ? 'Danh sách SĐT'
+                              : isZaloAddGroupMemberCampaign
+                                ? 'Danh sách thành viên cần thêm'
                               : isMessageUidCampaign
                                 ? 'Danh sách UID'
                                 : 'Danh sách data'}
@@ -11201,6 +11468,27 @@ export default function CampaignFormModal({
                           title="Chọn bạn bè từ danh sách liên hệ"
                         >
                           <Users size={14} /> {isZaloMessageFriendCampaign ? 'Chọn bạn bè Zalo' : 'Chọn bạn bè'}
+                        </button>
+                      )}
+                      {canPickZaloAddGroupMemberFriends && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            if (formData.accountIds.length === 0) {
+                              showAlert('Vui lòng chọn tài khoản trước.', 'error')
+                              return
+                            }
+                            setDataScanPicker({
+                              action: 'zalo_friends',
+                              mode: 'friends',
+                              initialStatusFilter: 'active',
+                              allowedActions: ['zalo_friends'],
+                              lockAccount: true
+                            })
+                          }}
+                          title="Chọn bạn bè Zalo từ danh sách liên hệ"
+                        >
+                          <Users size={14} /> Chọn bạn bè Zalo
                         </button>
                       )}
                       {canPickZaloGroupMembers && (
@@ -11464,7 +11752,7 @@ export default function CampaignFormModal({
                                     ) : (
                                       <>
                                         <td>
-                                          <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder={isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'UID hoặc link...'} disabled={isEditingSavedCampaign} />
+                                          <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder={isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : isZaloAddGroupMemberCampaign ? 'UID từ data quét...' : 'UID hoặc link...'} disabled={isEditingSavedCampaign || isZaloAddGroupMemberCampaign} />
                                         </td>
                                         <td>
                                           <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />

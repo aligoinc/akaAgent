@@ -60,6 +60,7 @@ import { callAiUsing } from './aiRuntimeService'
 import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
 import type {
   ZaloActionDetailOutput,
+  ZaloAddGroupMemberOptions,
   ZaloActionHelperResult,
   ZaloApplyContactTagOptions,
   ZaloCancelSentFriendRequestOptions,
@@ -67,6 +68,7 @@ import type {
   ZaloFindPhoneUserOptions,
   ZaloJoinGroupLinkOptions,
   ZaloResolvedTarget,
+  ZaloResolveAddGroupMemberTargetOptions,
   ZaloResolveGroupMemberTargetOptions,
   ZaloSendDirectMessageOptions,
   ZaloSendPhoneFriendRequestOptions,
@@ -307,6 +309,7 @@ const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const SMS_SEND_ACTION_ID = 'sms_send'
@@ -2752,6 +2755,7 @@ export class CampaignScheduler {
       || campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
       || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
+      || campaign.actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID
       || campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
       || campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
   }
@@ -2767,6 +2771,7 @@ export class CampaignScheduler {
           campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID ||
           campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID ||
+          campaign.actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID ||
           campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID ||
           campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
         ? [detail.name, detail.uid, detail.phone]
@@ -3760,6 +3765,61 @@ export class CampaignScheduler {
     return null
   }
 
+  private async buildRuntimeLimitDetail(
+    limitStatus: AccountActionLimitStatus,
+    data: Record<string, unknown> = {}
+  ): Promise<ZaloActionDetailOutput> {
+    const note = await this.buildLimitPreflightNote(limitStatus)
+    return {
+      createDetail: false,
+      actionCode: limitStatus.actionCode || null,
+      actionName: this.getLimitActionName(limitStatus),
+      errorCode: limitStatus.errorCode || null,
+      log: note,
+      countsTowardLimit: false,
+      countsTowardBadTarget: false,
+      resetInputToPending: true,
+      pendingNote: note,
+      stopAfterTarget: true,
+      data: {
+        ...data,
+        actionLimit: {
+          actionCode: limitStatus.actionCode || null,
+          actionName: limitStatus.actionName || null,
+          errorCode: limitStatus.errorCode || null,
+          reason: limitStatus.reason || null,
+          currentCount: limitStatus.currentCount ?? null,
+          limit: limitStatus.limit ?? null,
+          dailyActionCount: limitStatus.dailyActionCount ?? null,
+          dailyLimit: limitStatus.dailyLimit ?? null,
+          windowActionCount: limitStatus.windowActionCount ?? null,
+          windowLimit: limitStatus.windowLimit ?? null,
+          windowMinutes: limitStatus.windowMinutes ?? null,
+          retryAfterMs: limitStatus.retryAfterMs ?? null,
+          isActionDisabled: limitStatus.isActionDisabled === true
+        }
+      }
+    }
+  }
+
+  private async checkZaloFindPhoneUserRuntimeLimit(
+    account: AutoAccount,
+    campaign: Campaign,
+    data: Record<string, unknown> = {}
+  ): Promise<ZaloActionDetailOutput | null> {
+    const actionDescriptor: CampaignActionDescriptor = {
+      code: ZALO_FIND_PHONE_ACTION_CODE,
+      name: this.getAccountActionName(ZALO_FIND_PHONE_ACTION_CODE)
+    }
+    const disabledStatus = await this.checkActionDisabled(account, [actionDescriptor])
+    if (disabledStatus && !disabledStatus.ok) return this.buildRuntimeLimitDetail(disabledStatus, data)
+
+    const limitStatus = await this.checkActionLimits(account, campaign, [actionDescriptor], campaign.extraSettings?.actionLimits)
+    if (limitStatus && !limitStatus.ok) return this.buildRuntimeLimitDetail(limitStatus, data)
+
+    return null
+  }
+
   private shouldContinueWhenActionLimitReached(limitConfig?: CampaignActionLimitSettings): boolean {
     return limitConfig?.continueWhenActionLimitReached === true
   }
@@ -4741,6 +4801,9 @@ export class CampaignScheduler {
       zaloTagName: extra.zaloTagName || '',
       enableZaloAlias: extra.enableZaloAlias === true,
       zaloAlias: extra.zaloAliasTemplate || '',
+      zaloAddGroupMemberTargetGroupId: this.firstNonEmptyString(extra.zaloAddGroupMemberTargetGroupId),
+      zaloAddGroupMemberTargetGroupName: this.firstNonEmptyString(extra.zaloAddGroupMemberTargetGroupName),
+      zaloAddGroupMemberUseShareMethod: extra.zaloAddGroupMemberUseShareMethod === true,
       inputData: detail ? {
         id: detail.id,
         name: detail.name || '',
@@ -7903,6 +7966,8 @@ export class CampaignScheduler {
         return 'sendFriendRequest'
       case 'zalo_cancel_sent_friend_request':
         return 'undoFriendRequest'
+      case 'zalo_add_group_member':
+        return 'addUserToGroup'
       case 'zalo_join_group_link':
         return 'joinGroupLink'
       case 'zalo_tag_contact':
@@ -8434,6 +8499,58 @@ export class CampaignScheduler {
     return { ok: true, zaloTarget: target }
   }
 
+  private async zaloResolveAddGroupMemberTarget(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloResolveAddGroupMemberTargetOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const uid = this.firstNonEmptyString(options.targetUid, options.inputData?.uid)
+    if (uid) {
+      const target = await this.resolveZaloFriendMessageTarget(
+        account,
+        this.normalizeZaloTargetFromInputData(
+          uid,
+          options.targetName,
+          options.inputData,
+          { source: 'zalo_add_group_member' },
+          false
+        )
+      )
+      await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+      return { ok: true, zaloTarget: target }
+    }
+
+    const phone = this.firstNonEmptyString(options.phone, options.inputData?.phone)
+    if (phone) {
+      const limitDetail = await this.checkZaloFindPhoneUserRuntimeLimit(account, campaign, {
+        phone,
+        inputData: options.inputData
+      })
+      if (limitDetail) return { ok: false, detail: limitDetail }
+      return this.zaloFindPhoneUser(account, campaign, {
+        phone,
+        targetName: options.targetName,
+        inputData: options.inputData
+      })
+    }
+
+    const actionCode = ZALO_ADD_GROUP_MEMBER_ACTION_ID
+    const actionName = 'Thêm thành viên vào group'
+    const detail = await this.createZaloPolicyDetailFromCode(
+      account,
+      campaign,
+      await this.supabase.getZaloErrorPolicyByCode('114'),
+      'Data cần có SĐT hoặc UID Zalo',
+      actionCode,
+      actionName,
+      '114',
+      { inputData: options.inputData }
+    )
+    detail.countsTowardLimit = false
+    return { ok: false, detail }
+  }
+
   private async zaloResolveRemarketingCustomerTarget(
     account: AutoAccount,
     campaign: Campaign,
@@ -8653,6 +8770,96 @@ export class CampaignScheduler {
         ok: false,
         zaloTarget: target,
         detail: await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { target, groupId, message, attachments, inputData: options.inputData })
+      }
+    }
+  }
+
+  private async zaloAddGroupMember(
+    account: AutoAccount,
+    campaign: Campaign,
+    options: ZaloAddGroupMemberOptions
+  ): Promise<ZaloActionHelperResult> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const actionCode = ZALO_ADD_GROUP_MEMBER_ACTION_ID
+    const actionName = 'Thêm thành viên vào group'
+    const target = options.target ?? null
+    if (!target?.uid) return { ok: true, skipped: true, zaloTarget: target }
+
+    const groupId = this.firstNonEmptyString(
+      options.targetGroupId,
+      campaign.extraSettings?.zaloAddGroupMemberTargetGroupId
+    ).replace(/^g/i, '')
+    const groupName = this.firstNonEmptyString(
+      options.targetGroupName,
+      campaign.extraSettings?.zaloAddGroupMemberTargetGroupName,
+      groupId
+    )
+    if (!groupId) {
+      const detail = await this.createZaloPolicyDetailFromCode(
+        account,
+        campaign,
+        await this.supabase.getZaloErrorPolicyByCode('114'),
+        'Chưa chọn group Zalo cần thêm thành viên',
+        actionCode,
+        actionName,
+        '114',
+        { target, inputData: options.inputData }
+      )
+      detail.countsTowardLimit = false
+      return { ok: false, zaloTarget: target, detail }
+    }
+
+    const useShareMethod = options.useShareMethod === true
+    try {
+      const result = await this.zaloRuntime.addMemberToGroup(account.id, {
+        groupId,
+        memberId: target.uid,
+        useShareMethod
+      })
+      const targetLabel = this.getZaloTargetLabel(target)
+      const groupLabel = this.firstNonEmptyString(result.groupName, groupName, result.groupId)
+      const isAlreadyMember = result.outcome === 'already_member'
+      const log = isAlreadyMember
+        ? `${targetLabel} đã là thành viên của group ${groupLabel}`
+        : result.mode === 'share_group_link'
+        ? `Gửi lời mời thành công đến ${targetLabel} qua link group ${groupLabel}`
+        : `${result.message} cho ${targetLabel} vào group ${groupLabel}`
+      return {
+        ok: true,
+        zaloTarget: target,
+        detail: this.createZaloSuccessDetail({
+          actionCode,
+          actionName,
+          status: isAlreadyMember ? 'đã là thành viên' : undefined,
+          log,
+          countsTowardLimit: isAlreadyMember ? false : true,
+          data: {
+            target,
+            targetGroup: {
+              id: result.groupId,
+              name: groupLabel,
+              type: result.groupType ?? null
+            },
+            mode: result.mode,
+            outcome: result.outcome,
+            useShareMethod,
+            groupLink: result.groupLink,
+            response: result.response as Record<string, unknown> | undefined
+          }
+        })
+      }
+    } catch (err) {
+      const detail = await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, {
+        target,
+        targetGroup: { id: groupId, name: groupName },
+        useShareMethod,
+        inputData: options.inputData
+      })
+      detail.countsTowardLimit = false
+      return {
+        ok: false,
+        zaloTarget: target,
+        detail
       }
     }
   }
@@ -9102,11 +9309,13 @@ export class CampaignScheduler {
       }),
       zaloFindPhoneUser: (options) => this.zaloFindPhoneUser(account, campaign, options),
       zaloResolveGroupMemberTarget: (options) => this.zaloResolveGroupMemberTarget(account, campaign, options),
+      zaloResolveAddGroupMemberTarget: (options) => this.zaloResolveAddGroupMemberTarget(account, campaign, options),
       zaloResolveRemarketingCustomerTarget: (options) => this.zaloResolveRemarketingCustomerTarget(account, campaign, options),
       zaloResolveFriendRecommendationTarget: (options) => this.zaloResolveFriendRecommendationTarget(account, campaign, options),
       zaloSendPhoneMessage: (options, metadata) => this.zaloSendPhoneMessage(account, campaign, options, metadata),
       zaloSendFriendMessage: (options, metadata) => this.zaloSendFriendMessage(account, campaign, options, metadata),
       zaloSendGroupMessage: (options, metadata) => this.zaloSendGroupMessage(account, campaign, options, metadata),
+      zaloAddGroupMember: (options) => this.zaloAddGroupMember(account, campaign, options),
       zaloJoinGroupLink: (options) => this.zaloJoinGroupLink(account, campaign, options),
       zaloSendPhoneFriendRequest: (options) => this.zaloSendPhoneFriendRequest(account, campaign, options),
       zaloCancelSentFriendRequest: (options) => this.zaloCancelSentFriendRequest(account, campaign, options),

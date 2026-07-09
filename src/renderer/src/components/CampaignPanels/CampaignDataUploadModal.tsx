@@ -41,9 +41,11 @@ const INFO_FIELDS: FieldDef[] = [
   { key: 'info5', label: 'Info 5' }
 ]
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
+const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const FACEBOOK_FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const isZaloJoinGroupLinkAction = (actionId?: string | null): boolean => actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
+const isZaloAddGroupMemberAction = (actionId?: string | null): boolean => actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID
 const isFacebookJoinGroupAction = (actionId?: string | null): boolean => actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
 const isFacebookFindDataSearchAction = (actionId?: string | null): boolean => actionId === FACEBOOK_FIND_DATA_SEARCH_ACTION_ID
 
@@ -178,6 +180,13 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
     return [
       { key: 'name', label: 'Tên group' },
       { key: 'uid', label: 'Link group Zalo', required: true },
+      ...INFO_FIELDS
+    ]
+  }
+  if (isZaloAddGroupMemberAction(actionId)) {
+    return [
+      { key: 'name', label: 'Tên' },
+      { key: 'phone', label: 'Số điện thoại', required: true },
       ...INFO_FIELDS
     ]
   }
@@ -319,6 +328,20 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
       })
       continue
     }
+    if (isZaloAddGroupMemberAction(actionId)) {
+      const phone = normalizeVietnamMobilePhone(row.phone)
+      if (!phone || seen.has(phone)) continue
+      seen.add(phone)
+      output.push({
+        ...row,
+        name: getCellText(row.name),
+        phone,
+        phoneCarrier: getVietnamMobileCarrier(phone) || null,
+        uid: '',
+        email: ''
+      })
+      continue
+    }
 
     const item: CampaignImportDataRow = {
       name: getCellText(row.name),
@@ -451,6 +474,11 @@ const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlat
       uid: detectColumnFromHeader(rows, ['keyword', 'keywords', 'từ khóa', 'tu khoa', 'search', 'tìm kiếm']) || detectTextColumn(rows)
     }
   }
+  if (isZaloAddGroupMemberAction(actionId)) {
+    return {
+      phone: detectPhoneColumn(rows)
+    }
+  }
   if (platform === 'zalo' || platform === 'sms') {
     return { phone: detectPhoneColumn(rows) }
   }
@@ -563,6 +591,10 @@ export default function CampaignDataUploadModal({
   const buildRowsFromText = (): CampaignImportDataRow[] => {
     return splitTextItems(textContent).map(value => {
       if (isZaloJoinGroupLinkAction(actionId)) return { uid: value }
+      if (isZaloAddGroupMemberAction(actionId)) {
+        const phone = normalizeVietnamMobilePhone(value)
+        return phone ? { phone } : {}
+      }
       if (platform === 'zalo' || platform === 'sms') return { phone: value }
       if (platform === 'facebook') return { uid: value }
       return { email: value }

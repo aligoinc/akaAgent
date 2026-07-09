@@ -211,6 +211,53 @@ interface SmsCampaignDetailInfo {
   deviceId: string
 }
 
+interface CampaignDetailTargetInfo {
+  name: string
+  phone: string
+  uid: string
+  email: string
+}
+
+type CampaignDetailTargetColumnKey = keyof CampaignDetailTargetInfo
+
+interface CampaignDetailTargetColumn {
+  key: CampaignDetailTargetColumnKey
+  label: string
+  minWidth: number
+  exportWidth: number
+}
+
+const CAMPAIGN_DETAIL_TARGET_COLUMN_DEFS: Record<CampaignDetailTargetColumnKey, CampaignDetailTargetColumn> = {
+  name: { key: 'name', label: 'Tên', minWidth: 140, exportWidth: 24 },
+  phone: { key: 'phone', label: 'SĐT', minWidth: 110, exportWidth: 16 },
+  uid: { key: 'uid', label: 'UID', minWidth: 150, exportWidth: 24 },
+  email: { key: 'email', label: 'Email', minWidth: 180, exportWidth: 30 }
+}
+
+const getCampaignDetailTargetColumns = (campaign?: Campaign | null): CampaignDetailTargetColumn[] => {
+  const requirement = getCampaignInputDataRequirement(campaign?.actionId)
+  const keys: CampaignDetailTargetColumnKey[] = ['name']
+
+  switch (requirement?.field) {
+    case 'phone':
+      keys.push('phone')
+      break
+    case 'uid':
+      keys.push('uid')
+      break
+    case 'email':
+      keys.push('email')
+      break
+    case 'phone_or_uid':
+      keys.push('phone', 'uid')
+      break
+    case 'name':
+      break
+  }
+
+  return Array.from(new Set(keys)).map(key => CAMPAIGN_DETAIL_TARGET_COLUMN_DEFS[key])
+}
+
 const readDetailText = (value: unknown): string => {
   if (typeof value === 'string') return value.trim()
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
@@ -224,6 +271,56 @@ const readDetailDataText = (data: Record<string, unknown> | undefined, ...keys: 
     if (value) return value
   }
   return ''
+}
+
+const isDetailRecord = (value: unknown): value is Record<string, unknown> => (
+  !!value && typeof value === 'object' && !Array.isArray(value)
+)
+
+const readNestedDetailDataText = (data: Record<string, unknown> | undefined, ...keys: string[]): string => {
+  const direct = readDetailDataText(data, ...keys)
+  if (direct) return direct
+  if (!data) return ''
+
+  for (const nestedKey of ['target', 'zaloTarget', 'inputData']) {
+    const nested = data[nestedKey]
+    if (!isDetailRecord(nested)) continue
+    const value = readDetailDataText(nested, ...keys)
+    if (value) return value
+  }
+  return ''
+}
+
+const displayTargetValue = (value: string): string => value || '-'
+const exportTargetValue = (value: string): string => value === '-' ? '' : value
+const buildTargetExportFields = (
+  targetInfo: CampaignDetailTargetInfo,
+  columns: CampaignDetailTargetColumn[]
+): Record<string, string> => Object.fromEntries(
+  columns.map(column => [column.label, exportTargetValue(targetInfo[column.key])])
+)
+
+const getCampaignDetailTargetInfo = (detail: CampaignDetail): CampaignDetailTargetInfo => {
+  const inputData = detail.inputData
+  const data = detail.data
+  return {
+    name: displayTargetValue(
+      readDetailText(inputData?.name) ||
+      readNestedDetailDataText(data, 'targetName', 'name', 'displayName', 'originalName', 'zaloName', 'profileName', 'groupName', 'pageName')
+    ),
+    phone: displayTargetValue(
+      readDetailText(inputData?.phone) ||
+      readNestedDetailDataText(data, 'targetPhone', 'phone')
+    ),
+    uid: displayTargetValue(
+      readDetailText(inputData?.uid) ||
+      readNestedDetailDataText(data, 'targetUid', 'uid', 'userId', 'targetUrl', 'profileUrl', 'groupUrl', 'pageUrl')
+    ),
+    email: displayTargetValue(
+      readDetailText(inputData?.email) ||
+      readNestedDetailDataText(data, 'targetEmail', 'email')
+    )
+  }
 }
 
 const getSmsCampaignDetailInfo = (detail: CampaignDetail): SmsCampaignDetailInfo => {
@@ -341,6 +438,7 @@ const ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID = 'zalo_message_group_member'
 const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const ADD_DATA_UNSUPPORTED_ACTION_IDS = new Set([
@@ -1494,7 +1592,7 @@ const canImportDataForCampaign = (campaign: Campaign, action?: CampaignAction): 
     ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID,
     ZALO_MESSAGE_GROUP_ACTION_ID
   ].includes(campaign.actionId)) return false
-  if (campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID) return true
+  if (campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID || campaign.actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID) return true
   return action?.flatformType !== 'zalo' || campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
 }
 
@@ -1539,6 +1637,24 @@ const getAddDataScanSources = (campaign: Campaign): AddCampaignDataScanSource[] 
         allowedActions: ['facebook_page_inbox_customers'],
         lockAccount: true,
         lockPageInboxPage: true
+      }]
+    case ZALO_ADD_GROUP_MEMBER_ACTION_ID:
+      return [{
+        key: 'zalo_group_members',
+        label: 'Chọn thành viên group Zalo',
+        action: 'zalo_group_members',
+        mode: 'users',
+        initialStatusFilter: 'all',
+        allowedActions: ['zalo_group_members'],
+        lockAccount: true
+      }, {
+        key: 'zalo_friends',
+        label: 'Chọn bạn bè Zalo',
+        action: 'zalo_friends',
+        mode: 'friends',
+        initialStatusFilter: 'active',
+        allowedActions: ['zalo_friends'],
+        lockAccount: true
       }]
     case ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID:
       return [{
@@ -2884,6 +3000,15 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     actionDetailFilters.timePreset,
     campaignDetails
   ])
+  const campaignDetailTargetColumns = useMemo(() => {
+    return getCampaignDetailTargetColumns(selectedCampaign)
+  }, [selectedCampaign?.actionId])
+  const campaignDetailExportTargetColumns = useMemo(
+    () => isSelectedSmsCampaign
+      ? campaignDetailTargetColumns.filter(column => column.key !== 'phone')
+      : campaignDetailTargetColumns,
+    [campaignDetailTargetColumns, isSelectedSmsCampaign]
+  )
   const actionDetailStatusOptions = useMemo<CampaignFilterOption[]>(() => {
     const optionMap = new Map(CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS.map(option => [option.value, option]))
     campaignDetails.forEach(detail => {
@@ -3291,12 +3416,14 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
     try {
       const rows = filteredCampaignDetails.map((detail, index) => {
+        const targetInfo = getCampaignDetailTargetInfo(detail)
         if (isSelectedSmsCampaign) {
           const sms = getSmsCampaignDetailInfo(detail)
           return {
             STT: index + 1,
             'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
-            'SĐT': sms.phone,
+            'SĐT': sms.phone || exportTargetValue(targetInfo.phone),
+            ...buildTargetExportFields(targetInfo, campaignDetailExportTargetColumns),
             'Nhà mạng': sms.carrierLabel === '-' ? '' : sms.carrierLabel,
             'SIM': sms.simSlot === '-' ? '' : sms.simSlot,
             'Hành động': detail.actionName || '',
@@ -3315,6 +3442,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
         return {
           STT: index + 1,
           'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
+          ...buildTargetExportFields(targetInfo, campaignDetailTargetColumns),
           'Hành động': detail.actionName || '',
           'Trạng thái': detail.status,
           'Chi tiết': detail.log || '',
@@ -3327,6 +3455,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           { wch: 6 },
           { wch: 22 },
           { wch: 14 },
+          ...campaignDetailExportTargetColumns.map(column => ({ wch: column.exportWidth })),
           { wch: 14 },
           { wch: 10 },
           { wch: 18 },
@@ -3343,6 +3472,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
         : [
           { wch: 6 },
           { wch: 22 },
+          ...campaignDetailTargetColumns.map(column => ({ wch: column.exportWidth })),
           { wch: 18 },
           { wch: 14 },
           { wch: 70 },
@@ -5007,10 +5137,15 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                           </tr>
                         ) : (
                           <tr>
-                            <th>Thời gian</th>
-                            <th>Hành động</th>
-                            <th>Trạng thái</th>
-                            <th>Chi tiết</th>
+                            <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
+                            {campaignDetailTargetColumns.map(column => (
+                              <th key={column.key} style={{ minWidth: column.minWidth, whiteSpace: 'nowrap' }}>
+                                {column.label}
+                              </th>
+                            ))}
+                            <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Hành động</th>
+                            <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                            <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
                           </tr>
                         )}
                       </thead>
@@ -5020,6 +5155,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                           const statusLabel = getDetailStatusLabel(a.status)
                           const detailLogTitle = getCampaignDetailLogTitle(a)
                           const smsDetail = isSelectedSmsCampaign ? getSmsCampaignDetailInfo(a) : null
+                          const targetInfo = getCampaignDetailTargetInfo(a)
                           return (
                             <tr key={a.id}>
                               <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
@@ -5038,9 +5174,23 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                                   </td>
                                 </>
                               ) : (
-                                <td title={a.actionName || '-'}>
-                                  <strong>{a.actionName}</strong>
-                                </td>
+                                <>
+                                  {campaignDetailTargetColumns.map(column => {
+                                    const value = targetInfo[column.key]
+                                    return (
+                                      <td
+                                        key={column.key}
+                                        className={`campaign-detail-target-cell${column.key === 'phone' ? ' campaign-detail-target-phone-cell' : ''}`}
+                                        title={value}
+                                      >
+                                        {value}
+                                      </td>
+                                    )
+                                  })}
+                                  <td title={a.actionName || '-'}>
+                                    <strong>{a.actionName}</strong>
+                                  </td>
+                                </>
                               )}
                               <td title={statusLabel}>
                                 <span style={{ color: getStatusColor(a.status) }}>

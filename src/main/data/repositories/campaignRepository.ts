@@ -615,6 +615,43 @@ function shouldCountDetailByDefault(actionCode: string | null | undefined, statu
   return LIMIT_COUNT_STATUSES.includes(status)
 }
 
+const normalizeDetailInputText = (value: unknown): string | undefined => {
+  const text = String(value ?? '').trim()
+  return text || undefined
+}
+
+async function enrichCampaignDetailsWithInputData(details: CampaignDetail[]): Promise<CampaignDetail[]> {
+  const inputDataIds = uniquePositiveIds(details.map(detail => Number(detail.inputDataId || 0)))
+  if (inputDataIds.length === 0) return details
+
+  const inputDataById = new Map<number, NonNullable<CampaignDetail['inputData']>>()
+  for (const chunk of chunkArray(inputDataIds, 1000)) {
+    const { data, error } = await client()
+      .from('auto_campaign_input_data')
+      .select('id, name, phone, uid, email')
+      .in('id', chunk)
+
+    if (error) throw new Error(`Failed to enrich campaign details with input data: ${error.message}`)
+    for (const row of data || []) {
+      const id = Number(row.id)
+      if (!Number.isFinite(id) || id <= 0) continue
+      inputDataById.set(id, {
+        id,
+        name: normalizeDetailInputText(row.name),
+        phone: normalizeDetailInputText(row.phone),
+        uid: normalizeDetailInputText(row.uid),
+        email: normalizeDetailInputText(row.email)
+      })
+    }
+  }
+
+  return details.map(detail => {
+    const inputDataId = Number(detail.inputDataId || 0)
+    const inputData = inputDataById.get(inputDataId)
+    return inputData ? { ...detail, inputData } : detail
+  })
+}
+
 async function countLimitDetailsInWindow(
   accountId: number,
   actionCode: string,
@@ -2686,18 +2723,30 @@ export async function bulkUpdateCampaignInputDataStatus(
   }
 }
 
-function getAppendInputDataDedupeKey(row: Partial<CampaignInputData>, actionId?: string | null): string {
+function getAppendInputDataDedupeKeys(row: Partial<CampaignInputData>, actionId?: string | null): string[] {
   const requirement = getCampaignInputDataRequirement(actionId)
-  if (!requirement) return ''
+  if (!requirement) return []
+  if (requirement.field === 'phone_or_uid') {
+    const keys: string[] = []
+    const phone = normalizeVietnamMobilePhone(row.phone)
+    const uid = String(row.uid || '').trim().replace(/\/+$/g, '').toLowerCase()
+    if (phone) keys.push(`phone:${phone}`)
+    if (uid) keys.push(`uid:${uid}`)
+    return keys
+  }
   const value = String(row[requirement.field] || '').trim()
-  if (actionId === 'email_send') return value.toLowerCase()
-  if (requirement.field === 'phone') return normalizeVietnamMobilePhone(value)
-  return value.replace(/\/+$/g, '').toLowerCase()
+  if (actionId === 'email_send') return value ? [value.toLowerCase()] : []
+  if (requirement.field === 'phone') {
+    const phone = normalizeVietnamMobilePhone(value)
+    return phone ? [phone] : []
+  }
+  const key = value.replace(/\/+$/g, '').toLowerCase()
+  return key ? [key] : []
 }
 
 function normalizeAppendInputDataRow(row: Partial<CampaignInputData>, actionId: string): Partial<CampaignInputData> {
   const requirement = getCampaignInputDataRequirement(actionId)
-  const shouldNormalizePhone = requirement?.field === 'phone' || isSmsCampaignAction(actionId)
+  const shouldNormalizePhone = requirement?.field === 'phone' || requirement?.field === 'phone_or_uid' || isSmsCampaignAction(actionId)
   const phone = shouldNormalizePhone
     ? normalizeVietnamMobilePhone(row.phone)
     : String(row.phone || '').trim()
@@ -2723,23 +2772,25 @@ function normalizeAppendInputDataRow(row: Partial<CampaignInputData>, actionId: 
 async function loadAppendInputDataExistingKeys(campaignId: number, actionId: string): Promise<Set<string>> {
   const requirement = getCampaignInputDataRequirement(actionId)
   if (!requirement) return new Set()
+  const selectFields = requirement.field === 'phone_or_uid' ? 'phone, uid' : requirement.field
 
   const keys = new Set<string>()
   let offset = 0
   while (true) {
     const { data, error } = await client()
       .from('auto_campaign_input_data')
-      .select(requirement.field)
+      .select(selectFields)
       .eq('campaign_id', campaignId)
       .eq('is_delete', false)
       .range(offset, offset + CAMPAIGN_INPUT_DATA_FETCH_CHUNK - 1)
 
     if (error) throw new Error(`Failed to load existing campaign input data: ${error.message}`)
 
-    const rows = data || []
+    const rows = (data || []) as unknown as Record<string, unknown>[]
     for (const row of rows) {
-      const key = getAppendInputDataDedupeKey(mapCampaignInputDataFromDB(row), actionId)
-      if (key) keys.add(key)
+      for (const key of getAppendInputDataDedupeKeys(mapCampaignInputDataFromDB(row), actionId)) {
+        keys.add(key)
+      }
     }
     if (rows.length < CAMPAIGN_INPUT_DATA_FETCH_CHUNK) break
     offset += CAMPAIGN_INPUT_DATA_FETCH_CHUNK
@@ -2802,20 +2853,20 @@ export async function addCampaignInputDataRows(
 
   for (const rawRow of rows) {
     const row = normalizeAppendInputDataRow(rawRow, campaign.actionId)
-    const key = getAppendInputDataDedupeKey(row, campaign.actionId)
-    if (!key || !isCampaignInputDataValidForAction(row, campaign.actionId)) {
+    const keys = getAppendInputDataDedupeKeys(row, campaign.actionId)
+    if (keys.length === 0 || !isCampaignInputDataValidForAction(row, campaign.actionId)) {
       skippedInvalidCount += 1
       continue
     }
-    if (batchKeys.has(key)) {
+    if (keys.some(key => batchKeys.has(key))) {
       skippedBatchDuplicateCount += 1
       continue
     }
-    batchKeys.add(key)
-    if (request.skipExistingInCampaign && existingKeys.has(key)) {
+    if (request.skipExistingInCampaign && keys.some(key => existingKeys.has(key))) {
       skippedExistingCount += 1
       continue
     }
+    keys.forEach(key => batchKeys.add(key))
     validRows.push(row)
   }
 
@@ -3166,7 +3217,7 @@ export async function listCampaignDetailsByInputData(inputDataId: number): Promi
     .order('created_at', { ascending: true })
 
   if (error) throw new Error(`Failed to list campaign details: ${error.message}`)
-  return (data || []).map(row => mapCampaignDetailFromDB(row))
+  return enrichCampaignDetailsWithInputData((data || []).map(row => mapCampaignDetailFromDB(row)))
 }
 
 export async function listCampaignDetailsByCampaign(campaignId: number): Promise<CampaignDetail[]> {
@@ -3179,7 +3230,7 @@ export async function listCampaignDetailsByCampaign(campaignId: number): Promise
     .limit(500)
 
   if (error) throw new Error(`Failed to list campaign details by campaign: ${error.message}`)
-  return (data || []).map(row => mapCampaignDetailFromDB(row))
+  return enrichCampaignDetailsWithInputData((data || []).map(row => mapCampaignDetailFromDB(row)))
 }
 
 export async function listAllCampaignDetailsByCampaign(campaignId: number): Promise<CampaignDetail[]> {

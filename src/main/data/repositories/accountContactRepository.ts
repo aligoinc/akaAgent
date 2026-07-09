@@ -1300,34 +1300,38 @@ async function enrichZaloGroupContactCounts(
   ))
   if (zaloGroupUids.length === 0) return contacts
 
-  const totalMemberByGroupId = new Map<string, number | null>()
+  const groupMetaByGroupId = new Map<string, { totalMember: number | null; groupType: number | null }>()
   const chunkSize = 100
   for (let i = 0; i < zaloGroupUids.length; i += chunkSize) {
     const chunk = zaloGroupUids.slice(i, i + chunkSize)
     const { data, error } = await client()
       .from('zalo_groups')
-      .select('zalo_group_id, total_member')
+      .select('zalo_group_id, total_member, group_type')
       .eq('account_id', accountId)
       .eq('staff_id', staffId)
       .in('zalo_group_id', chunk)
 
     if (error) throw new Error(`Failed to enrich Zalo group contacts: ${error.message}`)
     for (const row of data || []) {
-      totalMemberByGroupId.set(
+      groupMetaByGroupId.set(
         String(row.zalo_group_id || '').trim(),
-        normalizeNullableNumber(row.total_member)
+        {
+          totalMember: normalizeNullableNumber(row.total_member),
+          groupType: normalizeNullableNumber(row.group_type)
+        }
       )
     }
   }
 
   return contacts.map(contact => {
-    const totalMember = totalMemberByGroupId.get(String(contact.uid || '').trim())
-    if (totalMember === undefined) return contact
+    const groupMeta = groupMetaByGroupId.get(String(contact.uid || '').trim())
+    if (groupMeta === undefined) return contact
     return {
       ...contact,
       extraData: {
         ...(contact.extraData || {}),
-        totalMember
+        totalMember: groupMeta.totalMember,
+        groupType: groupMeta.groupType
       }
     }
   })
@@ -1806,7 +1810,8 @@ export async function upsertZaloGroupContacts(
           source: 'zalo_get_all_groups',
           avatarUrl: normalizeNullableString(group.avatar),
           fullAvatar: normalizeNullableString(group.fullAvatar),
-          totalMember: normalizeNullableNumber(group.totalMember)
+          totalMember: normalizeNullableNumber(group.totalMember),
+          groupType: normalizeNullableNumber(group.groupType)
         },
         isJoined: group.isJoined ?? true,
         zaloGroupId: meta.id

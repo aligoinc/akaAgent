@@ -37,6 +37,7 @@ export const ZALO_CAMPAIGN_ACTION_IDS = new Set([
   'zalo_message_remarketing_customer',
   'zalo_message_friend_recommendation',
   'zalo_message_group',
+  'zalo_add_group_member',
   'zalo_join_group_link',
   'zalo_cancel_sent_friend_request'
 ])
@@ -52,6 +53,7 @@ export const ZALO_ACCOUNT_ACTION_CODES = new Set([
   'zalo_message_group',
   'zalo_message_stranger',
   'zalo_add_friend',
+  'zalo_add_group_member',
   'zalo_join_group_link',
   'zalo_cancel_sent_friend_request',
   'zalo_tag_contact',

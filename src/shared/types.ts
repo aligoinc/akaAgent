@@ -468,6 +468,9 @@ export interface CampaignExtraSettings {
   zaloCancelFriendRequestLimit?: number
   zaloCancelFriendRequestDataMaterializedAt?: string | null
   zaloCancelFriendRequestMaterializedCount?: number
+  zaloAddGroupMemberTargetGroupId?: string
+  zaloAddGroupMemberTargetGroupName?: string
+  zaloAddGroupMemberUseShareMethod?: boolean
   zaloRealtimeTriggers?: Array<'join' | 'leave' | 'interact'>
   zaloRealtimeGroupIds?: string[]
   zaloRealtimeGroupNames?: string[]
@@ -626,7 +629,7 @@ export interface CampaignInputData {
   createdAt?: string
 }
 
-export type CampaignInputDataRequirementField = 'name' | 'phone' | 'uid' | 'email'
+export type CampaignInputDataRequirementField = 'name' | 'phone' | 'uid' | 'email' | 'phone_or_uid'
 
 export interface CampaignInputDataRequirement {
   field: CampaignInputDataRequirementField
@@ -650,6 +653,7 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   zalo_message_group_realtime: { field: 'uid', label: 'UID thành viên group Zalo theo thời gian thực' },
   zalo_message_remarketing_customer: { field: 'uid', label: 'UID khách hàng Zalo đã từng gửi tin' },
   zalo_message_group: { field: 'uid', label: 'ID group Zalo' },
+  zalo_add_group_member: { field: 'phone_or_uid', label: 'SĐT hoặc UID Zalo' },
   zalo_join_group_link: { field: 'uid', label: 'Link group Zalo' },
   zalo_cancel_sent_friend_request: { field: 'uid', label: 'UID lời mời kết bạn Zalo đã gửi' },
   sms_send: { field: 'phone', label: 'SĐT SMS' },
@@ -687,6 +691,9 @@ export const isCampaignInputDataValidForAction = (
 ): boolean => {
   const requirement = getCampaignInputDataRequirement(actionId)
   if (!requirement) return false
+  if (requirement.field === 'phone_or_uid') {
+    return normalizeVietnamMobilePhone(row.phone).length > 0 || String(row.uid || '').trim().length > 0
+  }
   const value = String(row[requirement.field] || '').trim()
   if (actionId === 'email_send') return isValidEmailInputDataValue(value)
   if (requirement.field === 'phone') return normalizeVietnamMobilePhone(value).length > 0
@@ -745,6 +752,13 @@ export type CampaignDetailStatus = string
 export interface CampaignDetail {
   id: number
   inputDataId?: number | null
+  inputData?: {
+    id: number
+    name?: string
+    phone?: string
+    uid?: string
+    email?: string
+  }
   campaignId: number
   accountId?: number
   actionCode?: string | null
