@@ -1910,6 +1910,23 @@ export default function CampaignFormModal({
   const isSingleAccountSelection = Boolean((campaign && campaign.id) || requiresSingleAccount)
   const selectedAccountIdsSet = useMemo(() => new Set(formData.accountIds), [formData.accountIds])
   const selectedAllSelectableAccounts = selectableAccounts.length > 0 && selectableAccounts.every(account => selectedAccountIdsSet.has(account.id))
+  const selectedPostBumpAccountIdsSet = useMemo(
+    () => new Set(formData.postBumpAccountIds || []),
+    [formData.postBumpAccountIds]
+  )
+  const selectedPostBumpAccounts = useMemo(
+    () => selectableAccounts.filter(account => selectedPostBumpAccountIdsSet.has(account.id)),
+    [selectableAccounts, selectedPostBumpAccountIdsSet]
+  )
+  const validPostBumpAccountIds = useMemo(
+    () => selectedPostBumpAccounts.map(account => account.id),
+    [selectedPostBumpAccounts]
+  )
+  const postBumpAccountDropdownLabel = selectedPostBumpAccounts.length === 0
+    ? '-- Chọn tài khoản --'
+    : selectedPostBumpAccounts.length === 1
+      ? selectedPostBumpAccounts[0].name
+      : `Đã chọn ${selectedPostBumpAccounts.length} tài khoản`
   const getAccountIdsForPlatform = (accountIds: number[], platform: string): number[] => {
     if (!platform) return accountIds
     return accountIds.filter(id => {
@@ -2553,6 +2570,7 @@ export default function CampaignFormModal({
   const [activeStep, setActiveStep] = useState('general')
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
+  const [isPostBumpAccountDropdownOpen, setIsPostBumpAccountDropdownOpen] = useState(false)
   const [isOtherDataSourceOpen, setIsOtherDataSourceOpen] = useState(false)
   const [isZaloAddGroupMemberGroupDropdownOpen, setIsZaloAddGroupMemberGroupDropdownOpen] = useState(false)
   const [zaloAddGroupMemberGroupSearch, setZaloAddGroupMemberGroupSearch] = useState('')
@@ -2572,6 +2590,7 @@ export default function CampaignFormModal({
     postBumpContent: null
   })
   const accountDropdownRef = useRef<HTMLDivElement>(null)
+  const postBumpAccountDropdownRef = useRef<HTMLDivElement>(null)
   const otherDataSourceDropdownRef = useRef<HTMLDivElement>(null)
   const zaloAddGroupMemberGroupDropdownRef = useRef<HTMLDivElement>(null)
   const facebookGroupInviteGroupDropdownRef = useRef<HTMLDivElement>(null)
@@ -2719,6 +2738,12 @@ export default function CampaignFormModal({
     const handleClickOutside = (event: MouseEvent) => {
       if (accountDropdownRef.current && !accountDropdownRef.current.contains(event.target as Node)) {
         setIsAccountDropdownOpen(false)
+      }
+      if (
+        postBumpAccountDropdownRef.current &&
+        !postBumpAccountDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsPostBumpAccountDropdownOpen(false)
       }
       if (otherDataSourceDropdownRef.current && !otherDataSourceDropdownRef.current.contains(event.target as Node)) {
         setIsOtherDataSourceOpen(false)
@@ -4177,7 +4202,7 @@ export default function CampaignFormModal({
             ),
             postBumpMode: formData.postBumpMode,
             postBumpTargetCampaignIds: formData.postBumpMode === 'select' ? getCampaignIdList(formData.postBumpTargetCampaignIds) : [],
-            postBumpAccountIds: formData.postBumpMode === 'create' ? formData.postBumpAccountIds : [],
+            postBumpAccountIds: formData.postBumpMode === 'create' ? validPostBumpAccountIds : [],
             postBumpContent: formData.postBumpContent,
             postBumpCreatedCampaignIdsByAccount: formData.postBumpCreatedCampaignIdsByAccount,
             postBumpRotationIndex: formData.postBumpRotationIndex,
@@ -4766,7 +4791,7 @@ export default function CampaignFormModal({
         return
       }
       if (formData.postBumpMode === 'create') {
-        if (formData.postBumpAccountIds.length === 0) {
+        if (validPostBumpAccountIds.length === 0) {
           showAlert('Vui lòng chọn ít nhất một tài khoản để tạo chiến dịch up tin.', 'error')
           return
         }
@@ -9584,7 +9609,10 @@ export default function CampaignFormModal({
               name="postBumpMode"
               value="select"
               checked={formData.postBumpMode === 'select'}
-              onChange={() => setFormData(p => ({ ...p, postBumpMode: 'select' }))}
+              onChange={() => {
+                setIsPostBumpAccountDropdownOpen(false)
+                setFormData(p => ({ ...p, postBumpMode: 'select' }))
+              }}
             />
             <span>Chọn chiến dịch</span>
           </label>
@@ -9617,23 +9645,64 @@ export default function CampaignFormModal({
         </div>
       ) : (
         <>
-          <div className="stepper-form-group">
+          <div
+            className="stepper-form-group"
+            ref={postBumpAccountDropdownRef}
+            onKeyDown={event => {
+              if (event.key === 'Escape') setIsPostBumpAccountDropdownOpen(false)
+            }}
+          >
             <label>Chọn tài khoản tạo chiến dịch up tin</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
-              {accounts.map(account => (
-                <label key={account.id} className="schedule-checkbox-label" title={account.name}>
-                  <input
-                    type="checkbox"
-                    checked={(formData.postBumpAccountIds || []).includes(account.id)}
-                    onChange={() => togglePostBumpAccount(account.id)}
-                  />
-                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {account.name} <span style={{ color: 'var(--text-tertiary)' }}>({account.flatformType})</span>
-                  </span>
-                </label>
-              ))}
-              {accounts.length === 0 && (
-                <div className="text-muted" style={{ fontSize: 13 }}>Chưa có tài khoản nào.</div>
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="stepper-input"
+                aria-expanded={isPostBumpAccountDropdownOpen}
+                style={{
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  textAlign: 'left',
+                  backgroundColor: isPostBumpAccountDropdownOpen ? 'var(--bg-secondary)' : 'var(--bg-primary)'
+                }}
+                onClick={() => setIsPostBumpAccountDropdownOpen(current => !current)}
+              >
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                  {postBumpAccountDropdownLabel}
+                </span>
+                <ChevronDown
+                  size={16}
+                  style={{
+                    flexShrink: 0,
+                    transform: isPostBumpAccountDropdownOpen ? 'rotate(180deg)' : 'none',
+                    transition: 'transform 0.2s'
+                  }}
+                />
+              </button>
+
+              {isPostBumpAccountDropdownOpen && (
+                <div className="account-select-menu">
+                  <div className="account-checkbox-list" role="group" aria-label="Tài khoản tạo chiến dịch up tin">
+                    {selectableAccounts.map(account => (
+                      <label key={account.id} className="account-checkbox-option" title={account.name}>
+                        <input
+                          type="checkbox"
+                          checked={selectedPostBumpAccountIdsSet.has(account.id)}
+                          onChange={() => togglePostBumpAccount(account.id)}
+                        />
+                        <span>
+                          {account.name} <span style={{ color: 'var(--text-tertiary)' }}>({account.flatformType})</span>
+                        </span>
+                      </label>
+                    ))}
+                    {selectableAccounts.length === 0 && (
+                      <div className="text-muted" style={{ fontSize: 13, textAlign: 'center', padding: '8px 0' }}>
+                        Chưa có tài khoản Facebook nào.
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -9881,7 +9950,10 @@ export default function CampaignFormModal({
           <input
             type="checkbox"
             checked={formData.enablePostBump}
-            onChange={e => setFormData(p => ({ ...p, enablePostBump: e.target.checked }))}
+            onChange={e => {
+              if (!e.target.checked) setIsPostBumpAccountDropdownOpen(false)
+              setFormData(p => ({ ...p, enablePostBump: e.target.checked }))
+            }}
           />
           <span>Kiêm up tin</span>
         </label>

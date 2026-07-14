@@ -985,7 +985,7 @@ export default function MediaLibraryModal({
                       <tr>
                         {isPicker && <th style={{ width: 44 }}></th>}
                         {canDeleteMedia && (
-                          <th style={{ width: 44 }} className="text-center">
+                          <th style={{ width: 44, textAlign: 'center' }} className="text-center">
                             <input
                               ref={deleteSelectAllRef}
                               type="checkbox"
