@@ -15,6 +15,9 @@
     "postinstall": "electron-builder install-app-deps",
     "build:win": "node scripts/build-win.cjs",
     "build:server:win": "node scripts/build-server-win.cjs",
+    "test:zalo-origin-policy": "node scripts/run-zalo-server-origin-policy-smoke-test.cjs",
+    "test:zalo-ticket-verifier": "node scripts/run-zalo-server-ticket-verifier-smoke-test.cjs",
+    "load-test:zalo-gateway": "node scripts/run-zalo-server-gateway-load-test.cjs",
     "build:mac": "npm run build && electron-builder --mac dir --arm64 --config.mac.identity=null --publish never && node scripts/sign-mac-adhoc.cjs dist/mac-arm64/akaBizAuto.app && electron-builder --mac dmg --arm64 --prepackaged dist/mac-arm64 --config.mac.identity=null --config.mac.artifactName='akaAgent.${ext}' --publish never",
     "build:mac:intel": "node scripts/build-mac-intel.cjs"
   },

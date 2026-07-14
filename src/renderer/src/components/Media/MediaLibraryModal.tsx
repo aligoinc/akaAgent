@@ -80,8 +80,8 @@ const getUploadSizeError = (file: File): string => {
   return `${label} vượt quá dung lượng tối đa ${formatBytes(limit)}.`
 }
 
-const getMediaQuotaError = (activeCount: number): string =>
-  `Thư viện media đã có ${activeCount}/${MEDIA_LIBRARY_MAX_FILES_PER_STAFF} file. Vui lòng xoá bớt media trước khi upload thêm.`
+const getMediaQuotaError = (): string =>
+  'Thư viện media đã đầy. Vui lòng xoá bớt media trước khi upload thêm.'
 
 const formatDateTime = (value?: string): string => {
   if (!value) return '-'
@@ -112,6 +112,7 @@ export default function MediaLibraryModal({
   const showConfirm = useUiStore(s => s.showConfirm)
   const isAdmin = !!user?.isAdminAkabiz
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const deleteSelectAllRef = useRef<HTMLInputElement>(null)
   const groupMembershipRequestRef = useRef(0)
   const selectedGroupIdRef = useRef<number | null>(null)
   const [settings, setSettings] = useState<MediaStorageSettings>(EMPTY_SETTINGS)
@@ -130,8 +131,10 @@ export default function MediaLibraryModal({
   const [groupFormName, setGroupFormName] = useState('')
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set())
+  const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(() => new Set())
 
   const pickerLimit = Math.max(1, maxSelect ?? Number.MAX_SAFE_INTEGER)
   const isPicker = !!onConfirm
@@ -140,7 +143,8 @@ export default function MediaLibraryModal({
   const activeMediaCount = files.length
   const selectedGroup = selectedGroupId ? groups.find(group => group.id === selectedGroupId) || null : null
   const canDeleteMedia = !isPicker && selectedGroupId === null
-  const tableColSpan = isPicker ? 9 : 8
+  const showSelectionColumn = isPicker || canDeleteMedia
+  const tableColSpan = showSelectionColumn ? 9 : 8
   const groupFileOrder = useMemo(
     () => new Map(Array.from(groupFileIds).map((id, index) => [id, index])),
     [groupFileIds]
@@ -233,6 +237,31 @@ export default function MediaLibraryModal({
       : rows
   }, [files, groupFileIds, groupFileOrder, onlyImages, search, selectedGroupId])
 
+  const visibleDeleteIds = useMemo(
+    () => canDeleteMedia ? filteredFiles.map(file => file.id) : [],
+    [canDeleteMedia, filteredFiles]
+  )
+  const selectedDeleteFiles = useMemo(
+    () => files.filter(file => selectedDeleteIds.has(file.id)),
+    [files, selectedDeleteIds]
+  )
+  const allVisibleDeleteSelected = visibleDeleteIds.length > 0
+    && visibleDeleteIds.every(id => selectedDeleteIds.has(id))
+  const someVisibleDeleteSelected = visibleDeleteIds.some(id => selectedDeleteIds.has(id))
+
+  useEffect(() => {
+    if (!deleteSelectAllRef.current) return
+    deleteSelectAllRef.current.indeterminate = someVisibleDeleteSelected && !allVisibleDeleteSelected
+  }, [allVisibleDeleteSelected, someVisibleDeleteSelected])
+
+  useEffect(() => {
+    const existingIds = new Set(files.map(file => file.id))
+    setSelectedDeleteIds(current => {
+      const next = new Set(Array.from(current).filter(id => existingIds.has(id)))
+      return next.size === current.size ? current : next
+    })
+  }, [files])
+
   const selectedGroupSnapshots = useMemo(() => {
     if (!selectedGroupId) return []
     return files
@@ -309,6 +338,7 @@ export default function MediaLibraryModal({
     setGroupFileIds(new Set())
     setGroupMembershipLoading(!!groupId)
     setGroupManageMode(false)
+    setSelectedDeleteIds(new Set())
     setSelectedGroupId(groupId)
   }
 
@@ -421,7 +451,7 @@ export default function MediaLibraryModal({
     if (rawFiles.length === 0) return
 
     if (activeMediaCount + rawFiles.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
-      showAlert(getMediaQuotaError(activeMediaCount), 'error')
+      showAlert(getMediaQuotaError(), 'error')
       return
     }
 
@@ -498,6 +528,7 @@ export default function MediaLibraryModal({
   }
 
   const handleDelete = (file: MediaFile) => {
+    if (deleting) return
     showConfirm(
       `Xoá media "${file.originalName}" khỏi thư viện?`,
       async () => {
@@ -517,6 +548,71 @@ export default function MediaLibraryModal({
           void loadGroups()
         } catch (err) {
           showAlert(err instanceof Error ? err.message : 'Không thể xoá media.', 'error')
+        }
+      },
+      { title: 'Xoá media', confirmText: 'Xoá', variant: 'danger' }
+    )
+  }
+
+  const toggleDeleteSelect = (fileId: number) => {
+    if (!canDeleteMedia || deleting) return
+    setSelectedDeleteIds(current => {
+      const next = new Set(current)
+      if (next.has(fileId)) next.delete(fileId)
+      else next.add(fileId)
+      return next
+    })
+  }
+
+  const toggleAllVisibleDelete = () => {
+    if (!canDeleteMedia || deleting || visibleDeleteIds.length === 0) return
+    setSelectedDeleteIds(current => {
+      const next = new Set(current)
+      if (allVisibleDeleteSelected) {
+        for (const id of visibleDeleteIds) next.delete(id)
+      } else {
+        for (const id of visibleDeleteIds) next.add(id)
+      }
+      return next
+    })
+  }
+
+  const handleBulkDelete = () => {
+    if (deleting || selectedDeleteFiles.length === 0) return
+    const filesToDelete = [...selectedDeleteFiles]
+    const idsToDelete = filesToDelete.map(file => file.id)
+    showConfirm(
+      `Xoá ${idsToDelete.length} media đã chọn khỏi thư viện?`,
+      async () => {
+        setDeleting(true)
+        try {
+          const deletedIds = await window.electronAPI.deleteMediaFiles(idsToDelete)
+          const deletedIdSet = new Set(deletedIds)
+          const deletedFiles = filesToDelete.filter(file => deletedIdSet.has(file.id))
+          setFiles(current => current.filter(file => !deletedIdSet.has(file.id)))
+          setSelectedDeleteIds(current => new Set(Array.from(current).filter(id => !deletedIdSet.has(id))))
+          setSelectedKeys(current => {
+            const deletedKeys = new Set(deletedFiles.map(file => getSnapshotKey(fileToSnapshot(file))))
+            return new Set(Array.from(current).filter(key => !deletedKeys.has(key)))
+          })
+          setGroupFileIds(current => {
+            const next = new Set(current)
+            for (const id of deletedIds) next.delete(id)
+            return next
+          })
+          await loadGroups()
+          if (deletedIds.length === idsToDelete.length) {
+            showAlert(`Đã xoá ${deletedIds.length} media.`, 'success')
+          } else {
+            showAlert(
+              `Đã xoá ${deletedIds.length}/${idsToDelete.length} media. Vui lòng tải lại để kiểm tra các media còn lại.`,
+              'info'
+            )
+          }
+        } catch (err) {
+          showAlert(err instanceof Error ? err.message : 'Không thể xoá media.', 'error')
+        } finally {
+          setDeleting(false)
         }
       },
       { title: 'Xoá media', confirmText: 'Xoá', variant: 'danger' }
@@ -828,10 +924,6 @@ export default function MediaLibraryModal({
                       style={{ display: 'none' }}
                       onChange={handleUploadChange}
                     />
-                    <div className="media-library-quota" title={`Đã dùng ${activeMediaCount}/${MEDIA_LIBRARY_MAX_FILES_PER_STAFF} media`}>
-                      <span>Đã dùng</span>
-                      <strong>{activeMediaCount}/{MEDIA_LIBRARY_MAX_FILES_PER_STAFF}</strong>
-                    </div>
                     <div className="media-library-active-group" title={selectedGroup?.name || 'Tất cả media'}>
                       <Folder size={14} />
                       <span>{selectedGroup?.name || 'Tất cả media'}</span>
@@ -859,12 +951,53 @@ export default function MediaLibraryModal({
                   </div>
                 </div>
 
+                {canDeleteMedia && selectedDeleteFiles.length > 0 && (
+                  <div className="campaign-bulk-action-bar media-library-bulk-action-bar">
+                    <span>Đã chọn <strong>{selectedDeleteFiles.length}</strong> media</span>
+                    <div className="bulk-action-buttons">
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        disabled={deleting}
+                        onClick={handleBulkDelete}
+                        title="Xoá media đã chọn"
+                      >
+                        {deleting ? <RefreshCw size={12} className="spin" /> : <Trash2 size={12} />}
+                        <span>{deleting ? 'Đang xoá' : 'Xoá'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        disabled={deleting}
+                        onClick={() => setSelectedDeleteIds(new Set())}
+                        title="Bỏ chọn tất cả"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {!isPicker && selectedGroupId && groupManageMode ? renderGroupManagePanel() : (
                 <div className="stepper-grid-container media-library-grid">
                   <table className="campaign-grid">
                     <thead>
                       <tr>
                         {isPicker && <th style={{ width: 44 }}></th>}
+                        {canDeleteMedia && (
+                          <th style={{ width: 44 }} className="text-center">
+                            <input
+                              ref={deleteSelectAllRef}
+                              type="checkbox"
+                              checked={allVisibleDeleteSelected}
+                              onChange={toggleAllVisibleDelete}
+                              disabled={deleting || visibleDeleteIds.length === 0}
+                              title="Chọn tất cả media đang hiển thị"
+                              aria-label="Chọn tất cả media đang hiển thị"
+                              aria-checked={someVisibleDeleteSelected && !allVisibleDeleteSelected ? 'mixed' : allVisibleDeleteSelected}
+                            />
+                          </th>
+                        )}
                         <th style={{ width: 56, textAlign: 'center' }}>STT</th>
                         <th style={{ width: canDeleteMedia ? 76 : 44 }}></th>
                         <th style={{ width: 240 }}>Tên file</th>
@@ -884,7 +1017,9 @@ export default function MediaLibraryModal({
                         const snapshot = fileToSnapshot(file)
                         const key = getSnapshotKey(snapshot)
                         const selectable = !isPicker || !onlyImages || isImageMime(file.mimeType)
-                        const selected = selectable && selectedKeys.has(key)
+                        const pickerSelected = isPicker && selectable && selectedKeys.has(key)
+                        const deleteSelected = canDeleteMedia && selectedDeleteIds.has(file.id)
+                        const selected = pickerSelected || deleteSelected
                         return (
                           <tr
                             key={file.id}
@@ -895,10 +1030,21 @@ export default function MediaLibraryModal({
                               <td className="text-center">
                                 <input
                                   type="checkbox"
-                                  checked={selected}
+                                  checked={pickerSelected}
                                   onChange={() => toggleSelect(file)}
                                   disabled={!selectable}
                                   title={!selectable ? 'Chỉ chọn được ảnh trong mục này' : undefined}
+                                />
+                              </td>
+                            )}
+                            {canDeleteMedia && (
+                              <td className="text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={deleteSelected}
+                                  onChange={() => toggleDeleteSelect(file.id)}
+                                  disabled={deleting}
+                                  aria-label={`Chọn media ${file.originalName}`}
                                 />
                               </td>
                             )}
@@ -919,6 +1065,7 @@ export default function MediaLibraryModal({
                                       event.stopPropagation()
                                       handleDelete(file)
                                     }}
+                                    disabled={deleting}
                                     title="Xoá"
                                   >
                                     <Trash2 size={14} />

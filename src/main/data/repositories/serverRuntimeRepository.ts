@@ -224,6 +224,73 @@ export async function authenticateZaloRuntimeHandoff(
   return authenticateZaloRuntimeUser(username, password, false)
 }
 
+/**
+ * Revalidate the revocable control session behind a short-lived realtime ticket.
+ * Staff mode/product capability is cached independently so many tabs do not
+ * multiply the heavier entitlement query.
+ */
+export async function hasLiveControlRealtimeSession(
+  staffId: number,
+  organizationId: number,
+  sessionId: string
+): Promise<boolean> {
+  const normalizedStaffId = Math.floor(Number(staffId))
+  const normalizedOrganizationId = Math.floor(Number(organizationId))
+  const normalizedSessionId = String(sessionId || '').trim()
+  if (
+    !Number.isSafeInteger(normalizedStaffId) || normalizedStaffId <= 0 ||
+    !Number.isSafeInteger(normalizedOrganizationId) || normalizedOrganizationId <= 0 ||
+    !normalizedSessionId
+  ) return false
+
+  const { data: sessionData, error: sessionError } = await client()
+    .rpc('validate_control_session', {
+      p_session_id: normalizedSessionId,
+      p_staff_id: normalizedStaffId,
+      p_organization_id: normalizedOrganizationId
+    })
+
+  if (sessionError) throwServerRuntimeTechnicalError('revalidate control realtime session', sessionError)
+  return sessionData === true
+}
+
+export async function hasLiveZaloServerRealtimeCapability(
+  staffId: number,
+  organizationId: number
+): Promise<boolean> {
+  const normalizedStaffId = Math.floor(Number(staffId))
+  const normalizedOrganizationId = Math.floor(Number(organizationId))
+  if (
+    !Number.isSafeInteger(normalizedStaffId) || normalizedStaffId <= 0 ||
+    !Number.isSafeInteger(normalizedOrganizationId) || normalizedOrganizationId <= 0
+  ) return false
+
+  const { data, error } = await client()
+    .from('org_staff')
+    .select('id, organization_id, is_active, is_zalo_server')
+    .eq('id', normalizedStaffId)
+    .maybeSingle()
+
+  if (error) throwServerRuntimeTechnicalError('revalidate Zalo server realtime access', error)
+  const staff = data as {
+    id?: number | null
+    organization_id?: number | null
+    is_active?: boolean | null
+    is_zalo_server?: boolean | null
+  } | null
+  if (
+    !staff ||
+    Number(staff.organization_id) !== normalizedOrganizationId ||
+    !staff.is_active ||
+    !staff.is_zalo_server
+  ) return false
+
+  const organizationNames = await loadOrganizationNameMap([normalizedOrganizationId])
+  if (!organizationNames.has(normalizedOrganizationId)) return false
+  const entitlements = await loadOrganizationEntitlements(normalizedOrganizationId)
+  return entitlements.zalo
+}
+
 async function authenticateZaloRuntimeUser(
   username: string,
   password: string,

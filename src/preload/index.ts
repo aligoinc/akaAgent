@@ -303,6 +303,9 @@ const electronAPI = {
   deleteMediaFile: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.MEDIA_FILES_DELETE, id),
 
+  deleteMediaFiles: (ids: number[]): Promise<number[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.MEDIA_FILES_DELETE_MANY, ids),
+
   listMediaGroups: (): Promise<MediaGroup[]> =>
     ipcRenderer.invoke(IPC_EVENTS.MEDIA_GROUPS_LIST),
 

@@ -647,7 +647,9 @@ export class CampaignScheduler {
     }
     this.stopAllBackgroundPreviews()
     this.backgroundPages.destroyAll()
-    this.sendLog('⏹ Scheduler đã dừng.')
+    if (this.runtimeTarget !== 'server') {
+      this.sendLog('⏹ Scheduler đã dừng.')
+    }
   }
 
   private startPolling(): void {

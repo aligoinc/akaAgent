@@ -5,7 +5,9 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { runWithCurrentUser } from '../../main/data/currentUser'
 import {
   authenticateZaloRuntimeHandoff,
-  authenticateZaloServerClient
+  authenticateZaloServerClient,
+  hasLiveControlRealtimeSession,
+  hasLiveZaloServerRealtimeCapability
 } from '../../main/data/repositories/serverRuntimeRepository'
 import { ZALO_SERVER_IPC } from '../../shared/zaloServerProtocol'
 import { installServerFileLogger, type ServerFileLogger } from './serverFileLogger'
@@ -17,8 +19,23 @@ let mainWindow: BrowserWindow | null = null
 let gateway: ZaloServerGateway | null = null
 let runtimeManager: ZaloServerRuntimeManager | null = null
 let serverFileLogger: ServerFileLogger | null = null
+let clientCountSnapshotTimer: ReturnType<typeof setTimeout> | null = null
 let shutdownStarted = false
 let shutdownComplete = false
+
+function scheduleClientCountSnapshot(): void {
+  if (shutdownStarted) return
+  if (clientCountSnapshotTimer) clearTimeout(clientCountSnapshotTimer)
+  clientCountSnapshotTimer = setTimeout(() => {
+    clientCountSnapshotTimer = null
+    if (shutdownStarted) return
+    gateway?.broadcastSnapshot()
+    const window = mainWindow
+    if (window && !window.isDestroyed()) {
+      window.webContents.send(ZALO_SERVER_IPC.SNAPSHOT_UPDATED, runtimeManager?.getSnapshot())
+    }
+  }, 250)
+}
 
 function configureServerDataPath(): string {
   if (process.platform !== 'win32') return app.getPath('userData')
@@ -88,6 +105,8 @@ async function startServer(): Promise<void> {
   runtimeManager = new ZaloServerRuntimeManager({
     adminWindow: () => mainWindow,
     publishEvent: event => gateway?.publish(event),
+    publishLiveEvent: event => gateway?.publishLive(event),
+    publishControlEvent: event => gateway?.publishControl(event),
     broadcastSnapshot: () => gateway?.broadcastSnapshot(),
     connectedClientCount: () => gateway?.connectedClientCount || 0,
     listeningAt: () => gateway?.listeningAt || 'http://127.0.0.1:8787',
@@ -111,14 +130,14 @@ async function startServer(): Promise<void> {
       return runWithCurrentUser(user, () => runtimeManager!.handoffToDesktop(user.staffId))
     },
     getSnapshot: staffId => runtimeManager!.getSnapshot(staffId),
+    getOperations: staffId => runtimeManager!.getOperations(staffId),
     executeCommand: (staffId, command, args) => runtimeManager!.executeCommand(staffId, command, args),
-    onClientCountChanged: () => {
-      gateway?.broadcastSnapshot()
-      const window = mainWindow
-      if (window && !window.isDestroyed()) {
-        window.webContents.send(ZALO_SERVER_IPC.SNAPSHOT_UPDATED, runtimeManager?.getSnapshot())
-      }
-    }
+    startControlOperation: (staffId, command, args) => runtimeManager!.startControlOperation(staffId, command, args),
+    revalidateControlSession: (staffId, organizationId, sessionId) =>
+      hasLiveControlRealtimeSession(staffId, organizationId, sessionId),
+    revalidateControlCapability: (staffId, organizationId) =>
+      hasLiveZaloServerRealtimeCapability(staffId, organizationId),
+    onClientCountChanged: scheduleClientCountSnapshot
   })
 
   ipcMain.handle(ZALO_SERVER_IPC.GET_SNAPSHOT, () => runtimeManager!.getSnapshot())
@@ -138,6 +157,10 @@ async function startServer(): Promise<void> {
 async function shutdown(): Promise<void> {
   if (shutdownStarted) return
   shutdownStarted = true
+  if (clientCountSnapshotTimer) {
+    clearTimeout(clientCountSnapshotTimer)
+    clientCountSnapshotTimer = null
+  }
   console.log('[akaAgent Zalo Server] Graceful shutdown started.')
   try {
     // Start both shutdown barriers immediately. Runtime discovery/commands must

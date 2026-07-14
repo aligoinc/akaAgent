@@ -1,6 +1,8 @@
 export const ZALO_SERVER_DEFAULT_ORIGIN = 'https://akazalo.akabiz.net'
 export const ZALO_SERVER_INTERNAL_HOST = '127.0.0.1'
 export const ZALO_SERVER_INTERNAL_PORT = 8787
+/** Live control state only; never render this channel as an activity log. */
+export const ZALO_SERVER_OPERATION_UPDATED_CHANNEL = 'zalo-server:operation-updated'
 
 export const ZALO_SERVER_IPC = {
   GET_SNAPSHOT: 'zalo-server:get-snapshot',
@@ -18,6 +20,22 @@ export interface ZaloServerRuntimeEvent {
   organizationId: number
   channel: string
   payload: unknown
+}
+
+export type ZaloServerOperationStatus = 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface ZaloServerOperationSnapshot {
+  operationId: string
+  staffId: number
+  organizationId: number
+  command: ZaloServerCommandName
+  accountId: number | null
+  status: ZaloServerOperationStatus
+  startedAt: string
+  updatedAt: string
+  completedAt: string | null
+  result?: unknown
+  error?: string
 }
 
 export interface ZaloServerStaffSnapshot {
@@ -120,6 +138,9 @@ export interface ZaloServerHelloMessage {
   type: 'hello'
   snapshot: ZaloServerSnapshot
   events: ZaloServerRuntimeEvent[]
+  /** Control-web clients always start at the connection boundary. */
+  liveOnly?: boolean
+  operations?: ZaloServerOperationSnapshot[]
 }
 
 export interface ZaloServerEventMessage {

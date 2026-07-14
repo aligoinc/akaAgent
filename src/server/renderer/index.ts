@@ -24,6 +24,8 @@ const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const ACCOUNT_STATUS_UPDATED_CHANNEL = 'account:status-updated'
 const CAMPAIGN_STATUS_UPDATED_CHANNEL = 'campaign:status-updated'
 const V2_RUN_CHANNEL_PREFIX = 'v2:run:'
+const OPERATION_UPDATED_CHANNEL = 'zalo-server:operation-updated'
+const RUNTIME_STATE_CHANNEL = 'zalo-server:runtime-state'
 
 const dateTimeFormatter = new Intl.DateTimeFormat('vi-VN', {
   timeZone: VIETNAM_TIME_ZONE,
@@ -157,6 +159,7 @@ function eventKey(event: ZaloServerRuntimeEvent): string {
 
 function isVisibleAdminLogEvent(event: ZaloServerRuntimeEvent): boolean {
   if (event.channel === CAMPAIGN_STATUS_UPDATED_CHANNEL) return false
+  if (event.channel === OPERATION_UPDATED_CHANNEL || event.channel === RUNTIME_STATE_CHANNEL) return false
   if (event.channel.startsWith(V2_RUN_CHANNEL_PREFIX)) return false
   if (
     event.channel === ACCOUNT_STATUS_UPDATED_CHANNEL &&
