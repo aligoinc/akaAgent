@@ -1,8 +1,12 @@
+import { randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
 import { IPC_EVENTS, type AuthUser, type AutoAccountContact, type ZaloLabelOption } from '../../shared/types'
 import {
   ZALO_SERVER_IPC,
+  ZALO_SERVER_OPERATION_UPDATED_CHANNEL,
   type ZaloServerCommandName,
+  type ZaloServerOperationSnapshot,
+  type ZaloServerOperationStatus,
   type ZaloServerRuntimeEvent,
   type ZaloServerRuntimeHandoffResponse,
   type ZaloServerRuntimeState,
@@ -10,7 +14,6 @@ import {
   type ZaloServerStaffSnapshot
 } from '../../shared/zaloServerProtocol'
 import { requireCurrentUser, runWithCurrentUser } from '../../main/data/currentUser'
-import type { StaffZaloRunningState } from '../../main/data/repositories/accountRepository'
 import {
   listActiveZaloServerUsers,
   type ZaloServerRuntimeUser
@@ -31,6 +34,7 @@ import type { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
 
 const RECONCILE_INTERVAL_MS = 60_000
 const RECENT_EVENT_LIMIT = 1000
+const RECENT_OPERATION_LIMIT_PER_STAFF = 200
 
 interface StaffRuntime {
   user: ZaloServerRuntimeUser
@@ -46,12 +50,15 @@ interface StaffRuntime {
   activeCommands: Set<Promise<unknown>>
   qrAccountClaims: Map<number, 'chờ xử lý' | 'tạm dừng'>
   qrReleasePromises: Map<number, Promise<void>>
+  controlOperationIds: Map<number, string>
   stopDeferred: boolean
 }
 
 export interface ZaloServerRuntimeManagerOptions {
   adminWindow(): BrowserWindow | null
   publishEvent(event: ZaloServerRuntimeEvent): void
+  publishLiveEvent(event: ZaloServerRuntimeEvent): void
+  publishControlEvent(event: ZaloServerRuntimeEvent): void
   broadcastSnapshot(): void
   connectedClientCount(): number
   listeningAt(): string
@@ -87,6 +94,18 @@ function markServerCampaignLog(channel: string, payload: unknown): unknown {
   return { ...payload, source: 'server' }
 }
 
+function isUserFacingActivityChannel(channel: string): boolean {
+  return channel === IPC_EVENTS.CAMPAIGN_LOG ||
+    channel === IPC_EVENTS.ZALO_LOGIN_QR_EVENT ||
+    channel === IPC_EVENTS.CONTACTS_PROGRESS ||
+    channel === IPC_EVENTS.CONTACTS_COMPLETED
+}
+
+function isLiveUiStateChannel(channel: string): boolean {
+  return channel === IPC_EVENTS.CAMPAIGN_STATUS_UPDATED ||
+    channel === IPC_EVENTS.ACCOUNT_STATUS_UPDATED
+}
+
 export class ZaloServerRuntimeManager {
   private readonly startedAt = new Date().toISOString()
   private readonly runtimes = new Map<number, StaffRuntime>()
@@ -99,6 +118,7 @@ export class ZaloServerRuntimeManager {
   private initialDiscoveryComplete = false
   private lastDiscoveredStaffIds = new Set<number>()
   private readonly handoffRequiredStaffIds = new Set<number>()
+  private readonly operations = new Map<string, ZaloServerOperationSnapshot>()
 
   constructor(private readonly options: ZaloServerRuntimeManagerOptions) {}
 
@@ -287,7 +307,102 @@ export class ZaloServerRuntimeManager {
     )
   }
 
-  async executeCommand(staffId: number, command: ZaloServerCommandName, args: unknown[]): Promise<unknown> {
+  /**
+   * Start a browser/PWA command independently from the requesting socket. The
+   * operation remains owned by the server runtime when that browser disconnects.
+   */
+  startControlOperation(
+    staffId: number,
+    command: ZaloServerCommandName,
+    args: unknown[]
+  ): ZaloServerOperationSnapshot {
+    const runtime = this.runtimes.get(staffId)
+    const organizationId = runtime?.user.organizationId
+    if (
+      !runtime ||
+      runtime.state !== 'running' ||
+      !runtime.supabase ||
+      !runtime.scheduler ||
+      !runtime.zaloRuntime ||
+      !runtime.contactLoader ||
+      !organizationId
+    ) {
+      throw new Error('Runtime Zalo của staff chưa sẵn sàng')
+    }
+    const accountId = command === 'campaign.pause'
+      ? null
+      : this.normalizeAccountId(args[0])
+    const timestamp = new Date().toISOString()
+    const operation: ZaloServerOperationSnapshot = {
+      operationId: randomUUID(),
+      staffId,
+      organizationId,
+      command,
+      accountId,
+      status: 'running',
+      startedAt: timestamp,
+      updatedAt: timestamp,
+      completedAt: null
+    }
+    this.operations.set(operation.operationId, operation)
+    this.pruneOperations(staffId)
+    this.emitOperationUpdate(runtime.user, operation)
+
+    // Deliberately detach from the WebSocket request. Gateway disconnects only
+    // stop delivery; runtime ownership/cleanup stays with this promise.
+    void this.executeCommand(staffId, command, args, operation.operationId)
+      .then(result => {
+        const safeResult = this.sanitizeControlOperationResult(command, result)
+        if (command === 'zalo.loginQr.start') {
+          const started = !!(result && typeof result === 'object' && (result as { success?: unknown }).success)
+          if (started) {
+            this.updateOperation(operation.operationId, 'running', safeResult)
+          } else {
+            const reason = result && typeof result === 'object'
+              ? String((result as { reason?: unknown }).reason || 'Không thể bắt đầu đăng nhập QR')
+              : 'Không thể bắt đầu đăng nhập QR'
+            this.updateOperation(operation.operationId, 'failed', safeResult, reason)
+          }
+          return
+        }
+        const stopped = !!(result && typeof result === 'object' && (result as { stopped?: unknown }).stopped)
+        const reportedFailure = !!(
+          result &&
+          typeof result === 'object' &&
+          (result as { success?: unknown }).success === false
+        )
+        if (reportedFailure) {
+          const failure = result as { error?: unknown; reason?: unknown }
+          this.updateOperation(
+            operation.operationId,
+            'failed',
+            safeResult,
+            String(failure.error || failure.reason || 'Tác vụ không hoàn thành')
+          )
+        } else {
+          this.updateOperation(operation.operationId, stopped ? 'cancelled' : 'completed', safeResult)
+        }
+      })
+      .catch(error => {
+        this.updateOperation(operation.operationId, 'failed', undefined, this.errorMessage(error))
+      })
+
+    return { ...operation }
+  }
+
+  getOperations(staffId: number): ZaloServerOperationSnapshot[] {
+    return Array.from(this.operations.values())
+      .filter(operation => operation.staffId === staffId)
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+      .map(operation => ({ ...operation }))
+  }
+
+  async executeCommand(
+    staffId: number,
+    command: ZaloServerCommandName,
+    args: unknown[],
+    controlOperationId?: string
+  ): Promise<unknown> {
     const runtime = this.runtimes.get(staffId)
     if (!runtime || runtime.state !== 'running' || !runtime.supabase || !runtime.zaloRuntime || !runtime.contactLoader) {
       throw new Error('Runtime Zalo của staff chưa sẵn sàng')
@@ -316,8 +431,27 @@ export class ZaloServerRuntimeManager {
 
     const accountId = this.normalizeAccountId(args[0])
     const bypassReservation = command === 'contacts.cancel' || command === 'zalo.loginQr.cancel'
+    const bypassAccountValidation = bypassReservation || command === 'zalo.runtime.invalidate'
+    const bindsControlEvents = !!controlOperationId && (
+      command === 'zalo.loginQr.start' ||
+      command === 'contacts.loadFriends' ||
+      command === 'contacts.loadGroups' ||
+      command === 'contacts.loadZaloGroupMembers'
+    )
+    if (!bypassAccountValidation) {
+      const account = await runWithCurrentUser(runtime.user, () => runtime.supabase!.getAccount(accountId))
+      if (!account || account.flatformType !== 'zalo') {
+        throw new Error('Tài khoản không phải Zalo hoặc không còn tồn tại')
+      }
+      if (this.runtimes.get(staffId) !== runtime || runtime.state !== 'running') {
+        throw new Error('Runtime Zalo của staff đang dừng')
+      }
+    }
     if (!bypassReservation && !runtime.scheduler?.tryReserveExternalAccount(accountId)) {
       throw new Error('Tài khoản Zalo đang thực hiện một tác vụ khác')
+    }
+    if (bindsControlEvents && controlOperationId) {
+      runtime.controlOperationIds.set(accountId, controlOperationId)
     }
     let holdQrReservation = false
     let claimedPreviousStatus: 'chờ xử lý' | 'tạm dừng' | null = null
@@ -349,7 +483,7 @@ export class ZaloServerRuntimeManager {
           case 'zalo.loginQr.start': {
             const result = await runtime.zaloRuntime!.startLoginQr(accountId)
             holdQrReservation = result.success
-            if (result.success) this.watchQrCompletion(runtime, accountId)
+            if (result.success) this.watchQrCompletion(runtime, accountId, controlOperationId)
             return result
           }
           case 'zalo.loginQr.cancel':
@@ -401,6 +535,9 @@ export class ZaloServerRuntimeManager {
           }
         }
         if (!bypassReservation && !holdQrReservation) runtime.scheduler?.releaseExternalAccount(accountId)
+        if (bindsControlEvents && controlOperationId && !holdQrReservation) {
+          this.clearBoundControlOperation(runtime, accountId, controlOperationId)
+        }
       }
     })
     runtime.activeCommands.add(operation)
@@ -501,6 +638,7 @@ export class ZaloServerRuntimeManager {
       activeCommands: new Set(),
       qrAccountClaims: new Map(),
       qrReleasePromises: new Map(),
+      controlOperationIds: new Map(),
       stopDeferred: false
     }
     this.runtimes.set(user.staffId, runtime)
@@ -520,7 +658,6 @@ export class ZaloServerRuntimeManager {
             waitingForDesktop = true
             runtime.state = 'waiting'
             runtime.lastError = null
-            this.emitRuntimeState(runtime, this.formatDesktopHandoffWaitMessage(runningState))
             return
           }
         }
@@ -615,11 +752,9 @@ export class ZaloServerRuntimeManager {
       runtime.state = 'running'
       runtime.startedAt = new Date().toISOString()
       runtime.lastError = null
-      this.emitRuntimeState(runtime, 'Runtime Zalo server đã bắt đầu')
     } catch (error) {
       runtime.state = 'error'
       runtime.lastError = this.errorMessage(error)
-      this.emitRuntimeState(runtime, `Không khởi động được runtime: ${runtime.lastError}`)
       throw error
     } finally {
       this.notifySnapshot()
@@ -636,7 +771,7 @@ export class ZaloServerRuntimeManager {
       try {
         if (wasWaitingForDesktop) return
         runtime.contactLoader?.stopAll()
-        runtime.scheduler?.blockZaloRuntimeForRestart()
+        runtime.scheduler?.blockZaloRuntimeForRestart(null)
         runtime.scheduler?.stop()
         runtime.realtimeManager?.stop()
         const waitForQr = runtime.zaloRuntime?.cancelAllLoginQrAndWait() ?? Promise.resolve(true)
@@ -657,7 +792,6 @@ export class ZaloServerRuntimeManager {
         if (!qrSettled || !commandsSettled || !schedulerIdle || !contactLoaderIdle || !realtimeIdle) {
           runtime.stopDeferred = true
           runtime.lastError = 'Đang chờ tác vụ Zalo hiện tại kết thúc an toàn'
-          this.emitRuntimeState(runtime, runtime.lastError)
           return
         }
         await Promise.allSettled(
@@ -687,7 +821,7 @@ export class ZaloServerRuntimeManager {
       return
     }
     runtime.state = 'stopped'
-    this.emitRuntimeState(runtime, 'Runtime Zalo server đã dừng')
+    this.settleRunningOperations(staffId, 'Runtime Zalo server đã dừng')
     this.runtimes.delete(staffId)
     this.notifySnapshot()
   }
@@ -704,14 +838,6 @@ export class ZaloServerRuntimeManager {
     return result.finally(() => {
       if (this.lifecycleTails.get(staffId) === tail) this.lifecycleTails.delete(staffId)
     })
-  }
-
-  private formatDesktopHandoffWaitMessage(state: StaffZaloRunningState): string {
-    const runningCount = state.accountsRunning +
-      state.campaignsRunning +
-      state.campaignInputsRunning +
-      state.campaignInputDataRunning
-    return `Đang chờ app desktop dừng và dọn ${runningCount} trạng thái Zalo đang chạy`
   }
 
   private async restoreAccountClaim(
@@ -747,12 +873,22 @@ export class ZaloServerRuntimeManager {
     return release
   }
 
-  private watchQrCompletion(runtime: StaffRuntime, accountId: number): void {
+  private watchQrCompletion(
+    runtime: StaffRuntime,
+    accountId: number,
+    controlOperationId?: string
+  ): void {
     const completion = runWithCurrentUser(runtime.user, async () => {
-      await runtime.zaloRuntime?.waitForLoginQrIdle(accountId)
-      await this.releaseQrAccountClaim(runtime, accountId)
-      runtime.scheduler?.releaseExternalAccount(accountId)
-      runtime.eventWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+      try {
+        await runtime.zaloRuntime?.waitForLoginQrIdle(accountId)
+        await this.releaseQrAccountClaim(runtime, accountId)
+        runtime.scheduler?.releaseExternalAccount(accountId)
+        runtime.eventWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+      } finally {
+        if (controlOperationId) {
+          this.clearBoundControlOperation(runtime, accountId, controlOperationId)
+        }
+      }
     })
     runtime.activeCommands.add(completion)
     void completion.finally(() => {
@@ -784,15 +920,170 @@ export class ZaloServerRuntimeManager {
       webContents: {
         send: (channel: string, ...args: unknown[]) => {
           const payload = args.length <= 1 ? args[0] : args
-          this.emit(runtime.user, channel, markServerCampaignLog(channel, payload))
+          const operationPayload = this.decorateOperationPayload(runtime, channel, payload)
+          const normalizedPayload = markServerCampaignLog(channel, operationPayload)
+          if (isUserFacingActivityChannel(channel)) {
+            this.emitActivity(runtime.user, channel, normalizedPayload)
+          } else if (isLiveUiStateChannel(channel)) {
+            this.emitLiveState(runtime.user, channel, normalizedPayload)
+          }
         }
       }
     }
     return bridge as unknown as BrowserWindow
   }
 
-  private emit(user: AuthUser, channel: string, payload: unknown): void {
-    const event: ZaloServerRuntimeEvent = {
+  private decorateOperationPayload(runtime: StaffRuntime, channel: string, payload: unknown): unknown {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload
+    const value = payload as Record<string, unknown>
+    const accountId = Math.floor(Number(value.accountId))
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) return payload
+
+    if (channel === IPC_EVENTS.ZALO_LOGIN_QR_EVENT) {
+      const operation = this.getBoundRunningOperation(runtime, accountId, command => (
+        command === 'zalo.loginQr.start'
+      ))
+      if (!operation) return payload
+      const qrStatus = String(value.status || '')
+      const safeResult = {
+        status: qrStatus,
+        message: typeof value.message === 'string' ? value.message : undefined,
+        qrImage: qrStatus === 'qr' && typeof value.qrImage === 'string' ? value.qrImage : undefined,
+        displayName: typeof value.displayName === 'string' ? value.displayName : undefined,
+        avatarUrl: typeof value.avatarUrl === 'string' ? value.avatarUrl : undefined
+      }
+      if (qrStatus === 'success') {
+        this.updateOperation(operation.operationId, 'completed', safeResult)
+      } else if (qrStatus === 'cancelled') {
+        this.updateOperation(operation.operationId, 'cancelled', safeResult)
+      } else if (qrStatus === 'expired' || qrStatus === 'declined' || qrStatus === 'error') {
+        this.updateOperation(
+          operation.operationId,
+          'failed',
+          safeResult,
+          typeof value.message === 'string' ? value.message : 'Đăng nhập QR không hoàn thành'
+        )
+      } else {
+        this.updateOperation(operation.operationId, 'running', safeResult)
+      }
+      return { ...value, operationId: operation.operationId }
+    }
+
+    if (channel === IPC_EVENTS.CONTACTS_PROGRESS || channel === IPC_EVENTS.CONTACTS_COMPLETED) {
+      const operation = this.getBoundRunningOperation(runtime, accountId, command => (
+        command === 'contacts.loadFriends' ||
+        command === 'contacts.loadGroups' ||
+        command === 'contacts.loadZaloGroupMembers'
+      ))
+      if (operation) {
+        if (channel === IPC_EVENTS.CONTACTS_PROGRESS) {
+          this.updateOperation(operation.operationId, 'running', {
+            message: typeof value.message === 'string' ? value.message : '',
+            contactType: typeof value.contactType === 'string' ? value.contactType : undefined,
+            runKey: typeof value.runKey === 'string' ? value.runKey : undefined
+          })
+        }
+        return { ...value, operationId: operation.operationId }
+      }
+    }
+    return payload
+  }
+
+  private sanitizeControlOperationResult(command: ZaloServerCommandName, result: unknown): unknown {
+    if (
+      (command !== 'zalo.session.check' && command !== 'zalo.logout') ||
+      !result ||
+      typeof result !== 'object' ||
+      Array.isArray(result)
+    ) return result
+    const value = { ...(result as Record<string, unknown>) }
+    if (value.account && typeof value.account === 'object' && !Array.isArray(value.account)) {
+      const account = { ...(value.account as Record<string, unknown>) }
+      delete account.password
+      delete account.zaloSession
+      delete account.zalo_session
+      delete account.emailSession
+      delete account.email_session
+      value.account = account
+    }
+    return value
+  }
+
+  private getBoundRunningOperation(
+    runtime: StaffRuntime,
+    accountId: number,
+    matchesCommand: (command: ZaloServerCommandName) => boolean
+  ): ZaloServerOperationSnapshot | null {
+    const operationId = runtime.controlOperationIds.get(accountId)
+    if (!operationId) return null
+    const operation = this.operations.get(operationId)
+    if (
+      !operation ||
+      operation.staffId !== runtime.user.staffId ||
+      operation.accountId !== accountId ||
+      operation.status !== 'running' ||
+      !matchesCommand(operation.command)
+    ) return null
+    return operation
+  }
+
+  private clearBoundControlOperation(
+    runtime: StaffRuntime,
+    accountId: number,
+    operationId: string
+  ): void {
+    if (runtime.controlOperationIds.get(accountId) === operationId) {
+      runtime.controlOperationIds.delete(accountId)
+    }
+  }
+
+  private updateOperation(
+    operationId: string,
+    status: ZaloServerOperationStatus,
+    result?: unknown,
+    error?: string
+  ): void {
+    const operation = this.operations.get(operationId)
+    if (!operation) return
+    if (operation.status !== 'running' && status === 'running') return
+    const now = new Date().toISOString()
+    operation.status = status
+    operation.updatedAt = now
+    operation.completedAt = status === 'running' ? null : now
+    if (result !== undefined) operation.result = result
+    if (error) operation.error = error
+    else if (status !== 'failed') delete operation.error
+    const runtime = this.runtimes.get(operation.staffId)
+    if (runtime) this.emitOperationUpdate(runtime.user, operation)
+  }
+
+  private emitOperationUpdate(user: AuthUser, operation: ZaloServerOperationSnapshot): void {
+    this.emitControlState(user, ZALO_SERVER_OPERATION_UPDATED_CHANNEL, { ...operation })
+  }
+
+  private pruneOperations(staffId: number): void {
+    const staffOperations = Array.from(this.operations.values())
+      .filter(operation => operation.staffId === staffId)
+      .sort((left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt))
+    let excess = staffOperations.length - RECENT_OPERATION_LIMIT_PER_STAFF
+    for (const operation of staffOperations) {
+      if (excess <= 0) break
+      if (operation.status === 'running') continue
+      this.operations.delete(operation.operationId)
+      excess -= 1
+    }
+  }
+
+  private settleRunningOperations(staffId: number, reason: string): void {
+    for (const operation of this.operations.values()) {
+      if (operation.staffId === staffId && operation.status === 'running') {
+        this.updateOperation(operation.operationId, 'cancelled', { message: reason }, reason)
+      }
+    }
+  }
+
+  private createEvent(user: AuthUser, channel: string, payload: unknown): ZaloServerRuntimeEvent {
+    return {
       sequence: ++this.sequence,
       timestamp: new Date().toISOString(),
       staffId: user.staffId,
@@ -800,6 +1091,10 @@ export class ZaloServerRuntimeManager {
       channel,
       payload
     }
+  }
+
+  private emitActivity(user: AuthUser, channel: string, payload: unknown): void {
+    const event = this.createEvent(user, channel, payload)
     this.recentEvents.push(event)
     if (this.recentEvents.length > RECENT_EVENT_LIMIT) {
       this.recentEvents.splice(0, this.recentEvents.length - RECENT_EVENT_LIMIT)
@@ -813,12 +1108,12 @@ export class ZaloServerRuntimeManager {
     } catch {}
   }
 
-  private emitRuntimeState(runtime: StaffRuntime, message: string): void {
-    this.emit(runtime.user, 'zalo-server:runtime-state', {
-      state: runtime.state,
-      message,
-      error: runtime.lastError
-    })
+  private emitLiveState(user: AuthUser, channel: string, payload: unknown): void {
+    this.options.publishLiveEvent(this.createEvent(user, channel, payload))
+  }
+
+  private emitControlState(user: AuthUser, channel: string, payload: unknown): void {
+    this.options.publishControlEvent(this.createEvent(user, channel, payload))
   }
 
   private notifySnapshot(): void {

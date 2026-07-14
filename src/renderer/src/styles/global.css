@@ -1911,26 +1911,6 @@ button.btn-icon:not(.btn):disabled {
   font-size: 12px;
 }
 
-.media-library-quota {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.media-library-quota strong {
-  color: var(--text-primary);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
 .media-library-active-group {
   display: inline-flex;
   align-items: center;
@@ -1961,6 +1941,12 @@ button.btn-icon:not(.btn):disabled {
 .media-library-refresh:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+.media-library-bulk-action-bar {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
 }
 
 .media-group-manage {

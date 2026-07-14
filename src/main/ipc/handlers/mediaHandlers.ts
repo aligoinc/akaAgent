@@ -27,6 +27,10 @@ export function registerMediaHandlers(supabase: SupabaseService): void {
     return supabase.deleteMediaFile(id)
   })
 
+  ipcMain.handle(IPC_EVENTS.MEDIA_FILES_DELETE_MANY, async (_, ids: number[]) => {
+    return supabase.deleteMediaFiles(ids)
+  })
+
   ipcMain.handle(IPC_EVENTS.MEDIA_GROUPS_LIST, async () => {
     return supabase.listMediaGroups()
   })

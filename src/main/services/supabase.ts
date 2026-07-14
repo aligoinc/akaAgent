@@ -205,6 +205,7 @@ export class SupabaseService {
   listMediaFiles() { return mediaFileRepo.listMediaFiles() }
   uploadMediaFiles(localPaths: string[]) { return mediaFileRepo.uploadMediaFiles(localPaths) }
   deleteMediaFile(id: number) { return mediaFileRepo.deleteMediaFile(id) }
+  deleteMediaFiles(ids: number[]) { return mediaFileRepo.deleteMediaFiles(ids) }
   listMediaGroups() { return mediaFileRepo.listMediaGroups() }
   createMediaGroup(group: Partial<MediaGroup>) { return mediaFileRepo.createMediaGroup(group) }
   updateMediaGroup(id: number, updates: Partial<MediaGroup>) { return mediaFileRepo.updateMediaGroup(id, updates) }

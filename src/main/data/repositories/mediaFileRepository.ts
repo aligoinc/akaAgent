@@ -24,6 +24,8 @@ import {
 
 const client = () => getSupabaseClient()
 const SECRET_MASK = '********'
+const MEDIA_QUERY_PAGE_SIZE = 1000
+const MEDIA_ID_FILTER_CHUNK_SIZE = 500
 
 const MEDIA_SETTING_KEYS = {
   provider: 'media.storage.provider',
@@ -73,6 +75,14 @@ function normalizeIds(values: unknown): number[] {
   return ids
 }
 
+function chunkIds(ids: number[]): number[][] {
+  const chunks: number[][] = []
+  for (let index = 0; index < ids.length; index += MEDIA_ID_FILTER_CHUNK_SIZE) {
+    chunks.push(ids.slice(index, index + MEDIA_ID_FILTER_CHUNK_SIZE))
+  }
+  return chunks
+}
+
 function buildMediaGroupItemRows(groupId: number, mediaFileIds: number[]): Array<Record<string, unknown>> {
   const baseTime = Date.now()
   return mediaFileIds.map((mediaFileId, index) => ({
@@ -95,8 +105,8 @@ function formatMediaGroupError(error: { message?: string; code?: string } | null
   return new Error(message ? `${fallback}: ${message}` : fallback)
 }
 
-function getMediaQuotaError(activeCount: number): string {
-  return `Thư viện media đã có ${activeCount}/${MEDIA_LIBRARY_MAX_FILES_PER_STAFF} file. Vui lòng xoá bớt media trước khi upload thêm.`
+function getMediaQuotaError(): string {
+  return 'Thư viện media đã đầy. Vui lòng xoá bớt media trước khi upload thêm.'
 }
 
 function isMediaImageMime(mimeType: string): boolean {
@@ -255,30 +265,41 @@ export async function testMediaStorageSettings(settings: Partial<MediaStorageSet
 
 export async function listMediaFiles(): Promise<MediaFile[]> {
   const user = requireCurrentUser()
-  const { data, error } = await client()
-    .from('auto_media_files')
-    .select('*')
-    .eq('staff_id', user.staffId)
-    .eq('is_delete', false)
-    .order('created_at', { ascending: false })
+  const rows: Array<Record<string, unknown>> = []
+  for (let from = 0; ; from += MEDIA_QUERY_PAGE_SIZE) {
+    const { data, error } = await client()
+      .from('auto_media_files')
+      .select('*')
+      .eq('staff_id', user.staffId)
+      .eq('is_delete', false)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + MEDIA_QUERY_PAGE_SIZE - 1)
 
-  if (error) throw new Error(`Không thể tải thư viện media: ${error.message}`)
-  return (data || []).map(row => mapMediaFileFromDB(row))
+    if (error) throw new Error(`Không thể tải thư viện media: ${error.message}`)
+    const page = (data || []) as Array<Record<string, unknown>>
+    rows.push(...page)
+    if (page.length < MEDIA_QUERY_PAGE_SIZE) break
+  }
+  return rows.map(row => mapMediaFileFromDB(row))
 }
 
 async function listActiveMediaFileIds(staffId: number, mediaFileIds: number[]): Promise<number[]> {
   const ids = normalizeIds(mediaFileIds)
   if (ids.length === 0) return []
 
-  const { data, error } = await client()
-    .from('auto_media_files')
-    .select('id')
-    .eq('staff_id', staffId)
-    .eq('is_delete', false)
-    .in('id', ids)
+  const pages = await Promise.all(chunkIds(ids).map(async idChunk => {
+    const { data, error } = await client()
+      .from('auto_media_files')
+      .select('id')
+      .eq('staff_id', staffId)
+      .eq('is_delete', false)
+      .in('id', idChunk)
 
-  if (error) throw new Error(`Không thể kiểm tra media trong thư mục: ${error.message}`)
-  const active = new Set((data || []).map(row => Number(row.id)).filter(id => Number.isFinite(id) && id > 0))
+    if (error) throw new Error(`Không thể kiểm tra media trong thư mục: ${error.message}`)
+    return data || []
+  }))
+  const active = new Set(pages.flat().map(row => Number(row.id)).filter(id => Number.isFinite(id) && id > 0))
   return ids.filter(id => active.has(id))
 }
 
@@ -304,15 +325,26 @@ async function countMediaFilesByGroup(groupIds: number[], staffId: number): Prom
   for (const id of ids) counts.set(id, 0)
   if (ids.length === 0) return counts
 
-  const { data: memberships, error } = await client()
-    .from('auto_media_group_items')
-    .select('group_id, media_file_id')
-    .in('group_id', ids)
+  const memberships: Array<{ group_id: unknown; media_file_id: unknown }> = []
+  for (const groupIdChunk of chunkIds(ids)) {
+    for (let from = 0; ; from += MEDIA_QUERY_PAGE_SIZE) {
+      const { data, error } = await client()
+        .from('auto_media_group_items')
+        .select('group_id, media_file_id')
+        .in('group_id', groupIdChunk)
+        .order('group_id', { ascending: true })
+        .order('media_file_id', { ascending: true })
+        .range(from, from + MEDIA_QUERY_PAGE_SIZE - 1)
 
-  if (error) throw formatMediaGroupError(error, 'Không thể tải số lượng media trong thư mục')
-  const mediaIds = normalizeIds((memberships || []).map(row => row.media_file_id))
+      if (error) throw formatMediaGroupError(error, 'Không thể tải số lượng media trong thư mục')
+      const page = (data || []) as Array<{ group_id: unknown; media_file_id: unknown }>
+      memberships.push(...page)
+      if (page.length < MEDIA_QUERY_PAGE_SIZE) break
+    }
+  }
+  const mediaIds = normalizeIds(memberships.map(row => row.media_file_id))
   const activeMediaIds = new Set(await listActiveMediaFileIds(staffId, mediaIds))
-  for (const row of memberships || []) {
+  for (const row of memberships) {
     const groupId = normalizeId(row.group_id)
     const mediaFileId = normalizeId(row.media_file_id)
     if (!groupId || !activeMediaIds.has(mediaFileId)) continue
@@ -415,15 +447,22 @@ export async function listMediaGroupFileIds(groupId: number): Promise<number[]> 
   if (!id) throw new Error('Thư mục media không hợp lệ.')
   await assertMediaGroupForStaff(id, user.staffId)
 
-  const { data, error } = await client()
-    .from('auto_media_group_items')
-    .select('media_file_id, created_at')
-    .eq('group_id', id)
-    .order('created_at', { ascending: true })
-    .order('media_file_id', { ascending: true })
+  const rows: Array<{ media_file_id: unknown }> = []
+  for (let from = 0; ; from += MEDIA_QUERY_PAGE_SIZE) {
+    const { data, error } = await client()
+      .from('auto_media_group_items')
+      .select('media_file_id, created_at')
+      .eq('group_id', id)
+      .order('created_at', { ascending: true })
+      .order('media_file_id', { ascending: true })
+      .range(from, from + MEDIA_QUERY_PAGE_SIZE - 1)
 
-  if (error) throw formatMediaGroupError(error, 'Không thể tải media trong thư mục')
-  const ids = normalizeIds((data || []).map(row => row.media_file_id))
+    if (error) throw formatMediaGroupError(error, 'Không thể tải media trong thư mục')
+    const page = (data || []) as Array<{ media_file_id: unknown }>
+    rows.push(...page)
+    if (page.length < MEDIA_QUERY_PAGE_SIZE) break
+  }
+  const ids = normalizeIds(rows.map(row => row.media_file_id))
   return listActiveMediaFileIds(user.staffId, ids)
 }
 
@@ -505,7 +544,7 @@ export async function uploadMediaFiles(localPaths: string[]): Promise<MediaUploa
 
   const activeCount = await countActiveMediaFiles(user.staffId)
   if (activeCount + paths.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
-    const error = getMediaQuotaError(activeCount)
+    const error = getMediaQuotaError()
     return {
       files: [],
       failures: paths.map(localPath => ({ localPath, error }))
@@ -557,29 +596,40 @@ export async function uploadMediaFiles(localPaths: string[]): Promise<MediaUploa
   return { files: uploaded, failures }
 }
 
-export async function deleteMediaFile(id: number): Promise<void> {
+export async function deleteMediaFiles(ids: number[]): Promise<number[]> {
   const user = requireCurrentUser()
-  const mediaFileId = normalizeId(id)
-  if (!mediaFileId) throw new Error('Media không hợp lệ.')
+  const mediaFileIds = normalizeIds(ids)
+  if (mediaFileIds.length === 0) throw new Error('Media không hợp lệ.')
 
-  const { data, error } = await client()
-    .from('auto_media_files')
-    .update({ is_delete: true, updated_at: new Date().toISOString() })
-    .eq('id', mediaFileId)
-    .eq('staff_id', user.staffId)
-    .eq('is_delete', false)
-    .select('id')
-    .maybeSingle()
+  const deletedIds: number[] = []
+  const updatedAt = new Date().toISOString()
+  for (const idChunk of chunkIds(mediaFileIds)) {
+    const { data, error } = await client()
+      .from('auto_media_files')
+      .update({ is_delete: true, updated_at: updatedAt })
+      .in('id', idChunk)
+      .eq('staff_id', user.staffId)
+      .eq('is_delete', false)
+      .select('id')
 
-  if (error) throw new Error(`Không thể xoá media: ${error.message}`)
-  if (!data) throw new Error('Không tìm thấy media.')
+    if (error) throw new Error(`Không thể xoá media: ${error.message}`)
+    deletedIds.push(...(data || []).map(row => normalizeId(row.id)).filter(Boolean))
+  }
+  if (deletedIds.length === 0) throw new Error('Không tìm thấy media.')
 
-  const { error: membershipError } = await client()
-    .from('auto_media_group_items')
-    .delete()
-    .eq('media_file_id', mediaFileId)
+  for (const idChunk of chunkIds(deletedIds)) {
+    const { error: membershipError } = await client()
+      .from('auto_media_group_items')
+      .delete()
+      .in('media_file_id', idChunk)
 
-  if (membershipError) throw new Error(`Không thể xoá media khỏi thư mục: ${membershipError.message}`)
+    if (membershipError) throw new Error(`Không thể xoá media khỏi thư mục: ${membershipError.message}`)
+  }
+  return deletedIds
+}
+
+export async function deleteMediaFile(id: number): Promise<void> {
+  await deleteMediaFiles([id])
 }
 
 export function mediaFileToCampaignSnapshot(file: MediaFile): CampaignMediaSnapshot {

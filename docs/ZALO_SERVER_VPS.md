@@ -6,6 +6,24 @@ Chạy toàn bộ file `migrations/migration_v163_server_zalo_recovery_and_atomi
 trong Supabase SQL Editor của project hiện tại. Bước này dùng phiên Dashboard đã đăng nhập,
 không cần nhập token vào app server.
 
+Khi triển khai web/PWA, chạy tiếp
+`migrations/migration_v164_control_web_sessions.sql`. Migration này tạo phiên control web
+và RPC tối thiểu để app server kiểm tra phiên đã hết hạn/thu hồi mà không mở quyền đọc bảng.
+
+Sau v164, áp dụng v165 theo đúng ba lệnh riêng và đúng thứ tự sau:
+
+```powershell
+supabase db query --linked --file migrations/migration_v165_01_control_web_atomic_columns.sql
+supabase db query --linked --file migrations/migration_v165_02_control_web_atomic_append_index.sql
+supabase db query --linked --file migrations/migration_v165_03_control_web_atomic_functions.sql
+```
+
+Không gộp phase `02` vào transaction vì phase này tạo index bằng `CONCURRENTLY`.
+Phase `03` sẽ tự dừng nếu index chưa tạo xong hoặc không hợp lệ.
+Thứ tự rollout production bắt buộc là: **database v165 → akaBizApi → akaAgent Zalo
+Server → akaAgent Web/PWA**. App akaAgent desktop của user và app SMS mobile hiện tại
+không cần cài lại cho rollout này.
+
 Migration thêm một cột vào `org_staff`:
 
 - `is_zalo_server=false`: staff chạy Zalo trên app desktop;
@@ -42,6 +60,23 @@ WHERE id = 1;
 3. Mở shortcut **akaAgent Zalo Server** trên Desktop hoặc Start Menu.
 4. Không nhập Supabase URL, key hay token. App dùng sẵn cấu hình Supabase của akaAgent.
 5. Giữ cửa sổ app mở. Đóng app nghĩa là dừng toàn bộ runtime Zalo server.
+
+Bản cài server đã chứa public key Ed25519 để xác minh ticket realtime 60 giây do
+`akaBizApi` ký và đã cho phép sẵn hai origin:
+
+- `https://aka-agent-web-app.vercel.app`;
+- `https://*.akabiz.net`.
+
+Vì vậy VPS không cần nhập secret, Supabase token hoặc chạy `setx`; chỉ cần cài rồi mở app.
+Private key chỉ nằm ở akaBizApi/Vercel, không được chép sang VPS. Sau này gắn thêm subdomain
+thuộc `*.akabiz.net` vào Vercel cũng không cần build hay cấu hình lại app server.
+
+Chỉ khi dùng domain nằm ngoài hai origin mặc định, người quản trị mới cần tùy chọn override
+`AKA_AGENT_REALTIME_ALLOWED_ORIGINS` bằng danh sách origin chính xác hoặc wildcard dạng
+`https://*.example.com`, phân cách bằng dấu phẩy. Wildcard không bao gồm domain gốc; muốn
+cho phép domain gốc phải thêm origin đó riêng. `AKA_AGENT_REALTIME_TICKET_PUBLIC_KEY` là
+override public key dành cho rollout/rotation nội bộ, nhận PEM hoặc base64 của PEM và không
+phải cấu hình bắt buộc trên VPS production thông thường.
 
 Chỉ chạy **một** app akaAgent Zalo Server cho cùng database (một VPS production). Không mở
 thêm bản server trên VPS thứ hai; recovery startup được thiết kế theo invariant một server.

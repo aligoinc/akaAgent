@@ -107,7 +107,7 @@ export interface CampaignAdvancedContentItem {
 
 export const MEDIA_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
 export const MEDIA_FILE_MAX_SIZE_BYTES = 25 * 1024 * 1024
-export const MEDIA_LIBRARY_MAX_FILES_PER_STAFF = 100
+export const MEDIA_LIBRARY_MAX_FILES_PER_STAFF = 5000
 
 export interface MediaFile {
   id: number
@@ -1538,6 +1538,7 @@ export const IPC_EVENTS = {
   MEDIA_FILES_LIST: 'media:files:list',
   MEDIA_FILES_UPLOAD: 'media:files:upload',
   MEDIA_FILES_DELETE: 'media:files:delete',
+  MEDIA_FILES_DELETE_MANY: 'media:files:delete-many',
   MEDIA_GROUPS_LIST: 'media:groups:list',
   MEDIA_GROUPS_CREATE: 'media:groups:create',
   MEDIA_GROUPS_UPDATE: 'media:groups:update',
