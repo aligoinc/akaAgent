@@ -5,10 +5,15 @@ import { WebviewRegistry } from '../../playwright/webviewController'
 import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
 import { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 import { EmailRuntimeService } from '../../services/emailRuntimeService'
+import { ZaloServerClient } from '../../services/zaloServerClient'
 import {
   ensureCurrentUserCanUseAccountPlatform,
   ensureCurrentUserFeatureActive
 } from '../../data/repositories/entitlementRepository'
+import {
+  shouldRouteCurrentUserZaloCleanupToServer,
+  shouldRouteCurrentUserZaloToServer
+} from '../../data/repositories/zaloRuntimeModeRepository'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -54,6 +59,13 @@ interface ZaloRealtimeRefreshController {
   refreshSoon(reason?: string): void
 }
 
+export interface AccountZaloOperationController {
+  stopAll(): Promise<boolean>
+  waitForIdle(timeoutMs?: number): Promise<boolean>
+  abandonClaims(): void
+  resetClaims(): void
+}
+
 export function registerAccountHandlers(
   supabase: SupabaseService,
   webviewRegistry: WebviewRegistry,
@@ -61,8 +73,88 @@ export function registerAccountHandlers(
   zaloRuntime?: ZaloRuntimeService,
   emailRuntime?: EmailRuntimeService,
   mainWindow?: BrowserWindow,
-  zaloRealtimeRefresh?: ZaloRealtimeRefreshController
-): void {
+  zaloRealtimeRefresh?: ZaloRealtimeRefreshController,
+  zaloServerClient?: ZaloServerClient
+): AccountZaloOperationController {
+  type PreviousZaloAccountStatus = 'chờ xử lý' | 'tạm dừng'
+  const localQrClaims = new Map<number, PreviousZaloAccountStatus>()
+  const localQrReleasePromises = new Map<number, Promise<void>>()
+  const activeLocalOperations = new Set<Promise<unknown>>()
+  let runtimeClaimsAbandoned = false
+
+  const trackLocalOperation = <T>(operation: Promise<T>): Promise<T> => {
+    activeLocalOperations.add(operation)
+    void operation.finally(() => activeLocalOperations.delete(operation)).catch(() => {})
+    return operation
+  }
+
+  const claimLocalZaloOperation = async (
+    accountId: number,
+    requiresLogin: boolean
+  ): Promise<PreviousZaloAccountStatus> => {
+    if (runtimeClaimsAbandoned) {
+      throw new Error('Runtime Zalo của phiên cũ đang đóng. Vui lòng mở lại ứng dụng.')
+    }
+    const claim = await supabase.claimZaloAccountRuntimeOperation(accountId, 'desktop', requiresLogin)
+    if (!claim.claimed || !claim.previousStatus) {
+      const message = claim.reason === 'runtime_not_owner'
+        ? 'Chế độ chạy Zalo đã thay đổi. Vui lòng tắt và mở lại ứng dụng.'
+        : 'Tài khoản Zalo đang thực hiện một tác vụ khác.'
+      throw new Error(message)
+    }
+    try { mainWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+    return claim.previousStatus
+  }
+
+  const releaseLocalZaloOperation = async (
+    accountId: number,
+    previousStatus: PreviousZaloAccountStatus
+  ): Promise<boolean> => {
+    if (runtimeClaimsAbandoned) return true
+    try {
+      await supabase.releaseZaloAccountRuntimeOperation(accountId, 'desktop', previousStatus)
+      try { mainWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+      return true
+    } catch (error) {
+      console.error('[ZaloRuntime] Failed to release local account operation:', { accountId, error })
+      return false
+    }
+  }
+
+  const runClaimedLocalZaloOperation = async <T>(
+    accountId: number,
+    requiresLogin: boolean,
+    operation: () => Promise<T>
+  ): Promise<T> => trackLocalOperation((async () => {
+    const previousStatus = await claimLocalZaloOperation(accountId, requiresLogin)
+    try {
+      return await operation()
+    } finally {
+      await releaseLocalZaloOperation(accountId, previousStatus)
+    }
+  })())
+
+  const releaseLocalQrClaim = (accountId: number): Promise<void> => {
+    const existingRelease = localQrReleasePromises.get(accountId)
+    if (existingRelease) return existingRelease
+    const previousStatus = localQrClaims.get(accountId)
+    if (!previousStatus) return Promise.resolve()
+
+    const release = (async () => {
+      const releaseCompleted = await releaseLocalZaloOperation(accountId, previousStatus)
+      if (releaseCompleted && localQrClaims.get(accountId) === previousStatus) {
+        localQrClaims.delete(accountId)
+      }
+    })()
+    localQrReleasePromises.set(accountId, release)
+    void release.finally(() => {
+      if (localQrReleasePromises.get(accountId) === release) {
+        localQrReleasePromises.delete(accountId)
+      }
+    }).catch(() => {})
+    return release
+  }
+
   const resolveProxyForTest = async (request: ProxyTestRequest): Promise<Partial<AutoProxy>> => {
     const existing = request.proxyId ? await supabase.getProxy(request.proxyId) : null
     const draft = request.proxy || {}
@@ -86,32 +178,11 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
     const normalizedUpdates = updates || {}
-    const currentAccount = normalizedUpdates.proxyId !== undefined
-      ? await supabase.getAccount(id)
-      : null
-    const proxyChanged = Boolean(
-      currentAccount &&
-      normalizedUpdates.proxyId !== undefined &&
-      (currentAccount.proxyId ?? null) !== (normalizedUpdates.proxyId ?? null)
-    )
-    const targetPlatform = normalizedUpdates.flatformType ?? currentAccount?.flatformType
-    if (proxyChanged && targetPlatform === 'zalo' && currentAccount?.status === 'đang chạy') {
-      throw new Error('Không thể đổi proxy khi tài khoản Zalo đang chạy')
-    }
-
     const account = await supabase.updateAccount(id, normalizedUpdates)
-    if (normalizedUpdates.proxyId !== undefined || normalizedUpdates.flatformType !== undefined) {
-      zaloRuntime?.invalidateAccount(id)
-    }
-    if (proxyChanged && account.flatformType === 'zalo' && account.hasZaloSession && zaloRuntime) {
-      void zaloRuntime.checkSession(id)
-        .catch((err) => {
-          console.warn('[ZaloRuntime] Failed to verify Zalo session after proxy change:', {
-            accountId: id,
-            err
-          })
-        })
-        .finally(() => sendAccountStatusUpdated(mainWindow))
+    if (normalizedUpdates.flatformType !== undefined) {
+      if (!shouldRouteCurrentUserZaloCleanupToServer()) {
+        zaloRuntime?.invalidateAccount(id)
+      }
     }
     return account
   })
@@ -120,7 +191,11 @@ export function registerAccountHandlers(
     if (webviewRegistry.isRegistered(id)) {
       webviewRegistry.unregister(id)
     }
-    zaloRuntime?.invalidateAccount(id)
+    if (shouldRouteCurrentUserZaloCleanupToServer()) {
+      void zaloServerClient?.executeCommand('zalo.runtime.invalidate', id).catch(() => {})
+    } else {
+      zaloRuntime?.invalidateAccount(id)
+    }
     return supabase.deleteAccount(id)
   })
 
@@ -149,9 +224,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_PROXY, async (_, id: number, updates) => {
-    const proxy = await supabase.updateProxy(id, updates)
-    await invalidateZaloAccountsUsingProxy(supabase, zaloRuntime, id)
-    return proxy
+    return supabase.updateProxy(id, updates)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_PROXY, async (_, id: number) => {
@@ -196,21 +269,65 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_START, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
+    if (await shouldRouteCurrentUserZaloToServer()) {
+      return zaloServerClient?.executeCommand('zalo.loginQr.start', accountId)
+        ?? { success: false, accountId, reason: 'Chưa kết nối akaAgent Zalo Server' }
+    }
     if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
-    return zaloRuntime.startLoginQr(accountId)
+    return trackLocalOperation((async () => {
+      const previousStatus = await claimLocalZaloOperation(accountId, false)
+      try {
+        const result = await zaloRuntime.startLoginQr(accountId)
+        if (!result.success) {
+          await releaseLocalZaloOperation(accountId, previousStatus)
+          return result
+        }
+
+        localQrClaims.set(accountId, previousStatus)
+        trackLocalOperation(
+          zaloRuntime.waitForLoginQrIdle(accountId)
+            .finally(() => releaseLocalQrClaim(accountId))
+        ).catch(error => {
+          console.error(`[ZaloRuntime] QR completion failed for account ${accountId}:`, error)
+        })
+        return result
+      } catch (error) {
+        const qrSettled = await zaloRuntime.cancelLoginQrAndWait(accountId).catch(() => false)
+        if (qrSettled) {
+          await releaseLocalZaloOperation(accountId, previousStatus)
+        } else {
+          localQrClaims.set(accountId, previousStatus)
+        }
+        throw error
+      }
+    })())
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_CANCEL, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
+    if (shouldRouteCurrentUserZaloCleanupToServer()) {
+      return zaloServerClient?.executeCommand('zalo.loginQr.cancel', accountId)
+        ?? { success: false, accountId, reason: 'Chưa kết nối akaAgent Zalo Server' }
+    }
     if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
-    zaloRuntime.cancelLoginQr(accountId)
-    return { success: true, accountId }
+    return trackLocalOperation((async () => {
+      const qrSettled = await zaloRuntime.cancelLoginQrAndWait(accountId)
+      if (!qrSettled) {
+        return { success: false, accountId, reason: 'QR chưa dừng an toàn. Vui lòng thử lại sau.' }
+      }
+      await releaseLocalQrClaim(accountId)
+      return { success: true, accountId }
+    })())
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_CHECK_SESSION, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
+    if (await shouldRouteCurrentUserZaloToServer()) {
+      return zaloServerClient?.executeCommand('zalo.session.check', accountId)
+        ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }
+    }
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
-    const result = await zaloRuntime.checkSession(accountId)
+    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.checkSession(accountId))
     sendAccountStatusUpdated(mainWindow)
     zaloRealtimeRefresh?.refreshSoon('zalo-check-session')
     return result
@@ -218,8 +335,12 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGOUT, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
+    if (await shouldRouteCurrentUserZaloToServer()) {
+      return zaloServerClient?.executeCommand('zalo.logout', accountId)
+        ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }
+    }
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
-    const result = await zaloRuntime.logout(accountId)
+    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.logout(accountId))
     sendAccountStatusUpdated(mainWindow)
     zaloRealtimeRefresh?.refreshSoon('zalo-logout')
     return result
@@ -235,21 +356,27 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_SYNC_LABELS, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
+    if (await shouldRouteCurrentUserZaloToServer()) {
+      return zaloServerClient?.executeCommand('zalo.labels.sync', accountId)
+        ?? Promise.reject(new Error('Chưa kết nối akaAgent Zalo Server'))
+    }
     if (!zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
-    const account = await supabase.getAccount(accountId)
-    if (!account || account.flatformType !== 'zalo') {
-      throw new Error('Tài khoản không phải Zalo')
-    }
-    const labels = await zaloRuntime.listLabels(accountId)
-    if (labels.length === 0) {
-      await supabase.deleteContacts(accountId, 'zalo_tag')
-    } else {
-      await supabase.upsertContacts(labels.map(label => mapZaloLabelToContact(accountId, label)), {
-        markMissingDeleted: true
-      })
-    }
-    await supabase.syncZaloLabelMemberships(accountId, labels)
-    return labels
+    return runClaimedLocalZaloOperation(accountId, true, async () => {
+      const account = await supabase.getAccount(accountId)
+      if (!account || account.flatformType !== 'zalo') {
+        throw new Error('Tài khoản không phải Zalo')
+      }
+      const labels = await zaloRuntime.listLabels(accountId)
+      if (labels.length === 0) {
+        await supabase.deleteContacts(accountId, 'zalo_tag')
+      } else {
+        await supabase.upsertContacts(labels.map(label => mapZaloLabelToContact(accountId, label)), {
+          markMissingDeleted: true
+        })
+      }
+      await supabase.syncZaloLabelMemberships(accountId, labels)
+      return labels
+    })
   })
 
   ipcMain.handle(IPC_EVENTS.EMAIL_GET_CONFIG, async (_, accountId: number) => {
@@ -345,6 +472,31 @@ export function registerAccountHandlers(
       return { loggedIn: false, status: 'chưa đăng nhập', reason: err.message }
     }
   })
+
+  return {
+    async stopAll(): Promise<boolean> {
+      const qrSettled = await zaloRuntime?.cancelAllLoginQrAndWait() ?? true
+      if (qrSettled) {
+        await Promise.allSettled(Array.from(localQrClaims.keys()).map(releaseLocalQrClaim))
+      }
+      return qrSettled
+    },
+    async waitForIdle(timeoutMs = 30_000): Promise<boolean> {
+      const pending = Array.from(activeLocalOperations)
+      if (pending.length === 0) return true
+      return await Promise.race([
+        Promise.allSettled(pending).then(() => true),
+        new Promise<false>(resolve => setTimeout(() => resolve(false), Math.max(0, timeoutMs)))
+      ])
+    },
+    abandonClaims(): void {
+      runtimeClaimsAbandoned = true
+      localQrClaims.clear()
+    },
+    resetClaims(): void {
+      runtimeClaimsAbandoned = false
+    }
+  }
 }
 
 function sendAccountStatusUpdated(mainWindow?: BrowserWindow): void {
@@ -352,23 +504,5 @@ function sendAccountStatusUpdated(mainWindow?: BrowserWindow): void {
     mainWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
   } catch {
     // Window may be closed
-  }
-}
-
-async function invalidateZaloAccountsUsingProxy(
-  supabase: SupabaseService,
-  zaloRuntime: ZaloRuntimeService | undefined,
-  proxyId: number
-): Promise<void> {
-  if (!zaloRuntime) return
-  try {
-    const accounts = await supabase.listAccounts()
-    for (const account of accounts) {
-      if (account.flatformType === 'zalo' && account.proxyId === proxyId) {
-        zaloRuntime.invalidateAccount(account.id)
-      }
-    }
-  } catch (err) {
-    console.warn('[ZaloRuntime] Failed to invalidate Zalo accounts after proxy update:', err)
   }
 }

@@ -17,6 +17,7 @@ interface ActiveContactLoad {
   variables: Record<string, unknown>
   runKey: string
   contactType: ContactType
+  runtimePlatform: 'zalo' | 'other'
 }
 
 interface ContactLoadOptions {
@@ -29,6 +30,11 @@ interface ContactLoadOptions {
   markMissingDeleted?: boolean
   preserveExistingFriendStatus?: boolean
   resultMeta?: Partial<ContactLoadResult>
+  runtimePlatform?: 'zalo' | 'other'
+}
+
+export interface ContactLoaderOptions {
+  zaloRuntimeTarget?: 'desktop' | 'server'
 }
 
 const CONTACT_SCAN_WORKFLOWS: Partial<Record<ContactType, string>> = {
@@ -112,17 +118,22 @@ export class ContactLoader {
   private backgroundPreviewTimers = new Map<number, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<number>()
   private proxyRuntime?: ProxyRuntimeService
+  private readonly zaloRuntimeTarget: 'desktop' | 'server'
+  private zaloRuntimeBlockedForRestart = false
+  private zaloRuntimeClaimsAbandoned = false
 
   constructor(
     supabase: SupabaseService,
     _webviewRegistry: WebviewRegistry,
     mainWindow: BrowserWindow,
     proxyRuntime?: ProxyRuntimeService,
-    private readonly zaloRuntime?: ZaloRuntimeService
+    private readonly zaloRuntime?: ZaloRuntimeService,
+    options: ContactLoaderOptions = {}
   ) {
     this.supabase = supabase
     this.mainWindow = mainWindow
     this.proxyRuntime = proxyRuntime
+    this.zaloRuntimeTarget = options.zaloRuntimeTarget || 'desktop'
   }
 
   destroyBackgroundPage(accountId: number): void {
@@ -540,10 +551,40 @@ export class ContactLoader {
       active.controller.abort()
       this.stopBackgroundPreview(accountId)
     }
-    this.activeLoads.clear()
-    this.cancelledLoads.clear()
     this.stopAllBackgroundPreviews()
     this.backgroundPages.destroyAll()
+  }
+
+  blockZaloRuntimeForRestart(): void {
+    if (this.zaloRuntimeBlockedForRestart) return
+    this.zaloRuntimeBlockedForRestart = true
+    for (const [accountId, active] of this.activeLoads.entries()) {
+      if (active.runtimePlatform !== 'zalo') continue
+      active.variables.contactScanCancelled = true
+      active.controller.abort()
+      this.stopBackgroundPreview(accountId)
+    }
+  }
+
+  resetZaloRuntimeRestartBlock(): void {
+    this.zaloRuntimeBlockedForRestart = false
+  }
+
+  abandonZaloRuntimeClaims(): void {
+    this.zaloRuntimeClaimsAbandoned = true
+  }
+
+  resetZaloRuntimeClaims(): void {
+    this.zaloRuntimeClaimsAbandoned = false
+  }
+
+  async waitForIdle(timeoutMs = 30_000, platform?: 'zalo' | 'other'): Promise<boolean> {
+    const deadline = Date.now() + Math.max(0, timeoutMs)
+    while (Array.from(this.activeLoads.values()).some(active => !platform || active.runtimePlatform === platform)) {
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    return true
   }
 
   private async loadZaloFriends(account: AutoAccount): Promise<ContactLoadResult> {
@@ -571,14 +612,15 @@ export class ContactLoader {
 
     const loadState = this.startLoad(accountId, contactType, {}, {
       runKeyLabel: 'zalo-friends',
-      targetUrl: 'zalo://friends'
+      targetUrl: 'zalo://friends',
+      runtimePlatform: 'zalo'
     })
-    const previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
+    let previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
     const variables = loadState.variables
     let claimedAccount = false
 
     try {
-      await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
+      previousStatus = await this.claimZaloAccountForScan(accountId)
       claimedAccount = true
 
       if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
@@ -787,14 +829,15 @@ export class ContactLoader {
 
     const loadState = this.startLoad(accountId, contactType, {}, {
       runKeyLabel: 'zalo-groups',
-      targetUrl: 'zalo://groups'
+      targetUrl: 'zalo://groups',
+      runtimePlatform: 'zalo'
     })
-    const previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
+    let previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
     const variables = loadState.variables
     let claimedAccount = false
 
     try {
-      await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
+      previousStatus = await this.claimZaloAccountForScan(accountId)
       claimedAccount = true
 
       if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
@@ -983,14 +1026,15 @@ export class ContactLoader {
       runKeyLabel: mode === 'group_link'
         ? `zalo-group-link-members-${Date.now()}`
         : `zalo-group-members-${normalizedGroupId}`,
-      targetUrl: scanTarget || undefined
+      targetUrl: scanTarget || undefined,
+      runtimePlatform: 'zalo'
     })
-    const previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
+    let previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
     const variables = loadState.variables
     let claimedAccount = false
 
     try {
-      await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
+      previousStatus = await this.claimZaloAccountForScan(accountId)
       claimedAccount = true
 
       if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
@@ -1687,6 +1731,10 @@ export class ContactLoader {
     workflowDefaultVariables: Record<string, unknown> = {},
     options: ContactLoadOptions = {}
   ): ActiveContactLoad {
+    const runtimePlatform = options.runtimePlatform || 'other'
+    if (runtimePlatform === 'zalo' && this.zaloRuntimeBlockedForRestart) {
+      throw new Error('Chế độ chạy Zalo đã thay đổi. Vui lòng tắt và mở lại ứng dụng.')
+    }
     const existing = this.activeLoads.get(accountId)
     if (existing) {
       existing.variables.contactScanCancelled = true
@@ -1707,7 +1755,7 @@ export class ContactLoader {
       contactScanCancelled: false,
       ...(options.variables || {})
     }
-    const loadState = { controller, variables, runKey, contactType }
+    const loadState = { controller, variables, runKey, contactType, runtimePlatform }
     this.activeLoads.set(accountId, loadState)
     return loadState
   }
@@ -2141,11 +2189,36 @@ export class ContactLoader {
     return updated
   }
 
-  private async restoreAccountStatus(accountId: number, previousStatus: 'chờ xử lý' | 'tạm dừng'): Promise<void> {
+  private async claimZaloAccountForScan(
+    accountId: number
+  ): Promise<'chờ xử lý' | 'tạm dừng'> {
+    if (this.zaloRuntimeClaimsAbandoned) {
+      throw new Error('Runtime Zalo của phiên cũ đang đóng. Vui lòng mở lại ứng dụng.')
+    }
+    const claim = await this.supabase.claimZaloAccountRuntimeOperation(accountId, this.zaloRuntimeTarget)
+    if (!claim.claimed || !claim.previousStatus) {
+      const reason = claim.reason === 'runtime_not_owner'
+        ? 'Chế độ chạy Zalo vừa thay đổi. Vui lòng chờ runtime mới sẵn sàng rồi thử lại.'
+        : 'Tài khoản đang chạy chiến dịch hoặc tác vụ khác.'
+      throw new Error(reason)
+    }
     try {
-      const account = await this.supabase.getAccount(accountId)
-      if (!account || account.status !== 'đang chạy') return
-      await this.updateAccountAndBroadcast(accountId, { status: previousStatus })
+      this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+    } catch {}
+    return claim.previousStatus
+  }
+
+  private async restoreAccountStatus(accountId: number, previousStatus: 'chờ xử lý' | 'tạm dừng'): Promise<void> {
+    if (this.zaloRuntimeClaimsAbandoned) return
+    try {
+      const released = await this.supabase.releaseZaloAccountRuntimeOperation(
+        accountId,
+        this.zaloRuntimeTarget,
+        previousStatus
+      )
+      if (released) {
+        try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+      }
     } catch (err) {
       console.error('Failed to restore account after contact scan:', err)
     }

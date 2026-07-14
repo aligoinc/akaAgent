@@ -33,7 +33,7 @@ import {
   type AkaBizDesktopCampaignSummary
 } from './akaBizDesktopSqliteClient'
 import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
-import { getCurrentUser } from '../data/currentUser'
+import { getCurrentUser, isCurrentUserZaloServerEnabled } from '../data/currentUser'
 import {
   ensureCurrentUserCanUseCampaignAction,
   getAccountActionDailySendLimit,
@@ -58,6 +58,7 @@ import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepo
 import type { ZaloGroupContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
 import { callAiUsing } from './aiRuntimeService'
 import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
+import type { DailyMaintenanceBarrier } from './dailyMaintenanceCoordinator'
 import type {
   ZaloActionDetailOutput,
   ZaloAddGroupMemberOptions,
@@ -90,6 +91,22 @@ interface BackgroundPreviewOverride {
 
 interface SchedulerStartOptions {
   initialDelayMs?: number
+}
+
+export type CampaignSchedulerRuntimeTarget = 'desktop' | 'server'
+
+export interface CampaignSchedulerLogEntry {
+  timestamp: string
+  message: string
+  action?: CampaignLogAction
+}
+
+export type CampaignSchedulerLogSink = (entry: CampaignSchedulerLogEntry) => void | Promise<void>
+
+export interface CampaignSchedulerOptions {
+  runtimeTarget?: CampaignSchedulerRuntimeTarget
+  maintenanceCoordinator?: DailyMaintenanceBarrier
+  logSink?: CampaignSchedulerLogSink
 }
 
 interface RuntimeErrorResult {
@@ -188,6 +205,8 @@ interface ZaloShareMessageCapacity {
   capacity: number
   limitStatus?: AccountActionLimitStatus
 }
+
+type ZaloRuntimeStopReason = 'handoff' | 'shutdown'
 
 interface FacebookGroupInviteTarget {
   detail: CampaignInputData
@@ -397,6 +416,13 @@ const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
 const ZALO_FIND_PHONE_DEFAULT_LIMIT = 1000
 const ZALO_API_BUSINESS_FAILED_ERROR_CODE = 'err_zalo_api_business_failed'
 const ZALO_USER_NOT_FOUND_ERROR_CODE = 'err_zalo_user_not_found'
+const ZALO_RUNTIME_HANDOFF_UNCERTAIN_NOTE =
+  'Dừng do thay đổi chế độ runtime, không xác định kết quả; không tự thực hiện lại'
+const ZALO_RUNTIME_RESTART_NOTE =
+  'Chế độ chạy Zalo đã thay đổi. Vui lòng tắt và mở lại ứng dụng.'
+const ZALO_RUNTIME_SHUTDOWN_UNCERTAIN_NOTE =
+  'Dừng do runtime Zalo đang tắt, không xác định kết quả; không tự thực hiện lại'
+const ZALO_RUNTIME_SHUTDOWN_NOTE = 'Runtime Zalo đang dừng.'
 const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_diagnosis'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
@@ -493,7 +519,12 @@ export class CampaignScheduler {
   private running = false
   private dispatching = false
   private activeAccountRuns = new Set<number>()
+  private activeZaloAccountRuns = new Set<number>()
+  private externalAccountRuns = new Set<number>()
   private activeV2Aborts = new Map<number, AbortController>()
+  private activeZaloCampaignRuns = new Set<number>()
+  private activeZaloRunGenerations = new Map<number, number>()
+  private activeZaloRunStopReasons = new Map<number, ZaloRuntimeStopReason>()
   private pauseRequests = new Set<number>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private internalSmsPushedDetailKeys = new Set<string>()
@@ -506,6 +537,13 @@ export class CampaignScheduler {
   private zaloRuntime?: ZaloRuntimeService
   private emailRuntime?: EmailRuntimeService
   private schedulerConnectivityIssueActive = false
+  private zaloRuntimeBlockedForRestart = false
+  private zaloRuntimeStopRequested = false
+  private zaloRuntimeLifecycleGeneration = 0
+  private zaloRuntimeClaimsAbandoned = false
+  private runtimeTarget: CampaignSchedulerRuntimeTarget
+  private maintenanceCoordinator?: DailyMaintenanceBarrier
+  private logSink?: CampaignSchedulerLogSink
 
   constructor(
     supabase: SupabaseService,
@@ -513,7 +551,8 @@ export class CampaignScheduler {
     mainWindow: BrowserWindow,
     proxyRuntime?: ProxyRuntimeService,
     zaloRuntime?: ZaloRuntimeService,
-    emailRuntime?: EmailRuntimeService
+    emailRuntime?: EmailRuntimeService,
+    options: CampaignSchedulerOptions = {}
   ) {
     this.supabase = supabase
     this.webviewRegistry = webviewRegistry
@@ -521,6 +560,9 @@ export class CampaignScheduler {
     this.proxyRuntime = proxyRuntime
     this.zaloRuntime = zaloRuntime
     this.emailRuntime = emailRuntime
+    this.runtimeTarget = options.runtimeTarget || 'desktop'
+    this.maintenanceCoordinator = options.maintenanceCoordinator
+    this.logSink = options.logSink
   }
 
   setPageRegistry(reg: PageControllerRegistry): void {
@@ -587,6 +629,7 @@ export class CampaignScheduler {
   }
 
   stop(): void {
+    this.requestZaloRuntimeStop('shutdown')
     this.running = false
     this.schedulerConnectivityIssueActive = false
     if (this.startDelayTimeoutId) {
@@ -620,6 +663,118 @@ export class CampaignScheduler {
 
   isRunning(): boolean {
     return this.running
+  }
+
+  blockZaloRuntimeForRestart(
+    message: string | null = '⏹ Zalo đã dừng nhận tác vụ vì chế độ runtime thay đổi. Vui lòng khởi động lại ứng dụng.'
+  ): void {
+    if (this.zaloRuntimeBlockedForRestart) return
+    this.zaloRuntimeBlockedForRestart = true
+    this.requestZaloRuntimeStop('handoff')
+    if (message) this.sendLog(message)
+  }
+
+  resetZaloRuntimeRestartBlock(): void {
+    this.zaloRuntimeBlockedForRestart = false
+    this.zaloRuntimeStopRequested = false
+  }
+
+  private requestZaloRuntimeStop(reason: ZaloRuntimeStopReason): void {
+    this.zaloRuntimeStopRequested = true
+    this.zaloRuntimeLifecycleGeneration += 1
+    for (const campaignId of this.activeZaloCampaignRuns) {
+      const currentReason = this.activeZaloRunStopReasons.get(campaignId)
+      if (!currentReason || reason === 'handoff') {
+        this.activeZaloRunStopReasons.set(campaignId, reason)
+      }
+      const abort = this.activeV2Aborts.get(campaignId)
+      if (abort && !abort.signal.aborted) abort.abort()
+    }
+  }
+
+  private getZaloRuntimeStopReason(campaignId: number): ZaloRuntimeStopReason | null {
+    const explicitReason = this.activeZaloRunStopReasons.get(campaignId)
+    if (explicitReason) return explicitReason
+
+    const runGeneration = this.activeZaloRunGenerations.get(campaignId)
+    if (runGeneration === undefined) return null
+    if (
+      runGeneration !== this.zaloRuntimeLifecycleGeneration
+    ) {
+      return this.zaloRuntimeBlockedForRestart ? 'handoff' : 'shutdown'
+    }
+
+    if (!this.zaloRuntimeStopRequested) return null
+    return this.zaloRuntimeBlockedForRestart ? 'handoff' : 'shutdown'
+  }
+
+  private getZaloRuntimeUncertainNote(reason: ZaloRuntimeStopReason): string {
+    return reason === 'handoff'
+      ? ZALO_RUNTIME_HANDOFF_UNCERTAIN_NOTE
+      : ZALO_RUNTIME_SHUTDOWN_UNCERTAIN_NOTE
+  }
+
+  private getZaloRuntimeCampaignStopNote(reason: ZaloRuntimeStopReason): string {
+    return reason === 'handoff' ? ZALO_RUNTIME_RESTART_NOTE : ZALO_RUNTIME_SHUTDOWN_NOTE
+  }
+
+  private throwIfZaloRuntimeStopping(campaignId: number): void {
+    const reason = this.getZaloRuntimeStopReason(campaignId)
+    if (reason) throw new Error(this.getZaloRuntimeUncertainNote(reason))
+  }
+
+  private isZaloRuntimeWriteBarrierActive(campaignId: number): boolean {
+    return this.zaloRuntimeClaimsAbandoned && this.activeZaloRunGenerations.has(campaignId)
+  }
+
+  private async runZaloCampaignHelper<T>(campaignId: number, operation: () => Promise<T>): Promise<T> {
+    this.throwIfZaloRuntimeStopping(campaignId)
+    try {
+      const result = await operation()
+      this.throwIfZaloRuntimeStopping(campaignId)
+      return result
+    } catch (err) {
+      // Prefer the lifecycle stop over an API/account/pause error that raced it.
+      // This lets the scheduler apply the no-retry uncertainty rule uniformly.
+      this.throwIfZaloRuntimeStopping(campaignId)
+      throw err
+    }
+  }
+
+  abandonZaloRuntimeClaims(): void {
+    this.zaloRuntimeClaimsAbandoned = true
+  }
+
+  resetZaloRuntimeClaims(): void {
+    this.zaloRuntimeClaimsAbandoned = false
+  }
+
+  async waitForZaloIdle(timeoutMs = 30_000): Promise<boolean> {
+    const deadline = Date.now() + Math.max(0, timeoutMs)
+    while (this.activeZaloAccountRuns.size > 0 || this.externalAccountRuns.size > 0) {
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    return true
+  }
+
+  tryReserveExternalAccount(accountId: number): boolean {
+    if (this.activeAccountRuns.has(accountId) || this.externalAccountRuns.has(accountId)) return false
+    this.externalAccountRuns.add(accountId)
+    return true
+  }
+
+  releaseExternalAccount(accountId: number): void {
+    this.externalAccountRuns.delete(accountId)
+  }
+
+  async waitForIdle(timeoutMs = 30_000): Promise<boolean> {
+    const deadline = Date.now() + Math.max(0, timeoutMs)
+    while (this.dispatching || this.activeAccountRuns.size > 0) {
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    return true
   }
 
   async requestPauseCampaign(campaignId: number): Promise<Campaign> {
@@ -660,6 +815,7 @@ export class CampaignScheduler {
     const endAt = Date.now() + seconds * 1000
     while (Date.now() < endAt) {
       if (this.isCampaignPauseRequested(campaign.id)) return 'paused'
+      if (this.getZaloRuntimeStopReason(campaign.id)) return 'completed'
       await new Promise(resolve => setTimeout(resolve, Math.min(500, Math.max(0, endAt - Date.now()))))
     }
     return this.isCampaignPauseRequested(campaign.id) ? 'paused' : 'completed'
@@ -670,20 +826,27 @@ export class CampaignScheduler {
     this.dispatching = true
 
     try {
+      await this.maintenanceCoordinator?.ensureReady()
+      if (!this.running) return
+
       await this.supabase.enableDueAccountActions().catch(err => {
         console.error('Failed to enable due account actions:', err)
       })
+      if (!this.running) return
 
       // 1. Get eligible accounts
       const accounts = await this.supabase.getEligibleAccounts()
 
       for (const account of accounts) {
+        if (!this.running) break
+        if (!this.shouldProcessAccountForRuntime(account)) continue
+
         if (this.isSmsAccount(account)) {
           await this.refreshDueSmsCampaignLimitNotes(account)
           continue
         }
 
-        if (this.activeAccountRuns.has(account.id)) {
+        if (this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)) {
           continue
         }
 
@@ -693,6 +856,7 @@ export class CampaignScheduler {
 
         // 2. Get pending campaigns for this account
         const campaigns = await this.supabase.getPendingCampaigns(account.id)
+        if (!this.running) break
         if (campaigns.length === 0) continue
 
         // Browserless campaigns such as Zalo API flows do not mount a webview tab.
@@ -702,6 +866,7 @@ export class CampaignScheduler {
           continue
         }
 
+        if (this.externalAccountRuns.has(account.id)) continue
         this.startAccountCampaignQueue(account, campaigns)
       }
 
@@ -727,6 +892,8 @@ export class CampaignScheduler {
   private startAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): void {
     if (this.activeAccountRuns.has(account.id)) return
     this.activeAccountRuns.add(account.id)
+    const isZaloAccount = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
+    if (isZaloAccount) this.activeZaloAccountRuns.add(account.id)
 
     void this.runAccountCampaignQueue(account, campaigns)
       .catch(err => {
@@ -735,14 +902,37 @@ export class CampaignScheduler {
       })
       .finally(() => {
         this.activeAccountRuns.delete(account.id)
+        if (isZaloAccount) this.activeZaloAccountRuns.delete(account.id)
       })
   }
 
   private async runAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): Promise<void> {
     for (const campaign of campaigns) {
       if (!this.running) break
-      await this.executeCampaign(account, campaign)
+      await this.maintenanceCoordinator?.ensureReady()
+      if (!this.running) break
+      if (!this.shouldProcessAccountForRuntime(account)) break
+      const currentCampaign = await this.supabase.getCampaign(campaign.id)
+      if (!this.running) break
+      if (
+        !currentCampaign ||
+        currentCampaign.status !== 'chờ xử lý' ||
+        currentCampaign.isDelete ||
+        !currentCampaign.schedule ||
+        new Date(currentCampaign.schedule).getTime() > Date.now()
+      ) {
+        continue
+      }
+      if (!this.running) break
+      await this.executeCampaign(account, currentCampaign)
     }
+  }
+
+  private shouldProcessAccountForRuntime(account: AutoAccount): boolean {
+    const isZaloAccount = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
+    if (isZaloAccount && this.zaloRuntimeStopRequested) return false
+    if (this.runtimeTarget === 'server') return isZaloAccount
+    return !(isZaloAccount && isCurrentUserZaloServerEnabled())
   }
 
   private isSmsAccount(account: AutoAccount): boolean {
@@ -1332,6 +1522,12 @@ export class CampaignScheduler {
   }
 
   private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
+    let runtimeClaimed = false
+    const isZaloCampaign = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
+    if (isZaloCampaign) {
+      this.activeZaloCampaignRuns.add(campaign.id)
+      this.activeZaloRunGenerations.set(campaign.id, this.zaloRuntimeLifecycleGeneration)
+    }
     try {
       const currentCampaign = await this.supabase.getCampaign(campaign.id)
       if (!currentCampaign || currentCampaign.status !== 'chờ xử lý') {
@@ -1339,38 +1535,68 @@ export class CampaignScheduler {
       }
       campaign = currentCampaign
 
-      const startBlockReason = await this.getAccountRunBlockReason(account.id, 'chờ xử lý')
+      const claimed = await this.supabase.claimCampaignRuntime(
+        campaign.id,
+        account.id,
+        this.runtimeTarget
+      )
+      if (!claimed) return
+      runtimeClaimed = true
+
+      await this.broadcastClaimedRuntimeState(campaign.id)
+
+      // The mode may change immediately after the atomic claim commits. Do not
+      // let that already-claimed campaign advance into preflight/runtime writes.
+      const claimedRuntimeStopReason = isZaloCampaign
+        ? this.getZaloRuntimeStopReason(campaign.id)
+        : null
+      if (claimedRuntimeStopReason) {
+        if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+        await this.releaseClaimedCampaignPreflight(
+          account.id,
+          campaign,
+          this.getZaloRuntimeCampaignStopNote(claimedRuntimeStopReason)
+        )
+        return
+      }
+
+      const startBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
       if (startBlockReason) {
-        await this.updateCampaignPreflightNote(campaign, startBlockReason)
+        await this.releaseClaimedCampaignPreflight(account.id, campaign, startBlockReason)
         return
       }
 
       const findDataWaitNote = await this.getFindDataSourceWaitNote(campaign)
       if (findDataWaitNote) {
-        await this.updateCampaignPreflightNote(campaign, findDataWaitNote)
+        await this.releaseClaimedCampaignPreflight(account.id, campaign, findDataWaitNote)
         return
       }
 
       try {
         await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
       } catch (err) {
-        await this.updateCampaignPreflightNote(campaign, err instanceof Error ? err.message : String(err))
+        await this.releaseClaimedCampaignPreflight(
+          account.id,
+          campaign,
+          err instanceof Error ? err.message : String(err)
+        )
         return
       }
 
       const action = await this.supabase.getCampaignAction(campaign.actionId)
       if (!action) {
-        await this.updateCampaignPreflightNote(campaign, 'Không tìm thấy loại chiến dịch')
+        await this.releaseClaimedCampaignPreflight(account.id, campaign, 'Không tìm thấy loại chiến dịch')
         return
       }
 
       const workflowSelection = this.resolveCampaignWorkflow(action)
       if (!workflowSelection.workflowId) {
-        await this.updateCampaignPreflightNote(campaign, workflowSelection.missingNote)
+        await this.releaseClaimedCampaignPreflight(account.id, campaign, workflowSelection.missingNote)
         return
       }
 
       if (!(await this.prepareZaloRealtimeGroupCampaignRun(campaign))) {
+        await this.releaseRunningAccount(account.id)
         return
       }
 
@@ -1388,7 +1614,11 @@ export class CampaignScheduler {
           : quotaActionDescriptors
       const preflightDisabled = await this.checkActionDisabled(account, preflightExecutableActionDescriptors)
       if (preflightDisabled && !preflightDisabled.ok) {
-        await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(preflightDisabled))
+        await this.releaseClaimedCampaignPreflight(
+          account.id,
+          campaign,
+          await this.buildLimitPreflightNote(preflightDisabled)
+        )
         return
       }
       const preflightLimit = await this.checkActionLimitsForContinuation(
@@ -1398,22 +1628,54 @@ export class CampaignScheduler {
         campaign.extraSettings?.actionLimits
       )
       if (preflightLimit.limitStatus) {
-        await this.updateCampaignPreflightNote(campaign, await this.buildLimitPreflightNote(preflightLimit.limitStatus))
+        await this.releaseClaimedCampaignPreflight(
+          account.id,
+          campaign,
+          await this.buildLimitPreflightNote(preflightLimit.limitStatus)
+        )
         return
       }
 
       if (!(await this.ensureZaloSessionReadyForCampaign(account, campaign))) {
+        await this.releaseRunningAccount(account.id)
         return
       }
 
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'đang chạy', note: null })
-      await this.logCampaignProgress(campaign.id, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
+      const preRuntimeStopReason = isZaloCampaign
+        ? this.getZaloRuntimeStopReason(campaign.id)
+        : null
+      if (preRuntimeStopReason) {
+        if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+        await this.releaseClaimedCampaignPreflight(
+          account.id,
+          campaign,
+          this.getZaloRuntimeCampaignStopNote(preRuntimeStopReason)
+        )
+        return
+      }
 
-      await this.updateAccountAndBroadcast(account.id, { status: 'đang chạy' })
+      await this.logCampaignProgress(campaign.id, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
       await this.executeCampaignV2(account, campaign, workflowSelection.workflowId, executableActionDescriptors, quotaActionDescriptors)
     } catch (err) {
+      if (!runtimeClaimed) throw err
       const errMsg = err instanceof Error ? err.message : String(err)
+      const runtimeStopReason = isZaloCampaign
+        ? this.getZaloRuntimeStopReason(campaign.id)
+        : null
+      if (runtimeStopReason) {
+        if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+        await this.recoverStuckCampaignInputData(
+          campaign.id,
+          this.getZaloRuntimeUncertainNote(runtimeStopReason)
+        )
+        await this.updateCampaignAndBroadcast(campaign.id, {
+          status: 'chờ xử lý',
+          note: this.getZaloRuntimeCampaignStopNote(runtimeStopReason)
+        }).catch(() => {})
+        await this.releaseRunningAccount(account.id)
+        return
+      }
       await this.recoverStuckCampaignInputData(campaign.id, errMsg)
       if (this.isNewsfeedDailyCampaign(campaign)) {
         await this.completeNewsfeedDailyWithoutNextDay(campaign, errMsg)
@@ -1426,6 +1688,11 @@ export class CampaignScheduler {
       await this.releaseRunningAccount(account.id)
       await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     } finally {
+      if (isZaloCampaign) {
+        this.activeZaloCampaignRuns.delete(campaign.id)
+        this.activeZaloRunGenerations.delete(campaign.id)
+        this.activeZaloRunStopReasons.delete(campaign.id)
+      }
       this.clearZaloSmsPushKeysForCampaign(campaign.id)
     }
   }
@@ -1449,6 +1716,19 @@ export class CampaignScheduler {
     // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
     let details = await this.supabase.listCampaignInputData(campaign.id)
     const extra = campaign.extraSettings || {}
+
+    const initialRuntimeStopReason = account.flatformType === 'zalo'
+      ? this.getZaloRuntimeStopReason(campaign.id)
+      : null
+    if (initialRuntimeStopReason) {
+      if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        note: this.getZaloRuntimeCampaignStopNote(initialRuntimeStopReason)
+      })
+      await this.releaseRunningAccount(account.id)
+      return
+    }
 
     if (this.isCampaignPauseRequested(campaign.id)) {
       await this.releaseRunningAccount(account.id)
@@ -1534,6 +1814,19 @@ export class CampaignScheduler {
 
     if (this.isZaloCancelSentFriendRequestCampaign(campaign) && details.length === 0) {
       await this.completeZaloCancelSentFriendRequestWithoutTargets(campaign, 'Zalo không có lời mời kết bạn đã gửi để huỷ')
+      await this.releaseRunningAccount(account.id)
+      return
+    }
+
+    const materializedRuntimeStopReason = account.flatformType === 'zalo'
+      ? this.getZaloRuntimeStopReason(campaign.id)
+      : null
+    if (materializedRuntimeStopReason) {
+      if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        note: this.getZaloRuntimeCampaignStopNote(materializedRuntimeStopReason)
+      })
       await this.releaseRunningAccount(account.id)
       return
     }
@@ -1633,6 +1926,18 @@ export class CampaignScheduler {
     const loggedSkippedLimitActionCodes = new Set<string>()
 
     for (let i = 0; i < targets.length; i++) {
+      const loopRuntimeStopReason = account.flatformType === 'zalo'
+        ? this.getZaloRuntimeStopReason(campaign.id)
+        : null
+      if (loopRuntimeStopReason) {
+        if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+        stoppedBeforeCompletion = true
+        await this.updateCampaignAndBroadcast(campaign.id, {
+          status: 'chờ xử lý',
+          note: this.getZaloRuntimeCampaignStopNote(loopRuntimeStopReason)
+        })
+        break
+      }
       // Check pause
       const cur = await this.supabase.getCampaign(campaign.id)
       if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
@@ -1790,6 +2095,10 @@ export class CampaignScheduler {
             : {})
         }
 
+        if (account.flatformType === 'zalo') {
+          this.throwIfZaloRuntimeStopping(campaign.id)
+        }
+
         // Update detail status running
         if (detail) {
           await this.supabase.updateCampaignInputData(detail.id, {
@@ -1819,6 +2128,7 @@ export class CampaignScheduler {
           })
         }, 5000)
         this.activeV2Aborts.set(campaign.id, abort)
+        if (account.flatformType === 'zalo' && this.getZaloRuntimeStopReason(campaign.id)) abort.abort()
         if (automationPage.source === 'background' && page) {
           this.startBackgroundPreview(account.id, campaign.id, page)
         }
@@ -1849,6 +2159,14 @@ export class CampaignScheduler {
             }
           })
 
+          // An abort cannot cancel a Zalo HTTP request that is already in
+          // flight. Recheck the lifecycle immediately when the workflow
+          // returns, before milestone/detail writes can make the target look
+          // retryable or successfully completed by this obsolete runtime.
+          if (account.flatformType === 'zalo') {
+            this.throwIfZaloRuntimeStopping(campaign.id)
+          }
+
           // Per-milestone logging — scan steps theo block_name
           const milestoneSummary = await this.logMilestonesV2(
             campaign,
@@ -1862,9 +2180,14 @@ export class CampaignScheduler {
 
           const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
           const pauseCancelledRun = campaignPauseRequested && !accountStopReason && result.status === 'cancelled'
+          const runtimeStopReason = account.flatformType === 'zalo'
+            ? this.getZaloRuntimeStopReason(campaign.id)
+            : null
+          const runtimeModeStopRequested = runtimeStopReason !== null
+          if (runtimeModeStopRequested && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
           let runtimeStopTriggered = false
 
-          if (accountStopReason) {
+          if (accountStopReason && !runtimeModeStopRequested) {
             if (detail) {
               await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: accountStopReason })
             }
@@ -1872,8 +2195,14 @@ export class CampaignScheduler {
             shouldStopAfterTarget = true
           }
 
-          if (detail && !accountStopReason) {
-            if (result.status === 'completed') {
+          if (detail && (runtimeModeStopRequested || !accountStopReason)) {
+            if (runtimeModeStopRequested) {
+              await this.supabase.updateCampaignInputData(detail.id, {
+                status: 'hoàn thành',
+                note: this.getZaloRuntimeUncertainNote(runtimeStopReason)
+              })
+              consumedGroupPostInputDataIds.add(detail.id)
+            } else if (result.status === 'completed') {
               if (milestoneSummary.resetInputToPending) {
                 await this.supabase.updateCampaignInputData(detail.id, {
                   status: 'chờ xử lý',
@@ -1895,7 +2224,7 @@ export class CampaignScheduler {
             }
           }
 
-          if (!accountStopReason && !pauseCancelledRun) {
+          if (!accountStopReason && !pauseCancelledRun && !runtimeModeStopRequested) {
             const runtimeError = result.status !== 'completed'
               ? this.normalizeRuntimeError(campaign, result.steps, result.error)
               : null
@@ -1946,7 +2275,7 @@ export class CampaignScheduler {
             }
           }
 
-          if (milestoneSummary.stopAfterTarget) {
+          if (milestoneSummary.stopAfterTarget && !runtimeModeStopRequested) {
             const latestCampaign = await this.supabase.getCampaign(campaign.id).catch(() => null)
             if (!latestCampaign || latestCampaign.status === 'đang chạy') {
               await this.updateCampaignAndBroadcast(campaign.id, {
@@ -1957,7 +2286,16 @@ export class CampaignScheduler {
             shouldStopAfterTarget = true
           }
 
-          if (campaignPauseRequested) {
+          if (runtimeModeStopRequested && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+          if (runtimeModeStopRequested) {
+            await this.updateCampaignAndBroadcast(campaign.id, {
+              status: 'chờ xử lý',
+              note: this.getZaloRuntimeCampaignStopNote(runtimeStopReason)
+            })
+            shouldStopAfterTarget = true
+          }
+
+          if (campaignPauseRequested && !runtimeModeStopRequested) {
             if (!accountStopReason && !runtimeStopTriggered) {
               shouldCompletePauseAfterTarget = true
               shouldStopAfterTarget = true
@@ -1969,16 +2307,34 @@ export class CampaignScheduler {
           const errMsg = err?.message || String(err)
           const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
           const pauseAbortTriggered = campaignPauseRequested && !accountStopReason && abort.signal.aborted
+          const runtimeStopReason = account.flatformType === 'zalo'
+            ? this.getZaloRuntimeStopReason(campaign.id)
+            : null
+          const runtimeModeAbortTriggered = runtimeStopReason !== null
+          if (runtimeModeAbortTriggered && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
           let runtimeStopTriggered = false
           if (detail) {
-            const nextStatus = accountStopReason || pauseAbortTriggered ? 'chờ xử lý' : 'hoàn thành'
+            const nextStatus = runtimeModeAbortTriggered
+              ? 'hoàn thành'
+              : accountStopReason || pauseAbortTriggered
+                ? 'chờ xử lý'
+                : 'hoàn thành'
             await this.supabase.updateCampaignInputData(detail.id, {
               status: nextStatus,
-              note: accountStopReason || (pauseAbortTriggered ? CAMPAIGN_PAUSE_PENDING_NOTE : errMsg)
+              note: runtimeModeAbortTriggered
+                ? this.getZaloRuntimeUncertainNote(runtimeStopReason)
+                : accountStopReason || (pauseAbortTriggered ? CAMPAIGN_PAUSE_PENDING_NOTE : errMsg)
             })
             if (nextStatus === 'hoàn thành') consumedGroupPostInputDataIds.add(detail.id)
           }
-          if (pauseAbortTriggered) {
+          if (runtimeModeAbortTriggered && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+          if (runtimeModeAbortTriggered) {
+            await this.updateCampaignAndBroadcast(campaign.id, {
+              status: 'chờ xử lý',
+              note: this.getZaloRuntimeCampaignStopNote(runtimeStopReason)
+            })
+            shouldStopAfterTarget = true
+          } else if (pauseAbortTriggered) {
             shouldCompletePauseAfterTarget = true
             shouldStopAfterTarget = true
           } else if (accountStopReason) {
@@ -2006,7 +2362,7 @@ export class CampaignScheduler {
               shouldStopAfterTarget = handled.triggered
             }
           }
-          if (!pauseAbortTriggered) {
+          if (!pauseAbortTriggered && !runtimeModeAbortTriggered) {
             await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
             while (screenshotProgressLogs.length > 0) {
               const progressLog = screenshotProgressLogs.shift()
@@ -2017,7 +2373,7 @@ export class CampaignScheduler {
               })
             }
           }
-          if (campaignPauseRequested && !pauseAbortTriggered) {
+          if (campaignPauseRequested && !pauseAbortTriggered && !runtimeModeAbortTriggered) {
             if (!accountStopReason && !runtimeStopTriggered) {
               shouldCompletePauseAfterTarget = true
               shouldStopAfterTarget = true
@@ -2041,6 +2397,30 @@ export class CampaignScheduler {
         }
       } finally {
         this.cleanupCampaignMediaTempFiles(mediaTempPaths)
+      }
+
+      // Account-stop/pause handling above contains awaits. A mode change can
+      // arrive during one of those writes, so make the lifecycle decision one
+      // final time and let uncertainty be the authoritative last state.
+      const postTargetRuntimeStopReason = account.flatformType === 'zalo'
+        ? this.getZaloRuntimeStopReason(campaign.id)
+        : null
+      if (postTargetRuntimeStopReason) {
+        if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+        if (detail) {
+          await this.supabase.updateCampaignInputData(detail.id, {
+            status: 'hoàn thành',
+            note: this.getZaloRuntimeUncertainNote(postTargetRuntimeStopReason)
+          })
+          if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+          consumedGroupPostInputDataIds.add(detail.id)
+        }
+        await this.updateCampaignAndBroadcast(campaign.id, {
+          status: 'chờ xử lý',
+          note: this.getZaloRuntimeCampaignStopNote(postTargetRuntimeStopReason)
+        })
+        shouldCompletePauseAfterTarget = false
+        shouldStopAfterTarget = true
       }
 
       if (shouldCompletePauseAfterTarget) {
@@ -2336,6 +2716,7 @@ export class CampaignScheduler {
       })
     }, 5000)
     this.activeV2Aborts.set(campaign.id, abort)
+    if (account.flatformType === 'zalo' && this.zaloRuntimeBlockedForRestart) abort.abort()
     if (automationPage.source === 'background') {
       this.startBackgroundPreview(account.id, campaign.id, page)
     }
@@ -2749,6 +3130,16 @@ export class CampaignScheduler {
       let batchIndex = 0
 
       while (index < details.length) {
+        const loopRuntimeStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (loopRuntimeStopReason) {
+          if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+          stoppedBeforeCompletion = true
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            status: 'chờ xử lý',
+            note: this.getZaloRuntimeCampaignStopNote(loopRuntimeStopReason)
+          })
+          break
+        }
         const cur = await this.supabase.getCampaign(campaign.id)
         if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
           await this.releaseRunningAccount(account.id)
@@ -2786,6 +3177,10 @@ export class CampaignScheduler {
         let stopAfterInvalidTarget = false
 
         while (index < details.length && batch.length < capacity.capacity) {
+          if (this.getZaloRuntimeStopReason(campaign.id)) {
+            stoppedBeforeCompletion = true
+            break
+          }
           const detail = details[index]
           index += 1
 
@@ -2816,11 +3211,29 @@ export class CampaignScheduler {
           }
           if (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
             const resolvedTarget = await this.resolveZaloFriendMessageTarget(account, target.target)
+            if (this.getZaloRuntimeStopReason(campaign.id)) {
+              stoppedBeforeCompletion = true
+              break
+            }
             await this.upsertZaloResolvedProfileTarget(account, resolvedTarget, campaign.actionId)
+            if (this.getZaloRuntimeStopReason(campaign.id)) {
+              stoppedBeforeCompletion = true
+              break
+            }
             batch.push({ ...target, target: resolvedTarget })
           } else {
             batch.push(target)
           }
+        }
+
+        const batchBuildStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (batchBuildStopReason) {
+          if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            status: 'chờ xử lý',
+            note: this.getZaloRuntimeCampaignStopNote(batchBuildStopReason)
+          })
+          break
         }
 
         if (stopAfterInvalidTarget) {
@@ -2835,12 +3248,40 @@ export class CampaignScheduler {
           : (simpleAttachments || [])
         batchIndex += 1
         const message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage)
+        const contentStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (contentStopReason) {
+          if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+          stoppedBeforeCompletion = true
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            status: 'chờ xử lý',
+            note: this.getZaloRuntimeCampaignStopNote(contentStopReason)
+          })
+          break
+        }
         const batchStartedAt = new Date().toISOString()
         for (const item of batch) {
           await this.supabase.updateCampaignInputData(item.detail.id, {
             status: 'đang chạy',
             dateAction: batchStartedAt
           })
+          const prepareStopReason = this.getZaloRuntimeStopReason(campaign.id)
+          if (prepareStopReason) {
+            if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+            await this.settleZaloShareBatchRuntimeStop(batch, new Set(), prepareStopReason)
+            stoppedBeforeCompletion = true
+            break
+          }
+        }
+        if (stoppedBeforeCompletion) {
+          const prepareStopReason = this.getZaloRuntimeStopReason(campaign.id)
+          if (prepareStopReason) {
+            if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+            await this.updateCampaignAndBroadcast(campaign.id, {
+              status: 'chờ xử lý',
+              note: this.getZaloRuntimeCampaignStopNote(prepareStopReason)
+            })
+          }
+          break
         }
         const stopAfterBatch = await this.processZaloShareMessageBatch(
           account,
@@ -2850,8 +3291,16 @@ export class CampaignScheduler {
           message,
           batchAttachments
         )
-        if (stopAfterBatch) {
+        const processedStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (stopAfterBatch || processedStopReason) {
+          if (processedStopReason && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
           stoppedBeforeCompletion = true
+          if (processedStopReason) {
+            await this.updateCampaignAndBroadcast(campaign.id, {
+              status: 'chờ xử lý',
+              note: this.getZaloRuntimeCampaignStopNote(processedStopReason)
+            })
+          }
           break
         }
 
@@ -3062,37 +3511,78 @@ export class CampaignScheduler {
     attachments: string[]
   ): Promise<boolean> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const initialStopReason = this.getZaloRuntimeStopReason(campaign.id)
+    if (initialStopReason) {
+      await this.settleZaloShareBatchRuntimeStop(batch, new Set(), initialStopReason)
+      return true
+    }
 
     const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
     const trimmedMessage = String(message || '').trim()
     const mediaFailures = new Map<number, ZaloActionDetailOutput>()
     const mediaResponses = new Map<number, unknown>()
+    const startedInputDataIds = new Set<number>()
 
-    if (attachments.length > 0) {
-      for (const item of batch) {
-        try {
-          const response = isGroup
-            ? await this.zaloRuntime.sendMessageToGroup(account.id, item.threadId, '', attachments)
-            : await this.zaloRuntime.sendMessageToUser(account.id, item.threadId, '', attachments)
-          mediaResponses.set(item.detail.id, response)
-        } catch (err) {
-          mediaFailures.set(item.detail.id, await this.createZaloErrorDetail(
-            account,
-            campaign,
-            err,
-            actionDescriptor.code,
-            actionDescriptor.name,
-            { target: item.target, threadId: item.threadId, attachments, inputData: item.inputData, sendMode: 'share_media' }
-          ))
+    try {
+      if (attachments.length > 0) {
+        for (const item of batch) {
+          const beforeSendStopReason = this.getZaloRuntimeStopReason(campaign.id)
+          if (beforeSendStopReason) {
+            await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, beforeSendStopReason)
+            return true
+          }
+
+          startedInputDataIds.add(item.detail.id)
+          let response: unknown = null
+          let sendError: unknown = null
+          try {
+            response = isGroup
+              ? await this.zaloRuntime.sendMessageToGroup(account.id, item.threadId, '', attachments)
+              : await this.zaloRuntime.sendMessageToUser(account.id, item.threadId, '', attachments)
+          } catch (err) {
+            sendError = err
+          }
+
+          // The request may have reached Zalo even when shutdown/mode-change won
+          // the race with its response. Do not derive a success/error detail or
+          // start another API call from this obsolete runtime.
+          const afterSendStopReason = this.getZaloRuntimeStopReason(campaign.id)
+          if (afterSendStopReason) {
+            await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterSendStopReason)
+            return true
+          }
+
+          if (sendError) {
+            mediaFailures.set(item.detail.id, await this.createZaloErrorDetail(
+              account,
+              campaign,
+              sendError,
+              actionDescriptor.code,
+              actionDescriptor.name,
+              { target: item.target, threadId: item.threadId, attachments, inputData: item.inputData, sendMode: 'share_media' }
+            ))
+          } else {
+            mediaResponses.set(item.detail.id, response)
+          }
+
+          const afterMediaDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
+          if (afterMediaDetailStopReason) {
+            await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterMediaDetailStopReason)
+            return true
+          }
         }
       }
-    }
 
-    let forwardResult: ZaloForwardMessageResult | null = null
-    let forwardError: unknown = null
-    const textBatch = batch.filter(item => !mediaFailures.has(item.detail.id))
-    if (trimmedMessage) {
-      if (textBatch.length > 0) {
+      let forwardResult: ZaloForwardMessageResult | null = null
+      let forwardError: unknown = null
+      const textBatch = batch.filter(item => !mediaFailures.has(item.detail.id))
+      if (trimmedMessage && textBatch.length > 0) {
+        const beforeForwardStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (beforeForwardStopReason) {
+          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, beforeForwardStopReason)
+          return true
+        }
+        textBatch.forEach(item => startedInputDataIds.add(item.detail.id))
         try {
           forwardResult = isGroup
             ? await this.zaloRuntime.forwardMessageToGroups(account.id, textBatch.map(item => item.threadId), trimmedMessage)
@@ -3100,58 +3590,114 @@ export class CampaignScheduler {
         } catch (err) {
           forwardError = err
         }
-      }
-    }
 
-    let stopAfterBatch = false
-    let shareSuccessCount = 0
-    let shareFailCount = 0
+        const afterForwardStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (afterForwardStopReason) {
+          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterForwardStopReason)
+          return true
+        }
+      }
+
+      let stopAfterBatch = false
+      let shareSuccessCount = 0
+      let shareFailCount = 0
+      for (const item of batch) {
+        const beforeDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (beforeDetailStopReason) {
+          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, beforeDetailStopReason)
+          return true
+        }
+
+        const mediaFailure = mediaFailures.get(item.detail.id)
+        let actionDetail: ZaloActionDetailOutput
+
+        if (mediaFailure) {
+          actionDetail = mediaFailure
+        } else if (forwardError) {
+          actionDetail = await this.createZaloErrorDetail(
+            account,
+            campaign,
+            forwardError,
+            actionDescriptor.code,
+            actionDescriptor.name,
+            { target: item.target, threadId: item.threadId, message: trimmedMessage, attachments, inputData: item.inputData, sendMode: 'share_text' }
+          )
+        } else if (trimmedMessage) {
+          const targetResult = this.findZaloForwardTargetResult(forwardResult, item.threadId)
+          actionDetail = targetResult?.ok
+            ? this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response)
+            : await this.createZaloForwardFailureDetail(account, campaign, actionDescriptor, item, targetResult, trimmedMessage, attachments, forwardResult?.response)
+        } else {
+          actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, '', attachments, mediaResponses.get(item.detail.id), null)
+        }
+
+        const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail)
+        const afterRecordStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (afterRecordStopReason) {
+          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterRecordStopReason)
+          return true
+        }
+        await this.updateZaloShareInputStatus(item.detail, actionDetail)
+
+        const afterInputUpdateStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (afterInputUpdateStopReason) {
+          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterInputUpdateStopReason)
+          return true
+        }
+
+        if (actionDetail.stopAfterTarget) {
+          stopAfterBatch = true
+        }
+
+        const createdStatus = created?.status || actionDetail.status
+        if (createdStatus === 'thành công') {
+          shareSuccessCount += 1
+          await this.resetCampaignBadTargetCount(campaign)
+        } else {
+          shareFailCount += 1
+        }
+      }
+
+      await this.logCampaignProgress(
+        campaign.id,
+        `📨 Kết quả chia sẻ tin nhắn Zalo: tổng ${batch.length}, thành công ${shareSuccessCount}, thất bại ${shareFailCount}`
+      )
+
+      return stopAfterBatch
+    } catch (err) {
+      const runtimeStopReason = this.getZaloRuntimeStopReason(campaign.id)
+      if (runtimeStopReason) {
+        await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, runtimeStopReason)
+        return true
+      }
+      throw err
+    }
+  }
+
+  private async settleZaloShareBatchRuntimeStop(
+    batch: ZaloShareMessageTarget[],
+    startedInputDataIds: Set<number>,
+    reason: ZaloRuntimeStopReason
+  ): Promise<void> {
+    if (this.zaloRuntimeClaimsAbandoned) return
+    const uncertainNote = this.getZaloRuntimeUncertainNote(reason)
     for (const item of batch) {
-      const mediaFailure = mediaFailures.get(item.detail.id)
-      let actionDetail: ZaloActionDetailOutput
-
-      if (mediaFailure) {
-        actionDetail = mediaFailure
-      } else if (forwardError) {
-        actionDetail = await this.createZaloErrorDetail(
-          account,
-          campaign,
-          forwardError,
-          actionDescriptor.code,
-          actionDescriptor.name,
-          { target: item.target, threadId: item.threadId, message: trimmedMessage, attachments, inputData: item.inputData, sendMode: 'share_text' }
-        )
-      } else if (trimmedMessage) {
-        const targetResult = this.findZaloForwardTargetResult(forwardResult, item.threadId)
-        actionDetail = targetResult?.ok
-          ? this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response)
-          : await this.createZaloForwardFailureDetail(account, campaign, actionDescriptor, item, targetResult, trimmedMessage, attachments, forwardResult?.response)
+      if (this.zaloRuntimeClaimsAbandoned) return
+      if (startedInputDataIds.has(item.detail.id)) {
+        await this.supabase.updateCampaignInputData(item.detail.id, {
+          status: 'hoàn thành',
+          note: uncertainNote
+        })
+        if (this.zaloRuntimeClaimsAbandoned) return
       } else {
-        actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, '', attachments, mediaResponses.get(item.detail.id), null)
-      }
-
-      const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail)
-      await this.updateZaloShareInputStatus(item.detail, actionDetail)
-
-      if (actionDetail.stopAfterTarget) {
-        stopAfterBatch = true
-      }
-
-      const createdStatus = created?.status || actionDetail.status
-      if (createdStatus === 'thành công') {
-        shareSuccessCount += 1
-        await this.resetCampaignBadTargetCount(campaign)
-      } else {
-        shareFailCount += 1
+        // This target was reserved for the batch but no Zalo API call started,
+        // so it is safe for the next runtime to process it.
+        await this.supabase.updateCampaignInputData(item.detail.id, {
+          status: 'chờ xử lý'
+        })
+        if (this.zaloRuntimeClaimsAbandoned) return
       }
     }
-
-    await this.logCampaignProgress(
-      campaign.id,
-      `📨 Kết quả chia sẻ tin nhắn Zalo: tổng ${batch.length}, thành công ${shareSuccessCount}, thất bại ${shareFailCount}`
-    )
-
-    return stopAfterBatch
   }
 
   private findZaloForwardTargetResult(
@@ -3572,6 +4118,7 @@ export class CampaignScheduler {
     if (!page) throw new Error('Không khởi tạo được trình duyệt cho Facebook')
     const abort = new AbortController()
     this.activeV2Aborts.set(campaign.id, abort)
+    if (account.flatformType === 'zalo' && this.zaloRuntimeBlockedForRestart) abort.abort()
     if (automationPage.source === 'background') {
       this.startBackgroundPreview(account.id, campaign.id, page)
     }
@@ -3931,6 +4478,7 @@ export class CampaignScheduler {
         })),
         tagIds
       )
+      this.throwIfZaloRuntimeStopping(campaign.id)
       if (result.count > 0) {
         const label = contactType === 'group'
           ? `group ${this.getZaloTargetLabel(target)}`
@@ -3946,6 +4494,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const message = err instanceof Error ? err.message : String(err)
       console.warn('[CampaignScheduler] Failed to apply akaBiz contact tags:', {
         accountId: account.id,
@@ -3997,6 +4546,7 @@ export class CampaignScheduler {
 
   private async materializeZaloFriendInputData(account: AutoAccount, campaign: Campaign): Promise<CampaignInputData[]> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const mode = this.getZaloFriendTargetMode(campaign)
     const sourceTagIds = this.getZaloFriendSourceTagIds(campaign)
     let allowedUidKeys: Set<string> | null = null
@@ -4009,7 +4559,9 @@ export class CampaignScheduler {
       await this.logCampaignProgress(campaign.id, `🔄 Đang lấy danh sách hội thoại trong ${sourceTagIds.length} tag Zalo: ${this.getZaloFriendSourceTagLogLabel(campaign, sourceTagIds)}`)
       const conversationUids: string[] = []
       for (const tagId of sourceTagIds) {
+        this.throwIfZaloRuntimeStopping(campaign.id)
         conversationUids.push(...await this.zaloRuntime.getLabelConversationUids(account.id, tagId))
+        this.throwIfZaloRuntimeStopping(campaign.id)
       }
       allowedUidKeys = new Set(conversationUids.map(uid => this.normalizeUidForCompare(uid)).filter(Boolean))
       if (allowedUidKeys.size === 0) {
@@ -4033,7 +4585,9 @@ export class CampaignScheduler {
     const seen = new Set<string>()
     let page = 1
     while (true) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const rows = await this.zaloRuntime.getAllFriendsPage(account.id, ZALO_FRIEND_PAGE_SIZE, page)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       for (const row of rows) {
         const profile = this.normalizeZaloFriendProfile(row)
         if (!profile) continue
@@ -4047,11 +4601,13 @@ export class CampaignScheduler {
       page += 1
     }
 
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloApiUserContacts(
       profiles.map(profile => this.mapZaloApiRawUserContact(account.id, profile.raw, campaign.actionId))
     )
 
     for (const profile of profiles) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.supabase.createCampaignInputData({
         campaignId: campaign.id,
         name: profile.name,
@@ -4061,6 +4617,7 @@ export class CampaignScheduler {
         note: ''
       })
     }
+    this.throwIfZaloRuntimeStopping(campaign.id)
 
     const nextExtraSettings = {
       ...(campaign.extraSettings || {}),
@@ -4080,6 +4637,7 @@ export class CampaignScheduler {
 
   private async materializeZaloBirthdayInputData(account: AutoAccount, campaign: Campaign): Promise<CampaignInputData[]> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const todayDateKey = this.getVietnamDateKey()
     const todayDdMm = this.getVietnamBirthdayKey()
 
@@ -4089,7 +4647,9 @@ export class CampaignScheduler {
     const seen = new Set<string>()
     let page = 1
     while (true) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const rows = await this.zaloRuntime.getAllFriendsPage(account.id, ZALO_FRIEND_PAGE_SIZE, page)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       for (const row of rows) {
         const profile = this.normalizeZaloFriendProfile(row)
         if (!profile || !this.isZaloBirthdayToday(profile.sdob, todayDdMm)) continue
@@ -4102,11 +4662,13 @@ export class CampaignScheduler {
       page += 1
     }
 
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloApiUserContacts(
       profiles.map(profile => this.mapZaloApiRawUserContact(account.id, profile.raw, campaign.actionId))
     )
 
     for (const profile of profiles) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.supabase.createCampaignInputData({
         campaignId: campaign.id,
         name: profile.name,
@@ -4116,6 +4678,7 @@ export class CampaignScheduler {
         note: ''
       })
     }
+    this.throwIfZaloRuntimeStopping(campaign.id)
 
     const nextExtraSettings = {
       ...(campaign.extraSettings || {}),
@@ -4167,6 +4730,7 @@ export class CampaignScheduler {
     campaign: Campaign
   ): Promise<CampaignInputData[]> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const requestedCount = this.normalizeZaloFriendRecommendationCount(
       campaign.extraSettings?.zaloFriendRecommendationCount
     )
@@ -4174,8 +4738,11 @@ export class CampaignScheduler {
 
     let snapshot: Awaited<ReturnType<ZaloRuntimeService['getFriendRecommendations']>>
     try {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       snapshot = await this.zaloRuntime.getFriendRecommendations(account.id)
+      this.throwIfZaloRuntimeStopping(campaign.id)
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.markZaloFriendRecommendationMaterialized(campaign, 0)
       const message = `Không lấy được đề xuất Zalo: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
       await this.completeZaloFriendRecommendationWithoutTargets(campaign, message)
@@ -4210,6 +4777,7 @@ export class CampaignScheduler {
     }
 
     for (const profile of selectedProfiles) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.supabase.createCampaignInputData({
         campaignId: campaign.id,
         name: profile.name || '',
@@ -4219,6 +4787,7 @@ export class CampaignScheduler {
         note: ''
       })
     }
+    this.throwIfZaloRuntimeStopping(campaign.id)
 
     await this.markZaloFriendRecommendationMaterialized(campaign, selectedProfiles.length)
     await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${selectedProfiles.length} đề xuất Zalo vào chiến dịch "${campaign.name}"`)
@@ -4266,20 +4835,25 @@ export class CampaignScheduler {
     existingDetails: CampaignInputData[]
   ): Promise<CampaignInputData[]> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const limit = this.normalizeZaloCancelFriendRequestLimit(
       campaign.extraSettings?.zaloCancelFriendRequestLimit
     )
 
     if (existingDetails.length > 0) {
       await this.supabase.clearCampaignInputData(campaign.id)
+      this.throwIfZaloRuntimeStopping(campaign.id)
     }
 
     await this.logCampaignProgress(campaign.id, `🔄 Đang lấy danh sách lời mời kết bạn đã gửi từ Zalo để huỷ ${limit} lời mời cũ nhất`)
 
     let snapshot: Awaited<ReturnType<ZaloRuntimeService['getSentFriendRequests']>>
     try {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       snapshot = await this.zaloRuntime.getSentFriendRequests(account.id)
+      this.throwIfZaloRuntimeStopping(campaign.id)
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.markZaloCancelSentFriendRequestMaterialized(campaign, 0)
       const message = `Không lấy được danh sách lời mời kết bạn đã gửi từ Zalo: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
       await this.completeZaloCancelSentFriendRequestWithoutTargets(campaign, message)
@@ -4302,6 +4876,7 @@ export class CampaignScheduler {
     }
 
     for (const profile of selectedProfiles) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.supabase.createCampaignInputData({
         campaignId: campaign.id,
         name: profile.name || profile.displayName || profile.zaloName || profile.uid,
@@ -4313,6 +4888,7 @@ export class CampaignScheduler {
         info3: profile.globalId || ''
       })
     }
+    this.throwIfZaloRuntimeStopping(campaign.id)
 
     await this.markZaloCancelSentFriendRequestMaterialized(campaign, selectedProfiles.length)
     await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${selectedProfiles.length} lời mời kết bạn đã gửi vào chiến dịch "${campaign.name}"`)
@@ -4797,7 +5373,9 @@ export class CampaignScheduler {
     }
 
     try {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const result = await this.zaloRuntime.checkSession(account.id)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       try {
         this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
       } catch {
@@ -4805,6 +5383,7 @@ export class CampaignScheduler {
       }
       if (result.loggedIn) return true
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       console.error('Failed to verify Zalo session before campaign run:', err)
       try {
         this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
@@ -4861,8 +5440,26 @@ export class CampaignScheduler {
 
   private async updateCampaignPreflightNote(campaign: Campaign, note: string): Promise<void> {
     const message = note || 'Không đủ điều kiện chạy'
-    if (campaign.status === 'chờ xử lý' && campaign.note === message) return
+    if (campaign.status === 'chờ xử lý' && campaign.note === message) {
+      const currentCampaign = await this.supabase.getCampaign(campaign.id)
+      if (currentCampaign?.status === 'chờ xử lý' && currentCampaign.note === message) return
+    }
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+  }
+
+  private async releaseClaimedCampaignPreflight(
+    accountId: number,
+    campaign: Campaign,
+    note: string
+  ): Promise<void> {
+    try {
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        note: note || 'Không đủ điều kiện chạy'
+      })
+    } finally {
+      await this.releaseRunningAccount(accountId)
+    }
   }
 
   private async buildLimitPreflightNote(limitStatus: AccountActionLimitStatus): Promise<string> {
@@ -8375,7 +8972,9 @@ export class CampaignScheduler {
           // campaign_input_data enum không có 'lỗi' — flag bằng 'hoàn thành' + note
           await this.supabase.updateCampaignInputData(d.id, {
             status: 'hoàn thành',
-            note: `Dừng đột ngột: ${errMsg}`
+            note: errMsg === ZALO_RUNTIME_HANDOFF_UNCERTAIN_NOTE || errMsg === ZALO_RUNTIME_SHUTDOWN_UNCERTAIN_NOTE
+              ? errMsg
+              : `Dừng đột ngột: ${errMsg}`
           })
         }
       }
@@ -8385,14 +8984,25 @@ export class CampaignScheduler {
   }
 
   private sendLog(message: string, action?: CampaignLogAction): void {
+    const entry: CampaignSchedulerLogEntry = {
+      timestamp: new Date().toISOString(),
+      message,
+      ...(action ? { action } : {})
+    }
+
     try {
-      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_LOG, {
-        timestamp: new Date().toISOString(),
-        message,
-        ...(action ? { action } : {})
-      })
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_LOG, entry)
     } catch {
       // Window may be closed
+    }
+
+    if (!this.logSink) return
+    try {
+      void Promise.resolve(this.logSink(entry)).catch(err => {
+        console.error('Campaign scheduler log sink failed:', err)
+      })
+    } catch (err) {
+      console.error('Campaign scheduler log sink failed:', err)
     }
   }
 
@@ -8572,14 +9182,17 @@ export class CampaignScheduler {
   ): Promise<{ stopAfterTarget: boolean }> {
     let stopAfterTarget = false
     if (!policy) return { stopAfterTarget }
+    this.throwIfZaloRuntimeStopping(campaign.id)
 
     if (policy.updateLoginStatus) {
       await this.updateAccountAndBroadcast(account.id, { loginStatus: policy.updateLoginStatus })
+      this.throwIfZaloRuntimeStopping(campaign.id)
       this.zaloRuntime?.invalidateAccount(account.id)
       stopAfterTarget = true
     }
     if (policy.updateStatusAccount) {
       await this.updateAccountAndBroadcast(account.id, { status: policy.updateStatusAccount })
+      this.throwIfZaloRuntimeStopping(campaign.id)
       stopAfterTarget = true
     }
     if (policy.disableActionCodes.length > 0) {
@@ -8587,6 +9200,7 @@ export class CampaignScheduler {
         errorCode: policy.errorCode,
         reason: message
       })
+      this.throwIfZaloRuntimeStopping(campaign.id)
       stopAfterTarget = true
     }
     if (policy.updateStatusCampaign) {
@@ -8594,6 +9208,7 @@ export class CampaignScheduler {
         status: policy.updateStatusCampaign,
         note: message
       })
+      this.throwIfZaloRuntimeStopping(campaign.id)
       stopAfterTarget = true
     }
 
@@ -8719,15 +9334,18 @@ export class CampaignScheduler {
     actionName: string,
     data: Record<string, unknown> = {}
   ): Promise<ZaloActionDetailOutput> {
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const rawMessage = this.getZaloErrorMessage(err)
     const zaloCode = this.getZaloErrorCode(err)
     const policy = await this.getZaloPolicyByErrorCode(zaloCode)
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const log = this.renderZaloPolicyLog(policy, rawMessage, {
       actionName,
       action: actionName,
       actionCode
     }, zaloCode)
     const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, log)
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
     await this.logZaloApiError({
       account,
@@ -8741,6 +9359,7 @@ export class CampaignScheduler {
       policy,
       detailStatus
     })
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const detail: ZaloActionDetailOutput = {
       createDetail: Boolean(detailStatus),
       actionCode,
@@ -8776,12 +9395,14 @@ export class CampaignScheduler {
     zaloCode: string | null,
     data: Record<string, unknown> = {}
   ): Promise<ZaloActionDetailOutput> {
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const log = this.renderZaloPolicyLog(policy, rawMessage, {
       actionName,
       action: actionName,
       actionCode
     }, zaloCode)
     const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, log)
+    this.throwIfZaloRuntimeStopping(campaign.id)
     const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
     return {
       createDetail: Boolean(detailStatus),
@@ -9063,6 +9684,7 @@ export class CampaignScheduler {
 
     try {
       const user = await this.zaloRuntime.findUserByPhone(account.id, phone)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       if (!user) {
         const policy = await this.getZaloNotFoundPolicy()
         const detail = await this.createZaloPolicyDetailFromCode(
@@ -9080,7 +9702,9 @@ export class CampaignScheduler {
 
       const target = this.normalizeZaloTarget(phone, user)
       await this.upsertZaloFoundUserContact(account, user, campaign.actionId)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const inputDataId = Number((options.inputData as Record<string, unknown> | undefined)?.id)
       if (Number.isFinite(inputDataId) && inputDataId > 0) {
         const nextName = target.displayName || target.originalName || ''
@@ -9101,6 +9725,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: false,
         detail: await this.createZaloErrorDetail(account, campaign, err, 'zalo_find_phone_user', 'Tìm SĐT', { phone, inputData: options.inputData })
@@ -9139,7 +9764,9 @@ export class CampaignScheduler {
         false
       )
     )
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
 
     return { ok: true, zaloTarget: target }
@@ -9163,7 +9790,9 @@ export class CampaignScheduler {
           false
         )
       )
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return { ok: true, zaloTarget: target }
     }
 
@@ -9228,7 +9857,9 @@ export class CampaignScheduler {
         false
       )
     )
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
 
     return { ok: true, zaloTarget: target }
@@ -9265,7 +9896,9 @@ export class CampaignScheduler {
         false
       )
     )
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
 
     return { ok: true, zaloTarget: target }
@@ -9291,6 +9924,7 @@ export class CampaignScheduler {
 
     try {
       const response = await this.zaloRuntime.sendMessageToUser(account.id, target.uid, message, attachments)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
         zaloTarget: target,
@@ -9302,6 +9936,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: false,
         zaloTarget: target,
@@ -9338,7 +9973,9 @@ export class CampaignScheduler {
       account,
       this.normalizeZaloTargetFromInputData(uid, options.targetName, options.inputData)
     )
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
+    this.throwIfZaloRuntimeStopping(campaign.id)
     await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
@@ -9348,6 +9985,7 @@ export class CampaignScheduler {
 
     try {
       const response = await this.zaloRuntime.sendMessageToUser(account.id, target.uid, message, attachments)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
         zaloTarget: target,
@@ -9359,6 +9997,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: false,
         zaloTarget: target,
@@ -9400,6 +10039,7 @@ export class CampaignScheduler {
 
     try {
       const response = await this.zaloRuntime.sendMessageToGroup(account.id, groupId, message, attachments)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'group')
       return {
         ok: true,
@@ -9412,6 +10052,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: false,
         zaloTarget: target,
@@ -9462,6 +10103,7 @@ export class CampaignScheduler {
         memberId: target.uid,
         useShareMethod
       })
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const targetLabel = this.getZaloTargetLabel(target)
       const groupLabel = this.firstNonEmptyString(result.groupName, groupName, result.groupId)
       const isAlreadyMember = result.outcome === 'already_member'
@@ -9495,6 +10137,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const detail = await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, {
         target,
         targetGroup: { id: groupId, name: groupName },
@@ -9536,6 +10179,7 @@ export class CampaignScheduler {
 
     try {
       const result = await this.zaloRuntime.joinGroupByLink(account.id, normalizedLink)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const isConfirmedJoined = result.outcome === 'joined' || result.outcome === 'already_joined'
       const isPendingApproval = result.outcome === 'pending_approval'
       if (!isConfirmedJoined && !isPendingApproval) {
@@ -9614,6 +10258,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: false,
         detail: await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { link: normalizedLink, inputData: options.inputData })
@@ -9636,6 +10281,7 @@ export class CampaignScheduler {
 
     try {
       const response = await this.zaloRuntime.sendFriendRequestToUser(account.id, target.uid, message)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
         zaloTarget: target,
@@ -9648,6 +10294,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const detail = await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { target, message, inputData: options.inputData })
       const detailStatus = String(detail.status || '').toLocaleLowerCase('vi-VN')
       return {
@@ -9697,6 +10344,7 @@ export class CampaignScheduler {
 
     try {
       const response = await this.zaloRuntime.undoFriendRequest(account.id, target.uid)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
         zaloTarget: target,
@@ -9714,6 +10362,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: false,
         zaloTarget: target,
@@ -9754,6 +10403,7 @@ export class CampaignScheduler {
 
     try {
       const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const labelName = label.text || options.labelName || ''
       await this.supabase.appendZaloTagsToExistingContacts(
         account.id,
@@ -9780,6 +10430,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const message = this.getZaloErrorMessage(err)
       if (message.includes('Tag Zalo không tồn tại')) {
         await this.logCaughtZaloApiError({
@@ -9842,6 +10493,7 @@ export class CampaignScheduler {
 
     try {
       const response = await this.zaloRuntime.changeUserAlias(account.id, target.uid, alias)
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
         zaloTarget: target,
@@ -9854,6 +10506,7 @@ export class CampaignScheduler {
         })
       }
     } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
       const detail = await this.createZaloErrorDetail(account, campaign, err, 'zalo_change_alias', 'Đổi tên Zalo', { target, alias, inputData: options.inputData })
       detail.countsTowardLimit = false
       return {
@@ -9953,20 +10606,20 @@ export class CampaignScheduler {
         blockId: metadata.blockId,
         blockName: metadata.blockName
       }),
-      zaloFindPhoneUser: (options) => this.zaloFindPhoneUser(account, campaign, options),
-      zaloResolveGroupMemberTarget: (options) => this.zaloResolveGroupMemberTarget(account, campaign, options),
-      zaloResolveAddGroupMemberTarget: (options) => this.zaloResolveAddGroupMemberTarget(account, campaign, options),
-      zaloResolveRemarketingCustomerTarget: (options) => this.zaloResolveRemarketingCustomerTarget(account, campaign, options),
-      zaloResolveFriendRecommendationTarget: (options) => this.zaloResolveFriendRecommendationTarget(account, campaign, options),
-      zaloSendPhoneMessage: (options, metadata) => this.zaloSendPhoneMessage(account, campaign, options, metadata),
-      zaloSendFriendMessage: (options, metadata) => this.zaloSendFriendMessage(account, campaign, options, metadata),
-      zaloSendGroupMessage: (options, metadata) => this.zaloSendGroupMessage(account, campaign, options, metadata),
-      zaloAddGroupMember: (options) => this.zaloAddGroupMember(account, campaign, options),
-      zaloJoinGroupLink: (options) => this.zaloJoinGroupLink(account, campaign, options),
-      zaloSendPhoneFriendRequest: (options) => this.zaloSendPhoneFriendRequest(account, campaign, options),
-      zaloCancelSentFriendRequest: (options) => this.zaloCancelSentFriendRequest(account, campaign, options),
-      zaloApplyContactTag: (options) => this.zaloApplyContactTag(account, campaign, options),
-      zaloChangeContactAlias: (options) => this.zaloChangeContactAlias(account, campaign, options),
+      zaloFindPhoneUser: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloFindPhoneUser(account, campaign, options)),
+      zaloResolveGroupMemberTarget: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloResolveGroupMemberTarget(account, campaign, options)),
+      zaloResolveAddGroupMemberTarget: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloResolveAddGroupMemberTarget(account, campaign, options)),
+      zaloResolveRemarketingCustomerTarget: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloResolveRemarketingCustomerTarget(account, campaign, options)),
+      zaloResolveFriendRecommendationTarget: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloResolveFriendRecommendationTarget(account, campaign, options)),
+      zaloSendPhoneMessage: (options, metadata) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendPhoneMessage(account, campaign, options, metadata)),
+      zaloSendFriendMessage: (options, metadata) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendFriendMessage(account, campaign, options, metadata)),
+      zaloSendGroupMessage: (options, metadata) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendGroupMessage(account, campaign, options, metadata)),
+      zaloAddGroupMember: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloAddGroupMember(account, campaign, options)),
+      zaloJoinGroupLink: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloJoinGroupLink(account, campaign, options)),
+      zaloSendPhoneFriendRequest: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendPhoneFriendRequest(account, campaign, options)),
+      zaloCancelSentFriendRequest: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloCancelSentFriendRequest(account, campaign, options)),
+      zaloApplyContactTag: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloApplyContactTag(account, campaign, options)),
+      zaloChangeContactAlias: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloChangeContactAlias(account, campaign, options)),
       emailSendMessage: (options) => this.emailSendMessage(account, campaign, options)
     }
   }
@@ -10631,6 +11284,21 @@ export class CampaignScheduler {
     }
   }
 
+  private async broadcastClaimedRuntimeState(campaignId: number): Promise<void> {
+    try {
+      const claimedCampaign = await this.supabase.getCampaign(campaignId)
+      if (claimedCampaign) this.broadcastCampaignUpdate(claimedCampaign)
+    } catch (error) {
+      console.warn(`Campaign ${campaignId} was claimed but could not be reloaded for broadcast:`, error)
+    }
+
+    try {
+      this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+    } catch {
+      // Window may be closed
+    }
+  }
+
   /**
    * Cập nhật account xong push event để panel tài khoản reload realtime.
    */
@@ -10645,8 +11313,20 @@ export class CampaignScheduler {
   }
 
   private async releaseRunningAccount(accountId: number): Promise<void> {
+    if (this.zaloRuntimeClaimsAbandoned && this.activeZaloAccountRuns.has(accountId)) return
     const account = await this.supabase.getAccount(accountId)
     if (!account || account.status !== 'đang chạy') return
+    if (account.flatformType === 'zalo') {
+      const released = await this.supabase.releaseZaloAccountRuntimeOperation(
+        accountId,
+        this.runtimeTarget,
+        'chờ xử lý'
+      )
+      if (released) {
+        try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+      }
+      return
+    }
     await this.updateAccountAndBroadcast(accountId, { status: 'chờ xử lý' })
   }
 

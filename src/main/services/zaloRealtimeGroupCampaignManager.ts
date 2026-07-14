@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { GroupEventType, ThreadType } from 'zca-js'
 import type { GroupEvent, Message, Reaction } from 'zca-js'
 import { Campaign, IPC_EVENTS } from '../../shared/types'
+import type { CampaignRuntimeTarget } from '../data/repositories/campaignRepository'
 import { SupabaseService } from './supabase'
 import { ZaloRuntimeService, type ZaloListenerStatusEvent } from './zaloRuntimeService'
 
@@ -41,17 +42,23 @@ export class ZaloRealtimeGroupCampaignManager {
   private refreshInFlight: Promise<void> | null = null
   private campaignsByAccount = new Map<number, RealtimeCampaignConfig[]>()
   private subscriptions = new Map<number, AccountSubscription>()
+  private listenerEnsureOperations = new Map<number, Promise<void>>()
   private sessionCheckTimers = new Map<number, ReturnType<typeof setTimeout>>()
+  private activeOperations = new Set<Promise<unknown>>()
+  private generation = 0
+  private zaloRuntimeClaimsAbandoned = false
 
   constructor(
     private readonly supabase: SupabaseService,
     private readonly zaloRuntime: ZaloRuntimeService,
-    private readonly mainWindow: BrowserWindow
+    private readonly mainWindow: BrowserWindow,
+    private readonly runtimeTarget: CampaignRuntimeTarget = 'desktop'
   ) {}
 
   start(): void {
     if (this.running) return
     this.running = true
+    this.generation += 1
     void this.refresh('start')
     this.refreshTimer = setInterval(() => {
       void this.refresh('interval')
@@ -60,6 +67,7 @@ export class ZaloRealtimeGroupCampaignManager {
 
   stop(): void {
     this.running = false
+    this.generation += 1
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer)
       this.refreshTimer = null
@@ -73,16 +81,34 @@ export class ZaloRealtimeGroupCampaignManager {
     this.campaignsByAccount.clear()
   }
 
+  abandonZaloRuntimeClaims(): void {
+    this.zaloRuntimeClaimsAbandoned = true
+  }
+
+  resetZaloRuntimeClaims(): void {
+    this.zaloRuntimeClaimsAbandoned = false
+  }
+
   refreshSoon(reason = 'manual'): void {
     if (!this.running) return
     void this.refresh(reason)
+  }
+
+  async waitForIdle(timeoutMs = 30_000): Promise<boolean> {
+    const deadline = Date.now() + Math.max(0, timeoutMs)
+    while (this.activeOperations.size > 0 || this.refreshInFlight) {
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    return true
   }
 
   private async refresh(reason: string): Promise<void> {
     if (!this.running) return
     if (this.refreshInFlight) return this.refreshInFlight
 
-    this.refreshInFlight = this.doRefresh(reason)
+    const generation = this.generation
+    this.refreshInFlight = this.doRefresh(reason, generation)
       .catch((err) => {
         console.warn('[ZaloRealtimeGroupCampaignManager] Refresh failed', {
           reason,
@@ -96,8 +122,9 @@ export class ZaloRealtimeGroupCampaignManager {
     return this.refreshInFlight
   }
 
-  private async doRefresh(_reason: string): Promise<void> {
+  private async doRefresh(_reason: string, generation: number): Promise<void> {
     const snapshots = await this.supabase.listZaloRealtimeGroupCampaignSnapshots()
+    if (!this.isActiveGeneration(generation)) return
     const nextByAccount = new Map<number, RealtimeCampaignConfig[]>()
 
     for (const snapshot of snapshots) {
@@ -123,6 +150,7 @@ export class ZaloRealtimeGroupCampaignManager {
     }
 
     for (const accountId of nextByAccount.keys()) {
+      if (!this.isActiveGeneration(generation)) return
       this.ensureAccountSubscription(accountId)
       this.ensureAccountListener(accountId)
     }
@@ -166,9 +194,9 @@ export class ZaloRealtimeGroupCampaignManager {
     if (this.subscriptions.has(accountId)) return
 
     const unsubscribe = this.zaloRuntime.subscribeRealtimeListener(accountId, {
-      groupEvent: event => this.handleGroupEvent(accountId, event),
-      message: message => this.handleMessage(accountId, message),
-      reaction: reaction => this.handleReaction(accountId, reaction),
+      groupEvent: event => { void this.trackOperation(this.handleGroupEvent(accountId, event)) },
+      message: message => { void this.trackOperation(this.handleMessage(accountId, message)) },
+      reaction: reaction => { void this.trackOperation(this.handleReaction(accountId, reaction)) },
       status: event => this.handleListenerStatus(event)
     })
 
@@ -176,18 +204,52 @@ export class ZaloRealtimeGroupCampaignManager {
   }
 
   private ensureAccountListener(accountId: number): void {
-    void this.zaloRuntime.ensureRealtimeListenerReady(accountId)
-      .then(() => {
+    if (this.listenerEnsureOperations.has(accountId)) return
+    const generation = this.generation
+    const listenerSetup = (async () => {
+      let previousStatus: 'chờ xử lý' | 'tạm dừng' | null = null
+      try {
+        if (this.zaloRuntimeClaimsAbandoned) return
+        const claim = await this.supabase.claimZaloAccountRuntimeOperation(
+          accountId,
+          this.runtimeTarget,
+          true
+        )
+        if (!claim.claimed || !claim.previousStatus) return
+        previousStatus = claim.previousStatus
+        if (!this.isActiveGeneration(generation)) return
+        await this.zaloRuntime.ensureRealtimeListenerReady(accountId)
+        if (!this.isActiveGeneration(generation)) return
         const subscription = this.subscriptions.get(accountId)
         if (subscription) subscription.degraded = false
-      })
-      .catch((err) => {
+      } catch (err) {
         console.warn('[ZaloRealtimeGroupCampaignManager] Failed to ensure listener', {
           accountId,
           message: this.getErrorMessage(err)
         })
-        this.scheduleSessionCheck(accountId)
-      })
+        if (this.isActiveGeneration(generation)) this.scheduleSessionCheck(accountId)
+      } finally {
+        if (previousStatus && !this.zaloRuntimeClaimsAbandoned) {
+          await this.supabase.releaseZaloAccountRuntimeOperation(
+            accountId,
+            this.runtimeTarget,
+            previousStatus
+          ).catch(err => {
+            console.warn('[ZaloRealtimeGroupCampaignManager] Failed to release listener claim', {
+              accountId,
+              message: this.getErrorMessage(err)
+            })
+          })
+        }
+      }
+    })()
+    const operation = listenerSetup.finally(() => {
+      if (this.listenerEnsureOperations.get(accountId) === operation) {
+        this.listenerEnsureOperations.delete(accountId)
+      }
+    })
+    this.listenerEnsureOperations.set(accountId, operation)
+    void this.trackOperation(operation)
   }
 
   private handleListenerStatus(event: ZaloListenerStatusEvent): void {
@@ -214,14 +276,22 @@ export class ZaloRealtimeGroupCampaignManager {
     if (this.sessionCheckTimers.has(accountId)) return
     const timer = setTimeout(() => {
       this.sessionCheckTimers.delete(accountId)
-      void this.verifySessionAfterListenerFailure(accountId)
+      void this.trackOperation(this.verifySessionAfterListenerFailure(accountId, this.generation))
     }, SESSION_CHECK_DEBOUNCE_MS)
     this.sessionCheckTimers.set(accountId, timer)
   }
 
-  private async verifySessionAfterListenerFailure(accountId: number): Promise<void> {
+  private async verifySessionAfterListenerFailure(accountId: number, generation: number): Promise<void> {
+    if (!this.isActiveGeneration(generation)) return
+    let previousStatus: 'chờ xử lý' | 'tạm dừng' | null = null
     try {
+      if (this.zaloRuntimeClaimsAbandoned) return
+      const claim = await this.supabase.claimZaloAccountRuntimeOperation(accountId, this.runtimeTarget, true)
+      if (!claim.claimed || !claim.previousStatus) return
+      previousStatus = claim.previousStatus
+      if (!this.isActiveGeneration(generation)) return
       const result = await this.zaloRuntime.checkSession(accountId)
+      if (!this.isActiveGeneration(generation)) return
       this.broadcastAccountStatusUpdated()
       if (result.loggedIn) {
         this.ensureAccountListener(accountId)
@@ -234,6 +304,19 @@ export class ZaloRealtimeGroupCampaignManager {
         accountId,
         message: this.getErrorMessage(err)
       })
+    } finally {
+      if (previousStatus && !this.zaloRuntimeClaimsAbandoned) {
+        await this.supabase.releaseZaloAccountRuntimeOperation(
+          accountId,
+          this.runtimeTarget,
+          previousStatus
+        ).catch(err => {
+          console.warn('[ZaloRealtimeGroupCampaignManager] Failed to release session-check claim', {
+            accountId,
+            message: this.getErrorMessage(err)
+          })
+        })
+      }
     }
   }
 
@@ -255,6 +338,7 @@ export class ZaloRealtimeGroupCampaignManager {
   }
 
   private async handleGroupEvent(accountId: number, event: GroupEvent): Promise<void> {
+    if (!this.running) return
     const data = (event.data || {}) as Record<string, any>
     const members = Array.isArray(data.updateMembers) ? data.updateMembers : []
     const trigger = event.type === GroupEventType.JOIN
@@ -291,6 +375,7 @@ export class ZaloRealtimeGroupCampaignManager {
   }
 
   private async handleMessage(accountId: number, message: Message): Promise<void> {
+    if (!this.running) return
     if (message.isSelf || message.type !== ThreadType.Group) return
     const groupId = normalizeZaloGroupId(message.threadId)
     const targetUid = normalizeZaloMemberId(message.data?.uidFrom)
@@ -302,6 +387,7 @@ export class ZaloRealtimeGroupCampaignManager {
   }
 
   private async handleReaction(accountId: number, reaction: Reaction): Promise<void> {
+    if (!this.running) return
     if (reaction.isSelf || !reaction.isGroup) return
     const groupId = normalizeZaloGroupId(reaction.threadId)
     const targetUid = normalizeZaloMemberId(reaction.data?.uidFrom)
@@ -319,6 +405,7 @@ export class ZaloRealtimeGroupCampaignManager {
     rawName: unknown,
     rawPayload: Record<string, unknown>
   ): Promise<void> {
+    if (!this.running) return
     const campaigns = this.getMatchingCampaigns(accountId, groupId, 'interact')
     if (campaigns.length === 0) return
     const targetName = String(rawName || '').trim()
@@ -353,9 +440,12 @@ export class ZaloRealtimeGroupCampaignManager {
       rawPayload: Record<string, unknown>
     }
   ): Promise<void> {
+    const generation = this.generation
+    if (!this.isActiveGeneration(generation)) return
     try {
       const scheduleAt = this.getNextInputSchedule(item.campaign, new Date())
       const result = await this.supabase.enqueueZaloRealtimeGroupEvent({
+        runtimeTarget: this.runtimeTarget,
         campaignId: item.campaign.id,
         accountId: item.accountId,
         groupId: input.groupId,
@@ -367,7 +457,9 @@ export class ZaloRealtimeGroupCampaignManager {
         scheduleAt: scheduleAt.toISOString(),
         rawPayload: input.rawPayload
       })
+      if (!this.isActiveGeneration(generation)) return
       await this.logRealtimeReceiveHistory(item, input, result.inserted)
+      if (!this.isActiveGeneration(generation)) return
       if (result.inserted) {
         const updated = await this.supabase.getCampaign(item.campaign.id)
         if (updated) this.broadcastCampaign(updated)
@@ -381,6 +473,18 @@ export class ZaloRealtimeGroupCampaignManager {
         message: this.getErrorMessage(err)
       })
     }
+  }
+
+  private isActiveGeneration(generation: number): boolean {
+    return this.running && this.generation === generation
+  }
+
+  private trackOperation<T>(operation: Promise<T>): Promise<T> {
+    this.activeOperations.add(operation)
+    void operation.finally(() => {
+      this.activeOperations.delete(operation)
+    }).catch(() => {})
+    return operation
   }
 
   private async logRealtimeReceiveHistory(

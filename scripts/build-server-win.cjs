@@ -6,9 +6,22 @@ const { spawnSync } = require('child_process')
 const projectRoot = resolve(__dirname, '..')
 const betterSqliteDir = join(projectRoot, 'node_modules', 'better-sqlite3')
 const betterSqliteNativePath = join(betterSqliteDir, 'build', 'Release', 'better_sqlite3.node')
-const nativeBackupDir = mkdtempSync(join(tmpdir(), 'akabiz-win-native-'))
+const nativeBackupDir = mkdtempSync(join(tmpdir(), 'aka-zalo-server-win-native-'))
 const betterSqliteBackupPath = join(nativeBackupDir, 'better_sqlite3.node')
 let nativePreparationStarted = false
+const serverDistDir = join(projectRoot, 'dist-server')
+const serverMainPath = join(projectRoot, 'out-server', 'main', 'index.js')
+const packagedNativePath = join(
+  serverDistDir,
+  'win-unpacked',
+  'resources',
+  'app.asar.unpacked',
+  'node_modules',
+  'better-sqlite3',
+  'build',
+  'Release',
+  'better_sqlite3.node'
+)
 
 function command(name) {
   return process.platform === 'win32' ? `${name}.cmd` : name
@@ -32,7 +45,7 @@ function getElectronVersion() {
   try {
     return require(join(projectRoot, 'node_modules', 'electron', 'package.json')).version
   } catch {
-    throw new Error('Cannot read installed Electron version. Run npm ci before npm run build:win.')
+    throw new Error('Cannot read installed Electron version. Run npm ci before npm run build:server:win.')
   }
 }
 
@@ -57,7 +70,7 @@ function assertWindowsNativeModule(filePath) {
 
 function prepareWindowsNativeModules() {
   if (!existsSync(betterSqliteDir)) {
-    throw new Error('Missing node_modules/better-sqlite3. Run npm ci before npm run build:win.')
+    throw new Error('Missing node_modules/better-sqlite3. Run npm ci before npm run build:server:win.')
   }
 
   nativePreparationStarted = true
@@ -66,13 +79,12 @@ function prepareWindowsNativeModules() {
   }
 
   mkdirSync(dirname(betterSqliteNativePath), { recursive: true })
-  const electronVersion = getElectronVersion()
   run(command('npx'), [
     'prebuild-install',
     '--runtime',
     'electron',
     '--target',
-    electronVersion,
+    getElectronVersion(),
     '--platform',
     'win32',
     '--arch',
@@ -81,7 +93,7 @@ function prepareWindowsNativeModules() {
   ], { cwd: betterSqliteDir })
 
   assertWindowsNativeModule(betterSqliteNativePath)
-  console.log('Prepared better-sqlite3 Windows x64 native module for packaging.')
+  console.log('Prepared better-sqlite3 Windows x64 native module for server packaging.')
 }
 
 function restoreHostNativeModules() {
@@ -101,17 +113,16 @@ function restoreHostNativeModules() {
   }
 }
 
-function cleanWindowsDist() {
-  const distDir = join(projectRoot, 'dist')
+function cleanServerWindowsDist() {
   const appVersion = getAppVersion()
   const paths = [
-    join(distDir, 'win-unpacked'),
-    join(distDir, 'win-ia32-unpacked'),
-    join(distDir, 'win-arm64-unpacked'),
-    join(distDir, 'builder-debug.yml'),
-    join(distDir, 'builder-effective-config.yaml'),
-    join(distDir, 'latest.yml'),
-    join(distDir, `akaBizAuto-Setup-${appVersion}.exe`)
+    join(serverDistDir, 'win-unpacked'),
+    join(serverDistDir, 'win-ia32-unpacked'),
+    join(serverDistDir, 'win-arm64-unpacked'),
+    join(serverDistDir, 'builder-debug.yml'),
+    join(serverDistDir, 'builder-effective-config.yaml'),
+    join(serverDistDir, 'latest.yml'),
+    join(serverDistDir, `akaAgent-Zalo-Server-Setup-${appVersion}.exe`)
   ]
 
   for (const pathToRemove of paths) {
@@ -119,12 +130,32 @@ function cleanWindowsDist() {
   }
 }
 
+function assertServerBuildOutput() {
+  if (!existsSync(serverMainPath)) {
+    throw new Error(`Missing server main build output: ${serverMainPath}`)
+  }
+}
+
 try {
-  cleanWindowsDist()
-  run(command('npm'), ['run', 'build'])
+  cleanServerWindowsDist()
+  run(command('npm'), ['run', 'build:server'])
+  assertServerBuildOutput()
   prepareWindowsNativeModules()
-  run(command('npx'), ['electron-builder', '--win', '--x64', '--config'])
-  run(process.execPath, [join(projectRoot, 'scripts', 'verify-win-native-modules.cjs')])
+  run(command('npx'), [
+    'electron-builder',
+    '--win',
+    '--x64',
+    '--config',
+    'electron-builder.server.yml',
+    '--publish',
+    'never'
+  ])
+  assertWindowsNativeModule(packagedNativePath)
+  run(process.execPath, [
+    join(projectRoot, 'scripts', 'verify-win-native-modules.cjs'),
+    join('dist-server', 'win-unpacked')
+  ])
+  console.log('Verified packaged better-sqlite3 Windows x64 native module for akaAgent Zalo Server.')
 } finally {
   restoreHostNativeModules()
 }

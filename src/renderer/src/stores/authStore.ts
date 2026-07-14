@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AuthUser, LoginPreferences, SavedLoginCredentials } from '../../../shared/types'
+import { AuthUser, LoginPreferences, SavedLoginCredentials, ZaloRuntimeRestartRequiredPayload } from '../../../shared/types'
 
 interface AuthState {
   user: AuthUser | null
@@ -9,6 +9,7 @@ interface AuthState {
   errorMessage: string | null
   loginOptions: LoginPreferences
   savedCredentials: SavedLoginCredentials | null
+  zaloRuntimeRestartRequired: ZaloRuntimeRestartRequiredPayload | null
 
   setLoginOptions: (updates: Partial<LoginPreferences>) => Promise<void>
   login: (username: string, password: string, options?: LoginPreferences) => Promise<void>
@@ -20,6 +21,7 @@ interface AuthState {
   rehydrateFromStorage: () => Promise<void>
   handleSessionExpired: (message?: string | null) => void
   handleUserUpdated: (user: AuthUser) => void
+  handleZaloRuntimeRestartRequired: (payload: ZaloRuntimeRestartRequiredPayload) => void
   clearError: () => void
 }
 
@@ -115,6 +117,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   errorMessage: null,
   loginOptions: DEFAULT_LOGIN_OPTIONS,
   savedCredentials: null,
+  zaloRuntimeRestartRequired: null,
 
   setLoginOptions: async (updates) => {
     const current = useAuthStore.getState()
@@ -273,10 +276,18 @@ export const useAuthStore = create<AuthState>()((set) => ({
     errorMessage: formatAuthErrorMessage(message || 'Tài khoản của bạn đã hết hạn', 'Tài khoản của bạn đã hết hạn')
   }),
 
-  handleUserUpdated: (user) => set({
-    user,
+  handleUserUpdated: (user) => set((state) => ({
+    // The runtime target is a startup invariant. Periodic user refreshes may
+    // update entitlements, but must not hot-switch Zalo within this process.
+    user: state.user && state.user.staffId === user.staffId
+      ? { ...user, isZaloServer: state.user.isZaloServer }
+      : user,
     errorMessage: null
-  }),
+  })),
+
+  handleZaloRuntimeRestartRequired: (payload) => set((state) => ({
+    zaloRuntimeRestartRequired: state.zaloRuntimeRestartRequired || payload
+  })),
 
   clearError: () => set({ errorMessage: null })
 }))

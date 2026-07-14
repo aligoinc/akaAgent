@@ -7,20 +7,39 @@ export interface AuthProductCatalogItem {
   order: number
 }
 
+export const AUTH_ZALO_PRODUCT_IDS = [16, 18] as const
+
 export const AUTH_PRODUCT_CATALOG: AuthProductCatalogItem[] = [
   { feature: 'facebookCore', productId: 3, label: 'Facebook', order: 1 },
   { feature: 'facebookFanpage', productId: 10, label: 'Fanpage', order: 2 },
-  { feature: 'zalo', productId: 16, label: 'Zalo', order: 3 },
+  { feature: 'zalo', productId: AUTH_ZALO_PRODUCT_IDS[0], label: 'Zalo', order: 3 },
+  { feature: 'zalo', productId: AUTH_ZALO_PRODUCT_IDS[1], label: 'Zalo', order: 3 },
   { feature: 'email', productId: 13, label: 'Email', order: 4 },
   { feature: 'sms', productId: 17, label: 'akaAgent SMS', order: 5 }
 ]
 
 export const AUTH_PRODUCT_IDS = AUTH_PRODUCT_CATALOG.map(item => item.productId)
 
-export const AUTH_PRODUCT_BY_FEATURE = AUTH_PRODUCT_CATALOG.reduce((acc, item) => {
-  acc[item.feature] = item
+export const AUTH_PRODUCTS_BY_FEATURE = AUTH_PRODUCT_CATALOG.reduce((acc, item) => {
+  acc[item.feature].push(item)
   return acc
-}, {} as Record<AuthEntitlementFeature, AuthProductCatalogItem>)
+}, {
+  facebookCore: [],
+  facebookFanpage: [],
+  email: [],
+  zalo: [],
+  sms: []
+} as Record<AuthEntitlementFeature, AuthProductCatalogItem[]>)
+
+export type AuthSingleProductFeature = Exclude<AuthEntitlementFeature, 'zalo'>
+
+// Only features with exactly one product may use this singular lookup. Zalo
+// intentionally has no primary product because 16 and 18 are equivalent.
+export const AUTH_PRODUCT_BY_FEATURE = AUTH_PRODUCT_CATALOG.reduce((acc, item) => {
+  if (item.feature === 'zalo') return acc
+  if (!acc[item.feature]) acc[item.feature] = item
+  return acc
+}, {} as Partial<Record<AuthSingleProductFeature, AuthProductCatalogItem>>) as Record<AuthSingleProductFeature, AuthProductCatalogItem>
 
 export function getAuthProductById(productId: number | null | undefined): AuthProductCatalogItem | null {
   if (productId == null) return null

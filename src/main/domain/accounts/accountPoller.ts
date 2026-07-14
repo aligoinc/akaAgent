@@ -2,7 +2,11 @@ import { BrowserWindow, webContents } from 'electron'
 import { AutoAccount, IPC_EVENTS } from '../../../shared/types'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import * as accountRepo from '../../data/repositories/accountRepository'
-import { getCurrentUser } from '../../data/currentUser'
+import { getCurrentUser, isCurrentUserZaloServerEnabled } from '../../data/currentUser'
+import {
+  getZaloRuntimeRestartRequired,
+  isZaloLocalStartupHandoffBlocked
+} from '../../data/repositories/zaloRuntimeModeRepository'
 import type { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 
 const AUTO_CHECK_INTERVAL = 30_000
@@ -70,15 +74,28 @@ async function checkFacebookWebviewAccounts(
 
 async function checkZaloApiAccounts(
   accounts: AutoAccount[],
-  zaloRuntime?: ZaloRuntimeService
+  zaloRuntime: ZaloRuntimeService | undefined,
+  canContinue: () => boolean,
+  canReleaseClaim: () => boolean
 ): Promise<boolean> {
   if (!zaloRuntime) return false
   let hasChanges = false
   for (const account of accounts) {
+    if (!canContinue()) break
     if (account.flatformType !== 'zalo' || !account.hasZaloSession || account.loginStatus !== 'đã đăng nhập') continue
 
     try {
-      const result = await zaloRuntime.checkSession(account.id)
+      const claim = await accountRepo.claimZaloAccountRuntimeOperation(account.id, 'desktop', true)
+      if (!claim.claimed || !claim.previousStatus) continue
+      let result: Awaited<ReturnType<ZaloRuntimeService['checkSession']>>
+      try {
+        if (!canContinue()) continue
+        result = await zaloRuntime.checkSession(account.id)
+      } finally {
+        if (canReleaseClaim()) {
+          await accountRepo.releaseZaloAccountRuntimeOperation(account.id, 'desktop', claim.previousStatus)
+        }
+      }
       const newStatus = result.account?.loginStatus || result.status
       if (newStatus && account.loginStatus !== newStatus) {
         hasChanges = true
@@ -96,12 +113,23 @@ async function checkZaloApiAccounts(
   return hasChanges
 }
 
+export interface AccountPollerController {
+  blockZaloRuntime(): void
+  resetZaloRuntimeBlock(): void
+  waitForZaloIdle(timeoutMs?: number): Promise<boolean>
+  abandonZaloClaims(): void
+  resetZaloClaims(): void
+}
+
 export function startAccountPoller(
   webviewRegistry: WebviewRegistry,
   mainWindow: BrowserWindow,
   zaloRuntime?: ZaloRuntimeService
-): void {
+): AccountPollerController {
   let isRunning = false
+  let zaloRuntimeBlocked = false
+  let zaloClaimsAbandoned = false
+  let activeZaloCheck: Promise<boolean> | null = null
   let lastZaloAutoCheckAt = Date.now()
   let lastStaffId: number | null = null
 
@@ -119,10 +147,25 @@ export function startAccountPoller(
       const accounts = await accountRepo.listAccounts()
       const hasFacebookChanges = await checkFacebookWebviewAccounts(accounts, webviewRegistry)
       const now = Date.now()
-      const shouldCheckZalo = now - lastZaloAutoCheckAt >= ZALO_AUTO_CHECK_INTERVAL
-      const hasZaloChanges = shouldCheckZalo
-        ? await checkZaloApiAccounts(accounts, zaloRuntime)
-        : false
+      const shouldCheckZalo = !getZaloRuntimeRestartRequired() &&
+        !isZaloLocalStartupHandoffBlocked() &&
+        !isCurrentUserZaloServerEnabled() &&
+        now - lastZaloAutoCheckAt >= ZALO_AUTO_CHECK_INTERVAL
+      let hasZaloChanges = false
+      if (shouldCheckZalo && !zaloRuntimeBlocked) {
+        const operation = checkZaloApiAccounts(
+          accounts,
+          zaloRuntime,
+          () => !zaloRuntimeBlocked && !zaloClaimsAbandoned,
+          () => !zaloClaimsAbandoned
+        )
+        activeZaloCheck = operation
+        try {
+          hasZaloChanges = await operation
+        } finally {
+          if (activeZaloCheck === operation) activeZaloCheck = null
+        }
+      }
       if (shouldCheckZalo) lastZaloAutoCheckAt = now
       if (hasFacebookChanges || hasZaloChanges) {
         mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
@@ -131,4 +174,27 @@ export function startAccountPoller(
       isRunning = false
     }
   }, AUTO_CHECK_INTERVAL)
+
+  return {
+    blockZaloRuntime(): void {
+      zaloRuntimeBlocked = true
+    },
+    resetZaloRuntimeBlock(): void {
+      zaloRuntimeBlocked = false
+    },
+    abandonZaloClaims(): void {
+      zaloClaimsAbandoned = true
+    },
+    resetZaloClaims(): void {
+      zaloClaimsAbandoned = false
+    },
+    async waitForZaloIdle(timeoutMs = 30_000): Promise<boolean> {
+      const pending = activeZaloCheck
+      if (!pending) return true
+      return await Promise.race([
+        pending.then(() => true, () => true),
+        new Promise<false>(resolve => setTimeout(() => resolve(false), Math.max(0, timeoutMs)))
+      ])
+    }
+  }
 }

@@ -129,6 +129,7 @@ const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
 
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
+export type CampaignRuntimeTarget = 'desktop' | 'server'
 type CampaignInputDataProgress = {
   completed: number
   total: number
@@ -142,6 +143,7 @@ export interface ZaloRealtimeGroupCampaignSnapshot {
 }
 
 export interface EnqueueZaloRealtimeGroupEventRequest {
+  runtimeTarget: CampaignRuntimeTarget
   campaignId: number
   accountId: number
   groupId: string
@@ -1011,9 +1013,12 @@ export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloReal
 export async function enqueueZaloRealtimeGroupEvent(
   request: EnqueueZaloRealtimeGroupEventRequest
 ): Promise<EnqueueZaloRealtimeGroupEventResult> {
+  const u = requireCurrentUser()
   const { data, error } = await client().rpc('enqueue_campaign_zalo_realtime_group_event', {
     p_campaign_id: request.campaignId,
     p_account_id: request.accountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: request.runtimeTarget,
     p_group_id: request.groupId,
     p_group_name: request.groupName || null,
     p_trigger_type: request.triggerType,
@@ -1331,10 +1336,12 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
 }
 
 export async function appendCampaignLog(campaignId: number, logText: string): Promise<Campaign> {
+  const u = requireCurrentUser()
   const { data: current, error: currentError } = await client()
     .from('auto_campaigns')
-    .select('log, name, auto_accounts(name)')
+    .select('name, auto_accounts(name)')
     .eq('id', campaignId)
+    .eq('staff_id', u.staffId)
     .single()
 
   if (currentError) throw new Error(`Failed to load campaign log: ${currentError.message}`)
@@ -1344,17 +1351,68 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
     campaignName: (current as any)?.name,
     accountName: (current as any)?.auto_accounts?.name
   })
-  const fullLog = current?.log ? `${current.log}\n${newLog}` : newLog
+
+  const { error: appendError } = await client().rpc('append_auto_campaign_log', {
+    p_campaign_id: campaignId,
+    p_staff_id: u.staffId,
+    p_log_line: newLog
+  })
+
+  if (appendError) {
+    throw new Error(
+      `Failed to append campaign log atomically: ${appendError.message}. ` +
+      'Ensure migration v163 is applied; the legacy read-modify-write fallback was intentionally not used.'
+    )
+  }
 
   const { data, error } = await client()
     .from('auto_campaigns')
-    .update({ log: fullLog, updated_at: new Date().toISOString() })
-    .eq('id', campaignId)
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .eq('id', campaignId)
+    .eq('staff_id', u.staffId)
     .single()
 
-  if (error) throw new Error(`Failed to append campaign log: ${error.message}`)
+  if (error) {
+    throw new Error(
+      `Campaign log was appended atomically, but the updated campaign could not be reloaded: ${error.message}`
+    )
+  }
   return mapCampaignFromDB(data)
+}
+
+export async function claimCampaignRuntime(
+  campaignId: number,
+  accountId: number,
+  runtimeTarget: CampaignRuntimeTarget
+): Promise<boolean> {
+  const u = requireCurrentUser()
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  const normalizedAccountId = Math.floor(Number(accountId))
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for runtime claim')
+  }
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for runtime claim')
+  }
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Runtime target must be desktop or server')
+  }
+
+  const { data, error } = await client().rpc('claim_campaign_runtime', {
+    p_campaign_id: normalizedCampaignId,
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: runtimeTarget
+  })
+
+  if (error) {
+    throw new Error(
+      `Failed to claim campaign runtime atomically: ${error.message}. ` +
+      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  return data === true
 }
 
 export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {
@@ -1396,12 +1454,19 @@ export async function getDueSmsCampaignsForLimitCheck(accountId: number): Promis
   return (data || []).map(row => mapCampaignFromDB(row))
 }
 
-export async function maintainCampaignSchedules(): Promise<Campaign[]> {
+type CampaignSchedulePlatformScope = 'all' | 'zalo' | 'non-zalo'
+
+export async function maintainCampaignSchedules(
+  platformScope: CampaignSchedulePlatformScope = 'all'
+): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const todayStart = startOfVietnamDay()
-  const { data, error } = await client()
+  const accountRelation = platformScope === 'all'
+    ? 'auto_accounts(name)'
+    : 'auto_accounts!inner(name, flatform_type)'
+  let query = client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(`*, auto_campaign_actions(name), ${accountRelation}`)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .neq('action_id', SMS_SEND_ACTION_ID)
@@ -1409,9 +1474,18 @@ export async function maintainCampaignSchedules(): Promise<Campaign[]> {
     .lt('schedule', todayStart.toISOString())
     .in('status', ['chờ xử lý', 'hoàn thành'])
 
+  if (platformScope === 'zalo') {
+    query = query.eq('auto_accounts.flatform_type', 'zalo')
+  } else if (platformScope === 'non-zalo') {
+    query = query.neq('auto_accounts.flatform_type', 'zalo')
+  }
+
+  const { data, error } = await query
+
   if (error) throw new Error(`Failed to list stale campaign schedules: ${error.message}`)
 
   const updatedCampaigns: Campaign[] = []
+  const maintenanceErrors: Array<{ campaignId: number; message: string }> = []
   const campaigns = (data || []).map(row => mapCampaignFromDB(row))
 
   for (const campaign of campaigns) {
@@ -1557,10 +1631,30 @@ export async function maintainCampaignSchedules(): Promise<Campaign[]> {
       updatedCampaigns.push(updated)
     } catch (err) {
       console.error(`Failed to maintain campaign schedule ${campaign.id}:`, err)
+      maintenanceErrors.push({
+        campaignId: campaign.id,
+        message: err instanceof Error ? err.message : String(err)
+      })
     }
   }
 
+  if (maintenanceErrors.length > 0) {
+    const summary = maintenanceErrors
+      .slice(0, 5)
+      .map(item => `#${item.campaignId}: ${item.message}`)
+      .join('; ')
+    throw new Error(`Maintenance failed for ${maintenanceErrors.length} campaign(s): ${summary}`)
+  }
+
   return updatedCampaigns
+}
+
+export function maintainZaloCampaignSchedules(): Promise<Campaign[]> {
+  return maintainCampaignSchedules('zalo')
+}
+
+export function maintainNonZaloCampaignSchedules(): Promise<Campaign[]> {
+  return maintainCampaignSchedules('non-zalo')
 }
 
 async function listStaffCampaignIds(staffId: number, context: string): Promise<number[]> {

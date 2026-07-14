@@ -1,6 +1,8 @@
 node_modules/
 out/
 dist/
+out-server/
+dist-server/
 .env
 .mcp.json
 *.local.json
