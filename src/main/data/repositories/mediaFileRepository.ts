@@ -1,10 +1,12 @@
-import { statSync } from 'fs'
-import { basename } from 'path'
+import { renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { basename, extname, join } from 'path'
 import {
   CampaignMediaSnapshot,
   MEDIA_FILE_MAX_SIZE_BYTES,
   MEDIA_IMAGE_MAX_SIZE_BYTES,
   MEDIA_LIBRARY_MAX_FILES_PER_STAFF,
+  MediaClipboardImageInput,
   MediaFile,
   MediaGroup,
   MediaStorageSettings,
@@ -19,7 +21,8 @@ import {
   detectMediaMimeType,
   guessMediaMimeType,
   mediaStorageService,
-  ResolvedMediaStorageSettings
+  ResolvedMediaStorageSettings,
+  sniffImageMimeType
 } from '../../services/mediaStorageService'
 
 const client = () => getSupabaseClient()
@@ -119,6 +122,156 @@ function assertMediaUploadSize(localPath: string, mimeType: string): void {
     const label = isMediaImageMime(mimeType) ? 'Ảnh' : 'File'
     throw new Error(`${label} vượt quá dung lượng tối đa ${formatMediaLimitSize(limit)}.`)
   }
+}
+
+function getImageExtension(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case 'image/apng':
+      return '.apng'
+    case 'image/avif':
+      return '.avif'
+    case 'image/bmp':
+      return '.bmp'
+    case 'image/gif':
+      return '.gif'
+    case 'image/heic':
+      return '.heic'
+    case 'image/heif':
+      return '.heif'
+    case 'image/jpeg':
+      return '.jpg'
+    case 'image/png':
+      return '.png'
+    case 'image/svg+xml':
+      return '.svg'
+    case 'image/tiff':
+      return '.tiff'
+    case 'image/webp':
+      return '.webp'
+    default:
+      return '.png'
+  }
+}
+
+function sanitizeClipboardImageName(value: unknown, mimeType: string, index: number): string {
+  const rawName = basename(normalizeText(value))
+  const rawExtension = extname(rawName)
+  const rawStem = rawExtension ? rawName.slice(0, -rawExtension.length) : rawName
+  const safeStem = rawStem
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  const fallback = `pasted-image-${Date.now()}-${index + 1}`
+  return `${safeStem || fallback}${getImageExtension(mimeType)}`
+}
+
+function estimateBase64DecodedSize(value: string): number {
+  const normalized = value.replace(/\s/g, '')
+  if (!normalized) return 0
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0
+  return Math.max(0, Math.floor(normalized.length * 3 / 4) - padding)
+}
+
+interface PreparedMediaUpload {
+  uploadPath: string
+  originalName: string
+  persistedLocalPath: string | null
+  mimeType: string
+}
+
+function prepareClipboardImage(input: MediaClipboardImageInput, index: number): PreparedMediaUpload & { cleanupPath: string } {
+  const dataUrl = normalizeText(input?.dataUrl)
+  const failureName = normalizeText(input?.name) || `Ảnh dán #${index + 1}`
+  const maxDataUrlLength = Math.ceil(MEDIA_IMAGE_MAX_SIZE_BYTES * 4 / 3) + 1024
+  if (!dataUrl || dataUrl.length > maxDataUrlLength) {
+    throw new Error(dataUrl ? `Ảnh "${failureName}" vượt quá dung lượng tối đa ${formatMediaLimitSize(MEDIA_IMAGE_MAX_SIZE_BYTES)}.` : 'Ảnh dán không có dữ liệu.')
+  }
+
+  const match = /^data:([^;,]+);base64,([\s\S]+)$/i.exec(dataUrl)
+  if (!match || !match[1].toLowerCase().startsWith('image/')) {
+    throw new Error(`Ảnh "${failureName}" không đúng định dạng data URL.`)
+  }
+
+  const base64Payload = match[2].replace(/\s/g, '')
+  const validBase64 = base64Payload.length % 4 === 0
+    && /^(?:[a-zA-Z0-9+/]{4})*(?:[a-zA-Z0-9+/]{2}==|[a-zA-Z0-9+/]{3}=)?$/.test(base64Payload)
+  if (!validBase64) {
+    throw new Error(`Ảnh "${failureName}" có dữ liệu base64 không hợp lệ.`)
+  }
+  const estimatedSize = estimateBase64DecodedSize(base64Payload)
+  if (estimatedSize <= 0) throw new Error(`Ảnh "${failureName}" không có dữ liệu.`)
+  if (estimatedSize > MEDIA_IMAGE_MAX_SIZE_BYTES) {
+    throw new Error(`Ảnh "${failureName}" vượt quá dung lượng tối đa ${formatMediaLimitSize(MEDIA_IMAGE_MAX_SIZE_BYTES)}.`)
+  }
+
+  const body = Buffer.from(base64Payload, 'base64')
+  if (body.length <= 0) throw new Error(`Ảnh "${failureName}" không có dữ liệu.`)
+  if (body.length > MEDIA_IMAGE_MAX_SIZE_BYTES) {
+    throw new Error(`Ảnh "${failureName}" vượt quá dung lượng tối đa ${formatMediaLimitSize(MEDIA_IMAGE_MAX_SIZE_BYTES)}.`)
+  }
+
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const sniffPath = join(tmpdir(), `aka-agent-media-${unique}.tmp`)
+  let cleanupPath = sniffPath
+  try {
+    writeFileSync(sniffPath, body)
+    const mimeType = sniffImageMimeType(sniffPath)
+    if (!mimeType) throw new Error(`Ảnh "${failureName}" không phải định dạng ảnh được hỗ trợ.`)
+
+    const originalName = sanitizeClipboardImageName(input?.name, mimeType, index)
+    const uploadPath = join(tmpdir(), `aka-agent-media-${unique}-${originalName}`)
+    renameSync(sniffPath, uploadPath)
+    cleanupPath = uploadPath
+    return {
+      uploadPath,
+      originalName,
+      persistedLocalPath: null,
+      mimeType,
+      cleanupPath
+    }
+  } catch (error) {
+    try {
+      unlinkSync(cleanupPath)
+    } catch {
+      // Best-effort cleanup for invalid clipboard images.
+    }
+    throw error
+  }
+}
+
+async function uploadPreparedMedia(
+  settings: ResolvedMediaStorageSettings,
+  input: PreparedMediaUpload,
+  staffId: number,
+  organizationId?: number | null
+): Promise<MediaFile> {
+  assertMediaUploadSize(input.uploadPath, input.mimeType)
+  const objectKey = buildMediaObjectKey(input.originalName, settings.keyPrefix)
+  const result = await mediaStorageService.uploadFile(settings, {
+    localPath: input.uploadPath,
+    objectKey,
+    contentType: input.mimeType
+  })
+
+  const { data, error } = await client()
+    .from('auto_media_files')
+    .insert({
+      provider: settings.provider,
+      original_name: input.originalName,
+      local_path: input.persistedLocalPath,
+      cloud_url: result.cloudUrl,
+      object_key: result.objectKey,
+      mime_type: result.mimeType,
+      size_bytes: result.sizeBytes,
+      staff_id: staffId,
+      organization_id: organizationId
+    })
+    .select('*')
+    .single()
+
+  if (error) throw new Error(`Upload thành công nhưng không thể lưu media: ${error.message}`)
+  return mapMediaFileFromDB(data)
 }
 
 function requireAdmin(): void {
@@ -520,37 +673,64 @@ export async function uploadMediaFiles(localPaths: string[]): Promise<MediaUploa
   const failures: MediaUploadFailure[] = []
   for (const { localPath, mimeType } of mediaInputs) {
     try {
-      assertMediaUploadSize(localPath, mimeType)
-      const objectKey = buildMediaObjectKey(localPath, settings.keyPrefix)
-      const result = await mediaStorageService.uploadFile(settings, {
-        localPath,
-        objectKey,
-        contentType: mimeType
-      })
-
-      const { data, error } = await client()
-        .from('auto_media_files')
-        .insert({
-          provider: settings.provider,
-          original_name: basename(localPath) || 'file',
-          local_path: localPath,
-          cloud_url: result.cloudUrl,
-          object_key: result.objectKey,
-          mime_type: result.mimeType,
-          size_bytes: result.sizeBytes,
-          staff_id: user.staffId,
-          organization_id: user.organizationId
-        })
-        .select('*')
-        .single()
-
-      if (error) throw new Error(`Upload thành công nhưng không thể lưu media: ${error.message}`)
-      uploaded.push(mapMediaFileFromDB(data))
+      uploaded.push(await uploadPreparedMedia(settings, {
+        uploadPath: localPath,
+        originalName: basename(localPath) || 'file',
+        persistedLocalPath: localPath,
+        mimeType
+      }, user.staffId, user.organizationId))
     } catch (err) {
       failures.push({
         localPath,
         error: err instanceof Error ? err.message : String(err)
       })
+    }
+  }
+
+  return { files: uploaded, failures }
+}
+
+export async function uploadMediaClipboardImages(inputs: MediaClipboardImageInput[]): Promise<MediaUploadResult> {
+  const user = requireCurrentUser()
+  const settings = await resolveMediaStorageSettings()
+  const images = Array.isArray(inputs) ? inputs : []
+  if (images.length === 0) return { files: [], failures: [] }
+
+  const activeCount = await countActiveMediaFiles(user.staffId)
+  if (activeCount + images.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
+    const error = getMediaQuotaError(activeCount)
+    return {
+      files: [],
+      failures: images.map((image, index) => ({
+        localPath: normalizeText(image?.name) || `Ảnh dán #${index + 1}`,
+        error
+      }))
+    }
+  }
+
+  const uploaded: MediaFile[] = []
+  const failures: MediaUploadFailure[] = []
+  for (let index = 0; index < images.length; index += 1) {
+    const image = images[index]
+    const failureName = normalizeText(image?.name) || `Ảnh dán #${index + 1}`
+    let cleanupPath = ''
+    try {
+      const prepared = prepareClipboardImage(image, index)
+      cleanupPath = prepared.cleanupPath
+      uploaded.push(await uploadPreparedMedia(settings, prepared, user.staffId, user.organizationId))
+    } catch (err) {
+      failures.push({
+        localPath: failureName,
+        error: err instanceof Error ? err.message : String(err)
+      })
+    } finally {
+      if (cleanupPath) {
+        try {
+          unlinkSync(cleanupPath)
+        } catch {
+          // Best-effort cleanup for pasted-image temp files.
+        }
+      }
     }
   }
 

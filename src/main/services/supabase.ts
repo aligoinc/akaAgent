@@ -1,4 +1,4 @@
-import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaGroup, MediaStorageSettings } from '../../shared/types'
+import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -204,6 +204,7 @@ export class SupabaseService {
   testMediaStorageSettings(settings?: Partial<MediaStorageSettings>) { return mediaFileRepo.testMediaStorageSettings(settings) }
   listMediaFiles() { return mediaFileRepo.listMediaFiles() }
   uploadMediaFiles(localPaths: string[]) { return mediaFileRepo.uploadMediaFiles(localPaths) }
+  uploadMediaClipboardImages(images: MediaClipboardImageInput[]) { return mediaFileRepo.uploadMediaClipboardImages(images) }
   deleteMediaFile(id: number) { return mediaFileRepo.deleteMediaFile(id) }
   listMediaGroups() { return mediaFileRepo.listMediaGroups() }
   createMediaGroup(group: Partial<MediaGroup>) { return mediaFileRepo.createMediaGroup(group) }

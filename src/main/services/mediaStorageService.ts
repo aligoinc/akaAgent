@@ -81,7 +81,7 @@ function readMediaHeader(filePath: string, length = 512): Buffer {
   }
 }
 
-function sniffImageMimeType(filePath: string): string | null {
+export function sniffImageMimeType(filePath: string): string | null {
   const header = readMediaHeader(filePath)
   if (header.length < 4) return null
 

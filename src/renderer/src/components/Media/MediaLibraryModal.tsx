@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, ChevronRight, Cloud, Copy, Edit3, FileText, Folder, FolderPlus, Image, Plus, RefreshCw, Save, Search, Trash2, Upload, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ClipboardPaste, Cloud, Copy, Edit3, FileText, Folder, FolderPlus, Image, Plus, RefreshCw, Save, Search, Trash2, Upload, X } from 'lucide-react'
 import {
   CampaignMediaInput,
   CampaignMediaSnapshot,
   MEDIA_FILE_MAX_SIZE_BYTES,
   MEDIA_IMAGE_MAX_SIZE_BYTES,
   MEDIA_LIBRARY_MAX_FILES_PER_STAFF,
+  MediaClipboardImageInput,
   MediaFile,
   MediaGroup,
   MediaStorageSettings,
@@ -80,6 +81,13 @@ const getUploadSizeError = (file: File): string => {
   return `${label} vượt quá dung lượng tối đa ${formatBytes(limit)}.`
 }
 
+const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.onerror = () => reject(new Error(`Không thể đọc ảnh ${file.name || ''}.`))
+  reader.readAsDataURL(file)
+})
+
 const getMediaQuotaError = (activeCount: number): string =>
   `Thư viện media đã có ${activeCount}/${MEDIA_LIBRARY_MAX_FILES_PER_STAFF} file. Vui lòng xoá bớt media trước khi upload thêm.`
 
@@ -112,6 +120,7 @@ export default function MediaLibraryModal({
   const showConfirm = useUiStore(s => s.showConfirm)
   const isAdmin = !!user?.isAdminAkabiz
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const uploadInFlightRef = useRef(false)
   const groupMembershipRequestRef = useRef(0)
   const selectedGroupIdRef = useRef<number | null>(null)
   const [settings, setSettings] = useState<MediaStorageSettings>(EMPTY_SETTINGS)
@@ -139,7 +148,7 @@ export default function MediaLibraryModal({
   const onlyImages = pickerMode === 'image'
   const activeMediaCount = files.length
   const selectedGroup = selectedGroupId ? groups.find(group => group.id === selectedGroupId) || null : null
-  const canDeleteMedia = !isPicker && selectedGroupId === null
+  const canDeleteMedia = selectedGroupId === null
   const tableColSpan = isPicker ? 9 : 8
   const groupFileOrder = useMemo(
     () => new Map(Array.from(groupFileIds).map((id, index) => [id, index])),
@@ -318,7 +327,7 @@ export default function MediaLibraryModal({
   }
 
   const handleSaveGroup = async () => {
-    if (isPicker || groupSaving) return
+    if (groupSaving) return
     const name = normalizeGroupName(groupFormName)
     if (!name) {
       showAlert('Vui lòng nhập tên thư mục media.', 'error')
@@ -378,7 +387,7 @@ export default function MediaLibraryModal({
   }
 
   const handleAddToGroup = async (file: MediaFile) => {
-    if (isPicker || !selectedGroupId || groupSaving || groupMembershipLoading || groupFileIds.has(file.id)) return
+    if (!selectedGroupId || groupSaving || groupMembershipLoading || groupFileIds.has(file.id)) return
     const groupId = selectedGroupId
     setGroupSaving(true)
     try {
@@ -392,7 +401,7 @@ export default function MediaLibraryModal({
   }
 
   const handleRemoveFromGroup = async (file: MediaFile) => {
-    if (isPicker || !selectedGroupId || groupSaving || groupMembershipLoading) return
+    if (!selectedGroupId || groupSaving || groupMembershipLoading) return
     const groupId = selectedGroupId
     setGroupSaving(true)
     try {
@@ -415,10 +424,77 @@ export default function MediaLibraryModal({
     }
   }
 
+  const applyUploadResult = async (uploaded: MediaFile[], failures: MediaUploadFailure[] = []) => {
+    setFiles(current => [...uploaded, ...current])
+
+    let groupMembershipError = ''
+    if (selectedGroupId && uploaded.length > 0) {
+      const groupId = selectedGroupId
+      try {
+        const savedIds = await window.electronAPI.addMediaGroupFiles(groupId, uploaded.map(file => file.id))
+        applySavedGroupFileIds(groupId, savedIds)
+      } catch (err) {
+        groupMembershipError = err instanceof Error ? err.message : 'Không thể lưu thư mục media.'
+        if (selectedGroupIdRef.current === groupId) selectGroup(null)
+      }
+    }
+
+    if (isPicker) {
+      setSelectedKeys(current => {
+        const eligibleUploaded = uploaded.filter(file => !onlyImages || isImageMime(file.mimeType))
+        const next = pickerLimit === 1 && eligibleUploaded.length > 0
+          ? new Set<string>()
+          : new Set(current)
+        for (const file of eligibleUploaded) {
+          if (next.size >= pickerLimit) break
+          next.add(getSnapshotKey(fileToSnapshot(file)))
+        }
+        return next
+      })
+    }
+
+    if (groupMembershipError) {
+      const uploadFailureSuffix = failures.length > 0 ? `\nNgoài ra, ${failures.length} file upload lỗi.` : ''
+      showAlert(
+        `Đã upload ${uploaded.length} file nhưng chưa thêm được vào thư mục: ${groupMembershipError}${uploadFailureSuffix}`,
+        'error'
+      )
+      return
+    }
+
+    if (uploaded.length > 0 && failures.length === 0) {
+      showAlert(`Đã upload ${uploaded.length} file.`, 'success')
+    } else if (uploaded.length > 0) {
+      const failedDetails = failures.slice(0, 3).map(item => `${getMediaName(item.localPath)}: ${item.error}`).join('\n')
+      const suffix = failures.length > 3 ? `\n...và ${failures.length - 3} file khác` : ''
+      showAlert(`Đã upload ${uploaded.length} file, ${failures.length} file lỗi:\n${failedDetails}${suffix}`, 'info')
+    } else {
+      const failedMessage = failures.slice(0, 2).map(item => `${getMediaName(item.localPath)}: ${item.error}`).join('\n')
+      showAlert(failedMessage || 'Upload media thất bại.', 'error')
+    }
+  }
+
+  const canStartUpload = (): boolean => {
+    if (uploading || uploadInFlightRef.current) return false
+    if (settingsLoading) {
+      showAlert('Đang tải cấu hình media. Vui lòng thử lại.', 'info')
+      return false
+    }
+    if (!settings.isConfigured) {
+      showAlert('Kho media chưa được cấu hình upload.', 'error')
+      return false
+    }
+    if (selectedGroupId && groupMembershipLoading) {
+      showAlert('Đang tải thư mục media. Vui lòng thử lại.', 'info')
+      return false
+    }
+    return true
+  }
+
   const handleUploadChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const rawFiles = Array.from(event.target.files || [])
     event.target.value = ''
-    if (rawFiles.length === 0) return
+    if (rawFiles.length === 0 || !canStartUpload()) return
 
     if (activeMediaCount + rawFiles.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
       showAlert(getMediaQuotaError(activeMediaCount), 'error')
@@ -450,52 +526,85 @@ export default function MediaLibraryModal({
       return
     }
 
+    uploadInFlightRef.current = true
     setUploading(true)
     try {
       const result = await window.electronAPI.uploadMediaFiles(paths)
-      const uploaded = result.files || []
-      const failures = [...rejectedBySize, ...(result.failures || [])]
-      setFiles(current => [...uploaded, ...current])
-      if (isPicker) {
-        if (selectedGroupId && uploaded.length > 0) selectGroup(null)
-        setSelectedKeys(current => {
-          const next = new Set(current)
-          for (const file of uploaded) {
-            if (next.size >= pickerLimit) break
-            if (onlyImages && !isImageMime(file.mimeType)) continue
-            next.add(getSnapshotKey(fileToSnapshot(file)))
-          }
-          return next
-        })
-      } else if (selectedGroupId && uploaded.length > 0) {
-        const groupId = selectedGroupId
-        try {
-          const savedIds = await window.electronAPI.addMediaGroupFiles(groupId, uploaded.map(file => file.id))
-          applySavedGroupFileIds(groupId, savedIds)
-        } catch (err) {
-          showAlert(
-            `Đã upload ${uploaded.length} file nhưng chưa thêm được vào thư mục: ${err instanceof Error ? err.message : 'Không thể lưu thư mục media.'}`,
-            'error'
-          )
-          return
-        }
-      }
-      if (uploaded.length > 0 && failures.length === 0) {
-        showAlert(`Đã upload ${uploaded.length} file.`, 'success')
-      } else if (uploaded.length > 0) {
-        const failedDetails = failures.slice(0, 3).map(item => `${getMediaName(item.localPath)}: ${item.error}`).join('\n')
-        const suffix = failures.length > 3 ? `\n...và ${failures.length - 3} file khác` : ''
-        showAlert(`Đã upload ${uploaded.length} file, ${failures.length} file lỗi:\n${failedDetails}${suffix}`, 'info')
-      } else {
-        const failedMessage = failures.slice(0, 2).map(item => `${getMediaName(item.localPath)}: ${item.error}`).join('\n')
-        showAlert(failedMessage || 'Upload media thất bại.', 'error')
-      }
+      await applyUploadResult(result.files || [], [...rejectedBySize, ...(result.failures || [])])
     } catch (err) {
       showAlert(err instanceof Error ? err.message : 'Upload media thất bại.', 'error')
     } finally {
+      uploadInFlightRef.current = false
       setUploading(false)
     }
   }
+
+  const uploadClipboardFiles = async (rawFiles: File[]) => {
+    if (rawFiles.length === 0 || !canStartUpload()) return
+    if (activeMediaCount + rawFiles.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
+      showAlert(getMediaQuotaError(activeMediaCount), 'error')
+      return
+    }
+
+    const imageFiles = rawFiles.filter(isUploadImageFile)
+    if (imageFiles.length === 0) return
+    const oversizedFiles = imageFiles.filter(file => file.size > MEDIA_IMAGE_MAX_SIZE_BYTES)
+    const rejectedBySize: MediaUploadFailure[] = oversizedFiles
+      .map(file => ({ localPath: file.name || 'Ảnh dán', error: getUploadSizeError(file) }))
+    const oversizedSet = new Set(oversizedFiles)
+    const acceptedFiles = imageFiles.filter(file => !oversizedSet.has(file))
+
+    uploadInFlightRef.current = true
+    setUploading(true)
+    try {
+      const payload: MediaClipboardImageInput[] = []
+      const readFailures: MediaUploadFailure[] = []
+      for (let index = 0; index < acceptedFiles.length; index += 1) {
+        const file = acceptedFiles[index]
+        const name = file.name || `pasted-image-${Date.now()}-${index + 1}.png`
+        try {
+          payload.push({
+            name,
+            dataUrl: await readFileAsDataUrl(file),
+            mimeType: file.type || 'image/png',
+            sizeBytes: file.size
+          })
+        } catch (err) {
+          readFailures.push({
+            localPath: name,
+            error: err instanceof Error ? err.message : 'Không thể đọc ảnh dán.'
+          })
+        }
+      }
+
+      if (payload.length === 0) {
+        await applyUploadResult([], [...rejectedBySize, ...readFailures])
+        return
+      }
+      const result = await window.electronAPI.uploadMediaClipboardImages(payload)
+      await applyUploadResult(result.files || [], [...rejectedBySize, ...readFailures, ...(result.failures || [])])
+    } catch (err) {
+      showAlert(err instanceof Error ? err.message : 'Upload ảnh dán thất bại.', 'error')
+    } finally {
+      uploadInFlightRef.current = false
+      setUploading(false)
+    }
+  }
+
+  useEffect(() => {
+    const handleDocumentPaste = (event: ClipboardEvent) => {
+      const imageFiles = Array.from(event.clipboardData?.items || [])
+        .filter(item => item.type.startsWith('image/'))
+        .map(item => item.getAsFile())
+        .filter((file): file is File => !!file)
+      if (imageFiles.length === 0) return
+      event.preventDefault()
+      void uploadClipboardFiles(imageFiles)
+    }
+
+    document.addEventListener('paste', handleDocumentPaste)
+    return () => document.removeEventListener('paste', handleDocumentPaste)
+  }, [activeMediaCount, groupMembershipLoading, isPicker, onlyImages, pickerLimit, selectedGroupId, settings.isConfigured, settingsLoading, uploading])
 
   const handleDelete = (file: MediaFile) => {
     showConfirm(
@@ -552,12 +661,15 @@ export default function MediaLibraryModal({
       showAlert(onlyImages ? 'Thư mục này không có ảnh hợp lệ.' : 'Thư mục này chưa có media hợp lệ.', 'error')
       return
     }
+    if (selectedGroupSnapshots.length > pickerLimit) {
+      showAlert(`Chỉ có thể chọn tối đa ${pickerLimit} media.`, 'error')
+      return
+    }
     onConfirm(selectedGroupSnapshots)
     onClose()
   }
 
   const renderSettings = () => {
-    if (isPicker) return null
     if (!isAdmin) return null
     return (
       <section className="media-library-section">
@@ -628,29 +740,27 @@ export default function MediaLibraryModal({
         </div>
       </div>
 
-      {!isPicker && (
-        <div className="media-group-form">
-          <input
-            className="stepper-input"
-            value={groupFormName}
-            onChange={event => setGroupFormName(event.target.value)}
-            placeholder="Tên thư mục media"
-            disabled={groupSaving}
-          />
-          <div className="media-group-form-actions">
-            <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveGroup} disabled={groupSaving}>
-              {groupSaving ? <RefreshCw size={14} className="spin" /> : editingGroupId ? <Save size={14} /> : <Plus size={14} />}
-              <span>{editingGroupId ? 'Lưu' : 'Thêm'}</span>
+      <div className="media-group-form">
+        <input
+          className="stepper-input"
+          value={groupFormName}
+          onChange={event => setGroupFormName(event.target.value)}
+          placeholder="Tên thư mục media"
+          disabled={groupSaving}
+        />
+        <div className="media-group-form-actions">
+          <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveGroup} disabled={groupSaving}>
+            {groupSaving ? <RefreshCw size={14} className="spin" /> : editingGroupId ? <Save size={14} /> : <Plus size={14} />}
+            <span>{editingGroupId ? 'Lưu' : 'Thêm'}</span>
+          </button>
+          {editingGroupId && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={resetGroupForm} disabled={groupSaving}>
+              <X size={14} />
+              <span>Hủy</span>
             </button>
-            {editingGroupId && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={resetGroupForm} disabled={groupSaving}>
-                <X size={14} />
-                <span>Hủy</span>
-              </button>
-            )}
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       <div className="media-group-list">
         <button
@@ -678,16 +788,14 @@ export default function MediaLibraryModal({
               </span>
               <span className="media-group-count">{group.fileCount || 0}</span>
             </button>
-            {!isPicker && (
-              <div className="media-group-row-actions">
-                <button type="button" className="btn-icon" onClick={() => handleEditGroup(group)} title="Sửa thư mục">
-                  <Edit3 size={13} />
-                </button>
-                <button type="button" className="btn-icon text-error" onClick={() => handleDeleteGroup(group)} title="Xoá thư mục">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            )}
+            <div className="media-group-row-actions">
+              <button type="button" className="btn-icon" onClick={() => handleEditGroup(group)} title="Sửa thư mục">
+                <Edit3 size={13} />
+              </button>
+              <button type="button" className="btn-icon text-error" onClick={() => handleDeleteGroup(group)} title="Xoá thư mục">
+                <Trash2 size={13} />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -701,7 +809,7 @@ export default function MediaLibraryModal({
   }
 
   const renderGroupManagePanel = () => {
-    if (isPicker || !selectedGroupId) return null
+    if (!selectedGroupId) return null
     const loading = filesLoading || groupMembershipLoading
     return (
       <div className="media-group-manage">
@@ -818,7 +926,7 @@ export default function MediaLibraryModal({
                       disabled={uploading || settingsLoading || !settings.isConfigured || (!!selectedGroupId && groupMembershipLoading)}
                     >
                       {uploading ? <RefreshCw size={14} className="spin" /> : <Upload size={14} />}
-                      <span>{uploading ? 'Đang upload' : selectedGroupId && !isPicker ? 'Upload vào thư mục' : 'Upload'}</span>
+                      <span>{uploading ? 'Đang upload' : selectedGroupId ? 'Upload vào thư mục' : 'Upload'}</span>
                     </button>
                     <input
                       ref={uploadInputRef}
@@ -828,6 +936,11 @@ export default function MediaLibraryModal({
                       style={{ display: 'none' }}
                       onChange={handleUploadChange}
                     />
+                    <div className="media-library-paste-hint" title="Sao chép ảnh rồi dán trực tiếp vào cửa sổ Media">
+                      <ClipboardPaste size={14} />
+                      <span>Dán ảnh</span>
+                      <kbd>{window.electronAPI.platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V'}</kbd>
+                    </div>
                     <div className="media-library-quota" title={`Đã dùng ${activeMediaCount}/${MEDIA_LIBRARY_MAX_FILES_PER_STAFF} media`}>
                       <span>Đã dùng</span>
                       <strong>{activeMediaCount}/{MEDIA_LIBRARY_MAX_FILES_PER_STAFF}</strong>
@@ -838,7 +951,7 @@ export default function MediaLibraryModal({
                     </div>
                   </div>
                   <div className="media-library-toolbar-tools">
-                    {!isPicker && selectedGroupId && (
+                    {selectedGroupId && (
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
@@ -859,7 +972,7 @@ export default function MediaLibraryModal({
                   </div>
                 </div>
 
-                {!isPicker && selectedGroupId && groupManageMode ? renderGroupManagePanel() : (
+                {selectedGroupId && groupManageMode ? renderGroupManagePanel() : (
                 <div className="stepper-grid-container media-library-grid">
                   <table className="campaign-grid">
                     <thead>

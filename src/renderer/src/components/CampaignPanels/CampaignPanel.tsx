@@ -4666,6 +4666,36 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                         </button>
                         {openCampaignActionMenuId === campaign.id && campaignActionMenuPosition && createPortal(
                           <div ref={campaignActionMenuRef} className="campaign-action-menu" style={campaignActionMenuPosition} role="menu">
+                            {canPauseCampaign(campaign.status) ? (
+                              <button
+                                type="button"
+                                className="campaign-action-menu-item"
+                                onClick={() => {
+                                  closeCampaignActionMenu()
+                                  handlePause(campaign)
+                                }}
+                                role="menuitem"
+                              >
+                                <Pause size={14} />
+                                <span>Dừng chiến dịch</span>
+                              </button>
+                            ) : canResumeCampaign(campaign.status) ? (
+                              <button
+                                type="button"
+                                className="campaign-action-menu-item"
+                                onClick={() => {
+                                  closeCampaignActionMenu()
+                                  handleResume(campaign)
+                                }}
+                                role="menuitem"
+                              >
+                                <Play size={14} />
+                                <span>Tiếp tục chạy</span>
+                              </button>
+                            ) : null}
+                            {(canPauseCampaign(campaign.status) || canResumeCampaign(campaign.status)) && (
+                              <div className="campaign-action-menu-separator" />
+                            )}
                             <button
                               type="button"
                               className="campaign-action-menu-item"

@@ -592,6 +592,64 @@ function normalizeContactIdList(values: unknown): number[] {
   ))
 }
 
+function normalizeContactGroupId(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error('Nhóm data không hợp lệ.')
+  }
+  return value
+}
+
+async function resolveDataGroupContactIds(
+  accountId: number,
+  staffId: number,
+  contactType: ContactType | undefined,
+  value: unknown
+): Promise<Set<number> | null> {
+  const groupId = normalizeContactGroupId(value)
+  if (groupId === null) return null
+  if (!contactType) {
+    throw new Error('Không thể lọc nhóm data khi chưa xác định loại data.')
+  }
+
+  const { data: group, error: groupError } = await client()
+    .from('auto_account_contact_groups')
+    .select('id')
+    .eq('id', groupId)
+    .eq('staff_id', staffId)
+    .eq('account_id', accountId)
+    .eq('contact_type', contactType)
+    .eq('purpose', CONTACT_GROUP_PURPOSE_DATA)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (groupError) throw new Error(`Failed to validate contact group: ${groupError.message}`)
+  if (!group) {
+    throw new Error('Nhóm data không tồn tại hoặc không thuộc tài khoản và loại data hiện tại.')
+  }
+
+  const contactIds = new Set<number>()
+  let from = 0
+  while (true) {
+    const { data, error } = await client()
+      .from('auto_account_contact_group_members')
+      .select('id, contact_id')
+      .eq('group_id', groupId)
+      .order('id', { ascending: true })
+      .range(from, from + CONTACT_LIST_FETCH_CHUNK - 1)
+
+    if (error) throw new Error(`Failed to list contact group members: ${error.message}`)
+    for (const row of data || []) {
+      const contactId = Number(row.contact_id)
+      if (Number.isSafeInteger(contactId) && contactId > 0) contactIds.add(contactId)
+    }
+    if (!data || data.length < CONTACT_LIST_FETCH_CHUNK) break
+    from += CONTACT_LIST_FETCH_CHUNK
+  }
+
+  return contactIds
+}
+
 function normalizeSearchText(value: unknown): string {
   return String(value || '').trim().toLocaleLowerCase('vi-VN')
 }
@@ -832,6 +890,7 @@ function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   const ids = normalizeContactIdList(query.ids)
   const excludeIds = normalizeContactIdList(query.excludeIds)
   const statusFilter = query.statusFilter || 'all'
+  if (query.contactGroupId !== null && query.contactGroupId !== undefined) return false
   if (ids.length > 0 || excludeIds.length > 0) return false
   if (normalizeSearchText(query.search)) return false
   if (String(query.source || '').trim()) return false
@@ -947,6 +1006,16 @@ async function filterContactsForList(
   query: AccountContactListQuery = {}
 ): Promise<AutoAccountContact[]> {
   const ids = normalizeContactIdList(query.ids)
+  const groupContactIds = await resolveDataGroupContactIds(
+    accountId,
+    staffId,
+    query.contactType,
+    query.contactGroupId
+  )
+  const effectiveIds = groupContactIds
+    ? (ids.length > 0 ? ids.filter(id => groupContactIds.has(id)) : Array.from(groupContactIds))
+    : ids
+  if (groupContactIds && effectiveIds.length === 0) return []
   const excludeIds = new Set(normalizeContactIdList(query.excludeIds))
   const search = normalizeSearchText(query.search)
   const source = String(query.source || '').trim()
@@ -957,9 +1026,13 @@ async function filterContactsForList(
   const akaBizTagIds = normalizeContactIdList(query.akaBizTagIds)
   const includeNoZaloTag = query.zaloNoTag === true
   const includeNoAkaBizTag = query.akaBizNoTag === true
-  const contacts = await fetchContactRowsForList(accountId, staffId, query.contactType, ids)
+  const contacts = await fetchContactRowsForList(accountId, staffId, query.contactType, effectiveIds)
+  if (groupContactIds) {
+    contacts.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'vi-VN'))
+  }
 
   return contacts.filter(contact => {
+    if (groupContactIds && !groupContactIds.has(contact.id)) return false
     if (excludeIds.has(contact.id)) return false
     if (!contactMatchesStatusFilter(contact, query.statusFilter)) return false
     if (!contactMatchesSourcePostPair(contact, source, normalizedPostUrl)) return false
@@ -2253,6 +2326,14 @@ async function fetchZaloGroupMemberContactsForList(
   query: ZaloGroupMemberContactListQuery = {}
 ): Promise<AutoAccountContact[]> {
   const u = requireCurrentUser()
+  const groupContactIds = await resolveDataGroupContactIds(
+    accountId,
+    u.staffId,
+    'person',
+    query.contactGroupId
+  )
+  if (groupContactIds && groupContactIds.size === 0) return []
+
   const normalizedGroupId = String(query.zaloGroupId || '').trim()
   if (!normalizedGroupId) return []
 
@@ -2291,6 +2372,7 @@ async function fetchZaloGroupMemberContactsForList(
   const includeNoAkaBizTag = query.akaBizNoTag === true
 
   return result.filter(contact => {
+    if (groupContactIds && !groupContactIds.has(contact.id)) return false
     if (idSet && !idSet.has(contact.id)) return false
     if (excludeIds.has(contact.id)) return false
     if (!contactMatchesSearch(contact, search)) return false
@@ -2369,6 +2451,7 @@ async function mapZaloGroupMemberRowsToContacts(
 
 function canUseDbPagedZaloGroupMemberContacts(query: ZaloGroupMemberContactListQuery): boolean {
   if (!String(query.zaloGroupId || '').trim()) return false
+  if (query.contactGroupId !== null && query.contactGroupId !== undefined) return false
   if (normalizeContactIdList(query.ids).length > 0) return false
   if (normalizeContactIdList(query.excludeIds).length > 0) return false
   if (normalizeSearchText(query.search)) return false
