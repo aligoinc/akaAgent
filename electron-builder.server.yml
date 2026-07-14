@@ -1,0 +1,44 @@
+appId: com.akabiz.zalo-server
+productName: akaAgent Zalo Server
+artifactName: akaAgent-Zalo-Server-Setup-${version}.${ext}
+
+directories:
+  buildResources: build
+  output: dist-server
+
+extraMetadata:
+  main: out-server/main/index.js
+
+files:
+  - out-server/**/*
+  - package.json
+
+extraResources:
+  - from: version.txt
+    to: version.txt
+  - from: build/icon.png
+    to: icon.png
+
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+
+npmRebuild: false
+
+win:
+  files:
+    - out-server/**/*
+    - package.json
+    - "!node_modules/**/fsevents{,/**/*}"
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: akaAgent Zalo Server
+  runAfterFinish: false

@@ -173,7 +173,12 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
                 : null
               return (
                 <div key={i} className="log-entry">
-                  <span className="log-time">{new Date(log.timestamp).toLocaleTimeString('vi-VN')}</span>
+                  <div className="log-meta">
+                    <span className="log-time">{new Date(log.timestamp).toLocaleTimeString('vi-VN')}</span>
+                    {log.source === 'server' && (
+                      <span className="log-source-server" title="Log từ akaAgent Zalo Server">SERVER</span>
+                    )}
+                  </div>
                   <span className="log-message">{log.message}</span>
                   {action && (
                     <button

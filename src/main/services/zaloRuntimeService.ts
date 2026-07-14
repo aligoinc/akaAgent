@@ -3,6 +3,7 @@ import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError, FriendRecomme
 import type { API, AttachmentSource, Credentials, GroupEvent, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, Message, MessageContent, Options as ZaloOptions, ProfileInfo, Reaction, UserBasic } from 'zca-js'
 import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, ZaloSessionCredentials } from '../../shared/types'
 import { SupabaseService } from './supabase'
+import type { ZaloAccountRuntimeTarget } from '../data/repositories/accountRepository'
 
 const DEFAULT_ZALO_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0'
@@ -13,6 +14,7 @@ interface ActiveQrLogin {
   abort?: () => unknown
   cancelRequested: boolean
   expired?: boolean
+  completion?: Promise<void>
 }
 
 interface CachedZaloApi {
@@ -359,6 +361,8 @@ export class ZaloRuntimeService {
   private listenerStates = new Map<number, ZaloListenerState>()
   private realtimeListenerSubscribers = new Map<number, Set<ZaloRealtimeListenerHandlers>>()
   private accountCacheVersions = new Map<number, number>()
+  private activeWarmSessionOperations = new Set<Promise<void>>()
+  private warmSessionClaimsAbandoned = false
   private cacheVersion = 0
 
   constructor(
@@ -374,11 +378,15 @@ export class ZaloRuntimeService {
       return { success: false, accountId, reason: 'Tài khoản không phải nền tảng Zalo' }
     }
 
-    this.cancelLoginQr(accountId)
+    const previousLoginSettled = await this.cancelLoginQrAndWait(accountId)
+    if (!previousLoginSettled) {
+      throw new Error('Phiên đăng nhập QR trước chưa dừng an toàn. Vui lòng thử lại sau.')
+    }
     this.invalidateAccount(accountId)
     const active: ActiveQrLogin = { accountId, cancelRequested: false }
     this.activeQrLogins.set(accountId, active)
-    void this.runLoginQr(account, active)
+    active.completion = this.runLoginQr(account, active)
+    void active.completion
     return { success: true, accountId }
   }
 
@@ -387,12 +395,54 @@ export class ZaloRuntimeService {
     if (!active) return
     active.cancelRequested = true
     try { active.abort?.() } catch {}
-    this.activeQrLogins.delete(accountId)
     this.emitLoginQrEvent({
       accountId,
       status: 'cancelled',
       message: 'Đã huỷ đăng nhập Zalo'
     })
+  }
+
+  async cancelLoginQrAndWait(accountId: number): Promise<boolean> {
+    const active = this.activeQrLogins.get(accountId)
+    if (!active) return true
+    this.cancelLoginQr(accountId)
+    if (active.completion) {
+      const settled = await this.waitForSettled([active.completion], 30_000)
+      if (!settled) console.warn(`[ZaloRuntime] QR cancellation timed out for account ${accountId}`)
+      return settled
+    }
+    return true
+  }
+
+  async waitForLoginQrIdle(accountId: number): Promise<void> {
+    const active = this.activeQrLogins.get(accountId)
+    await active?.completion?.catch(() => {})
+  }
+
+  async cancelAllLoginQrAndWait(): Promise<boolean> {
+    const activeLogins = Array.from(this.activeQrLogins.values())
+    for (const active of activeLogins) this.cancelLoginQr(active.accountId)
+    const completions = activeLogins
+      .map(active => active.completion)
+      .filter((completion): completion is Promise<void> => !!completion)
+    const settled = await this.waitForSettled(completions, 30_000)
+    if (!settled) console.warn('[ZaloRuntime] Some QR cancellations did not settle before cleanup timeout')
+    return settled
+  }
+
+  private async waitForSettled(promises: Promise<unknown>[], timeoutMs: number): Promise<boolean> {
+    if (promises.length === 0) return true
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    try {
+      return await Promise.race([
+        Promise.allSettled(promises).then(() => true),
+        new Promise<false>(resolve => {
+          timeout = setTimeout(() => resolve(false), Math.max(0, timeoutMs))
+        })
+      ])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
   }
 
   async ensureApi(accountId: number): Promise<API> {
@@ -457,7 +507,31 @@ export class ZaloRuntimeService {
     await this.ensureZaloListenerReady(accountId, api)
   }
 
-  async warmStoredSessions(): Promise<void> {
+  async warmStoredSessions(runtimeTarget: ZaloAccountRuntimeTarget): Promise<void> {
+    const operation = this.runWarmStoredSessions(runtimeTarget)
+    this.activeWarmSessionOperations.add(operation)
+    try {
+      await operation
+    } finally {
+      this.activeWarmSessionOperations.delete(operation)
+    }
+  }
+
+  async waitForWarmSessionsIdle(timeoutMs = 30_000): Promise<boolean> {
+    const pending = Array.from(this.activeWarmSessionOperations)
+    if (pending.length === 0) return true
+    return this.waitForSettled(pending, timeoutMs)
+  }
+
+  abandonWarmSessionClaims(): void {
+    this.warmSessionClaimsAbandoned = true
+  }
+
+  resetWarmSessionClaims(): void {
+    this.warmSessionClaimsAbandoned = false
+  }
+
+  private async runWarmStoredSessions(runtimeTarget: ZaloAccountRuntimeTarget): Promise<void> {
     const version = this.cacheVersion
     const entries = await this.supabase.listZaloAccountsWithSession()
     if (entries.length > 0) {
@@ -465,8 +539,15 @@ export class ZaloRuntimeService {
     }
 
     for (const entry of entries) {
-      if (this.cacheVersion !== version) return
+      if (this.cacheVersion !== version || this.warmSessionClaimsAbandoned) return
+      const claim = await this.supabase.claimZaloAccountRuntimeOperation(
+        entry.account.id,
+        runtimeTarget,
+        false
+      )
+      if (!claim.claimed || !claim.previousStatus) continue
       try {
+        if (this.warmSessionClaimsAbandoned) return
         await this.verifyAccountSession(entry.account.id)
         if (this.cacheVersion !== version) return
         const account = await this.supabase.markAccountZaloSessionCheck(entry.account.id, { ok: true })
@@ -483,6 +564,19 @@ export class ZaloRuntimeService {
           ok: false,
           error: message
         }).catch(() => {})
+      } finally {
+        if (!this.warmSessionClaimsAbandoned) {
+          await this.supabase.releaseZaloAccountRuntimeOperation(
+            entry.account.id,
+            runtimeTarget,
+            claim.previousStatus
+          ).catch(error => {
+            console.error('[ZaloRuntime] Failed to release warm-session account claim:', {
+              accountId: entry.account.id,
+              error
+            })
+          })
+        }
       }
     }
   }
@@ -494,13 +588,13 @@ export class ZaloRuntimeService {
     this.apiLoginInflight.delete(accountId)
   }
 
-  clearAll(): void {
+  clearAll(options: { preserveActiveQrLogins?: boolean } = {}): void {
     this.cacheVersion += 1
     for (const active of this.activeQrLogins.values()) {
       active.cancelRequested = true
       try { active.abort?.() } catch {}
     }
-    this.activeQrLogins.clear()
+    if (!options.preserveActiveQrLogins) this.activeQrLogins.clear()
     this.stopAllZaloListeners()
     this.realtimeListenerSubscribers.clear()
     this.apiCache.clear()
@@ -1528,8 +1622,15 @@ export class ZaloRuntimeService {
 
   private async runLoginQr(account: AutoAccount, active: ActiveQrLogin): Promise<void> {
     let callbackCredentials: ZaloSessionCredentials | null = null
+    const cacheVersion = this.cacheVersion
+    const isCurrentLogin = (): boolean => (
+      !active.cancelRequested
+      && this.activeQrLogins.get(account.id) === active
+      && this.cacheVersion === cacheVersion
+    )
     try {
       const zalo = await this.createZaloClient(account)
+      if (!isCurrentLogin()) return
       const api = await zalo.loginQR({
         userAgent: DEFAULT_ZALO_USER_AGENT,
         language: DEFAULT_LANGUAGE
@@ -1537,17 +1638,20 @@ export class ZaloRuntimeService {
         callbackCredentials = this.handleQrCallback(account.id, event, active) || callbackCredentials
       })
 
-      if (active.cancelRequested) return
+      if (!isCurrentLogin()) return
       const credentials = this.getSessionCredentialsFromApi(api, callbackCredentials)
 
       const profile = await this.loadOwnProfile(api)
+      if (!isCurrentLogin()) return
       const zaloAccount = await this.supabase.upsertZaloAccount(profile)
+      if (!isCurrentLogin()) return
       const updated = await this.supabase.updateAccountZaloSession(account.id, {
         zaloAccountId: zaloAccount.id,
         session: credentials,
         verified: true,
         clearError: true
       })
+      if (!isCurrentLogin()) return
       this.cacheApi(updated, api)
 
       this.emitLoginQrEvent({
@@ -1560,7 +1664,7 @@ export class ZaloRuntimeService {
         zaloUid: zaloAccount.zaloUid
       })
     } catch (err) {
-      if (active.cancelRequested || active.expired) return
+      if (!isCurrentLogin() || active.expired) return
       this.logLoginQrFailure(account.id, err)
       const message = this.getErrorMessage(err)
       await this.supabase.markAccountZaloSessionCheck(account.id, { ok: false, error: message }).catch(() => {})
@@ -1570,7 +1674,9 @@ export class ZaloRuntimeService {
         message
       })
     } finally {
-      this.activeQrLogins.delete(account.id)
+      if (this.activeQrLogins.get(account.id) === active) {
+        this.activeQrLogins.delete(account.id)
+      }
     }
   }
 
@@ -1579,6 +1685,12 @@ export class ZaloRuntimeService {
     event: LoginQRCallbackEvent,
     active: ActiveQrLogin
   ): ZaloSessionCredentials | null {
+    if (active.cancelRequested || this.activeQrLogins.get(accountId) !== active) {
+      if (event.actions && 'abort' in event.actions) {
+        try { event.actions.abort() } catch {}
+      }
+      return null
+    }
     if (event.actions && 'abort' in event.actions) {
       active.abort = event.actions.abort
       if (active.cancelRequested) {
@@ -1616,11 +1728,13 @@ export class ZaloRuntimeService {
         })
         return null
       case LoginQRCallbackEventType.QRCodeDeclined:
+        active.cancelRequested = true
         this.emitLoginQrEvent({
           accountId,
           status: 'declined',
           message: 'Bạn đã từ chối đăng nhập Zalo'
         })
+        try { event.actions.abort() } catch {}
         return null
       case LoginQRCallbackEventType.GotLoginInfo:
         return {

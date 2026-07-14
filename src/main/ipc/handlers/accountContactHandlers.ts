@@ -2,11 +2,16 @@ import { ipcMain } from 'electron'
 import { AccountContactListQuery, IPC_EVENTS, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
+import { ZaloServerClient } from '../../services/zaloServerClient'
 import * as localContactRepo from '../../data/repositories/localAccountContactRepository'
 import {
   ensureCurrentUserCanUseAccountPlatform,
   ensureCurrentUserFeatureActive
 } from '../../data/repositories/entitlementRepository'
+import {
+  shouldRouteCurrentUserZaloCleanupToServer,
+  shouldRouteCurrentUserZaloToServer
+} from '../../data/repositories/zaloRuntimeModeRepository'
 
 async function ensureContactAccess(
   supabase: SupabaseService,
@@ -34,14 +39,28 @@ async function ensureContactAccess(
   await ensureCurrentUserCanUseAccountPlatform(account?.flatformType || 'facebook')
 }
 
-export function registerAccountContactHandlers(supabase: SupabaseService, contactLoader: ContactLoader): void {
+export function registerAccountContactHandlers(
+  supabase: SupabaseService,
+  contactLoader: ContactLoader,
+  zaloServerClient?: ZaloServerClient
+): void {
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_FRIENDS, async (_, accountId: number) => {
     await ensureContactAccess(supabase, accountId, 'person')
+    const account = await supabase.getAccount(accountId)
+    if (account?.flatformType === 'zalo' && await shouldRouteCurrentUserZaloToServer()) {
+      if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
+      return zaloServerClient.executeCommand('contacts.loadFriends', accountId)
+    }
     return contactLoader.loadFriends(accountId)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_GROUPS, async (_, accountId: number) => {
     await ensureContactAccess(supabase, accountId, 'group')
+    const account = await supabase.getAccount(accountId)
+    if (account?.flatformType === 'zalo' && await shouldRouteCurrentUserZaloToServer()) {
+      if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
+      return zaloServerClient.executeCommand('contacts.loadGroups', accountId)
+    }
     return contactLoader.loadGroups(accountId)
   })
 
@@ -77,10 +96,19 @@ export function registerAccountContactHandlers(supabase: SupabaseService, contac
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_ZALO_GROUP_MEMBERS, async (_, accountId: number, request: ZaloGroupMemberScanRequest) => {
     await ensureContactAccess(supabase, accountId, 'zalo_tag')
+    if (await shouldRouteCurrentUserZaloToServer()) {
+      if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
+      return zaloServerClient.executeCommand('contacts.loadZaloGroupMembers', accountId, request)
+    }
     return contactLoader.loadZaloGroupMembers(accountId, request)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_CANCEL_LOAD, async (_, accountId: number) => {
+    const account = await supabase.getAccount(accountId).catch(() => null)
+    if (account?.flatformType === 'zalo' && shouldRouteCurrentUserZaloCleanupToServer()) {
+      if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
+      return zaloServerClient.executeCommand('contacts.cancel', accountId)
+    }
     contactLoader.cancelLoad(accountId)
     return { success: true }
   })

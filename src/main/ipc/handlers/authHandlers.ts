@@ -1,5 +1,5 @@
 import { app, ipcMain } from 'electron'
-import { IPC_EVENTS, LoginPreferences } from '../../../shared/types'
+import { AuthUser, IPC_EVENTS, LoginPreferences } from '../../../shared/types'
 import {
   changePassword,
   loadLoginSettingsForCurrentDevice,
@@ -14,9 +14,17 @@ import {
 } from '../../data/repositories/authRepository'
 import { setCurrentUser, getCurrentUser } from '../../data/currentUser'
 
+export interface AuthLoginContext {
+  user: AuthUser
+  username: string
+  password: string
+  automatic: boolean
+}
+
 interface AuthLifecycleHooks {
-  afterLogin?: () => Promise<void> | void
+  afterLogin?: (context: AuthLoginContext) => Promise<void> | void
   beforeLogout?: () => Promise<void> | void
+  afterPasswordChange?: (context: { oldPassword: string; newPassword: string }) => Promise<void> | void
 }
 
 function syncStartupSetting(enabled: boolean): void {
@@ -43,7 +51,12 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
       setCurrentUser(user)
       if (hooks.afterLogin) {
         try {
-          await hooks.afterLogin()
+          await hooks.afterLogin({
+            user,
+            username: snapshot.savedCredentials.username,
+            password: snapshot.savedCredentials.password,
+            automatic: true
+          })
         } catch (err) {
           console.error('Post-login hook failed:', err)
         }
@@ -71,7 +84,7 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     setCurrentUser(user)
     if (hooks.afterLogin) {
       try {
-        await hooks.afterLogin()
+        await hooks.afterLogin({ user, username, password, automatic: false })
       } catch (err) {
         console.error('Post-login hook failed:', err)
       }
@@ -120,7 +133,9 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
   ipcMain.handle(IPC_EVENTS.AUTH_CHANGE_PASSWORD, async (_, oldPassword: string, newPassword: string) => {
     const user = getCurrentUser()
     if (!user) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi đổi mật khẩu.')
-    return changePassword(user, oldPassword, newPassword)
+    const result = await changePassword(user, oldPassword, newPassword)
+    await hooks.afterPasswordChange?.({ oldPassword, newPassword })
+    return result
   })
 
   ipcMain.handle(IPC_EVENTS.AUTH_UPDATE_USE_TEST_WORKFLOW, async (_, useTestWorkflow: boolean) => {

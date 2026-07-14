@@ -1,5 +1,12 @@
 import { AuthAccountProduct, AuthEntitlementFeature, AuthEntitlements, AuthUser } from '../../../shared/types'
-import { AUTH_PRODUCT_BY_FEATURE, AUTH_PRODUCT_IDS, getAuthProductById } from '../../../shared/authProductCatalog'
+import {
+  AUTH_PRODUCT_BY_FEATURE,
+  AUTH_PRODUCT_IDS,
+  AUTH_PRODUCTS_BY_FEATURE,
+  AUTH_ZALO_PRODUCT_IDS,
+  getAuthProductById
+} from '../../../shared/authProductCatalog'
+import { getVietnamDayStart } from '../../../shared/vietnamTime'
 import { requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
@@ -10,7 +17,7 @@ export type EntitlementFeature = AuthEntitlementFeature
 export const FACEBOOK_CORE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookCore.productId
 export const FACEBOOK_FANPAGE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId
 export const EMAIL_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.email.productId
-export const ZALO_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.zalo.productId
+export const ZALO_PRODUCT_IDS = AUTH_ZALO_PRODUCT_IDS
 export const SMS_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.sms.productId
 export const AKA_AGENT_PRODUCT_ID = FACEBOOK_CORE_PRODUCT_ID
 export const DEFAULT_DEMO_DAILY_SEND_LIMIT = 30
@@ -60,12 +67,12 @@ export const ZALO_ACCOUNT_ACTION_CODES = new Set([
   'zalo_change_alias'
 ])
 
-const FEATURE_PRODUCT_IDS: Record<EntitlementFeature, number> = {
-  facebookCore: AUTH_PRODUCT_BY_FEATURE.facebookCore.productId,
-  facebookFanpage: AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId,
-  email: AUTH_PRODUCT_BY_FEATURE.email.productId,
-  zalo: AUTH_PRODUCT_BY_FEATURE.zalo.productId,
-  sms: AUTH_PRODUCT_BY_FEATURE.sms.productId
+const FEATURE_PRODUCT_IDS: Record<EntitlementFeature, readonly number[]> = {
+  facebookCore: AUTH_PRODUCTS_BY_FEATURE.facebookCore.map(item => item.productId),
+  facebookFanpage: AUTH_PRODUCTS_BY_FEATURE.facebookFanpage.map(item => item.productId),
+  email: AUTH_PRODUCTS_BY_FEATURE.email.map(item => item.productId),
+  zalo: AUTH_PRODUCTS_BY_FEATURE.zalo.map(item => item.productId),
+  sms: AUTH_PRODUCTS_BY_FEATURE.sms.map(item => item.productId)
 }
 
 const FEATURE_UNAVAILABLE_MESSAGES: Record<EntitlementFeature, string> = {
@@ -77,6 +84,7 @@ const FEATURE_UNAVAILABLE_MESSAGES: Record<EntitlementFeature, string> = {
 }
 
 interface OrganizationProductRow {
+  id?: number | string | null
   product_id?: number | null
   product_name?: string | null
   package_name?: string | null
@@ -84,6 +92,7 @@ interface OrganizationProductRow {
   package_type?: string | null
   max_sends_per_day?: number | string | null
   max_accounts?: number | string | null
+  created_at?: string | null
 }
 
 export function emptyAuthEntitlements(): AuthEntitlements {
@@ -130,9 +139,7 @@ function normalizeAuthEntitlements(entitlements?: Partial<AuthEntitlements> | nu
 }
 
 function todayStartTimestamp(): number {
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  return todayStart.getTime()
+  return getVietnamDayStart().getTime()
 }
 
 function isExpirationActive(expirationDate?: string | null): boolean {
@@ -171,6 +178,38 @@ function getFeatureAccountLimit(rows: OrganizationProductRow[]): number | null {
   return limits.length > 0 ? Math.max(...limits) : null
 }
 
+function compareNewestOrganizationProduct(
+  left: OrganizationProductRow,
+  right: OrganizationProductRow
+): number {
+  const leftCreatedAt = Date.parse(String(left.created_at || ''))
+  const rightCreatedAt = Date.parse(String(right.created_at || ''))
+  const normalizedLeftCreatedAt = Number.isFinite(leftCreatedAt) ? leftCreatedAt : 0
+  const normalizedRightCreatedAt = Number.isFinite(rightCreatedAt) ? rightCreatedAt : 0
+  if (normalizedLeftCreatedAt !== normalizedRightCreatedAt) {
+    return normalizedRightCreatedAt - normalizedLeftCreatedAt
+  }
+  return Number(right.id || 0) - Number(left.id || 0)
+}
+
+function getNewestZaloProductRow(
+  rows: OrganizationProductRow[],
+  activeOnly: boolean
+): OrganizationProductRow | null {
+  const candidates = rows.filter(row => (
+    ZALO_PRODUCT_IDS.includes(Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]) &&
+    (!activeOnly || isExpirationActive(row.expiration_date))
+  ))
+  candidates.sort(compareNewestOrganizationProduct)
+  return candidates[0] || null
+}
+
+function getPreferredLimitRows(feature: EntitlementFeature, rows: OrganizationProductRow[]): OrganizationProductRow[] {
+  if (feature !== 'zalo') return rows
+  const newestActiveRow = getNewestZaloProductRow(rows, true)
+  return newestActiveRow ? [newestActiveRow] : []
+}
+
 function hasAnyEntitlement(entitlements: Partial<AuthEntitlements> | null | undefined): boolean {
   return !!(
     entitlements?.facebookCore ||
@@ -189,11 +228,11 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
   const entitlements = emptyAuthEntitlements()
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('product_id, expiration_date, package_type, max_sends_per_day, max_accounts')
+    .select('id, product_id, expiration_date, package_type, max_sends_per_day, max_accounts, created_at')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)
-    .order('expiration_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false, nullsFirst: false })
     .order('id', { ascending: false })
 
   if (error) {
@@ -202,11 +241,12 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
   }
 
   const rows = (data || []) as unknown as OrganizationProductRow[]
-  for (const [feature, productId] of Object.entries(FEATURE_PRODUCT_IDS) as Array<[EntitlementFeature, number]>) {
-    const featureRows = rows.filter(row => Number(row.product_id) === productId)
+  for (const [feature, productIds] of Object.entries(FEATURE_PRODUCT_IDS) as Array<[EntitlementFeature, readonly number[]]>) {
+    const featureRows = rows.filter(row => productIds.includes(Number(row.product_id)))
+    const limitRows = getPreferredLimitRows(feature, featureRows)
     entitlements[feature] = featureRows.some(row => isExpirationActive(row.expiration_date))
-    entitlements.dailySendLimits[feature] = getFeatureDailySendLimitFromProducts(featureRows)
-    entitlements.accountLimits[feature] = getFeatureAccountLimit(featureRows)
+    entitlements.dailySendLimits[feature] = getFeatureDailySendLimitFromProducts(limitRows)
+    entitlements.accountLimits[feature] = getFeatureAccountLimit(limitRows)
   }
 
   return entitlements
@@ -215,11 +255,11 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
 export async function loadOrganizationAccountProducts(organizationId: number): Promise<AuthAccountProduct[]> {
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('product_id, product_name, package_name, package_type, expiration_date, max_accounts')
+    .select('id, product_id, product_name, package_name, package_type, expiration_date, max_accounts, created_at')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)
-    .order('expiration_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false, nullsFirst: false })
     .order('id', { ascending: false })
 
   if (error) {
@@ -227,7 +267,16 @@ export async function loadOrganizationAccountProducts(organizationId: number): P
     throw new Error('Không thể tải thông tin gói sản phẩm. Vui lòng thử lại sau.')
   }
 
-  return ((data || []) as unknown as OrganizationProductRow[]).map(row => {
+  const rows = (data || []) as unknown as OrganizationProductRow[]
+  const newestActiveZaloRow = getNewestZaloProductRow(rows, true)
+  const effectiveZaloRow = newestActiveZaloRow || getNewestZaloProductRow(rows, false)
+  const effectiveRows = rows.filter(row => !ZALO_PRODUCT_IDS.includes(
+    Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
+  ))
+  if (effectiveZaloRow) effectiveRows.push(effectiveZaloRow)
+  effectiveRows.sort(compareNewestOrganizationProduct)
+
+  return effectiveRows.map(row => {
     const productId = Number(row.product_id)
     const productCatalogItem = getAuthProductById(Number.isFinite(productId) ? productId : null)
     const productName = String(row.product_name || '').trim()

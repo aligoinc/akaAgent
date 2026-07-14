@@ -1083,6 +1083,67 @@ button.btn-icon:not(.btn):disabled {
   z-index: 1000;
 }
 
+/* Blocking handoff prompt: Zalo runtime mode only changes after app restart. */
+.zalo-runtime-restart-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 10, 20, 0.78);
+  backdrop-filter: blur(7px);
+}
+
+.zalo-runtime-restart-modal {
+  width: min(440px, calc(100vw - 48px));
+  padding: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.zalo-runtime-restart-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 16px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  color: var(--accent-primary);
+}
+
+.zalo-runtime-restart-modal h2 {
+  margin: 0 0 12px;
+  font-size: 19px;
+}
+
+.zalo-runtime-restart-modal p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.zalo-runtime-restart-modal .zalo-runtime-restart-detail {
+  margin-top: 8px;
+}
+
+.zalo-runtime-restart-quit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 168px;
+  margin-top: 24px;
+}
+
 .general-settings-modal-overlay {
   z-index: 3400;
 }
@@ -6905,6 +6966,14 @@ button.btn-icon.campaign-control-button.assistant {
   border-bottom: none;
 }
 
+.log-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
 .log-time {
   color: var(--accent-primary);
   flex-shrink: 0;
@@ -6912,6 +6981,19 @@ button.btn-icon.campaign-control-button.assistant {
   font-weight: 500;
   font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
   opacity: 0.7;
+}
+
+.log-source-server {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 48%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  color: var(--accent-primary);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
 }
 
 .log-message {

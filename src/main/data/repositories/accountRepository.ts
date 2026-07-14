@@ -521,6 +521,271 @@ export async function resetRunningAccountStatuses(staffId: number): Promise<void
   if (error) console.error('Failed to reset account statuses:', error.message)
 }
 
+export interface ServerZaloRecoveryResult {
+  staffId: number
+  accountsReset: number
+  campaignsReset: number
+  campaignInputsCompleted: number
+  campaignInputDataCompleted: number
+}
+
+export interface ServerZaloRecoveryOptions {
+  expectedModeRevision?: string | null
+  requireServerMode?: boolean
+}
+
+export interface DesktopRecoveryResult {
+  staffId: number
+  excludeZalo: boolean
+  zaloUncertainNoRetry: boolean
+  accountsReset: number
+  campaignsReset: number
+  campaignNotesReset: number
+  campaignInputsReset: number
+  campaignInputDataReset: number
+}
+
+export type ZaloAccountRuntimeTarget = 'desktop' | 'server'
+
+export interface ZaloAccountRuntimeOperationClaim {
+  claimed: boolean
+  accountId: number
+  previousStatus: 'chờ xử lý' | 'tạm dừng' | null
+  reason: string | null
+}
+
+export interface StaffZaloRunningState {
+  staffId: number
+  hasRunningState: boolean
+  accountsRunning: number
+  campaignsRunning: number
+  campaignInputsRunning: number
+  campaignInputDataRunning: number
+}
+
+function normalizeRecoveryCount(value: unknown): number {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
+
+function normalizeRecoveryStaffId(staffId: number): number {
+  const normalizedStaffId = Number(staffId)
+  if (!Number.isSafeInteger(normalizedStaffId) || normalizedStaffId <= 0) {
+    throw new Error('Staff ID must be a positive integer for runtime recovery')
+  }
+  return normalizedStaffId
+}
+
+export async function claimZaloAccountRuntimeOperation(
+  accountId: number,
+  runtimeTarget: ZaloAccountRuntimeTarget,
+  requiresLogin = true
+): Promise<ZaloAccountRuntimeOperationClaim> {
+  const normalizedAccountId = Math.floor(Number(accountId))
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for Zalo runtime claim')
+  }
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Zalo runtime target must be desktop or server')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('claim_zalo_account_runtime_operation', {
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: runtimeTarget,
+    p_requires_login: requiresLogin === true
+  })
+
+  if (error) {
+    throw new Error(
+      `Failed to claim Zalo account operation atomically: ${error.message}. ` +
+      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const rawPayload = Array.isArray(data) ? data[0] : data
+  if (!rawPayload || typeof rawPayload !== 'object') {
+    throw new Error('Zalo account operation claim completed without a valid result payload')
+  }
+  const payload = rawPayload as Record<string, unknown>
+  const previousStatus = payload.previous_status === 'chờ xử lý' || payload.previous_status === 'tạm dừng'
+    ? payload.previous_status
+    : null
+  return {
+    claimed: payload.claimed === true,
+    accountId: normalizeRecoveryCount(payload.account_id ?? normalizedAccountId),
+    previousStatus,
+    reason: typeof payload.reason === 'string' ? payload.reason : null
+  }
+}
+
+export async function releaseZaloAccountRuntimeOperation(
+  accountId: number,
+  runtimeTarget: ZaloAccountRuntimeTarget,
+  previousStatus: 'chờ xử lý' | 'tạm dừng'
+): Promise<boolean> {
+  const normalizedAccountId = Math.floor(Number(accountId))
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for Zalo runtime release')
+  }
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Zalo runtime target must be desktop or server')
+  }
+  if (previousStatus !== 'chờ xử lý' && previousStatus !== 'tạm dừng') {
+    throw new Error('Previous Zalo account status is invalid')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('release_zalo_account_runtime_operation', {
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: runtimeTarget,
+    p_previous_status: previousStatus
+  })
+
+  if (error) {
+    throw new Error(
+      `Failed to release Zalo account operation atomically: ${error.message}. ` +
+      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+  return data === true
+}
+
+export async function inspectStaffZaloRunningState(staffId: number): Promise<StaffZaloRunningState> {
+  const normalizedStaffId = normalizeRecoveryStaffId(staffId)
+  const u = requireCurrentUser()
+  if (u.staffId !== normalizedStaffId) throw new Error('Cannot inspect another staff runtime')
+
+  const { data, error } = await client().rpc('inspect_staff_zalo_running_state', {
+    p_staff_id: normalizedStaffId
+  })
+
+  if (error) {
+    throw new Error(
+      `Failed to inspect Zalo running state: ${error.message}. ` +
+      'Ensure migration v163 is applied; server handoff was not started.'
+    )
+  }
+
+  const rawPayload = Array.isArray(data) ? data[0] : data
+  if (!rawPayload || typeof rawPayload !== 'object') {
+    throw new Error('Zalo running-state inspection completed without a valid result payload')
+  }
+  const payload = rawPayload as Record<string, unknown>
+  return {
+    staffId: normalizeRecoveryCount(payload.staff_id ?? normalizedStaffId),
+    hasRunningState: payload.has_running_state === true,
+    accountsRunning: normalizeRecoveryCount(payload.accounts_running),
+    campaignsRunning: normalizeRecoveryCount(payload.campaigns_running),
+    campaignInputsRunning: normalizeRecoveryCount(payload.campaign_inputs_running),
+    campaignInputDataRunning: normalizeRecoveryCount(payload.campaign_input_data_running)
+  }
+}
+
+/**
+ * Recover only a staff's interrupted server-side Zalo work in one database transaction.
+ * There is intentionally no client-side fallback because partial recovery could resend
+ * a target whose previous result is unknown.
+ */
+export async function recoverServerZaloRunningState(
+  staffId: number,
+  options: ServerZaloRecoveryOptions = {}
+): Promise<ServerZaloRecoveryResult> {
+  const normalizedStaffId = normalizeRecoveryStaffId(staffId)
+  const u = requireCurrentUser()
+  if (u.staffId !== normalizedStaffId) throw new Error('Cannot recover another staff runtime')
+
+  const { data, error } = await client().rpc('recover_server_zalo_running_state', {
+    p_staff_id: normalizedStaffId,
+    p_expected_mode_revision: options.expectedModeRevision || null,
+    p_require_server_mode: options.requireServerMode === true
+  })
+
+  if (error) {
+    throw new Error(
+      `Failed to recover server Zalo state atomically: ${error.message}. ` +
+      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const rawPayload = Array.isArray(data) ? data[0] : data
+  if (!rawPayload || typeof rawPayload !== 'object') {
+    throw new Error('Server Zalo recovery completed without a valid result payload')
+  }
+
+  const payload = rawPayload as Record<string, unknown>
+  return {
+    staffId: normalizeRecoveryCount(payload.staff_id ?? normalizedStaffId),
+    accountsReset: normalizeRecoveryCount(payload.accounts_reset),
+    campaignsReset: normalizeRecoveryCount(payload.campaigns_reset),
+    campaignInputsCompleted: normalizeRecoveryCount(payload.campaign_inputs_completed),
+    campaignInputDataCompleted: normalizeRecoveryCount(payload.campaign_input_data_completed)
+  }
+}
+
+/**
+ * Recover Zalo rows left by a crashed desktop session. The mode revision is
+ * mandatory so the database transaction aborts if the staff is switched back
+ * to server mode before the recovery acquires its staff-row lock.
+ */
+export function recoverDesktopZaloRunningState(
+  staffId: number,
+  expectedModeRevision: string
+): Promise<ServerZaloRecoveryResult> {
+  const revision = String(expectedModeRevision || '').trim()
+  if (!revision) throw new Error('Desktop Zalo recovery requires a runtime mode revision')
+  return recoverServerZaloRunningState(staffId, {
+    expectedModeRevision: revision,
+    requireServerMode: false
+  })
+}
+
+/**
+ * Desktop startup recovery with an optional hard Zalo exclusion. Server-mode staff
+ * pass excludeZalo=true so local recovery cannot mutate state owned by the server.
+ */
+export async function resetDesktopRunningStatuses(
+  staffId: number,
+  excludeZalo: boolean,
+  zaloUncertainNoRetry = false
+): Promise<DesktopRecoveryResult> {
+  const normalizedStaffId = normalizeRecoveryStaffId(staffId)
+  const u = requireCurrentUser()
+  if (u.staffId !== normalizedStaffId) throw new Error('Cannot reset another staff runtime')
+  const shouldExcludeZalo = excludeZalo === true
+  const { data, error } = await client().rpc('reset_desktop_running_statuses', {
+    p_staff_id: normalizedStaffId,
+    p_exclude_zalo: shouldExcludeZalo,
+    p_zalo_uncertain_no_retry: zaloUncertainNoRetry === true
+  })
+
+  if (error) {
+    throw new Error(
+      `Failed to reset desktop runtime state atomically: ${error.message}. ` +
+      'Ensure migration v163 is applied; no cross-platform fallback was attempted.'
+    )
+  }
+
+  const rawPayload = Array.isArray(data) ? data[0] : data
+  if (!rawPayload || typeof rawPayload !== 'object') {
+    throw new Error('Desktop runtime recovery completed without a valid result payload')
+  }
+
+  const payload = rawPayload as Record<string, unknown>
+  return {
+    staffId: normalizeRecoveryCount(payload.staff_id ?? normalizedStaffId),
+    excludeZalo: payload.exclude_zalo === true,
+    zaloUncertainNoRetry: payload.zalo_uncertain_no_retry === true,
+    accountsReset: normalizeRecoveryCount(payload.accounts_reset),
+    campaignsReset: normalizeRecoveryCount(payload.campaigns_reset),
+    campaignNotesReset: normalizeRecoveryCount(payload.campaign_notes_reset),
+    campaignInputsReset: normalizeRecoveryCount(payload.campaign_inputs_reset),
+    campaignInputDataReset: normalizeRecoveryCount(payload.campaign_input_data_reset)
+  }
+}
+
 function normalizeNullableString(value: unknown): string | null {
   const trimmed = String(value || '').trim()
   return trimmed || null

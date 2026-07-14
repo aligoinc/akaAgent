@@ -867,6 +867,7 @@ export interface CampaignLogAction {
 export interface CampaignLogEntry {
   timestamp: string
   message: string
+  source?: 'local' | 'server'
   action?: CampaignLogAction
 }
 
@@ -1203,6 +1204,17 @@ export interface AuthSessionExpiredPayload {
   message: string
 }
 
+/**
+ * Main -> renderer notification emitted when the Zalo runtime target stored in
+ * org_staff changes after the current desktop session was initialized.
+ * The running session deliberately keeps its original target until app restart.
+ */
+export interface ZaloRuntimeRestartRequiredPayload {
+  sessionIsZaloServer: boolean
+  databaseIsZaloServer: boolean
+  message: string
+}
+
 export interface AuthAccountProduct {
   feature: AuthEntitlementFeature | null
   productId: number | null
@@ -1225,6 +1237,7 @@ export interface AuthUser {
   organizationName: string
   isAdminAkabiz: boolean
   useTestWorkflow: boolean
+  isZaloServer: boolean
   entitlements: AuthEntitlements
   accountProducts: AuthAccountProduct[]
   deviceLabel?: string | null
@@ -1427,10 +1440,12 @@ export const IPC_EVENTS = {
   AUTH_UPDATE_USE_TEST_WORKFLOW: 'auth:update-use-test-workflow',
   AUTH_SESSION_EXPIRED: 'auth:session-expired',
   AUTH_USER_UPDATED: 'auth:user-updated',
+  AUTH_ZALO_RUNTIME_RESTART_REQUIRED: 'auth:zalo-runtime-restart-required',
 
   // App
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',
   APP_SET_STARTUP_SETTING: 'app:set-startup-setting',
+  APP_QUIT: 'app:quit',
   APP_GET_VERSION: 'app:get-version',
   APP_READ_BLOCK_SCREENSHOT: 'app:read-block-screenshot',
   APP_READ_CAMPAIGN_PREVIEW_FILE: 'app:read-campaign-preview-file',

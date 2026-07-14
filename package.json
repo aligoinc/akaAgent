@@ -1,19 +1,22 @@
 {
   "name": "aka-biz-auto",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "Browser Automation Desktop App with Visual Flow Builder",
   "main": "./out/main/index.js",
   "author": "akaBiz",
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:server": "electron-vite dev --config electron.server.vite.config.ts --entry out-server/main/index.js",
     "build": "electron-vite build",
+    "build:server": "electron-vite build --config electron.server.vite.config.ts",
     "preview": "electron-vite preview",
     "seed:ai:akabizrpa": "node scripts/seed-ai-from-akabizrpa.mjs",
     "postinstall": "electron-builder install-app-deps",
     "build:win": "node scripts/build-win.cjs",
+    "build:server:win": "node scripts/build-server-win.cjs",
     "build:mac": "npm run build && electron-builder --mac dir --arm64 --config.mac.identity=null --publish never && node scripts/sign-mac-adhoc.cjs dist/mac-arm64/akaBizAuto.app && electron-builder --mac dmg --arm64 --prepackaged dist/mac-arm64 --config.mac.identity=null --config.mac.artifactName='akaAgent.${ext}' --publish never",
-    "build:mac:intel": "npm run build && electron-builder --mac dir --x64 --config.mac.identity=null --publish never && node scripts/sign-mac-adhoc.cjs dist/mac/akaBizAuto.app && electron-builder --mac dmg --x64 --prepackaged dist/mac --config.mac.identity=null --config.mac.artifactName='akaAgentIntel.${ext}' --publish never"
+    "build:mac:intel": "node scripts/build-mac-intel.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
@@ -82,6 +85,10 @@
       "node_modules/better-sqlite3/**/*"
     ],
     "win": {
+      "files": [
+        "out/**/*",
+        "!node_modules/**/fsevents{,/**/*}"
+      ],
       "target": [
         "nsis"
       ],

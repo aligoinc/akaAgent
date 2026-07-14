@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>akaAgent Zalo Server — Quản trị máy chủ</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="admin-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">akaAgent Zalo Server</p>
+          <h1>Quản trị máy chủ runtime</h1>
+          <p class="subtitle">Theo dõi sức khỏe dịch vụ, runtime nhân viên và log hoạt động theo thời gian thực.</p>
+        </div>
+        <div id="connection-status" class="connection-status is-loading" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="connection-status-text">Đang kết nối dữ liệu…</span>
+        </div>
+      </header>
+
+      <section class="metric-grid" aria-label="Tổng quan máy chủ">
+        <article class="metric-card metric-card-wide">
+          <span class="metric-label">Trạng thái hệ thống</span>
+          <strong id="metric-health" class="metric-value">Đang tải…</strong>
+          <span id="metric-started" class="metric-detail">Chưa có dữ liệu</span>
+        </article>
+        <article class="metric-card metric-card-wide">
+          <span class="metric-label">Địa chỉ lắng nghe</span>
+          <strong id="metric-listening" class="metric-value metric-value-code">—</strong>
+          <span class="metric-detail">Gateway nội bộ</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Giờ Việt Nam</span>
+          <strong id="metric-vietnam-time" class="metric-value">—</strong>
+          <span id="metric-timezone" class="metric-detail">Đang kiểm tra múi giờ</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Client đang kết nối</span>
+          <strong id="metric-clients" class="metric-value metric-value-number">0</strong>
+          <span class="metric-detail">Admin / ứng dụng theo dõi</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Runtime nhân viên</span>
+          <strong id="metric-runtimes" class="metric-value metric-value-number">0</strong>
+          <span class="metric-detail">Đang được máy chủ quản lý</span>
+        </article>
+      </section>
+
+      <section class="panel" aria-labelledby="staff-runtime-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">Runtime</p>
+            <h2 id="staff-runtime-heading">Nhân viên đang được phục vụ</h2>
+          </div>
+          <span id="staff-count" class="count-badge">0 nhân viên</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nhân viên</th>
+                <th>Tổ chức</th>
+                <th>Trạng thái</th>
+                <th>Bắt đầu lúc</th>
+                <th>Lỗi gần nhất</th>
+              </tr>
+            </thead>
+            <tbody id="staff-table-body">
+              <tr class="empty-row">
+                <td colspan="5">Đang tải danh sách runtime…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel log-panel" aria-labelledby="live-log-heading">
+        <div class="panel-heading log-heading">
+          <div>
+            <p class="section-kicker">Theo thời gian thực</p>
+            <h2 id="live-log-heading">Log runtime</h2>
+          </div>
+          <div class="log-actions">
+            <span id="log-count" class="count-badge">0 / 0 dòng</span>
+            <button
+              id="clear-logs"
+              class="secondary-button"
+              type="button"
+              title="Xóa log đang hiển thị, bộ đệm realtime và file log trên máy chủ"
+            >Xóa log</button>
+          </div>
+        </div>
+
+        <div class="filters" aria-label="Bộ lọc log">
+          <label>
+            <span>Nhân viên</span>
+            <select id="filter-staff">
+              <option value="">Tất cả nhân viên</option>
+            </select>
+          </label>
+          <label>
+            <span>Kênh log</span>
+            <select id="filter-channel">
+              <option value="">Tất cả kênh</option>
+            </select>
+          </label>
+          <label class="filter-search">
+            <span>Tìm nội dung</span>
+            <input id="filter-text" type="search" placeholder="Nhập nội dung, mã staff hoặc tổ chức…" autocomplete="off" />
+          </label>
+        </div>
+
+        <div id="log-list" class="log-list" role="log" aria-live="polite" aria-relevant="additions">
+          <div class="log-empty">Chưa có log runtime.</div>
+        </div>
+      </section>
+
+      <footer>
+        <span>Dữ liệu được cập nhật trực tiếp từ tiến trình máy chủ.</span>
+        <span id="last-updated">Chưa cập nhật</span>
+      </footer>
+    </main>
+
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

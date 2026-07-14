@@ -22,6 +22,7 @@ import AccountProfileModal from './components/Settings/AccountProfileModal'
 import MediaLibraryModal from './components/Media/MediaLibraryModal'
 import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
 import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeedbackLauncher'
+import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
 
 type UpdatePromptSource = 'startup' | 'manual'
 
@@ -32,7 +33,15 @@ interface UpdateInfo {
 }
 
 export default function App() {
-  const { user, initializing, rehydrateFromStorage, handleSessionExpired, handleUserUpdated } = useAuthStore()
+  const {
+    user,
+    initializing,
+    zaloRuntimeRestartRequired,
+    rehydrateFromStorage,
+    handleSessionExpired,
+    handleUserUpdated,
+    handleZaloRuntimeRestartRequired
+  } = useAuthStore()
   const { theme } = useThemeStore()
   const {
     accounts,
@@ -90,6 +99,17 @@ export default function App() {
       void loadCampaignActions()
     })
   }, [handleUserUpdated, loadAccounts, loadCampaigns, loadCampaignActions])
+
+  useEffect(() => {
+    if (!window.electronAPI?.onZaloRuntimeRestartRequired) return
+    return window.electronAPI.onZaloRuntimeRestartRequired((payload) => {
+      handleZaloRuntimeRestartRequired(payload)
+    })
+  }, [handleZaloRuntimeRestartRequired])
+
+  const runtimeRestartModal = zaloRuntimeRestartRequired
+    ? <ZaloRuntimeRestartRequiredModal payload={zaloRuntimeRestartRequired} />
+    : null
 
   // Snap workflow-editor -> campaigns if user loses workflow access (e.g. after switching account).
   useEffect(() => {
@@ -237,6 +257,7 @@ export default function App() {
         </div>
         <AlertModal />
         <ConfirmModal />
+        {runtimeRestartModal}
         {updateInfo && (
           <UpdateModal
             localVersion={updateInfo.localVersion}
@@ -255,6 +276,7 @@ export default function App() {
         <LoginPage />
         <AlertModal />
         <ConfirmModal />
+        {runtimeRestartModal}
         {updateInfo && (
           <UpdateModal
             localVersion={updateInfo.localVersion}
@@ -328,6 +350,7 @@ export default function App() {
 
       <AlertModal />
       <ConfirmModal />
+      {runtimeRestartModal}
       {showDataScan && (
         <DataScanModal onClose={() => setShowDataScan(false)} />
       )}

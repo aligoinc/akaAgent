@@ -33,6 +33,20 @@ export class SupabaseService {
     await accountActionRepo.enableDueAccountActions()
   }
 
+  recoverServerZaloRunningState(staffId: number, options?: accountRepo.ServerZaloRecoveryOptions) {
+    return accountRepo.recoverServerZaloRunningState(staffId, options)
+  }
+
+  recoverDesktopZaloRunningState(staffId: number, expectedModeRevision: string) {
+    return accountRepo.recoverDesktopZaloRunningState(staffId, expectedModeRevision)
+  }
+
+  async resetDesktopRunningStatuses(staffId: number, excludeZalo: boolean, zaloUncertainNoRetry = false) {
+    const result = await accountRepo.resetDesktopRunningStatuses(staffId, excludeZalo, zaloUncertainNoRetry)
+    await accountActionRepo.enableDueAccountActions()
+    return result
+  }
+
   // =========== ACCOUNTS ===========
   getAccount(id: number) { return accountRepo.getAccount(id) }
   listAccounts() { return accountRepo.listAccounts() }
@@ -51,6 +65,21 @@ export class SupabaseService {
     return accountRepo.markAccountZaloSessionCheck(id, result)
   }
   clearAccountZaloSession(id: number) { return accountRepo.clearAccountZaloSession(id) }
+  claimZaloAccountRuntimeOperation(
+    id: number,
+    runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,
+    requiresLogin = true
+  ) {
+    return accountRepo.claimZaloAccountRuntimeOperation(id, runtimeTarget, requiresLogin)
+  }
+  releaseZaloAccountRuntimeOperation(
+    id: number,
+    runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,
+    previousStatus: 'chờ xử lý' | 'tạm dừng'
+  ) {
+    return accountRepo.releaseZaloAccountRuntimeOperation(id, runtimeTarget, previousStatus)
+  }
+  inspectStaffZaloRunningState(staffId: number) { return accountRepo.inspectStaffZaloRunningState(staffId) }
   getAccountEmailSession(id: number) { return accountRepo.getAccountEmailSession(id) }
   updateAccountEmailSession(id: number, input: { session: EmailAccountConfig; verified?: boolean; clearError?: boolean }) {
     return accountRepo.updateAccountEmailSession(id, input)
@@ -85,9 +114,14 @@ export class SupabaseService {
   deleteCampaign(id: number) { return campaignRepo.deleteCampaign(id) }
   cloneCampaign(id: number) { return campaignRepo.cloneCampaign(id) }
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }
+  claimCampaignRuntime(campaignId: number, accountId: number, runtimeTarget: campaignRepo.CampaignRuntimeTarget) {
+    return campaignRepo.claimCampaignRuntime(campaignId, accountId, runtimeTarget)
+  }
   getPendingCampaigns(accountId: number) { return campaignRepo.getPendingCampaigns(accountId) }
   getDueSmsCampaignsForLimitCheck(accountId: number) { return campaignRepo.getDueSmsCampaignsForLimitCheck(accountId) }
   maintainCampaignSchedules() { return campaignRepo.maintainCampaignSchedules() }
+  maintainZaloCampaignSchedules() { return campaignRepo.maintainZaloCampaignSchedules() }
+  maintainNonZaloCampaignSchedules() { return campaignRepo.maintainNonZaloCampaignSchedules() }
   listZaloRealtimeGroupCampaignSnapshots() { return campaignRepo.listZaloRealtimeGroupCampaignSnapshots() }
   enqueueZaloRealtimeGroupEvent(request: campaignRepo.EnqueueZaloRealtimeGroupEventRequest) {
     return campaignRepo.enqueueZaloRealtimeGroupEvent(request)
