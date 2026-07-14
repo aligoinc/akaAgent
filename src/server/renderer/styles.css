@@ -365,6 +365,11 @@ tbody tr:not(.empty-row):hover {
   background: rgba(255, 107, 120, 0.13);
 }
 
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .secondary-button:focus-visible,
 input:focus-visible,
 select:focus-visible {

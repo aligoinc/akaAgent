@@ -5,6 +5,7 @@ import type { ZaloServerAdminBridge } from './types'
 
 const bridge: ZaloServerAdminBridge = {
   getSnapshot: () => ipcRenderer.invoke(ZALO_SERVER_IPC.GET_SNAPSHOT),
+  clearLogs: () => ipcRenderer.invoke(ZALO_SERVER_IPC.CLEAR_LOGS),
 
   onRuntimeEvent: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: ZaloServerRuntimeEvent): void => {

@@ -197,6 +197,10 @@ export class ZaloServerGateway {
     return [...(this.eventBuffers.get(staffId) || [])]
   }
 
+  clearEventBuffers(): void {
+    this.eventBuffers.clear()
+  }
+
   private async handleHttp(request: IncomingMessage, response: ServerResponse): Promise<void> {
     try {
       if (this.stopping) {

@@ -653,7 +653,9 @@ export class CampaignScheduler {
   private startPolling(): void {
     if (!this.running || this.intervalId) return
     this.intervalId = setInterval(() => this.tick(), 30000)
-    this.sendLog('📋 Scheduler đã bắt đầu. Kiểm tra mỗi 30 giây.')
+    if (this.runtimeTarget !== 'server') {
+      this.sendLog('📋 Scheduler đã bắt đầu. Kiểm tra mỗi 30 giây.')
+    }
     this.tick()
   }
 

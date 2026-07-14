@@ -1,4 +1,5 @@
 import type {
+  ZaloServerClearLogsResult,
   ZaloServerRuntimeEvent,
   ZaloServerRuntimeState,
   ZaloServerSnapshot,
@@ -7,6 +8,7 @@ import type {
 
 interface ZaloServerAdminBridge {
   getSnapshot(): Promise<ZaloServerSnapshot>
+  clearLogs(): Promise<ZaloServerClearLogsResult>
   onRuntimeEvent(listener: (event: ZaloServerRuntimeEvent) => void): () => void
   onSnapshotUpdated(listener: (snapshot?: ZaloServerSnapshot) => void): () => void
 }
@@ -129,6 +131,13 @@ function isSnapshot(value: unknown): value is ZaloServerSnapshot {
     Array.isArray(value.recentEvents) &&
     value.recentEvents.every(isRuntimeEvent)
   )
+}
+
+function isClearLogsResult(value: unknown): value is ZaloServerClearLogsResult {
+  return isRecord(value) &&
+    typeof value.clearedThroughSequence === 'number' &&
+    Number.isSafeInteger(value.clearedThroughSequence) &&
+    value.clearedThroughSequence >= 0
 }
 
 function parseTimestamp(value: string): number {
@@ -469,9 +478,32 @@ filterStaff.addEventListener('change', () => renderLogs(false))
 filterChannel.addEventListener('change', () => renderLogs(false))
 filterText.addEventListener('input', () => renderLogs(false))
 clearLogsButton.addEventListener('click', () => {
-  runtimeEvents = []
-  renderFilterOptions()
-  renderLogs(false)
+  const bridge = window.zaloServerAdmin
+  if (!bridge || clearLogsButton.disabled) return
+  if (!window.confirm('Xóa toàn bộ log đang hiển thị, bộ đệm realtime và file log trên máy chủ?')) return
+
+  clearLogsButton.disabled = true
+  clearLogsButton.textContent = 'Đang xóa…'
+  void bridge.clearLogs()
+    .then((result) => {
+      if (!isClearLogsResult(result)) throw new Error('Kết quả xóa log không hợp lệ')
+      // Preserve any event emitted after the synchronous main-process flush,
+      // even if its IPC delivery races the clear request response.
+      runtimeEvents = runtimeEvents.filter(event => event.sequence > result.clearedThroughSequence)
+      hydratedRecentEvents = true
+      if (snapshot) snapshot = { ...snapshot, recentEvents: [] }
+      renderFilterOptions()
+      renderLogs(false)
+      lastUpdated.textContent = `Cập nhật ${dateTimeFormatter.format(new Date())}`
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      window.alert(`Không thể xóa log: ${message}`)
+    })
+    .finally(() => {
+      clearLogsButton.disabled = false
+      clearLogsButton.textContent = 'Xóa log'
+    })
 })
 
 const bridge = window.zaloServerAdmin

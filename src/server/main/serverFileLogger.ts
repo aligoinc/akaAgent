@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from 'fs'
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
 import { inspect } from 'util'
 
@@ -25,7 +25,11 @@ function rotateIfNeeded(filePath: string): void {
   }
 }
 
-export function installServerFileLogger(filePath: string): void {
+export interface ServerFileLogger {
+  clear(): void
+}
+
+export function installServerFileLogger(filePath: string): ServerFileLogger {
   mkdirSync(dirname(filePath), { recursive: true })
   const original = {
     log: console.log.bind(console),
@@ -49,4 +53,12 @@ export function installServerFileLogger(filePath: string): void {
   console.log = wrap('INFO', original.log)
   console.warn = wrap('WARN', original.warn)
   console.error = wrap('ERROR', original.error)
+
+  return {
+    clear: () => {
+      mkdirSync(dirname(filePath), { recursive: true })
+      writeFileSync(filePath, '', 'utf8')
+      rmSync(`${filePath}.1`, { force: true })
+    }
+  }
 }

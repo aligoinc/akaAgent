@@ -8,7 +8,7 @@ import {
   authenticateZaloServerClient
 } from '../../main/data/repositories/serverRuntimeRepository'
 import { ZALO_SERVER_IPC } from '../../shared/zaloServerProtocol'
-import { installServerFileLogger } from './serverFileLogger'
+import { installServerFileLogger, type ServerFileLogger } from './serverFileLogger'
 import { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
 import { ZaloServerGateway } from './zaloServerGateway'
 import { ZaloServerRuntimeManager } from './zaloServerRuntimeManager'
@@ -16,6 +16,7 @@ import { ZaloServerRuntimeManager } from './zaloServerRuntimeManager'
 let mainWindow: BrowserWindow | null = null
 let gateway: ZaloServerGateway | null = null
 let runtimeManager: ZaloServerRuntimeManager | null = null
+let serverFileLogger: ServerFileLogger | null = null
 let shutdownStarted = false
 let shutdownComplete = false
 
@@ -121,6 +122,15 @@ async function startServer(): Promise<void> {
   })
 
   ipcMain.handle(ZALO_SERVER_IPC.GET_SNAPSHOT, () => runtimeManager!.getSnapshot())
+  ipcMain.handle(ZALO_SERVER_IPC.CLEAR_LOGS, () => {
+    // All stores are synchronous so no runtime event can be inserted halfway
+    // through the flush. Clear disk first so a file permission failure leaves
+    // the visible/in-memory history intact instead of reporting false success.
+    serverFileLogger?.clear()
+    const clearedThroughSequence = runtimeManager!.clearLogs()
+    gateway?.clearEventBuffers()
+    return { clearedThroughSequence }
+  })
   await gateway.start()
   await runtimeManager.start()
 }
@@ -147,7 +157,7 @@ async function shutdown(): Promise<void> {
 }
 
 if (gotSingleInstanceLock) {
-  installServerFileLogger(join(serverDataPath, 'logs', 'server.log'))
+  serverFileLogger = installServerFileLogger(join(serverDataPath, 'logs', 'server.log'))
   app.commandLine.appendSwitch('disable-background-timer-throttling')
 
   app.on('second-instance', () => {

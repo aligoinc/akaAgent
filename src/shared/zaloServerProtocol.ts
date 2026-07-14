@@ -4,6 +4,7 @@ export const ZALO_SERVER_INTERNAL_PORT = 8787
 
 export const ZALO_SERVER_IPC = {
   GET_SNAPSHOT: 'zalo-server:get-snapshot',
+  CLEAR_LOGS: 'zalo-server:clear-logs',
   RUNTIME_EVENT: 'zalo-server:runtime-event',
   SNAPSHOT_UPDATED: 'zalo-server:snapshot-updated'
 } as const
@@ -39,6 +40,10 @@ export interface ZaloServerSnapshot {
   runtimeCount: number
   staffs: ZaloServerStaffSnapshot[]
   recentEvents: ZaloServerRuntimeEvent[]
+}
+
+export interface ZaloServerClearLogsResult {
+  clearedThroughSequence: number
 }
 
 export interface ZaloServerSessionRequest {

@@ -430,6 +430,13 @@ export class ZaloServerRuntimeManager {
     }
   }
 
+  clearLogs(): number {
+    this.recentEvents.length = 0
+    // Keep the sequence monotonic so events emitted after the flush cannot
+    // collide with event keys that a renderer may already have observed.
+    return this.sequence
+  }
+
   private async reconcile(): Promise<void> {
     if (this.state === 'stopping' || this.state === 'stopped') return
     if (this.reconcilePromise) return this.reconcilePromise
