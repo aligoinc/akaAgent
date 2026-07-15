@@ -1297,8 +1297,8 @@ export interface AuthSessionExpiredPayload {
 }
 
 /**
- * Main -> renderer notification emitted when the Zalo runtime target stored in
- * org_staff changes after the current desktop session was initialized.
+ * Main -> renderer notification emitted when the effective organization Zalo
+ * entitlement changes runtime target after the desktop session was initialized.
  * The running session deliberately keeps its original target until app restart.
  */
 export interface ZaloRuntimeRestartRequiredPayload {

@@ -13,6 +13,7 @@ import {
   loadOrganizationAccountProducts,
   loadOrganizationEntitlements
 } from './entitlementRepository'
+import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
 
 const client = () => getSupabaseClient()
 
@@ -40,7 +41,6 @@ interface StaffRow extends StaffDeviceColumns {
   is_active: boolean
   is_admin_akabiz: boolean
   use_test_workflow: boolean
-  is_zalo_server: boolean
 }
 
 interface DeviceLoginSettingsRow {
@@ -70,7 +70,6 @@ const STAFF_SELECT = [
   'is_active',
   'is_admin_akabiz',
   'use_test_workflow',
-  'is_zalo_server',
   'device_fingerprint_hash',
   'device_label',
   'device_platform',
@@ -170,9 +169,10 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     )
   }
 
-  const [entitlements, accountProducts] = await Promise.all([
+  const [entitlements, accountProducts, zaloRuntimeMode] = await Promise.all([
     loadOrganizationEntitlements(staffRow.organization_id),
-    loadOrganizationAccountProducts(staffRow.organization_id)
+    loadOrganizationAccountProducts(staffRow.organization_id),
+    loadStaffZaloServerModeSnapshot(staffRow.id)
   ])
 
   return {
@@ -184,7 +184,7 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     organizationName: (org?.name as string) || '',
     isAdminAkabiz: !!staffRow.is_admin_akabiz,
     useTestWorkflow: !!staffRow.use_test_workflow,
-    isZaloServer: !!staffRow.is_zalo_server,
+    isZaloServer: zaloRuntimeMode.isZaloServer,
     entitlements,
     accountProducts,
     deviceLabel: deviceRecord.device_label || null,

@@ -7,6 +7,7 @@ import {
   type ZaloServerCommandName,
   type ZaloServerCommandRequest,
   type ZaloServerCommandResponse,
+  type ZaloServerDesktopHandoffReadyResponse,
   type ZaloServerMessage,
   type ZaloServerRuntimeHandoffResponse,
   type ZaloServerRuntimeEvent,
@@ -19,6 +20,7 @@ const RECONNECT_MAX_DELAY_MS = 30_000
 const QUICK_COMMAND_TIMEOUT_MS = 10 * 60 * 1000
 const CONNECT_TIMEOUT_MS = 15_000
 const RUNTIME_HANDOFF_TIMEOUT_MS = 45_000
+const DESKTOP_HANDOFF_READY_TIMEOUT_MS = 10_000
 
 interface LoginCredentials {
   username: string
@@ -121,7 +123,7 @@ export class ZaloServerClient {
 
   async executeCommand<T = unknown>(command: ZaloServerCommandName, ...args: unknown[]): Promise<T> {
     const socket = this.socket
-    if (!this.isEnabled()) throw new Error('Staff này không được bật chế độ chạy Zalo trên server')
+    if (!this.isEnabled()) throw new Error('Gói Zalo của doanh nghiệp không bật chế độ chạy trên server')
     if (!this.isConnected() || !socket || socket.readyState !== WebSocket.OPEN) {
       throw new Error('akaAgent Zalo Server chưa kết nối. Vui lòng kiểm tra app server trên VPS.')
     }
@@ -183,6 +185,45 @@ export class ZaloServerClient {
         throw new Error('App server trả về kết quả bàn giao Zalo không hợp lệ')
       }
       return value as ZaloServerRuntimeHandoffResponse
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  /**
+   * Tell the VPS that the previous desktop-local runtime has stopped every
+   * Zalo producer. The VPS owns the recovery/start decision so a desktop that
+   * wakes late can never bulk-reset an already-running server runtime.
+   */
+  async requestDesktopHandoffReady(
+    username: string,
+    password: string,
+    expectedModeRevision: string
+  ): Promise<ZaloServerDesktopHandoffReadyResponse> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), DESKTOP_HANDOFF_READY_TIMEOUT_MS)
+    try {
+      const response = await fetch(`${this.origin}/api/runtime-handoff-ready`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: String(username || '').trim(),
+          password: String(password || ''),
+          expectedModeRevision: String(expectedModeRevision || '').trim()
+        }),
+        signal: controller.signal
+      })
+      const value = await response.json() as Partial<ZaloServerDesktopHandoffReadyResponse> & { error?: string }
+      if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`)
+      if (
+        typeof value.success !== 'boolean' ||
+        typeof value.serverReady !== 'boolean' ||
+        typeof value.serverStarted !== 'boolean' ||
+        typeof value.alreadyRunning !== 'boolean'
+      ) {
+        throw new Error('App server trả về kết quả nhận bàn giao Zalo không hợp lệ')
+      }
+      return value as ZaloServerDesktopHandoffReadyResponse
     } finally {
       clearTimeout(timeout)
     }

@@ -101,6 +101,13 @@ export interface ZaloServerRuntimeHandoffResponse {
   runningState?: ZaloServerHandoffRunningState
 }
 
+export interface ZaloServerDesktopHandoffReadyResponse {
+  success: boolean
+  serverReady: boolean
+  serverStarted: boolean
+  alreadyRunning: boolean
+}
+
 export type ZaloServerCommandName =
   | 'zalo.loginQr.start'
   | 'zalo.loginQr.cancel'

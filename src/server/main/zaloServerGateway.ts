@@ -19,6 +19,7 @@ import {
   type ZaloServerClientMessage,
   type ZaloServerCommandName,
   type ZaloServerCommandResponse,
+  type ZaloServerDesktopHandoffReadyResponse,
   type ZaloServerRuntimeEvent,
   type ZaloServerRuntimeHandoffResponse,
   type ZaloServerOperationSnapshot,
@@ -111,6 +112,11 @@ export interface ZaloServerGatewayOptions {
   port?: number
   authenticate(username: string, password: string): Promise<AuthenticatedStaff>
   handoffToDesktop(username: string, password: string): Promise<ZaloServerRuntimeHandoffResponse>
+  desktopHandoffReady(
+    username: string,
+    password: string,
+    expectedModeRevision: string
+  ): Promise<ZaloServerDesktopHandoffReadyResponse>
   getSnapshot(staffId?: number): ZaloServerSnapshot
   getOperations(staffId: number): ZaloServerOperationSnapshot[]
   executeCommand(staffId: number, command: ZaloServerCommandName, args: unknown[]): Promise<unknown>
@@ -408,6 +414,35 @@ export class ZaloServerGateway {
           return
         }
         const result = await this.options.handoffToDesktop(username, password)
+        if (this.stopping) {
+          response.setHeader('Connection', 'close')
+          json(response, 503, { error: 'Server đang dừng' })
+          return
+        }
+        this.loginAttempts.delete(loginKeys.identity)
+        json(response, 200, result)
+        return
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/runtime-handoff-ready') {
+        const body = await readJsonBody(request)
+        const username = String(body.username || '').trim()
+        const password = String(body.password || '')
+        const expectedModeRevision = String(body.expectedModeRevision || '').trim()
+        if (!username || !password || !expectedModeRevision) {
+          json(response, 400, { error: 'Thiếu tên đăng nhập, mật khẩu hoặc revision bàn giao' })
+          return
+        }
+        const loginKeys = this.getLoginAttemptKeys(request, username)
+        if (!this.allowLoginAttempt(loginKeys)) {
+          json(response, 429, { error: 'Đăng nhập quá nhiều lần. Vui lòng thử lại sau.' })
+          return
+        }
+        const result = await this.options.desktopHandoffReady(
+          username,
+          password,
+          expectedModeRevision
+        )
         if (this.stopping) {
           response.setHeader('Connection', 'close')
           json(response, 503, { error: 'Server đang dừng' })

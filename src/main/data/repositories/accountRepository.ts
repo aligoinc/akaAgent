@@ -600,7 +600,7 @@ export async function claimZaloAccountRuntimeOperation(
   if (error) {
     throw new Error(
       `Failed to claim Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
     )
   }
 
@@ -647,7 +647,7 @@ export async function releaseZaloAccountRuntimeOperation(
   if (error) {
     throw new Error(
       `Failed to release Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
     )
   }
   return data === true
@@ -665,7 +665,7 @@ export async function inspectStaffZaloRunningState(staffId: number): Promise<Sta
   if (error) {
     throw new Error(
       `Failed to inspect Zalo running state: ${error.message}. ` +
-      'Ensure migration v163 is applied; server handoff was not started.'
+      'Ensure migration v171 is applied; server handoff was not started.'
     )
   }
 
@@ -706,7 +706,7 @@ export async function recoverServerZaloRunningState(
   if (error) {
     throw new Error(
       `Failed to recover server Zalo state atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
     )
   }
 
@@ -764,7 +764,7 @@ export async function resetDesktopRunningStatuses(
   if (error) {
     throw new Error(
       `Failed to reset desktop runtime state atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no cross-platform fallback was attempted.'
+      'Ensure migration v171 is applied; no cross-platform fallback was attempted.'
     )
   }
 

@@ -115,10 +115,9 @@ async function startServer(): Promise<void> {
   gateway = new ZaloServerGateway({
     authenticate: async (username, password) => {
       const user = await authenticateZaloServerClient(username, password)
-      if (!user) throw new Error('Sai thông tin đăng nhập, staff chưa bật Zalo Server hoặc gói Zalo đã hết hạn')
-      // Session authentication must stay fast while a newly enabled staff is in
-      // its desktop-to-server handoff grace period. Runtime readiness is
-      // reported independently by snapshots/commands.
+      if (!user) throw new Error('Sai thông tin đăng nhập, gói chưa bật Zalo Server hoặc đã hết hạn')
+      // Session authentication stays independent from runtime readiness while
+      // a newly enabled staff is waiting for desktop handoff.
       void runtimeManager!.ensureUser(user).catch(error => {
         console.error(`[akaAgent Zalo Server] Cannot ensure staff runtime ${user.staffId}:`, error)
       })
@@ -128,6 +127,13 @@ async function startServer(): Promise<void> {
       const user = await authenticateZaloRuntimeHandoff(username, password)
       if (!user) throw new Error('Sai thông tin đăng nhập hoặc gói Zalo đã hết hạn')
       return runWithCurrentUser(user, () => runtimeManager!.handoffToDesktop(user.staffId))
+    },
+    desktopHandoffReady: async (username, password, expectedModeRevision) => {
+      const user = await authenticateZaloServerClient(username, password)
+      if (!user) throw new Error('Sai thông tin đăng nhập, gói chưa bật Zalo Server hoặc đã hết hạn')
+      return runWithCurrentUser(user, () =>
+        runtimeManager!.acceptDesktopHandoffReady(user, expectedModeRevision)
+      )
     },
     getSnapshot: staffId => runtimeManager!.getSnapshot(staffId),
     getOperations: staffId => runtimeManager!.getOperations(staffId),

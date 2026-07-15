@@ -20,14 +20,21 @@ supabase db query --linked --file migrations/migration_v165_03_control_web_atomi
 
 Không gộp phase `02` vào transaction vì phase này tạo index bằng `CONCURRENTLY`.
 Phase `03` sẽ tự dừng nếu index chưa tạo xong hoặc không hợp lệ.
-Thứ tự rollout production bắt buộc là: **database v165 → akaBizApi → akaAgent Zalo
-Server → akaAgent Web/PWA**. App akaAgent desktop của user và app SMS mobile hiện tại
-không cần cài lại cho rollout này.
 
-Migration thêm một cột vào `org_staff`:
+Sau các migration control web, áp dụng tiếp
+`migrations/migration_v171_organization_product_zalo_runtime_mode.sql`. Thứ tự rollout
+cho v171 là: **dừng runtime test → database v171 → akaBizApi → akaAgent Zalo Server →
+akaAgent desktop**. `akaAgentWebApp` và app SMS mobile không cần deploy lại vì contract
+capability không đổi.
 
-- `is_zalo_server=false`: staff chạy Zalo trên app desktop;
-- `is_zalo_server=true`: staff chạy Zalo trên app server.
+Migration thêm một cột vào `org_organization_product`:
+
+- `is_zalo_server=false`: toàn bộ staff của organization chạy Zalo trên app desktop;
+- `is_zalo_server=true`: toàn bộ staff của organization chạy Zalo trên app server.
+
+Chỉ row product Zalo `16`/`18` còn hạn, chưa soft-delete và mới nhất theo
+`created_at DESC, id DESC` có hiệu lực. Cột cũ cùng tên trên `org_staff` chỉ được
+giữ để binary cũ không lỗi schema và không còn quyết định runtime.
 
 Migration đồng thời tạo các RPC transaction để:
 
@@ -37,21 +44,25 @@ Migration đồng thời tạo các RPC transaction để:
 - kiểm tra trạng thái Zalo đang chạy trong lúc bàn giao;
 - recovery Zalo server sau khi app bị tắt đột ngột;
 - recovery runtime desktop theo đúng phạm vi.
-- đọc cờ kèm revision giao dịch của row staff để loại marker VPS cũ sau mọi lần đổi mode.
+- đọc cờ kèm revision `entitlement_id:xmin` của row organization product để loại
+  marker VPS cũ sau mọi lần đổi mode.
+- discover toàn bộ staff chạy server bằng RPC keyset tối đa 1.000 row mỗi trang,
+  không query entitlement/mode riêng cho từng organization.
 
 Product 16 và product 18 đều cấp cùng quyền Zalo. Nếu organization có cả hai,
-app lấy giới hạn từ entitlement Zalo còn hạn được tạo sau cùng, không dùng product
-để quyết định local/server.
+app lấy cả giới hạn và chế độ runtime từ entitlement Zalo còn hạn được tạo sau cùng.
 
-Sau khi migration chạy xong, bật server cho đúng staff cần sử dụng, ví dụ:
+Migration không backfill từ staff và mọi row hiện tại mặc định `false`. Sau khi đã
+deploy API, desktop và app server mới, bật server trên đúng row entitlement cần dùng:
 
 ```sql
-UPDATE public.org_staff
-SET is_zalo_server = true, updated_at = now()
-WHERE id = 1;
+UPDATE public.org_organization_product
+SET is_zalo_server = true
+WHERE id = 219;
 ```
 
-Đổi lại `false` nếu muốn staff đó chạy Zalo local. Không tự backfill cờ này từ product.
+Đổi lại `false` nếu muốn organization đó chạy Zalo local. Không đồng bộ cờ này về
+`org_staff`. Không bật cờ trên product Facebook, Email hoặc SMS vì runtime sẽ bỏ qua.
 
 ## 2. Cài app server
 
@@ -86,18 +97,26 @@ buộc thoát/mở lại app. Không đóng modal để tiếp tục dùng Zalo 
 
 Khi đổi từ local sang server, giao diện server có thể hiển thị staff ở trạng thái **Đang chờ
 app desktop cũ đóng**. Server không recovery hoặc chạy campaign cho staff đó cho tới khi
-desktop cleanup xong account/campaign/input đang chạy. Input có kết quả chưa xác định được
-đánh dấu hoàn thành và không tự gửi lại. Khi đổi từ server về local, server dừng runtime;
+desktop đã dừng toàn bộ producer Zalo và gọi `POST /api/runtime-handoff-ready`. Endpoint
+Để retry khi endpoint tạm offline, desktop lưu marker trong `local-data` và chỉ gửi lại
+sau khi mở app nếu staff, organization và revision `entitlement_id:xmin` vẫn khớp.
+Marker local chỉ cho phép thoát ngay khi DB đã sạch; nếu còn row Zalo `đang chạy`,
+desktop chờ VPS xác nhận để server không bị kẹt ở trạng thái chờ vĩnh viễn.
+Endpoint được serialize theo staff và tự kiểm tra revision; nó chỉ recovery/start khi
+server đang chờ và trả no-op nếu server đã chạy, nên desktop mở lại muộn không thể
+reset campaign server. Input có kết quả chưa xác
+định được đánh dấu hoàn thành và không tự gửi lại. Cleanup quit/logout rộng cũng tự bỏ qua
+Zalo khi product mode đang là server. Khi đổi từ server về local, server dừng runtime;
 desktop mở lại sẽ gọi `POST /api/runtime-handoff` qua chính domain HTTPS và chỉ chạy Zalo
 local sau khi server xác nhận đã dừng/cleanup xong. Vì IIS proxy toàn bộ `(.*)`, endpoint này
-không cần tạo rule riêng.
+không cần tạo rule riêng cho các endpoint handoff.
 
 App lưu marker ownership tại
 `C:\ProgramData\akaAgentServer\runtime-ownership.json`. Marker này cho phép lần mở sau
-recovery công việc do chính server bị crash để lại. Marker chỉ hợp lệ khi revision giao dịch
-của row `org_staff` vẫn khớp; đổi `false → true` hoặc `true → false` tự làm revision đổi dù
-không có trigger. Nếu marker thiếu/cũ, server coi trạng thái `đang chạy` là có thể thuộc
-desktop còn sống và chỉ chờ, không tự reset.
+recovery công việc do chính server bị crash để lại. Marker chỉ hợp lệ khi revision
+`entitlement_id:xmin` của row Zalo hiệu lực trong `org_organization_product` vẫn khớp.
+Nếu marker thiếu/cũ, server coi trạng thái `đang chạy` là có thể thuộc desktop còn sống
+và chỉ chờ, không tự reset.
 
 Sau khi Windows/VPS reboot, dùng Remote Desktop (RDP) đăng nhập vào Windows rồi mở lại
 shortcut. Bản này cố ý không tự chạy cùng Windows.
@@ -146,8 +165,9 @@ Invoke-RestMethod https://akazalo.akabiz.net/health
 ```
 
 Kết quả đúng có `ok: true`, `state: running`, `timeZoneOk: true` và số runtime staff.
-Sau khi mở lại, desktop của staff có `is_zalo_server=true` sẽ tự đăng nhập kênh server bằng
-phiên akaBiz hiện tại; user không phải nhập cấu hình Supabase hay token lần nữa.
+Sau khi mở lại, desktop thuộc organization có entitlement Zalo hiệu lực với
+`is_zalo_server=true` sẽ tự đăng nhập kênh server bằng phiên akaBiz hiện tại; user
+không phải nhập cấu hình Supabase hay token lần nữa.
 
 Khi đóng app server, domain có thể trả `502` từ IIS. Đây là hành vi đúng vì runtime đã dừng.
 

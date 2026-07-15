@@ -1361,7 +1361,7 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
   if (appendError) {
     throw new Error(
       `Failed to append campaign log atomically: ${appendError.message}. ` +
-      'Ensure migration v163 is applied; the legacy read-modify-write fallback was intentionally not used.'
+      'Ensure migration v171 is applied; the legacy read-modify-write fallback was intentionally not used.'
     )
   }
 
@@ -1408,7 +1408,7 @@ export async function claimCampaignRuntime(
   if (error) {
     throw new Error(
       `Failed to claim campaign runtime atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
     )
   }
 

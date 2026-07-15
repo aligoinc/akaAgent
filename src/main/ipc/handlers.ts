@@ -10,6 +10,7 @@ import { ZaloRuntimeService } from '../services/zaloRuntimeService'
 import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupCampaignManager'
 import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { ZaloServerClient } from '../services/zaloServerClient'
+import { DesktopZaloHandoffStore } from '../services/desktopZaloHandoffStore'
 import { DailyMaintenanceCoordinator } from '../services/dailyMaintenanceCoordinator'
 import { startAccountPoller, type AccountPollerController } from '../domain/accounts/accountPoller'
 
@@ -62,6 +63,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000
 const CAMPAIGN_SCHEDULER_START_DELAY_MS = 30 * 1000
 const RUNTIME_ENTITLEMENT_REFRESH_INTERVAL_MS = 30 * 1000
 const LOCAL_ZALO_HANDOFF_RETRY_INTERVAL_MS = 30 * 1000
+const DESKTOP_HANDOFF_ACK_RETRY_INTERVAL_MS = 30 * 1000
 const SESSION_EXPIRY_DAILY_CHECK_HOUR = 0
 const SESSION_EXPIRY_DAILY_CHECK_MINUTE = 5
 
@@ -120,6 +122,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const pageRegistry = new PageControllerRegistry()
   const proxyRuntime = new ProxyRuntimeService((id) => supabase.getProxy(id))
   const zaloServerClient = new ZaloServerClient(mainWindow)
+  const desktopZaloHandoffStore = new DesktopZaloHandoffStore()
   let runtimeCredentials: { username: string; password: string } | null = null
   let forceFullDesktopMaintenance = false
   let zaloRealtimeGroupManager: ZaloRealtimeGroupCampaignManager | null = null
@@ -187,11 +190,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   zaloRealtimeGroupManager = new ZaloRealtimeGroupCampaignManager(supabase, zaloRuntime, mainWindow)
 
   let restartRequiredActivation: Promise<void> | null = null
+  let desktopZaloOwnershipRelinquished = false
   let accountZaloOperations: AccountZaloOperationController | null = null
   let accountPollerController: AccountPollerController | null = null
   let localHandoffGeneration = 0
   let localHandoffRetryTimer: ReturnType<typeof setTimeout> | null = null
   let localHandoffRetryRunningGeneration: number | null = null
+  let desktopHandoffAckGeneration = 0
+  let desktopHandoffAckRetryTimer: ReturnType<typeof setTimeout> | null = null
 
   const cancelLocalHandoffRetry = (): void => {
     localHandoffGeneration += 1
@@ -210,14 +216,146 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   }
 
+  const acknowledgeDesktopHandoffMarker = async (
+    staffId: number,
+    organizationId: number,
+    credentials: { username: string; password: string }
+  ): Promise<boolean> => {
+    const marker = desktopZaloHandoffStore.get(staffId, organizationId)
+    if (!marker) return false
+
+    try {
+      const liveMode = await loadStaffZaloServerModeSnapshot(staffId)
+      if (!liveMode.isZaloServer || liveMode.revision !== marker.expectedModeRevision) {
+        desktopZaloHandoffStore.clear(staffId, organizationId, marker.expectedModeRevision)
+        console.info('[RuntimeHandoff] Removed stale desktop handoff marker.')
+        return false
+      }
+
+      const result = await zaloServerClient.requestDesktopHandoffReady(
+        credentials.username,
+        credentials.password,
+        marker.expectedModeRevision
+      )
+      if (!result.success || !result.serverReady) {
+        console.warn('[RuntimeHandoff] Zalo Server has not accepted the desktop handoff yet:', result)
+        return false
+      }
+      desktopZaloHandoffStore.clear(staffId, organizationId, marker.expectedModeRevision)
+      return true
+    } catch (error) {
+      console.warn('[RuntimeHandoff] Failed to acknowledge desktop-to-server handoff:', error)
+      // Distinguish a live revision race from a transient endpoint failure.
+      // During the old desktop's live activation, clearing a stale marker lets
+      // the caller immediately save fresh proof for the new exact revision.
+      try {
+        const liveMode = await loadStaffZaloServerModeSnapshot(staffId)
+        if (!liveMode.isZaloServer || liveMode.revision !== marker.expectedModeRevision) {
+          desktopZaloHandoffStore.clear(staffId, organizationId, marker.expectedModeRevision)
+        }
+      } catch {
+        // Keep the durable marker when live state cannot be revalidated. It is
+        // retried conservatively after the next server-mode login.
+      }
+      return false
+    }
+  }
+
+  const canDeferDesktopHandoffAcknowledgement = async (staffId: number): Promise<boolean> => {
+    try {
+      const runningState = await supabase.inspectStaffZaloRunningState(staffId)
+      if (runningState.hasRunningState) {
+        console.warn('[RuntimeHandoff] VPS acknowledgement is still required because Zalo rows are running:', runningState)
+        return false
+      }
+      return true
+    } catch (error) {
+      // Without either a VPS acknowledgement or a clean DB snapshot, a local
+      // marker is not sufficient proof for a future server process.
+      console.warn('[RuntimeHandoff] Cannot prove the Zalo database is clean yet:', error)
+      return false
+    }
+  }
+
+  const settleDesktopHandoffMarkerBeforeExit = async (
+    staffId: number,
+    organizationId: number
+  ): Promise<void> => {
+    while (desktopZaloHandoffStore.get(staffId, organizationId)) {
+      const credentials = runtimeCredentials
+      if (!credentials) return
+      const acknowledged = await acknowledgeDesktopHandoffMarker(
+        staffId,
+        organizationId,
+        { ...credentials }
+      )
+      if (acknowledged || !desktopZaloHandoffStore.get(staffId, organizationId)) return
+      if (await canDeferDesktopHandoffAcknowledgement(staffId)) return
+      await new Promise(resolve => setTimeout(resolve, 5000))
+    }
+  }
+
+  const cancelDesktopHandoffAckRetry = (): void => {
+    desktopHandoffAckGeneration += 1
+    if (desktopHandoffAckRetryTimer) clearTimeout(desktopHandoffAckRetryTimer)
+    desktopHandoffAckRetryTimer = null
+  }
+
+  const scheduleDesktopHandoffAckRetry = (
+    staffId: number,
+    organizationId: number,
+    generation: number,
+    delayMs = DESKTOP_HANDOFF_ACK_RETRY_INTERVAL_MS
+  ): void => {
+    if (
+      generation !== desktopHandoffAckGeneration ||
+      desktopHandoffAckRetryTimer ||
+      !desktopZaloHandoffStore.get(staffId, organizationId)
+    ) {
+      return
+    }
+    desktopHandoffAckRetryTimer = setTimeout(() => {
+      desktopHandoffAckRetryTimer = null
+      void (async () => {
+        const user = getCurrentUser()
+        const credentials = runtimeCredentials
+        if (
+          generation !== desktopHandoffAckGeneration ||
+          !user ||
+          user.staffId !== staffId ||
+          user.organizationId !== organizationId ||
+          !user.isZaloServer ||
+          !credentials
+        ) {
+          return
+        }
+        const acknowledged = await acknowledgeDesktopHandoffMarker(
+          staffId,
+          organizationId,
+          { ...credentials }
+        )
+        if (
+          !acknowledged &&
+          generation === desktopHandoffAckGeneration &&
+          desktopZaloHandoffStore.get(staffId, organizationId)
+        ) {
+          scheduleDesktopHandoffAckRetry(staffId, organizationId, generation)
+        }
+      })()
+    }, delayMs)
+  }
+
   const activateZaloRuntimeRestartRequired = (
     liveIsZaloServer: boolean
   ): Promise<void> => {
+    const activationUser = getCurrentUser()
+    const activationCredentials = runtimeCredentials ? { ...runtimeCredentials } : null
     const payload = markZaloRuntimeRestartRequired(liveIsZaloServer)
     notifyRendererZaloRuntimeRestartRequired(payload)
     if (restartRequiredActivation) return restartRequiredActivation
 
     cancelLocalHandoffRetry()
+    cancelDesktopHandoffAckRetry()
     clearZaloLocalStartupHandoffBlock()
     campaignScheduler.blockZaloRuntimeForRestart(null)
     contactLoader.blockZaloRuntimeForRestart()
@@ -225,18 +363,137 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     zaloRealtimeGroupManager?.stop()
     zaloServerClient.stop()
 
-    const activation = (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
-      .then((qrSettled) => {
-        // Keep an unresolved QR entry visible to the final quit cleanup. The
-        // cache/version invalidation still prevents that old login from
-        // publishing a success or caching an API after the mode changed.
-        zaloRuntime.clearAll({ preserveActiveQrLogins: !qrSettled })
-      })
-      .catch(err => {
-        console.error('[RuntimeMode] Failed to settle direct Zalo operations during restart handoff:', err)
-      })
+    const activation = (async () => {
+      if (!activationUser) return
+      while (true) {
+        const currentUser = getCurrentUser()
+        if (!currentUser || currentUser.staffId !== activationUser.staffId) return
+        try {
+          const qrSettled = await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
+          // Keep an unresolved QR entry visible to the final quit cleanup. The
+          // cache/version invalidation still prevents that old login from
+          // publishing a success or caching an API after the mode changed.
+          zaloRuntime.clearAll({ preserveActiveQrLogins: !qrSettled })
+
+          const [schedulerIdle, contactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle] = await Promise.all([
+            campaignScheduler.waitForZaloIdle(30_000),
+            contactLoader.waitForIdle(30_000, 'zalo'),
+            zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
+            accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
+            accountPollerController?.waitForZaloIdle(30_000) ?? Promise.resolve(true),
+            zaloRuntime.waitForWarmSessionsIdle(30_000)
+          ])
+          if (qrSettled && schedulerIdle && contactLoaderIdle && realtimeIdle && directOperationsIdle && accountPollerIdle && warmSessionsIdle) {
+            break
+          }
+          console.warn('[RuntimeMode] Waiting for every desktop Zalo producer to settle before handoff.')
+        } catch (error) {
+          // A rejected stop/wait is not evidence of idle. Keep the app alive
+          // and retry so quit/logout cannot silently abandon unproven work.
+          console.warn('[RuntimeMode] Failed to settle desktop Zalo producers; retrying:', error)
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+
+      if (!liveIsZaloServer || activationUser.isZaloServer || !activationCredentials) return
+
+      // From this point the old local session must never bulk-reset Zalo again,
+      // even if the product flag flips back to local before the process exits.
+      // A later local session performs the revision-guarded recovery instead.
+      desktopZaloOwnershipRelinquished = true
+      campaignScheduler.abandonZaloRuntimeClaims()
+      contactLoader.abandonZaloRuntimeClaims()
+      zaloRealtimeGroupManager?.abandonZaloRuntimeClaims()
+      zaloRuntime.abandonWarmSessionClaims()
+      accountZaloOperations?.abandonClaims()
+      accountPollerController?.abandonZaloClaims()
+
+      while (true) {
+        try {
+          const currentUser = getCurrentUser()
+          if (!currentUser || currentUser.staffId !== activationUser.staffId) return
+          const liveMode = await loadStaffZaloServerModeSnapshot(activationUser.staffId)
+          if (!liveMode.isZaloServer) return
+
+          // Save proof before contacting the VPS. If the endpoint is offline or
+          // the app closes immediately, the next server-mode login may retry only
+          // this exact entitlement revision.
+          desktopZaloHandoffStore.save({
+            staffId: activationUser.staffId,
+            organizationId: activationUser.organizationId,
+            expectedModeRevision: liveMode.revision
+          })
+          const latestCredentials = runtimeCredentials
+            ? { ...runtimeCredentials }
+            : activationCredentials
+          const acknowledged = await acknowledgeDesktopHandoffMarker(
+            activationUser.staffId,
+            activationUser.organizationId,
+            latestCredentials
+          )
+          if (acknowledged) return
+          // A preserved marker means only the endpoint failed. A cleared marker
+          // means the revision changed, so this still-idle desktop loops and
+          // creates proof for the new live server transition.
+          if (desktopZaloHandoffStore.get(activationUser.staffId, activationUser.organizationId)) {
+            // A local marker is only a retry aid. The VPS cannot read it, so a
+            // graceful exit may defer acknowledgement only when DB is clean.
+            if (await canDeferDesktopHandoffAcknowledgement(activationUser.staffId)) return
+            await new Promise(resolve => setTimeout(resolve, 5000))
+            continue
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        } catch (error) {
+          // Do not authorize server recovery unless the durable proof was saved.
+          // Quit/logout waits for this activation, so retry a failed disk write.
+          console.warn('[RuntimeMode] Cannot persist desktop handoff proof yet; retrying:', error)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      }
+    })()
     restartRequiredActivation = activation
     return activation
+  }
+
+  const ensureDesktopZaloHandoffBeforeExit = async (): Promise<void> => {
+    const sessionUser = getCurrentUser()
+    if (sessionUser) {
+      await settleDesktopHandoffMarkerBeforeExit(
+        sessionUser.staffId,
+        sessionUser.organizationId
+      )
+    }
+    if (
+      !sessionUser ||
+      sessionUser.isZaloServer ||
+      !sessionUser.entitlements.zalo ||
+      desktopZaloOwnershipRelinquished
+    ) {
+      return
+    }
+    if (restartRequiredActivation) {
+      await restartRequiredActivation
+      return
+    }
+
+    try {
+      const pendingRestart = getZaloRuntimeRestartRequired()
+      if (pendingRestart?.databaseIsZaloServer) {
+        await activateZaloRuntimeRestartRequired(true)
+        return
+      }
+      const liveMode = await loadStaffZaloServerModeSnapshot(sessionUser.staffId)
+      const currentUser = getCurrentUser()
+      if (!currentUser || currentUser.staffId !== sessionUser.staffId) return
+      if (liveMode.isZaloServer) {
+        await activateZaloRuntimeRestartRequired(true)
+      }
+    } catch (error) {
+      // Do not make every local quit depend on network availability. The
+      // following reset RPC is the atomic second check and will trigger the
+      // handoff if it observes server mode after this read failed/raced.
+      console.warn('[RuntimeHandoff] Cannot preflight desktop ownership before exit:', error)
+    }
   }
 
   const runScopedRecovery = async (
@@ -266,18 +523,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       zaloRuntime.abandonWarmSessionClaims()
       accountZaloOperations?.abandonClaims()
       accountPollerController?.abandonZaloClaims()
-      const excludeZalo = options.excludeZalo ?? (
+      const excludeZalo = desktopZaloOwnershipRelinquished || (options.excludeZalo ?? (
         user.isZaloServer || isZaloLocalStartupHandoffBlocked()
-      )
+      ))
       // Whenever this desktop is responsible for Zalo cleanup, a running
       // input/input-data row has an unknown outcome and must never be queued
       // again automatically. Server-owned or handoff-blocked Zalo stays intact.
       const zaloUncertainNoRetry = options.zaloUncertainNoRetry ?? !excludeZalo
-      await supabase.resetDesktopRunningStatuses(
+      const recoveryResult = await supabase.resetDesktopRunningStatuses(
         user.staffId,
         excludeZalo,
         zaloUncertainNoRetry
       )
+      if (!excludeZalo && recoveryResult.excludeZalo && !user.isZaloServer) {
+        // The product switched local -> server after the pre-exit mode check
+        // but before this atomic RPC acquired its entitlement lock. No Zalo
+        // row was reset, so finish the same proven-idle server handoff now.
+        await activateZaloRuntimeRestartRequired(true)
+      }
       return true
     } catch (err) {
       console.error(`[Recovery] ${reason}: failed to reset running statuses:`, err)
@@ -320,20 +583,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     clearSessionExpiryTimer()
     cancelLocalHandoffRetry()
+    cancelDesktopHandoffAckRetry()
     try {
+      await ensureDesktopZaloHandoffBeforeExit()
       contactLoader.stopAll()
       campaignScheduler.stop()
       accountPollerController?.blockZaloRuntime()
       zaloServerClient.stop()
-      runtimeCredentials = null
       zaloRealtimeGroupManager?.stop()
       await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
+      await restartRequiredActivation?.catch(() => {})
       zaloRuntime.clearAll()
       emailRuntime.clearAll()
       await runScopedRecovery('logout')
+      runtimeCredentials = null
     } catch (err) {
       console.error(`[AuthSessionExpiry] ${reason}: failed to clean up expired session:`, err)
     } finally {
+      runtimeCredentials = null
       clearZaloLocalStartupHandoffBlock()
       setCurrentUser(null)
       notifyRendererSessionExpired()
@@ -710,19 +977,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       try {
         clearSessionExpiryTimer()
         cancelLocalHandoffRetry()
+        cancelDesktopHandoffAckRetry()
+        await ensureDesktopZaloHandoffBeforeExit()
         contactLoader.stopAll()
         campaignScheduler.stop()
         accountPollerController?.blockZaloRuntime()
         zaloServerClient.stop()
-        runtimeCredentials = null
         zaloRealtimeGroupManager?.stop()
         await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
+        await restartRequiredActivation?.catch(() => {})
         zaloRuntime.clearAll()
         emailRuntime.clearAll()
         await runScopedRecovery('quit')
+        runtimeCredentials = null
       } catch (err) {
         console.error('[Recovery] quit: failed to reset running statuses:', err)
       } finally {
+        runtimeCredentials = null
         clearZaloLocalStartupHandoffBlock()
         quitCleanupCompleted = true
         app.quit()
@@ -769,9 +1040,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAuthHandlers({
     afterLogin: async ({ username, password }) => {
       cancelLocalHandoffRetry()
+      cancelDesktopHandoffAckRetry()
+      const handoffAckGeneration = desktopHandoffAckGeneration
       clearZaloLocalStartupHandoffBlock()
       clearZaloRuntimeRestartRequired()
       restartRequiredActivation = null
+      desktopZaloOwnershipRelinquished = false
       campaignScheduler.resetZaloRuntimeRestartBlock()
       contactLoader.resetZaloRuntimeRestartBlock()
       accountPollerController?.resetZaloRuntimeBlock()
@@ -786,6 +1060,27 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         ? beginLocalZaloHandoff()
         : localHandoffGeneration
       try {
+        if (loginUser) {
+          // A server-mode login alone is not proof that an older local desktop
+          // stopped. Retry only a marker written by that old local runtime
+          // after every Zalo producer reached idle.
+          const acknowledged = await acknowledgeDesktopHandoffMarker(
+            loginUser.staffId,
+            loginUser.organizationId,
+            { username, password }
+          )
+          if (
+            !acknowledged &&
+            loginUser.isZaloServer &&
+            desktopZaloHandoffStore.get(loginUser.staffId, loginUser.organizationId)
+          ) {
+            scheduleDesktopHandoffAckRetry(
+              loginUser.staffId,
+              loginUser.organizationId,
+              handoffAckGeneration
+            )
+          }
+        }
         await runScopedRecovery('login', requiresLocalHandoff ? { excludeZalo: true } : undefined)
         await runScheduleMaintenance('login')
       } finally {
@@ -807,16 +1102,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     beforeLogout: async () => {
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()
+      cancelDesktopHandoffAckRetry()
+      await ensureDesktopZaloHandoffBeforeExit()
       contactLoader.stopAll()
       campaignScheduler.stop()
       accountPollerController?.blockZaloRuntime()
       zaloServerClient.stop()
-      runtimeCredentials = null
       zaloRealtimeGroupManager?.stop()
       await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
+      await restartRequiredActivation?.catch(() => {})
       zaloRuntime.clearAll()
       emailRuntime.clearAll()
       await runScopedRecovery('logout')
+      runtimeCredentials = null
       clearZaloLocalStartupHandoffBlock()
     },
     afterPasswordChange: async ({ newPassword }) => {
