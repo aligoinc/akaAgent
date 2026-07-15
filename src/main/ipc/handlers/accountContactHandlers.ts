@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { AccountContactListQuery, IPC_EVENTS, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
+import { AccountContactListQuery, ContactDatasetListQuery, IPC_EVENTS, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import { ZaloServerClient } from '../../services/zaloServerClient'
@@ -18,6 +18,10 @@ async function ensureContactAccess(
   accountId: number,
   contactType?: string | null
 ): Promise<void> {
+  const account = await supabase.getAccount(accountId)
+  if (!account) {
+    throw new Error('Tài khoản không tồn tại hoặc không thuộc quyền quản lý của bạn')
+  }
   if (contactType === 'page' || contactType === 'page_inbox_customer') {
     await ensureCurrentUserFeatureActive('facebookFanpage')
     return
@@ -27,7 +31,6 @@ async function ensureContactAccess(
     return
   }
 
-  const account = await supabase.getAccount(accountId)
   if (account?.flatformType === 'zalo') {
     await ensureCurrentUserFeatureActive('zalo')
     return
@@ -116,6 +119,27 @@ export function registerAccountContactHandlers(
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST, async (_, accountId: number, contactType?: string) => {
     await ensureContactAccess(supabase, accountId, contactType)
     return supabase.listContacts(accountId, contactType as any)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_DATASETS_LIST, async (_, query: ContactDatasetListQuery) => {
+    if (!query || !Number.isSafeInteger(query.accountId) || query.accountId <= 0) {
+      throw new Error('Tài khoản không hợp lệ')
+    }
+    await ensureContactAccess(supabase, query.accountId, query.contactType)
+    return supabase.listContactDatasets(query)
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACT_DATASETS_SAVE_UPLOAD, async (_, request: SaveUploadDatasetRequest) => {
+    const requestedAccountIds = Array.isArray(request?.accountIds) ? request.accountIds : []
+    const accountIds = Array.from(new Set(requestedAccountIds))
+      .filter(accountId => Number.isSafeInteger(accountId) && accountId > 0)
+    if (accountIds.length === 0) {
+      throw new Error('Vui lòng chọn ít nhất một tài khoản')
+    }
+    for (const accountId of accountIds) {
+      await ensureContactAccess(supabase, accountId)
+    }
+    return supabase.saveUploadDataset({ ...request, accountIds })
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LIST_PAGED, async (_, accountId: number, query: AccountContactListQuery = {}) => {

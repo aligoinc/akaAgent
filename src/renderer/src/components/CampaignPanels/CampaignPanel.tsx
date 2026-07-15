@@ -1939,7 +1939,17 @@ function AddDataToCurrentCampaignModal({
 
           <div className="add-current-data-source-row">
             {canImportData && (
-              <button className="btn btn-secondary" type="button" onClick={() => setShowDataUploadModal(true)}>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => {
+                  if (!account?.id) {
+                    showAlert('Chiến dịch chưa có tài khoản hợp lệ để import data.', 'error')
+                    return
+                  }
+                  setShowDataUploadModal(true)
+                }}
+              >
                 <Upload size={14} /> Nhập/import data
               </button>
             )}
@@ -2046,11 +2056,13 @@ function AddDataToCurrentCampaignModal({
           </button>
         </div>
       </div>
-      {showDataUploadModal && (
+      {showDataUploadModal && account?.id && (
         <div onMouseDown={event => event.stopPropagation()}>
           <CampaignDataUploadModal
             platform={importPlatform}
             actionId={campaign.actionId}
+            actionName={campaignAction?.name}
+            accountIds={[account.id]}
             onClose={() => setShowDataUploadModal(false)}
             onInsert={appendRows}
           />

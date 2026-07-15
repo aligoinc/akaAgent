@@ -1473,6 +1473,14 @@ button.btn-icon:not(.btn):disabled {
   gap: 14px;
 }
 
+.campaign-import-dataset-name {
+  margin-bottom: 2px;
+}
+
+.campaign-import-dataset-name .stepper-input {
+  max-width: 560px;
+}
+
 .campaign-import-tabs {
   display: flex;
   gap: 14px;
@@ -11202,6 +11210,14 @@ button.btn-icon.campaign-control-button.assistant {
   grid-template-columns: minmax(0, 1fr) repeat(2, minmax(180px, 232px));
 }
 
+.data-scan-filter-header.has-dataset-filter.has-contact-group-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(170px, 225px));
+}
+
+.data-scan-filter-header.has-dataset-filter.has-contact-group-filter.has-status-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(160px, 220px));
+}
+
 .data-scan-filter-header.has-zalo-tags {
   grid-template-columns: minmax(0, 1fr) repeat(2, minmax(170px, 220px));
   column-gap: 12px;
@@ -11211,12 +11227,28 @@ button.btn-icon.campaign-control-button.assistant {
   grid-template-columns: minmax(0, 1fr) repeat(2, minmax(150px, 220px)) minmax(130px, 180px);
 }
 
+.data-scan-filter-header.has-zalo-tags.has-dataset-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(150px, 210px));
+}
+
+.data-scan-filter-header.has-zalo-tags.has-dataset-filter.has-status-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(140px, 200px)) minmax(130px, 180px);
+}
+
 .data-scan-filter-header.has-zalo-tags.has-contact-group-filter {
   grid-template-columns: minmax(0, 1fr) repeat(3, minmax(150px, 210px));
 }
 
 .data-scan-filter-header.has-zalo-tags.has-contact-group-filter.has-status-filter {
   grid-template-columns: minmax(0, 1fr) repeat(3, minmax(140px, 200px)) minmax(130px, 180px);
+}
+
+.data-scan-filter-header.has-zalo-tags.has-dataset-filter.has-contact-group-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(4, minmax(135px, 195px));
+}
+
+.data-scan-filter-header.has-zalo-tags.has-dataset-filter.has-contact-group-filter.has-status-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(4, minmax(125px, 185px)) minmax(120px, 170px);
 }
 
 .data-scan-search-group {
@@ -11243,7 +11275,8 @@ button.btn-icon.campaign-control-button.assistant {
 }
 
 .data-scan-filter-status,
-.data-scan-filter-contact-group {
+.data-scan-filter-contact-group,
+.data-scan-filter-dataset {
   min-width: 0;
 }
 
@@ -11559,6 +11592,10 @@ button.btn-icon.campaign-control-button.assistant {
 
 .data-scan-table tbody tr {
   cursor: pointer;
+}
+
+.data-scan-table.is-upload-data {
+  min-width: 1480px;
 }
 
 .data-scan-table tbody tr:hover {
@@ -12156,11 +12193,18 @@ button.btn-icon.campaign-control-button.assistant {
   }
 
   .data-scan-filter-header.has-zalo-tags,
+  .data-scan-filter-header.has-dataset-filter,
+  .data-scan-filter-header.has-dataset-filter.has-contact-group-filter,
+  .data-scan-filter-header.has-dataset-filter.has-contact-group-filter.has-status-filter,
   .data-scan-filter-header.has-zalo-tags.has-status-filter,
+  .data-scan-filter-header.has-zalo-tags.has-dataset-filter,
+  .data-scan-filter-header.has-zalo-tags.has-dataset-filter.has-status-filter,
   .data-scan-filter-header.has-contact-group-filter,
   .data-scan-filter-header.has-contact-group-filter.has-status-filter,
   .data-scan-filter-header.has-zalo-tags.has-contact-group-filter,
-  .data-scan-filter-header.has-zalo-tags.has-contact-group-filter.has-status-filter {
+  .data-scan-filter-header.has-zalo-tags.has-contact-group-filter.has-status-filter,
+  .data-scan-filter-header.has-zalo-tags.has-dataset-filter.has-contact-group-filter,
+  .data-scan-filter-header.has-zalo-tags.has-dataset-filter.has-contact-group-filter.has-status-filter {
     grid-template-columns: 1fr;
   }
 

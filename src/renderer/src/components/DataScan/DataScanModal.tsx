@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import jsQR from 'jsqr'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, Info, Link2, Maximize2, Minimize2, Plus, QrCode, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
-import { AccountContactListQuery, AkaBizContactTag, AutoAccountContact, AutoAccountContactGroup, ContactStatusFilter, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanMode, ZaloRemarketingCustomerListQuery } from '../../../../shared/types'
+import { AccountContactListQuery, AkaBizContactTag, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetScanType, ContactStatusFilter, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanMode, ZaloRemarketingCustomerListQuery } from '../../../../shared/types'
 import { normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -12,8 +12,8 @@ import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
 import type { AuthEntitlements } from '../../../../shared/types'
 
-export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_post_likes' | 'facebook_profile_friends' | 'facebook_group_members' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers'
-type DataScanPlatform = 'facebook' | 'zalo'
+export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_post_likes' | 'facebook_profile_friends' | 'facebook_group_members' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers' | 'upload_data'
+type DataScanPlatform = 'facebook' | 'zalo' | 'email' | 'sms'
 type PageInboxTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 interface PageInboxAppliedFilters {
   pageUid: string
@@ -37,6 +37,7 @@ const GROUP_MEMBERS_ACTION_ID: DataScanAction = 'facebook_group_members'
 const PAGE_INBOX_CUSTOMERS_ACTION_ID: DataScanAction = 'facebook_page_inbox_customers'
 const ZALO_GROUP_MEMBERS_ACTION_ID: DataScanAction = 'zalo_group_members'
 const ZALO_REMARKETING_CUSTOMERS_ACTION_ID: DataScanAction = 'zalo_remarketing_customers'
+const UPLOAD_DATA_ACTION_ID: DataScanAction = 'upload_data'
 const DEFAULT_POST_COMMENTER_LIMIT = 100
 const DEFAULT_POST_LIKE_LIMIT = 1000
 const DEFAULT_PROFILE_FRIEND_LIMIT = 1000
@@ -66,7 +67,7 @@ const PAGE_INBOX_TIME_PRESETS: Array<{ value: PageInboxTimePreset; label: string
 interface DataScanActionDef {
   id: DataScanAction
   label: string
-  platform: DataScanPlatform
+  platform: DataScanPlatform | 'all'
   contactType: ContactType
   emptyText: string
   loadingText: string
@@ -183,13 +184,31 @@ const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
     contactType: 'person',
     emptyText: 'Chọn bộ lọc rồi tải data',
     loadingText: 'Đang tải khách hàng cũ Zalo...'
+  },
+  {
+    id: UPLOAD_DATA_ACTION_ID,
+    label: 'Dữ liệu đã upload',
+    platform: 'all',
+    contactType: 'campaign_input',
+    emptyText: 'Chọn danh sách data đã upload để xem dữ liệu',
+    loadingText: 'Đang tải dữ liệu đã upload...'
   }
 ]
+
+const DATASET_SCAN_TYPE_BY_ACTION: Partial<Record<DataScanAction, ContactDatasetScanType>> = {
+  [POST_COMMENTERS_ACTION_ID]: 'facebook_post_commenters',
+  [POST_LIKES_ACTION_ID]: 'facebook_post_likes',
+  [PROFILE_FRIENDS_ACTION_ID]: 'facebook_profile_friends',
+  [GROUP_MEMBERS_ACTION_ID]: 'facebook_group_members',
+  [ZALO_GROUP_MEMBERS_ACTION_ID]: 'zalo_group_members',
+  [UPLOAD_DATA_ACTION_ID]: 'upload_data'
+}
 
 const canUseDataScanAction = (
   actionId: DataScanAction,
   entitlements?: Partial<AuthEntitlements> | null
 ): boolean => {
+  if (actionId === UPLOAD_DATA_ACTION_ID) return true
   const normalized = normalizeEntitlements(entitlements)
   if (actionId === 'facebook_pages' || actionId === PAGE_INBOX_CUSTOMERS_ACTION_ID) {
     return normalized.facebookFanpage
@@ -230,6 +249,17 @@ const formatExportTimestamp = (date = new Date()) => {
 }
 
 const formatCount = (value: number) => new Intl.NumberFormat('vi-VN').format(value)
+
+const formatDatasetOptionDate = (value?: string) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(date)
+}
 
 const formatDateInput = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -757,6 +787,32 @@ const getExtraText = (contact: AutoAccountContact, key: string) => {
   return value === null || value === undefined ? '' : String(value).trim()
 }
 
+const getUploadedContactField = (contact: AutoAccountContact, key: string) => {
+  const extra = toRecord(contact.extraData)
+  const rawPayload = toRecord(extra.rawPayload)
+  const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase()
+  const value = extra[key] ?? extra[snakeKey] ?? rawPayload[key] ?? rawPayload[snakeKey]
+  return value === null || value === undefined ? '' : String(value).trim()
+}
+
+const getUploadedContactPhone = (contact: AutoAccountContact) => (
+  getUploadedContactField(contact, 'phone')
+  || getUploadedContactField(contact, 'phoneNumber')
+  || (contact.contactType === 'phone' ? String(contact.uid || '').trim() : '')
+)
+
+const getUploadedContactEmail = (contact: AutoAccountContact) => (
+  getUploadedContactField(contact, 'email')
+  || (contact.contactType === 'email' ? String(contact.uid || '').trim() : '')
+)
+
+const getUploadedContactUid = (contact: AutoAccountContact) => (
+  getUploadedContactField(contact, 'uid')
+  || getUploadedContactField(contact, 'url')
+  || String(contact.url || '').trim()
+  || (contact.contactType !== 'phone' && contact.contactType !== 'email' ? String(contact.uid || '').trim() : '')
+)
+
 const getContactPhoneText = (contact: AutoAccountContact) => {
   const extra = toRecord(contact.extraData)
   const rawPayload = toRecord(extra.rawPayload)
@@ -814,10 +870,18 @@ const getContactTypeLabel = (contactType: ContactType, platform: string = 'faceb
   if (contactType === 'person') return isZalo ? 'User Zalo' : 'User Facebook'
   if (contactType === 'group') return isZalo ? 'Group Zalo' : 'Group Facebook'
   if (contactType === 'page_inbox_customer') return 'Khách inbox Page'
+  if (contactType === 'phone') return 'Số điện thoại'
+  if (contactType === 'email') return 'Email'
+  if (contactType === 'campaign_input') return 'Data chiến dịch'
   return 'Page Facebook'
 }
 
-const getPlatformLabel = (platform: DataScanPlatform) => platform === 'zalo' ? 'Zalo' : 'Facebook'
+const getPlatformLabel = (platform: DataScanPlatform) => {
+  if (platform === 'zalo') return 'Zalo'
+  if (platform === 'email') return 'Email'
+  if (platform === 'sms') return 'SMS'
+  return 'Facebook'
+}
 
 const getStatusFilterOptions = (contactType: ContactType): Array<{ value: ContactStatusFilter; label: string }> => {
   if (contactType === 'person') {
@@ -887,6 +951,7 @@ export default function DataScanModal({
   const completedScanIdsRef = useRef<Set<number>>(new Set())
   const contactsLoadIdRef = useRef(0)
   const contactGroupsLoadIdRef = useRef(0)
+  const contactDatasetsLoadIdRef = useRef(0)
   const lastLoadedQueryKeyRef = useRef('')
   const lastAutoLoadBaseQueryKeyRef = useRef('')
   const lockedPageInboxPageUid = String(initialPageInboxPageUid || '').trim()
@@ -898,6 +963,9 @@ export default function DataScanModal({
   const akaBizTagFilterDropdownRef = useRef<HTMLDivElement | null>(null)
   const [action, setAction] = useState<DataScanAction>(() => getInitialDataScanAction(initialAction, allowedActions, entitlements))
   const [accountId, setAccountId] = useState<number | ''>(initialAccountId || '')
+  const [contactDatasets, setContactDatasets] = useState<AutoAccountContactDataset[]>([])
+  const [selectedDatasetId, setSelectedDatasetId] = useState<number | ''>('')
+  const [datasetsLoading, setDatasetsLoading] = useState(false)
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
   const [loading, setLoading] = useState(false)
   const [scanLoading, setScanLoading] = useState(false)
@@ -982,7 +1050,8 @@ export default function DataScanModal({
   const isPageInboxAction = action === PAGE_INBOX_CUSTOMERS_ACTION_ID
   const isZaloGroupMembersAction = action === ZALO_GROUP_MEMBERS_ACTION_ID
   const isZaloRemarketingCustomersAction = action === ZALO_REMARKETING_CUSTOMERS_ACTION_ID
-  const supportsContactGroups = !isPageInboxAction && !isZaloRemarketingCustomersAction
+  const isUploadDataAction = action === UPLOAD_DATA_ACTION_ID
+  const datasetScanType = DATASET_SCAN_TYPE_BY_ACTION[action]
   const normalizedPostCommentersUrl = useMemo(
     () => normalizeFacebookPostUrlForCompare(postCommentersUrl),
     [postCommentersUrl]
@@ -1003,25 +1072,37 @@ export default function DataScanModal({
     () => accounts.find(account => account.id === accountId),
     [accounts, accountId]
   )
-  const platformAccounts = useMemo(
-    () => accounts.filter(account => account.flatformType === actionDef.platform),
-    [accounts, actionDef.platform]
+  const selectedDataset = useMemo(
+    () => contactDatasets.find(dataset => dataset.id === selectedDatasetId) || null,
+    [contactDatasets, selectedDatasetId]
   )
-  const selectedPlatform = (selectedAccount?.flatformType || actionDef.platform) as DataScanPlatform
-  const showGroupApprovalColumn = actionDef.contactType === 'group' && actionDef.platform === 'facebook'
-  const showAvatarColumn = actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
-  const showLinkColumn = !isPageInboxAction && (actionDef.platform === 'facebook' || actionDef.id === 'zalo_groups')
+  const effectiveContactType = selectedDataset?.contactType || actionDef.contactType
+  const supportsContactGroups = !isPageInboxAction
+    && !isZaloRemarketingCustomersAction
+    && (effectiveContactType === 'person' || effectiveContactType === 'group' || effectiveContactType === 'page')
+  const platformAccounts = useMemo(
+    () => isUploadDataAction
+      ? accounts.filter(account => ['facebook', 'zalo', 'email', 'sms'].includes(account.flatformType))
+      : accounts.filter(account => account.flatformType === actionDef.platform),
+    [accounts, actionDef.platform, isUploadDataAction]
+  )
+  const selectedPlatform = (selectedAccount?.flatformType || (actionDef.platform === 'all' ? 'facebook' : actionDef.platform)) as DataScanPlatform
+  const showGroupApprovalColumn = !isUploadDataAction && actionDef.contactType === 'group' && actionDef.platform === 'facebook'
+  const showAvatarColumn = !isUploadDataAction && actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
+  const showLinkColumn = !isUploadDataAction && !isPageInboxAction && (actionDef.platform === 'facebook' || actionDef.id === 'zalo_groups')
   const showZaloGroupMemberCountColumn = actionDef.id === 'zalo_groups'
   const showGroupMemberRoleColumn = isZaloGroupMembersAction
-  const showFriendStatusColumn = actionDef.contactType === 'person' && !isZaloGroupMembersAction && !isZaloRemarketingCustomersAction
-  const showZaloPhoneColumn = actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
-  const showZaloTagColumn = actionDef.platform === 'zalo'
-  const showAkaBizTagColumn = actionDef.platform === 'zalo'
+  const showFriendStatusColumn = !isUploadDataAction && actionDef.contactType === 'person' && !isZaloGroupMembersAction && !isZaloRemarketingCustomersAction
+  const showZaloPhoneColumn = !isUploadDataAction && actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
+  const showZaloTagColumn = !isUploadDataAction && actionDef.platform === 'zalo'
+  const showAkaBizTagColumn = !isUploadDataAction && actionDef.platform === 'zalo'
   const statusFilterOptions = useMemo(
-    () => getStatusFilterOptions(actionDef.contactType),
-    [actionDef.contactType]
+    () => getStatusFilterOptions(effectiveContactType),
+    [effectiveContactType]
   )
-  const hasStatusFilter = !isZaloGroupMembersAction && !isZaloRemarketingCustomersAction && (actionDef.contactType === 'person' || actionDef.contactType === 'group')
+  const hasStatusFilter = (!isZaloGroupMembersAction || !!selectedDataset)
+    && !isZaloRemarketingCustomersAction
+    && (effectiveContactType === 'person' || effectiveContactType === 'group')
   const selectedPageInboxPage = useMemo(
     () => pageInboxPages.find(page => page.uid === pageInboxPageUid) || null,
     [pageInboxPageUid, pageInboxPages]
@@ -1065,11 +1146,11 @@ export default function DataScanModal({
   const compatibleContactGroups = useMemo(
     () => contactGroups.filter(group => (
       group.accountId === accountId
-      && group.contactType === actionDef.contactType
+      && group.contactType === effectiveContactType
       && group.purpose === 'data_group'
       && !group.isDelete
     )),
-    [accountId, actionDef.contactType, contactGroups]
+    [accountId, contactGroups, effectiveContactType]
   )
   const effectiveContactGroupFilterId = useMemo(
     () => supportsContactGroups
@@ -1079,7 +1160,8 @@ export default function DataScanModal({
       : undefined,
     [compatibleContactGroups, contactGroupFilterId, supportsContactGroups]
   )
-  const hasZaloTagFilters = actionDef.platform === 'zalo'
+  const hasZaloTagFilters = selectedPlatform === 'zalo'
+    && (effectiveContactType === 'person' || effectiveContactType === 'group')
   const zaloTagFilterLabel = useMemo(() => {
     const selectedCount = zaloTagFilterIds.length + (zaloNoTagFilter ? 1 : 0)
     if (selectedCount === 0) return 'Tất cả'
@@ -1132,7 +1214,7 @@ export default function DataScanModal({
   }, [loadAkaBizContactTags])
 
   const loadZaloTagContacts = useCallback(async () => {
-    if (!window.electronAPI?.listContacts || !accountId || actionDef.platform !== 'zalo') {
+    if (!window.electronAPI?.listContacts || !accountId || !hasZaloTagFilters) {
       setZaloTagContacts([])
       return
     }
@@ -1143,7 +1225,7 @@ export default function DataScanModal({
       console.error('Failed to load Zalo tags:', err)
       if (mountedRef.current) showAlert(err?.message || 'Không thể tải tag Zalo.', 'error')
     }
-  }, [accountId, actionDef.platform, showAlert])
+  }, [accountId, hasZaloTagFilters, showAlert])
 
   useEffect(() => {
     void loadZaloTagContacts()
@@ -1187,7 +1269,7 @@ export default function DataScanModal({
   }, [akaBizTagFilterDropdownOpen, zaloTagFilterDropdownOpen])
 
   useEffect(() => {
-    if (actionDef.platform !== 'zalo') {
+    if (!hasZaloTagFilters) {
       setZaloTagFilterIds(prev => prev.length === 0 ? prev : [])
       setAkaBizTagFilterIds(prev => prev.length === 0 ? prev : [])
       setZaloNoTagFilter(prev => prev ? false : prev)
@@ -1195,7 +1277,7 @@ export default function DataScanModal({
       setZaloTagFilterDropdownOpen(prev => prev ? false : prev)
       setAkaBizTagFilterDropdownOpen(prev => prev ? false : prev)
     }
-  }, [actionDef.platform])
+  }, [hasZaloTagFilters])
 
   useEffect(() => {
     const availableIds = new Set(zaloTagFilterOptions.map(option => option.id))
@@ -1216,18 +1298,20 @@ export default function DataScanModal({
   useEffect(() => {
     if (accountId !== '') return
     const preferred = initialAccountId
-      ? accounts.find(account => account.id === initialAccountId && account.flatformType === actionDef.platform)
-      : accounts.find(account => account.flatformType === actionDef.platform)
+      ? accounts.find(account => account.id === initialAccountId && (isUploadDataAction || account.flatformType === actionDef.platform))
+      : isUploadDataAction
+        ? accounts[0]
+        : accounts.find(account => account.flatformType === actionDef.platform)
     if (preferred) setAccountId(preferred.id)
-  }, [accountId, accounts, actionDef.platform, initialAccountId])
+  }, [accountId, accounts, actionDef.platform, initialAccountId, isUploadDataAction])
 
   useEffect(() => {
     if (accountId === '') return
     const current = accounts.find(account => account.id === accountId)
-    if (!current || current.flatformType === actionDef.platform) return
+    if (!current || isUploadDataAction || current.flatformType === actionDef.platform) return
     const preferred = accounts.find(account => account.flatformType === actionDef.platform)
     setAccountId(preferred?.id || '')
-  }, [accountId, accounts, actionDef.platform])
+  }, [accountId, accounts, actionDef.platform, isUploadDataAction])
 
   useEffect(() => {
     if (availableActions.length === 0) return
@@ -1236,36 +1320,98 @@ export default function DataScanModal({
     }
   }, [action, availableActions])
 
+  const loadContactDatasets = useCallback(async (preferredDatasetId?: number) => {
+    const loadId = contactDatasetsLoadIdRef.current + 1
+    contactDatasetsLoadIdRef.current = loadId
+    if (!window.electronAPI?.listContactDatasets || !accountId || !datasetScanType) {
+      if (mountedRef.current && contactDatasetsLoadIdRef.current === loadId) {
+        setContactDatasets([])
+        setSelectedDatasetId('')
+        setDatasetsLoading(false)
+      }
+      return []
+    }
+
+    setDatasetsLoading(true)
+    try {
+      const rows = await window.electronAPI.listContactDatasets({
+        accountId,
+        scanType: datasetScanType,
+        source: isUploadDataAction ? 'upload' : 'scan',
+        flatformType: selectedAccount?.flatformType
+      })
+      if (!mountedRef.current || contactDatasetsLoadIdRef.current !== loadId) return rows
+      setContactDatasets(rows)
+      setSelectedDatasetId(currentId => {
+        if (preferredDatasetId && rows.some(dataset => dataset.id === preferredDatasetId)) {
+          return preferredDatasetId
+        }
+        if (currentId !== '' && rows.some(dataset => dataset.id === currentId)) {
+          return currentId
+        }
+        return isUploadDataAction ? (rows[0]?.id || '') : ''
+      })
+      return rows
+    } catch (err: any) {
+      if (!mountedRef.current || contactDatasetsLoadIdRef.current !== loadId) return []
+      console.error('Failed to load contact datasets:', err)
+      setContactDatasets([])
+      setSelectedDatasetId('')
+      showAlert(err?.message || 'Không thể tải danh sách data.', 'error')
+      return []
+    } finally {
+      if (mountedRef.current && contactDatasetsLoadIdRef.current === loadId) {
+        setDatasetsLoading(false)
+      }
+    }
+  }, [accountId, datasetScanType, isUploadDataAction, selectedAccount?.flatformType, showAlert])
+
+  useEffect(() => {
+    setSelectedDatasetId('')
+    setContactDatasets([])
+  }, [accountId, action])
+
+  useEffect(() => {
+    void loadContactDatasets()
+  }, [loadContactDatasets])
+
   const getAccountContactListQuery = useCallback((overrides: Partial<AccountContactListQuery> = {}): AccountContactListQuery => ({
-    contactType: actionDef.contactType,
+    contactType: selectedDataset?.contactType || actionDef.contactType,
+    datasetId: selectedDataset?.id,
     contactGroupId: effectiveContactGroupFilterId,
     statusFilter: hasStatusFilter ? statusFilter : 'all',
     search,
-    source: isPostCommentersAction
+    source: selectedDataset
+      ? undefined
+      : isPostCommentersAction
       ? 'facebook_post_commenters'
       : isPostLikesAction
         ? 'facebook_post_likes'
         : isGroupMembersAction
           ? 'facebook_group_members'
           : undefined,
-    sourcePostUrl: isPostCommentersAction
+    sourcePostUrl: selectedDataset
+      ? undefined
+      : isPostCommentersAction
       ? normalizedPostCommentersUrl
       : isPostLikesAction
         ? normalizedPostLikesUrl
         : undefined,
-    sourceProfileUrl: isProfileFriendsAction ? normalizedProfileFriendsUrl : undefined,
-    sourceGroupUrl: isGroupMembersAction ? normalizedGroupMembersUrl : undefined,
+    sourceProfileUrl: !selectedDataset && isProfileFriendsAction ? normalizedProfileFriendsUrl : undefined,
+    sourceGroupUrl: !selectedDataset && isGroupMembersAction ? normalizedGroupMembersUrl : undefined,
     ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, effectiveContactGroupFilterId, hasStatusFilter, hasZaloTagFilters, isGroupMembersAction, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction, normalizedGroupMembersUrl, normalizedPostCommentersUrl, normalizedPostLikesUrl, normalizedProfileFriendsUrl, search, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
+  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, effectiveContactGroupFilterId, hasStatusFilter, hasZaloTagFilters, isGroupMembersAction, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction, normalizedGroupMembersUrl, normalizedPostCommentersUrl, normalizedPostLikesUrl, normalizedProfileFriendsUrl, search, selectedDataset, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
 
   const getZaloGroupMemberListQuery = useCallback((overrides: Partial<ZaloGroupMemberContactListQuery> = {}): ZaloGroupMemberContactListQuery => ({
-    zaloGroupId: zaloGroupMemberGroupId,
+    contactType: selectedDataset?.contactType || 'person',
+    datasetId: selectedDataset?.id,
+    zaloGroupId: selectedDataset ? undefined : zaloGroupMemberGroupId,
     contactGroupId: effectiveContactGroupFilterId,
     search,
     ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [akaBizNoTagFilter, akaBizTagFilterIds, effectiveContactGroupFilterId, hasZaloTagFilters, search, zaloGroupMemberGroupId, zaloNoTagFilter, zaloTagFilterIds])
+  }), [akaBizNoTagFilter, akaBizTagFilterIds, effectiveContactGroupFilterId, hasZaloTagFilters, search, selectedDataset, zaloGroupMemberGroupId, zaloNoTagFilter, zaloTagFilterIds])
 
   const getZaloRemarketingListQuery = useCallback((overrides: Partial<ZaloRemarketingCustomerListQuery> = {}): ZaloRemarketingCustomerListQuery => ({
     campaignActionIds: zaloRemarketingActionIds,
@@ -1489,6 +1635,21 @@ export default function DataScanModal({
       ...(includePage ? { page: pageToLoad } : {})
     }
 
+    if (selectedDatasetId !== '' && !selectedDataset) return null
+
+    if (selectedDataset) {
+      const query = getAccountContactListQuery()
+      return JSON.stringify({
+        ...base,
+        mode: 'contact_dataset',
+        query: {
+          ...query,
+          zaloTagIds: sortedStringValues(query.zaloTagIds),
+          akaBizTagIds: sortedNumberValues(query.akaBizTagIds)
+        }
+      })
+    }
+
     if (isPageInboxAction) {
       const filters = pageInboxFiltersOverride || pageInboxAppliedFilters
       if (pageInboxOptionsAccountRef.current !== accountId) return null
@@ -1501,7 +1662,7 @@ export default function DataScanModal({
     }
 
     if (isZaloGroupMembersAction) {
-      if (!zaloGroupMemberGroupId) return null
+      if (!selectedDataset && !zaloGroupMemberGroupId) return null
       const query = getZaloGroupMemberListQuery()
       return JSON.stringify({
         ...base,
@@ -1528,10 +1689,11 @@ export default function DataScanModal({
       })
     }
 
-    if (isPostCommentersAction && !normalizedPostCommentersUrl) return null
-    if (isPostLikesAction && !normalizedPostLikesUrl) return null
-    if (isProfileFriendsAction && !normalizedProfileFriendsUrl) return null
-    if (isGroupMembersAction && !normalizedGroupMembersUrl) return null
+    if (isUploadDataAction && !selectedDataset) return null
+    if (!selectedDataset && isPostCommentersAction && !normalizedPostCommentersUrl) return null
+    if (!selectedDataset && isPostLikesAction && !normalizedPostLikesUrl) return null
+    if (!selectedDataset && isProfileFriendsAction && !normalizedProfileFriendsUrl) return null
+    if (!selectedDataset && isGroupMembersAction && !normalizedGroupMembersUrl) return null
 
     const query = getAccountContactListQuery()
     return JSON.stringify({
@@ -1554,6 +1716,7 @@ export default function DataScanModal({
     isPostCommentersAction,
     isPostLikesAction,
     isProfileFriendsAction,
+    isUploadDataAction,
     isZaloGroupMembersAction,
     isZaloRemarketingCustomersAction,
     normalizedGroupMembersUrl,
@@ -1562,6 +1725,8 @@ export default function DataScanModal({
     normalizedProfileFriendsUrl,
     pageInboxAppliedFilters,
     pageInboxPage,
+    selectedDataset,
+    selectedDatasetId,
     zaloGroupMemberGroupId
   ])
 
@@ -1587,7 +1752,16 @@ export default function DataScanModal({
     contactsLoadIdRef.current = loadId
     setLoading(true)
     try {
-      if (isPageInboxAction) {
+      if (selectedDataset) {
+        const result = await window.electronAPI.listContactsPage(accountId, {
+          ...getAccountContactListQuery(),
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        })
+        if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
+        setContacts(result.contacts)
+        setPageInboxTotal(result.total)
+      } else if (isPageInboxAction) {
         const pageInboxFilters = pageInboxFiltersOverride || pageInboxAppliedFilters
         if (!pageInboxFilters.pageUid) {
           if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
@@ -1610,7 +1784,7 @@ export default function DataScanModal({
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
       } else if (isZaloGroupMembersAction) {
-        if (!zaloGroupMemberGroupId) {
+        if (!selectedDataset && !zaloGroupMemberGroupId) {
           if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
           setContacts([])
           setPageInboxTotal(0)
@@ -1634,25 +1808,31 @@ export default function DataScanModal({
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
       } else {
-        if (isPostCommentersAction && !normalizedPostCommentersUrl) {
+        if (isUploadDataAction && !selectedDataset) {
           if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
           setContacts([])
           setPageInboxTotal(0)
           return
         }
-        if (isPostLikesAction && !normalizedPostLikesUrl) {
+        if (!selectedDataset && isPostCommentersAction && !normalizedPostCommentersUrl) {
           if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
           setContacts([])
           setPageInboxTotal(0)
           return
         }
-        if (isProfileFriendsAction && !normalizedProfileFriendsUrl) {
+        if (!selectedDataset && isPostLikesAction && !normalizedPostLikesUrl) {
           if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
           setContacts([])
           setPageInboxTotal(0)
           return
         }
-        if (isGroupMembersAction && !normalizedGroupMembersUrl) {
+        if (!selectedDataset && isProfileFriendsAction && !normalizedProfileFriendsUrl) {
+          if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
+          setContacts([])
+          setPageInboxTotal(0)
+          return
+        }
+        if (!selectedDataset && isGroupMembersAction && !normalizedGroupMembersUrl) {
           if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
           setContacts([])
           setPageInboxTotal(0)
@@ -1692,6 +1872,7 @@ export default function DataScanModal({
     isPostCommentersAction,
     isPostLikesAction,
     isProfileFriendsAction,
+    isUploadDataAction,
     isZaloGroupMembersAction,
     isZaloRemarketingCustomersAction,
     normalizedPostCommentersUrl,
@@ -1700,6 +1881,7 @@ export default function DataScanModal({
     normalizedProfileFriendsUrl,
     pageInboxAppliedFilters,
     pageInboxPage,
+    selectedDataset,
     showAlert,
     zaloGroupMemberGroupId
   ])
@@ -1735,7 +1917,7 @@ export default function DataScanModal({
     setGroupsLoading(true)
     try {
       const [groups, allGroups] = await Promise.all([
-        window.electronAPI.listContactGroups(accountId, actionDef.contactType),
+        window.electronAPI.listContactGroups(accountId, effectiveContactType),
         window.electronAPI.listContactGroups(accountId)
       ])
       if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
@@ -1749,7 +1931,7 @@ export default function DataScanModal({
     } finally {
       if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) setGroupsLoading(false)
     }
-  }, [accountId, actionDef.contactType, showAlert, supportsContactGroups])
+  }, [accountId, effectiveContactType, showAlert, supportsContactGroups])
 
   const loadContactsForGroup = useCallback(async (groupId: number, force = false): Promise<AutoAccountContact[]> => {
     if (!window.electronAPI) return []
@@ -1778,7 +1960,7 @@ export default function DataScanModal({
     setGroupsLoading(true)
     try {
       const [groups, allGroups] = await Promise.all([
-        window.electronAPI.listContactGroups(accountId, actionDef.contactType),
+        window.electronAPI.listContactGroups(accountId, effectiveContactType),
         window.electronAPI.listContactGroups(accountId)
       ])
       if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
@@ -1809,7 +1991,7 @@ export default function DataScanModal({
     } finally {
       if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) setGroupsLoading(false)
     }
-  }, [accountId, actionDef.contactType, contactGroupFilterId, refreshContactsAfterGroupMembershipChange, selectedGroupIds, showAlert, supportsContactGroups])
+  }, [accountId, contactGroupFilterId, effectiveContactType, refreshContactsAfterGroupMembershipChange, selectedGroupIds, showAlert, supportsContactGroups])
 
   useEffect(() => {
     pageInboxPageUidRef.current = pageInboxPageUid
@@ -1878,7 +2060,7 @@ export default function DataScanModal({
     setSelectedIds(new Set())
     setSelectedGroupIds(new Set())
     setModalSelectedGroupIds(new Set())
-    const nextStatusFilter = (isPostCommentersAction || isPostLikesAction || isProfileFriendsAction || isGroupMembersAction)
+    const nextStatusFilter = (isUploadDataAction || isPostCommentersAction || isPostLikesAction || isProfileFriendsAction || isGroupMembersAction || isZaloGroupMembersAction)
       ? 'all'
       : (hasStatusFilter ? (initialStatusFilter || 'active') : 'all')
     setStatusFilter(prev => prev === nextStatusFilter ? prev : nextStatusFilter)
@@ -1912,7 +2094,7 @@ export default function DataScanModal({
       setZaloRemarketingDateFrom(defaults.fromDate)
       setZaloRemarketingDateTo(defaults.toDate)
     }
-  }, [action, hasStatusFilter, initialShowGroupPanel, initialStatusFilter, isGroupMembersAction, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction])
+  }, [action, hasStatusFilter, initialShowGroupPanel, initialStatusFilter, isGroupMembersAction, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction, isUploadDataAction, isZaloGroupMembersAction])
 
   useEffect(() => {
     if (!isZaloRemarketingCustomersAction) return
@@ -1943,6 +2125,7 @@ export default function DataScanModal({
     normalizedPostLikesUrl,
     normalizedProfileFriendsUrl,
     normalizedGroupMembersUrl,
+    selectedDatasetId,
     contactGroupFilterId,
     akaBizNoTagFilter,
     akaBizTagFilterIds,
@@ -1953,6 +2136,12 @@ export default function DataScanModal({
     zaloNoTagFilter,
     zaloTagFilterIds
   ])
+
+  useEffect(() => {
+    setSelectedGroupIds(new Set())
+    setModalSelectedGroupIds(new Set())
+    setGroupContactCache({})
+  }, [selectedDatasetId])
 
   useEffect(() => {
     const baseQueryKey = buildContactsLoadQueryKey(undefined, undefined, false)
@@ -2113,7 +2302,7 @@ export default function DataScanModal({
 
   useEffect(() => {
     if (!window.electronAPI?.onContactsCompleted || accountId === '') return
-    const unsubscribe = window.electronAPI.onContactsCompleted(({ accountId: completedAccountId, contactType, result }) => {
+    const unsubscribe = window.electronAPI.onContactsCompleted(async ({ accountId: completedAccountId, contactType, result }) => {
       if (completedAccountId !== accountId || contactType !== actionDef.contactType) return
 
       const scanId = scanRunIdRef.current
@@ -2155,11 +2344,17 @@ export default function DataScanModal({
       if (isZaloGroupMembersAction && result.zaloGroupId) {
         setZaloGroupMemberGroupId(String(result.zaloGroupId))
       }
-      if (result.success) {
+      if (result.datasetId) {
+        setSelectedDatasetId(result.datasetId)
+        await loadContactDatasets(result.datasetId)
+      }
+      if (result.success || result.datasetId) {
         resetPagedContactSelection()
         setPageInboxPage(1)
       }
-      if (isPageInboxAction) {
+      if (result.datasetId) {
+        // Dataset selection triggers the generic paged contact query after metadata reloads.
+      } else if (isPageInboxAction) {
         void refreshPageInboxContactsAfterScan()
       } else if (isZaloGroupMembersAction && result.zaloGroupId) {
         loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
@@ -2186,6 +2381,7 @@ export default function DataScanModal({
     isProfileFriendsAction,
     isZaloGroupMembersAction,
     loadCachedContacts,
+    loadContactDatasets,
     loadContactGroups,
     loadZaloGroupMemberContactsForGroup,
     loadZaloGroupOptions,
@@ -2199,16 +2395,16 @@ export default function DataScanModal({
   ])
 
   const matchesStatusFilter = useCallback((contact: AutoAccountContact) => {
-    if (isZaloGroupMembersAction) return true
+    if (isZaloGroupMembersAction && !selectedDataset) return true
     if (statusFilter === 'all') return true
-    if (actionDef.contactType === 'person') {
+    if (effectiveContactType === 'person') {
       return statusFilter === 'active' ? contact.isFriend === true : contact.isFriend !== true
     }
-    if (actionDef.contactType === 'group') {
+    if (effectiveContactType === 'group') {
       return statusFilter === 'active' ? contact.isJoined === true : contact.isJoined !== true
     }
     return true
-  }, [actionDef.contactType, isZaloGroupMembersAction, statusFilter])
+  }, [effectiveContactType, isZaloGroupMembersAction, selectedDataset, statusFilter])
 
   const actionContacts = useMemo(() => {
     return contacts
@@ -2256,7 +2452,7 @@ export default function DataScanModal({
     () => allContactGroups.find(group => group.id === activeGroupId) || null,
     [activeGroupId, allContactGroups]
   )
-  const activeGroupContactType = activeContactGroup?.contactType || actionDef.contactType
+  const activeGroupContactType = activeContactGroup?.contactType || effectiveContactType
   const activeGroupShowApprovalColumn = activeGroupContactType === 'group' && selectedPlatform === 'facebook'
   const activeGroupShowAvatarColumn = selectedPlatform === 'zalo'
   const activeGroupShowLinkColumn = selectedPlatform === 'facebook' || (activeGroupContactType === 'group' && selectedPlatform === 'zalo')
@@ -2264,8 +2460,8 @@ export default function DataScanModal({
   const activeGroupShowZaloTagColumn = selectedPlatform === 'zalo'
   const activeGroupShowAkaBizTagColumn = selectedPlatform === 'zalo'
   const groupContactsByStatus = useMemo(
-    () => activeGroupContactType === actionDef.contactType ? groupContacts.filter(matchesStatusFilter) : groupContacts,
-    [activeGroupContactType, actionDef.contactType, groupContacts, matchesStatusFilter]
+    () => activeGroupContactType === effectiveContactType ? groupContacts.filter(matchesStatusFilter) : groupContacts,
+    [activeGroupContactType, effectiveContactType, groupContacts, matchesStatusFilter]
   )
   const filteredGroupContacts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('vi-VN')
@@ -2283,8 +2479,10 @@ export default function DataScanModal({
       contact.contactType === 'group' && selectedPlatform === 'facebook' ? getGroupApprovalStatus(contact) : ''
     ].some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(query)))
   }, [activeGroupShowAkaBizTagColumn, activeGroupShowZaloTagColumn, akaBizTagNameById, groupContactsByStatus, search, selectedPlatform, showZaloGroupMemberCountColumn, zaloTagNameById])
-  const tableColSpan = isPageInboxAction
-    ? 7
+  const tableColSpan = isUploadDataAction
+    ? 11
+    : isPageInboxAction
+      ? 7
     : isZaloRemarketingCustomersAction
       ? 13 + (showZaloTagColumn ? 1 : 0) + (showAkaBizTagColumn ? 1 : 0)
     : 4
@@ -2293,7 +2491,7 @@ export default function DataScanModal({
       + (showZaloTagColumn ? 1 : 0)
       + (showAkaBizTagColumn ? 1 : 0)
       + (showFriendStatusColumn ? 1 : 0)
-      + (actionDef.contactType === 'group' ? 1 : 0)
+      + (effectiveContactType === 'group' ? 1 : 0)
       + (showGroupApprovalColumn ? 1 : 0)
       + (showGroupMemberRoleColumn ? 1 : 0)
       + (showLinkColumn ? 1 : 0)
@@ -2420,6 +2618,12 @@ export default function DataScanModal({
 
   const exportCurrentSelection = async (overrides: any = {}) => {
     if (!window.electronAPI || !accountId) return []
+    if (selectedDataset) {
+      return window.electronAPI.exportContactsPage(accountId, {
+        ...getAccountContactListQuery(),
+        ...overrides
+      })
+    }
     if (isPageInboxAction) {
       return window.electronAPI.exportPageInboxContacts(accountId, {
         ...pageInboxAppliedFilters,
@@ -2536,7 +2740,7 @@ export default function DataScanModal({
     }
 
     const group = allContactGroups.find(item => item.id === groupId)
-    if (!group || group.contactType !== actionDef.contactType) {
+    if (!group || group.contactType !== effectiveContactType) {
       showAlert('Nhóm này không đúng loại data hiện tại nên không thể đưa vào danh sách chọn.', 'error')
       return
     }
@@ -2570,7 +2774,7 @@ export default function DataScanModal({
   }
 
   const handleToggleModalGroup = (group: AutoAccountContactGroup) => {
-    if (group.contactType !== actionDef.contactType) return
+    if (group.contactType !== effectiveContactType) return
     setModalSelectedGroupIds(prev => {
       const next = new Set(prev)
       if (next.has(group.id)) next.delete(group.id)
@@ -2606,11 +2810,11 @@ export default function DataScanModal({
     try {
       const groupIds = Array.from(modalSelectedGroupIds).filter(groupId => {
         const group = allContactGroups.find(item => item.id === groupId)
-        return group?.contactType === actionDef.contactType
+        return group?.contactType === effectiveContactType
       })
       let createdGroup: AutoAccountContactGroup | null = null
       if (shouldCreateGroup) {
-        createdGroup = await window.electronAPI.createContactGroup(accountId, actionDef.contactType, newName)
+        createdGroup = await window.electronAPI.createContactGroup(accountId, effectiveContactType, newName)
         groupIds.push(createdGroup.id)
       }
 
@@ -2734,8 +2938,8 @@ export default function DataScanModal({
       showAlert('Vui lòng chọn tài khoản trước.', 'error')
       return
     }
-    if (selectedAccount?.flatformType !== actionDef.platform) {
-      showAlert(`Hành động này chỉ hỗ trợ tài khoản ${getPlatformLabel(actionDef.platform)}.`, 'error')
+    if (!isUploadDataAction && selectedAccount?.flatformType !== actionDef.platform) {
+      showAlert(`Hành động này chỉ hỗ trợ tài khoản ${getPlatformLabel(actionDef.platform as DataScanPlatform)}.`, 'error')
       return
     }
     if (isPostCommentersAction) {
@@ -2867,6 +3071,11 @@ export default function DataScanModal({
         setZaloGroupMemberGroupId(String(result.zaloGroupId))
       }
 
+      if (result.datasetId) {
+        setSelectedDatasetId(result.datasetId)
+        await loadContactDatasets(result.datasetId)
+      }
+
       if (!result.success) {
         if (wasStopped) return
         showAlert(result.error || 'Tải data thất bại.', 'error')
@@ -2874,7 +3083,9 @@ export default function DataScanModal({
       }
       resetPagedContactSelection()
       setPageInboxPage(1)
-      if (isPageInboxAction) {
+      if (result.datasetId) {
+        // Dataset selection triggers the generic paged contact query after metadata reloads.
+      } else if (isPageInboxAction) {
         await refreshPageInboxContactsAfterScan()
       } else if (isZaloGroupMembersAction && result.zaloGroupId) {
         await loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
@@ -2942,8 +3153,10 @@ export default function DataScanModal({
       }
       const getAkaBizTagExportText = (contact: AutoAccountContact) => formatContactAkaBizTags(contact, akaBizTagNameById)
       const getZaloTagExportText = (contact: AutoAccountContact) => formatContactZaloTags(contact, zaloTagNameById)
-      const headers = isPageInboxAction
-        ? ['Tên', 'PSID', 'SĐT', 'Ngày nhắn cuối', 'Tin nhắn cuối']
+      const headers = isUploadDataAction
+        ? ['Tên', 'UID/Link', 'Số điện thoại', 'Email', 'Info 1', 'Info 2', 'Info 3', 'Info 4', 'Info 5']
+        : isPageInboxAction
+          ? ['Tên', 'PSID', 'SĐT', 'Ngày nhắn cuối', 'Tin nhắn cuối']
         : isZaloRemarketingCustomersAction
           ? [
             'Tên Zalo',
@@ -2968,6 +3181,19 @@ export default function DataScanModal({
       const rows = [
         headers,
         ...exportContacts.map(contact => {
+          if (isUploadDataAction) {
+            return [
+              contact.name || '',
+              getUploadedContactUid(contact),
+              getUploadedContactPhone(contact),
+              getUploadedContactEmail(contact),
+              getUploadedContactField(contact, 'info1'),
+              getUploadedContactField(contact, 'info2'),
+              getUploadedContactField(contact, 'info3'),
+              getUploadedContactField(contact, 'info4'),
+              getUploadedContactField(contact, 'info5')
+            ]
+          }
           if (isPageInboxAction) {
             return [
               contact.name || '',
@@ -3005,8 +3231,20 @@ export default function DataScanModal({
         })
       ]
       const sheet = utils.aoa_to_sheet(rows)
-      sheet['!cols'] = isPageInboxAction
+      sheet['!cols'] = isUploadDataAction
         ? [
+          { wch: 24 },
+          { wch: 48 },
+          { wch: 18 },
+          { wch: 30 },
+          { wch: 24 },
+          { wch: 24 },
+          { wch: 24 },
+          { wch: 24 },
+          { wch: 24 }
+        ]
+        : isPageInboxAction
+          ? [
           { wch: 24 },
           { wch: 28 },
           { wch: 16 },
@@ -3123,6 +3361,8 @@ export default function DataScanModal({
                     value={action}
                     onChange={event => {
                       setContactGroupFilterId('')
+                      setSelectedDatasetId('')
+                      setContactDatasets([])
                       setAction(event.target.value as DataScanAction)
                     }}
                     disabled={scanLoading || (lockAction && !canSwitchLockedAction)}
@@ -3140,6 +3380,8 @@ export default function DataScanModal({
                     value={accountId}
                     onChange={event => {
                       setContactGroupFilterId('')
+                      setSelectedDatasetId('')
+                      setContactDatasets([])
                       setAccountId(event.target.value ? Number(event.target.value) : '')
                     }}
                     disabled={scanLoading || lockAccount}
@@ -3387,7 +3629,7 @@ export default function DataScanModal({
               )}
             </div>
 
-            <div className="data-scan-load-actions">
+            {!isUploadDataAction && <div className="data-scan-load-actions">
               {scanLoading ? (
                 <button
                   className="btn btn-danger data-scan-load-button"
@@ -3417,11 +3659,11 @@ export default function DataScanModal({
                   Tải data
                 </button>
               )}
-            </div>
+            </div>}
           </div>
 
           <div className="data-scan-filter-section">
-            <div className={`data-scan-filter-header${hasZaloTagFilters ? ' has-zalo-tags' : ''}${supportsContactGroups ? ' has-contact-group-filter' : ''}${hasStatusFilter ? ' has-status-filter' : ''}`}>
+            <div className={`data-scan-filter-header${hasZaloTagFilters ? ' has-zalo-tags' : ''}${supportsContactGroups ? ' has-contact-group-filter' : ''}${hasStatusFilter ? ' has-status-filter' : ''}${datasetScanType ? ' has-dataset-filter' : ''}`}>
               <div className="stepper-form-group data-scan-search-group">
                 <label aria-hidden="true">&nbsp;</label>
                 <label className="data-scan-search">
@@ -3430,13 +3672,41 @@ export default function DataScanModal({
                     value={search}
                     onChange={event => setSearch(event.target.value)}
                     placeholder={
-                      isPageInboxAction
+                      isUploadDataAction
+                        ? 'Tìm theo tên, UID, SĐT hoặc email...'
+                        : isPageInboxAction
                         ? 'Tìm theo tên, PSID hoặc SĐT...'
                         : 'Tìm theo tên, UID hoặc SĐT...'
                     }
                   />
                 </label>
               </div>
+              {datasetScanType && (
+                <div className="stepper-form-group data-scan-filter-dataset">
+                  <label>Danh sách data</label>
+                  <select
+                    className="stepper-input"
+                    value={selectedDatasetId}
+                    onChange={event => {
+                      const nextDatasetId = Number(event.target.value)
+                      setSelectedDatasetId(Number.isFinite(nextDatasetId) && nextDatasetId > 0 ? nextDatasetId : '')
+                      setContactGroupFilterId('')
+                      setPageInboxPage(1)
+                      resetPagedContactSelection()
+                    }}
+                    disabled={!accountId || datasetsLoading}
+                  >
+                    <option value="">
+                      {isUploadDataAction ? 'Chọn danh sách data' : 'Tất cả data'}
+                    </option>
+                    {contactDatasets.map(dataset => (
+                      <option key={dataset.id} value={dataset.id}>
+                        {`${dataset.name}${typeof dataset.contactCount === 'number' ? ` (${formatCount(dataset.contactCount)})` : ''}${formatDatasetOptionDate(dataset.createdAt) ? ` • ${formatDatasetOptionDate(dataset.createdAt)}` : ''}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {hasZaloTagFilters && (
                 <>
                   <div className="stepper-form-group">
@@ -3843,7 +4113,7 @@ export default function DataScanModal({
           )}
 
           <div className="stepper-grid-container data-scan-table-wrap">
-            <table className="campaign-grid data-scan-table">
+            <table className={`campaign-grid data-scan-table${isUploadDataAction ? ' is-upload-data' : ''}`}>
               <thead>
                 <tr>
                   <th style={{ width: 44 }}>
@@ -3857,7 +4127,19 @@ export default function DataScanModal({
                     />
                   </th>
                   <th style={{ width: 64 }}>STT</th>
-                  {isZaloRemarketingCustomersAction ? (
+                  {isUploadDataAction ? (
+                    <>
+                      <th>Tên</th>
+                      <th>UID/Link</th>
+                      <th>Số điện thoại</th>
+                      <th>Email</th>
+                      <th>Info 1</th>
+                      <th>Info 2</th>
+                      <th>Info 3</th>
+                      <th>Info 4</th>
+                      <th>Info 5</th>
+                    </>
+                  ) : isZaloRemarketingCustomersAction ? (
                     <>
                       <th>Tên Zalo</th>
                       <th>Số điện thoại</th>
@@ -3892,7 +4174,7 @@ export default function DataScanModal({
                   {showZaloGroupMemberCountColumn && <th>Số thành viên</th>}
                   {showGroupMemberRoleColumn && <th>Vai trò</th>}
                   {showFriendStatusColumn && <th>Bạn bè</th>}
-                  {actionDef.contactType === 'group' && <th>Tham gia</th>}
+                  {effectiveContactType === 'group' && <th>Tham gia</th>}
                   {showGroupApprovalColumn && <th>Duyệt bài</th>}
                     </>
                   )}
@@ -3929,7 +4211,27 @@ export default function DataScanModal({
                         />
                       </td>
                       <td>{rowNumber}</td>
-                      {isZaloRemarketingCustomersAction ? (
+                      {isUploadDataAction ? (
+                        <>
+                          <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
+                            {contact.name || '-'}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-link-cell" title={getUploadedContactUid(contact) || undefined}>
+                            {getUploadedContactUid(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell data-scan-phone-cell" title={getUploadedContactPhone(contact) || undefined}>
+                            {getUploadedContactPhone(contact) || '-'}
+                          </td>
+                          <td className="data-scan-text-cell" title={getUploadedContactEmail(contact) || undefined}>
+                            {getUploadedContactEmail(contact) || '-'}
+                          </td>
+                          {(['info1', 'info2', 'info3', 'info4', 'info5'] as const).map(key => (
+                            <td key={key} className="data-scan-text-cell" title={getUploadedContactField(contact, key) || undefined}>
+                              {getUploadedContactField(contact, key) || '-'}
+                            </td>
+                          ))}
+                        </>
+                      ) : isZaloRemarketingCustomersAction ? (
                         <>
                           <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
                             {contact.name || '-'}
@@ -4036,7 +4338,7 @@ export default function DataScanModal({
                               </span>
                             </td>
                           )}
-                          {actionDef.contactType === 'group' && (
+                          {effectiveContactType === 'group' && (
                             <td>
                               <span className={`data-scan-status-badge ${contact.isJoined ? 'is-active' : 'is-muted'}`}>
                                 {getContactStatusLabel(contact)}
@@ -4106,9 +4408,9 @@ export default function DataScanModal({
         {supportsContactGroups && showGroupPanel && (
           <DataGroupManagerModal
             initialAccountId={typeof accountId === 'number' ? accountId : null}
-            initialGroupId={activeContactGroup?.contactType === actionDef.contactType ? activeGroupId : null}
+            initialGroupId={activeContactGroup?.contactType === effectiveContactType ? activeGroupId : null}
             initialPlatform={selectedPlatform}
-            initialContactType={actionDef.contactType}
+            initialContactType={effectiveContactType}
             lockContext
             zaloTagNameById={zaloTagNameById}
             akaBizTagNameById={akaBizTagNameById}
@@ -4119,7 +4421,7 @@ export default function DataScanModal({
 
         {supportsContactGroups && showGroupSelectionModal && (
           <DataScanGroupSelectionModal
-            contactType={actionDef.contactType}
+            contactType={effectiveContactType}
             platform={selectedPlatform}
             groupsLoading={groupsLoading}
             contactGroups={allContactGroups}
@@ -4162,7 +4464,7 @@ export default function DataScanModal({
                     <div className="data-scan-group-empty">Chưa có nhóm data.</div>
                   ) : (
                     allContactGroups.map(group => {
-                      const isCompatible = group.contactType === actionDef.contactType
+                      const isCompatible = group.contactType === effectiveContactType
                       return (
                       <label
                         key={group.id}

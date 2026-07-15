@@ -1006,8 +1006,88 @@ export interface ZaloLabelOption {
 // Account Contact Types
 // ============================================
 
-export type ContactType = 'person' | 'group' | 'page' | 'page_inbox_customer' | 'zalo_tag'
+export type ContactType =
+  | 'person'
+  | 'group'
+  | 'page'
+  | 'page_inbox_customer'
+  | 'zalo_tag'
+  | 'phone'
+  | 'email'
+  | 'campaign_input'
 export type ContactStatusFilter = 'active' | 'inactive' | 'all'
+
+export type ContactDatasetSource = 'scan' | 'upload'
+export type ContactDatasetScanType =
+  | 'facebook_group_members'
+  | 'facebook_profile_friends'
+  | 'facebook_post_commenters'
+  | 'facebook_post_likes'
+  | 'zalo_group_members'
+  | 'upload_data'
+export type ContactDatasetScanStatus = 'completed' | 'partial' | 'failed'
+export type ContactDatasetImportSource = 'textbox' | 'image' | 'sheet' | 'excel'
+
+export interface AutoAccountContactDataset {
+  id: number
+  name: string
+  link?: string | null
+  description?: string | null
+  source: ContactDatasetSource
+  accountId: number
+  flatformType: string
+  contactType: ContactType
+  scanType: ContactDatasetScanType
+  sourceKey: string
+  lastScannedAt?: string | null
+  lastScanStatus?: ContactDatasetScanStatus | null
+  extraData?: Record<string, unknown>
+  contactCount?: number
+  isDelete: boolean
+  staffId?: number
+  organizationId?: number | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ContactDatasetListQuery {
+  accountId: number
+  scanType?: ContactDatasetScanType
+  contactType?: ContactType
+  source?: ContactDatasetSource
+  flatformType?: string
+}
+
+export interface ContactDatasetFinalizeInput {
+  accountId: number
+  scanType: Exclude<ContactDatasetScanType, 'upload_data'>
+  contactType: ContactType
+  sourceKey: string
+  name: string
+  link?: string | null
+  description?: string | null
+  status: ContactDatasetScanStatus
+  contactUids: string[]
+  extraData?: Record<string, unknown>
+}
+
+export interface SaveUploadDatasetRequest {
+  accountIds: number[]
+  name: string
+  platform: CampaignImportPlatform
+  actionId: string
+  actionName?: string
+  importSource: ContactDatasetImportSource
+  sourceLink?: string | null
+  rows: CampaignImportDataRow[]
+}
+
+export interface SaveUploadDatasetResult {
+  success: boolean
+  count: number
+  datasets: AutoAccountContactDataset[]
+  rows: CampaignImportDataRow[]
+}
 
 export type PageInboxPhoneFilter = 'all' | 'has_phone' | 'no_phone'
 export type PageInboxMessageFilterMode = 'all' | 'contain_all' | 'contain_any' | 'not_contain_all' | 'not_contain_any'
@@ -1028,6 +1108,7 @@ export interface PageInboxContactListQuery {
 
 export interface AccountContactListQuery {
   contactType?: ContactType
+  datasetId?: number
   contactGroupId?: number
   statusFilter?: ContactStatusFilter
   search?: string
@@ -1073,6 +1154,7 @@ export interface ZaloRemarketingCustomerListQuery {
 export interface ContactLoadResult {
   success: boolean
   count: number
+  datasetId?: number
   error?: string
   stopped?: boolean
   runKey?: string
@@ -1623,6 +1705,8 @@ export const IPC_EVENTS = {
   CONTACTS_EXPORT_ZALO_REMARKETING_CUSTOMERS: 'contacts:export-zalo-remarketing-customers',
   CONTACTS_CANCEL_LOAD: 'contacts:cancel-load',
   CONTACTS_LIST: 'contacts:list',
+  CONTACT_DATASETS_LIST: 'contacts:datasets:list',
+  CONTACT_DATASETS_SAVE_UPLOAD: 'contacts:datasets:save-upload',
   CONTACTS_DELETE: 'contacts:delete',
   CONTACT_GROUPS_LIST: 'contacts:groups:list',
   CONTACT_GROUPS_CREATE: 'contacts:groups:create',
