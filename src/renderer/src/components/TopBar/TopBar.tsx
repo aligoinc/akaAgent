@@ -136,6 +136,24 @@ export default function TopBar({
         onClick: onOpenMediaLibrary
       },
       {
+        key: 'proxy',
+        label: 'Proxy',
+        icon: <ServerCog size={18} />,
+        onClick: onOpenProxyManager
+      },
+      {
+        key: 'data-groups',
+        label: 'Nhóm data',
+        icon: <FolderOpen size={18} />,
+        onClick: onOpenDataGroups
+      },
+      {
+        key: 'content-templates',
+        label: 'Mẫu nội dung',
+        icon: <FileText size={18} />,
+        onClick: onOpenContentTemplates
+      },
+      {
         key: 'reports',
         label: 'Báo cáo',
         icon: <BarChart3 size={18} />,
@@ -155,7 +173,16 @@ export default function TopBar({
     }
 
     return items
-  }, [activePage, canOpenWorkflowEditor, onOpenDataScan, onOpenMediaLibrary, onPageChange])
+  }, [
+    activePage,
+    canOpenWorkflowEditor,
+    onOpenContentTemplates,
+    onOpenDataGroups,
+    onOpenDataScan,
+    onOpenMediaLibrary,
+    onOpenProxyManager,
+    onPageChange
+  ])
 
   const closeAccountMenu = () => setAccountMenuOpen(false)
 
@@ -193,21 +220,6 @@ export default function TopBar({
   const handleOpenGeneralSettings = () => {
     closeAccountMenu()
     onOpenGeneralSettings()
-  }
-
-  const handleOpenProxyManager = () => {
-    closeAccountMenu()
-    onOpenProxyManager()
-  }
-
-  const handleOpenContentTemplates = () => {
-    closeAccountMenu()
-    onOpenContentTemplates()
-  }
-
-  const handleOpenDataGroups = () => {
-    closeAccountMenu()
-    onOpenDataGroups()
   }
 
   const handleOpenAccountInfo = () => {
@@ -308,18 +320,6 @@ export default function TopBar({
               >
                 {checkingUpdate ? <RefreshCw size={16} className="animate-spin" /> : <UpdateBadgeIcon />}
                 <span>{checkingUpdate ? 'Đang kiểm tra' : 'Cập nhật'}</span>
-              </button>
-              <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenProxyManager} role="menuitem">
-                <ServerCog size={16} />
-                <span>Proxy</span>
-              </button>
-              <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenContentTemplates} role="menuitem">
-                <FileText size={16} />
-                <span>Mẫu nội dung</span>
-              </button>
-              <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenDataGroups} role="menuitem">
-                <FolderOpen size={16} />
-                <span>Nhóm data</span>
               </button>
               <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenGeneralSettings} role="menuitem">
                 <SlidersHorizontal size={16} />

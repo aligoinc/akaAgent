@@ -107,7 +107,8 @@ export interface CampaignAdvancedContentItem {
 
 export const MEDIA_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
 export const MEDIA_FILE_MAX_SIZE_BYTES = 25 * 1024 * 1024
-export const MEDIA_LIBRARY_MAX_FILES_PER_STAFF = 5000
+export const MEDIA_LIBRARY_MAX_FILES_SETTING_KEY = 'media.so_luong_file_toi_da'
+export const MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF = 10_000
 
 export interface MediaFile {
   id: number
@@ -144,6 +145,7 @@ export interface MediaStorageSettings {
   bucket: string
   publicBaseUrl: string
   keyPrefix?: string
+  maxFilesPerStaff: number
   isConfigured?: boolean
   secretAccessKeyMasked?: boolean
 }
@@ -151,6 +153,13 @@ export interface MediaStorageSettings {
 export interface MediaUploadFailure {
   localPath: string
   error: string
+}
+
+export interface MediaClipboardImageInput {
+  name?: string | null
+  dataUrl: string
+  mimeType?: string | null
+  sizeBytes?: number | null
 }
 
 export interface MediaUploadResult {
@@ -1019,6 +1028,7 @@ export interface PageInboxContactListQuery {
 
 export interface AccountContactListQuery {
   contactType?: ContactType
+  contactGroupId?: number
   statusFilter?: ContactStatusFilter
   search?: string
   source?: string
@@ -1537,6 +1547,7 @@ export const IPC_EVENTS = {
   MEDIA_STORAGE_SETTINGS_TEST: 'media:storage-settings:test',
   MEDIA_FILES_LIST: 'media:files:list',
   MEDIA_FILES_UPLOAD: 'media:files:upload',
+  MEDIA_CLIPBOARD_IMAGES_UPLOAD: 'media:clipboard-images:upload',
   MEDIA_FILES_DELETE: 'media:files:delete',
   MEDIA_FILES_DELETE_MANY: 'media:files:delete-many',
   MEDIA_GROUPS_LIST: 'media:groups:list',

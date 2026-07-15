@@ -886,6 +886,7 @@ export default function DataScanModal({
   const stoppedScanIdsRef = useRef<Set<number>>(new Set())
   const completedScanIdsRef = useRef<Set<number>>(new Set())
   const contactsLoadIdRef = useRef(0)
+  const contactGroupsLoadIdRef = useRef(0)
   const lastLoadedQueryKeyRef = useRef('')
   const lastAutoLoadBaseQueryKeyRef = useRef('')
   const lockedPageInboxPageUid = String(initialPageInboxPageUid || '').trim()
@@ -903,6 +904,7 @@ export default function DataScanModal({
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<number>>(new Set())
+  const [contactGroupFilterId, setContactGroupFilterId] = useState<number | ''>('')
   const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>(initialStatusFilter || 'active')
   const [dedupeOnOutput, setDedupeOnOutput] = useState(true)
   const [rangeStart, setRangeStart] = useState(1)
@@ -1059,6 +1061,23 @@ export default function DataScanModal({
   const akaBizTagFilterOptions = useMemo(
     () => akaBizContactTags.map(tag => ({ id: tag.id, name: tag.name })),
     [akaBizContactTags]
+  )
+  const compatibleContactGroups = useMemo(
+    () => contactGroups.filter(group => (
+      group.accountId === accountId
+      && group.contactType === actionDef.contactType
+      && group.purpose === 'data_group'
+      && !group.isDelete
+    )),
+    [accountId, actionDef.contactType, contactGroups]
+  )
+  const effectiveContactGroupFilterId = useMemo(
+    () => supportsContactGroups
+      && contactGroupFilterId !== ''
+      && compatibleContactGroups.some(group => group.id === contactGroupFilterId)
+      ? contactGroupFilterId
+      : undefined,
+    [compatibleContactGroups, contactGroupFilterId, supportsContactGroups]
   )
   const hasZaloTagFilters = actionDef.platform === 'zalo'
   const zaloTagFilterLabel = useMemo(() => {
@@ -1219,6 +1238,7 @@ export default function DataScanModal({
 
   const getAccountContactListQuery = useCallback((overrides: Partial<AccountContactListQuery> = {}): AccountContactListQuery => ({
     contactType: actionDef.contactType,
+    contactGroupId: effectiveContactGroupFilterId,
     statusFilter: hasStatusFilter ? statusFilter : 'all',
     search,
     source: isPostCommentersAction
@@ -1237,14 +1257,15 @@ export default function DataScanModal({
     sourceGroupUrl: isGroupMembersAction ? normalizedGroupMembersUrl : undefined,
     ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, hasStatusFilter, hasZaloTagFilters, isGroupMembersAction, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction, normalizedGroupMembersUrl, normalizedPostCommentersUrl, normalizedPostLikesUrl, normalizedProfileFriendsUrl, search, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
+  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, effectiveContactGroupFilterId, hasStatusFilter, hasZaloTagFilters, isGroupMembersAction, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction, normalizedGroupMembersUrl, normalizedPostCommentersUrl, normalizedPostLikesUrl, normalizedProfileFriendsUrl, search, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
 
   const getZaloGroupMemberListQuery = useCallback((overrides: Partial<ZaloGroupMemberContactListQuery> = {}): ZaloGroupMemberContactListQuery => ({
     zaloGroupId: zaloGroupMemberGroupId,
+    contactGroupId: effectiveContactGroupFilterId,
     search,
     ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [akaBizNoTagFilter, akaBizTagFilterIds, hasZaloTagFilters, search, zaloGroupMemberGroupId, zaloNoTagFilter, zaloTagFilterIds])
+  }), [akaBizNoTagFilter, akaBizTagFilterIds, effectiveContactGroupFilterId, hasZaloTagFilters, search, zaloGroupMemberGroupId, zaloNoTagFilter, zaloTagFilterIds])
 
   const getZaloRemarketingListQuery = useCallback((overrides: Partial<ZaloRemarketingCustomerListQuery> = {}): ZaloRemarketingCustomerListQuery => ({
     campaignActionIds: zaloRemarketingActionIds,
@@ -1262,10 +1283,34 @@ export default function DataScanModal({
     setPageInboxExcludedIds(new Set())
   }, [])
 
+  useEffect(() => {
+    setContactGroupFilterId('')
+    setPageInboxPage(1)
+    resetPagedContactSelection()
+  }, [accountId, action, resetPagedContactSelection])
+
+  useEffect(() => {
+    if (contactGroupFilterId === '') return
+    if (!supportsContactGroups) {
+      setContactGroupFilterId('')
+      return
+    }
+    if (groupsLoading) return
+    if (!compatibleContactGroups.some(group => group.id === contactGroupFilterId)) {
+      setContactGroupFilterId('')
+    }
+  }, [compatibleContactGroups, contactGroupFilterId, groupsLoading, supportsContactGroups])
+
   const loadZaloGroupMemberContactsForGroup = useCallback(async (groupId: string) => {
+    const loadId = contactsLoadIdRef.current + 1
+    contactsLoadIdRef.current = loadId
     if (!window.electronAPI || !accountId || !groupId) {
-      setContacts([])
-      setPageInboxTotal(0)
+      if (mountedRef.current && contactsLoadIdRef.current === loadId) {
+        setContacts([])
+        setPageInboxTotal(0)
+        setGroupContactCache({})
+        setLoading(false)
+      }
       return
     }
     setLoading(true)
@@ -1276,17 +1321,16 @@ export default function DataScanModal({
         limit: PAGE_INBOX_PAGE_SIZE,
         offset: 0
       }))
-      if (!mountedRef.current) return
+      if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
       setContacts(result.contacts)
       setPageInboxTotal(result.total)
       setGroupContactCache({})
     } catch (err: any) {
+      if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
       console.error('Failed to load Zalo group members:', err)
-      if (mountedRef.current) {
-        showAlert(err?.message || 'Không thể tải danh sách thành viên group Zalo.', 'error')
-      }
+      showAlert(err?.message || 'Không thể tải danh sách thành viên group Zalo.', 'error')
     } finally {
-      if (mountedRef.current) setLoading(false)
+      if (mountedRef.current && contactsLoadIdRef.current === loadId) setLoading(false)
     }
   }, [accountId, getZaloGroupMemberListQuery, showAlert])
 
@@ -1660,17 +1704,32 @@ export default function DataScanModal({
     zaloGroupMemberGroupId
   ])
 
+  const refreshContactsAfterGroupMembershipChange = useCallback(async () => {
+    if (contactGroupFilterId === '') return
+    resetPagedContactSelection()
+    setPageInboxPage(1)
+    await loadCachedContacts(1, undefined, { force: true })
+  }, [contactGroupFilterId, loadCachedContacts, resetPagedContactSelection])
+
   const loadContactGroups = useCallback(async () => {
+    const loadId = contactGroupsLoadIdRef.current + 1
+    contactGroupsLoadIdRef.current = loadId
     if (!window.electronAPI || !accountId) {
-      setContactGroups([])
-      setAllContactGroups([])
-      setActiveGroupId(null)
+      if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) {
+        setContactGroups([])
+        setAllContactGroups([])
+        setActiveGroupId(null)
+        setGroupsLoading(false)
+      }
       return
     }
     if (!supportsContactGroups) {
-      setContactGroups([])
-      setAllContactGroups([])
-      setActiveGroupId(null)
+      if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) {
+        setContactGroups([])
+        setAllContactGroups([])
+        setActiveGroupId(null)
+        setGroupsLoading(false)
+      }
       return
     }
     setGroupsLoading(true)
@@ -1679,14 +1738,16 @@ export default function DataScanModal({
         window.electronAPI.listContactGroups(accountId, actionDef.contactType),
         window.electronAPI.listContactGroups(accountId)
       ])
+      if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
       setContactGroups(groups)
       setAllContactGroups(allGroups)
       setActiveGroupId(prev => prev && allGroups.some(group => group.id === prev) ? prev : allGroups[0]?.id || null)
     } catch (err: any) {
+      if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
       console.error('Failed to load contact groups:', err)
       showAlert(err?.message || 'Không thể tải danh sách nhóm data.', 'error')
     } finally {
-      setGroupsLoading(false)
+      if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) setGroupsLoading(false)
     }
   }, [accountId, actionDef.contactType, showAlert, supportsContactGroups])
 
@@ -1699,10 +1760,18 @@ export default function DataScanModal({
   }, [groupContactCache])
 
   const handleManagedContactGroupsChanged = useCallback(async () => {
+    const loadId = contactGroupsLoadIdRef.current + 1
+    contactGroupsLoadIdRef.current = loadId
     if (!window.electronAPI || !accountId || !supportsContactGroups) {
-      setSelectedGroupIds(new Set())
-      setGroupContactCache({})
-      await loadContactGroups()
+      if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) {
+        setSelectedGroupIds(new Set())
+        setContactGroupFilterId('')
+        setGroupContactCache({})
+        setContactGroups([])
+        setAllContactGroups([])
+        setActiveGroupId(null)
+        setGroupsLoading(false)
+      }
       return
     }
 
@@ -1712,25 +1781,35 @@ export default function DataScanModal({
         window.electronAPI.listContactGroups(accountId, actionDef.contactType),
         window.electronAPI.listContactGroups(accountId)
       ])
+      if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
       const currentGroupIds = new Set(groups.map(group => group.id))
       const nextSelectedGroupIds = Array.from(selectedGroupIds).filter(groupId => currentGroupIds.has(groupId))
       const nextGroupContactCache: Record<number, AutoAccountContact[]> = {}
       await Promise.all(nextSelectedGroupIds.map(async groupId => {
         nextGroupContactCache[groupId] = await window.electronAPI.listContactGroupContacts(groupId)
       }))
+      if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
 
       setContactGroups(groups)
       setAllContactGroups(allGroups)
       setActiveGroupId(prev => prev && allGroups.some(group => group.id === prev) ? prev : allGroups[0]?.id || null)
       setSelectedGroupIds(new Set(nextSelectedGroupIds))
       setGroupContactCache(nextGroupContactCache)
+      if (contactGroupFilterId !== '') {
+        if (currentGroupIds.has(contactGroupFilterId)) {
+          await refreshContactsAfterGroupMembershipChange()
+        } else {
+          setContactGroupFilterId('')
+        }
+      }
     } catch (err: any) {
+      if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
       console.error('Failed to refresh managed contact groups:', err)
       showAlert(err?.message || 'Không thể tải lại nhóm data sau khi cập nhật.', 'error')
     } finally {
-      setGroupsLoading(false)
+      if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) setGroupsLoading(false)
     }
-  }, [accountId, actionDef.contactType, loadContactGroups, selectedGroupIds, showAlert, supportsContactGroups])
+  }, [accountId, actionDef.contactType, contactGroupFilterId, refreshContactsAfterGroupMembershipChange, selectedGroupIds, showAlert, supportsContactGroups])
 
   useEffect(() => {
     pageInboxPageUidRef.current = pageInboxPageUid
@@ -1864,6 +1943,7 @@ export default function DataScanModal({
     normalizedPostLikesUrl,
     normalizedProfileFriendsUrl,
     normalizedGroupMembersUrl,
+    contactGroupFilterId,
     akaBizNoTagFilter,
     akaBizTagFilterIds,
     zaloGroupMemberGroupId,
@@ -2418,6 +2498,7 @@ export default function DataScanModal({
           await window.electronAPI.deleteContactGroup(group.id)
           setContactGroups(prev => prev.filter(item => item.id !== group.id))
           setAllContactGroups(prev => prev.filter(item => item.id !== group.id))
+          setContactGroupFilterId(prev => prev === group.id ? '' : prev)
           setSelectedGroupIds(prev => {
             const next = new Set(prev)
             next.delete(group.id)
@@ -2545,6 +2626,7 @@ export default function DataScanModal({
         return next
       })
       await loadContactGroups()
+      await refreshContactsAfterGroupMembershipChange()
       if (createdGroup) {
         setActiveGroupId(createdGroup.id)
         setShowGroupPanel(true)
@@ -2590,6 +2672,7 @@ export default function DataScanModal({
             [activeGroupId]: (prev[activeGroupId] || []).filter(item => !contactIdSet.has(item.id))
           }))
           await loadContactGroups()
+          await refreshContactsAfterGroupMembershipChange()
           onSuccess?.()
           showAlert('Đã xoá data khỏi nhóm.', 'success')
         } catch (err: any) {
@@ -3038,7 +3121,10 @@ export default function DataScanModal({
                   <select
                     className="stepper-input"
                     value={action}
-                    onChange={event => setAction(event.target.value as DataScanAction)}
+                    onChange={event => {
+                      setContactGroupFilterId('')
+                      setAction(event.target.value as DataScanAction)
+                    }}
                     disabled={scanLoading || (lockAction && !canSwitchLockedAction)}
                   >
                     {availableActions.map(item => (
@@ -3052,7 +3138,10 @@ export default function DataScanModal({
                   <select
                     className="stepper-input"
                     value={accountId}
-                    onChange={event => setAccountId(event.target.value ? Number(event.target.value) : '')}
+                    onChange={event => {
+                      setContactGroupFilterId('')
+                      setAccountId(event.target.value ? Number(event.target.value) : '')
+                    }}
                     disabled={scanLoading || lockAccount}
                   >
                     <option value="">Chọn tài khoản</option>
@@ -3332,7 +3421,7 @@ export default function DataScanModal({
           </div>
 
           <div className="data-scan-filter-section">
-            <div className={`data-scan-filter-header${hasZaloTagFilters ? ' has-zalo-tags' : ''}${hasStatusFilter ? ' has-status-filter' : ''}`}>
+            <div className={`data-scan-filter-header${hasZaloTagFilters ? ' has-zalo-tags' : ''}${supportsContactGroups ? ' has-contact-group-filter' : ''}${hasStatusFilter ? ' has-status-filter' : ''}`}>
               <div className="stepper-form-group data-scan-search-group">
                 <label aria-hidden="true">&nbsp;</label>
                 <label className="data-scan-search">
@@ -3484,6 +3573,25 @@ export default function DataScanModal({
                     </div>
                   </div>
                 </>
+              )}
+              {supportsContactGroups && (
+                <div className="stepper-form-group data-scan-filter-contact-group">
+                  <label>Nhóm data</label>
+                  <select
+                    className="stepper-input"
+                    value={contactGroupFilterId}
+                    onChange={event => {
+                      const nextGroupId = Number(event.target.value)
+                      setContactGroupFilterId(Number.isFinite(nextGroupId) && nextGroupId > 0 ? nextGroupId : '')
+                    }}
+                    disabled={!accountId || groupsLoading}
+                  >
+                    <option value="">Tất cả</option>
+                    {compatibleContactGroups.map(group => (
+                      <option key={group.id} value={group.id}>{group.name}</option>
+                    ))}
+                  </select>
+                </div>
               )}
               {hasStatusFilter && (
                 <div className="stepper-form-group data-scan-filter-status">

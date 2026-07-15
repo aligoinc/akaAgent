@@ -1880,6 +1880,32 @@ button.btn-icon:not(.btn):disabled {
   padding-inline: 14px;
 }
 
+.media-library-paste-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.media-library-paste-hint kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border-default);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 10px;
+  line-height: 16px;
+}
+
 .media-library-search {
   display: flex;
   align-items: center;
@@ -2026,6 +2052,27 @@ button.btn-icon:not(.btn):disabled {
   padding: 10px 4px;
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+.media-library-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 30px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.media-library-pagination > span:first-child {
+  margin-right: auto;
+}
+
+.media-library-pagination .btn {
+  min-width: 30px;
+  min-height: 28px;
+  padding-inline: 7px;
 }
 
 .media-library-modal .media-library-grid {
@@ -2210,6 +2257,10 @@ button.btn-icon:not(.btn):disabled {
   .media-library-toolbar-main,
   .media-library-toolbar-tools {
     width: 100%;
+  }
+
+  .media-library-toolbar-main {
+    flex-wrap: wrap;
   }
 
   .media-library-toolbar-tools {
@@ -11147,6 +11198,10 @@ button.btn-icon.campaign-control-button.assistant {
   align-items: start;
 }
 
+.data-scan-filter-header.has-contact-group-filter.has-status-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(180px, 232px));
+}
+
 .data-scan-filter-header.has-zalo-tags {
   grid-template-columns: minmax(0, 1fr) repeat(2, minmax(170px, 220px));
   column-gap: 12px;
@@ -11154,6 +11209,14 @@ button.btn-icon.campaign-control-button.assistant {
 
 .data-scan-filter-header.has-zalo-tags.has-status-filter {
   grid-template-columns: minmax(0, 1fr) repeat(2, minmax(150px, 220px)) minmax(130px, 180px);
+}
+
+.data-scan-filter-header.has-zalo-tags.has-contact-group-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(150px, 210px));
+}
+
+.data-scan-filter-header.has-zalo-tags.has-contact-group-filter.has-status-filter {
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(140px, 200px)) minmax(130px, 180px);
 }
 
 .data-scan-search-group {
@@ -11179,7 +11242,8 @@ button.btn-icon.campaign-control-button.assistant {
   grid-column: 1 / -1;
 }
 
-.data-scan-filter-status {
+.data-scan-filter-status,
+.data-scan-filter-contact-group {
   min-width: 0;
 }
 
@@ -12092,7 +12156,11 @@ button.btn-icon.campaign-control-button.assistant {
   }
 
   .data-scan-filter-header.has-zalo-tags,
-  .data-scan-filter-header.has-zalo-tags.has-status-filter {
+  .data-scan-filter-header.has-zalo-tags.has-status-filter,
+  .data-scan-filter-header.has-contact-group-filter,
+  .data-scan-filter-header.has-contact-group-filter.has-status-filter,
+  .data-scan-filter-header.has-zalo-tags.has-contact-group-filter,
+  .data-scan-filter-header.has-zalo-tags.has-contact-group-filter.has-status-filter {
     grid-template-columns: 1fr;
   }
 
