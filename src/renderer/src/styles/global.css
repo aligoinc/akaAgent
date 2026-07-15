@@ -2068,6 +2068,27 @@ button.btn-icon:not(.btn):disabled {
   font-size: 12px;
 }
 
+.media-library-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 30px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.media-library-pagination > span:first-child {
+  margin-right: auto;
+}
+
+.media-library-pagination .btn {
+  min-width: 30px;
+  min-height: 28px;
+  padding-inline: 7px;
+}
+
 .media-library-modal .media-library-grid {
   flex: 1 1 auto;
   min-height: 0;

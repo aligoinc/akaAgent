@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, ChevronRight, ClipboardPaste, Cloud, Copy, Edit3, FileText, Folder, FolderPlus, Image, Plus, RefreshCw, Save, Search, Trash2, Upload, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardPaste, Cloud, Copy, Edit3, FileText, Folder, FolderPlus, Image, Plus, RefreshCw, Save, Search, Trash2, Upload, X } from 'lucide-react'
 import {
   CampaignMediaInput,
   CampaignMediaSnapshot,
   MEDIA_FILE_MAX_SIZE_BYTES,
   MEDIA_IMAGE_MAX_SIZE_BYTES,
-  MEDIA_LIBRARY_MAX_FILES_PER_STAFF,
+  MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF,
   MediaClipboardImageInput,
   MediaFile,
   MediaGroup,
@@ -18,6 +18,8 @@ import { useUiStore } from '../../stores/uiStore'
 import MediaPreviewHover from './MediaPreviewHover'
 
 type MediaPickerMode = 'image' | 'file'
+const MEDIA_TABLE_PAGE_SIZE = 100
+const MEDIA_GROUP_MANAGE_PAGE_SIZE = 50
 
 interface MediaLibraryModalProps {
   onClose: () => void
@@ -33,7 +35,8 @@ const EMPTY_SETTINGS: MediaStorageSettings = {
   secretAccessKey: '',
   bucket: '',
   publicBaseUrl: '',
-  keyPrefix: ''
+  keyPrefix: '',
+  maxFilesPerStaff: MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF
 }
 
 const isImageMime = (mime?: string | null) => String(mime || '').toLowerCase().startsWith('image/')
@@ -88,8 +91,15 @@ const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve,
   reader.readAsDataURL(file)
 })
 
-const getMediaQuotaError = (activeCount: number): string =>
-  `Thư viện media đã có ${activeCount}/${MEDIA_LIBRARY_MAX_FILES_PER_STAFF} file. Vui lòng xoá bớt media trước khi upload thêm.`
+const normalizeMediaLibraryMaxFiles = (value: unknown): number => {
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? parsed
+    : MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF
+}
+
+const getMediaQuotaError = (activeCount: number, maxFilesPerStaff: number): string =>
+  `Thư viện media đã có ${activeCount}/${maxFilesPerStaff} file. Vui lòng xoá bớt media trước khi upload thêm.`
 
 const formatDateTime = (value?: string): string => {
   if (!value) return '-'
@@ -141,12 +151,16 @@ export default function MediaLibraryModal({
   const [uploading, setUploading] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set())
+  const [mediaPage, setMediaPage] = useState(1)
+  const [availableManagePage, setAvailableManagePage] = useState(1)
+  const [groupManagePage, setGroupManagePage] = useState(1)
 
   const pickerLimit = Math.max(1, maxSelect ?? Number.MAX_SAFE_INTEGER)
   const isPicker = !!onConfirm
   const isSingleSelectPicker = isPicker && pickerLimit === 1
   const onlyImages = pickerMode === 'image'
   const activeMediaCount = files.length
+  const mediaLibraryMaxFiles = normalizeMediaLibraryMaxFiles(settings.maxFilesPerStaff)
   const selectedGroup = selectedGroupId ? groups.find(group => group.id === selectedGroupId) || null : null
   const canDeleteMedia = selectedGroupId === null
   const tableColSpan = isPicker ? 9 : 8
@@ -242,6 +256,13 @@ export default function MediaLibraryModal({
       : rows
   }, [files, groupFileIds, groupFileOrder, onlyImages, search, selectedGroupId])
 
+  const mediaPageCount = Math.max(1, Math.ceil(filteredFiles.length / MEDIA_TABLE_PAGE_SIZE))
+  const resolvedMediaPage = Math.min(mediaPage, mediaPageCount)
+  const pagedFiles = useMemo(() => {
+    const start = (resolvedMediaPage - 1) * MEDIA_TABLE_PAGE_SIZE
+    return filteredFiles.slice(start, start + MEDIA_TABLE_PAGE_SIZE)
+  }, [filteredFiles, resolvedMediaPage])
+
   const selectedGroupSnapshots = useMemo(() => {
     if (!selectedGroupId) return []
     return files
@@ -286,6 +307,26 @@ export default function MediaLibraryModal({
     const q = search.trim().toLowerCase()
     return groupManageFiles.filter(file => !q || mediaMatchesSearch(file, q))
   }, [groupManageFiles, search, selectedGroupId])
+
+  const availableManagePageCount = Math.max(1, Math.ceil(visibleAvailableGroupManageFiles.length / MEDIA_GROUP_MANAGE_PAGE_SIZE))
+  const resolvedAvailableManagePage = Math.min(availableManagePage, availableManagePageCount)
+  const pagedAvailableGroupManageFiles = useMemo(() => {
+    const start = (resolvedAvailableManagePage - 1) * MEDIA_GROUP_MANAGE_PAGE_SIZE
+    return visibleAvailableGroupManageFiles.slice(start, start + MEDIA_GROUP_MANAGE_PAGE_SIZE)
+  }, [resolvedAvailableManagePage, visibleAvailableGroupManageFiles])
+
+  const groupManagePageCount = Math.max(1, Math.ceil(visibleGroupManageFiles.length / MEDIA_GROUP_MANAGE_PAGE_SIZE))
+  const resolvedGroupManagePage = Math.min(groupManagePage, groupManagePageCount)
+  const pagedGroupManageFiles = useMemo(() => {
+    const start = (resolvedGroupManagePage - 1) * MEDIA_GROUP_MANAGE_PAGE_SIZE
+    return visibleGroupManageFiles.slice(start, start + MEDIA_GROUP_MANAGE_PAGE_SIZE)
+  }, [resolvedGroupManagePage, visibleGroupManageFiles])
+
+  useEffect(() => {
+    setMediaPage(1)
+    setAvailableManagePage(1)
+    setGroupManagePage(1)
+  }, [groupManageMode, search, selectedGroupId])
 
   const handleSaveSettings = async () => {
     if (!isAdmin || settingsSaving) return
@@ -496,8 +537,8 @@ export default function MediaLibraryModal({
     event.target.value = ''
     if (rawFiles.length === 0 || !canStartUpload()) return
 
-    if (activeMediaCount + rawFiles.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
-      showAlert(getMediaQuotaError(activeMediaCount), 'error')
+    if (activeMediaCount + rawFiles.length > mediaLibraryMaxFiles) {
+      showAlert(getMediaQuotaError(activeMediaCount, mediaLibraryMaxFiles), 'error')
       return
     }
 
@@ -541,8 +582,8 @@ export default function MediaLibraryModal({
 
   const uploadClipboardFiles = async (rawFiles: File[]) => {
     if (rawFiles.length === 0 || !canStartUpload()) return
-    if (activeMediaCount + rawFiles.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
-      showAlert(getMediaQuotaError(activeMediaCount), 'error')
+    if (activeMediaCount + rawFiles.length > mediaLibraryMaxFiles) {
+      showAlert(getMediaQuotaError(activeMediaCount, mediaLibraryMaxFiles), 'error')
       return
     }
 
@@ -604,7 +645,7 @@ export default function MediaLibraryModal({
 
     document.addEventListener('paste', handleDocumentPaste)
     return () => document.removeEventListener('paste', handleDocumentPaste)
-  }, [activeMediaCount, groupMembershipLoading, isPicker, onlyImages, pickerLimit, selectedGroupId, settings.isConfigured, settingsLoading, uploading])
+  }, [activeMediaCount, groupMembershipLoading, isPicker, mediaLibraryMaxFiles, onlyImages, pickerLimit, selectedGroupId, settings.isConfigured, settingsLoading, uploading])
 
   const handleDelete = (file: MediaFile) => {
     showConfirm(
@@ -808,6 +849,42 @@ export default function MediaLibraryModal({
     return 'Chưa có media'
   }
 
+  const renderPagination = (
+    total: number,
+    page: number,
+    pageCount: number,
+    pageSize: number,
+    onPageChange: (page: number) => void
+  ) => {
+    if (total <= pageSize) return null
+    const from = (page - 1) * pageSize + 1
+    const to = Math.min(total, page * pageSize)
+    return (
+      <div className="media-library-pagination">
+        <span>{from}-{to}/{total}</span>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          title="Trang trước"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <span>Trang {page}/{pageCount}</span>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => onPageChange(Math.min(pageCount, page + 1))}
+          disabled={page >= pageCount}
+          title="Trang sau"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+    )
+  }
+
   const renderGroupManagePanel = () => {
     if (!selectedGroupId) return null
     const loading = filesLoading || groupMembershipLoading
@@ -828,7 +905,7 @@ export default function MediaLibraryModal({
               <div className="media-group-manage-empty">Tất cả media đã nằm trong thư mục.</div>
             ) : visibleAvailableGroupManageFiles.length === 0 ? (
               <div className="media-group-manage-empty">Không có media phù hợp.</div>
-            ) : visibleAvailableGroupManageFiles.map(file => (
+            ) : pagedAvailableGroupManageFiles.map(file => (
               <div key={file.id} className="media-group-manage-item">
                 <MediaPreviewHover
                   name={file.originalName}
@@ -853,6 +930,13 @@ export default function MediaLibraryModal({
               </div>
             ))}
           </div>
+          {renderPagination(
+            visibleAvailableGroupManageFiles.length,
+            resolvedAvailableManagePage,
+            availableManagePageCount,
+            MEDIA_GROUP_MANAGE_PAGE_SIZE,
+            setAvailableManagePage
+          )}
         </div>
 
         <div className="media-group-manage-column">
@@ -870,7 +954,7 @@ export default function MediaLibraryModal({
               <div className="media-group-manage-empty">Thư mục này chưa có media.</div>
             ) : visibleGroupManageFiles.length === 0 ? (
               <div className="media-group-manage-empty">Không có media phù hợp.</div>
-            ) : visibleGroupManageFiles.map(file => (
+            ) : pagedGroupManageFiles.map(file => (
               <div key={file.id} className="media-group-manage-item">
                 <MediaPreviewHover
                   name={file.originalName}
@@ -895,6 +979,13 @@ export default function MediaLibraryModal({
               </div>
             ))}
           </div>
+          {renderPagination(
+            visibleGroupManageFiles.length,
+            resolvedGroupManagePage,
+            groupManagePageCount,
+            MEDIA_GROUP_MANAGE_PAGE_SIZE,
+            setGroupManagePage
+          )}
         </div>
       </div>
     )
@@ -941,9 +1032,9 @@ export default function MediaLibraryModal({
                       <span>Dán ảnh</span>
                       <kbd>{window.electronAPI.platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V'}</kbd>
                     </div>
-                    <div className="media-library-quota" title={`Đã dùng ${activeMediaCount}/${MEDIA_LIBRARY_MAX_FILES_PER_STAFF} media`}>
+                    <div className="media-library-quota" title={`Đã dùng ${activeMediaCount}/${mediaLibraryMaxFiles} media`}>
                       <span>Đã dùng</span>
-                      <strong>{activeMediaCount}/{MEDIA_LIBRARY_MAX_FILES_PER_STAFF}</strong>
+                      <strong>{activeMediaCount}/{mediaLibraryMaxFiles}</strong>
                     </div>
                     <div className="media-library-active-group" title={selectedGroup?.name || 'Tất cả media'}>
                       <Folder size={14} />
@@ -973,6 +1064,7 @@ export default function MediaLibraryModal({
                 </div>
 
                 {selectedGroupId && groupManageMode ? renderGroupManagePanel() : (
+                <>
                 <div className="stepper-grid-container media-library-grid">
                   <table className="campaign-grid">
                     <thead>
@@ -993,7 +1085,7 @@ export default function MediaLibraryModal({
                         <tr><td colSpan={tableColSpan} className="text-center text-muted">Đang tải...</td></tr>
                       ) : filteredFiles.length === 0 ? (
                         <tr><td colSpan={tableColSpan} className="text-center text-muted">{getEmptyMediaText()}</td></tr>
-                      ) : filteredFiles.map((file, index) => {
+                      ) : pagedFiles.map((file, index) => {
                         const snapshot = fileToSnapshot(file)
                         const key = getSnapshotKey(snapshot)
                         const selectable = !isPicker || !onlyImages || isImageMime(file.mimeType)
@@ -1015,7 +1107,7 @@ export default function MediaLibraryModal({
                                 />
                               </td>
                             )}
-                            <td className="text-center" style={{ width: 56 }}>{index + 1}</td>
+                            <td className="text-center" style={{ width: 56 }}>{(resolvedMediaPage - 1) * MEDIA_TABLE_PAGE_SIZE + index + 1}</td>
                             <td className="text-center">
                               <span className="media-library-row-tools">
                                 <MediaPreviewHover
@@ -1065,6 +1157,14 @@ export default function MediaLibraryModal({
                     </tbody>
                   </table>
                 </div>
+                {renderPagination(
+                  filteredFiles.length,
+                  resolvedMediaPage,
+                  mediaPageCount,
+                  MEDIA_TABLE_PAGE_SIZE,
+                  setMediaPage
+                )}
+                </>
                 )}
               </div>
             </div>

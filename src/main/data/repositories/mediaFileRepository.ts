@@ -5,7 +5,8 @@ import {
   CampaignMediaSnapshot,
   MEDIA_FILE_MAX_SIZE_BYTES,
   MEDIA_IMAGE_MAX_SIZE_BYTES,
-  MEDIA_LIBRARY_MAX_FILES_PER_STAFF,
+  MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF,
+  MEDIA_LIBRARY_MAX_FILES_SETTING_KEY,
   MediaClipboardImageInput,
   MediaFile,
   MediaGroup,
@@ -16,6 +17,7 @@ import {
 import { mapMediaFileFromDB, mapMediaGroupFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
+import { getSettingValue as getSystemSettingValue, listActiveSystemSettingsByKeys } from './systemSettingsRepository'
 import {
   buildMediaObjectKey,
   detectMediaMimeType,
@@ -27,6 +29,8 @@ import {
 
 const client = () => getSupabaseClient()
 const SECRET_MASK = '********'
+const MEDIA_QUERY_PAGE_SIZE = 1_000
+const MEDIA_ID_QUERY_CHUNK_SIZE = 500
 
 const MEDIA_SETTING_KEYS = {
   provider: 'media.storage.provider',
@@ -76,13 +80,17 @@ function normalizeIds(values: unknown): number[] {
   return ids
 }
 
-function buildMediaGroupItemRows(groupId: number, mediaFileIds: number[]): Array<Record<string, unknown>> {
-  const baseTime = Date.now()
+function buildMediaGroupItemRows(
+  groupId: number,
+  mediaFileIds: number[],
+  sortOrderStart = 0,
+  baseTime = Date.now()
+): Array<Record<string, unknown>> {
   return mediaFileIds.map((mediaFileId, index) => ({
     group_id: groupId,
     media_file_id: mediaFileId,
-    sort_order: index + 1,
-    created_at: new Date(baseTime + index).toISOString()
+    sort_order: sortOrderStart + index + 1,
+    created_at: new Date(baseTime + sortOrderStart + index).toISOString()
   }))
 }
 
@@ -98,8 +106,15 @@ function formatMediaGroupError(error: { message?: string; code?: string } | null
   return new Error(message ? `${fallback}: ${message}` : fallback)
 }
 
-function getMediaQuotaError(activeCount: number): string {
-  return `Thư viện media đã có ${activeCount}/${MEDIA_LIBRARY_MAX_FILES_PER_STAFF} file. Vui lòng xoá bớt media trước khi upload thêm.`
+function getMediaQuotaError(activeCount: number, maxFilesPerStaff: number): string {
+  return `Thư viện media đã có ${activeCount}/${maxFilesPerStaff} file. Vui lòng xoá bớt media trước khi upload thêm.`
+}
+
+function normalizeMediaLibraryMaxFiles(value: unknown): number {
+  const parsed = Number(normalizeText(value))
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? parsed
+    : MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF
 }
 
 function isMediaImageMime(mimeType: string): boolean {
@@ -292,24 +307,33 @@ async function readSettingsMap(): Promise<Map<string, string>> {
   return new Map((data || []).map(row => [String(row.key), String(row.value || '')]))
 }
 
-function getSettingValue(settings: Map<string, string>, name: MediaSettingName): string {
+function getStorageSettingValue(settings: Map<string, string>, name: MediaSettingName): string {
   return normalizeText(settings.get(MEDIA_SETTING_KEYS[name]) ?? DEFAULT_SETTINGS[name])
 }
 
 export async function resolveMediaStorageSettings(): Promise<ResolvedMediaStorageSettings> {
   const settings = await readSettingsMap()
   return {
-    provider: getSettingValue(settings, 'provider') || 'r2',
-    endpointUrl: getSettingValue(settings, 'endpointUrl'),
-    accessKeyId: getSettingValue(settings, 'accessKeyId'),
-    secretAccessKey: getSettingValue(settings, 'secretAccessKey'),
-    bucket: getSettingValue(settings, 'bucket'),
-    publicBaseUrl: getSettingValue(settings, 'publicBaseUrl'),
-    keyPrefix: getSettingValue(settings, 'keyPrefix')
+    provider: getStorageSettingValue(settings, 'provider') || 'r2',
+    endpointUrl: getStorageSettingValue(settings, 'endpointUrl'),
+    accessKeyId: getStorageSettingValue(settings, 'accessKeyId'),
+    secretAccessKey: getStorageSettingValue(settings, 'secretAccessKey'),
+    bucket: getStorageSettingValue(settings, 'bucket'),
+    publicBaseUrl: getStorageSettingValue(settings, 'publicBaseUrl'),
+    keyPrefix: getStorageSettingValue(settings, 'keyPrefix')
   }
 }
 
-function toPublicSettings(settings: ResolvedMediaStorageSettings, includeConfig = true): MediaStorageSettings {
+export async function resolveMediaLibraryMaxFiles(): Promise<number> {
+  const settings = await listActiveSystemSettingsByKeys([MEDIA_LIBRARY_MAX_FILES_SETTING_KEY])
+  return normalizeMediaLibraryMaxFiles(getSystemSettingValue(settings, MEDIA_LIBRARY_MAX_FILES_SETTING_KEY))
+}
+
+function toPublicSettings(
+  settings: ResolvedMediaStorageSettings,
+  includeConfig = true,
+  maxFilesPerStaff = MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF
+): MediaStorageSettings {
   const isConfigured = Boolean(
     settings.provider &&
     settings.endpointUrl &&
@@ -327,6 +351,7 @@ function toPublicSettings(settings: ResolvedMediaStorageSettings, includeConfig 
       bucket: '',
       publicBaseUrl: '',
       keyPrefix: '',
+      maxFilesPerStaff,
       isConfigured,
       secretAccessKeyMasked: false
     }
@@ -340,6 +365,7 @@ function toPublicSettings(settings: ResolvedMediaStorageSettings, includeConfig 
     bucket: settings.bucket,
     publicBaseUrl: settings.publicBaseUrl,
     keyPrefix: settings.keyPrefix,
+    maxFilesPerStaff,
     isConfigured,
     secretAccessKeyMasked: Boolean(settings.secretAccessKey)
   }
@@ -362,7 +388,11 @@ async function upsertSetting(key: string, value: string, description: string, is
 
 export async function getMediaStorageSettings(): Promise<MediaStorageSettings> {
   const user = requireCurrentUser()
-  return toPublicSettings(await resolveMediaStorageSettings(), user.isAdminAkabiz === true)
+  const [settings, maxFilesPerStaff] = await Promise.all([
+    resolveMediaStorageSettings(),
+    resolveMediaLibraryMaxFiles()
+  ])
+  return toPublicSettings(settings, user.isAdminAkabiz === true, maxFilesPerStaff)
 }
 
 function buildStorageSettingsInput(
@@ -397,7 +427,7 @@ export async function saveMediaStorageSettings(settings: Partial<MediaStorageSet
   await upsertSetting(MEDIA_SETTING_KEYS.publicBaseUrl, next.publicBaseUrl, 'Public base URL used to build uploaded media links.')
   await upsertSetting(MEDIA_SETTING_KEYS.keyPrefix, next.keyPrefix || '', 'Optional key prefix for uploaded media objects.')
 
-  return toPublicSettings(next)
+  return toPublicSettings(next, true, await resolveMediaLibraryMaxFiles())
 }
 
 export async function testMediaStorageSettings(settings: Partial<MediaStorageSettings> = {}): Promise<{ ok: boolean; cloudUrl?: string }> {
@@ -408,30 +438,45 @@ export async function testMediaStorageSettings(settings: Partial<MediaStorageSet
 
 export async function listMediaFiles(): Promise<MediaFile[]> {
   const user = requireCurrentUser()
-  const { data, error } = await client()
-    .from('auto_media_files')
-    .select('*')
-    .eq('staff_id', user.staffId)
-    .eq('is_delete', false)
-    .order('created_at', { ascending: false })
+  const rows: Record<string, unknown>[] = []
+  for (let from = 0; ; from += MEDIA_QUERY_PAGE_SIZE) {
+    const { data, error } = await client()
+      .from('auto_media_files')
+      .select('*')
+      .eq('staff_id', user.staffId)
+      .eq('is_delete', false)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + MEDIA_QUERY_PAGE_SIZE - 1)
 
-  if (error) throw new Error(`Không thể tải thư viện media: ${error.message}`)
-  return (data || []).map(row => mapMediaFileFromDB(row))
+    if (error) throw new Error(`Không thể tải thư viện media: ${error.message}`)
+    const page = (data || []) as Record<string, unknown>[]
+    rows.push(...page)
+    if (page.length < MEDIA_QUERY_PAGE_SIZE) break
+  }
+  return rows.map(row => mapMediaFileFromDB(row))
 }
 
 async function listActiveMediaFileIds(staffId: number, mediaFileIds: number[]): Promise<number[]> {
   const ids = normalizeIds(mediaFileIds)
   if (ids.length === 0) return []
 
-  const { data, error } = await client()
-    .from('auto_media_files')
-    .select('id')
-    .eq('staff_id', staffId)
-    .eq('is_delete', false)
-    .in('id', ids)
+  const active = new Set<number>()
+  for (let from = 0; from < ids.length; from += MEDIA_ID_QUERY_CHUNK_SIZE) {
+    const chunk = ids.slice(from, from + MEDIA_ID_QUERY_CHUNK_SIZE)
+    const { data, error } = await client()
+      .from('auto_media_files')
+      .select('id')
+      .eq('staff_id', staffId)
+      .eq('is_delete', false)
+      .in('id', chunk)
 
-  if (error) throw new Error(`Không thể kiểm tra media trong thư mục: ${error.message}`)
-  const active = new Set((data || []).map(row => Number(row.id)).filter(id => Number.isFinite(id) && id > 0))
+    if (error) throw new Error(`Không thể kiểm tra media trong thư mục: ${error.message}`)
+    for (const row of data || []) {
+      const id = Number(row.id)
+      if (Number.isFinite(id) && id > 0) active.add(id)
+    }
+  }
   return ids.filter(id => active.has(id))
 }
 
@@ -457,15 +502,24 @@ async function countMediaFilesByGroup(groupIds: number[], staffId: number): Prom
   for (const id of ids) counts.set(id, 0)
   if (ids.length === 0) return counts
 
-  const { data: memberships, error } = await client()
-    .from('auto_media_group_items')
-    .select('group_id, media_file_id')
-    .in('group_id', ids)
+  const memberships: Record<string, unknown>[] = []
+  for (let from = 0; ; from += MEDIA_QUERY_PAGE_SIZE) {
+    const { data, error } = await client()
+      .from('auto_media_group_items')
+      .select('group_id, media_file_id')
+      .in('group_id', ids)
+      .order('group_id', { ascending: true })
+      .order('media_file_id', { ascending: true })
+      .range(from, from + MEDIA_QUERY_PAGE_SIZE - 1)
 
-  if (error) throw formatMediaGroupError(error, 'Không thể tải số lượng media trong thư mục')
-  const mediaIds = normalizeIds((memberships || []).map(row => row.media_file_id))
+    if (error) throw formatMediaGroupError(error, 'Không thể tải số lượng media trong thư mục')
+    const page = (data || []) as Record<string, unknown>[]
+    memberships.push(...page)
+    if (page.length < MEDIA_QUERY_PAGE_SIZE) break
+  }
+  const mediaIds = normalizeIds(memberships.map(row => row.media_file_id))
   const activeMediaIds = new Set(await listActiveMediaFileIds(staffId, mediaIds))
-  for (const row of memberships || []) {
+  for (const row of memberships) {
     const groupId = normalizeId(row.group_id)
     const mediaFileId = normalizeId(row.media_file_id)
     if (!groupId || !activeMediaIds.has(mediaFileId)) continue
@@ -568,16 +622,22 @@ export async function listMediaGroupFileIds(groupId: number): Promise<number[]> 
   if (!id) throw new Error('Thư mục media không hợp lệ.')
   await assertMediaGroupForStaff(id, user.staffId)
 
-  const { data, error } = await client()
-    .from('auto_media_group_items')
-    .select('media_file_id, created_at')
-    .eq('group_id', id)
-    .order('created_at', { ascending: true })
-    .order('media_file_id', { ascending: true })
+  const rows: Record<string, unknown>[] = []
+  for (let from = 0; ; from += MEDIA_QUERY_PAGE_SIZE) {
+    const { data, error } = await client()
+      .from('auto_media_group_items')
+      .select('media_file_id, created_at')
+      .eq('group_id', id)
+      .order('created_at', { ascending: true })
+      .order('media_file_id', { ascending: true })
+      .range(from, from + MEDIA_QUERY_PAGE_SIZE - 1)
 
-  if (error) throw formatMediaGroupError(error, 'Không thể tải media trong thư mục')
-  const ids = normalizeIds((data || []).map(row => row.media_file_id))
-  return listActiveMediaFileIds(user.staffId, ids)
+    if (error) throw formatMediaGroupError(error, 'Không thể tải media trong thư mục')
+    const page = (data || []) as Record<string, unknown>[]
+    rows.push(...page)
+    if (page.length < MEDIA_QUERY_PAGE_SIZE) break
+  }
+  return listActiveMediaFileIds(user.staffId, normalizeIds(rows.map(row => row.media_file_id)))
 }
 
 export async function addMediaGroupFiles(groupId: number, mediaFileIds: number[]): Promise<number[]> {
@@ -587,10 +647,12 @@ export async function addMediaGroupFiles(groupId: number, mediaFileIds: number[]
   await assertMediaGroupForStaff(id, user.staffId)
 
   const activeIds = await listActiveMediaFileIds(user.staffId, mediaFileIds)
-  if (activeIds.length > 0) {
+  const membershipBaseTime = Date.now()
+  for (let from = 0; from < activeIds.length; from += MEDIA_ID_QUERY_CHUNK_SIZE) {
+    const chunk = activeIds.slice(from, from + MEDIA_ID_QUERY_CHUNK_SIZE)
     const { error: insertError } = await client()
       .from('auto_media_group_items')
-      .upsert(buildMediaGroupItemRows(id, activeIds), {
+      .upsert(buildMediaGroupItemRows(id, chunk, from, membershipBaseTime), {
         onConflict: 'group_id,media_file_id',
         ignoreDuplicates: true
       })
@@ -615,12 +677,13 @@ export async function removeMediaGroupFiles(groupId: number, mediaFileIds: numbe
   await assertMediaGroupForStaff(id, user.staffId)
 
   const ids = normalizeIds(mediaFileIds)
-  if (ids.length > 0) {
+  for (let from = 0; from < ids.length; from += MEDIA_ID_QUERY_CHUNK_SIZE) {
+    const chunk = ids.slice(from, from + MEDIA_ID_QUERY_CHUNK_SIZE)
     const { error: deleteError } = await client()
       .from('auto_media_group_items')
       .delete()
       .eq('group_id', id)
-      .in('media_file_id', ids)
+      .in('media_file_id', chunk)
 
     if (deleteError) throw formatMediaGroupError(deleteError, 'Không thể gỡ media khỏi thư mục')
   }
@@ -648,7 +711,10 @@ async function countActiveMediaFiles(staffId: number): Promise<number> {
 
 export async function uploadMediaFiles(localPaths: string[]): Promise<MediaUploadResult> {
   const user = requireCurrentUser()
-  const settings = await resolveMediaStorageSettings()
+  const [settings, maxFilesPerStaff] = await Promise.all([
+    resolveMediaStorageSettings(),
+    resolveMediaLibraryMaxFiles()
+  ])
   const paths = Array.from(new Set(
     (Array.isArray(localPaths) ? localPaths : [])
       .map(path => normalizeText(path))
@@ -657,8 +723,8 @@ export async function uploadMediaFiles(localPaths: string[]): Promise<MediaUploa
   if (paths.length === 0) return { files: [], failures: [] }
 
   const activeCount = await countActiveMediaFiles(user.staffId)
-  if (activeCount + paths.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
-    const error = getMediaQuotaError(activeCount)
+  if (activeCount + paths.length > maxFilesPerStaff) {
+    const error = getMediaQuotaError(activeCount, maxFilesPerStaff)
     return {
       files: [],
       failures: paths.map(localPath => ({ localPath, error }))
@@ -692,13 +758,16 @@ export async function uploadMediaFiles(localPaths: string[]): Promise<MediaUploa
 
 export async function uploadMediaClipboardImages(inputs: MediaClipboardImageInput[]): Promise<MediaUploadResult> {
   const user = requireCurrentUser()
-  const settings = await resolveMediaStorageSettings()
+  const [settings, maxFilesPerStaff] = await Promise.all([
+    resolveMediaStorageSettings(),
+    resolveMediaLibraryMaxFiles()
+  ])
   const images = Array.isArray(inputs) ? inputs : []
   if (images.length === 0) return { files: [], failures: [] }
 
   const activeCount = await countActiveMediaFiles(user.staffId)
-  if (activeCount + images.length > MEDIA_LIBRARY_MAX_FILES_PER_STAFF) {
-    const error = getMediaQuotaError(activeCount)
+  if (activeCount + images.length > maxFilesPerStaff) {
+    const error = getMediaQuotaError(activeCount, maxFilesPerStaff)
     return {
       files: [],
       failures: images.map((image, index) => ({
