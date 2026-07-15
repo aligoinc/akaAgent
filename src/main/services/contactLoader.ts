@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { IPC_EVENTS, ContactType, AutoAccount, AutoAccountContact, ContactLoadProgress, ContactLoadResult, ZaloGroupMemberScanRequest, ZaloLabelOption } from '../../shared/types'
+import { IPC_EVENTS, ContactType, AutoAccount, AutoAccountContact, ContactDatasetFinalizeInput, ContactLoadProgress, ContactLoadResult, ZaloGroupMemberScanRequest, ZaloLabelOption } from '../../shared/types'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 import { PageController } from '../v2/runtime/pageController'
@@ -31,6 +31,17 @@ interface ContactLoadOptions {
   preserveExistingFriendStatus?: boolean
   resultMeta?: Partial<ContactLoadResult>
   runtimePlatform?: 'zalo' | 'other'
+  dataset?: ContactDatasetScanContext
+}
+
+interface ContactDatasetScanContext {
+  scanType: ContactDatasetFinalizeInput['scanType']
+  actionLabel: string
+  platformLabel: string
+  sourceKey: string
+  targetNameOrUid?: string
+  link?: string | null
+  extraData?: Record<string, unknown>
 }
 
 export interface ContactLoaderOptions {
@@ -196,6 +207,19 @@ export class ContactLoader {
       resultMeta: {
         sourcePostUrl: normalizedPostUrl,
         maxCommenters: commenterLimit
+      },
+      dataset: {
+        scanType: 'facebook_post_commenters',
+        actionLabel: 'Lấy người comment bài post',
+        platformLabel: 'Facebook',
+        sourceKey: normalizedPostUrl,
+        targetNameOrUid: 'Bài post',
+        link: normalizedPostUrl,
+        extraData: {
+          source: 'facebook_post_commenters',
+          sourcePostUrl: normalizedPostUrl,
+          maxCommenters: commenterLimit
+        }
       }
     })
   }
@@ -228,6 +252,19 @@ export class ContactLoader {
       resultMeta: {
         sourcePostUrl: normalizedPostUrl,
         maxLikes: likeLimit
+      },
+      dataset: {
+        scanType: 'facebook_post_likes',
+        actionLabel: 'Lấy người like bài post',
+        platformLabel: 'Facebook',
+        sourceKey: normalizedPostUrl,
+        targetNameOrUid: 'Bài post',
+        link: normalizedPostUrl,
+        extraData: {
+          source: 'facebook_post_likes',
+          sourcePostUrl: normalizedPostUrl,
+          maxLikes: likeLimit
+        }
       }
     })
   }
@@ -262,6 +299,20 @@ export class ContactLoader {
         sourceProfileUrl: profileTarget.sourceProfileUrl,
         sourceProfileUid: profileTarget.sourceProfileUid,
         maxFriends: friendLimit
+      },
+      dataset: {
+        scanType: 'facebook_profile_friends',
+        actionLabel: 'Lấy danh sách bạn bè của profile',
+        platformLabel: 'Facebook',
+        sourceKey: profileTarget.sourceProfileUid || profileTarget.sourceProfileUrl,
+        targetNameOrUid: profileTarget.sourceProfileUid,
+        link: profileTarget.sourceProfileUrl,
+        extraData: {
+          source: 'facebook_profile_friends',
+          sourceProfileUrl: profileTarget.sourceProfileUrl,
+          sourceProfileUid: profileTarget.sourceProfileUid,
+          maxFriends: friendLimit
+        }
       }
     })
   }
@@ -299,6 +350,20 @@ export class ContactLoader {
         sourceGroupUrl: groupTarget.sourceGroupUrl,
         sourceGroupUid: groupTarget.sourceGroupUid,
         maxGroupMembers: memberLimit
+      },
+      dataset: {
+        scanType: 'facebook_group_members',
+        actionLabel: 'Lấy thành viên group',
+        platformLabel: 'Facebook',
+        sourceKey: groupTarget.sourceGroupUid || groupTarget.sourceGroupUrl,
+        targetNameOrUid: groupTarget.sourceGroupUid,
+        link: groupTarget.sourceGroupUrl,
+        extraData: {
+          source: 'facebook_group_members',
+          sourceGroupUrl: groupTarget.sourceGroupUrl,
+          sourceGroupUid: groupTarget.sourceGroupUid,
+          maxGroupMembers: memberLimit
+        }
       }
     })
   }
@@ -1032,6 +1097,7 @@ export class ContactLoader {
     let previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
     const variables = loadState.variables
     let claimedAccount = false
+    let datasetContext: ContactDatasetScanContext | null = null
 
     try {
       previousStatus = await this.claimZaloAccountForScan(accountId)
@@ -1061,6 +1127,27 @@ export class ContactLoader {
 
       const resultGroupId = this.firstString(result.group.groupId, normalizedGroupId)
       if (!resultGroupId) throw new Error('Không lấy được Zalo group id.')
+      const resolvedGroupName = this.firstString(result.group.name, request?.groupName)
+      const resolvedGroupLink = mode === 'group_link'
+        ? normalizedLink
+        : this.stringValue(result.group.link)
+      datasetContext = {
+        scanType: 'zalo_group_members',
+        actionLabel: 'Lấy thành viên group',
+        platformLabel: 'Zalo',
+        sourceKey: resultGroupId,
+        targetNameOrUid: resolvedGroupName || resultGroupId,
+        link: resolvedGroupLink,
+        extraData: {
+          source: 'zalo_group_members',
+          mode,
+          targetName: resolvedGroupName,
+          targetUid: resultGroupId,
+          sourceLink: resolvedGroupLink,
+          joinOutcome: result.joinOutcome,
+          usedProxy: result.usedProxy === true
+        }
+      }
 
       const members: ZaloGroupMemberContactInput[] = result.members.map(member => ({
         zaloGroupId: resultGroupId,
@@ -1097,6 +1184,19 @@ export class ContactLoader {
 
       const stoppedBeforeSave = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
       if (stoppedBeforeSave) {
+        let datasetId: number | undefined
+        try {
+          datasetId = await this.finalizeScanDataset({
+            accountId,
+            contactType,
+            context: datasetContext,
+            contactUids: [],
+            stopped: true,
+            runKey: loadState.runKey
+          })
+        } catch (datasetError) {
+          console.warn('[ContactLoader] Failed to finalize stopped Zalo dataset:', datasetError)
+        }
         this.sendProgress(`Đã dừng quét ${typeName}.`, {
           accountId,
           contactType,
@@ -1105,6 +1205,7 @@ export class ContactLoader {
         return this.completeLoad(accountId, contactType, {
           success: true,
           count: 0,
+          datasetId,
           stopped: true,
           zaloGroupId: resultGroupId,
           zaloGroupName: this.stringValue(result.group.name) || undefined,
@@ -1125,6 +1226,14 @@ export class ContactLoader {
       })
 
       const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+      const datasetId = await this.finalizeScanDataset({
+        accountId,
+        contactType,
+        context: datasetContext,
+        contactUids: members.map(member => member.zaloUid),
+        stopped,
+        runKey: loadState.runKey
+      })
       if (stopped) {
         this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu ${saved} data cho lần quét này.`, {
           accountId,
@@ -1134,6 +1243,7 @@ export class ContactLoader {
         return this.completeLoad(accountId, contactType, {
           success: true,
           count: saved,
+          datasetId,
           stopped: true,
           zaloGroupId: resultGroupId,
           zaloGroupName: this.stringValue(result.group.name) || undefined,
@@ -1149,6 +1259,7 @@ export class ContactLoader {
       return this.completeLoad(accountId, contactType, {
         success: true,
         count: saved,
+        datasetId,
         zaloGroupId: resultGroupId,
         zaloGroupName: this.stringValue(result.group.name) || undefined,
         usedProxy: result.usedProxy === true
@@ -1156,6 +1267,22 @@ export class ContactLoader {
     } catch (err: any) {
       const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
       const errMsg = err?.message || String(err)
+      let datasetId: number | undefined
+      if (datasetContext) {
+        try {
+          datasetId = await this.finalizeScanDataset({
+            accountId,
+            contactType,
+            context: datasetContext,
+            contactUids: [],
+            stopped,
+            runKey: loadState.runKey,
+            status: stopped ? 'partial' : 'failed'
+          })
+        } catch (datasetError) {
+          console.warn('[ContactLoader] Failed to record Zalo group member dataset result:', datasetError)
+        }
+      }
       if (stopped) {
         this.sendProgress(`Đã dừng quét ${typeName}.`, {
           accountId,
@@ -1165,6 +1292,7 @@ export class ContactLoader {
         return this.completeLoad(accountId, contactType, {
           success: true,
           count: 0,
+          datasetId,
           stopped: true
         }, loadState.runKey)
       }
@@ -1177,6 +1305,7 @@ export class ContactLoader {
       return this.completeLoad(accountId, contactType, {
         success: false,
         count: 0,
+        datasetId,
         error: errMsg
       }, loadState.runKey)
     } finally {
@@ -1308,7 +1437,27 @@ export class ContactLoader {
 
       const contacts = this.extractContacts(result, contactType)
       if (contacts.length === 0) {
-        if (stopped) {
+        const stoppedWithEmptyResult = stopped
+          || this.isLoadCancelled(accountId, variables)
+          || loadState.controller.signal.aborted
+        let datasetId: number | undefined
+        if (options.dataset) {
+          try {
+            datasetId = await this.finalizeScanDataset({
+              accountId,
+              contactType,
+              context: options.dataset,
+              contactUids: [],
+              stopped: stoppedWithEmptyResult,
+              runKey: loadState.runKey
+            })
+          } catch (datasetError) {
+            if (!stoppedWithEmptyResult) throw datasetError
+            console.warn('[ContactLoader] Failed to finalize stopped empty contact dataset:', datasetError)
+          }
+        }
+
+        if (stoppedWithEmptyResult) {
           if (options.markMissingDeleted !== false) {
             await this.supabase.deleteContacts(accountId, contactType)
           }
@@ -1321,7 +1470,22 @@ export class ContactLoader {
             ...resultMeta,
             success: true,
             count: 0,
+            datasetId,
             stopped: true
+          }, loadState.runKey)
+        }
+
+        if (datasetId) {
+          this.sendProgress(`✅ Đã cập nhật danh sách data: không có ${typeName} nào trong lần quét này.`, {
+            accountId,
+            contactType,
+            runKey: loadState.runKey
+          })
+          return this.completeLoad(accountId, contactType, {
+            ...resultMeta,
+            success: true,
+            count: 0,
+            datasetId
           }, loadState.runKey)
         }
 
@@ -1355,8 +1519,21 @@ export class ContactLoader {
       const saved = await this.supabase.upsertContacts(contactsToSave, {
         markMissingDeleted: options.markMissingDeleted
       })
+      const stoppedAfterSave = stopped
+        || this.isLoadCancelled(accountId, variables)
+        || loadState.controller.signal.aborted
+      const datasetId = options.dataset
+        ? await this.finalizeScanDataset({
+          accountId,
+          contactType,
+          context: options.dataset,
+          contactUids: contactsToSave.map(contact => contact.uid),
+          stopped: stoppedAfterSave,
+          runKey: loadState.runKey
+        })
+        : undefined
 
-      if (stopped) {
+      if (stoppedAfterSave) {
         this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu ${saved} data cho lần quét này.`, {
           accountId,
           contactType,
@@ -1366,6 +1543,7 @@ export class ContactLoader {
           ...resultMeta,
           success: true,
           count: saved,
+          datasetId,
           stopped: true
         }, loadState.runKey)
       }
@@ -1375,10 +1553,31 @@ export class ContactLoader {
         contactType,
         runKey: loadState.runKey
       })
-      return this.completeLoad(accountId, contactType, { ...resultMeta, success: true, count: saved }, loadState.runKey)
+      return this.completeLoad(accountId, contactType, {
+        ...resultMeta,
+        success: true,
+        count: saved,
+        datasetId
+      }, loadState.runKey)
     } catch (err: any) {
       const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
       const errMsg = err?.message || String(err)
+      let datasetId: number | undefined
+      if (options.dataset) {
+        try {
+          datasetId = await this.finalizeScanDataset({
+            accountId,
+            contactType,
+            context: options.dataset,
+            contactUids: [],
+            stopped,
+            runKey: loadState.runKey,
+            status: stopped ? 'partial' : 'failed'
+          })
+        } catch (datasetError) {
+          console.warn('[ContactLoader] Failed to record contact dataset scan result:', datasetError)
+        }
+      }
       if (stopped) {
         this.sendProgress(`Đã dừng quét ${typeName}.`, {
           accountId,
@@ -1389,6 +1588,7 @@ export class ContactLoader {
           ...resultMeta,
           success: true,
           count: 0,
+          datasetId,
           stopped: true
         }, loadState.runKey)
       }
@@ -1402,6 +1602,7 @@ export class ContactLoader {
         ...resultMeta,
         success: false,
         count: 0,
+        datasetId,
         error: errMsg
       }, loadState.runKey)
     } finally {
@@ -1762,6 +1963,56 @@ export class ContactLoader {
 
   private isLoadCancelled(accountId: number, variables?: Record<string, unknown>): boolean {
     return this.cancelledLoads.has(accountId) || variables?.contactScanCancelled === true
+  }
+
+  private async finalizeScanDataset(input: {
+    accountId: number
+    contactType: ContactType
+    context: ContactDatasetScanContext
+    contactUids: unknown[]
+    stopped: boolean
+    runKey: string
+    status?: ContactDatasetFinalizeInput['status']
+  }): Promise<number | undefined> {
+    const sourceKey = String(input.context.sourceKey || '').trim()
+    if (!sourceKey) throw new Error('Không xác định được nguồn của danh sách data vừa quét.')
+
+    const targetNameOrUid = String(input.context.targetNameOrUid || '').replace(/\s+/g, ' ').trim()
+    const link = String(input.context.link || '').trim()
+    const nameParts = [
+      input.context.actionLabel,
+      input.context.platformLabel,
+      targetNameOrUid
+    ].filter(Boolean)
+    if (link) nameParts.push(link)
+
+    const descriptionParts = [`${input.context.actionLabel} trên ${input.context.platformLabel}`]
+    if (targetNameOrUid) descriptionParts.push(targetNameOrUid)
+    if (link) descriptionParts.push(link)
+
+    const finalizeInput: ContactDatasetFinalizeInput = {
+      accountId: input.accountId,
+      scanType: input.context.scanType,
+      contactType: input.contactType,
+      sourceKey,
+      name: nameParts.join(' - '),
+      link: link || null,
+      description: descriptionParts.join(' - '),
+      status: input.status || (input.stopped ? 'partial' : 'completed'),
+      contactUids: Array.from(new Set(
+        input.contactUids
+          .map(uid => String(uid || '').trim())
+          .filter(Boolean)
+      )),
+      extraData: {
+        ...(input.context.extraData || {}),
+        runKey: input.runKey,
+        stopped: input.stopped
+      }
+    }
+
+    const dataset = await this.supabase.finalizeContactDataset(finalizeInput)
+    return dataset?.id
   }
 
   private sendProgress(message: string, meta: Omit<ContactLoadProgress, 'message'> = {}): void {
@@ -2170,6 +2421,9 @@ export class ContactLoader {
       case 'page': return 'page'
       case 'page_inbox_customer': return 'người từng nhắn tin với page'
       case 'zalo_tag': return 'tag Zalo'
+      case 'phone': return 'số điện thoại'
+      case 'email': return 'email'
+      case 'campaign_input': return 'dữ liệu chiến dịch'
     }
   }
 

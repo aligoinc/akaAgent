@@ -1,4 +1,4 @@
-import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
+import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   const flatformType = row.flatform_type as string
@@ -264,6 +264,32 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: row.organization_id as number | undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string
+  }
+}
+
+export function mapAccountContactDatasetFromDB(row: Record<string, unknown>): AutoAccountContactDataset {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    link: (row.link as string | null | undefined) ?? null,
+    description: (row.description as string | null | undefined) ?? null,
+    source: row.source as AutoAccountContactDataset['source'],
+    accountId: row.account_id as number,
+    flatformType: row.flatform_type as string,
+    contactType: row.contact_type as ContactType,
+    scanType: row.scan_type as AutoAccountContactDataset['scanType'],
+    sourceKey: row.source_key as string,
+    lastScannedAt: (row.last_scanned_at as string | null | undefined) ?? null,
+    lastScanStatus: (row.last_scan_status as AutoAccountContactDataset['lastScanStatus']) ?? null,
+    extraData: (row.extra_data as Record<string, unknown> | null | undefined) || {},
+    contactCount: row.contact_count === null || row.contact_count === undefined
+      ? undefined
+      : Number(row.contact_count),
+    isDelete: row.is_delete as boolean,
+    staffId: row.staff_id as number | undefined,
+    organizationId: (row.organization_id as number | null | undefined) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }

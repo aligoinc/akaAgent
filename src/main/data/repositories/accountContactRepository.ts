@@ -1,6 +1,25 @@
-import { AccountContactListQuery, AutoAccountContact, AutoAccountContactGroup, ContactGroupMutationResult, ContactGroupPurpose, ContactListResult, ContactType, ZaloGroupMemberContactListQuery, ZaloLabelOption } from '../../../shared/types'
+import {
+  AccountContactListQuery,
+  AutoAccountContact,
+  AutoAccountContactDataset,
+  AutoAccountContactGroup,
+  CampaignImportDataRow,
+  ContactDatasetFinalizeInput,
+  ContactDatasetListQuery,
+  ContactGroupMutationResult,
+  ContactGroupPurpose,
+  ContactListResult,
+  ContactType,
+  SaveUploadDatasetRequest,
+  SaveUploadDatasetResult,
+  isValidEmailInputDataValue,
+  normalizeEmailInputDataValue,
+  ZaloGroupMemberContactListQuery,
+  ZaloLabelOption
+} from '../../../shared/types'
+import { normalizeVietnamMobilePhone } from '../../../shared/phone'
 import { getSupabaseClient } from '../supabaseClient'
-import { mapAccountContactFromDB, mapAccountContactGroupFromDB } from '../mappers'
+import { mapAccountContactDatasetFromDB, mapAccountContactFromDB, mapAccountContactGroupFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
 
 interface UpsertContactsOptions {
@@ -127,6 +146,9 @@ function parseFacebookUrl(value: string): URL | null {
 function extractUid(value: string | undefined, contactType: ContactType): string {
   const raw = String(value || '').trim()
   if (!raw) return ''
+  if (contactType === 'email') return raw.toLocaleLowerCase('en-US')
+  if (contactType === 'phone') return normalizeVietnamMobilePhone(raw) || raw
+  if (contactType === 'campaign_input') return raw
   const cleaned = raw.replace(/^\/+|\/+$/g, '')
   if (contactType === 'group' && /^groups\//i.test(cleaned)) {
     return cleaned.split('/').filter(Boolean)[1] || cleaned
@@ -172,11 +194,12 @@ function extractGroupUidForStatus(value: string | undefined | null): string {
 }
 
 function normalizeContactUrl(uid: string, url: string | undefined, contactType: ContactType, platform?: string): string | null {
+  if (contactType === 'phone' || contactType === 'email' || contactType === 'campaign_input') return null
   const rawUrl = String(url || '').trim()
   if (rawUrl) return rawUrl
   if (!uid) return null
-  if (platform === 'zalo') return null
-  if (contactType === 'zalo_tag') return null
+  if (platform && platform !== 'facebook') return null
+  if (contactType !== 'person' && contactType !== 'group' && contactType !== 'page') return null
   if (contactType === 'group') return `https://www.facebook.com/groups/${uid}`
   if (contactType === 'page') return `https://www.facebook.com/${uid}`
   if (/^\d+$/.test(uid)) return `https://www.facebook.com/profile.php?id=${uid}`
@@ -554,6 +577,330 @@ export async function listContacts(accountId: number, contactType?: ContactType)
     : contacts
 }
 
+const UPLOAD_PERSON_ACTIONS = new Set([
+  'facebook_message_friend',
+  'facebook_message_uid',
+  'facebook_group_invite',
+  'facebook_page_to_message',
+  'zalo_message_friend',
+  'zalo_message_group_member',
+  'zalo_message_group_realtime',
+  'zalo_message_remarketing_customer',
+  'zalo_cancel_sent_friend_request'
+])
+const UPLOAD_GROUP_ACTIONS = new Set([
+  'facebook_group_post',
+  'facebook_join_group',
+  'facebook_find_data_group',
+  'zalo_join_group_link',
+  'zalo_message_group'
+])
+const UPLOAD_PAGE_ACTIONS = new Set(['facebook_page_post'])
+const UPLOAD_PHONE_ACTIONS = new Set(['zalo_message_phone', 'zalo_add_group_member', 'sms_send'])
+
+interface NormalizedUploadContact {
+  name: string
+  uid: string
+  url: string | null
+  extraData: Record<string, unknown>
+}
+
+interface NormalizedUploadItem {
+  contact: NormalizedUploadContact
+  row: CampaignImportDataRow
+}
+
+function normalizeUploadContactType(actionId: string): ContactType {
+  if (UPLOAD_PERSON_ACTIONS.has(actionId)) return 'person'
+  if (UPLOAD_GROUP_ACTIONS.has(actionId)) return 'group'
+  if (UPLOAD_PAGE_ACTIONS.has(actionId)) return 'page'
+  if (UPLOAD_PHONE_ACTIONS.has(actionId)) return 'phone'
+  if (actionId === 'email_send') return 'email'
+  return 'campaign_input'
+}
+
+function uploadActionMatchesPlatform(actionId: string, platform: SaveUploadDatasetRequest['platform']): boolean {
+  if (actionId.startsWith('facebook_')) return platform === 'facebook'
+  if (actionId.startsWith('zalo_')) return platform === 'zalo'
+  if (actionId === 'email_send') return platform === 'email'
+  if (actionId === 'sms_send') return platform === 'sms'
+  return true
+}
+
+function normalizeDatasetName(value: unknown): string {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function deterministicUploadSourceKey(name: string): string {
+  return `upload:${name.normalize('NFKC').toLocaleLowerCase('vi-VN')}`
+}
+
+function optionalText(value: unknown): string | undefined {
+  const text = String(value ?? '').trim()
+  return text || undefined
+}
+
+function getUploadTargetValue(row: CampaignImportDataRow, actionId: string, contactType: ContactType): string {
+  if (contactType === 'email') {
+    const email = normalizeEmailInputDataValue(row.email).toLocaleLowerCase('en-US')
+    return isValidEmailInputDataValue(email) ? email : ''
+  }
+  if (contactType === 'phone') {
+    return normalizeVietnamMobilePhone(row.phone || row.uid)
+  }
+  if (contactType === 'campaign_input') {
+    return String(row.uid || row.phone || row.email || '').trim()
+  }
+  return extractUid(String(row.uid || '').trim(), contactType)
+}
+
+function normalizeUploadCampaignRow(
+  row: CampaignImportDataRow,
+  uid: string,
+  contactType: ContactType
+): CampaignImportDataRow {
+  const normalized: CampaignImportDataRow = {
+    name: optionalText(row.name),
+    phone: optionalText(row.phone),
+    phoneCarrier: row.phoneCarrier || null,
+    uid: optionalText(row.uid),
+    email: optionalText(row.email),
+    info1: optionalText(row.info1),
+    info2: optionalText(row.info2),
+    info3: optionalText(row.info3),
+    info4: optionalText(row.info4),
+    info5: optionalText(row.info5)
+  }
+  if (contactType === 'phone') normalized.phone = uid
+  else if (contactType === 'email') normalized.email = uid
+  else if (!normalized.uid) normalized.uid = uid
+  return normalized
+}
+
+function mergeUploadCampaignRows(
+  existing: CampaignImportDataRow,
+  incoming: CampaignImportDataRow,
+  uid: string
+): CampaignImportDataRow {
+  const existingName = optionalText(existing.name)
+  const incomingName = optionalText(incoming.name)
+  const merged: CampaignImportDataRow = { ...existing }
+
+  if ((!existingName || existingName === uid) && incomingName && incomingName !== uid) {
+    merged.name = incomingName
+  }
+
+  for (const field of ['phone', 'email', 'info1', 'info2', 'info3', 'info4', 'info5'] as const) {
+    const value = optionalText(incoming[field])
+    if (value) merged[field] = value
+  }
+  if (incoming.phoneCarrier) merged.phoneCarrier = incoming.phoneCarrier
+  if (!optionalText(merged.uid) && optionalText(incoming.uid)) merged.uid = incoming.uid
+
+  return merged
+}
+
+function normalizeUploadContacts(
+  rows: CampaignImportDataRow[],
+  actionId: string,
+  platform: SaveUploadDatasetRequest['platform'],
+  contactType: ContactType,
+  importSource: SaveUploadDatasetRequest['importSource']
+): NormalizedUploadItem[] {
+  const byUid = new Map<string, NormalizedUploadItem>()
+
+  for (const row of rows) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+    const uid = getUploadTargetValue(row, actionId, contactType)
+    if (!uid) continue
+
+    const name = normalizeDatasetName(row.name) || uid
+    const phone = normalizeVietnamMobilePhone(row.phone) || optionalText(row.phone)
+    const rawEmail = normalizeEmailInputDataValue(row.email).toLocaleLowerCase('en-US')
+    const email = isValidEmailInputDataValue(rawEmail) ? rawEmail : optionalText(row.email)
+    const rawUid = String(row.uid || '').trim()
+    const explicitFacebookUrl = platform === 'facebook' && /^https?:\/\//i.test(rawUid)
+      ? rawUid
+      : undefined
+    const url = normalizeContactUrl(uid, explicitFacebookUrl, contactType, platform)
+    const extraData = compactRecord({
+      platform,
+      uploadSource: 'campaign_data_upload',
+      actionId,
+      importSource,
+      phone,
+      phoneCarrier: row.phoneCarrier || undefined,
+      email,
+      info1: optionalText(row.info1),
+      info2: optionalText(row.info2),
+      info3: optionalText(row.info3),
+      info4: optionalText(row.info4),
+      info5: optionalText(row.info5),
+      rawPayload: compactRecord({
+        name: optionalText(row.name),
+        phone: optionalText(row.phone),
+        phoneCarrier: row.phoneCarrier || undefined,
+        uid: optionalText(row.uid),
+        email: optionalText(row.email),
+        info1: optionalText(row.info1),
+        info2: optionalText(row.info2),
+        info3: optionalText(row.info3),
+        info4: optionalText(row.info4),
+        info5: optionalText(row.info5)
+      })
+    })
+
+    const contact: NormalizedUploadContact = { name, uid, url, extraData }
+    const normalizedRow = normalizeUploadCampaignRow(row, uid, contactType)
+    const existing = byUid.get(uid)
+    byUid.set(uid, existing
+      ? {
+          contact: {
+            name: existing.contact.name === uid && name !== uid ? name : existing.contact.name,
+            uid,
+            url: existing.contact.url || url,
+            extraData: { ...existing.contact.extraData, ...extraData }
+          },
+          row: mergeUploadCampaignRows(existing.row, normalizedRow, uid)
+        }
+      : {
+          contact,
+          row: normalizedRow
+        })
+  }
+
+  return Array.from(byUid.values())
+}
+
+export async function listContactDatasets(
+  query: ContactDatasetListQuery
+): Promise<AutoAccountContactDataset[]> {
+  const u = requireCurrentUser()
+  const accountId = Number(query.accountId)
+  if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+    throw new Error('Tài khoản của danh sách data không hợp lệ.')
+  }
+
+  const { data, error } = await client().rpc('aka_agent_list_contact_datasets', {
+    p_staff_id: u.staffId,
+    p_organization_id: u.organizationId,
+    p_account_id: accountId,
+    p_scan_type: query.scanType || null,
+    p_contact_type: query.contactType || null,
+    p_source: query.source || null,
+    p_flatform_type: query.flatformType || null
+  })
+
+  if (error) throw new Error(`Failed to list contact datasets: ${error.message}`)
+  return (data || []).map((row: Record<string, unknown>) => mapAccountContactDatasetFromDB(row))
+}
+
+export async function finalizeContactDataset(
+  input: ContactDatasetFinalizeInput
+): Promise<AutoAccountContactDataset | null> {
+  const u = requireCurrentUser()
+  const accountId = Number(input.accountId)
+  const sourceKey = String(input.sourceKey || '').trim()
+  const name = normalizeDatasetName(input.name)
+  if (!Number.isSafeInteger(accountId) || accountId <= 0 || !sourceKey || !name) {
+    throw new Error('Thông tin danh sách data quét không hợp lệ.')
+  }
+
+  const contactUids = Array.from(new Set(
+    (Array.isArray(input.contactUids) ? input.contactUids : [])
+      .map(value => extractUid(String(value || ''), input.contactType))
+      .filter(Boolean)
+  ))
+  const { data, error } = await client().rpc('aka_agent_finalize_contact_dataset', {
+    p_staff_id: u.staffId,
+    p_organization_id: u.organizationId,
+    p_account_id: accountId,
+    p_scan_type: input.scanType,
+    p_contact_type: input.contactType,
+    p_source_key: sourceKey,
+    p_name: name,
+    p_link: optionalText(input.link) || null,
+    p_description: optionalText(input.description) || null,
+    p_status: input.status,
+    p_contact_uids: contactUids,
+    p_extra_data: toRecord(input.extraData)
+  })
+
+  if (error) throw new Error(`Failed to finalize contact dataset: ${error.message}`)
+  const row = data?.[0]
+  return row ? mapAccountContactDatasetFromDB(row as Record<string, unknown>) : null
+}
+
+export async function saveUploadDataset(
+  request: SaveUploadDatasetRequest
+): Promise<SaveUploadDatasetResult> {
+  const u = requireCurrentUser()
+  const accountIds = normalizeContactIdList(request.accountIds)
+  const name = normalizeDatasetName(request.name)
+  const actionId = String(request.actionId || '').trim().toLocaleLowerCase('en-US')
+  const platformIsValid = ['facebook', 'zalo', 'email', 'sms'].includes(request.platform)
+  const importSourceIsValid = ['textbox', 'image', 'sheet', 'excel'].includes(request.importSource)
+  if (
+    accountIds.length === 0 || !name || !actionId || !Array.isArray(request.rows)
+    || !platformIsValid || !importSourceIsValid
+    || !uploadActionMatchesPlatform(actionId, request.platform)
+  ) {
+    throw new Error('Tên nhóm dữ liệu, tài khoản hoặc dữ liệu tải lên không hợp lệ.')
+  }
+
+  const contactType = normalizeUploadContactType(actionId)
+  const normalizedItems = normalizeUploadContacts(
+    request.rows,
+    actionId,
+    request.platform,
+    contactType,
+    request.importSource
+  )
+  const contacts = normalizedItems.map(item => item.contact)
+  const normalizedRows = normalizedItems.map(item => item.row)
+  if (contacts.length === 0) {
+    throw new Error('Không có dữ liệu hợp lệ để lưu vào danh sách data.')
+  }
+
+  const actionName = normalizeDatasetName(request.actionName) || actionId
+  const sourceLink = request.importSource === 'sheet'
+    ? optionalText(request.sourceLink) || null
+    : null
+  const description = [actionName, request.platform, name, sourceLink]
+    .filter(Boolean)
+    .join(' - ')
+  const sourceKeyPrefix = deterministicUploadSourceKey(name)
+  const { data, error } = await client().rpc('aka_agent_save_upload_contact_datasets', {
+    p_staff_id: u.staffId,
+    p_organization_id: u.organizationId,
+    p_account_ids: accountIds,
+    p_name: name,
+    p_flatform_type: request.platform,
+    p_contact_type: contactType,
+    p_action_id: actionId,
+    p_import_source: request.importSource,
+    p_source_link: sourceLink,
+    p_description: description,
+    p_source_key_prefix: sourceKeyPrefix,
+    p_contacts: contacts,
+    p_extra_data: {
+      actionId,
+      actionName,
+      importSource: request.importSource,
+      rowCount: contacts.length,
+      accountCount: accountIds.length,
+      sourceLink
+    }
+  })
+
+  if (error) throw new Error(`Failed to save uploaded contact dataset: ${error.message}`)
+  const datasets = (data || []).map((row: Record<string, unknown>) => mapAccountContactDatasetFromDB(row))
+  if (datasets.length !== accountIds.length) {
+    throw new Error('Không thể lưu đầy đủ danh sách data cho các tài khoản đã chọn.')
+  }
+  return { success: true, count: contacts.length, datasets, rows: normalizedRows }
+}
+
 const CONTACT_LIST_DEFAULT_LIMIT = 100
 const CONTACT_LIST_MAX_LIMIT = 20000
 const CONTACT_LIST_FETCH_CHUNK = 1000
@@ -578,6 +925,15 @@ function normalizeOptionalContactListLimit(value: unknown): number | null {
   return clampContactListLimit(value)
 }
 
+function normalizeOptionalDatasetExportLimit(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Math.floor(Number(value))
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error('Giới hạn xuất danh sách data không hợp lệ.')
+  }
+  return parsed
+}
+
 function clampContactListOffset(value: unknown): number {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
@@ -588,7 +944,7 @@ function normalizeContactIdList(values: unknown): number[] {
   return Array.from(new Set(
     values
       .map(value => Number(value))
-      .filter(value => Number.isFinite(value) && value > 0)
+      .filter(value => Number.isSafeInteger(value) && value > 0)
   ))
 }
 
@@ -598,6 +954,58 @@ function normalizeContactGroupId(value: unknown): number | null {
     throw new Error('Nhóm data không hợp lệ.')
   }
   return value
+}
+
+function normalizeContactDatasetId(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error('Danh sách data không hợp lệ.')
+  }
+  return value
+}
+
+interface ContactDatasetMembership {
+  contactIds: Set<number>
+  orderByContactId: Map<number, number>
+}
+
+async function resolveContactDatasetContactIds(
+  accountId: number,
+  staffId: number,
+  organizationId: number,
+  contactType: ContactType | undefined,
+  value: unknown
+): Promise<ContactDatasetMembership | null> {
+  const datasetId = normalizeContactDatasetId(value)
+  if (datasetId === null) return null
+
+  const contactIds = new Set<number>()
+  const orderByContactId = new Map<number, number>()
+  let from = 0
+  while (true) {
+    const { data, error } = await client()
+      .rpc('aka_agent_list_contact_dataset_member_ids', {
+        p_staff_id: staffId,
+        p_organization_id: organizationId,
+        p_account_id: accountId,
+        p_dataset_id: datasetId,
+        p_contact_type: contactType || null
+      })
+      .range(from, from + CONTACT_LIST_FETCH_CHUNK - 1)
+
+    if (error) throw new Error(`Failed to list contact dataset members: ${error.message}`)
+    for (const [index, row] of (data || []).entries()) {
+      const contactId = Number((row as Record<string, unknown>).contact_id)
+      if (Number.isSafeInteger(contactId) && contactId > 0) {
+        contactIds.add(contactId)
+        orderByContactId.set(contactId, from + index)
+      }
+    }
+    if (!data || data.length < CONTACT_LIST_FETCH_CHUNK) break
+    from += CONTACT_LIST_FETCH_CHUNK
+  }
+
+  return { contactIds, orderByContactId }
 }
 
 async function resolveDataGroupContactIds(
@@ -890,6 +1298,7 @@ function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   const ids = normalizeContactIdList(query.ids)
   const excludeIds = normalizeContactIdList(query.excludeIds)
   const statusFilter = query.statusFilter || 'all'
+  if (query.datasetId !== null && query.datasetId !== undefined) return false
   if (query.contactGroupId !== null && query.contactGroupId !== undefined) return false
   if (ids.length > 0 || excludeIds.length > 0) return false
   if (normalizeSearchText(query.search)) return false
@@ -903,6 +1312,75 @@ function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   if (query.akaBizNoTag) return false
   if (statusFilter !== 'all' && !query.contactType) return false
   return true
+}
+
+function canUseDbPagedContactDatasetList(query: AccountContactListQuery): boolean {
+  if (query.datasetId === null || query.datasetId === undefined) return false
+  if (query.contactGroupId !== null && query.contactGroupId !== undefined) return false
+  if (normalizeContactIdList(query.ids).length > 0 || normalizeContactIdList(query.excludeIds).length > 0) return false
+  if (query.statusFilter && query.statusFilter !== 'all') return false
+  if (normalizeSearchText(query.search)) return false
+  if (String(query.source || '').trim()) return false
+  if (String(query.sourcePostUrl || '').trim()) return false
+  if (String(query.sourceProfileUrl || '').trim()) return false
+  if (String(query.sourceGroupUrl || '').trim()) return false
+  if (normalizeZaloTagIdList(query.zaloTagIds).length > 0 || query.zaloNoTag) return false
+  if (normalizeContactIdList(query.akaBizTagIds).length > 0 || query.akaBizNoTag) return false
+  return true
+}
+
+async function listContactDatasetPageFromDb(
+  accountId: number,
+  staffId: number,
+  organizationId: number,
+  query: AccountContactListQuery,
+  offset: number,
+  limit: number
+): Promise<ContactListResult> {
+  const datasetId = normalizeContactDatasetId(query.datasetId)
+  if (datasetId === null) throw new Error('Danh sách data không hợp lệ.')
+
+  const rpcArgs = {
+    p_staff_id: staffId,
+    p_organization_id: organizationId,
+    p_account_id: accountId,
+    p_dataset_id: datasetId,
+    p_contact_type: query.contactType || null
+  }
+  const memberRows: Array<Record<string, unknown>> = []
+  let total: number | null = null
+
+  for (let fetched = 0; fetched < limit; fetched += CONTACT_LIST_FETCH_CHUNK) {
+    const chunkLimit = Math.min(CONTACT_LIST_FETCH_CHUNK, limit - fetched)
+    const request = fetched === 0
+      ? client().rpc('aka_agent_list_contact_dataset_member_ids', rpcArgs, { count: 'exact' })
+      : client().rpc('aka_agent_list_contact_dataset_member_ids', rpcArgs)
+    const { data, error, count } = await request.range(
+      offset + fetched,
+      offset + fetched + chunkLimit - 1
+    )
+
+    if (error) throw new Error(`Failed to list contact dataset members: ${error.message}`)
+    const rows = (data || []) as Array<Record<string, unknown>>
+    if (fetched === 0 && count !== null) total = count
+    memberRows.push(...rows)
+    if (rows.length < chunkLimit || (total !== null && offset + fetched + rows.length >= total)) break
+  }
+
+  const contactIds: number[] = memberRows
+    .map(row => Number(row.contact_id))
+    .filter((contactId: number) => Number.isSafeInteger(contactId) && contactId > 0)
+  if (contactIds.length === 0) return { contacts: [], total: total ?? 0 }
+
+  const contacts = await fetchContactRowsForList(accountId, staffId, query.contactType, contactIds)
+  const contactById = new Map(contacts.map(contact => [contact.id, contact]))
+  const orderedContacts = contactIds
+    .map((contactId: number) => contactById.get(contactId))
+    .filter((contact: AutoAccountContact | undefined): contact is AutoAccountContact => !!contact)
+  return {
+    contacts: await enrichContactListResult(orderedContacts, accountId, staffId, query.contactType),
+    total: total ?? orderedContacts.length
+  }
 }
 
 function applyDbContactStatusFilter(dbQuery: any, contactType: ContactType | undefined, statusFilter: AccountContactListQuery['statusFilter']): any {
@@ -1003,19 +1481,34 @@ async function fetchContactRowsForList(
 async function filterContactsForList(
   accountId: number,
   staffId: number,
+  organizationId: number,
   query: AccountContactListQuery = {}
 ): Promise<AutoAccountContact[]> {
   const ids = normalizeContactIdList(query.ids)
+  const datasetMembership = await resolveContactDatasetContactIds(
+    accountId,
+    staffId,
+    organizationId,
+    query.contactType,
+    query.datasetId
+  )
+  const datasetContactIds = datasetMembership?.contactIds || null
   const groupContactIds = await resolveDataGroupContactIds(
     accountId,
     staffId,
     query.contactType,
     query.contactGroupId
   )
-  const effectiveIds = groupContactIds
-    ? (ids.length > 0 ? ids.filter(id => groupContactIds.has(id)) : Array.from(groupContactIds))
-    : ids
-  if (groupContactIds && effectiveIds.length === 0) return []
+  let effectiveIds = ids
+  let hasIdRestriction = ids.length > 0
+  for (const allowedIds of [datasetContactIds, groupContactIds]) {
+    if (!allowedIds) continue
+    effectiveIds = hasIdRestriction
+      ? effectiveIds.filter(id => allowedIds.has(id))
+      : Array.from(allowedIds)
+    hasIdRestriction = true
+  }
+  if (hasIdRestriction && effectiveIds.length === 0) return []
   const excludeIds = new Set(normalizeContactIdList(query.excludeIds))
   const search = normalizeSearchText(query.search)
   const source = String(query.source || '').trim()
@@ -1027,11 +1520,8 @@ async function filterContactsForList(
   const includeNoZaloTag = query.zaloNoTag === true
   const includeNoAkaBizTag = query.akaBizNoTag === true
   const contacts = await fetchContactRowsForList(accountId, staffId, query.contactType, effectiveIds)
-  if (groupContactIds) {
-    contacts.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'vi-VN'))
-  }
-
-  return contacts.filter(contact => {
+  const filtered = contacts.filter(contact => {
+    if (datasetContactIds && !datasetContactIds.has(contact.id)) return false
     if (groupContactIds && !groupContactIds.has(contact.id)) return false
     if (excludeIds.has(contact.id)) return false
     if (!contactMatchesStatusFilter(contact, query.statusFilter)) return false
@@ -1043,6 +1533,17 @@ async function filterContactsForList(
     if (!contactMatchesAkaBizTagFilter(contact, akaBizTagIds, includeNoAkaBizTag)) return false
     return true
   })
+  if (datasetMembership) {
+    filtered.sort((a, b) => (
+      (datasetMembership.orderByContactId.get(a.id) ?? Number.MAX_SAFE_INTEGER)
+      - (datasetMembership.orderByContactId.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+    ))
+  } else if (groupContactIds) {
+    filtered.sort((a, b) => (
+      String(a.name || '').localeCompare(String(b.name || ''), 'vi-VN') || a.id - b.id
+    ))
+  }
+  return filtered
 }
 
 async function enrichContactListResult(
@@ -1063,11 +1564,14 @@ export async function listContactsPage(
   const u = requireCurrentUser()
   const offset = clampContactListOffset(query.offset)
   const limit = clampContactListLimit(query.limit)
+  if (canUseDbPagedContactDatasetList(query)) {
+    return listContactDatasetPageFromDb(accountId, u.staffId, u.organizationId, query, offset, limit)
+  }
   if (canUseDbPagedContactList(query)) {
     return listContactsPageFromDb(accountId, u.staffId, query, offset, limit)
   }
 
-  const filtered = await filterContactsForList(accountId, u.staffId, query)
+  const filtered = await filterContactsForList(accountId, u.staffId, u.organizationId, query)
   const contacts = filtered.slice(offset, offset + limit)
   return {
     contacts: await enrichContactListResult(contacts, accountId, u.staffId, query.contactType),
@@ -1081,13 +1585,26 @@ export async function exportContactsPage(
 ): Promise<AutoAccountContact[]> {
   const u = requireCurrentUser()
   const offset = clampContactListOffset(query.offset)
-  const limit = normalizeOptionalContactListLimit(query.limit)
+  const limit = query.datasetId !== null && query.datasetId !== undefined
+    ? normalizeOptionalDatasetExportLimit(query.limit)
+    : normalizeOptionalContactListLimit(query.limit)
+  if (limit !== null && canUseDbPagedContactDatasetList(query)) {
+    const result = await listContactDatasetPageFromDb(
+      accountId,
+      u.staffId,
+      u.organizationId,
+      query,
+      offset,
+      limit
+    )
+    return result.contacts
+  }
   if (limit !== null && canUseDbPagedContactList(query)) {
     const result = await listContactsPageFromDb(accountId, u.staffId, query, offset, limit)
     return result.contacts
   }
 
-  const filtered = await filterContactsForList(accountId, u.staffId, query)
+  const filtered = await filterContactsForList(accountId, u.staffId, u.organizationId, query)
   const contacts = limit === null ? filtered : filtered.slice(offset, offset + limit)
   return enrichContactListResult(contacts, accountId, u.staffId, query.contactType)
 }

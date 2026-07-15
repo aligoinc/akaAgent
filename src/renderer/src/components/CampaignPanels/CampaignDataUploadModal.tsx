@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, X } from 'lucide-react'
 import jsQR from 'jsqr'
 import { read, utils } from 'xlsx'
@@ -29,6 +29,9 @@ interface FieldDef {
 interface CampaignDataUploadModalProps {
   platform: CampaignImportPlatform
   actionId: string
+  actionName?: string
+  accountIds: number[]
+  initialTab?: ImportTab
   onClose: () => void
   onInsert: (rows: Partial<CampaignInputData>[]) => void
 }
@@ -493,12 +496,16 @@ const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlat
 export default function CampaignDataUploadModal({
   platform,
   actionId,
+  actionName,
+  accountIds,
+  initialTab = 'textbox',
   onClose,
   onInsert
 }: CampaignDataUploadModalProps) {
   const showAlert = useUiStore(state => state.showAlert)
   const fields = useMemo(() => getFieldsForPlatform(platform, actionId), [platform, actionId])
-  const [activeTab, setActiveTab] = useState<ImportTab>('textbox')
+  const [activeTab, setActiveTab] = useState<ImportTab>(initialTab)
+  const [datasetName, setDatasetName] = useState('')
   const [textContent, setTextContent] = useState('')
   const [txtFileName, setTxtFileName] = useState('')
   const [imageDataUrl, setImageDataUrl] = useState('')
@@ -509,10 +516,18 @@ export default function CampaignDataUploadModal({
   const [columnMap, setColumnMap] = useState<ColumnMap>(() => createEmptyColumnMap())
   const [skipExcelHeader, setSkipExcelHeader] = useState(true)
   const [previewRows, setPreviewRows] = useState<CampaignImportDataRow[]>([])
+  const [formattedImportSource, setFormattedImportSource] = useState<ImportTab | null>(null)
+  const [formattedSourceLink, setFormattedSourceLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const sourceRevisionRef = useRef(0)
+  const asyncOperationRef = useRef(0)
 
   useEffect(() => {
-    setActiveTab('textbox')
+    sourceRevisionRef.current += 1
+    asyncOperationRef.current += 1
+    setActiveTab(initialTab)
+    setDatasetName('')
     setTextContent('')
     setTxtFileName('')
     setImageDataUrl('')
@@ -523,7 +538,11 @@ export default function CampaignDataUploadModal({
     setColumnMap(createEmptyColumnMap())
     setSkipExcelHeader(true)
     setPreviewRows([])
-  }, [platform, actionId])
+    setFormattedImportSource(null)
+    setFormattedSourceLink(null)
+    setLoading(false)
+    setSaving(false)
+  }, [platform, actionId, initialTab])
 
   const excelHeaders = useMemo(() => {
     const maxCols = excelRows.reduce((max, row) => Math.max(max, row.length), 0)
@@ -541,24 +560,62 @@ export default function CampaignDataUploadModal({
     ]
   }, [excelHeaders, excelRows, skipExcelHeader])
 
+  const invalidateFormattedPreview = (): void => {
+    sourceRevisionRef.current += 1
+    setPreviewRows([])
+    setFormattedImportSource(null)
+    setFormattedSourceLink(null)
+  }
+
   const readTextFile = (file?: File | null): void => {
     if (!file) return
+    invalidateFormattedPreview()
+    const sourceRevision = sourceRevisionRef.current
+    const operation = ++asyncOperationRef.current
+    setLoading(true)
     setTxtFileName(file.name)
     const reader = new FileReader()
-    reader.onload = event => setTextContent(String(event.target?.result || ''))
-    reader.onerror = () => showAlert('Không thể đọc file TXT.', 'error')
+    reader.onload = event => {
+      if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
+        invalidateFormattedPreview()
+        setTextContent(String(event.target?.result || ''))
+      }
+      if (asyncOperationRef.current === operation) setLoading(false)
+    }
+    reader.onerror = () => {
+      if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
+        showAlert('Không thể đọc file TXT.', 'error')
+      }
+      if (asyncOperationRef.current === operation) setLoading(false)
+    }
     reader.readAsText(file)
   }
 
   const readImageFile = (file?: File | null): void => {
     if (!file) return
+    invalidateFormattedPreview()
+    const sourceRevision = sourceRevisionRef.current
+    const operation = ++asyncOperationRef.current
+    setLoading(true)
     const reader = new FileReader()
-    reader.onload = event => setImageDataUrl(String(event.target?.result || ''))
-    reader.onerror = () => showAlert('Không thể đọc ảnh.', 'error')
+    reader.onload = event => {
+      if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
+        invalidateFormattedPreview()
+        setImageDataUrl(String(event.target?.result || ''))
+      }
+      if (asyncOperationRef.current === operation) setLoading(false)
+    }
+    reader.onerror = () => {
+      if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
+        showAlert('Không thể đọc ảnh.', 'error')
+      }
+      if (asyncOperationRef.current === operation) setLoading(false)
+    }
     reader.readAsDataURL(file)
   }
 
   const handleImagePaste = (event: React.ClipboardEvent<HTMLDivElement>): void => {
+    if (loading || saving) return
     const items = event.clipboardData?.items
     if (!items) return
     for (const item of Array.from(items)) {
@@ -572,6 +629,9 @@ export default function CampaignDataUploadModal({
 
   const readExcelFile = async (file?: File | null): Promise<void> => {
     if (!file) return
+    invalidateFormattedPreview()
+    const sourceRevision = sourceRevisionRef.current
+    const operation = ++asyncOperationRef.current
     setExcelFile(file)
     setExcelFileName(file.name)
     setLoading(true)
@@ -579,12 +639,16 @@ export default function CampaignDataUploadModal({
       const workbook = read(new Uint8Array(await file.arrayBuffer()), { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
+      if (sourceRevisionRef.current !== sourceRevision || asyncOperationRef.current !== operation) return
+      invalidateFormattedPreview()
       setExcelRows(rows)
       setColumnMap(detectRequiredColumnMap(rows, platform, actionId))
     } catch (err) {
-      showAlert(err instanceof Error ? err.message : 'Không thể đọc file Excel.', 'error')
+      if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
+        showAlert(err instanceof Error ? err.message : 'Không thể đọc file Excel.', 'error')
+      }
     } finally {
-      setLoading(false)
+      if (asyncOperationRef.current === operation) setLoading(false)
     }
   }
 
@@ -618,12 +682,19 @@ export default function CampaignDataUploadModal({
   }
 
   const handleFormatData = async (): Promise<void> => {
+    if (loading || saving) return
+    invalidateFormattedPreview()
+    const sourceRevision = sourceRevisionRef.current
+    const operation = ++asyncOperationRef.current
+    const importSource = activeTab
+    const sourceLink = sheetLink.trim()
+    const sourceImage = imageDataUrl
     setLoading(true)
     try {
       let rows: CampaignImportDataRow[] = []
-      if (activeTab === 'textbox') {
+      if (importSource === 'textbox') {
         rows = buildRowsFromText()
-      } else if (activeTab === 'excel') {
+      } else if (importSource === 'excel') {
         if (!excelFile) {
           showAlert('Vui lòng tải file Excel.', 'error')
           return
@@ -634,68 +705,114 @@ export default function CampaignDataUploadModal({
           return
         }
         rows = buildRowsFromExcel()
-      } else if (activeTab === 'sheet') {
-        if (!sheetLink.trim()) {
+      } else if (importSource === 'sheet') {
+        if (!sourceLink) {
           showAlert('Vui lòng nhập link sheet.', 'error')
           return
         }
         rows = await window.electronAPI.loadCampaignDataFromSheet({
-          linkSheet: sheetLink,
+          linkSheet: sourceLink,
           platform,
           actionId
         })
       } else {
-        if (!imageDataUrl) {
+        if (!sourceImage) {
           showAlert('Vui lòng tải hoặc dán ảnh.', 'error')
           return
         }
         if (isZaloJoinGroupLinkAction(actionId)) {
-          const qrData = await decodeQrDataFromDataUrl(imageDataUrl).catch(() => '')
+          const qrData = await decodeQrDataFromDataUrl(sourceImage).catch(() => '')
           const qrLink = normalizeZaloGroupInviteLink(qrData)
           rows = qrLink
             ? [{ uid: qrLink }]
             : await window.electronAPI.extractCampaignDataFromImage({
-              imageDataUrl,
+              imageDataUrl: sourceImage,
               platform,
               actionId
             })
         } else {
           rows = await window.electronAPI.extractCampaignDataFromImage({
-            imageDataUrl,
+            imageDataUrl: sourceImage,
             platform,
             actionId
           })
         }
       }
 
+      if (sourceRevisionRef.current !== sourceRevision || asyncOperationRef.current !== operation) return
       const normalized = normalizeRows(rows, platform, actionId)
       if (normalized.length === 0) {
         showAlert('Không có data hợp lệ.', 'error')
         return
       }
       setPreviewRows(normalized)
+      setFormattedImportSource(importSource)
+      setFormattedSourceLink(importSource === 'sheet' ? sourceLink : null)
       showAlert(`Đã format ${normalized.length} data hợp lệ.`, 'success')
     } catch (err) {
-      showAlert(err instanceof Error ? err.message : 'Không thể format dữ liệu.', 'error')
+      if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
+        showAlert(err instanceof Error ? err.message : 'Không thể format dữ liệu.', 'error')
+      }
     } finally {
-      setLoading(false)
+      if (asyncOperationRef.current === operation) setLoading(false)
     }
   }
 
-  const handleInsert = (): void => {
+  const handleInsert = async (): Promise<void> => {
     if (previewRows.length === 0) {
       showAlert('Vui lòng format dữ liệu trước khi chèn.', 'error')
       return
     }
-    onInsert(previewRows.map(row => ({
-      ...row,
-      note: '',
-      status: 'chờ xử lý'
-    })))
-    onClose()
+    if (!formattedImportSource) {
+      showAlert('Vui lòng format lại dữ liệu trước khi chèn.', 'error')
+      return
+    }
+    const normalizedName = datasetName.trim()
+    if (!normalizedName) {
+      showAlert('Vui lòng nhập tên nhóm dữ liệu.', 'error')
+      return
+    }
+    const normalizedAccountIds = Array.from(new Set(accountIds))
+      .filter(accountId => Number.isSafeInteger(accountId) && accountId > 0)
+    if (normalizedAccountIds.length === 0) {
+      showAlert('Vui lòng chọn ít nhất một tài khoản trước khi lưu dữ liệu.', 'error')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const result = await window.electronAPI.saveUploadDataset({
+        accountIds: normalizedAccountIds,
+        name: normalizedName,
+        platform,
+        actionId,
+        actionName: actionName?.trim() || undefined,
+        importSource: formattedImportSource,
+        sourceLink: formattedSourceLink,
+        rows: previewRows
+      })
+      if (!result.success) {
+        throw new Error('Không thể lưu nhóm dữ liệu.')
+      }
+      onInsert(result.rows.map(row => ({
+        ...row,
+        note: '',
+        status: 'chờ xử lý'
+      })))
+      showAlert(
+        `Đã lưu ${result.count} data vào ${result.datasets.length} nhóm dữ liệu.`,
+        'success'
+      )
+      onClose()
+    } catch (err) {
+      showAlert(err instanceof Error ? err.message : 'Không thể lưu nhóm dữ liệu.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const updateColumn = (field: ImportField, value: string): void => {
+    invalidateFormattedPreview()
     setColumnMap(prev => ({ ...prev, [field]: value.toUpperCase().trim() }))
   }
 
@@ -703,7 +820,12 @@ export default function CampaignDataUploadModal({
     <button
       type="button"
       className={`campaign-import-tab${activeTab === tab ? ' active' : ''}`}
-      onClick={() => setActiveTab(tab)}
+      onClick={() => {
+        if (tab === activeTab) return
+        setActiveTab(tab)
+        invalidateFormattedPreview()
+      }}
+      disabled={loading || saving}
     >
       {label}
     </button>
@@ -714,17 +836,31 @@ export default function CampaignDataUploadModal({
       <div className="modal campaign-import-modal" onMouseDown={event => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">Upload dữ liệu</div>
-          <button className="btn-icon" onClick={onClose} title="Đóng">
+          <button className="btn-icon" onClick={onClose} title="Đóng" disabled={loading || saving}>
             <X size={18} />
           </button>
         </div>
 
         <div className="modal-body campaign-import-body">
+          <div className="stepper-form-group campaign-import-dataset-name">
+            <label htmlFor="campaign-import-dataset-name">Tên nhóm dữ liệu</label>
+            <input
+              id="campaign-import-dataset-name"
+              className="stepper-input"
+              value={datasetName}
+              onChange={event => setDatasetName(event.target.value)}
+              placeholder="Ví dụ: Khách hàng quan tâm tháng 7"
+              maxLength={255}
+              disabled={saving}
+              autoFocus
+            />
+          </div>
+
           <div className="campaign-import-tabs">
             {renderTabButton('textbox', 'Form txt')}
             {renderTabButton('image', 'Ảnh')}
             {renderTabButton('sheet', 'Link sheet')}
-            {renderTabButton('excel', 'File Excel của khách hàng')}
+            {renderTabButton('excel', 'File Excel/CSV của khách hàng')}
           </div>
 
           {activeTab === 'textbox' && (
@@ -736,13 +872,23 @@ export default function CampaignDataUploadModal({
                 id="campaign-import-textbox"
                 className="campaign-import-textarea"
                 value={textContent}
-                onChange={event => setTextContent(event.target.value)}
+                disabled={loading || saving}
+                onChange={event => {
+                  invalidateFormattedPreview()
+                  setTextContent(event.target.value)
+                }}
               />
               <div className="campaign-import-hint">Mỗi dữ liệu cách nhau bởi ký tự xuống dòng hoặc dấu phẩy</div>
               <div className="campaign-import-hint">Hệ thống sẽ loại bỏ ký tự đặc biệt sau đó verify dữ liệu đúng chuẩn input</div>
               <label className="btn btn-secondary campaign-import-file-button">
                 <Upload size={14} /> Tải file txt
-                <input type="file" accept=".txt" hidden onChange={event => readTextFile(event.target.files?.[0])} />
+                <input
+                  type="file"
+                  accept=".txt"
+                  hidden
+                  disabled={loading || saving}
+                  onChange={event => readTextFile(event.target.files?.[0])}
+                />
               </label>
               {txtFileName && <div className="text-muted campaign-import-file-name">{txtFileName}</div>}
             </div>
@@ -763,7 +909,13 @@ export default function CampaignDataUploadModal({
               </div>
               <label className="btn btn-secondary campaign-import-file-button">
                 <Upload size={14} /> Tải ảnh
-                <input type="file" accept="image/*" hidden onChange={event => readImageFile(event.target.files?.[0])} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={loading || saving}
+                  onChange={event => readImageFile(event.target.files?.[0])}
+                />
               </label>
             </div>
           )}
@@ -779,7 +931,11 @@ export default function CampaignDataUploadModal({
                 type="text"
                 placeholder="Nhập link sheet"
                 value={sheetLink}
-                onChange={event => setSheetLink(event.target.value)}
+                disabled={loading || saving}
+                onChange={event => {
+                  invalidateFormattedPreview()
+                  setSheetLink(event.target.value)
+                }}
               />
             </div>
           )}
@@ -790,7 +946,11 @@ export default function CampaignDataUploadModal({
                 <input
                   type="checkbox"
                   checked={skipExcelHeader}
-                  onChange={event => setSkipExcelHeader(event.target.checked)}
+                  disabled={loading || saving}
+                  onChange={event => {
+                    invalidateFormattedPreview()
+                    setSkipExcelHeader(event.target.checked)
+                  }}
                 />
                 <span>Bỏ qua dòng đầu (dòng tiêu đề)</span>
               </label>
@@ -801,6 +961,7 @@ export default function CampaignDataUploadModal({
                     <select
                       className="stepper-input"
                       value={columnMap[field.key] || ''}
+                      disabled={loading || saving}
                       onChange={event => updateColumn(field.key, event.target.value)}
                     >
                       {excelColumnOptions.map(option => (
@@ -813,8 +974,14 @@ export default function CampaignDataUploadModal({
                 ))}
               </div>
               <label className="btn btn-secondary campaign-import-file-button">
-                <FileSpreadsheet size={14} /> Tải file Excel
-                <input type="file" accept=".xlsx,.xls" hidden onChange={event => void readExcelFile(event.target.files?.[0])} />
+                <FileSpreadsheet size={14} /> Tải file Excel/CSV
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  hidden
+                  disabled={loading || saving}
+                  onChange={event => void readExcelFile(event.target.files?.[0])}
+                />
               </label>
               {excelFileName && <div className="text-muted campaign-import-file-name">{excelFileName}</div>}
               {excelRows.length > 0 && (
@@ -842,7 +1009,7 @@ export default function CampaignDataUploadModal({
           )}
 
           <div className="campaign-import-format-row">
-            <button className="btn btn-secondary" onClick={() => void handleFormatData()} disabled={loading}>
+            <button className="btn btn-secondary" onClick={() => void handleFormatData()} disabled={loading || saving}>
               {loading ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />}
               Format chuẩn dữ liệu
             </button>
@@ -875,9 +1042,14 @@ export default function CampaignDataUploadModal({
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Huỷ</button>
-          <button className="btn btn-primary" onClick={handleInsert} disabled={loading || previewRows.length === 0}>
-            Chèn xuống chi tiết
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading || saving}>Huỷ</button>
+          <button
+            className="btn btn-primary"
+            onClick={() => void handleInsert()}
+            disabled={loading || saving || previewRows.length === 0 || !datasetName.trim()}
+          >
+            {saving ? <RefreshCw size={14} className="spin" /> : null}
+            {saving ? 'Đang lưu...' : 'Chèn xuống chi tiết'}
           </button>
         </div>
       </div>
