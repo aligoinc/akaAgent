@@ -77,6 +77,16 @@ export function isZaloServerUser(
   return user?.isZaloServer === true
 }
 
+export function isZaloShowWebUser(
+  user: Pick<AuthUser, 'isZaloShowWeb'> | null | undefined
+): boolean {
+  return user?.isZaloShowWeb === true
+}
+
+export function isCurrentUserZaloShowWeb(): boolean {
+  return isZaloShowWebUser(getCurrentUser())
+}
+
 export function isCurrentUserZaloServerEnabled(): boolean {
   return isZaloServerUser(getCurrentUser())
 }

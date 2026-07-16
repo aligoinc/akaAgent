@@ -3,7 +3,6 @@ import { PageController, isNavigationAbortError } from './pageController'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
-  zalo: 'https://chat.zalo.me',
   tiktok: 'https://www.tiktok.com',
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com'
@@ -32,6 +31,9 @@ export class BackgroundPageManager {
   private temporaryPages = new Set<BrowserWindow>()
 
   getOrCreate(accountId: number, platformType: string): PageController {
+    if (String(platformType || '').toLowerCase() === 'zalo') {
+      throw new Error('Zalo chỉ chạy qua API của phiên tài khoản; không được mở trang nền thứ hai')
+    }
     const existing = this.pages.get(accountId)
     if (existing && !existing.win.isDestroyed() && existing.page.isConnected()) {
       return existing.page
@@ -73,7 +75,9 @@ export class BackgroundPageManager {
   }
 
   createTemporary(accountId: number, platformType: string): TemporaryPageEntry {
-    void platformType
+    if (String(platformType || '').toLowerCase() === 'zalo') {
+      throw new Error('Zalo chỉ chạy qua API của phiên tài khoản; không được mở trang tạm thứ hai')
+    }
     const win = new BrowserWindow({
       width: 1920,
       height: 1080,

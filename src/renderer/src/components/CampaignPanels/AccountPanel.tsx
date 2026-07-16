@@ -149,6 +149,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   } = useCampaignStore()
   const entitlements = useAuthStore(state => state.user?.entitlements)
   const isZaloServer = useAuthStore(state => state.user?.isZaloServer === true)
+  const isZaloShowWeb = useAuthStore(state => state.user?.isZaloShowWeb === true)
   const serverOperationState = useZaloServerOperationState(isZaloServer)
   const canUseFacebookAccount = canUsePlatform('facebook', entitlements)
   const canUseZaloFeature = canUsePlatform('zalo', entitlements)
@@ -627,6 +628,10 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       useUiStore.getState().showAlert('Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.', 'error')
       return
     }
+    if (isZaloShowWeb) {
+      onNavigateToBrowser?.({ accountId: account.id, reloadAfterOpen: false })
+      return
+    }
     if (!window.electronAPI?.startZaloLoginQr) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
@@ -709,6 +714,28 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleCheckZaloSession = async (account: AutoAccount) => {
+    if (isZaloShowWeb) {
+      if (!window.electronAPI?.checkZaloWebLogin) {
+        useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
+        return
+      }
+      try {
+        const result = await window.electronAPI.checkZaloWebLogin(account.id)
+        await loadAccounts()
+        useUiStore.getState().showAlert(
+          result.loggedIn
+            ? `${account.name}: Đã đăng nhập Zalo Web`
+            : `${account.name}: ${result.reason || 'Chưa đăng nhập Zalo Web'}`,
+          result.loggedIn ? 'success' : 'error'
+        )
+      } catch (err) {
+        useUiStore.getState().showAlert(
+          getErrorMessage(err, 'Không thể kiểm tra phiên Zalo Web'),
+          'error'
+        )
+      }
+      return
+    }
     if (!window.electronAPI?.checkZaloSession) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
@@ -727,13 +754,25 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleLogoutZalo = async (account: AutoAccount) => {
-    if (!window.electronAPI?.logoutZalo) {
+    if (
+      (isZaloShowWeb && !window.electronAPI?.logoutZaloWeb)
+      || (!isZaloShowWeb && !window.electronAPI?.logoutZalo)
+    ) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
     }
     useUiStore.getState().showConfirm(
       `Đăng xuất Zalo khỏi tài khoản "${account.name}"?`,
       async () => {
+        if (isZaloShowWeb) {
+          const result = await window.electronAPI.logoutZaloWeb(account.id)
+          await loadAccounts()
+          useUiStore.getState().showAlert(
+            result.reason || 'Đã đăng xuất Zalo Web',
+            result.success ? 'success' : 'error'
+          )
+          return
+        }
         const result = await window.electronAPI.logoutZalo(account.id)
         await loadAccounts()
         useUiStore.getState().showAlert(result.reason || 'Đã xoá session Zalo khỏi tài khoản', 'success')

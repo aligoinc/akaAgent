@@ -1223,6 +1223,7 @@ export default function CampaignFormModal({
     createCampaignInputData
   } = useCampaignStore()
   const entitlements = useAuthStore(state => state.user?.entitlements)
+  const isZaloShowWeb = useAuthStore(state => state.user?.isZaloShowWeb === true)
   const canUseEmailFeature = !!entitlements?.email
   const canUseInternalSmsFeature = !!entitlements?.sms
   const canUseFanpageFeature = !!entitlements?.facebookFanpage
@@ -1813,8 +1814,9 @@ export default function CampaignFormModal({
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
+      .filter(action => !isZaloShowWeb || action.id !== ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
       .sort(compareCampaignActionsByPlatform),
-    [campaignActions, entitlements]
+    [campaignActions, entitlements, isZaloShowWeb]
   )
   const campaignActionPlatformOptions = useMemo(() => {
     const platforms = new Set<string>()
@@ -3593,7 +3595,7 @@ export default function CampaignFormModal({
       target,
       name: '',
       content,
-      groupId: contentTemplateGroups.find(group => group.isActive)?.id || null
+      groupId: null
     })
   }
 
@@ -3903,10 +3905,6 @@ export default function CampaignFormModal({
     const groupId = contentTemplateSaveModal.groupId
     if (!name) {
       showAlert('Vui lòng nhập tên mẫu nội dung.', 'error')
-      return
-    }
-    if (!groupId) {
-      showAlert('Vui lòng chọn nhóm mẫu nội dung.', 'error')
       return
     }
     if (!window.electronAPI?.createContentTemplate) {
@@ -11058,7 +11056,7 @@ export default function CampaignFormModal({
               />
             </div>
             <div className="stepper-form-group">
-              <label>Nhóm mẫu <span className="required">*</span></label>
+              <label>Nhóm mẫu</label>
               <select
                 className="stepper-select"
                 value={contentTemplateSaveModal.groupId ?? ''}
@@ -11066,15 +11064,15 @@ export default function CampaignFormModal({
                   ? { ...prev, groupId: event.target.value ? Number(event.target.value) : null }
                   : prev)}
                 disabled={contentTemplateSaving}
-                aria-label="Chọn nhóm mẫu nội dung"
+                aria-label="Chọn nhóm mẫu nội dung (không bắt buộc)"
               >
-                <option value="">Chọn nhóm mẫu</option>
+                <option value="">Không chọn nhóm</option>
                 {contentTemplateGroups.filter(group => group.isActive).map(group => (
                   <option key={group.id} value={group.id}>{group.name}</option>
                 ))}
               </select>
               {contentTemplateGroups.filter(group => group.isActive).length === 0 && (
-                <div className="schedule-hint">Chưa có nhóm hoạt động. Hãy tạo nhóm trong Quản lý mẫu trước.</div>
+                <div className="schedule-hint">Chưa có nhóm hoạt động. Bạn vẫn có thể lưu mẫu mà không chọn nhóm.</div>
               )}
             </div>
             <div className="stepper-form-group">

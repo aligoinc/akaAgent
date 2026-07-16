@@ -436,6 +436,43 @@ export async function markAccountZaloSessionCheck(
   return mapAccountFromDB(toDbRow(data))
 }
 
+/**
+ * Persist only public identity/login metadata for Zalo Web. Chromium keeps the
+ * actual cookie in persist:account_<id>; raw Web session data never enters DB.
+ */
+export async function updateAccountZaloWebSession(
+  id: number,
+  input: {
+    zaloAccountId: number
+    verified: boolean
+    error?: string | null
+  }
+): Promise<AutoAccount> {
+  await ensureCurrentUserFeatureActive('zalo')
+  const u = requireCurrentUser()
+  const now = new Date().toISOString()
+  const { data, error } = await client()
+    .from('auto_accounts')
+    .update({
+      zalo_account_id: input.zaloAccountId,
+      zalo_session: null,
+      zalo_session_updated_at: null,
+      zalo_session_last_verified_at: input.verified ? now : null,
+      zalo_session_last_error: input.verified ? null : normalizeNullableString(input.error),
+      login_status: input.verified ? 'đã đăng nhập' : 'chưa đăng nhập',
+      updated_at: now
+    })
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('flatform_type', 'zalo')
+    .eq('is_delete', false)
+    .select(ACCOUNT_SELECT)
+    .single()
+
+  if (error) throw new Error(`Failed to update account Zalo Web session: ${error.message}`)
+  return mapAccountFromDB(toDbRow(data))
+}
+
 export async function clearAccountZaloSession(id: number): Promise<AutoAccount> {
   await ensureCurrentUserFeatureActive('zalo')
   const u = requireCurrentUser()

@@ -280,7 +280,11 @@ export const useAuthStore = create<AuthState>()((set) => ({
     // The runtime target is a startup invariant. Periodic user refreshes may
     // update entitlements, but must not hot-switch Zalo within this process.
     user: state.user && state.user.staffId === user.staffId
-      ? { ...user, isZaloServer: state.user.isZaloServer }
+      ? {
+          ...user,
+          isZaloServer: state.user.isZaloServer,
+          isZaloShowWeb: state.user.isZaloShowWeb
+        }
       : user,
     errorMessage: null
   })),

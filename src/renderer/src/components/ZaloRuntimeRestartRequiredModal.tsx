@@ -35,7 +35,11 @@ export default function ZaloRuntimeRestartRequiredModal({ payload }: Props) {
     window.electronAPI.quitApp()
   }
 
-  const targetLabel = payload.databaseIsZaloServer ? 'máy chủ' : 'máy tính này'
+  const targetLabel = payload.databaseIsZaloShowWeb
+    ? 'Zalo Web trên máy tính này'
+    : payload.databaseIsZaloServer
+      ? 'máy chủ'
+      : 'máy tính này'
 
   return (
     <div className="zalo-runtime-restart-overlay">

@@ -118,8 +118,8 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_EVENTS.AKABIZ_DESKTOP_INSTALL_PATH_VALIDATE, installPath),
 
   // Webview registration (embedded browser tabs)
-  registerWebview: (accountId: number, webContentsId: number): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC_EVENTS.WEBVIEW_REGISTER, accountId, webContentsId),
+  registerWebview: (accountId: number, webContentsId: number, platformType?: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC_EVENTS.WEBVIEW_REGISTER, accountId, webContentsId, platformType),
 
   unregisterWebview: (accountId: number): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_EVENTS.WEBVIEW_UNREGISTER, accountId),
@@ -452,6 +452,12 @@ const electronAPI = {
   // Account Actions
   checkFacebookLogin: (accountId: number): Promise<{ loggedIn: boolean; status: string; reason?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CHECK_FB_LOGIN, accountId),
+
+  checkZaloWebLogin: (accountId: number): Promise<{ loggedIn: boolean; status: string; reason?: string }> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CHECK_ZALO_WEB_LOGIN, accountId),
+
+  logoutZaloWeb: (accountId: number): Promise<{ success: boolean; reason?: string }> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_LOGOUT_ZALO_WEB, accountId),
 
   reloadAccountPage: (accountId: number, flatformType: string): Promise<{ success: boolean; reason?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, accountId, flatformType),

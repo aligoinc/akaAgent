@@ -1,10 +1,13 @@
 import { promises as fs } from 'node:fs'
+import type { WebContents } from 'electron'
 import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError, FriendRecommendationsType } from 'zca-js'
 import type { API, AttachmentSource, Credentials, GroupEvent, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, Message, MessageContent, Options as ZaloOptions, ProfileInfo, Reaction, SendMessageResponse, UserBasic } from 'zca-js'
 import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, ZaloSessionCredentials } from '../../shared/types'
 import { SupabaseService } from './supabase'
 import type { ZaloAccountRuntimeTarget } from '../data/repositories/accountRepository'
 import type { ZaloOutgoingText } from './zaloFormattedContent'
+import { isCurrentUserZaloShowWeb } from '../data/currentUser'
+import { ZaloWebRuntimeService } from './zaloWebRuntimeService'
 
 export type { ZaloOutgoingText, ZaloStyledText } from './zaloFormattedContent'
 
@@ -369,14 +372,49 @@ export class ZaloRuntimeService {
   private activeWarmSessionOperations = new Set<Promise<void>>()
   private warmSessionClaimsAbandoned = false
   private cacheVersion = 0
+  private readonly webRuntime: ZaloWebRuntimeService
 
   constructor(
     private readonly supabase: SupabaseService,
     private readonly getProxyById: (id: number) => Promise<AutoProxy | null>,
-    private readonly emitLoginQrEvent: (event: ZaloLoginQrEvent) => void
-  ) {}
+    private readonly emitLoginQrEvent: (event: ZaloLoginQrEvent) => void,
+    private readonly emitAccountStatusUpdated?: (accountId: number) => void
+  ) {
+    this.webRuntime = new ZaloWebRuntimeService(
+      getZaloImageMetadata,
+      undefined,
+      async (accountId, api, accountInfo) => {
+        await this.persistVerifiedWebSession(accountId, api, accountInfo)
+        try { this.emitAccountStatusUpdated?.(accountId) } catch {}
+      }
+    )
+  }
+
+  async attachWebSession(accountId: number, webContents: WebContents): Promise<void> {
+    if (!isCurrentUserZaloShowWeb()) throw new Error('Organization không chạy Zalo Web')
+    const account = await this.supabase.getAccount(accountId)
+    if (!account || account.flatformType !== 'zalo') {
+      throw new Error('Không tìm thấy tài khoản Zalo')
+    }
+    await this.webRuntime.attach(accountId, webContents)
+  }
+
+  detachWebSession(accountId: number): void {
+    this.webRuntime.detach(accountId)
+  }
+
+  hasVerifiedWebSession(accountId: number): boolean {
+    return this.webRuntime.hasVerifiedSession(accountId)
+  }
+
+  invalidateWebSession(accountId: number): void {
+    this.webRuntime.invalidate(accountId)
+  }
 
   async startLoginQr(accountId: number): Promise<ZaloLoginQrStartResult> {
+    if (isCurrentUserZaloShowWeb()) {
+      return { success: false, accountId, reason: 'Hãy mở tab Zalo Web để đăng nhập' }
+    }
     const account = await this.supabase.getAccount(accountId)
     if (!account) return { success: false, accountId, reason: 'Không tìm thấy tài khoản' }
     if (account.flatformType !== 'zalo') {
@@ -451,6 +489,12 @@ export class ZaloRuntimeService {
   }
 
   async ensureApi(accountId: number): Promise<API> {
+    if (isCurrentUserZaloShowWeb()) {
+      const account = await this.supabase.getAccount(accountId)
+      if (!account) throw new Error('Không tìm thấy tài khoản')
+      if (account.flatformType !== 'zalo') throw new Error('Tài khoản không phải nền tảng Zalo')
+      return this.webRuntime.ensureApi(accountId)
+    }
     const entry = await this.supabase.getAccountZaloSession(accountId)
     if (!entry) throw new Error('Không tìm thấy tài khoản')
     if (entry.account.flatformType !== 'zalo') throw new Error('Tài khoản không phải nền tảng Zalo')
@@ -508,6 +552,9 @@ export class ZaloRuntimeService {
   }
 
   async ensureRealtimeListenerReady(accountId: number): Promise<void> {
+    if (isCurrentUserZaloShowWeb()) {
+      throw new Error('Zalo Web chưa hỗ trợ chiến dịch realtime')
+    }
     const api = await this.ensureApi(accountId)
     await this.ensureZaloListenerReady(accountId, api)
   }
@@ -591,6 +638,7 @@ export class ZaloRuntimeService {
     this.stopZaloListener(accountId)
     this.apiCache.delete(accountId)
     this.apiLoginInflight.delete(accountId)
+    this.webRuntime.invalidateApi(accountId)
   }
 
   clearAll(options: { preserveActiveQrLogins?: boolean } = {}): void {
@@ -606,9 +654,59 @@ export class ZaloRuntimeService {
     this.apiLoginInflight.clear()
     this.verifyInflight.clear()
     this.accountCacheVersions.clear()
+    this.webRuntime.clearAll()
   }
 
   async checkSession(accountId: number): Promise<ZaloSessionCheckResult> {
+    if (isCurrentUserZaloShowWeb()) {
+      const current = await this.supabase.getAccount(accountId)
+      if (!current || current.flatformType !== 'zalo') {
+        return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Không tìm thấy tài khoản Zalo' }
+      }
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        let checkedApi: API | null = null
+        try {
+          checkedApi = await this.webRuntime.ensureApi(accountId)
+          // A cached API can outlive a manual logout performed inside Zalo Web.
+          // Verify it against the live Chromium cookies before reporting login.
+          await checkedApi.fetchAccountInfo()
+          if (!this.webRuntime.isCurrentApi(accountId, checkedApi)) continue
+          const account = await this.supabase.getAccount(accountId)
+          if (!this.webRuntime.isCurrentApi(accountId, checkedApi)) continue
+          return {
+            success: true,
+            loggedIn: true,
+            status: account?.loginStatus || 'đã đăng nhập',
+            account: account || undefined
+          }
+        } catch (err) {
+          const generationChanged = checkedApi
+            ? !this.webRuntime.isCurrentApi(accountId, checkedApi)
+            : this.webRuntime.hasVerifiedSession(accountId)
+              || this.webRuntime.hasPendingVerification(accountId)
+          if (generationChanged) {
+            continue
+          }
+
+          const message = this.getErrorMessage(err)
+          this.webRuntime.invalidateApi(accountId)
+          const account = await this.supabase.markAccountZaloSessionCheck(accountId, {
+            ok: false,
+            error: message
+          })
+          return { success: true, loggedIn: false, status: account.loginStatus, reason: message, account }
+        }
+      }
+      const account = await this.supabase.getAccount(accountId)
+      const message = 'Phiên Zalo Web vừa thay đổi; vui lòng thử lại'
+      return {
+        success: false,
+        loggedIn: false,
+        status: account?.loginStatus || 'chưa đăng nhập',
+        reason: message,
+        account: account || undefined
+      }
+    }
     const entry = await this.supabase.getAccountZaloSession(accountId)
     if (!entry) {
       return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Không tìm thấy tài khoản' }
@@ -635,6 +733,12 @@ export class ZaloRuntimeService {
   }
 
   async logout(accountId: number): Promise<ZaloSessionCheckResult> {
+    if (isCurrentUserZaloShowWeb()) {
+      const webContents = await this.webRuntime.clearForLogout(accountId)
+      const account = await this.supabase.clearAccountZaloSession(accountId)
+      await this.webRuntime.loadLoginPage(webContents)
+      return { success: true, loggedIn: false, status: account.loginStatus, account }
+    }
     this.cancelLoginQr(accountId)
     this.invalidateAccount(accountId)
     const account = await this.supabase.clearAccountZaloSession(accountId)
@@ -1327,6 +1431,21 @@ export class ZaloRuntimeService {
       ? { ...outgoing, attachments: safeAttachments }
       : outgoing
     const needsUploadCallback = safeAttachments.some(item => requiresZaloUploadCallback(String(item || '')))
+    const isWebRuntime = isCurrentUserZaloShowWeb()
+    if (isWebRuntime && safeAttachments.some(item => !isZaloWebSupportedAttachment(String(item || '')))) {
+      throw new Error('Zalo Web hiện chỉ hỗ trợ ảnh JPG, JPEG, PNG, WEBP hoặc GIF')
+    }
+
+    // Realtime is intentionally excluded from Zalo Web. Image messages do not
+    // need the upload callback listener and can use the captured HTTP API.
+    if (isWebRuntime) {
+      return this.withTimeout(
+        api.sendMessage(payload, threadId, type),
+        ZALO_MESSAGE_SEND_TIMEOUT_MS,
+        `Gửi tin nhắn Zalo quá thời gian chờ (${Math.round(ZALO_MESSAGE_SEND_TIMEOUT_MS / 1000)} giây)`
+      )
+    }
+
     const listenerPromise = this.ensureZaloListenerReady(accountId, api, {
       refreshIfOlderThanMs: needsUploadCallback ? ZALO_LISTENER_REFRESH_AFTER_MS : undefined
     })
@@ -2439,7 +2558,20 @@ export class ZaloRuntimeService {
     }
   }
 
-  private async loadOwnProfile(api: API): Promise<{
+  private async persistVerifiedWebSession(
+    accountId: number,
+    api: API,
+    verifiedAccountInfo?: unknown
+  ): Promise<void> {
+    const profile = await this.loadOwnProfile(api, verifiedAccountInfo)
+    const zaloAccount = await this.supabase.upsertZaloAccount(profile)
+    await this.supabase.updateAccountZaloWebSession(accountId, {
+      zaloAccountId: zaloAccount.id,
+      verified: true
+    })
+  }
+
+  private async loadOwnProfile(api: API, verifiedAccountInfo?: unknown): Promise<{
     zaloUid: string
     displayName?: string | null
     phone?: string | null
@@ -2447,8 +2579,10 @@ export class ZaloRuntimeService {
     metadata: Record<string, unknown>
   }> {
     const ownId = String(api.getOwnId() || '').trim()
-    const info = await api.fetchAccountInfo().catch(() => null)
-    const profile = ((info && 'profile' in info ? info.profile : null) || {}) as ZaloProfile
+    const info = verifiedAccountInfo !== undefined
+      ? verifiedAccountInfo
+      : await api.fetchAccountInfo().catch(() => null)
+    const profile = ((info && typeof info === 'object' && 'profile' in info ? info.profile : null) || {}) as ZaloProfile
     const zaloUid = ownId || normalizeProfileId(profile)
     if (!zaloUid) throw new Error('Không lấy được Zalo UID')
 
@@ -2517,6 +2651,14 @@ function requiresZaloUploadCallback(source: string): boolean {
   const ext = getAttachmentExtension(trimmed)
   if (!ext) return true
   return !ZALO_ATTACHMENT_EXTENSIONS_WITHOUT_UPLOAD_CALLBACK.has(ext)
+}
+
+function isZaloWebSupportedAttachment(source: string): boolean {
+  const trimmed = String(source || '').trim()
+  if (!trimmed) return false
+  if (/^data:image\/(?:gif|jpe?g|png|webp)(?:[;,])/i.test(trimmed)) return true
+  const ext = getAttachmentExtension(trimmed)
+  return !!ext && ZALO_ATTACHMENT_EXTENSIONS_WITHOUT_UPLOAD_CALLBACK.has(ext)
 }
 
 function getAttachmentExtension(source: string): string {

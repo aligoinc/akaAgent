@@ -1580,6 +1580,8 @@ export interface AuthSessionExpiredPayload {
 export interface ZaloRuntimeRestartRequiredPayload {
   sessionIsZaloServer: boolean
   databaseIsZaloServer: boolean
+  sessionIsZaloShowWeb: boolean
+  databaseIsZaloShowWeb: boolean
   message: string
 }
 
@@ -1606,6 +1608,7 @@ export interface AuthUser {
   isAdminAkabiz: boolean
   useTestWorkflow: boolean
   isZaloServer: boolean
+  isZaloShowWeb: boolean
   entitlements: AuthEntitlements
   accountProducts: AuthAccountProduct[]
   deviceLabel?: string | null
@@ -1964,6 +1967,8 @@ export const IPC_EVENTS = {
 
   // Account Actions
   ACCOUNT_CHECK_FB_LOGIN: 'account:check-fb-login',
+  ACCOUNT_CHECK_ZALO_WEB_LOGIN: 'account:check-zalo-web-login',
+  ACCOUNT_LOGOUT_ZALO_WEB: 'account:logout-zalo-web',
   ACCOUNT_RELOAD_PAGE: 'account:reload-page',
   ACCOUNT_STATUS_UPDATED: 'account:status-updated',
   ACCOUNT_ACTION_OVERVIEW: 'account:action-overview',

@@ -10,12 +10,21 @@ import { BlockExecutor } from '../../v2/runtime/blockExecutor'
 import { callAiUsing } from '../../services/aiRuntimeService'
 import { captureBlockScreenshot } from '../../services/blockScreenshotService'
 import * as campaignRunEventRepo from '../../data/repositories/campaignRunEventRepository'
+import * as accountRepo from '../../data/repositories/accountRepository'
 
 const _activeAborts = new Map<string, AbortController>()
 
 export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: PageControllerRegistry): void {
   const engine = new WorkflowEngineV2()
   const blockExec = new BlockExecutor()
+
+  const assertDomTestAccountAllowed = async (accountId: number): Promise<void> => {
+    const account = await accountRepo.getAccount(accountId)
+    if (!account) throw new Error(`Không tìm thấy tài khoản (accountId=${accountId})`)
+    if (String(account.flatformType || '').trim().toLowerCase() === 'zalo') {
+      throw new Error('Zalo Web chỉ dùng tab để đăng nhập; không hỗ trợ DOM workflow/block test')
+    }
+  }
 
   // ===== Block library CRUD =====
   ipcMain.handle(IPC_EVENTS_V2.BLOCK_LIST, async () => blockRepo.listBlocks())
@@ -58,6 +67,7 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
     accountId: number
     variables: Record<string, unknown>
   }) => {
+    await assertDomTestAccountAllowed(args.accountId)
     const page = pageRegistry.get(args.accountId)
     if (!page) throw new Error(`Tài khoản chưa mở trình duyệt (accountId=${args.accountId})`)
 
@@ -180,6 +190,7 @@ export function registerV2Handlers(mainWindow: BrowserWindow, pageRegistry: Page
     accountId: number
     variables: Record<string, unknown>
   }) => {
+    await assertDomTestAccountAllowed(args.accountId)
     const page = pageRegistry.get(args.accountId)
     if (!page) throw new Error(`Tài khoản chưa mở trình duyệt (accountId=${args.accountId})`)
 

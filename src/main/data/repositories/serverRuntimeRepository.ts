@@ -116,6 +116,7 @@ async function buildServerAuthUser(
     isAdminAkabiz: !!staff.is_admin_akabiz,
     useTestWorkflow: !!staff.use_test_workflow,
     isZaloServer: resolvedModeSnapshot.isZaloServer,
+    isZaloShowWeb: resolvedModeSnapshot.isZaloShowWeb,
     entitlements: context.entitlements,
     accountProducts: context.accountProducts,
     zaloRuntimeModeRevision: resolvedModeSnapshot.revision
@@ -190,6 +191,7 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
     isAdminAkabiz: row.is_admin_akabiz === true,
     useTestWorkflow: row.use_test_workflow === true,
     isZaloServer: true,
+    isZaloShowWeb: false,
     entitlements,
     accountProducts: [accountProduct],
     zaloRuntimeModeRevision: revision
