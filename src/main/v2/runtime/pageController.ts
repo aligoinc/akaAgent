@@ -400,6 +400,96 @@ export class PageController {
     `)
   }
 
+  /** Focus đúng element đã resolve, không click hoặc dùng toạ độ viewport. */
+  async focus(selector: string): Promise<void> {
+    await this.waitForSelector(selector, { timeout: 15000 })
+    await this.exec(`
+      var el = resolveSelector(${safeJS(selector)});
+      if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
+      if (typeof el.focus !== "function") throw new Error("Element cannot be focused: " + ${safeJS(selector)});
+      el.focus();
+      return true;
+    `)
+  }
+
+  /**
+   * Dispatch paste event lên đúng element, tương đương C# DispatchPaste.
+   * Với HTML có nội dung, poll ngắn để chắc chắn editor đã nhận paste.
+   * Không fallback chèn text/html thô nếu Facebook từ chối rich paste.
+   */
+  async paste(
+    selector: string,
+    value: string,
+    opts: { mimeType?: 'text/plain' | 'text/html' } = {}
+  ): Promise<void> {
+    const mimeType = opts.mimeType ?? 'text/plain'
+    if (mimeType !== 'text/plain' && mimeType !== 'text/html') {
+      throw new Error(`Unsupported paste MIME type: ${String(mimeType)}`)
+    }
+    await this.waitForSelector(selector, { timeout: 15000 })
+    const result = await this.exec<{ accepted: boolean; error?: string }>(`
+      var el = resolveSelector(${safeJS(selector)});
+      if (!el) throw new Error("Element not found: " + ${safeJS(selector)});
+      var mimeType = ${safeJS(mimeType)};
+      var value = String(${safeJS(value)});
+      if (mimeType === "text/html" && !el.isContentEditable) {
+        throw new Error("HTML paste requires a contenteditable element");
+      }
+      var shouldVerify = false;
+      if (mimeType === "text/html") {
+        var probe = document.createElement("template");
+        probe.innerHTML = value;
+        shouldVerify = String(probe.content.textContent || "").replace(/\\s+/g, "").length > 0;
+      }
+      var beforeHtml = shouldVerify ? String(el.innerHTML || "") : "";
+      var beforeText = shouldVerify ? String(el.innerText || el.textContent || "") : "";
+      var dataTransfer = new DataTransfer();
+      var mutationObserved = false;
+      var observer = null;
+      if (shouldVerify) {
+        observer = new MutationObserver(function() { mutationObserved = true; });
+        observer.observe(el, { childList: true, characterData: true, subtree: true });
+      }
+      return (async function() {
+        try {
+          dataTransfer.setData(mimeType, value);
+          var pasteEvent = new ClipboardEvent("paste", {
+            clipboardData: dataTransfer,
+            bubbles: true,
+            cancelable: true,
+            view: window
+          });
+          el.dispatchEvent(pasteEvent);
+          dataTransfer.clearData();
+          if (!shouldVerify) return { accepted: true };
+
+          var deadline = Date.now() + 750;
+          while (Date.now() <= deadline) {
+            var htmlChanged = String(el.innerHTML || "") !== beforeHtml;
+            var textChanged = String(el.innerText || el.textContent || "") !== beforeText;
+            if (htmlChanged || textChanged || mutationObserved) return { accepted: true };
+            await new Promise(function(resolve) { setTimeout(resolve, 25); });
+          }
+          return { accepted: false };
+        } catch (e) {
+          try { dataTransfer.clearData(); } catch (_) {}
+          return { accepted: false, error: e && e.message ? String(e.message) : String(e) };
+        } finally {
+          if (observer) observer.disconnect();
+        }
+      })();
+    `)
+    if (!result?.accepted) {
+      throw new Error(result?.error || 'Facebook không nhận nội dung HTML đã paste')
+    }
+  }
+
+  /** Native text insertion vào element hiện đang focus. */
+  async insertText(text: string): Promise<void> {
+    if (!this.isConnected()) throw new Error('Browser page is not connected')
+    await this.wc.insertText(text)
+  }
+
   /**
    * setValue equivalent — paste-based, hỗ trợ Lexical (FB rich text).
    * Mạnh hơn type() khi cần chắc chắn nội dung được set, có thể vượt qua các

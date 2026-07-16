@@ -128,6 +128,8 @@ export interface ZaloActionDetailOutput {
   countsTowardLimit?: boolean
   countsTowardBadTarget?: boolean
   resetInputToPending?: boolean
+  /** The target was partially sent and must be completed instead of retried. */
+  preventInputRetry?: boolean
   pendingNote?: string
   stopAfterTarget?: boolean
 }

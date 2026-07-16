@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react'
 import type { AutoAccount, Campaign, CampaignAction, CampaignExtraSettings, CampaignMediaInput } from '../../../../shared/types'
+import {
+  formattedContentToPlainText,
+  splitFormattedContentVariants,
+  supportsFormattedContent
+} from '../../../../shared/formattedContent'
 
 interface CampaignInfoViewProps {
   campaign: Campaign
@@ -325,6 +330,18 @@ const renderSection = (title: string, rows: InfoRow[]) => {
 export default function CampaignInfoView({ campaign, account, action, campaigns, accounts }: CampaignInfoViewProps) {
   const extra = campaign.extraSettings || {}
   const actionId = campaign.actionId
+  const isFormattedContent = supportsFormattedContent(actionId) && extra.formattedContentEnabled === true
+  const displayCampaignContent = extra.advancedContentEnabled && Array.isArray(extra.advancedContentItems) && extra.advancedContentItems.length > 0
+    ? extra.advancedContentItems
+      .map(item => isFormattedContent ? formattedContentToPlainText(item.content) : String(item.content || '').trim())
+      .filter(Boolean)
+      .join('\n\n———\n\n')
+    : isFormattedContent
+      ? splitFormattedContentVariants(campaign.content)
+        .map(formattedContentToPlainText)
+        .filter(Boolean)
+        .join('\n\n———\n\n')
+      : campaign.content
   const scheduleType = campaign.scheduleType || 'daily'
   const linkedSourceCampaigns = findLinkedSourceCampaigns(campaign, campaigns)
   const rawEnabledActionCodes = extra.actionLimits?.enabledActionCodes
@@ -573,10 +590,15 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
 
       <div className="campaign-info-section-grid">
         {renderSection('Nội dung & nguồn', [
-          { label: 'Nội dung chính', value: textOrDash(campaign.content), fullWidth: true },
+          {
+            label: 'Định dạng nội dung',
+            value: <span className="campaign-info-chip">Có định dạng</span>,
+            hidden: !isFormattedContent
+          },
+          { label: 'Nội dung chính', value: textOrDash(displayCampaignContent), fullWidth: true },
           { label: 'Ảnh bài đăng', value: formatImageSummary(campaign.images) },
           { label: 'Cách dùng ảnh', value: formatImageOption(extra, campaign.images) },
-          { label: 'AI viết lại nội dung', value: onOff(extra.rewriteContentEachRun), hidden: actionId === 'email_send' && extra.emailBodyIsHtml === true },
+          { label: 'AI viết lại nội dung', value: onOff(extra.rewriteContentEachRun), hidden: isFormattedContent || (actionId === 'email_send' && extra.emailBodyIsHtml === true) },
           ...emailRows.map(row => ({ ...row, hidden: row.hidden || !hasEmailSettings })),
           ...sourceRows.map(row => ({ ...row, hidden: row.hidden || !hasSourceSettings }))
         ])}

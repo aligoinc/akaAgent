@@ -4,6 +4,7 @@ export type AdvancedContentMediaOption = NonNullable<CampaignAdvancedContentItem
 
 export interface AdvancedContentValidationOptions {
   allowMediaOnly?: boolean
+  contentIsEmpty?: (content: string) => boolean
 }
 
 const MEDIA_OPTIONS = new Set<AdvancedContentMediaOption>(['none', 'all', 'random'])
@@ -55,7 +56,10 @@ export const isAdvancedContentItemValid = (
   item: CampaignAdvancedContentItem,
   options: AdvancedContentValidationOptions = {}
 ): boolean => {
-  const hasContent = String(item.content || '').trim().length > 0
+  const content = String(item.content || '')
+  const hasContent = options.contentIsEmpty
+    ? !options.contentIsEmpty(content)
+    : content.trim().length > 0
   const hasMedia = item.mediaOption !== 'none' && Array.isArray(item.mediaItems) && item.mediaItems.length > 0
   const allowMediaOnly = options.allowMediaOnly ?? true
   return hasContent || (allowMediaOnly && hasMedia)

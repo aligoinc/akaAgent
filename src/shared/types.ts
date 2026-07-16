@@ -391,6 +391,7 @@ export interface CampaignExtraSettings {
   sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
   postWithBackground?: boolean   // Đăng bài profile/page UI/group với phông nền Facebook
   rewriteContentEachRun?: boolean // Viết lại nội dung chính bằng AI trước mỗi lượt chạy; email chỉ áp dụng plain text
+  formattedContentEnabled?: boolean // Nội dung chính là HTML rich-text cho facebook_group_post và các chiến dịch Zalo nhắn tin hỗ trợ
   advancedContentEnabled?: boolean
   advancedContentItems?: CampaignAdvancedContentItem[]
   enableComment?: boolean        // kiếm comment

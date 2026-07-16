@@ -100,13 +100,11 @@ function findSpinGroupEnd(value: string, openIndex: number): number | null {
   return null
 }
 
-function splitTopLevelPipe(
-  value: string,
-  options: Required<Pick<SplitContentVariantsOptions, 'trim' | 'filterEmpty'>>
-): string[] {
-  const parts: string[] = []
-  let start = 0
-
+export function findContentVariantSeparatorIndexes(
+  content: string | undefined | null
+): number[] {
+  const value = String(content || '')
+  const separatorIndexes: number[] = []
   for (let index = 0; index < value.length; index += 1) {
     if (isEscapedSpecial(value, index)) {
       index += 1
@@ -134,12 +132,24 @@ function splitTopLevelPipe(
       break
     }
 
-    if (value[index] !== '|') continue
+    if (value[index] === '|') separatorIndexes.push(index)
+  }
 
-    const rawPart = value.slice(start, index)
+  return separatorIndexes
+}
+
+function splitTopLevelPipe(
+  value: string,
+  options: Required<Pick<SplitContentVariantsOptions, 'trim' | 'filterEmpty'>>
+): string[] {
+  const parts: string[] = []
+  let start = 0
+
+  for (const separatorIndex of findContentVariantSeparatorIndexes(value)) {
+    const rawPart = value.slice(start, separatorIndex)
     const part = options.trim ? rawPart.trim() : rawPart
     if (!options.filterEmpty || part.length > 0) parts.push(part)
-    start = index + 1
+    start = separatorIndex + 1
   }
 
   const rawTail = value.slice(start)

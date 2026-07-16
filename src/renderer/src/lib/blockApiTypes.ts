@@ -30,6 +30,9 @@ interface PageController {
   click(selector: string, opts?: { clickCount?: number }): Promise<void>;
   type(selector: string, text: string, opts?: { clearFirst?: boolean }): Promise<void>;
   fill(selector: string, value: string): Promise<void>;
+  focus(selector: string): Promise<void>;
+  paste(selector: string, value: string, opts?: { mimeType?: 'text/plain' | 'text/html' }): Promise<void>;
+  insertText(text: string): Promise<void>;
   hover(selector: string): Promise<void>;
   press(key: string): Promise<void>;
   scroll(opts: { selector?: string; direction: 'up' | 'down' | 'left' | 'right'; amount?: number }): Promise<{ scrollX: number; scrollY: number }>;

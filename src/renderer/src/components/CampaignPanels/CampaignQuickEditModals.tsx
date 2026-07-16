@@ -12,6 +12,15 @@ import type {
 } from '../../../../shared/types'
 import { renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
 import { findInvalidAdvancedContentItemIndex, normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
+import {
+  formattedContentToPlainCampaignContent,
+  formattedContentToPlainText,
+  isFormattedContentEmpty,
+  plainTextToFormattedContent,
+  sanitizeFormattedContent,
+  splitFormattedContentVariants,
+  supportsFormattedContent
+} from '../../../../shared/formattedContent'
 import { useAuthStore } from '../../stores/authStore'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -46,6 +55,7 @@ interface CampaignLimitFormState {
 
 interface CampaignContentFormState {
   content: string
+  formattedContentEnabled: boolean
   advancedContentEnabled: boolean
   advancedContentItems: CampaignAdvancedContentItem[]
   emailSubject: string
@@ -55,6 +65,7 @@ interface CampaignContentFormState {
   smsKeepNewLines: boolean
   rewriteContentEachRun: boolean
   postWithBackground: boolean
+  zaloMessageSendMode: NonNullable<CampaignExtraSettings['zaloMessageSendMode']>
   imageOption: ImageOption
   randomImageCount: number
   images: CampaignMediaInput[]
@@ -396,6 +407,7 @@ const getInitialContentFormState = (campaign: Campaign): CampaignContentFormStat
     extra.commentImageOption && extra.commentImageOption !== 'none' && savedCommentImages.length > 0 ? 'all' : 'none'
   return {
     content: campaign.content || '',
+    formattedContentEnabled: extra.formattedContentEnabled ?? false,
     advancedContentEnabled: extra.advancedContentEnabled ?? false,
     advancedContentItems: normalizeAdvancedContentItems(extra.advancedContentItems),
     emailSubject: extra.emailSubject || '',
@@ -405,6 +417,7 @@ const getInitialContentFormState = (campaign: Campaign): CampaignContentFormStat
     smsKeepNewLines: extra.smsKeepNewLines ?? false,
     rewriteContentEachRun: extra.rewriteContentEachRun ?? false,
     postWithBackground: extra.postWithBackground ?? false,
+    zaloMessageSendMode: extra.zaloMessageSendMode || 'normal',
     imageOption: (extra.imageOption || 'none') as ImageOption,
     randomImageCount: extra.randomImageCount || 3,
     images: (campaign.images || []) as CampaignMediaInput[],
@@ -697,6 +710,7 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
 export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: CampaignQuickEditModalProps) {
   const updateCampaign = useCampaignStore(state => state.updateCampaign)
   const showAlert = useUiStore(state => state.showAlert)
+  const showConfirm = useUiStore(state => state.showConfirm)
   const [saving, setSaving] = useState(false)
   const [mediaPickerTarget, setMediaPickerTarget] = useState<QuickMediaPickerTarget | null>(null)
   const [formData, setFormData] = useState<CampaignContentFormState>(() => getInitialContentFormState(campaign))
@@ -704,6 +718,9 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   const extra = campaign.extraSettings || {}
   const isEmailCampaign = actionId === EMAIL_SEND_ACTION_ID
   const isSmsCampaign = actionId === SMS_SEND_ACTION_ID
+  const canUseFormattedContent = supportsFormattedContent(actionId)
+  const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
+  const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTION_IDS.has(actionId)
   const isNewsfeedInteractionCampaign = actionId === NEWSFEED_INTERACTION_ACTION_ID
   const isFacebookGroupPostCampaign = actionId === FACEBOOK_GROUP_POST_ACTION_ID
@@ -742,7 +759,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     extra.sharePost === true ||
     extra.postAsReels === true
   const canUsePostBackground = isPostBackgroundCampaign && !isPostBackgroundDisabled
-  const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground
+  const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground && !isFormattedContentEnabled
   const showMainMedia = showMainContentSection && !isSmsCampaign && !isFacebookJoinGroupCampaign && !isFacebookGroupInviteCampaign
   const showCommentContent = isCommentSeedingCampaign || (isFacebookGroupPostCampaign && extra.enableComment === true)
   const showPostBumpContent = isFacebookGroupPostCampaign && extra.enablePostBump === true
@@ -758,6 +775,43 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
   const canUseAdvancedContentMode = showMainContentSection && !isCommentSeedingCampaign && !isSmsCampaign
   const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
+
+  const convertFormattedStateToPlain = (current: CampaignContentFormState): CampaignContentFormState => {
+    const plainContent = formattedContentToPlainCampaignContent(current.content)
+    const plainAdvancedItems = current.advancedContentItems.map(item => ({
+      ...item,
+      content: formattedContentToPlainText(item.content)
+    }))
+    return {
+      ...current,
+      formattedContentEnabled: false,
+      content: plainContent,
+      advancedContentEnabled: current.advancedContentEnabled,
+      advancedContentItems: plainAdvancedItems
+    }
+  }
+
+  const setFormattedContentEnabled = (checked: boolean) => {
+    if (!checked) {
+      setFormData(current => convertFormattedStateToPlain(current))
+      return
+    }
+    setFormData(current => {
+      return {
+        ...current,
+        formattedContentEnabled: true,
+        rewriteContentEachRun: false,
+        postWithBackground: false,
+        zaloMessageSendMode: 'normal',
+        content: plainTextToFormattedContent(current.content),
+        advancedContentEnabled: current.advancedContentEnabled,
+        advancedContentItems: current.advancedContentItems.map(item => ({
+          ...item,
+          content: plainTextToFormattedContent(item.content)
+        }))
+      }
+    })
+  }
 
   const validateSelectedMedia = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
     if (option === 'none' || images.length === 0) return true
@@ -778,7 +832,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     }
 
     const invalidIndex = findInvalidAdvancedContentItemIndex(normalizedAdvancedContentItems, {
-      allowMediaOnly: !isSmsCampaign
+      allowMediaOnly: !isSmsCampaign,
+      contentIsEmpty: isRichContentEditorEnabled ? isFormattedContentEmpty : undefined
     })
     if (invalidIndex < 0) return true
 
@@ -1079,7 +1134,9 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
     const note = formData.advancedContentEnabled
       ? 'Tạo nhiều nội dung riêng, mỗi nội dung là một biến thể hoàn chỉnh với media riêng. Mỗi lượt chạy sẽ xoay vòng qua các nội dung trong danh sách.'
-      : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
+      : isRichContentEditorEnabled
+        ? 'Dùng dấu | để phân tách các nội dung có định dạng gửi luân phiên. Nhập \\| nếu muốn hiển thị dấu |.'
+        : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
 
     return (
       <div className="campaign-content-mode-row">
@@ -1302,13 +1359,20 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
                 </button>
               </div>
             </div>
-            <textarea
-              className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
-              placeholder="Nhập nội dung..."
-              value={item.content}
-              onChange={event => setAdvancedContentItem(item.id, { content: event.target.value })}
-              rows={5}
-            />
+            {isRichContentEditorEnabled ? (
+              <EmailHtmlEditor
+                value={item.content}
+                onChange={html => setAdvancedContentItem(item.id, { content: html })}
+              />
+            ) : (
+              <textarea
+                className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
+                placeholder="Nhập nội dung..."
+                value={item.content}
+                onChange={event => setAdvancedContentItem(item.id, { content: event.target.value })}
+                rows={5}
+              />
+            )}
             {renderAdvancedContentItemMedia(item)}
           </div>
           {index === formData.advancedContentItems.length - 1 && (
@@ -1335,8 +1399,12 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     }
     if (showMainContentSection) {
       const hasMainContentText = isAdvancedContentMode
-        ? normalizedAdvancedContentItems.some(item => String(item.content || '').trim().length > 0)
-        : formData.content.trim().length > 0
+        ? normalizedAdvancedContentItems.some(item => isRichContentEditorEnabled
+          ? !isFormattedContentEmpty(item.content)
+          : String(item.content || '').trim().length > 0)
+        : isRichContentEditorEnabled
+          ? splitFormattedContentVariants(formData.content).length > 0
+          : formData.content.trim().length > 0
       const hasSelectedMainMedia = isAdvancedContentMode
         ? !isSmsCampaign && normalizedAdvancedContentItems.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
         : !isSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
@@ -1390,10 +1458,16 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
       if (showMainContentSection) {
         nextExtraSettings.advancedContentEnabled = canUseAdvancedContentMode ? formData.advancedContentEnabled : false
-        nextExtraSettings.advancedContentItems = normalizedAdvancedContentItems.map(item => isSmsCampaign
-          ? { ...item, mediaOption: 'none' as const, mediaItems: [] }
-          : item)
-        nextExtraSettings.rewriteContentEachRun = isSmsCampaign || (isEmailCampaign && formData.emailBodyIsHtml)
+        nextExtraSettings.advancedContentItems = normalizedAdvancedContentItems.map(item => {
+          const normalizedItem = isFormattedContentEnabled
+            ? { ...item, content: sanitizeFormattedContent(item.content) }
+            : item
+          return isSmsCampaign
+            ? { ...normalizedItem, mediaOption: 'none' as const, mediaItems: [] }
+            : normalizedItem
+        })
+        nextExtraSettings.formattedContentEnabled = isFormattedContentEnabled
+        nextExtraSettings.rewriteContentEachRun = isSmsCampaign || isFormattedContentEnabled || (isEmailCampaign && formData.emailBodyIsHtml)
           ? false
           : formData.rewriteContentEachRun
         nextExtraSettings.imageOption = (isSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption
@@ -1409,7 +1483,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
         nextExtraSettings.smsKeepNewLines = formData.smsKeepNewLines
       }
       if (isPostBackgroundCampaign) {
-        nextExtraSettings.postWithBackground = isPostBackgroundActive
+        nextExtraSettings.postWithBackground = isFormattedContentEnabled ? false : isPostBackgroundActive
         if (isPostBackgroundActive) {
           nextExtraSettings.copyContentFromSource = false
           nextExtraSettings.includeSourceImages = false
@@ -1417,6 +1491,9 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
           nextExtraSettings.sharePost = false
           nextExtraSettings.postAsReels = false
         }
+      }
+      if (isZaloMessageCampaign) {
+        nextExtraSettings.zaloMessageSendMode = isFormattedContentEnabled ? 'normal' : formData.zaloMessageSendMode
       }
       if (showCommentContent) {
         nextExtraSettings.commentContent = formData.commentContent
@@ -1435,7 +1512,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       }
 
       await updateCampaign(campaign.id, {
-        ...(showMainContentSection ? { content: formData.content } : {}),
+        ...(showMainContentSection ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
         extraSettings: nextExtraSettings,
         ...(showMainMedia ? { images: isSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
       })
@@ -1489,7 +1566,24 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
                       type="checkbox"
                       checked={isPostBackgroundActive}
                       disabled={isPostBackgroundDisabled}
-                      onChange={event => setFormData(prev => ({ ...prev, postWithBackground: event.target.checked }))}
+                      onChange={event => {
+                        const checked = event.target.checked
+                        const apply = () => setFormData(current => {
+                          const compatibleState = checked && current.formattedContentEnabled
+                            ? convertFormattedStateToPlain(current)
+                            : current
+                          return { ...compatibleState, postWithBackground: checked }
+                        })
+                        if (checked && isFormattedContentEnabled) {
+                          showConfirm(
+                            'Đăng bài với phông nền không hỗ trợ nội dung có định dạng. Nội dung sẽ được chuyển sang văn bản thường.',
+                            apply,
+                            { title: 'Chuyển sang nội dung thường', confirmText: 'Chuyển và bật', variant: 'primary' }
+                          )
+                          return
+                        }
+                        apply()
+                      }}
                     />
                     <span>Đăng bài với phông nền <em>(tối đa 130 ký tự, 3 dòng và không đăng ảnh)</em></span>
                   </label>
@@ -1533,11 +1627,29 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
               )}
 
               {renderContentModeSegmented()}
+
+              {canUseFormattedContent && (
+                <div className="stepper-form-group">
+                  <label className="schedule-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={isFormattedContentEnabled}
+                      onChange={event => setFormattedContentEnabled(event.target.checked)}
+                    />
+                    <span>Nội dung có định dạng</span>
+                  </label>
+                  {isFormattedContentEnabled && !isAdvancedContentMode && (
+                    <div className="schedule-hint" style={{ marginTop: 6 }}>
+                      Dấu | phân tách các nội dung gửi luân phiên. Nhập \| nếu muốn hiển thị dấu |.
+                    </div>
+                  )}
+                </div>
+              )}
               {isAdvancedContentMode ? (
                 <>
                   {renderAdvancedContentEditor()}
                   {renderSmsContentOptions()}
-                  {!isSmsCampaign && !(isEmailCampaign && formData.emailBodyIsHtml) && (
+                  {!isSmsCampaign && !isRichContentEditorEnabled && (
                     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
                       <input
                         type="checkbox"
@@ -1551,8 +1663,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
               ) : (
                 <>
                   <div className="stepper-form-group">
-                    <label>{isEmailCampaign ? (formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email') : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
-                    {isEmailCampaign && formData.emailBodyIsHtml ? (
+                    <label>{isEmailCampaign ? (formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email') : isFormattedContentEnabled ? 'Nội dung có định dạng' : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
+                    {isRichContentEditorEnabled ? (
                       <EmailHtmlEditor
                         value={formData.content}
                         onChange={html => setFormData(prev => ({ ...prev, content: html }))}
@@ -1569,7 +1681,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
                   {renderSmsContentOptions()}
 
-                  {!isSmsCampaign && !(isEmailCampaign && formData.emailBodyIsHtml) && (
+                  {!isSmsCampaign && !isRichContentEditorEnabled && (
                     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
                       <input
                         type="checkbox"
