@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
 import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetListQuery, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, ZaloRuntimeRestartRequiredPayload, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AiGenerateCampaignNameRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizSmsShopListItem, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContactListResult, PageInboxContactListQuery, SaveUploadDatasetRequest, SaveUploadDatasetResult, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, EmailCampaignLinkTrackingSummary, MediaClipboardImageInput, MediaFile, MediaGroup, MediaStorageSettings, MediaUploadResult, CustomerFeedbackSubmitRequest, CustomerFeedbackSubmitResult } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
+import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -449,6 +450,17 @@ const electronAPI = {
     const handler = (_: unknown, event: ZaloLoginQrEvent) => callback(event)
     ipcRenderer.on(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, handler)
+  },
+
+  getZaloServerOperationState: (): Promise<ZaloServerOperationStateSnapshot> =>
+    ipcRenderer.invoke(IPC_EVENTS.ZALO_SERVER_OPERATION_STATE_GET),
+
+  onZaloServerOperationStateUpdated: (
+    callback: (snapshot: ZaloServerOperationStateSnapshot) => void
+  ): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, snapshot: ZaloServerOperationStateSnapshot) => callback(snapshot)
+    ipcRenderer.on(IPC_EVENTS.ZALO_SERVER_OPERATION_STATE_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.ZALO_SERVER_OPERATION_STATE_UPDATED, handler)
   },
 
   onAccountStatusUpdated: (callback: () => void): () => void => {

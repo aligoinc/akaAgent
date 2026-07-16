@@ -178,6 +178,34 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
     const normalizedUpdates = updates || {}
+    const updateKeys = Object.keys(normalizedUpdates)
+    const statusOnly = updateKeys.length === 1 && updateKeys[0] === 'status'
+    const requestedStatus = normalizedUpdates.status
+    if (
+      statusOnly
+      && (requestedStatus === 'chờ xử lý' || requestedStatus === 'tạm dừng')
+      && shouldRouteCurrentUserZaloCleanupToServer()
+    ) {
+      const existing = await supabase.getAccount(id)
+      if (existing?.flatformType === 'zalo') {
+        const result = await supabase.setZaloServerAccountStatus(id, requestedStatus)
+        if (!result.ok) {
+          if (result.reason === 'runtime_not_owner') {
+            throw new Error('Organization không còn chạy Zalo Server. Vui lòng tắt và mở lại ứng dụng.')
+          }
+          if (result.reason === 'not_found') throw new Error('Không tìm thấy tài khoản Zalo.')
+          if (result.reason === 'invalid_transition') {
+            throw new Error('Trạng thái tài khoản đã thay đổi. Vui lòng thử lại.')
+          }
+          throw new Error('Không thể cập nhật trạng thái tài khoản Zalo Server.')
+        }
+        const account = await supabase.getAccount(id)
+        if (!account) throw new Error('Không tìm thấy tài khoản Zalo.')
+        sendAccountStatusUpdated(mainWindow)
+        return account
+      }
+    }
+
     const account = await supabase.updateAccount(id, normalizedUpdates)
     if (normalizedUpdates.flatformType !== undefined) {
       if (!shouldRouteCurrentUserZaloCleanupToServer()) {

@@ -162,6 +162,55 @@ export interface EnqueueZaloRealtimeGroupEventResult {
   inputDataId: number | null
 }
 
+export type ZaloServerControlStatus = 'chờ xử lý' | 'tạm dừng'
+
+export interface ZaloServerCampaignStatusResult {
+  ok: boolean
+  reason: 'updated' | 'already_target' | 'not_found' | 'runtime_not_owner' | 'invalid_transition' | string
+  campaignId: number
+  campaignStatus: string | null
+  accountStatus: string | null
+}
+
+export interface ZaloServerRunControlState {
+  campaignId: number
+  accountId: number
+  campaignStatus: string | null
+  accountStatus: string | null
+  accountLoginStatus: string | null
+  accountIsActive: boolean
+  accountIsDelete: boolean
+  campaignIsDelete: boolean
+  pauseRequested: boolean
+  shouldStop: boolean
+  hardStopReason: string | null
+}
+
+export interface ZaloServerRunUnitClaimResult {
+  ok: boolean
+  reason: string
+  campaignStatus: string | null
+  accountStatus: string | null
+  claimedCount: number
+}
+
+export interface ZaloServerCampaignFinalizationResult {
+  ok: boolean
+  reason: string
+  campaignId: number
+  accountId: number | null
+  campaignStatus: string | null
+  accountStatus: string | null
+}
+
+export interface ZaloServerMultiDailySlotAdvanceResult {
+  ok: boolean
+  reason: string
+  campaignStatus: string | null
+  accountStatus: string | null
+  resetCount: number
+}
+
 const uniquePositiveIds = (ids: number[]): number[] => Array.from(new Set(
   ids
     .map(id => Number(id))
@@ -911,6 +960,210 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
   return mapCampaignFromDB(data)
 }
 
+export async function setZaloServerCampaignStatus(
+  campaignId: number,
+  status: ZaloServerControlStatus
+): Promise<ZaloServerCampaignStatusResult> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for Zalo Server control')
+  }
+  if (status !== 'chờ xử lý' && status !== 'tạm dừng') {
+    throw new Error('Zalo Server campaign status must be pending or paused')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_set_zalo_server_campaign_status', {
+    p_campaign_id: normalizedCampaignId,
+    p_staff_id: u.staffId,
+    p_status: status
+  })
+  if (error) {
+    throw new Error(
+      `Failed to update Zalo Server campaign status atomically: ${error.message}. ` +
+      'Ensure migration v172 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Zalo Server campaign control returned no result')
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'invalid_transition'),
+    campaignId: Number(row.campaign_id || normalizedCampaignId),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status)
+  }
+}
+
+export async function getZaloServerRunControlState(
+  campaignId: number,
+  accountId: number
+): Promise<ZaloServerRunControlState> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  const normalizedAccountId = Math.floor(Number(accountId))
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for Zalo Server control')
+  }
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for Zalo Server control')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_get_zalo_server_run_control_state', {
+    p_campaign_id: normalizedCampaignId,
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId
+  })
+  if (error) {
+    throw new Error(
+      `Failed to read Zalo Server run control atomically: ${error.message}. ` +
+      'Ensure migration v172 is applied; no local fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Zalo Server run control returned no result')
+  return {
+    campaignId: Number(row.campaign_id || normalizedCampaignId),
+    accountId: Number(row.account_id || normalizedAccountId),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    accountLoginStatus: row.account_login_status == null ? null : String(row.account_login_status),
+    accountIsActive: row.account_is_active === true,
+    accountIsDelete: row.account_is_delete === true,
+    campaignIsDelete: row.campaign_is_delete === true,
+    pauseRequested: row.pause_requested === true,
+    shouldStop: row.should_stop === true,
+    hardStopReason: row.hard_stop_reason == null ? null : String(row.hard_stop_reason)
+  }
+}
+
+export async function claimZaloServerRunUnit(
+  campaignId: number,
+  accountId: number,
+  inputDataIds: number[]
+): Promise<ZaloServerRunUnitClaimResult> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  const normalizedAccountId = Math.floor(Number(accountId))
+  const normalizedInputDataIds = Array.from(new Set(inputDataIds.map(id => Number(id))))
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for Zalo Server unit claim')
+  }
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for Zalo Server unit claim')
+  }
+  if (
+    normalizedInputDataIds.length !== inputDataIds.length ||
+    normalizedInputDataIds.length > 50 ||
+    normalizedInputDataIds.some(id => !Number.isSafeInteger(id) || id <= 0)
+  ) {
+    throw new Error('Zalo Server unit input IDs must be unique positive integers with at most 50 rows')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_claim_zalo_server_run_unit', {
+    p_campaign_id: normalizedCampaignId,
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_input_data_ids: normalizedInputDataIds
+  })
+  if (error) {
+    throw new Error(
+      `Failed to claim Zalo Server run unit atomically: ${error.message}. ` +
+      'Ensure migration v172 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Zalo Server run unit claim returned no result')
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'not_found'),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    claimedCount: Number(row.claimed_count || 0)
+  }
+}
+
+export async function finalizeZaloServerCampaign(
+  campaignId: number,
+  note?: string | null
+): Promise<ZaloServerCampaignFinalizationResult> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for Zalo Server finalization')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_finalize_zalo_server_campaign', {
+    p_campaign_id: normalizedCampaignId,
+    p_staff_id: u.staffId,
+    p_note: note ?? null,
+    p_update_note: note !== undefined
+  })
+  if (error) {
+    throw new Error(
+      `Failed to finalize Zalo Server campaign atomically: ${error.message}. ` +
+      'Ensure migration v172 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Zalo Server campaign finalization returned no result')
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'not_found'),
+    campaignId: Number(row.campaign_id || normalizedCampaignId),
+    accountId: row.account_id == null ? null : Number(row.account_id),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status)
+  }
+}
+
+export async function advanceZaloServerMultiDailySlot(
+  campaignId: number,
+  accountId: number,
+  nextSchedule: string
+): Promise<ZaloServerMultiDailySlotAdvanceResult> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  const normalizedAccountId = Math.floor(Number(accountId))
+  const normalizedNextSchedule = new Date(nextSchedule)
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for Zalo Server slot advance')
+  }
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for Zalo Server slot advance')
+  }
+  if (Number.isNaN(normalizedNextSchedule.getTime())) {
+    throw new Error('Next schedule must be a valid timestamp for Zalo Server slot advance')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_advance_zalo_server_multi_daily_slot', {
+    p_campaign_id: normalizedCampaignId,
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_next_schedule: normalizedNextSchedule.toISOString()
+  })
+  if (error) {
+    throw new Error(
+      `Failed to advance Zalo Server multi-daily slot atomically: ${error.message}. ` +
+      'Ensure migration v172 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Zalo Server multi-daily slot advance returned no result')
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'not_found'),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    resetCount: Number(row.reset_count || 0)
+  }
+}
+
 const chunkNumbers = (values: number[], chunkSize: number): number[][] => {
   const chunks: number[][] = []
   for (let i = 0; i < values.length; i += chunkSize) {
@@ -1173,6 +1426,71 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
     )
   }
   return updatedCampaign
+}
+
+/**
+ * Server runtime writes after an atomic claim must never overwrite a newer
+ * pause/resume written by a client. A missing update is a normal CAS conflict;
+ * return the current row so realtime can publish the winning client state.
+ */
+export async function updateClaimedZaloServerCampaign(
+  id: number,
+  updates: Partial<Campaign>
+): Promise<Campaign> {
+  const u = requireCurrentUser()
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (updates.status !== undefined) payload.status = updates.status
+  if (updates.schedule !== undefined) payload.schedule = updates.schedule
+  if (updates.originalSchedule !== undefined) payload.original_schedule = updates.originalSchedule
+  if (updates.completedAt !== undefined) payload.completed_at = updates.completedAt
+  if (updates.extraSettings !== undefined) payload.extra_settings = updates.extraSettings
+  if (updates.log !== undefined) payload.log = updates.log
+  if (updates.note !== undefined) payload.note = updates.note
+
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .update(payload)
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('status', 'đang chạy')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to update claimed Zalo Server campaign: ${error.message}`)
+  if (data) return mapCampaignFromDB(data)
+
+  const current = await getCampaign(id)
+  if (!current) throw new Error('Không tìm thấy chiến dịch Zalo Server sau xung đột trạng thái')
+  return current
+}
+
+/**
+ * A find-data producer inserts rows outside the target campaign run. If the
+ * target finalizer committed first, reopen only that completed snapshot; a
+ * newer pause or already-running state must win the CAS.
+ */
+export async function reopenCompletedZaloServerCampaignAfterInputInsert(
+  id: number,
+  expectedActionId: string
+): Promise<Campaign | null> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .update({
+      status: 'chờ xử lý',
+      note: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('action_id', expectedActionId)
+    .eq('is_delete', false)
+    .eq('status', 'hoàn thành')
+    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to reopen Zalo Server campaign after input insert: ${error.message}`)
+  return data ? mapCampaignFromDB(data) : null
 }
 
 export async function deleteCampaign(id: number): Promise<void> {

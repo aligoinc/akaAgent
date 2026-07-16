@@ -38,6 +38,12 @@ export interface ZaloServerOperationSnapshot {
   error?: string
 }
 
+/** Cached live operation state exposed by the desktop main process to its renderer. */
+export interface ZaloServerOperationStateSnapshot {
+  serverStartedAt: string | null
+  operations: ZaloServerOperationSnapshot[]
+}
+
 export interface ZaloServerStaffSnapshot {
   staffId: number
   organizationId: number

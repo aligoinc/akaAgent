@@ -5,7 +5,7 @@ interface CampaignStore {
   // Accounts
   accounts: AutoAccount[]
   loadingAccounts: boolean
-  loadAccounts: () => Promise<void>
+  loadAccounts: (options?: { silent?: boolean }) => Promise<void>
   createAccount: (data: Partial<AutoAccount>) => Promise<AutoAccount>
   updateAccount: (id: number, updates: Partial<AutoAccount>) => Promise<AutoAccount>
   deleteAccount: (id: number) => Promise<void>
@@ -34,7 +34,7 @@ interface CampaignStore {
   // Campaigns
   campaigns: Campaign[]
   loadingCampaigns: boolean
-  loadCampaigns: () => Promise<void>
+  loadCampaigns: (options?: { silent?: boolean }) => Promise<void>
   createCampaign: (data: Partial<Campaign>) => Promise<Campaign>
   updateCampaign: (id: number, updates: Partial<Campaign>) => Promise<void>
   deleteCampaign: (id: number) => Promise<void>
@@ -94,6 +94,8 @@ interface CampaignStore {
 
 }
 
+const BULK_CAMPAIGN_STATUS_CONCURRENCY = 10
+
 const getCampaignUpdatedAtTime = (campaign: Campaign): number | null => {
   const time = Date.parse(campaign.updatedAt || '')
   return Number.isFinite(time) ? time : null
@@ -121,6 +123,24 @@ const mergeLoadedCampaignsPreservingNewest = (current: Campaign[], loaded: Campa
   return loaded.map(campaign => mergeCampaignPreservingNewest(currentById.get(campaign.id), campaign))
 }
 
+const mergeLoadedAccountsPreservingNewest = (current: AutoAccount[], loaded: AutoAccount[]): AutoAccount[] => {
+  const currentById = new Map(current.map(account => [account.id, account]))
+  return loaded.map(account => {
+    const existing = currentById.get(account.id)
+    if (!existing) return account
+    const existingTime = Date.parse(existing.updatedAt || '')
+    const incomingTime = Date.parse(account.updatedAt || '')
+    return Number.isFinite(existingTime) && Number.isFinite(incomingTime) && incomingTime < existingTime
+      ? existing
+      : account
+  })
+}
+
+let accountsLoadInFlight: Promise<void> | null = null
+let accountsLoadTrailingRequested = false
+let campaignsLoadInFlight: Promise<void> | null = null
+let campaignsLoadTrailingRequested = false
+
 export const useCampaignStore = create<CampaignStore>((set, get) => ({
   // =========== ACCOUNTS ===========
   accounts: [],
@@ -130,17 +150,34 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   proxies: [],
   loadingProxies: false,
 
-  loadAccounts: async () => {
-    if (!window.electronAPI) return
-    set({ loadingAccounts: true })
-    try {
-      const accounts = await window.electronAPI.listAccounts()
-      set({ accounts })
-    } catch (err) {
-      console.error('Failed to load accounts:', err)
-    } finally {
-      set({ loadingAccounts: false })
+  loadAccounts: (options) => {
+    if (!window.electronAPI) return Promise.resolve()
+    if (accountsLoadInFlight) {
+      accountsLoadTrailingRequested = true
+      return accountsLoadInFlight
     }
+    const silent = options?.silent === true
+    if (!silent) set({ loadingAccounts: true })
+    const operation = (async () => {
+      let firstRequest = true
+      do {
+        accountsLoadTrailingRequested = false
+        try {
+          const accounts = await window.electronAPI.listAccounts()
+          set(state => ({ accounts: mergeLoadedAccountsPreservingNewest(state.accounts, accounts) }))
+        } catch (err) {
+          console.error('Failed to load accounts:', err)
+        } finally {
+          if (firstRequest && !silent) set({ loadingAccounts: false })
+          firstRequest = false
+        }
+      } while (accountsLoadTrailingRequested)
+    })()
+    accountsLoadInFlight = operation
+    void operation.finally(() => {
+      if (accountsLoadInFlight === operation) accountsLoadInFlight = null
+    })
+    return operation
   },
 
   createAccount: async (data) => {
@@ -153,7 +190,13 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   updateAccount: async (id, updates) => {
     if (!window.electronAPI) throw new Error('API not available')
     const account = await window.electronAPI.updateAccount(id, updates)
-    await get().loadAccounts()
+    set(state => {
+      const index = state.accounts.findIndex(item => item.id === account.id)
+      if (index < 0) return { accounts: [account, ...state.accounts] }
+      const accounts = state.accounts.slice()
+      accounts[index] = account
+      return { accounts }
+    })
     return account
   },
 
@@ -280,17 +323,34 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   campaigns: [],
   loadingCampaigns: false,
 
-  loadCampaigns: async () => {
-    if (!window.electronAPI) return
-    set({ loadingCampaigns: true })
-    try {
-      const campaigns = await window.electronAPI.listCampaigns()
-      set(state => ({ campaigns: mergeLoadedCampaignsPreservingNewest(state.campaigns, campaigns) }))
-    } catch (err) {
-      console.error('Failed to load campaigns:', err)
-    } finally {
-      set({ loadingCampaigns: false })
+  loadCampaigns: (options) => {
+    if (!window.electronAPI) return Promise.resolve()
+    if (campaignsLoadInFlight) {
+      campaignsLoadTrailingRequested = true
+      return campaignsLoadInFlight
     }
+    const silent = options?.silent === true
+    if (!silent) set({ loadingCampaigns: true })
+    const operation = (async () => {
+      let firstRequest = true
+      do {
+        campaignsLoadTrailingRequested = false
+        try {
+          const campaigns = await window.electronAPI.listCampaigns()
+          set(state => ({ campaigns: mergeLoadedCampaignsPreservingNewest(state.campaigns, campaigns) }))
+        } catch (err) {
+          console.error('Failed to load campaigns:', err)
+        } finally {
+          if (firstRequest && !silent) set({ loadingCampaigns: false })
+          firstRequest = false
+        }
+      } while (campaignsLoadTrailingRequested)
+    })()
+    campaignsLoadInFlight = operation
+    void operation.finally(() => {
+      if (campaignsLoadInFlight === operation) campaignsLoadInFlight = null
+    })
+    return operation
   },
 
   createCampaign: async (data) => {
@@ -302,8 +362,14 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
 
   updateCampaign: async (id, updates) => {
     if (!window.electronAPI) return
-    await window.electronAPI.updateCampaign(id, updates)
-    await get().loadCampaigns()
+    const campaign = await window.electronAPI.updateCampaign(id, updates)
+    set(state => {
+      const index = state.campaigns.findIndex(item => item.id === campaign.id)
+      if (index < 0) return { campaigns: [campaign, ...state.campaigns] }
+      const campaigns = state.campaigns.slice()
+      campaigns[index] = mergeCampaignPreservingNewest(campaigns[index], campaign)
+      return { campaigns }
+    })
   },
 
   deleteCampaign: async (id) => {
@@ -322,8 +388,32 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   bulkUpdateCampaignStatus: async (ids, status) => {
     if (!window.electronAPI || ids.length === 0) return
     const api = window.electronAPI
-    await Promise.all(ids.map(id => api.updateCampaign(id, { status })))
-    await get().loadCampaigns()
+    const results: PromiseSettledResult<Campaign>[] = []
+    for (let offset = 0; offset < ids.length; offset += BULK_CAMPAIGN_STATUS_CONCURRENCY) {
+      const batch = ids.slice(offset, offset + BULK_CAMPAIGN_STATUS_CONCURRENCY)
+      results.push(...await Promise.allSettled(
+        batch.map(id => api.updateCampaign(id, { status }))
+      ))
+    }
+    const updatedCampaigns = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+    const updatedById = new Map(updatedCampaigns.map(campaign => [campaign.id, campaign]))
+    set(state => ({
+      campaigns: state.campaigns.map(campaign => {
+        const updated = updatedById.get(campaign.id)
+        return updated ? mergeCampaignPreservingNewest(campaign, updated) : campaign
+      })
+    }))
+    await get().loadCampaigns({ silent: true })
+    const failed = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failed.length > 0) {
+      const firstReason = failed[0].reason
+      const firstMessage = firstReason instanceof Error ? firstReason.message : ''
+      throw new Error(
+        failed.length === 1 && firstMessage
+          ? firstMessage
+          : `Không thể cập nhật ${failed.length}/${ids.length} chiến dịch.`
+      )
+    }
   },
 
   bulkDeleteCampaigns: async (ids) => {

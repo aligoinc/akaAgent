@@ -37,6 +37,7 @@ const RECONCILE_INTERVAL_MS = 60_000
 const RECONCILE_LIFECYCLE_CONCURRENCY = 25
 const RECENT_EVENT_LIMIT = 1000
 const RECENT_OPERATION_LIMIT_PER_STAFF = 200
+const SNAPSHOT_BROADCAST_COALESCE_MS = 50
 const ZALO_SERVER_MODE_DISABLED_MESSAGE = 'Gói Zalo của doanh nghiệp đã chuyển về chế độ chạy local'
 
 interface StaffRuntime {
@@ -123,6 +124,7 @@ export class ZaloServerRuntimeManager {
   private lastDiscoveredStaffIds = new Set<number>()
   private readonly handoffRequiredStaffIds = new Set<number>()
   private readonly operations = new Map<string, ZaloServerOperationSnapshot>()
+  private snapshotNotifyTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly options: ZaloServerRuntimeManagerOptions) {}
 
@@ -420,7 +422,14 @@ export class ZaloServerRuntimeManager {
             const reason = result && typeof result === 'object'
               ? String((result as { reason?: unknown }).reason || 'Không thể bắt đầu đăng nhập QR')
               : 'Không thể bắt đầu đăng nhập QR'
-            this.updateOperation(operation.operationId, 'failed', safeResult, reason)
+            if (this.operations.get(operation.operationId)?.status === 'running') {
+              this.updateOperation(operation.operationId, 'failed', safeResult, reason)
+              runtime.eventWindow?.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, {
+                accountId,
+                status: 'error',
+                message: reason
+              })
+            }
           }
           return
         }
@@ -443,7 +452,17 @@ export class ZaloServerRuntimeManager {
         }
       })
       .catch(error => {
-        this.updateOperation(operation.operationId, 'failed', undefined, this.errorMessage(error))
+        const reason = this.errorMessage(error)
+        if (this.operations.get(operation.operationId)?.status === 'running') {
+          this.updateOperation(operation.operationId, 'failed', undefined, reason)
+          if (command === 'zalo.loginQr.start') {
+            runtime.eventWindow?.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, {
+              accountId,
+              status: 'error',
+              message: reason
+            })
+          }
+        }
       })
 
     return { ...operation }
@@ -823,7 +842,10 @@ export class ZaloServerRuntimeManager {
         this.options.ownershipStore.claim(user.staffId, liveModeAfterWarmup.revision)
         this.assertRuntimeMayStart(runtime)
         realtimeManager.start()
-        scheduler.start()
+        // Spread database discovery/claim bursts when many staff runtimes are
+        // created together after a VPS restart. This is only an initial delay;
+        // it does not cap staff, accounts or concurrent workers.
+        scheduler.start({ initialDelayMs: Math.floor(Math.random() * 30_001) })
       })
       if (waitingForDesktop) return
       this.assertRuntimeMayStart(runtime)
@@ -1196,6 +1218,14 @@ export class ZaloServerRuntimeManager {
   }
 
   private notifySnapshot(): void {
+    if (this.snapshotNotifyTimer) return
+    this.snapshotNotifyTimer = setTimeout(() => {
+      this.snapshotNotifyTimer = null
+      this.flushSnapshot()
+    }, SNAPSHOT_BROADCAST_COALESCE_MS)
+  }
+
+  private flushSnapshot(): void {
     this.options.broadcastSnapshot()
     const adminWindow = this.options.adminWindow()
     try {

@@ -207,6 +207,8 @@ interface ZaloShareMessageCapacity {
 }
 
 type ZaloRuntimeStopReason = 'handoff' | 'shutdown'
+type ZaloServerPauseBoundary = 'campaign' | 'account'
+type ZaloServerCampaignFinalization = Awaited<ReturnType<SupabaseService['finalizeZaloServerCampaign']>>
 
 interface FacebookGroupInviteTarget {
   detail: CampaignInputData
@@ -523,9 +525,12 @@ export class CampaignScheduler {
   private externalAccountRuns = new Set<number>()
   private activeV2Aborts = new Map<number, AbortController>()
   private activeZaloCampaignRuns = new Set<number>()
+  private claimedServerZaloCampaignIds = new Set<number>()
+  private claimedServerZaloAccountIds = new Set<number>()
   private activeZaloRunGenerations = new Map<number, number>()
   private activeZaloRunStopReasons = new Map<number, ZaloRuntimeStopReason>()
   private pauseRequests = new Set<number>()
+  private serverZaloPauseBoundaries = new Map<number, ZaloServerPauseBoundary>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private internalSmsPushedDetailKeys = new Set<string>()
   private externalSmsPushedDetailKeys = new Set<string>()
@@ -617,7 +622,9 @@ export class CampaignScheduler {
     const initialDelayMs = Math.max(0, options.initialDelayMs ?? 0)
     if (initialDelayMs > 0) {
       const seconds = Math.ceil(initialDelayMs / 1000)
-      this.sendLog(`📋 Scheduler sẽ bắt đầu sau ${seconds} giây. Kiểm tra mỗi 30 giây.`)
+      if (this.runtimeTarget !== 'server') {
+        this.sendLog(`📋 Scheduler sẽ bắt đầu sau ${seconds} giây. Kiểm tra mỗi 30 giây.`)
+      }
       this.startDelayTimeoutId = setTimeout(() => {
         this.startDelayTimeoutId = null
         this.startPolling()
@@ -782,6 +789,19 @@ export class CampaignScheduler {
   }
 
   async requestPauseCampaign(campaignId: number): Promise<Campaign> {
+    if (this.runtimeTarget === 'server') {
+      const result = await this.supabase.setZaloServerCampaignStatus(campaignId, 'tạm dừng')
+      if (!result.ok) {
+        if (result.reason === 'not_found') throw new Error('Không tìm thấy chiến dịch Zalo Server.')
+        if (result.reason === 'runtime_not_owner') throw new Error('Organization không còn chạy Zalo Server.')
+        throw new Error('Chỉ có thể tạm dừng chiến dịch đang chờ xử lý hoặc đang chạy.')
+      }
+      const campaign = await this.supabase.getCampaign(campaignId)
+      if (!campaign) throw new Error('Không tìm thấy chiến dịch Zalo Server sau khi tạm dừng.')
+      this.broadcastCampaignUpdate(campaign)
+      return campaign
+    }
+
     const campaign = await this.supabase.getCampaign(campaignId)
     if (!campaign) {
       throw new Error('Không tìm thấy chiến dịch.')
@@ -815,14 +835,44 @@ export class CampaignScheduler {
     await this.logCampaignProgress(campaign.id, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
   }
 
-  private async sleepBetweenTargets(campaign: Campaign, seconds: number): Promise<'paused' | 'completed'> {
+  private async sleepBetweenTargets(
+    campaign: Campaign,
+    seconds: number,
+    account?: AutoAccount
+  ): Promise<'paused' | 'completed'> {
     const endAt = Date.now() + seconds * 1000
+    let nextServerControlCheckAt = 0
     while (Date.now() < endAt) {
       if (this.isCampaignPauseRequested(campaign.id)) return 'paused'
+      if (account && this.isServerZaloCampaign(account, campaign) && Date.now() >= nextServerControlCheckAt) {
+        nextServerControlCheckAt = Date.now() + 5000
+        const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
+        if (this.isServerZaloBoundaryRequested(
+          control.campaignStatus,
+          control.accountStatus,
+          control.hardStopReason
+        )) {
+          this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
+          return 'paused'
+        }
+        if (control.hardStopReason) return 'completed'
+      }
       if (this.getZaloRuntimeStopReason(campaign.id)) return 'completed'
       await new Promise(resolve => setTimeout(resolve, Math.min(500, Math.max(0, endAt - Date.now()))))
     }
-    return this.isCampaignPauseRequested(campaign.id) ? 'paused' : 'completed'
+    if (this.isCampaignPauseRequested(campaign.id)) return 'paused'
+    if (account && this.isServerZaloCampaign(account, campaign)) {
+      const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
+      if (this.isServerZaloBoundaryRequested(
+        control.campaignStatus,
+        control.accountStatus,
+        control.hardStopReason
+      )) {
+        this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
+        return 'paused'
+      }
+    }
+    return 'completed'
   }
 
   private async tick(): Promise<void> {
@@ -1005,6 +1055,27 @@ export class CampaignScheduler {
    * Handle post-campaign completion. Recurring schedule maintenance runs after
    * login / day change; completion itself should not move weekly/monthly dates.
    */
+  private async transitionCampaignToCompleted(
+    campaign: Campaign,
+    note?: string | null
+  ): Promise<boolean> {
+    if (this.claimedServerZaloCampaignIds.has(campaign.id)) {
+      const { finalized, campaign: updated } = await this.finalizeClaimedServerZaloCampaign(
+        campaign.id,
+        note
+      )
+      this.broadcastCampaignUpdate(updated)
+      if (updated.status === 'hoàn thành') return true
+      await this.finishServerZaloFinalizationBoundary(campaign, finalized)
+      return false
+    }
+
+    const updates: Partial<Campaign> = { status: 'hoàn thành' }
+    if (note !== undefined) updates.note = note
+    const updated = await this.updateCampaignAndBroadcast(campaign.id, updates)
+    return updated.status === 'hoàn thành'
+  }
+
   private async handleCampaignCompletion(campaign: Campaign): Promise<void> {
     // Check end date
     const now = new Date()
@@ -1015,8 +1086,10 @@ export class CampaignScheduler {
     if (campaign.scheduleEndDate) {
       const endDate = new Date(campaign.scheduleEndDate)
       if (now >= endDate) {
-        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
+        const completed = await this.transitionCampaignToCompleted(campaign)
+        if (completed) {
+          await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
+        }
         return
       }
     }
@@ -1029,8 +1102,10 @@ export class CampaignScheduler {
       return
     }
 
-    await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+    const completed = await this.transitionCampaignToCompleted(campaign)
+    if (completed) {
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+    }
   }
 
   private async handleZaloRealtimeGroupCompletion(campaign: Campaign, now: Date): Promise<boolean> {
@@ -1077,11 +1152,13 @@ export class CampaignScheduler {
       return true
     }
 
-    await this.updateCampaignAndBroadcast(campaign.id, {
-      status: 'hoàn thành',
-      note: 'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy'
-    })
-    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
+    const completed = await this.transitionCampaignToCompleted(
+      campaign,
+      'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy'
+    )
+    if (completed) {
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
+    }
     return true
   }
 
@@ -1119,49 +1196,99 @@ export class CampaignScheduler {
     }
 
     if (!nextSchedule) {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không còn khung giờ chạy trong hôm nay)`)
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không còn khung giờ chạy trong hôm nay)`)
+      }
       return true
     }
 
     if (this.isAfterDailyStopTime(nextSchedule, campaign.dailyStopTime)) {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.logCampaignProgress(
-        campaign.id,
-        `✅ Hoàn thành chiến dịch "${campaign.name}" (khung giờ ${nextSlot} vượt quá giờ dừng trong ngày)`
-      )
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(
+          campaign.id,
+          `✅ Hoàn thành chiến dịch "${campaign.name}" (khung giờ ${nextSlot} vượt quá giờ dừng trong ngày)`
+        )
+      }
       return true
     }
 
     const details = await this.supabase.listCampaignInputData(campaign.id)
     const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length
     if (details.length > 0 && resettableCount === 0) {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+      }
       return true
     }
     if (campaign.actionId === PAGE_POST_ACTION_ID && details.length === 0) {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có page cần chạy lại ở khung giờ tiếp theo)`)
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có page cần chạy lại ở khung giờ tiếp theo)`)
+      }
       return true
     }
     if (
       (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID) &&
       details.length === 0
     ) {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+      }
       return true
     }
 
-    if (resettableCount > 0) {
-      await this.supabase.resetCampaignInputDataForRerun(campaign.id)
+    const isClaimedServerZalo = this.runtimeTarget === 'server' &&
+      this.claimedServerZaloCampaignIds.has(campaign.id) &&
+      this.claimedServerZaloAccountIds.has(campaign.accountId) &&
+      String(campaign.actionId || '').trim().toLowerCase().startsWith('zalo_')
+
+    if (isClaimedServerZalo) {
+      const advanced = await this.supabase.advanceZaloServerMultiDailySlot(
+        campaign.id,
+        campaign.accountId,
+        nextSchedule.toISOString()
+      )
+      if (!advanced.ok) {
+        const account = await this.supabase.getAccount(campaign.accountId)
+        if (!account) {
+          throw new Error(`Không tìm thấy tài khoản khi chuyển khung giờ Zalo Server (${advanced.reason}).`)
+        }
+
+        if (advanced.reason === 'runtime_control_paused') {
+          this.latchServerZaloPause(campaign.id, advanced.campaignStatus, advanced.accountStatus)
+          await this.completePauseAtBoundary(account, campaign)
+          return true
+        }
+
+        const control = await this.getServerZaloBoundaryReason(account, campaign)
+        if (control.paused) {
+          await this.completePauseAtBoundary(account, campaign)
+          return true
+        }
+        if (control.hardStopReason) {
+          await this.stopCampaignForAccountCondition(account, campaign, control.hardStopReason)
+          await this.releaseRunningAccount(account.id)
+          return true
+        }
+        throw new Error(`Không thể chuyển khung giờ Zalo Server (${advanced.reason}).`)
+      }
+
+      const updated = await this.supabase.getCampaign(campaign.id)
+      if (updated) this.broadcastCampaignUpdate(updated)
+    } else {
+      if (resettableCount > 0) {
+        await this.supabase.resetCampaignInputDataForRerun(campaign.id)
+      }
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        schedule: nextSchedule.toISOString(),
+        note: null
+      })
     }
-    await this.updateCampaignAndBroadcast(campaign.id, {
-      status: 'chờ xử lý',
-      schedule: nextSchedule.toISOString(),
-      note: null
-    })
     await this.logCampaignProgress(
       campaign.id,
       `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch "${campaign.name}" ở khung giờ ${nextSlot} (${this.formatVietnamDateTime(nextSchedule)})`
@@ -1188,17 +1315,21 @@ export class CampaignScheduler {
     const nextSchedule = new Date(now.getTime() + hours * 60 * 60 * 1000)
 
     if (!this.isSameVietnamDay(nextSchedule, now)) {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+      }
       return true
     }
 
     if (this.isAfterDailyStopTime(nextSchedule, campaign.dailyStopTime)) {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-      await this.logCampaignProgress(
-        campaign.id,
-        `✅ Hoàn thành chiến dịch "${campaign.name}" (lượt chạy lại sau ${hours} giờ vượt quá giờ dừng trong ngày)`
-      )
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(
+          campaign.id,
+          `✅ Hoàn thành chiến dịch "${campaign.name}" (lượt chạy lại sau ${hours} giờ vượt quá giờ dừng trong ngày)`
+        )
+      }
       return true
     }
 
@@ -1206,8 +1337,10 @@ export class CampaignScheduler {
       const details = await this.supabase.listCampaignInputData(campaign.id)
       const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length
       if (resettableCount === 0) {
-        await this.updateCampaignAndBroadcast(campaign.id, { status: 'hoàn thành' })
-        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại)`)
+        const completed = await this.transitionCampaignToCompleted(campaign)
+        if (completed) {
+          await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại)`)
+        }
         return true
       }
 
@@ -1231,32 +1364,29 @@ export class CampaignScheduler {
 
   private async completeNewsfeedDailyWithoutNextDay(campaign: Campaign, reason?: string): Promise<void> {
     const note = reason?.trim() || null
-    await this.updateCampaignAndBroadcast(campaign.id, {
-      status: 'hoàn thành',
-      note
-    })
+    const completed = await this.transitionCampaignToCompleted(campaign, note)
     const suffix = note ? ` (${note})` : ''
-    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"${suffix}`)
+    if (completed) {
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"${suffix}`)
+    }
   }
 
   private async completeZaloBirthdayWithoutTargets(campaign: Campaign): Promise<void> {
     const message = 'Không có bạn bè sinh nhật hôm nay'
-    await this.updateCampaignAndBroadcast(campaign.id, {
-      status: 'hoàn thành',
-      note: message
-    })
+    const completed = await this.transitionCampaignToCompleted(campaign, message)
     await this.logCampaignProgress(campaign.id, `🎂 ${message}`)
-    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+    if (completed) {
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+    }
   }
 
   private async completeZaloFriendRecommendationWithoutTargets(campaign: Campaign, message: string): Promise<void> {
     const note = message || 'Không lấy được đề xuất Zalo để chạy'
-    await this.updateCampaignAndBroadcast(campaign.id, {
-      status: 'hoàn thành',
-      note
-    })
+    const completed = await this.transitionCampaignToCompleted(campaign, note)
     await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
-    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+    if (completed) {
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+    }
   }
 
   private getFutureInputSchedule(detail: CampaignInputData, now: Date): Date | null {
@@ -1498,11 +1628,13 @@ export class CampaignScheduler {
       return false
     }
 
-    await this.updateCampaignAndBroadcast(campaign.id, {
-      status: 'hoàn thành',
-      note: 'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy'
-    })
-    await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
+    const completed = await this.transitionCampaignToCompleted(
+      campaign,
+      'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy'
+    )
+    if (completed) {
+      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
+    }
     return false
   }
 
@@ -1546,6 +1678,10 @@ export class CampaignScheduler {
       )
       if (!claimed) return
       runtimeClaimed = true
+      if (this.runtimeTarget === 'server' && isZaloCampaign) {
+        this.claimedServerZaloCampaignIds.add(campaign.id)
+        this.claimedServerZaloAccountIds.add(account.id)
+      }
 
       await this.broadcastClaimedRuntimeState(campaign.id)
 
@@ -1564,7 +1700,16 @@ export class CampaignScheduler {
         return
       }
 
-      const startBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+      const initialServerControl = this.isServerZaloCampaign(account, campaign)
+        ? await this.getServerZaloBoundaryReason(account, campaign)
+        : null
+      if (initialServerControl?.paused) {
+        await this.completePauseAtBoundary(account, campaign)
+        return
+      }
+      const startBlockReason = initialServerControl
+        ? initialServerControl.hardStopReason
+        : await this.getAccountRunBlockReason(account.id, 'đang chạy')
       if (startBlockReason) {
         await this.releaseClaimedCampaignPreflight(account.id, campaign, startBlockReason)
         return
@@ -1696,6 +1841,9 @@ export class CampaignScheduler {
         this.activeZaloCampaignRuns.delete(campaign.id)
         this.activeZaloRunGenerations.delete(campaign.id)
         this.activeZaloRunStopReasons.delete(campaign.id)
+        this.serverZaloPauseBoundaries.delete(campaign.id)
+        this.claimedServerZaloCampaignIds.delete(campaign.id)
+        this.claimedServerZaloAccountIds.delete(account.id)
       }
       this.clearZaloSmsPushKeysForCampaign(campaign.id)
     }
@@ -1942,15 +2090,22 @@ export class CampaignScheduler {
         })
         break
       }
-      // Check pause
-      const cur = await this.supabase.getCampaign(campaign.id)
-      if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+      // Server-mode pause is durable DB control. Stop only before the next
+      // unit; an already-started target is allowed to finish below.
+      const serverBoundary = await this.getServerZaloBoundaryReason(account, campaign)
+      const cur = serverBoundary.paused ? null : await this.supabase.getCampaign(campaign.id)
+      if (
+        serverBoundary.paused ||
+        this.isCampaignPauseRequested(campaign.id) ||
+        (cur && cur.status === 'tạm dừng')
+      ) {
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
 
-      const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+      const accountBlockReason = this.isServerZaloCampaign(account, campaign)
+        ? serverBoundary.hardStopReason
+        : await this.getAccountRunBlockReason(account.id, 'đang chạy')
       if (accountBlockReason) {
         stoppedBeforeCompletion = true
         await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
@@ -2103,12 +2258,23 @@ export class CampaignScheduler {
           this.throwIfZaloRuntimeStopping(campaign.id)
         }
 
-        // Update detail status running
-        if (detail) {
+        // For Zalo Server this RPC is the linearization point with DB pause:
+        // campaign/account are still running and the whole unit is marked
+        // running in one transaction. Local runtimes keep the existing write.
+        if (this.isServerZaloCampaign(account, campaign)) {
+          const canStartUnit = await this.beginServerZaloRunUnit(
+            account,
+            campaign,
+            detail ? [detail.id] : []
+          )
+          if (!canStartUnit) return
+        } else if (detail) {
           await this.supabase.updateCampaignInputData(detail.id, {
             status: 'đang chạy',
             dateAction: new Date().toISOString()
           })
+        }
+        if (detail) {
           const inputDataName = this.getInputDataDisplayName(campaign, detail)
           await this.logCampaignProgress(campaign.id, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
           if (groupPostApproval.skipPostByKnownApproval) {
@@ -2119,13 +2285,35 @@ export class CampaignScheduler {
 
         const abort = new AbortController()
         let accountStopReason: string | null = null
+        let accountGuardCheckInFlight = false
         const accountGuard = setInterval(() => {
           void (async () => {
-            if (accountStopReason || abort.signal.aborted) return
+            if (accountStopReason || abort.signal.aborted || accountGuardCheckInFlight) return
+            accountGuardCheckInFlight = true
+            try {
+            if (this.isServerZaloCampaign(account, campaign)) {
+              const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
+              if (this.isServerZaloBoundaryRequested(
+                control.campaignStatus,
+                control.accountStatus,
+                control.hardStopReason
+              )) {
+                this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
+                return
+              }
+              if (control.hardStopReason) {
+                accountStopReason = this.getServerZaloHardStopMessage(control.hardStopReason)
+                abort.abort()
+              }
+              return
+            }
             const reason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
             if (reason) {
               accountStopReason = reason
               abort.abort()
+            }
+            } finally {
+              accountGuardCheckInFlight = false
             }
           })().catch(err => {
             console.error('Account run guard error:', err)
@@ -2182,7 +2370,21 @@ export class CampaignScheduler {
             consumedGroupPostInputDataIds
           )
 
-          const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
+          if (this.isServerZaloCampaign(account, campaign)) {
+            const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
+            if (this.isServerZaloBoundaryRequested(
+              control.campaignStatus,
+              control.accountStatus,
+              control.hardStopReason
+            )) {
+              this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
+            } else if (control.hardStopReason && !accountStopReason) {
+              accountStopReason = this.getServerZaloHardStopMessage(control.hardStopReason)
+            }
+          }
+
+          const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id) ||
+            this.serverZaloPauseBoundaries.has(campaign.id)
           const pauseCancelledRun = campaignPauseRequested && !accountStopReason && result.status === 'cancelled'
           const runtimeStopReason = account.flatformType === 'zalo'
             ? this.getZaloRuntimeStopReason(campaign.id)
@@ -2309,7 +2511,20 @@ export class CampaignScheduler {
           }
         } catch (err: any) {
           const errMsg = err?.message || String(err)
-          const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id)
+          if (this.isServerZaloCampaign(account, campaign)) {
+            const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id).catch(() => null)
+            if (control && this.isServerZaloBoundaryRequested(
+              control.campaignStatus,
+              control.accountStatus,
+              control.hardStopReason
+            )) {
+              this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
+            } else if (control?.hardStopReason && !accountStopReason) {
+              accountStopReason = this.getServerZaloHardStopMessage(control.hardStopReason)
+            }
+          }
+          const campaignPauseRequested = this.isCampaignPauseRequested(campaign.id) ||
+            this.serverZaloPauseBoundaries.has(campaign.id)
           const pauseAbortTriggered = campaignPauseRequested && !accountStopReason && abort.signal.aborted
           const runtimeStopReason = account.flatformType === 'zalo'
             ? this.getZaloRuntimeStopReason(campaign.id)
@@ -2428,8 +2643,7 @@ export class CampaignScheduler {
       }
 
       if (shouldCompletePauseAfterTarget) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
 
@@ -2443,10 +2657,9 @@ export class CampaignScheduler {
         const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
         if (sleepTime > 0) {
           await this.logCampaignProgress(campaign.id, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
-          const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime)
+          const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime, account)
           if (sleepResult === 'paused') {
-            await this.releaseRunningAccount(account.id)
-            await this.completeCampaignPause(campaign)
+            await this.completePauseAtBoundary(account, campaign)
             return
           }
         }
@@ -3144,14 +3357,20 @@ export class CampaignScheduler {
           })
           break
         }
-        const cur = await this.supabase.getCampaign(campaign.id)
-        if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
-          await this.releaseRunningAccount(account.id)
-          await this.completeCampaignPause(campaign)
+        const serverBoundary = await this.getServerZaloBoundaryReason(account, campaign)
+        const cur = serverBoundary.paused ? null : await this.supabase.getCampaign(campaign.id)
+        if (
+          serverBoundary.paused ||
+          this.isCampaignPauseRequested(campaign.id) ||
+          (cur && cur.status === 'tạm dừng')
+        ) {
+          await this.completePauseAtBoundary(account, campaign)
           return
         }
 
-        const accountBlockReason = await this.getAccountRunBlockReason(account.id, 'đang chạy')
+        const accountBlockReason = this.isServerZaloCampaign(account, campaign)
+          ? serverBoundary.hardStopReason
+          : await this.getAccountRunBlockReason(account.id, 'đang chạy')
         if (accountBlockReason) {
           stoppedBeforeCompletion = true
           await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
@@ -3205,10 +3424,19 @@ export class CampaignScheduler {
 
           const target = this.createZaloShareMessageTarget(campaign, detail)
           if (!target) {
-            await this.supabase.updateCampaignInputData(detail.id, {
-              status: 'đang chạy',
-              dateAction: new Date().toISOString()
-            })
+            if (this.isServerZaloCampaign(account, campaign)) {
+              const canHandleInvalidTarget = await this.beginServerZaloRunUnit(
+                account,
+                campaign,
+                [detail.id]
+              )
+              if (!canHandleInvalidTarget) return
+            } else {
+              await this.supabase.updateCampaignInputData(detail.id, {
+                status: 'đang chạy',
+                dateAction: new Date().toISOString()
+              })
+            }
             stopAfterInvalidTarget = await this.handleInvalidZaloShareMessageTarget(account, campaign, detail, actionDescriptor)
             if (stopAfterInvalidTarget) break
             continue
@@ -3262,18 +3490,28 @@ export class CampaignScheduler {
           })
           break
         }
-        const batchStartedAt = new Date().toISOString()
-        for (const item of batch) {
-          await this.supabase.updateCampaignInputData(item.detail.id, {
-            status: 'đang chạy',
-            dateAction: batchStartedAt
-          })
-          const prepareStopReason = this.getZaloRuntimeStopReason(campaign.id)
-          if (prepareStopReason) {
-            if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
-            await this.settleZaloShareBatchRuntimeStop(batch, new Set(), prepareStopReason)
-            stoppedBeforeCompletion = true
-            break
+
+        if (this.isServerZaloCampaign(account, campaign)) {
+          const canStartBatch = await this.beginServerZaloRunUnit(
+            account,
+            campaign,
+            batch.map(item => item.detail.id)
+          )
+          if (!canStartBatch) return
+        } else {
+          const batchStartedAt = new Date().toISOString()
+          for (const item of batch) {
+            await this.supabase.updateCampaignInputData(item.detail.id, {
+              status: 'đang chạy',
+              dateAction: batchStartedAt
+            })
+            const prepareStopReason = this.getZaloRuntimeStopReason(campaign.id)
+            if (prepareStopReason) {
+              if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+              await this.settleZaloShareBatchRuntimeStop(batch, new Set(), prepareStopReason)
+              stoppedBeforeCompletion = true
+              break
+            }
           }
         }
         if (stoppedBeforeCompletion) {
@@ -3287,14 +3525,56 @@ export class CampaignScheduler {
           }
           break
         }
-        const stopAfterBatch = await this.processZaloShareMessageBatch(
-          account,
-          campaign,
-          batch,
-          actionDescriptor,
-          message,
-          batchAttachments
-        )
+        let batchHardStopReason: string | null = null
+        let batchControlGuard: ReturnType<typeof setInterval> | null = null
+        if (this.isServerZaloCampaign(account, campaign)) {
+          let batchControlCheckInFlight = false
+          batchControlGuard = setInterval(() => {
+            if (batchControlCheckInFlight) return
+            batchControlCheckInFlight = true
+            void this.supabase.getZaloServerRunControlState(campaign.id, account.id)
+              .then(control => {
+                if (this.isServerZaloBoundaryRequested(
+                  control.campaignStatus,
+                  control.accountStatus,
+                  control.hardStopReason
+                )) {
+                  this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
+                } else if (control.hardStopReason) {
+                  batchHardStopReason = this.getServerZaloHardStopMessage(control.hardStopReason)
+                }
+              })
+              .catch(err => console.error('Zalo Server batch control guard error:', err))
+              .finally(() => { batchControlCheckInFlight = false })
+          }, 5000)
+        }
+        let stopAfterBatch = false
+        try {
+          stopAfterBatch = await this.processZaloShareMessageBatch(
+            account,
+            campaign,
+            batch,
+            actionDescriptor,
+            message,
+            batchAttachments
+          )
+        } finally {
+          if (batchControlGuard) clearInterval(batchControlGuard)
+        }
+        const postBatchControl = await this.getServerZaloBoundaryReason(account, campaign)
+        if (postBatchControl.paused) {
+          await this.completePauseAtBoundary(account, campaign)
+          return
+        }
+        if (batchHardStopReason || postBatchControl.hardStopReason) {
+          stoppedBeforeCompletion = true
+          await this.stopCampaignForAccountCondition(
+            account,
+            campaign,
+            batchHardStopReason || postBatchControl.hardStopReason || 'Trạng thái Zalo Server không còn hợp lệ'
+          )
+          break
+        }
         const processedStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (stopAfterBatch || processedStopReason) {
           if (processedStopReason && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
@@ -3311,10 +3591,9 @@ export class CampaignScheduler {
         if (index < details.length) {
           const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
           if (sleepTime > 0) {
-            const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime)
+            const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime, account)
             if (sleepResult === 'paused') {
-              await this.releaseRunningAccount(account.id)
-              await this.completeCampaignPause(campaign)
+              await this.completePauseAtBoundary(account, campaign)
               return
             }
           }
@@ -5353,6 +5632,159 @@ export class CampaignScheduler {
     return this.normalizeNonNegativeLimitValue(account.accountGroupSettings?.sleepBetweenActions)
       ?? this.normalizeNonNegativeLimitValue(limitConfig?.sleepBetweenActions)
       ?? 0
+  }
+
+  private isServerZaloCampaign(account: AutoAccount, campaign: Campaign): boolean {
+    return this.runtimeTarget === 'server' &&
+      String(account.flatformType || '').trim().toLowerCase() === 'zalo' &&
+      String(campaign.actionId || '').trim().toLowerCase().startsWith('zalo_')
+  }
+
+  private latchServerZaloPause(
+    campaignId: number,
+    campaignStatus: string | null,
+    accountStatus: string | null
+  ): void {
+    const current = this.serverZaloPauseBoundaries.get(campaignId)
+    if (current === 'campaign') return
+    if (campaignStatus && campaignStatus !== 'đang chạy') {
+      this.serverZaloPauseBoundaries.set(campaignId, 'campaign')
+    } else if (accountStatus && accountStatus !== 'đang chạy') {
+      this.serverZaloPauseBoundaries.set(campaignId, 'account')
+    }
+  }
+
+  private isServerZaloBoundaryRequested(
+    campaignStatus: string | null,
+    accountStatus: string | null,
+    hardStopReason: string | null
+  ): boolean {
+    if (hardStopReason) return false
+    return (campaignStatus !== null && campaignStatus !== 'đang chạy') ||
+      (accountStatus !== null && accountStatus !== 'đang chạy')
+  }
+
+  private getServerZaloHardStopMessage(reason: string): string {
+    if (reason === 'account_logged_out') return 'Tài khoản bị đăng xuất'
+    if (reason === 'account_inactive') return 'Tài khoản đã bị tắt'
+    if (reason === 'account_deleted') return 'Tài khoản đã bị xoá'
+    if (reason === 'campaign_deleted') return 'Chiến dịch đã bị xoá'
+    if (reason === 'runtime_not_owner') {
+      // A mode change is a lifecycle stop, not an ordinary account pause. Any
+      // in-flight request follows the existing uncertainty/no-retry cleanup.
+      this.requestZaloRuntimeStop('handoff')
+      return ZALO_RUNTIME_RESTART_NOTE
+    }
+    return 'Trạng thái Zalo Server không còn hợp lệ'
+  }
+
+  private async getServerZaloBoundaryReason(
+    account: AutoAccount,
+    campaign: Campaign
+  ): Promise<{ paused: boolean; hardStopReason: string | null }> {
+    if (!this.isServerZaloCampaign(account, campaign)) {
+      return { paused: false, hardStopReason: null }
+    }
+    const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
+    const boundaryRequested = this.isServerZaloBoundaryRequested(
+      control.campaignStatus,
+      control.accountStatus,
+      control.hardStopReason
+    )
+    if (boundaryRequested) {
+      this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
+    }
+    return {
+      paused: boundaryRequested,
+      hardStopReason: control.hardStopReason
+        ? this.getServerZaloHardStopMessage(control.hardStopReason)
+        : null
+    }
+  }
+
+  private async beginServerZaloRunUnit(
+    account: AutoAccount,
+    campaign: Campaign,
+    inputDataIds: number[]
+  ): Promise<boolean> {
+    if (!this.isServerZaloCampaign(account, campaign)) return true
+
+    const claim = await this.supabase.claimZaloServerRunUnit(
+      campaign.id,
+      account.id,
+      inputDataIds
+    )
+    if (claim.ok) {
+      if (claim.claimedCount !== inputDataIds.length) {
+        throw new Error('Zalo Server đã claim số lượng data không khớp với lượt chạy.')
+      }
+      return true
+    }
+
+    if (claim.reason === 'runtime_control_paused') {
+      this.latchServerZaloPause(campaign.id, claim.campaignStatus, claim.accountStatus)
+      await this.completePauseAtBoundary(account, campaign)
+      return false
+    }
+
+    const control = await this.getServerZaloBoundaryReason(account, campaign)
+    if (control.paused) {
+      await this.completePauseAtBoundary(account, campaign)
+      return false
+    }
+    if (control.hardStopReason) {
+      await this.stopCampaignForAccountCondition(account, campaign, control.hardStopReason)
+      await this.releaseRunningAccount(account.id)
+      return false
+    }
+
+    if (claim.reason === 'input_not_pending') {
+      // The input was edited after this run loaded its snapshot. End the old
+      // claim without consuming another row; the scheduler will reload fresh
+      // input state on the next pass.
+      await this.updateCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        note: null
+      })
+      await this.releaseRunningAccount(account.id)
+      return false
+    }
+
+    throw new Error(`Không thể bắt đầu lượt Zalo Server (${claim.reason}).`)
+  }
+
+  private async completePauseAtBoundary(account: AutoAccount, campaign: Campaign): Promise<void> {
+    if (!this.isServerZaloCampaign(account, campaign)) {
+      await this.releaseRunningAccount(account.id)
+      await this.completeCampaignPause(campaign)
+      return
+    }
+
+    let boundary = this.serverZaloPauseBoundaries.get(campaign.id) || null
+    const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id).catch(() => null)
+    if (control?.campaignStatus && control.campaignStatus !== 'đang chạy') boundary = 'campaign'
+    else if (!boundary && control?.accountStatus && control.accountStatus !== 'đang chạy') boundary = 'account'
+
+    try {
+      if (boundary === 'account') {
+        const updated = await this.updateCampaignAndBroadcast(campaign.id, {
+          status: 'chờ xử lý',
+          note: null
+        })
+        // A concurrent campaign pause wins the CAS and must remain paused.
+        if (updated.status === 'tạm dừng') boundary = 'campaign'
+      } else {
+        const current = await this.supabase.getCampaign(campaign.id)
+        if (current) this.broadcastCampaignUpdate(current)
+      }
+    } finally {
+      this.serverZaloPauseBoundaries.delete(campaign.id)
+      await this.releaseRunningAccount(account.id)
+      try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+    }
+
+    const label = boundary === 'account' ? 'tài khoản' : 'chiến dịch'
+    await this.logCampaignProgress(campaign.id, `⏸ Đã hoàn thành lượt hiện tại và tạm dừng ${label}.`)
   }
 
   private async getAccountRunBlockReason(
@@ -8497,11 +8929,14 @@ export class CampaignScheduler {
           })
         }
 
+        const reopenedTarget = await this.supabase.reopenCompletedZaloServerCampaignAfterInputInsert(
+          targetCampaign.id,
+          ZALO_MESSAGE_PHONE_ACTION_ID
+        )
+        if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
+
         await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang chiến dịch "${targetCampaign.name}"`)
         await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${phones.length} SĐT từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
-        if (targetCampaign.status === 'hoàn thành') {
-          await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
-        }
       } catch (err) {
         console.error('Failed to push found phones to Zalo phone campaign:', err)
       }
@@ -8571,11 +9006,14 @@ export class CampaignScheduler {
           })
         }
 
+        const reopenedTarget = await this.supabase.reopenCompletedZaloServerCampaignAfterInputInsert(
+          targetCampaign.id,
+          ZALO_JOIN_GROUP_LINK_ACTION_ID
+        )
+        if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
+
         await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${links.length} link group Zalo sang chiến dịch "${targetCampaign.name}"`)
         await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${links.length} link group Zalo từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
-        if (targetCampaign.status === 'hoàn thành') {
-          await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
-        }
       } catch (err) {
         console.error('Failed to push found Zalo group links to join campaign:', err)
       }
@@ -11274,8 +11712,63 @@ export class CampaignScheduler {
   /**
    * Cập nhật campaign xong push luôn ra renderer để UI hiện status realtime.
    */
+  private async finalizeClaimedServerZaloCampaign(
+    id: number,
+    note?: string | null
+  ): Promise<{ finalized: ZaloServerCampaignFinalization; campaign: Campaign }> {
+    const finalized = await this.supabase.finalizeZaloServerCampaign(id, note)
+    if (!finalized.ok) {
+      throw new Error(`Không thể hoàn tất chiến dịch Zalo Server (${finalized.reason}).`)
+    }
+    const current = await this.supabase.getCampaign(id)
+    if (!current) {
+      throw new Error('Không tìm thấy chiến dịch Zalo Server sau khi hoàn tất atomic.')
+    }
+    return { finalized, campaign: current }
+  }
+
+  private async finishServerZaloFinalizationBoundary(
+    campaign: Campaign,
+    finalized: ZaloServerCampaignFinalization
+  ): Promise<void> {
+    if (
+      finalized.reason !== 'account_control_won' &&
+      finalized.reason !== 'campaign_control_won' &&
+      finalized.reason !== 'pending_input_remaining'
+    ) {
+      return
+    }
+
+    this.serverZaloPauseBoundaries.delete(campaign.id)
+    await this.releaseRunningAccount(finalized.accountId || campaign.accountId)
+    try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+
+    if (finalized.reason === 'pending_input_remaining') return
+
+    if (finalized.reason === 'account_control_won') {
+      const message = finalized.accountStatus === 'tạm dừng'
+        ? '⏸ Đã hoàn thành lượt hiện tại và tạm dừng tài khoản.'
+        : '🔄 Đã hoàn thành lượt hiện tại và áp dụng trạng thái mới của tài khoản.'
+      await this.logCampaignProgress(campaign.id, message)
+      return
+    }
+
+    const message = finalized.campaignStatus === 'tạm dừng'
+      ? '⏸ Đã hoàn thành lượt hiện tại và tạm dừng chiến dịch.'
+      : '🔄 Đã hoàn thành lượt hiện tại và áp dụng trạng thái mới của chiến dịch.'
+    await this.logCampaignProgress(campaign.id, message)
+  }
+
   private async updateCampaignAndBroadcast(id: number, updates: Partial<Campaign>): Promise<Campaign> {
-    const updated = await this.supabase.updateCampaign(id, updates)
+    let updated: Campaign
+    if (updates.status === 'hoàn thành' && this.claimedServerZaloCampaignIds.has(id)) {
+      const result = await this.finalizeClaimedServerZaloCampaign(id, updates.note)
+      updated = result.campaign
+    } else if (updates.status !== undefined && this.claimedServerZaloCampaignIds.has(id)) {
+      updated = await this.supabase.updateClaimedZaloServerCampaign(id, updates)
+    } else {
+      updated = await this.supabase.updateCampaign(id, updates)
+    }
     this.broadcastCampaignUpdate(updated)
     return updated
   }
@@ -11307,7 +11800,9 @@ export class CampaignScheduler {
    * Cập nhật account xong push event để panel tài khoản reload realtime.
    */
   private async updateAccountAndBroadcast(id: number, updates: Partial<AutoAccount>): Promise<AutoAccount> {
-    const updated = await this.supabase.updateAccount(id, updates)
+    const updated = updates.status !== undefined && this.claimedServerZaloAccountIds.has(id)
+      ? await this.supabase.updateClaimedZaloServerAccount(id, updates)
+      : await this.supabase.updateAccount(id, updates)
     try {
       this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
     } catch {

@@ -122,6 +122,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const pageRegistry = new PageControllerRegistry()
   const proxyRuntime = new ProxyRuntimeService((id) => supabase.getProxy(id))
   const zaloServerClient = new ZaloServerClient(mainWindow)
+  ipcMain.handle(IPC_EVENTS.ZALO_SERVER_OPERATION_STATE_GET, () => (
+    zaloServerClient.getOperationState()
+  ))
   const desktopZaloHandoffStore = new DesktopZaloHandoffStore()
   let runtimeCredentials: { username: string; password: string } | null = null
   let forceFullDesktopMaintenance = false
@@ -457,6 +460,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   const ensureDesktopZaloHandoffBeforeExit = async (): Promise<void> => {
     const sessionUser = getCurrentUser()
+    // A stable server-mode desktop is only a control/view client. Closing it
+    // must never wait for the VPS or for a marker left by an older local
+    // runtime; the background acknowledgement loop may retry on a later login.
+    if (sessionUser?.isZaloServer) return
     if (sessionUser) {
       await settleDesktopHandoffMarkerBeforeExit(
         sessionUser.staffId,
@@ -1060,26 +1067,26 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         ? beginLocalZaloHandoff()
         : localHandoffGeneration
       try {
-        if (loginUser) {
-          // A server-mode login alone is not proof that an older local desktop
-          // stopped. Retry only a marker written by that old local runtime
-          // after every Zalo producer reached idle.
-          const acknowledged = await acknowledgeDesktopHandoffMarker(
+        if (loginUser?.isZaloServer) {
+          // Do not put the login screen behind VPS availability. A marker from
+          // an older local runtime is acknowledged in the bounded background
+          // retry loop while this desktop remains a DB-backed control client.
+          if (desktopZaloHandoffStore.get(loginUser.staffId, loginUser.organizationId)) {
+            scheduleDesktopHandoffAckRetry(
+              loginUser.staffId,
+              loginUser.organizationId,
+              handoffAckGeneration,
+              0
+            )
+          }
+        } else if (loginUser) {
+          // A local-mode login can clear a stale marker immediately after the
+          // entitlement has switched back; it does not start a VPS runtime.
+          await acknowledgeDesktopHandoffMarker(
             loginUser.staffId,
             loginUser.organizationId,
             { username, password }
           )
-          if (
-            !acknowledged &&
-            loginUser.isZaloServer &&
-            desktopZaloHandoffStore.get(loginUser.staffId, loginUser.organizationId)
-          ) {
-            scheduleDesktopHandoffAckRetry(
-              loginUser.staffId,
-              loginUser.organizationId,
-              handoffAckGeneration
-            )
-          }
         }
         await runScopedRecovery('login', requiresLocalHandoff ? { excludeZalo: true } : undefined)
         await runScheduleMaintenance('login')
@@ -1140,20 +1147,38 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerReportHandlers(supabase)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase, {
-    requestPauseCampaign: async (campaignId) => {
+    requestCampaignStatus: async (campaignId, status) => {
       const campaign = await supabase.getCampaign(campaignId)
-      if (campaign) {
-        const account = await supabase.getAccount(campaign.accountId)
-        if (account?.flatformType === 'zalo') {
-          if (isZaloLocalStartupHandoffBlocked()) {
-            throw new Error(ZALO_LOCAL_STARTUP_HANDOFF_MESSAGE)
+      if (!campaign) throw new Error('Không tìm thấy chiến dịch.')
+
+      const account = await supabase.getAccount(campaign.accountId)
+      if (account?.flatformType === 'zalo') {
+        if (shouldRouteCurrentUserZaloCleanupToServer()) {
+          const result = await supabase.setZaloServerCampaignStatus(campaignId, status)
+          if (!result.ok) {
+            if (result.reason === 'runtime_not_owner') {
+              throw new Error('Organization không còn chạy Zalo Server. Vui lòng tắt và mở lại ứng dụng.')
+            }
+            if (result.reason === 'not_found') throw new Error('Không tìm thấy chiến dịch.')
+            if (result.reason === 'invalid_transition') {
+              throw new Error('Trạng thái chiến dịch đã thay đổi. Vui lòng thử lại.')
+            }
+            throw new Error('Không thể cập nhật trạng thái chiến dịch Zalo Server.')
           }
-          if (shouldRouteCurrentUserZaloCleanupToServer()) {
-            return await zaloServerClient.executeCommand('campaign.pause', campaignId)
-          }
+          const updated = await supabase.getCampaign(campaignId)
+          if (!updated) throw new Error('Không tìm thấy chiến dịch.')
+          return updated
+        }
+
+        if (isZaloLocalStartupHandoffBlocked()) {
+          throw new Error(ZALO_LOCAL_STARTUP_HANDOFF_MESSAGE)
         }
       }
-      return campaignScheduler.requestPauseCampaign(campaignId)
+
+      if (status === 'tạm dừng') {
+        return campaignScheduler.requestPauseCampaign(campaignId)
+      }
+      return supabase.updateCampaign(campaignId, { status: 'chờ xử lý' })
     }
   }, zaloRealtimeGroupManager || undefined)
   accountZaloOperations = registerAccountHandlers(

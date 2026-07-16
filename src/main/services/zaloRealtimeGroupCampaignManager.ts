@@ -465,12 +465,19 @@ export class ZaloRealtimeGroupCampaignManager {
         if (updated) this.broadcastCampaign(updated)
       }
     } catch (err) {
+      const message = this.getErrorMessage(err)
+      if (message.includes('runtime_control_paused')) {
+        // Pause can race an event already delivered by the Zalo listener. The
+        // database rejected it before insert; refresh subscriptions quietly.
+        this.refreshSoon('runtime-control-paused')
+        return
+      }
       console.warn('[ZaloRealtimeGroupCampaignManager] Failed to enqueue event', {
         campaignId: item.campaign.id,
         groupId: input.groupId,
         trigger: input.trigger,
         targetUid: input.targetUid,
-        message: this.getErrorMessage(err)
+        message
       })
     }
   }

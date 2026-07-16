@@ -74,6 +74,7 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const authBootstrapStarted = useRef(false)
   const startupUpdateCheckStarted = useRef(false)
+  const accountRealtimeRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const runtimePlatform = window.electronAPI?.platform || 'unknown'
   const platformClass = `platform-${runtimePlatform}`
 
@@ -94,8 +95,8 @@ export default function App() {
     if (!window.electronAPI?.onAuthUserUpdated) return
     return window.electronAPI.onAuthUserUpdated((nextUser) => {
       handleUserUpdated(nextUser)
-      void loadAccounts()
-      void loadCampaigns()
+      void loadAccounts({ silent: true })
+      void loadCampaigns({ silent: true })
       void loadCampaignActions()
     })
   }, [handleUserUpdated, loadAccounts, loadCampaigns, loadCampaignActions])
@@ -214,10 +215,40 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI?.onAccountStatusUpdated) return
     const unsubscribe = window.electronAPI.onAccountStatusUpdated(() => {
-      loadAccounts()
+      if (accountRealtimeRefreshTimer.current) clearTimeout(accountRealtimeRefreshTimer.current)
+      accountRealtimeRefreshTimer.current = setTimeout(() => {
+        accountRealtimeRefreshTimer.current = null
+        void loadAccounts({ silent: true })
+      }, 300)
     })
-    return unsubscribe
+    return () => {
+      unsubscribe()
+      if (accountRealtimeRefreshTimer.current) clearTimeout(accountRealtimeRefreshTimer.current)
+      accountRealtimeRefreshTimer.current = null
+    }
   }, [loadAccounts])
+
+  useEffect(() => {
+    if (!user?.isZaloServer || activePage !== 'campaigns') return
+
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      void loadAccounts({ silent: true })
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+
+    refresh()
+    const timer = setInterval(refresh, 30_000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [activePage, loadAccounts, user?.isZaloServer])
 
   // Listen for realtime campaign status updates (scheduler → renderer)
   useEffect(() => {

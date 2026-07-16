@@ -4,6 +4,7 @@ import WebSocket from 'ws'
 import { IPC_EVENTS, type AuthUser } from '../../shared/types'
 import {
   ZALO_SERVER_DEFAULT_ORIGIN,
+  ZALO_SERVER_OPERATION_UPDATED_CHANNEL,
   type ZaloServerCommandName,
   type ZaloServerCommandRequest,
   type ZaloServerCommandResponse,
@@ -11,12 +12,28 @@ import {
   type ZaloServerMessage,
   type ZaloServerRuntimeHandoffResponse,
   type ZaloServerRuntimeEvent,
+  type ZaloServerOperationSnapshot,
+  type ZaloServerOperationStateSnapshot,
   type ZaloServerSessionResponse
 } from '../../shared/zaloServerProtocol'
 import { SupabaseService } from './supabase'
 
 const RECONNECT_MIN_DELAY_MS = 2_000
-const RECONNECT_MAX_DELAY_MS = 30_000
+const RECONNECT_MAX_DELAY_MS = 120_000
+const RECONNECT_STABLE_RESET_MS = 30_000
+const SESSION_REUSE_SAFETY_MS = 30_000
+const DATABASE_REFRESH_DEBOUNCE_MS = 300
+const TRACKED_OPERATION_COMMANDS = new Set<ZaloServerCommandName>([
+  'zalo.loginQr.start',
+  'contacts.loadFriends',
+  'contacts.loadGroups',
+  'contacts.loadZaloGroupMembers'
+])
+const WAIT_FOR_OPERATION_COMMANDS = new Set<ZaloServerCommandName>([
+  'contacts.loadFriends',
+  'contacts.loadGroups',
+  'contacts.loadZaloGroupMembers'
+])
 const QUICK_COMMAND_TIMEOUT_MS = 10 * 60 * 1000
 const CONNECT_TIMEOUT_MS = 15_000
 const RUNTIME_HANDOFF_TIMEOUT_MS = 45_000
@@ -38,6 +55,11 @@ interface PendingCommand {
   timeout: ReturnType<typeof setTimeout> | null
 }
 
+interface PendingOperation {
+  resolve(value: unknown): void
+  reject(error: Error): void
+}
+
 export class ZaloServerClient {
   private readonly origin: string
   private readonly supabase = new SupabaseService()
@@ -45,12 +67,19 @@ export class ZaloServerClient {
   private user: AuthUser | null = null
   private socket: WebSocket | null = null
   private token: string | null = null
+  private tokenExpiresAt = 0
   private authenticated = false
   private stopped = true
   private connecting = false
   private reconnectDelayMs = RECONNECT_MIN_DELAY_MS
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null
+  private databaseRefreshTimer: ReturnType<typeof setTimeout> | null = null
+  private databaseRefreshPromise: Promise<void> | null = null
+  private databaseRefreshSocket: WebSocket | null = null
   private pendingCommands = new Map<string, PendingCommand>()
+  private operationSnapshots = new Map<string, ZaloServerOperationSnapshot>()
+  private pendingOperations = new Map<string, PendingOperation>()
   private lastSequence = 0
   private serverStartedAt: string | null = null
   private generation = 0
@@ -66,6 +95,15 @@ export class ZaloServerClient {
 
   isConnected(): boolean {
     return this.authenticated && this.socket?.readyState === WebSocket.OPEN
+  }
+
+  getOperationState(): ZaloServerOperationStateSnapshot {
+    return {
+      serverStartedAt: this.serverStartedAt,
+      operations: Array.from(this.operationSnapshots.values())
+        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+        .map(operation => ({ ...operation }))
+    }
   }
 
   start(user: AuthUser, username: string, password: string): void {
@@ -105,12 +143,19 @@ export class ZaloServerClient {
     this.credentials = null
     this.user = null
     this.token = null
+    this.tokenExpiresAt = 0
     this.authenticated = false
     this.lastSequence = 0
     this.serverStartedAt = null
     this.inboundMessageChain = Promise.resolve()
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
+    if (this.stableConnectionTimer) clearTimeout(this.stableConnectionTimer)
+    this.stableConnectionTimer = null
+    if (this.databaseRefreshTimer) clearTimeout(this.databaseRefreshTimer)
+    this.databaseRefreshTimer = null
+    this.databaseRefreshPromise = null
+    this.databaseRefreshSocket = null
     const socket = this.socket
     this.socket = null
     try { socket?.close(1000, 'Desktop logout') } catch {}
@@ -119,6 +164,8 @@ export class ZaloServerClient {
       pending.reject(new Error('Kết nối akaAgent Zalo Server đã dừng'))
     }
     this.pendingCommands.clear()
+    this.rejectPendingOperations('Kết nối akaAgent Zalo Server đã dừng')
+    this.operationSnapshots.clear()
   }
 
   async executeCommand<T = unknown>(command: ZaloServerCommandName, ...args: unknown[]): Promise<T> {
@@ -129,7 +176,7 @@ export class ZaloServerClient {
     }
     const requestId = randomUUID()
     const request: ZaloServerCommandRequest = { type: 'command', requestId, command, args }
-    return await new Promise<T>((resolve, reject) => {
+    const result = await new Promise<unknown>((resolve, reject) => {
       const timeoutMs = this.getCommandTimeoutMs(command)
       const timeout = timeoutMs === null
         ? null
@@ -138,7 +185,7 @@ export class ZaloServerClient {
             reject(new Error('Server xử lý quá thời gian cho phép'))
           }, timeoutMs)
       this.pendingCommands.set(requestId, {
-        resolve: value => resolve(value as T),
+        resolve,
         reject,
         timeout
       })
@@ -151,6 +198,20 @@ export class ZaloServerClient {
         pending.reject(error)
       })
     })
+    if (TRACKED_OPERATION_COMMANDS.has(command) && this.isOperationSnapshot(result)) {
+      this.acceptOperationSnapshot(result)
+      if (WAIT_FOR_OPERATION_COMMANDS.has(command)) {
+        return await this.waitForOperationResult(result) as T
+      }
+      if (command === 'zalo.loginQr.start') {
+        return {
+          success: true,
+          accountId: result.accountId,
+          operationId: result.operationId
+        } as T
+      }
+    }
+    return result as T
   }
 
   /**
@@ -242,13 +303,28 @@ export class ZaloServerClient {
     }
     this.connecting = true
     try {
+      const reusableToken = this.getReusableSessionToken()
+      if (reusableToken) {
+        try {
+          await this.openSocket(reusableToken, generation)
+          return
+        } catch {
+          if (!this.isCurrentGeneration(generation)) return
+          this.token = null
+          this.tokenExpiresAt = 0
+          if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+          this.reconnectTimer = null
+        }
+      }
+
       const session = await this.createSession(credentials, expectedIdentity)
       if (!this.isCurrentGeneration(generation)) return
       this.token = session.token
+      this.tokenExpiresAt = Date.parse(session.expiresAt)
       await this.openSocket(session.token, generation)
     } catch (error) {
       if (this.isCurrentGeneration(generation)) {
-        this.sendConnectionLog(`⚠️ Không kết nối được akaAgent Zalo Server: ${this.errorMessage(error)}`)
+        console.warn('[ZaloServerClient] Connection failed:', this.errorMessage(error))
         this.scheduleReconnect(generation)
       }
     } finally {
@@ -276,6 +352,10 @@ export class ZaloServerClient {
       }
       if (Number(value.organizationId) !== expectedIdentity.organizationId) {
         throw new Error('Server trả về phiên đăng nhập không đúng organization')
+      }
+      const expiresAt = Date.parse(String(value.expiresAt || ''))
+      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        throw new Error('Server trả về thời hạn phiên đăng nhập không hợp lệ')
       }
       return value as ZaloServerSessionResponse
     } finally {
@@ -318,8 +398,7 @@ export class ZaloServerClient {
           settled = true
           clearTimeout(timeout)
           this.authenticated = true
-          this.reconnectDelayMs = RECONNECT_MIN_DELAY_MS
-          this.sendConnectionLog('✅ Đã kết nối akaAgent Zalo Server.')
+          this.scheduleStableReconnectReset(socket, generation)
           resolve()
         }
         this.enqueueInboundMessage(socket, generation, raw.toString())
@@ -340,6 +419,8 @@ export class ZaloServerClient {
           this.socket = null
           this.authenticated = false
           this.inboundMessageChain = Promise.resolve()
+          if (this.stableConnectionTimer) clearTimeout(this.stableConnectionTimer)
+          this.stableConnectionTimer = null
           this.rejectPendingCommands('Mất kết nối akaAgent Zalo Server')
         }
         if (!settled) {
@@ -377,8 +458,11 @@ export class ZaloServerClient {
       return
     }
     if (message.type === 'hello') {
-      if (this.serverStartedAt && this.serverStartedAt !== message.snapshot.startedAt) this.lastSequence = 0
+      const serverRestarted = !!this.serverStartedAt && this.serverStartedAt !== message.snapshot.startedAt
+      if (serverRestarted) this.lastSequence = 0
       this.serverStartedAt = message.snapshot.startedAt
+      this.reconcileOperationSnapshots(message.operations || [], serverRestarted)
+      this.publishOperationState()
       await this.refreshDatabaseSnapshot(socket, generation)
       if (!this.isCurrentSocket(socket, generation)) return
       for (const event of [...message.events].sort((left, right) => left.sequence - right.sequence)) {
@@ -393,11 +477,19 @@ export class ZaloServerClient {
       return
     }
     if (message.type === 'runtime-event') {
+      if (message.event.channel === ZALO_SERVER_OPERATION_UPDATED_CHANNEL) {
+        if (!this.isCurrentUserEvent(message.event)) return
+        this.markRuntimeEventSeen(message.event)
+        if (this.isOperationSnapshot(message.event.payload)) {
+          this.acceptOperationSnapshot(message.event.payload)
+        }
+        return
+      }
       this.forwardRuntimeEvent(message.event)
       return
     }
     if (message.type === 'snapshot') {
-      await this.refreshDatabaseSnapshot(socket, generation)
+      this.scheduleDatabaseSnapshotRefresh(socket, generation)
     }
   }
 
@@ -448,6 +540,26 @@ export class ZaloServerClient {
   }
 
   private async refreshDatabaseSnapshot(socket: WebSocket, generation: number): Promise<void> {
+    if (this.databaseRefreshPromise) {
+      const pending = this.databaseRefreshPromise
+      if (this.databaseRefreshSocket === socket) return pending
+      await pending
+      if (!this.isCurrentSocket(socket, generation)) return
+    }
+    const operation = this.performDatabaseSnapshotRefresh(socket, generation)
+    this.databaseRefreshPromise = operation
+    this.databaseRefreshSocket = socket
+    try {
+      await operation
+    } finally {
+      if (this.databaseRefreshPromise === operation) {
+        this.databaseRefreshPromise = null
+        this.databaseRefreshSocket = null
+      }
+    }
+  }
+
+  private async performDatabaseSnapshotRefresh(socket: WebSocket, generation: number): Promise<void> {
     if (!this.isCurrentSocket(socket, generation)) return
     try {
       const campaigns = await this.supabase.listCampaigns()
@@ -463,9 +575,19 @@ export class ZaloServerClient {
     }
   }
 
+  private scheduleDatabaseSnapshotRefresh(socket: WebSocket, generation: number): void {
+    if (!this.isCurrentSocket(socket, generation)) return
+    if (this.databaseRefreshTimer) clearTimeout(this.databaseRefreshTimer)
+    this.databaseRefreshTimer = setTimeout(() => {
+      this.databaseRefreshTimer = null
+      if (!this.isCurrentSocket(socket, generation)) return
+      void this.refreshDatabaseSnapshot(socket, generation)
+    }, DATABASE_REFRESH_DEBOUNCE_MS)
+  }
+
   private scheduleReconnect(generation: number): void {
     if (!this.isCurrentGeneration(generation) || this.reconnectTimer) return
-    const delay = this.reconnectDelayMs
+    const delay = Math.round(this.reconnectDelayMs * (0.5 + Math.random() * 0.5))
     this.reconnectDelayMs = Math.min(RECONNECT_MAX_DELAY_MS, this.reconnectDelayMs * 2)
     const timer = setTimeout(() => {
       if (this.reconnectTimer === timer) this.reconnectTimer = null
@@ -473,6 +595,22 @@ export class ZaloServerClient {
       void this.connect(generation)
     }, delay)
     this.reconnectTimer = timer
+  }
+
+  private scheduleStableReconnectReset(socket: WebSocket, generation: number): void {
+    if (this.stableConnectionTimer) clearTimeout(this.stableConnectionTimer)
+    this.stableConnectionTimer = setTimeout(() => {
+      this.stableConnectionTimer = null
+      if (!this.isCurrentSocket(socket, generation) || !this.authenticated) return
+      this.reconnectDelayMs = RECONNECT_MIN_DELAY_MS
+    }, RECONNECT_STABLE_RESET_MS)
+  }
+
+  private getReusableSessionToken(): string | null {
+    if (!this.token || !Number.isFinite(this.tokenExpiresAt)) return null
+    return this.tokenExpiresAt - SESSION_REUSE_SAFETY_MS > Date.now()
+      ? this.token
+      : null
   }
 
   private isCurrentGeneration(generation: number): boolean {
@@ -489,6 +627,114 @@ export class ZaloServerClient {
       pending.reject(new Error(message))
     }
     this.pendingCommands.clear()
+  }
+
+  private waitForOperationResult(operation: ZaloServerOperationSnapshot): Promise<unknown> {
+    this.acceptOperationSnapshot(operation)
+    const latest = this.operationSnapshots.get(operation.operationId) || operation
+    if (latest.status !== 'running') return this.operationResult(latest)
+    return new Promise((resolve, reject) => {
+      this.pendingOperations.set(operation.operationId, { resolve, reject })
+      const current = this.operationSnapshots.get(operation.operationId)
+      if (current && current.status !== 'running') this.settleOperation(current)
+    })
+  }
+
+  private reconcileOperationSnapshots(
+    operations: ZaloServerOperationSnapshot[],
+    serverRestarted: boolean
+  ): void {
+    const next = new Map<string, ZaloServerOperationSnapshot>()
+    for (const operation of operations) {
+      if (!this.isOperationSnapshot(operation)) continue
+      next.set(operation.operationId, operation)
+    }
+    this.operationSnapshots = next
+    for (const [operationId, pending] of this.pendingOperations.entries()) {
+      const operation = next.get(operationId)
+      if (!operation) {
+        pending.reject(new Error(serverRestarted
+          ? 'App server đã khởi động lại; tác vụ trước đó đã kết thúc.'
+          : 'Tác vụ không còn tồn tại trên app server.'))
+        this.pendingOperations.delete(operationId)
+        continue
+      }
+      this.settleOperation(operation)
+    }
+  }
+
+  private acceptOperationSnapshot(operation: ZaloServerOperationSnapshot): void {
+    const existing = this.operationSnapshots.get(operation.operationId)
+    const existingTime = Date.parse(existing?.updatedAt || '')
+    const incomingTime = Date.parse(operation.updatedAt || '')
+    const latest = existing && (
+      (existing.status !== 'running' && operation.status === 'running') ||
+      (Number.isFinite(existingTime) && Number.isFinite(incomingTime) && existingTime > incomingTime)
+    )
+      ? existing
+      : operation
+    this.operationSnapshots.set(operation.operationId, latest)
+    this.settleOperation(latest)
+    this.publishOperationState()
+  }
+
+  private publishOperationState(): void {
+    if (this.mainWindow.isDestroyed()) return
+    try {
+      this.mainWindow.webContents.send(
+        IPC_EVENTS.ZALO_SERVER_OPERATION_STATE_UPDATED,
+        this.getOperationState()
+      )
+    } catch {
+      // renderer may be closing
+    }
+  }
+
+  private settleOperation(operation: ZaloServerOperationSnapshot): void {
+    if (operation.status === 'running') return
+    const pending = this.pendingOperations.get(operation.operationId)
+    if (!pending) return
+    this.pendingOperations.delete(operation.operationId)
+    if (operation.status === 'failed') {
+      pending.reject(new Error(operation.error || 'Tác vụ Zalo Server không hoàn thành'))
+      return
+    }
+    pending.resolve(this.successfulOperationResult(operation))
+  }
+
+  private operationResult(operation: ZaloServerOperationSnapshot): Promise<unknown> {
+    if (operation.status === 'failed') {
+      return Promise.reject(new Error(operation.error || 'Tác vụ Zalo Server không hoàn thành'))
+    }
+    return Promise.resolve(this.successfulOperationResult(operation))
+  }
+
+  private successfulOperationResult(operation: ZaloServerOperationSnapshot): unknown {
+    if (operation.status !== 'cancelled') return operation.result
+    const result = operation.result && typeof operation.result === 'object' && !Array.isArray(operation.result)
+      ? { ...(operation.result as Record<string, unknown>) }
+      : {}
+    return {
+      ...result,
+      success: false,
+      stopped: true,
+      message: typeof result.message === 'string' && result.message.trim()
+        ? result.message
+        : operation.error || 'Tác vụ đã dừng.'
+    }
+  }
+
+  private rejectPendingOperations(message: string): void {
+    for (const pending of this.pendingOperations.values()) pending.reject(new Error(message))
+    this.pendingOperations.clear()
+  }
+
+  private isOperationSnapshot(value: unknown): value is ZaloServerOperationSnapshot {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const operation = value as Partial<ZaloServerOperationSnapshot>
+    return typeof operation.operationId === 'string' &&
+      typeof operation.command === 'string' &&
+      (operation.status === 'running' || operation.status === 'completed' || operation.status === 'failed' || operation.status === 'cancelled')
   }
 
   private getCommandTimeoutMs(command: ZaloServerCommandName): number | null {
@@ -508,17 +754,6 @@ export class ZaloServerClient {
     } catch {
       return false
     }
-  }
-
-  private sendConnectionLog(message: string): void {
-    try {
-      if (!this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_LOG, {
-          timestamp: new Date().toISOString(),
-          message
-        })
-      }
-    } catch {}
   }
 
   private errorMessage(error: unknown): string {

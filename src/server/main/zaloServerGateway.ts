@@ -40,6 +40,12 @@ const CONTROL_REVALIDATION_INTERVAL_MS = 50_000
 const CONTROL_TICKET_MAX_TTL_SECONDS = 60
 const USED_TICKET_LIMIT = 100_000
 const CONTROL_ACCESS_CACHE_MS = 45_000
+const DESKTOP_DETACHED_OPERATION_COMMANDS = new Set<ZaloServerCommandName>([
+  'zalo.loginQr.start',
+  'contacts.loadFriends',
+  'contacts.loadGroups',
+  'contacts.loadZaloGroupMembers'
+])
 
 interface LoginAttemptKeys {
   identity: string
@@ -295,13 +301,9 @@ export class ZaloServerGateway {
     this.publishToStaffClients(event, false)
   }
 
-  /**
-   * Operation lifecycle is control-protocol state, not a user-facing log. Only
-   * browser/PWA clients use it; reconnects recover the current operation list
-   * from the hello snapshot instead of replaying old running/completed events.
-   */
+  /** Operation lifecycle is control state, not a user-facing activity log. */
   publishControl(event: ZaloServerRuntimeEvent): void {
-    this.publishToStaffClients(event, true)
+    this.publishToStaffClients(event, false)
   }
 
   private publishToStaffClients(event: ZaloServerRuntimeEvent, controlOnly: boolean): void {
@@ -554,7 +556,8 @@ export class ZaloServerGateway {
         client.socket.send(JSON.stringify({
           type: 'hello',
           snapshot: this.options.getSnapshot(session.staffId),
-          events: this.getBufferedEvents(session.staffId)
+          events: this.getBufferedEvents(session.staffId),
+          operations: this.options.getOperations(session.staffId)
         }))
         this.options.onClientCountChanged?.()
         return
@@ -592,7 +595,9 @@ export class ZaloServerGateway {
       const args = Array.isArray(message.args) ? message.args : []
       const result = auth.kind === 'control'
         ? await this.startAuthorizedControlOperation(client, message.command, args)
-        : await this.options.executeCommand(auth.staffId, message.command, args)
+        : DESKTOP_DETACHED_OPERATION_COMMANDS.has(message.command)
+          ? this.options.startControlOperation(auth.staffId, message.command, args)
+          : await this.options.executeCommand(auth.staffId, message.command, args)
       response = { type: 'command-result', requestId: message.requestId, ok: true, result }
     } catch (error) {
       response = {
