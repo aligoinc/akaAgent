@@ -9,6 +9,13 @@ import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import { renderContentSpin, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
 import {
+  isFormattedContentEmpty,
+  sanitizeFormattedContent,
+  splitFormattedContentVariants,
+  supportsFormattedContent,
+  transformFormattedContentText
+} from '../../shared/formattedContent'
+import {
   findInvalidAdvancedContentItemIndex,
   getAdvancedContentItems,
   selectAdvancedContentItem
@@ -52,7 +59,8 @@ import {
 } from '../domain/campaigns/campaignActionDescriptors'
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import { ZaloApiError } from 'zca-js'
-import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser, type ZaloFriendRecommendationProfile, type ZaloJoinGroupLinkResult, type ZaloSentFriendRequestProfile } from './zaloRuntimeService'
+import { ZaloRuntimeService, type ZaloForwardMessageResult, type ZaloForwardMessageTargetResult, type ZaloFoundUser, type ZaloFriendRecommendationProfile, type ZaloJoinGroupLinkResult, type ZaloMessageSendResult, type ZaloOutgoingText, type ZaloSentFriendRequestProfile } from './zaloRuntimeService'
+import { convertHtmlToZaloMessage } from './zaloFormattedContent'
 import { EmailRuntimeService, type EmailRecipientCheckResult } from './emailRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import type { ZaloGroupContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
@@ -130,7 +138,9 @@ interface MilestoneSummary {
   failureRootReasons: string[]
   errorRootReasons: string[]
   resetInputToPending?: boolean
+  preventInputRetry?: boolean
   pendingNote?: string
+  inputCompletionNote?: string
   stopAfterTarget?: boolean
 }
 
@@ -161,6 +171,19 @@ class CampaignMediaResolveError extends Error {
   ) {
     super(`Không dùng được media "${mediaName}": ${reason}`)
     this.name = 'CampaignMediaResolveError'
+  }
+}
+
+class ZaloPartialSendError extends Error {
+  constructor(
+    public readonly stage: 'content_after_media' | 'media_after_content',
+    public readonly causeError: unknown,
+    public readonly response: ZaloMessageDispatchResponse
+  ) {
+    super(stage === 'content_after_media'
+      ? 'Đã gửi file nhưng gửi nội dung thất bại'
+      : 'Đã gửi nội dung nhưng gửi file thất bại')
+    this.name = 'ZaloPartialSendError'
   }
 }
 
@@ -204,6 +227,21 @@ interface ZaloShareMessageCapacity {
   ok: boolean
   capacity: number
   limitStatus?: AccountActionLimitStatus
+}
+
+interface ZaloMessageDispatchResponse {
+  sequence: 'combined' | 'content_only' | 'media_only' | 'media_then_content' | 'content_then_media'
+  response?: ZaloMessageSendResult
+  mediaResponse?: ZaloMessageSendResult
+  contentResponse?: ZaloMessageSendResult
+}
+
+interface ZaloPartialSendMetadata {
+  stage: 'content_after_media' | 'media_after_content'
+  sequence: 'media_then_content' | 'content_then_media'
+  mediaResponse?: unknown
+  contentResponse?: unknown
+  error: string
 }
 
 type ZaloRuntimeStopReason = 'handoff' | 'shutdown'
@@ -534,6 +572,7 @@ export class CampaignScheduler {
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private internalSmsPushedDetailKeys = new Set<string>()
   private externalSmsPushedDetailKeys = new Set<string>()
+  private formattedZaloShareWarnings = new Set<number>()
   private backgroundPages = new BackgroundPageManager()
   private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<string>()
@@ -2008,6 +2047,18 @@ export class CampaignScheduler {
       return
     }
 
+    if (
+      this.isFormattedContentCampaign(campaign) &&
+      campaign.extraSettings?.zaloMessageSendMode === ZALO_MESSAGE_SEND_MODE_SHARE &&
+      !this.formattedZaloShareWarnings.has(campaign.id)
+    ) {
+      this.formattedZaloShareWarnings.add(campaign.id)
+      await this.logCampaignProgress(
+        campaign.id,
+        '⚠️ Nội dung có định dạng không hỗ trợ chế độ chia sẻ; chiến dịch sẽ gửi tin nhắn thường.'
+      )
+    }
+
     if (this.shouldUseZaloShareMessageBatch(campaign)) {
       await this.executeZaloShareMessageBatchCampaign(
         account,
@@ -2042,7 +2093,7 @@ export class CampaignScheduler {
     }
 
     const sourcePagePostMode = extra.pagePostMode || 'api'
-    const shouldPostWithBackground = extra.postWithBackground === true && (
+    const shouldPostWithBackground = !this.isFormattedContentCampaign(campaign) && extra.postWithBackground === true && (
       campaign.actionId === 'facebook_timeline_post' ||
       (campaign.actionId === PAGE_POST_ACTION_ID && sourcePagePostMode === 'ui') ||
       campaign.actionId === GROUP_POST_ACTION_ID
@@ -2394,18 +2445,24 @@ export class CampaignScheduler {
           let runtimeStopTriggered = false
 
           if (accountStopReason && !runtimeModeStopRequested) {
-            if (detail) {
+            if (detail && !milestoneSummary.preventInputRetry) {
               await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: accountStopReason })
             }
             await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
             shouldStopAfterTarget = true
           }
 
-          if (detail && (runtimeModeStopRequested || !accountStopReason)) {
+          if (detail && (runtimeModeStopRequested || !accountStopReason || milestoneSummary.preventInputRetry)) {
             if (runtimeModeStopRequested) {
               await this.supabase.updateCampaignInputData(detail.id, {
                 status: 'hoàn thành',
                 note: this.getZaloRuntimeUncertainNote(runtimeStopReason)
+              })
+              consumedGroupPostInputDataIds.add(detail.id)
+            } else if (milestoneSummary.preventInputRetry) {
+              await this.supabase.updateCampaignInputData(detail.id, {
+                status: 'hoàn thành',
+                note: milestoneSummary.inputCompletionNote || 'Tin nhắn đã gửi một phần; không tự động gửi lại để tránh trùng nội dung hoặc file.'
               })
               consumedGroupPostInputDataIds.add(detail.id)
             } else if (result.status === 'completed') {
@@ -3255,9 +3312,14 @@ export class CampaignScheduler {
 
   private shouldUseZaloShareMessageBatch(campaign: Campaign): boolean {
     return (
+      !this.isFormattedContentCampaign(campaign) &&
       campaign.extraSettings?.zaloMessageSendMode === ZALO_MESSAGE_SEND_MODE_SHARE &&
       (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID)
     )
+  }
+
+  private isFormattedContentCampaign(campaign: Campaign): boolean {
+    return campaign.extraSettings?.formattedContentEnabled === true && supportsFormattedContent(campaign.actionId)
   }
 
   private getZaloShareMessageActionDescriptor(
@@ -3893,6 +3955,7 @@ export class CampaignScheduler {
 
         const mediaFailure = mediaFailures.get(item.detail.id)
         let actionDetail: ZaloActionDetailOutput
+        let forwardTargetResult: ZaloForwardMessageTargetResult | null = null
 
         if (mediaFailure) {
           actionDetail = mediaFailure
@@ -3906,12 +3969,45 @@ export class CampaignScheduler {
             { target: item.target, threadId: item.threadId, message: trimmedMessage, attachments, inputData: item.inputData, sendMode: 'share_text' }
           )
         } else if (trimmedMessage) {
-          const targetResult = this.findZaloForwardTargetResult(forwardResult, item.threadId)
-          actionDetail = targetResult?.ok
+          forwardTargetResult = this.findZaloForwardTargetResult(forwardResult, item.threadId)
+          actionDetail = forwardTargetResult?.ok
             ? this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response)
-            : await this.createZaloForwardFailureDetail(account, campaign, actionDescriptor, item, targetResult, trimmedMessage, attachments, forwardResult?.response)
+            : await this.createZaloForwardFailureDetail(account, campaign, actionDescriptor, item, forwardTargetResult, trimmedMessage, attachments, forwardResult?.response)
         } else {
           actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, '', attachments, mediaResponses.get(item.detail.id), null)
+        }
+
+        if (
+          trimmedMessage &&
+          mediaResponses.has(item.detail.id) &&
+          actionDetail.status !== 'thành công'
+        ) {
+          const forwardFailure = forwardError || {
+            message: forwardTargetResult?.errorMessage || 'Chia sẻ tin nhắn Zalo thất bại',
+            code: forwardTargetResult?.errorCode
+          }
+          const mediaResponse = mediaResponses.get(item.detail.id)
+          actionDetail = this.finalizeZaloPartialSendDetail(
+            actionDetail,
+            {
+              target: item.target,
+              threadId: item.threadId,
+              message: trimmedMessage,
+              attachments,
+              inputData: item.inputData,
+              sendMode: 'share',
+              mediaResponse,
+              forwardTargetResult: forwardTargetResult || undefined,
+              forwardResponse: forwardResult?.response as Record<string, unknown> | undefined
+            },
+            {
+              stage: 'content_after_media',
+              sequence: 'media_then_content',
+              mediaResponse,
+              contentResponse: forwardTargetResult || forwardResult?.response,
+              error: this.getZaloErrorMessage(forwardFailure)
+            }
+          )
         }
 
         const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail)
@@ -4073,7 +4169,7 @@ export class CampaignScheduler {
     detail: CampaignInputData,
     actionDetail: ZaloActionDetailOutput
   ): Promise<void> {
-    if (actionDetail.resetInputToPending) {
+    if (actionDetail.resetInputToPending && !actionDetail.preventInputRetry) {
       await this.supabase.updateCampaignInputData(detail.id, {
         status: 'chờ xử lý',
         note: actionDetail.pendingNote || actionDetail.log || ''
@@ -4711,7 +4807,7 @@ export class CampaignScheduler {
   private getAkaBizTagIdsForCampaign(campaign: Campaign): number[] {
     if (
       campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID ||
-      campaign.extraSettings?.zaloMessageSendMode === ZALO_MESSAGE_SEND_MODE_SHARE ||
+      this.shouldUseZaloShareMessageBatch(campaign) ||
       campaign.extraSettings?.enableAkaBizTag !== true
     ) {
       return []
@@ -6293,6 +6389,7 @@ export class CampaignScheduler {
     skippedLimitActionCodes: Set<string> = new Set()
   ): Promise<Record<string, unknown>> {
     const extra = campaign.extraSettings || {}
+    const formattedContentEnabled = this.isFormattedContentCampaign(campaign)
     const isActionSkippedByLimit = (actionCode: string) => skippedLimitActionCodes.has(actionCode)
     const skipMessageByLimit = this.shouldSkipMessageByLimit(campaign, skippedLimitActionCodes)
     const skipAddFriendByLimit = this.shouldSkipAddFriendByLimit(skippedLimitActionCodes)
@@ -6302,7 +6399,7 @@ export class CampaignScheduler {
     const canUseCommentSeedingPostContentConditions = campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID
     const canUsePostContentConditions = canUseFindDataPostContentConditions || canUseCommentSeedingPostContentConditions
     const pagePostMode = extra.pagePostMode || 'api'
-    const postWithBackground = extra.postWithBackground === true && (
+    const postWithBackground = !formattedContentEnabled && extra.postWithBackground === true && (
       campaign.actionId === 'facebook_timeline_post' ||
       (campaign.actionId === PAGE_POST_ACTION_ID && pagePostMode === 'ui') ||
       campaign.actionId === GROUP_POST_ACTION_ID
@@ -6325,9 +6422,13 @@ export class CampaignScheduler {
     const selectedRawPostContent = this.getRawCampaignContentForIndex(campaign, detailIndex)
     const selectedPostContent = campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
       ? ''
-      : this.isBrowserlessCampaign(campaign)
-        ? selectedRawPostContent
-        : this.renderSpinContent(selectedRawPostContent)
+      : formattedContentEnabled
+        ? this.isBrowserlessCampaign(campaign)
+          ? selectedRawPostContent
+          : transformFormattedContentText(selectedRawPostContent, text => this.renderSpinContent(text))
+        : this.isBrowserlessCampaign(campaign)
+          ? selectedRawPostContent
+          : this.renderSpinContent(selectedRawPostContent)
     const storedCommentImageOption = String(extra.commentImageOption || 'none')
     const commentImageOption = storedCommentImageOption === 'none' ? 'none' : 'all'
     const shouldUseCommentImages = enableComment && commentImageOption === 'all'
@@ -6356,7 +6457,10 @@ export class CampaignScheduler {
       campaignName: campaign.name,
       campaignContent: selectedPostContent,
       originalCampaignContent: selectedPostContent,
-      rewriteContentEachRun: extra.rewriteContentEachRun === true,
+      manualContentNative: selectedPostContent,
+      sourceContentPlain: '',
+      formattedContentEnabled,
+      rewriteContentEachRun: !formattedContentEnabled && extra.rewriteContentEachRun === true,
       campaignInputDataName: detail?.name || '',
       inputDataName: detail?.name || '',
       images: validPostImages,
@@ -6722,7 +6826,13 @@ export class CampaignScheduler {
       const actionDetail = this.getZaloActionDetailFromStep(step)
       if (!actionDetail) continue
 
-      if (actionDetail.resetInputToPending) {
+      if (actionDetail.preventInputRetry) {
+        // A successful first send cannot be rolled back. This terminal marker
+        // wins over retry requests from every action before or after it.
+        summary.preventInputRetry = true
+        summary.resetInputToPending = false
+        summary.inputCompletionNote = actionDetail.log || summary.inputCompletionNote
+      } else if (actionDetail.resetInputToPending && !summary.preventInputRetry) {
         summary.resetInputToPending = true
         summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
       }
@@ -9897,6 +10007,21 @@ export class CampaignScheduler {
   private renderZaloTemplate(
     template: string | undefined | null,
     inputData: Record<string, unknown> | undefined,
+    target?: ZaloResolvedTarget | null,
+    formatted = false
+  ): string {
+    if (formatted) {
+      return transformFormattedContentText(
+        template,
+        text => this.renderZaloTemplateText(text, inputData, target)
+      )
+    }
+    return this.renderZaloTemplateText(template, inputData, target)
+  }
+
+  private renderZaloTemplateText(
+    template: string | undefined | null,
+    inputData: Record<string, unknown> | undefined,
     target?: ZaloResolvedTarget | null
   ): string {
     const raw = this.renderSpinContent(template)
@@ -9948,6 +10073,20 @@ export class CampaignScheduler {
       .replace(/#\{INFO3\}/g, getInput('info3'))
       .replace(/#\{INFO4\}/g, getInput('info4'))
       .replace(/#\{INFO5\}/g, getInput('info5'))
+  }
+
+  private async buildZaloOutgoingMessage(
+    account: AutoAccount,
+    campaign: Campaign,
+    rawMessage: string | undefined | null,
+    inputData: Record<string, unknown> | undefined,
+    target: ZaloResolvedTarget | null | undefined,
+    metadata?: BlockRuntimeMetadata
+  ): Promise<ZaloOutgoingText> {
+    const formatted = this.isFormattedContentCampaign(campaign)
+    const rendered = this.renderZaloTemplate(rawMessage, inputData, target, formatted)
+    if (formatted) return convertHtmlToZaloMessage(rendered)
+    return this.rewriteZaloMessageForRun(account, campaign, rendered, metadata)
   }
 
   private async logZaloAiRewriteRunEvent(
@@ -10346,6 +10485,120 @@ export class CampaignScheduler {
     return { ok: true, zaloTarget: target }
   }
 
+  private getZaloOutgoingMessageText(message: ZaloOutgoingText): string {
+    return typeof message === 'string' ? message : String(message?.msg || '')
+  }
+
+  private async dispatchZaloMessage(
+    accountId: number,
+    threadId: string,
+    isGroup: boolean,
+    message: ZaloOutgoingText,
+    attachments: string[]
+  ): Promise<ZaloMessageDispatchResponse> {
+    if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const safeAttachments = attachments.map(item => String(item || '').trim()).filter(Boolean)
+    const hasContent = this.getZaloOutgoingMessageText(message).trim().length > 0
+    const isFormatted = typeof message !== 'string'
+    const send = (outgoing: ZaloOutgoingText, files: string[]): Promise<ZaloMessageSendResult> => (
+      isGroup
+        ? this.zaloRuntime!.sendMessageToGroup(accountId, threadId, outgoing, files)
+        : this.zaloRuntime!.sendMessageToUser(accountId, threadId, outgoing, files)
+    )
+
+    if (safeAttachments.length >= 2) {
+      const mediaResponse = await send('', safeAttachments)
+      const response: ZaloMessageDispatchResponse = {
+        sequence: hasContent ? 'media_then_content' : 'media_only',
+        mediaResponse
+      }
+      if (!hasContent) return response
+      try {
+        response.contentResponse = await send(message, [])
+        return response
+      } catch (err) {
+        throw new ZaloPartialSendError('content_after_media', err, response)
+      }
+    }
+
+    if (isFormatted && safeAttachments.length === 1) {
+      if (!hasContent) {
+        return {
+          sequence: 'media_only',
+          mediaResponse: await send('', safeAttachments)
+        }
+      }
+
+      const contentResponse = await send(message, [])
+      const response: ZaloMessageDispatchResponse = {
+        sequence: 'content_then_media',
+        contentResponse
+      }
+      try {
+        response.mediaResponse = await send('', safeAttachments)
+        return response
+      } catch (err) {
+        throw new ZaloPartialSendError('media_after_content', err, response)
+      }
+    }
+
+    return {
+      sequence: safeAttachments.length > 0 ? 'combined' : 'content_only',
+      response: await send(message, safeAttachments)
+    }
+  }
+
+  private async createZaloPartialSendDetail(
+    account: AutoAccount,
+    campaign: Campaign,
+    err: ZaloPartialSendError,
+    actionCode: string,
+    actionName: string,
+    data: Record<string, unknown>
+  ): Promise<ZaloActionDetailOutput> {
+    const detail = await this.createZaloErrorDetail(
+      account,
+      campaign,
+      err.causeError,
+      actionCode,
+      actionName,
+      data
+    )
+    return this.finalizeZaloPartialSendDetail(detail, data, {
+      stage: err.stage,
+      sequence: err.response.sequence === 'content_then_media' ? 'content_then_media' : 'media_then_content',
+      mediaResponse: err.response.mediaResponse,
+      contentResponse: err.response.contentResponse,
+      error: this.getZaloErrorMessage(err.causeError)
+    })
+  }
+
+  private finalizeZaloPartialSendDetail(
+    detail: ZaloActionDetailOutput,
+    data: Record<string, unknown>,
+    partialSend: ZaloPartialSendMetadata
+  ): ZaloActionDetailOutput {
+    const log = partialSend.stage === 'content_after_media'
+      ? 'Đã gửi file nhưng gửi nội dung thất bại'
+      : 'Đã gửi nội dung nhưng gửi file thất bại'
+    return {
+      ...detail,
+      createDetail: true,
+      status: 'thất bại',
+      log,
+      countsTowardLimit: true,
+      countsTowardBadTarget: false,
+      resetInputToPending: false,
+      preventInputRetry: true,
+      pendingNote: undefined,
+      data: {
+        ...(detail.data || {}),
+        ...data,
+        partialSend
+      }
+    }
+  }
+
   private async zaloSendPhoneMessage(
     account: AutoAccount,
     campaign: Campaign,
@@ -10359,13 +10612,19 @@ export class CampaignScheduler {
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
-    const renderedMessage = this.renderZaloTemplate(options.message, options.inputData, target)
-    const message = await this.rewriteZaloMessageForRun(account, campaign, renderedMessage, metadata)
+    const message = await this.buildZaloOutgoingMessage(
+      account,
+      campaign,
+      options.message,
+      options.inputData,
+      target,
+      metadata
+    )
     const actionCode = 'zalo_message_stranger'
     const actionName = 'Nhắn tin người lạ'
 
     try {
-      const response = await this.zaloRuntime.sendMessageToUser(account.id, target.uid, message, attachments)
+      const response = await this.dispatchZaloMessage(account.id, target.uid, false, message, attachments)
       this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
@@ -10374,15 +10633,18 @@ export class CampaignScheduler {
           actionCode,
           actionName,
           log: `Đã gửi tin nhắn đến ${this.getZaloTargetLabel(target)}`,
-          data: { target, message, attachments, response: response as Record<string, unknown> | undefined }
+          data: { target, message, attachments, response }
         })
       }
     } catch (err) {
       this.throwIfZaloRuntimeStopping(campaign.id)
+      const errorData = { target, message, attachments, inputData: options.inputData }
       return {
         ok: false,
         zaloTarget: target,
-        detail: await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { target, message, attachments, inputData: options.inputData })
+        detail: err instanceof ZaloPartialSendError
+          ? await this.createZaloPartialSendDetail(account, campaign, err, actionCode, actionName, errorData)
+          : await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, errorData)
       }
     }
   }
@@ -10422,11 +10684,17 @@ export class CampaignScheduler {
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
-    const renderedMessage = this.renderZaloTemplate(options.message, options.inputData, target)
-    const message = await this.rewriteZaloMessageForRun(account, campaign, renderedMessage, metadata)
+    const message = await this.buildZaloOutgoingMessage(
+      account,
+      campaign,
+      options.message,
+      options.inputData,
+      target,
+      metadata
+    )
 
     try {
-      const response = await this.zaloRuntime.sendMessageToUser(account.id, target.uid, message, attachments)
+      const response = await this.dispatchZaloMessage(account.id, target.uid, false, message, attachments)
       this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
@@ -10435,15 +10703,18 @@ export class CampaignScheduler {
           actionCode,
           actionName,
           log: `Đã gửi tin nhắn đến ${this.getZaloTargetLabel(target)}`,
-          data: { target, message, attachments, response: response as Record<string, unknown> | undefined }
+          data: { target, message, attachments, response }
         })
       }
     } catch (err) {
       this.throwIfZaloRuntimeStopping(campaign.id)
+      const errorData = { target, message, attachments, inputData: options.inputData }
       return {
         ok: false,
         zaloTarget: target,
-        detail: await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { target, message, attachments, inputData: options.inputData })
+        detail: err instanceof ZaloPartialSendError
+          ? await this.createZaloPartialSendDetail(account, campaign, err, actionCode, actionName, errorData)
+          : await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, errorData)
       }
     }
   }
@@ -10476,11 +10747,17 @@ export class CampaignScheduler {
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)
-    const renderedMessage = this.renderZaloTemplate(options.message, options.inputData, target)
-    const message = await this.rewriteZaloMessageForRun(account, campaign, renderedMessage, metadata)
+    const message = await this.buildZaloOutgoingMessage(
+      account,
+      campaign,
+      options.message,
+      options.inputData,
+      target,
+      metadata
+    )
 
     try {
-      const response = await this.zaloRuntime.sendMessageToGroup(account.id, groupId, message, attachments)
+      const response = await this.dispatchZaloMessage(account.id, groupId, true, message, attachments)
       this.throwIfZaloRuntimeStopping(campaign.id)
       await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'group')
       return {
@@ -10490,15 +10767,18 @@ export class CampaignScheduler {
           actionCode,
           actionName,
           log: `Đã gửi tin nhắn vào group ${this.getZaloTargetLabel(target)}`,
-          data: { target, groupId, message, attachments, response: response as Record<string, unknown> | undefined }
+          data: { target, groupId, message, attachments, response }
         })
       }
     } catch (err) {
       this.throwIfZaloRuntimeStopping(campaign.id)
+      const errorData = { target, groupId, message, attachments, inputData: options.inputData }
       return {
         ok: false,
         zaloTarget: target,
-        detail: await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, { target, groupId, message, attachments, inputData: options.inputData })
+        detail: err instanceof ZaloPartialSendError
+          ? await this.createZaloPartialSendDetail(account, campaign, err, actionCode, actionName, errorData)
+          : await this.createZaloErrorDetail(account, campaign, err, actionCode, actionName, errorData)
       }
     }
   }
@@ -11665,7 +11945,13 @@ export class CampaignScheduler {
     if (items.length === 0) {
       return 'Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.'
     }
-    const invalidIndex = findInvalidAdvancedContentItemIndex(items, { allowMediaOnly })
+    const invalidIndex = this.isFormattedContentCampaign(campaign)
+      ? items.findIndex(item => {
+          const hasContent = !isFormattedContentEmpty(item.content)
+          const hasMedia = item.mediaOption !== 'none' && Array.isArray(item.mediaItems) && item.mediaItems.length > 0
+          return !hasContent && !(allowMediaOnly && hasMedia)
+        })
+      : findInvalidAdvancedContentItemIndex(items, { allowMediaOnly })
     if (invalidIndex < 0) return null
     return allowMediaOnly
       ? `Nội dung nâng cao số ${invalidIndex + 1} đang rỗng. Vui lòng nhập nội dung hoặc chọn media.`
@@ -11674,7 +11960,14 @@ export class CampaignScheduler {
 
   private getRawCampaignContentForIndex(campaign: Campaign, index: number): string {
     if (this.shouldUseAdvancedContent(campaign)) {
-      return selectAdvancedContentItem(campaign.extraSettings, index)?.content || ''
+      const selected = selectAdvancedContentItem(campaign.extraSettings, index)?.content || ''
+      return this.isFormattedContentCampaign(campaign)
+        ? sanitizeFormattedContent(selected)
+        : selected
+    }
+
+    if (this.isFormattedContentCampaign(campaign)) {
+      return this.cycleVariant(splitFormattedContentVariants(campaign.content), index)
     }
 
     const variants = this.splitContentVariants(campaign.content)

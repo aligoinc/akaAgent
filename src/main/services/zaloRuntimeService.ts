@@ -1,9 +1,14 @@
 import { promises as fs } from 'node:fs'
 import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError, FriendRecommendationsType } from 'zca-js'
-import type { API, AttachmentSource, Credentials, GroupEvent, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, Message, MessageContent, Options as ZaloOptions, ProfileInfo, Reaction, UserBasic } from 'zca-js'
+import type { API, AttachmentSource, Credentials, GroupEvent, ImageMetadataGetterResponse, LabelData, LoginQRCallbackEvent, Message, MessageContent, Options as ZaloOptions, ProfileInfo, Reaction, SendMessageResponse, UserBasic } from 'zca-js'
 import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, ZaloSessionCredentials } from '../../shared/types'
 import { SupabaseService } from './supabase'
 import type { ZaloAccountRuntimeTarget } from '../data/repositories/accountRepository'
+import type { ZaloOutgoingText } from './zaloFormattedContent'
+
+export type { ZaloOutgoingText, ZaloStyledText } from './zaloFormattedContent'
+
+export type ZaloMessageSendResult = SendMessageResponse
 
 const DEFAULT_ZALO_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0'
@@ -1109,18 +1114,18 @@ export class ZaloRuntimeService {
   async sendMessageToUser(
     accountId: number,
     uid: string,
-    message: string,
+    message: ZaloOutgoingText,
     attachments: string[] = []
-  ): Promise<unknown> {
+  ): Promise<ZaloMessageSendResult> {
     return this.sendMessage(accountId, uid, ThreadType.User, message, attachments)
   }
 
   async sendMessageToGroup(
     accountId: number,
     groupId: string,
-    message: string,
+    message: ZaloOutgoingText,
     attachments: string[] = []
-  ): Promise<unknown> {
+  ): Promise<ZaloMessageSendResult> {
     return this.sendMessage(accountId, groupId, ThreadType.Group, message, attachments)
   }
 
@@ -1305,14 +1310,22 @@ export class ZaloRuntimeService {
     accountId: number,
     threadId: string,
     type: ThreadType,
-    message: string,
+    message: ZaloOutgoingText,
     attachments: string[] = []
-  ): Promise<unknown> {
+  ): Promise<ZaloMessageSendResult> {
     const api = await this.ensureApi(accountId)
     const safeAttachments = attachments.map(item => String(item || '').trim()).filter(Boolean) as AttachmentSource[]
+    const outgoing = typeof message === 'string'
+      ? { msg: String(message || '') }
+      : {
+          msg: String(message?.msg || ''),
+          ...(Array.isArray(message?.styles) && message.styles.length > 0
+            ? { styles: message.styles }
+            : {})
+        }
     const payload: MessageContent = safeAttachments.length > 0
-      ? { msg: String(message || ''), attachments: safeAttachments }
-      : { msg: String(message || '') }
+      ? { ...outgoing, attachments: safeAttachments }
+      : outgoing
     const needsUploadCallback = safeAttachments.some(item => requiresZaloUploadCallback(String(item || '')))
     const listenerPromise = this.ensureZaloListenerReady(accountId, api, {
       refreshIfOlderThanMs: needsUploadCallback ? ZALO_LISTENER_REFRESH_AFTER_MS : undefined

@@ -1,6 +1,13 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { FileText, Image, Mail, MessageCircle, Paperclip, Send, Share2, ThumbsUp, X } from 'lucide-react'
 import { renderContentSpin, renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
+import {
+  formattedContentToZaloPreviewHtml,
+  isFormattedContentEmpty,
+  sanitizeFormattedContent,
+  splitFormattedContentVariants,
+  transformFormattedContentTextNodes
+} from '../../../../shared/formattedContent'
 
 export type ContentPreviewKind = 'post' | 'comment' | 'message' | 'email' | 'answer' | 'friendRequest'
 export type ContentPreviewPlatform = 'facebook' | 'zalo' | 'email' | 'generic'
@@ -19,11 +26,14 @@ export interface ContentPreviewModalData {
   platform?: ContentPreviewPlatform
   surface?: ContentPreviewSurface
   content: string
+  contentFormat?: 'plain' | 'rich_text'
+  variants?: string[]
   subject?: string
   isHtml?: boolean
   media?: ContentPreviewMediaItem[]
   mediaMode?: 'none' | 'all' | 'random'
   randomCount?: number
+  zaloMessageSendMode?: 'normal' | 'share'
   notes?: string[]
 }
 
@@ -137,7 +147,13 @@ const getInitials = (name: string) => name
   .toUpperCase() || 'MA'
 
 export default function ContentPreviewModal({ data, onClose }: ContentPreviewModalProps) {
-  const variants = useMemo(() => splitPreviewVariants(data.content), [data.content])
+  const isRichText = data.contentFormat === 'rich_text'
+  const variants = useMemo(() => {
+    if (Array.isArray(data.variants) && data.variants.length > 0) return data.variants
+    if (isRichText) return splitFormattedContentVariants(data.content)
+    if (data.isHtml) return [data.content]
+    return splitPreviewVariants(data.content)
+  }, [data.content, data.isHtml, data.variants, isRichText])
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0)
   const [mediaItems, setMediaItems] = useState<PreviewMediaState[]>([])
 
@@ -146,20 +162,33 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
   }, [data.content])
 
   const selectedVariant = variants[Math.min(selectedVariantIndex, variants.length - 1)] || ''
+  const platform = data.platform || getFallbackPlatform(data.kind)
+  const surface = data.surface || getFallbackSurface(data.kind)
+  const isEmail = platform === 'email' || surface === 'email'
+  const isZalo = platform === 'zalo'
   const selectedSpinSample = useMemo(
     () => data.kind === 'friendRequest' ? renderContentSpinMax(selectedVariant) : renderContentSpin(selectedVariant),
     [data.kind, selectedVariant]
   )
   const subjectSpinSample = useMemo(() => renderContentSpin(data.subject || ''), [data.subject])
   const renderedContent = renderPreviewSampleTokens(selectedSpinSample)
+  const renderedRichContent = useMemo(() => {
+    if (!isRichText) return ''
+    const transformedHtml = transformFormattedContentTextNodes(
+      sanitizeFormattedContent(selectedVariant),
+      text => renderPreviewSampleTokens(data.kind === 'friendRequest' ? renderContentSpinMax(text) : renderContentSpin(text))
+    )
+    return isZalo ? formattedContentToZaloPreviewHtml(transformedHtml) : transformedHtml
+  }, [data.kind, isRichText, isZalo, selectedVariant])
   const renderedSubject = renderPreviewSampleTokens(subjectSpinSample)
-  const platform = data.platform || getFallbackPlatform(data.kind)
-  const surface = data.surface || getFallbackSurface(data.kind)
-  const isEmail = platform === 'email' || surface === 'email'
-  const isZalo = platform === 'zalo'
   const isFriendRequest = data.kind === 'friendRequest'
   const displayName = isFriendRequest ? 'Trần Quốc Bảo' : 'Nguyễn Minh Anh'
   const displayInitials = getInitials(displayName)
+  const renderTextContent = (emptyText: string) => {
+    if (!isRichText) return renderedContent || emptyText
+    if (isFormattedContentEmpty(renderedRichContent)) return emptyText
+    return <div className="content-preview-rich-text" dangerouslySetInnerHTML={{ __html: renderedRichContent }} />
+  }
 
   const selectedMedia = useMemo(() => {
     const media = (data.media || []).filter(item => item.path)
@@ -324,7 +353,7 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
               <span>Vừa xong</span>
             </div>
           </div>
-          <div className="content-preview-fb-text">{renderedContent || 'Chưa có nội dung để xem trước.'}</div>
+          <div className="content-preview-fb-text">{renderTextContent('Chưa có nội dung để xem trước.')}</div>
           {renderMediaGrid('feed')}
           <div className="content-preview-fb-actions">
             <span><ThumbsUp size={14} /> Thích</span>
@@ -353,7 +382,7 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
             <div className="content-preview-avatar facebook small">{displayInitials}</div>
             <div className="content-preview-comment-bubble">
               <strong>{displayName}</strong>
-              <p>{renderedContent || 'Chưa có nội dung comment để xem trước.'}</p>
+              <p>{renderTextContent('Chưa có nội dung comment để xem trước.')}</p>
               {renderMediaGrid('bubble')}
             </div>
           </div>
@@ -374,43 +403,85 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
               <span>Vừa xong</span>
             </div>
           </div>
-          <div className="content-preview-story-text">{renderedContent || 'Chưa có nội dung để xem trước.'}</div>
+          <div className="content-preview-story-text">{renderTextContent('Chưa có nội dung để xem trước.')}</div>
           {renderMediaGrid('bubble')}
         </div>
       </div>
     </>
   )
 
-  const renderChatPreview = () => renderPhoneFrame(
-    <>
-      {isZalo ? renderZaloTopbar() : (
-        <div className="content-preview-platform-bar messenger">
-          <div className="content-preview-avatar messenger">{displayInitials}</div>
-          <div>
-            <strong>{displayName}</strong>
-            <span>Đang hoạt động</span>
+  const renderChatPreview = () => {
+    const emptyText = isFriendRequest ? 'Không nhập lời nhắn kết bạn.' : 'Chưa có nội dung tin nhắn để xem trước.'
+    const hasContent = isRichText
+      ? !isFormattedContentEmpty(renderedRichContent)
+      : renderedContent.trim().length > 0
+    const renderTextRow = (showEmptyText = false) => {
+      if (!hasContent && !showEmptyText) return null
+      return (
+        <div className="content-preview-outgoing-row content-preview-outgoing-text-row">
+          <div className="content-preview-chat-bubble outgoing">
+            <div>{renderTextContent(emptyText)}</div>
           </div>
         </div>
-      )}
-      <div className={`content-preview-chat-screen ${isZalo ? 'zalo' : 'messenger'}`}>
-        <div className="content-preview-chat-day">Hôm nay</div>
-        {isFriendRequest && (
-          <div className="content-preview-chat-system">Lời mời kết bạn</div>
-        )}
+      )
+    }
+    const renderMediaRow = () => mediaItems.length > 0 ? (
+      <div className="content-preview-outgoing-row content-preview-outgoing-media-row">
+        <div className="content-preview-chat-bubble outgoing media-only">
+          {renderMediaGrid('bubble')}
+        </div>
+      </div>
+    ) : null
+
+    const renderOutgoingMessages = () => {
+      if (isZalo && data.zaloMessageSendMode === 'share' && mediaItems.length > 0) {
+        return <>{renderMediaRow()}{renderTextRow()}</>
+      }
+      if (isZalo && mediaItems.length >= 2) {
+        return <>{renderMediaRow()}{renderTextRow()}</>
+      }
+      if (isZalo && mediaItems.length === 1 && isRichText) {
+        return <>{renderTextRow()}{renderMediaRow()}</>
+      }
+      if (isZalo && mediaItems.length === 1 && !hasContent) {
+        return renderMediaRow()
+      }
+      return (
         <div className="content-preview-outgoing-row">
           <div className="content-preview-chat-bubble outgoing">
-            <div>{renderedContent || (isFriendRequest ? 'Không nhập lời nhắn kết bạn.' : 'Chưa có nội dung tin nhắn để xem trước.')}</div>
+            <div>{renderTextContent(emptyText)}</div>
             {renderMediaGrid('bubble')}
           </div>
         </div>
-      </div>
-      <div className={`content-preview-chat-composer ${isZalo ? 'zalo' : 'messenger'}`}>
-        <Paperclip size={15} />
-        <span>Nhập tin nhắn...</span>
-        <Send size={15} />
-      </div>
-    </>
-  )
+      )
+    }
+
+    return renderPhoneFrame(
+      <>
+        {isZalo ? renderZaloTopbar() : (
+          <div className="content-preview-platform-bar messenger">
+            <div className="content-preview-avatar messenger">{displayInitials}</div>
+            <div>
+              <strong>{displayName}</strong>
+              <span>Đang hoạt động</span>
+            </div>
+          </div>
+        )}
+        <div className={`content-preview-chat-screen ${isZalo ? 'zalo' : 'messenger'}`}>
+          <div className="content-preview-chat-day">Hôm nay</div>
+          {isFriendRequest && (
+            <div className="content-preview-chat-system">Lời mời kết bạn</div>
+          )}
+          {renderOutgoingMessages()}
+        </div>
+        <div className={`content-preview-chat-composer ${isZalo ? 'zalo' : 'messenger'}`}>
+          <Paperclip size={15} />
+          <span>Nhập tin nhắn...</span>
+          <Send size={15} />
+        </div>
+      </>
+    )
+  }
 
   const renderEmailPreview = () => (
     <div className="content-preview-email-client">
