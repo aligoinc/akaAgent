@@ -145,6 +145,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       } catch {
         // Window may be closed
       }
+    },
+    () => {
+      try { mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
     }
   )
   const emailRuntime = new EmailRuntimeService(supabase)
@@ -356,13 +359,22 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   }
 
   const activateZaloRuntimeRestartRequired = (
-    liveIsZaloServer: boolean
+    liveIsZaloServer: boolean,
+    liveIsZaloShowWeb = false
   ): Promise<void> => {
     const activationUser = getCurrentUser()
     const activationCredentials = runtimeCredentials ? { ...runtimeCredentials } : null
-    const payload = markZaloRuntimeRestartRequired(liveIsZaloServer)
+    const payload = markZaloRuntimeRestartRequired(liveIsZaloServer, liveIsZaloShowWeb)
     notifyRendererZaloRuntimeRestartRequired(payload)
     if (restartRequiredActivation) return restartRequiredActivation
+
+    // Show Web is intentionally a restart-only setting. Do not add handoff,
+    // ownership, cleanup or "mode changed while running" coordination here;
+    // the user closes and reopens the app to apply the new browser mode.
+    if (activationUser?.isZaloShowWeb || liveIsZaloShowWeb) {
+      restartRequiredActivation = Promise.resolve()
+      return restartRequiredActivation
+    }
 
     cancelLocalHandoffRetry()
     cancelDesktopHandoffAckRetry()
@@ -467,10 +479,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   const ensureDesktopZaloHandoffBeforeExit = async (): Promise<void> => {
     const sessionUser = getCurrentUser()
-    // A stable server-mode desktop is only a control/view client. Closing it
-    // must never wait for the VPS or for a marker left by an older local
-    // runtime; the background acknowledgement loop may retry on a later login.
-    if (sessionUser?.isZaloServer) return
+    // Server control clients and Show Web never participate in the
+    // local<->server handoff path.
+    if (sessionUser?.isZaloServer || sessionUser?.isZaloShowWeb) return
     if (sessionUser) {
       await settleDesktopHandoffMarkerBeforeExit(
         sessionUser.staffId,
@@ -655,7 +666,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (reason !== 'login' && (entitlementsChanged || accountProductsChanged || runtimeModeChanged)) {
         if (pendingRuntimeRestart) {
           void activateZaloRuntimeRestartRequired(
-            pendingRuntimeRestart.databaseIsZaloServer
+            pendingRuntimeRestart.databaseIsZaloServer,
+            pendingRuntimeRestart.databaseIsZaloShowWeb
           )
         }
 
@@ -695,15 +707,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       // A direct QR/scan/session IPC can discover the mismatch before this
       // poll. Activate cleanup/modal here instead of waiting for entitlement
       // refresh to succeed.
-      void activateZaloRuntimeRestartRequired(pendingRestart.databaseIsZaloServer)
+      void activateZaloRuntimeRestartRequired(
+        pendingRestart.databaseIsZaloServer,
+        pendingRestart.databaseIsZaloShowWeb
+      )
       return
     }
     try {
-      const liveIsZaloServer = await loadStaffZaloServerMode(checkedUser.staffId)
+      const liveMode = await loadStaffZaloServerModeSnapshot(checkedUser.staffId)
       const currentUser = getCurrentUser()
       if (!currentUser || currentUser.staffId !== checkedUser.staffId) return
-      if (currentUser.isZaloServer !== liveIsZaloServer) {
-        void activateZaloRuntimeRestartRequired(liveIsZaloServer)
+      if (
+        currentUser.isZaloServer !== liveMode.isZaloServer
+        || currentUser.isZaloShowWeb !== liveMode.isZaloShowWeb
+      ) {
+        void activateZaloRuntimeRestartRequired(
+          liveMode.isZaloServer,
+          liveMode.isZaloShowWeb
+        )
       }
     } catch (error) {
       console.error('[RuntimeMode] Failed to refresh Zalo runtime mode:', error)
@@ -734,6 +755,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (user?.entitlements?.zalo && user.isZaloServer) {
       zaloRealtimeGroupManager?.stop()
       zaloRuntime.clearAll()
+      return
+    }
+    if (user?.entitlements?.zalo && user.isZaloShowWeb) {
+      // The visible browser tab owns this session. Do not warm zca-js cookies
+      // from DB and do not start the realtime listener in Web mode.
+      zaloRealtimeGroupManager?.stop()
       return
     }
     if (user?.entitlements?.zalo) {
@@ -1071,6 +1098,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       const requiresLocalHandoff = !!(
         loginUser &&
         !loginUser.isZaloServer &&
+        !loginUser.isZaloShowWeb &&
         loginUser.entitlements.zalo
       )
       const handoffGeneration = requiresLocalHandoff
@@ -1089,7 +1117,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
               0
             )
           }
-        } else if (loginUser) {
+        } else if (loginUser && !loginUser.isZaloShowWeb) {
           // A local-mode login can clear a stale marker immediately after the
           // entitlement has switched back; it does not start a VPS runtime.
           await acknowledgeDesktopHandoffMarker(
@@ -1158,7 +1186,22 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerEmailNotificationHandlers(supabase)
   registerReportHandlers(supabase)
   registerAutomationHandlers(mainWindow)
-  registerBrowserHandlers(webviewRegistry, pageRegistry)
+  registerBrowserHandlers(webviewRegistry, pageRegistry, {
+    onRegister: async (accountId, webContents, platformType) => {
+      // Facebook and other browser platforms must not depend on an extra DB
+      // round trip before their initial URL can load. ZaloRuntimeService still
+      // verifies the account/platform server-side before attaching Web mode.
+      if (platformType !== 'zalo') return
+      const user = getCurrentUser()
+      if (!user?.isZaloShowWeb) {
+        throw new Error('Organization không chạy Zalo Web')
+      }
+      await zaloRuntime.attachWebSession(accountId, webContents)
+    },
+    onUnregister: (accountId) => {
+      zaloRuntime.detachWebSession(accountId)
+    }
+  })
   registerCampaignHandlers(supabase, {
     requestCampaignStatus: async (campaignId, status) => {
       const campaign = await supabase.getCampaign(campaignId)

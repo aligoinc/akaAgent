@@ -65,7 +65,6 @@ interface ContentTemplateWorkspaceProps {
 
 interface TemplateEditorState {
   id: number | null
-  originalGroupId: number | null
   name: string
   groupId: number | null
   baseContentHtml: string
@@ -122,7 +121,6 @@ const makeEditorState = (template?: ContentTemplate | null): TemplateEditorState
 
   return {
     id: template?.id || null,
-    originalGroupId: template?.groupId ?? null,
     name: template?.name || '',
     groupId: template?.groupId ?? null,
     baseContentHtml,
@@ -750,11 +748,6 @@ export default function ContentTemplateWorkspace({
       showAlert('Vui lòng nhập tên mẫu nội dung.', 'error')
       return
     }
-    if (!editor.id && editor.groupId === null) {
-      showAlert('Vui lòng chọn nhóm nội dung.', 'error')
-      return
-    }
-
     for (const channelName of CHANNELS) {
       const channel = editor.channels[channelName]
       if (channel.enabled && isChannelContentEmpty(channelName, channel)) {
@@ -965,14 +958,14 @@ export default function ContentTemplateWorkspace({
 
       <div className="ctw-editor-body">
         <section className="ctw-general-card">
-          <div className="ctw-section-heading"><div><strong>Thông tin chung</strong><span>Đặt tên và chọn nhóm cho mẫu nội dung.</span></div></div>
+          <div className="ctw-section-heading"><div><strong>Thông tin chung</strong><span>Đặt tên và tùy chọn nhóm cho mẫu nội dung.</span></div></div>
           <div className="ctw-general-grid">
             <div className="ctw-form-field">
               <label>Tên mẫu <span>*</span></label>
               <input className="stepper-input" value={editor.name} onChange={event => setEditor(previous => ({ ...previous, name: event.target.value }))} placeholder="Ví dụ: Chăm sóc khách hàng sau mua" disabled={busy} />
             </div>
             <div className="ctw-form-field">
-              <label>Nhóm nội dung {!editor.id && <span>*</span>}</label>
+              <label>Nhóm nội dung</label>
               <div className="ctw-group-select-row">
                 <select
                   className="stepper-select"
@@ -980,7 +973,7 @@ export default function ContentTemplateWorkspace({
                   onChange={event => setEditor(previous => ({ ...previous, groupId: event.target.value ? Number(event.target.value) : null }))}
                   disabled={busy}
                 >
-                  <option value="">{editor.id && editor.originalGroupId === null ? 'Chưa phân nhóm (mẫu cũ)' : 'Chọn nhóm nội dung'}</option>
+                  <option value="">Không chọn nhóm</option>
                   {activeGroups.map(group => <option value={group.id} key={group.id}>{group.name}</option>)}
                   {editor.groupId !== null && !activeGroups.some(group => group.id === editor.groupId) && (
                     <option value={editor.groupId}>{groups.find(group => group.id === editor.groupId)?.name || 'Nhóm ngừng hoạt động'}</option>
@@ -988,7 +981,7 @@ export default function ContentTemplateWorkspace({
                 </select>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => setGroupDialogOpen(true)}><FolderCog size={15} /> Quản lý nhóm</button>
               </div>
-              {activeGroups.length === 0 && <small>Chưa có nhóm hoạt động. Hãy tạo nhóm trước khi lưu mẫu mới.</small>}
+              {activeGroups.length === 0 && <small>Chưa có nhóm hoạt động. Bạn vẫn có thể lưu mẫu mà không chọn nhóm.</small>}
             </div>
           </div>
         </section>

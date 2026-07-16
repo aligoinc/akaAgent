@@ -185,6 +185,7 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     isAdminAkabiz: !!staffRow.is_admin_akabiz,
     useTestWorkflow: !!staffRow.use_test_workflow,
     isZaloServer: zaloRuntimeMode.isZaloServer,
+    isZaloShowWeb: zaloRuntimeMode.isZaloShowWeb,
     entitlements,
     accountProducts,
     deviceLabel: deviceRecord.device_label || null,

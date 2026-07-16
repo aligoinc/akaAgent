@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { useAuthStore } from '../../stores/authStore'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
@@ -98,10 +99,12 @@ export default function AccountContextMenu({
   }, [onClose])
 
   const isPaused = account.status === 'tạm dừng'
+  const isZaloShowWeb = useAuthStore(state => state.user?.isZaloShowWeb === true)
   const isDisabled = !account.isActive
   const isZalo = account.flatformType === 'zalo'
   const isSmsAccount = account.flatformType === 'sms'
   const isBrowserless = BROWSERLESS_PLATFORMS.has(account.flatformType)
+    && !(account.flatformType === 'zalo' && isZaloShowWeb)
 
   return (
     <div
@@ -155,7 +158,7 @@ export default function AccountContextMenu({
               onClick={() => handleAction(() => onZaloLoginQr(account))}
             >
               <QrCode size={14} />
-              <span>{account.hasZaloSession ? 'Đăng nhập lại Zalo' : 'Đăng nhập Zalo QR'}</span>
+              <span>{isZaloShowWeb ? 'Mở Zalo Web để đăng nhập' : (account.hasZaloSession ? 'Đăng nhập lại Zalo' : 'Đăng nhập Zalo QR')}</span>
             </button>
             <button
               className="context-menu-item"
@@ -164,7 +167,7 @@ export default function AccountContextMenu({
               <Shield size={14} />
               <span>Kiểm tra đăng nhập Zalo</span>
             </button>
-            {account.hasZaloSession && (
+            {(isZaloShowWeb ? account.loginStatus === 'đã đăng nhập' : account.hasZaloSession) && (
               <button
                 className="context-menu-item accent-warning"
                 onClick={() => handleAction(() => onLogoutZalo(account))}

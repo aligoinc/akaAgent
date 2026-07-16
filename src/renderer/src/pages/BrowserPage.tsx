@@ -2,14 +2,16 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useCampaignStore } from '../stores/campaignStore'
 import { AutoAccount } from '../../../shared/types'
+import { useAuthStore } from '../stores/authStore'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
+  zalo: 'https://chat.zalo.me',
   tiktok: 'https://www.tiktok.com',
   shopee: 'https://banhang.shopee.vn',
   instagram: 'https://www.instagram.com',
 }
-const BROWSERLESS_PLATFORMS = new Set(['zalo', 'email', 'sms'])
+const ALWAYS_BROWSERLESS_PLATFORMS = new Set(['email', 'sms'])
 
 export interface BrowserOpenRequest {
   requestId: number
@@ -24,6 +26,7 @@ interface BrowserPageProps {
 
 export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPageProps) {
   const { accounts, loadingAccounts, loadAccounts } = useCampaignStore()
+  const isZaloShowWeb = useAuthStore(state => state.user?.isZaloShowWeb === true)
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
   const [preparedProxyByAccountId, setPreparedProxyByAccountId] = useState<Map<number, number | null>>(new Map())
   const [accountsLoadAttempted, setAccountsLoadAttempted] = useState(false)
@@ -39,10 +42,15 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
   const webviewDomReadyHandlers = useRef<Map<number, EventListener>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
+  const initializationPromises = useRef<Map<number, Promise<boolean>>>(new Map())
   const preparingSessionKeys = useRef<Set<string>>(new Set())
 
   // Filter out disabled and API-only platforms - they don't get browser tabs/profiles.
-  const browserAccounts = accounts.filter(a => a.isActive && !BROWSERLESS_PLATFORMS.has(a.flatformType))
+  const browserAccounts = accounts.filter(account => (
+    account.isActive
+    && !ALWAYS_BROWSERLESS_PLATFORMS.has(account.flatformType)
+    && (account.flatformType !== 'zalo' || isZaloShowWeb)
+  ))
 
   // Load accounts on mount
   useEffect(() => {
@@ -170,6 +178,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
       })
       registeredIds.current.clear()
+      initializationPromises.current.clear()
       webviewDomReadyHandlers.current.clear()
       webviewRefs.current.clear()
     }
@@ -188,15 +197,15 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     onRequestHandled?.(requestId)
   }, [onRequestHandled])
 
-  const registerWebviewNow = useCallback((accountId: number, wv: Electron.WebviewTag) => {
+  const registerWebviewNow = useCallback(async (account: AutoAccount, wv: Electron.WebviewTag): Promise<boolean> => {
     try {
       const wcId = (wv as any).getWebContentsId?.()
       if (wcId && window.electronAPI) {
-        const wasRegistered = registeredIds.current.has(accountId)
-        window.electronAPI.registerWebview(accountId, wcId).catch(err => {
-          console.error('Failed to register webview:', err)
-        })
-        registeredIds.current.add(accountId)
+        const wasRegistered = registeredIds.current.has(account.id)
+        // Re-register on dom-ready as well. Electron can recreate a crashed
+        // renderer behind the same <webview>; main then re-arms Zalo capture.
+        await window.electronAPI.registerWebview(account.id, wcId, account.flatformType)
+        registeredIds.current.add(account.id)
         if (!wasRegistered) setWebviewReadyVersion(version => version + 1)
         return true
       }
@@ -205,6 +214,33 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     }
     return false
   }, [])
+
+  const initializeWebview = useCallback((account: AutoAccount, wv: Electron.WebviewTag): Promise<boolean> => {
+    const existing = initializationPromises.current.get(account.id)
+    if (existing) return existing
+
+    let initialization!: Promise<boolean>
+    initialization = (async () => {
+      const registered = await registerWebviewNow(account, wv)
+      if (!registered) return false
+      const currentUrl = String((wv as any).getURL?.() || '')
+      if (!currentUrl || currentUrl === 'about:blank') {
+        wv.loadURL(getInitialUrl(account))
+      }
+      return true
+    })()
+      .catch(err => {
+        console.error('Failed to initialize webview:', err)
+        return false
+      })
+      .finally(() => {
+        if (initializationPromises.current.get(account.id) === initialization) {
+          initializationPromises.current.delete(account.id)
+        }
+      })
+    initializationPromises.current.set(account.id, initialization)
+    return initialization
+  }, [registerWebviewNow])
 
   const handleReload = async () => {
     if (!activeAccountId) return
@@ -253,15 +289,10 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     const wv = webviewRefs.current.get(account.id)
     if (!wv) return
 
-    registerWebviewNow(account.id, wv)
-
-    if (pendingOpenRequest.reloadAfterOpen) {
-      try {
-        wv.loadURL(getInitialUrl(account))
-      } catch (err) {
-        console.error('Failed to reload opened browser webview:', err)
-      }
-    }
+    void initializeWebview(account, wv).then(initialized => {
+      if (!initialized || !pendingOpenRequest.reloadAfterOpen) return
+      wv.loadURL(getInitialUrl(account))
+    })
 
     markRequestHandled(pendingOpenRequest.requestId)
   }, [
@@ -273,7 +304,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     markRequestHandled,
     pendingOpenRequest,
     preparedProxyByAccountId,
-    registerWebviewNow,
+    initializeWebview,
     webviewReadyVersion
   ])
 
@@ -283,7 +314,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     const wv = el as Electron.WebviewTag
     const existing = webviewRefs.current.get(account.id)
     if (existing === wv) {
-      registerWebviewNow(account.id, wv)
+      void initializeWebview(account, wv)
       return
     }
 
@@ -296,13 +327,13 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     setWebviewReadyVersion(version => version + 1)
 
     const onDomReady = () => {
-      registerWebviewNow(account.id, wv)
+      void initializeWebview(account, wv)
     }
     webviewDomReadyHandlers.current.set(account.id, onDomReady)
 
-    registerWebviewNow(account.id, wv)
+    void initializeWebview(account, wv)
     wv.addEventListener('dom-ready', onDomReady)
-  }, [registerWebviewNow])
+  }, [initializeWebview])
 
   return (
     <div className="browser-page">
@@ -340,7 +371,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
             <webview
               key={account.id}
               ref={(el: any) => handleWebviewRef(account, el)}
-              src={getInitialUrl(account)}
+              src="about:blank"
               partition={getProfilePartition(account.id)}
               style={{
                 position: 'absolute' as const,

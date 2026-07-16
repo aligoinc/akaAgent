@@ -70,6 +70,9 @@ export class SupabaseService {
   markAccountZaloSessionCheck(id: number, result: { ok: boolean; error?: string | null }) {
     return accountRepo.markAccountZaloSessionCheck(id, result)
   }
+  updateAccountZaloWebSession(id: number, input: { zaloAccountId: number; verified: boolean; error?: string | null }) {
+    return accountRepo.updateAccountZaloWebSession(id, input)
+  }
   clearAccountZaloSession(id: number) { return accountRepo.clearAccountZaloSession(id) }
   claimZaloAccountRuntimeOperation(
     id: number,

@@ -11,6 +11,7 @@ import type { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 
 const AUTO_CHECK_INTERVAL = 30_000
 const ZALO_AUTO_CHECK_INTERVAL = 30 * 60 * 1000
+const ZALO_WEB_AUTH_COOKIE_NAMES = ['zpsid', 'zpw_sek'] as const
 
 async function checkAccountLogin(accountId: number, wcId: number): Promise<string | null> {
   try {
@@ -72,6 +73,54 @@ async function checkFacebookWebviewAccounts(
   return hasChanges
 }
 
+async function hasZaloWebAuthenticationCookies(wcId: number): Promise<boolean | null> {
+  const wc = webContents.fromId(wcId)
+  if (!wc || wc.isDestroyed()) return null
+  const cookies = await wc.session.cookies.get({ url: 'https://chat.zalo.me/' })
+  const names = new Set(
+    cookies
+      .filter(cookie => String(cookie.value || '').length > 0)
+      .map(cookie => cookie.name.toLowerCase())
+  )
+  return ZALO_WEB_AUTH_COOKIE_NAMES.every(name => names.has(name))
+}
+
+async function checkZaloWebviewAccounts(
+  accounts: AutoAccount[],
+  webviewRegistry: WebviewRegistry,
+  zaloRuntime: ZaloRuntimeService | undefined,
+  canContinue: () => boolean
+): Promise<boolean> {
+  if (!zaloRuntime) return false
+  const accountById = new Map(accounts.map(account => [account.id, account]))
+  let hasChanges = false
+
+  for (const { accountId, connected } of webviewRegistry.listRegistered()) {
+    if (!canContinue()) break
+    if (!connected) continue
+    const account = accountById.get(accountId)
+    if (account?.flatformType !== 'zalo' || account.loginStatus !== 'đã đăng nhập') continue
+    const wcId = webviewRegistry.getWebContentsId(accountId)
+    if (!wcId) continue
+
+    try {
+      const hasAuthCookies = await hasZaloWebAuthenticationCookies(wcId)
+      if (hasAuthCookies !== false || !canContinue()) continue
+      zaloRuntime.invalidateWebSession(accountId)
+      await accountRepo.markAccountZaloSessionCheck(accountId, {
+        ok: false,
+        error: 'Zalo Web đã đăng xuất'
+      })
+      hasChanges = true
+      console.log(`[AutoCheck] Zalo Web account ${accountId}: đã đăng nhập -> chưa đăng nhập`)
+    } catch (err) {
+      console.warn('[AutoCheck] Failed to check Zalo Web login cookies:', { accountId, err })
+    }
+  }
+
+  return hasChanges
+}
+
 async function checkZaloApiAccounts(
   accounts: AutoAccount[],
   zaloRuntime: ZaloRuntimeService | undefined,
@@ -79,10 +128,16 @@ async function checkZaloApiAccounts(
   canReleaseClaim: () => boolean
 ): Promise<boolean> {
   if (!zaloRuntime) return false
+  const isZaloShowWeb = getCurrentUser()?.isZaloShowWeb === true
   let hasChanges = false
   for (const account of accounts) {
     if (!canContinue()) break
-    if (account.flatformType !== 'zalo' || !account.hasZaloSession || account.loginStatus !== 'đã đăng nhập') continue
+    if (account.flatformType !== 'zalo' || account.loginStatus !== 'đã đăng nhập') continue
+    if (isZaloShowWeb) {
+      if (!zaloRuntime.hasVerifiedWebSession(account.id)) continue
+    } else if (!account.hasZaloSession) {
+      continue
+    }
 
     try {
       const claim = await accountRepo.claimZaloAccountRuntimeOperation(account.id, 'desktop', true)
@@ -147,18 +202,35 @@ export function startAccountPoller(
       const accounts = await accountRepo.listAccounts()
       const hasFacebookChanges = await checkFacebookWebviewAccounts(accounts, webviewRegistry)
       const now = Date.now()
-      const shouldCheckZalo = !getZaloRuntimeRestartRequired() &&
+      const canCheckZalo = !getZaloRuntimeRestartRequired() &&
         !isZaloLocalStartupHandoffBlocked() &&
-        !isCurrentUserZaloServerEnabled() &&
+        !isCurrentUserZaloServerEnabled()
+      const shouldCheckZaloWeb = canCheckZalo && user.isZaloShowWeb
+      const shouldCheckZaloApi = canCheckZalo &&
         now - lastZaloAutoCheckAt >= ZALO_AUTO_CHECK_INTERVAL
       let hasZaloChanges = false
-      if (shouldCheckZalo && !zaloRuntimeBlocked) {
-        const operation = checkZaloApiAccounts(
-          accounts,
-          zaloRuntime,
-          () => !zaloRuntimeBlocked && !zaloClaimsAbandoned,
-          () => !zaloClaimsAbandoned
-        )
+      if ((shouldCheckZaloWeb || shouldCheckZaloApi) && !zaloRuntimeBlocked) {
+        const canContinue = () => !zaloRuntimeBlocked && !zaloClaimsAbandoned
+        const operation = (async () => {
+          let changed = false
+          if (shouldCheckZaloWeb) {
+            changed = await checkZaloWebviewAccounts(
+              accounts,
+              webviewRegistry,
+              zaloRuntime,
+              canContinue
+            )
+          }
+          if (shouldCheckZaloApi && canContinue()) {
+            changed = await checkZaloApiAccounts(
+              accounts,
+              zaloRuntime,
+              canContinue,
+              () => !zaloClaimsAbandoned
+            ) || changed
+          }
+          return changed
+        })()
         activeZaloCheck = operation
         try {
           hasZaloChanges = await operation
@@ -166,7 +238,7 @@ export function startAccountPoller(
           if (activeZaloCheck === operation) activeZaloCheck = null
         }
       }
-      if (shouldCheckZalo) lastZaloAutoCheckAt = now
+      if (shouldCheckZaloApi) lastZaloAutoCheckAt = now
       if (hasFacebookChanges || hasZaloChanges) {
         mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
       }

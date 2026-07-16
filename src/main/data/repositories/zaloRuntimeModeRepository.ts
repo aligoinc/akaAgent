@@ -15,6 +15,7 @@ let localStartupHandoffBlocked = false
 
 export interface StaffZaloRuntimeModeSnapshot {
   isZaloServer: boolean
+  isZaloShowWeb: boolean
   revision: string
 }
 
@@ -34,11 +35,15 @@ export async function loadStaffZaloServerModeSnapshot(
     console.error('[zalo-runtime-mode] load staff mode:', error)
     throw new Error('Không thể kiểm tra chế độ chạy Zalo. Vui lòng thử lại sau.')
   }
+
   const payload = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
   const revision = String(payload?.revision || '').trim()
   if (!payload || !revision) throw new Error('Tài khoản staff không còn hoạt động.')
+
+  const isZaloShowWeb = payload.is_zalo_show_web === true
   return {
-    isZaloServer: payload.is_zalo_server === true,
+    isZaloShowWeb,
+    isZaloServer: payload.is_zalo_server === true && !isZaloShowWeb,
     revision
   }
 }
@@ -68,12 +73,15 @@ export function clearZaloLocalStartupHandoffBlock(): void {
 }
 
 export function markZaloRuntimeRestartRequired(
-  databaseIsZaloServer: boolean
+  databaseIsZaloServer: boolean,
+  databaseIsZaloShowWeb = false
 ): ZaloRuntimeRestartRequiredPayload {
   const user = requireCurrentUser()
   const payload: ZaloRuntimeRestartRequiredPayload = {
     sessionIsZaloServer: user.isZaloServer,
     databaseIsZaloServer,
+    sessionIsZaloShowWeb: user.isZaloShowWeb,
+    databaseIsZaloShowWeb,
     message: ZALO_RUNTIME_RESTART_REQUIRED_MESSAGE
   }
   restartRequired = payload
@@ -88,31 +96,50 @@ export function ensureCurrentUserZaloRuntimeCanStartOperation(): void {
 export async function refreshCurrentUserZaloRuntimeMode(): Promise<{
   changed: boolean
   liveIsZaloServer: boolean
+  liveIsZaloShowWeb: boolean
   payload: ZaloRuntimeRestartRequiredPayload | null
 }> {
   const user = requireCurrentUser()
-  const liveIsZaloServer = await loadStaffZaloServerMode(user.staffId)
-  if (liveIsZaloServer === user.isZaloServer) {
-    return { changed: false, liveIsZaloServer, payload: restartRequired }
+  const liveMode = await loadStaffZaloServerModeSnapshot(user.staffId)
+  if (
+    liveMode.isZaloServer === user.isZaloServer
+    && liveMode.isZaloShowWeb === user.isZaloShowWeb
+  ) {
+    return {
+      changed: false,
+      liveIsZaloServer: liveMode.isZaloServer,
+      liveIsZaloShowWeb: liveMode.isZaloShowWeb,
+      payload: restartRequired
+    }
   }
+
   return {
     changed: true,
-    liveIsZaloServer,
-    payload: markZaloRuntimeRestartRequired(liveIsZaloServer)
+    liveIsZaloServer: liveMode.isZaloServer,
+    liveIsZaloShowWeb: liveMode.isZaloShowWeb,
+    payload: markZaloRuntimeRestartRequired(
+      liveMode.isZaloServer,
+      liveMode.isZaloShowWeb
+    )
   }
 }
 
 /**
- * New operations always stay on the runtime selected when this desktop session
- * started. A live mode mismatch requires an app restart; it must never hot-route
- * a command (especially cancel/cleanup) to the other runtime.
+ * A running process never hot-switches Zalo. Any live mode mismatch asks the
+ * user to close and reopen the app.
  */
 export async function shouldRouteCurrentUserZaloToServer(): Promise<boolean> {
   ensureCurrentUserZaloRuntimeCanStartOperation()
   const user = requireCurrentUser()
-  const liveMode = await loadStaffZaloServerMode(user.staffId)
-  if (liveMode !== user.isZaloServer) {
-    const payload = markZaloRuntimeRestartRequired(liveMode)
+  const liveMode = await loadStaffZaloServerModeSnapshot(user.staffId)
+  if (
+    liveMode.isZaloServer !== user.isZaloServer
+    || liveMode.isZaloShowWeb !== user.isZaloShowWeb
+  ) {
+    const payload = markZaloRuntimeRestartRequired(
+      liveMode.isZaloServer,
+      liveMode.isZaloShowWeb
+    )
     throw new Error(payload.message)
   }
   return user.isZaloServer

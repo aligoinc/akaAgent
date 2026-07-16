@@ -31,6 +31,13 @@ export default function TestPanelV2() {
     clearTest
   } = useWorkflowV2Store()
   const accounts = useCampaignStore(s => s.accounts)
+  const testAccounts = useMemo(
+    () => accounts.filter(account => (
+      account.isActive
+      && !['zalo', 'email', 'sms'].includes(String(account.flatformType || '').trim().toLowerCase())
+    )),
+    [accounts]
+  )
   const [accountId, setAccountId] = useState<number | null>(null)
   const [variablesJson, setVariablesJson] = useState('{}')
   const [collapsed, setCollapsed] = useState(false)
@@ -47,6 +54,12 @@ export default function TestPanelV2() {
   useEffect(() => {
     resizeHeightRef.current = panelHeight
   }, [panelHeight])
+
+  useEffect(() => {
+    if (accountId !== null && !testAccounts.some(account => account.id === accountId)) {
+      setAccountId(null)
+    }
+  }, [accountId, testAccounts])
 
   // Tự fill variables theo defaultVariables khi load workflow
   useEffect(() => {
@@ -175,7 +188,7 @@ export default function TestPanelV2() {
               style={{ padding: '4px 6px', fontSize: 12, background: 'var(--bg-primary, #0e0e15)', border: '1px solid var(--border, #2a2a35)', borderRadius: 4, color: 'var(--text, #e0e0e0)' }}
             >
               <option value="">— Chọn TK —</option>
-              {accounts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {testAccounts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
 
             {!isTesting ? (
