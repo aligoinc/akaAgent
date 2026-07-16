@@ -12,7 +12,12 @@ import {
   updateLoginPreferencesForCurrentDevice,
   updateUseTestWorkflow
 } from '../../data/repositories/authRepository'
-import { setCurrentUser, getCurrentUser } from '../../data/currentUser'
+import {
+  getCurrentUser,
+  getCurrentUserCredentials,
+  setCurrentUser,
+  setCurrentUserCredentials
+} from '../../data/currentUser'
 
 export interface AuthLoginContext {
   user: AuthUser
@@ -49,6 +54,10 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
       const savedOptions = await saveDeviceLoginSettings(user, snapshot.loginOptions)
       syncStartupSetting(savedOptions.startupEnabled)
       setCurrentUser(user)
+      setCurrentUserCredentials({
+        username: snapshot.savedCredentials.username,
+        password: snapshot.savedCredentials.password
+      })
       if (hooks.afterLogin) {
         try {
           await hooks.afterLogin({
@@ -68,6 +77,8 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
         errorMessage: null
       }
     } catch (err: any) {
+      setCurrentUserCredentials(null)
+      setCurrentUser(null)
       return {
         ...snapshot,
         user: null,
@@ -82,6 +93,7 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     const savedOptions = await saveDeviceLoginSettings(user, loginOptions)
     syncStartupSetting(savedOptions.startupEnabled)
     setCurrentUser(user)
+    setCurrentUserCredentials({ username, password })
     if (hooks.afterLogin) {
       try {
         await hooks.afterLogin({ user, username, password, automatic: false })
@@ -116,6 +128,7 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
         console.error('Pre-logout hook failed:', err)
       }
     }
+    setCurrentUserCredentials(null)
     setCurrentUser(null)
     return { success: true }
   })
@@ -134,6 +147,11 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     const user = getCurrentUser()
     if (!user) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi đổi mật khẩu.')
     const result = await changePassword(user, oldPassword, newPassword)
+    const credentials = getCurrentUserCredentials()
+    setCurrentUserCredentials({
+      username: credentials?.username || user.username,
+      password: newPassword
+    })
     await hooks.afterPasswordChange?.({ oldPassword, newPassword })
     return result
   })

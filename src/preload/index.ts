@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetListQuery, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, ZaloRuntimeRestartRequiredPayload, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AiGenerateCampaignNameRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizSmsShopListItem, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContactListResult, PageInboxContactListQuery, SaveUploadDatasetRequest, SaveUploadDatasetResult, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, EmailCampaignLinkTrackingSummary, MediaClipboardImageInput, MediaFile, MediaGroup, MediaStorageSettings, MediaUploadResult, CustomerFeedbackSubmitRequest, CustomerFeedbackSubmitResult } from '../shared/types'
+import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetListQuery, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, ZaloRuntimeRestartRequiredPayload, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AiGenerateCampaignNameRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizSmsShopListItem, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContactListResult, PageInboxContactListQuery, SaveUploadDatasetRequest, SaveUploadDatasetResult, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, EmailCampaignLinkTrackingSummary, MediaClipboardImageInput, MediaFile, MediaGroup, MediaStorageSettings, MediaUploadResult, CustomerFeedbackSubmitRequest, CustomerFeedbackSubmitResult, Automation, AutomationExecutionListQuery, AutomationExecutionListResult, AutomationInput, AutomationListQuery, AutomationListResult, AutomationOptions, AutomationUpdatedEvent } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
@@ -347,6 +347,40 @@ const electronAPI = {
 
   getAccountActionReportDetails: (query: AccountActionReportDetailQuery): Promise<AccountActionReportDetailResult> =>
     ipcRenderer.invoke(IPC_EVENTS.REPORT_ACCOUNT_ACTION_DETAILS, query),
+
+  // Campaign result automations
+  listAutomations: (query?: AutomationListQuery): Promise<AutomationListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_LIST, query),
+
+  getAutomation: (id: number): Promise<Automation> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_GET, id),
+
+  getAutomationOptions: (): Promise<AutomationOptions> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_OPTIONS),
+
+  createAutomation: (input: AutomationInput): Promise<Automation> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_CREATE, input),
+
+  updateAutomation: (id: number, input: AutomationInput): Promise<Automation> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_UPDATE, id, input),
+
+  setAutomationActive: (id: number, isActive: boolean): Promise<Automation> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_SET_ACTIVE, id, isActive),
+
+  deleteAutomation: (id: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_DELETE, id),
+
+  listAutomationDetails: (
+    automationId: number,
+    query?: AutomationExecutionListQuery
+  ): Promise<AutomationExecutionListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_DETAILS_LIST, automationId, query),
+
+  onAutomationUpdated: (callback: (event: AutomationUpdatedEvent) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: AutomationUpdatedEvent) => callback(payload)
+    ipcRenderer.on(IPC_EVENTS.AUTOMATION_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.AUTOMATION_UPDATED, handler)
+  },
 
   // Campaign Log (real-time)
   onCampaignLog: (callback: (log: CampaignLogEntry) => void): () => void => {

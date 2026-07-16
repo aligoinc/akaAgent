@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Upload, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -3528,6 +3528,14 @@ export default function CampaignFormModal({
     }
   }
 
+  const scrollToAccountSelector = () => {
+    setActiveStep('general')
+    setCollapsedSections(prev => ({ ...prev, general: false }))
+    window.requestAnimationFrame(() => {
+      accountDropdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+
   const toggleSection = (stepId: string) => {
     setCollapsedSections(prev => ({ ...prev, [stepId]: !prev[stepId] }))
   }
@@ -5211,7 +5219,7 @@ export default function CampaignFormModal({
     allowedActions?: DataScanAction[]
     lockAccount?: boolean
   } | null>(null)
-  const [dataUploadInitialTab, setDataUploadInitialTab] = useState<'textbox' | 'excel' | null>(null)
+  const [isDataUploadModalOpen, setIsDataUploadModalOpen] = useState(false)
 
   const dataUploadPlatform: CampaignImportPlatform = selectedActionPlatform === 'zalo'
     ? 'zalo'
@@ -5277,12 +5285,17 @@ export default function CampaignFormModal({
     })
   }
 
-  const openDataUploadModal = (initialTab: 'textbox' | 'excel') => {
+  const openDataUploadModal = () => {
     if (formData.accountIds.length === 0) {
-      showAlert('Vui lòng chọn ít nhất một tài khoản trước khi upload dữ liệu.', 'error')
+      showAlert('Vui lòng chọn ít nhất một tài khoản trước khi upload dữ liệu.', 'error', {
+        action: {
+          label: 'Đóng',
+          onClick: scrollToAccountSelector
+        }
+      })
       return
     }
-    setDataUploadInitialTab(initialTab)
+    setIsDataUploadModalOpen(true)
   }
 
   const handleImportedDataRows = (rows: Partial<CampaignInputData>[]) => {
@@ -11871,20 +11884,12 @@ export default function CampaignFormModal({
                   {!isEditingSavedCampaign && (
                     <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
                       {canUploadData ? (
-                        <button className="btn btn-secondary" onClick={() => openDataUploadModal('textbox')}>
+                        <button className="btn btn-secondary" onClick={openDataUploadModal}>
                           <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
                         </button>
                       ) : !isFindDataSearchCampaign && !isFacebookGroupInviteCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && (
                         <button className="btn btn-secondary" onClick={addDetailRow}>
                           <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
-                        </button>
-                      )}
-                      {canUploadData && (
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => openDataUploadModal('excel')}
-                        >
-                          <Upload size={14} /> Upload Excel
                         </button>
                       )}
                       {canUseOtherDataSources && (
@@ -12331,14 +12336,13 @@ export default function CampaignFormModal({
           }
         />
       )}
-      {dataUploadInitialTab && (
+      {isDataUploadModalOpen && (
         <CampaignDataUploadModal
           platform={dataUploadPlatform}
           actionId={formData.actionId}
           actionName={selectedCampaignAction?.name}
           accountIds={formData.accountIds}
-          initialTab={dataUploadInitialTab}
-          onClose={() => setDataUploadInitialTab(null)}
+          onClose={() => setIsDataUploadModalOpen(false)}
           onInsert={handleImportedDataRows}
         />
       )}

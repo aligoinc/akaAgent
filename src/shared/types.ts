@@ -1241,6 +1241,211 @@ export interface ContactGroupMutationResult {
   count: number
 }
 
+// ============================================
+// Campaign result automations (campaign A -> campaign B)
+// ============================================
+
+export type AutomationDataType = 'phone' | 'email' | 'zalo_uid' | 'facebook_uid'
+
+export type AutomationDelayUnit = 'minute' | 'hour' | 'day'
+
+export type AutomationScheduleMode = 'immediate' | 'after_delay' | 'daily_time' | 'fixed_at'
+
+export type AutomationActionType = 'campaign_detail_route'
+
+export type AutomationExecutionStatus =
+  | 'chờ xử lý'
+  | 'đang xử lý'
+  | 'đã thêm'
+  | 'bỏ qua'
+  | 'lỗi'
+
+export interface AutomationTriggerCondition {
+  id?: number
+  statusMappingId?: number | null
+  semanticStatusId?: number | null
+  actionCode?: string | null
+  actionName?: string | null
+  isWildcard?: boolean
+  status: string
+  statusLabel?: string
+}
+
+export interface Automation {
+  id: number
+  name: string
+  actionType: AutomationActionType
+  isActive: boolean
+  sourceCampaignId: number
+  targetCampaignId: number
+  dataType: AutomationDataType
+  targetContactGroupId?: number | null
+  scheduleMode: AutomationScheduleMode
+  delayValue: number | null
+  delayUnit: AutomationDelayUnit | null
+  delayExactTime: string | null
+  dailyTime: string | null
+  delayDays: number
+  delayHours: number
+  fixedAt?: string | null
+  note?: string | null
+  lastDataAt?: string | null
+  activatedAt?: string | null
+  isDelete?: boolean
+  staffId?: number
+  organizationId?: number
+  createdAt?: string
+  updatedAt?: string
+  sourceCampaignName?: string
+  targetCampaignName?: string
+  sourceAccountId?: number
+  targetAccountId?: number
+  sourceAccountName?: string
+  targetAccountName?: string
+  sourceActionId?: string
+  targetActionId?: string
+  sourceActionName?: string
+  targetActionName?: string
+  triggerConditions: AutomationTriggerCondition[]
+}
+
+export interface AutomationInput {
+  name: string
+  actionType?: AutomationActionType
+  sourceCampaignId: number
+  targetCampaignId: number
+  dataType: AutomationDataType
+  targetContactGroupId?: number | null
+  scheduleMode: AutomationScheduleMode
+  delayValue?: number | null
+  delayUnit?: AutomationDelayUnit | null
+  delayExactTime: string | null
+  dailyTime?: string | null
+  delayDays?: number
+  delayHours?: number
+  fixedAt?: string | null
+  note?: string | null
+  isActive?: boolean
+  triggerConditions: AutomationTriggerCondition[]
+}
+
+export type AutomationSortField =
+  | 'name'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'lastDataAt'
+  | 'isActive'
+
+export interface AutomationListQuery {
+  page?: number
+  pageSize?: number
+  search?: string
+  isActive?: boolean
+  dataType?: AutomationDataType
+  sourceCampaignId?: number
+  targetCampaignId?: number
+  updatedFrom?: string
+  sortBy?: AutomationSortField
+  sortDirection?: 'asc' | 'desc'
+}
+
+export interface AutomationListResult {
+  items: Automation[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface AutomationCampaignOption {
+  id: number
+  name: string
+  actionId: string
+  actionName?: string
+  accountId: number
+  accountName?: string
+  platformType: string
+  status: string
+  dataTypes: AutomationDataType[]
+  contactTypeByDataType?: Partial<Record<AutomationDataType, ContactType>>
+}
+
+export interface AutomationTriggerOption {
+  campaignActionId: string
+  statusMappingId?: number | null
+  semanticStatusId?: number | null
+  actionCode?: string | null
+  actionName?: string | null
+  isWildcard: boolean
+  status: string
+  statusLabel: string
+}
+
+export interface AutomationContactGroupOption {
+  id: number
+  name: string
+  accountId: number
+  contactType: ContactType
+}
+
+export interface AutomationActionOption {
+  id: 'campaign_detail_route' | 'zalo_friend_status_check' | 'akaagent_campaign_notification'
+  name: string
+  description?: string | null
+  isAvailable: boolean
+  isActive: boolean
+  sortOrder: number
+}
+
+export interface AutomationOptions {
+  actions: AutomationActionOption[]
+  campaigns: AutomationCampaignOption[]
+  triggerOptions: AutomationTriggerOption[]
+  contactGroups: AutomationContactGroupOption[]
+}
+
+export interface AutomationExecution {
+  id: number
+  automationId: number
+  sourceCampaignDetailId: number
+  sourceInputDataId: number
+  targetInputDataId?: number | null
+  targetContactGroupMemberId?: number | null
+  sourceStatus: string
+  dataType: AutomationDataType
+  dataValue: string
+  triggeredAt: string
+  scheduledAt: string
+  processedAt?: string | null
+  status: AutomationExecutionStatus
+  attemptCount: number
+  errorMessage?: string | null
+  dataSnapshot?: Record<string, unknown> | null
+  targetResultStatus?: string | null
+  targetResultCount?: number
+  targetContactGroupName?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AutomationExecutionListQuery {
+  page?: number
+  pageSize?: number
+  status?: AutomationExecutionStatus
+}
+
+export interface AutomationExecutionListResult {
+  items: AutomationExecution[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface AutomationUpdatedEvent {
+  automationId?: number
+  executionId?: number
+  reason: 'created' | 'updated' | 'deleted' | 'active_changed' | 'execution_changed'
+}
+
 export interface AkaBizContactTag {
   id: number
   name: string
@@ -1658,6 +1863,17 @@ export const IPC_EVENTS = {
   // Reports
   REPORT_ACCOUNT_ACTION_SUMMARY: 'report:account-action-summary',
   REPORT_ACCOUNT_ACTION_DETAILS: 'report:account-action-details',
+
+  // Campaign result automations
+  AUTOMATION_LIST: 'automation:list',
+  AUTOMATION_GET: 'automation:get',
+  AUTOMATION_OPTIONS: 'automation:options',
+  AUTOMATION_CREATE: 'automation:create',
+  AUTOMATION_UPDATE: 'automation:update',
+  AUTOMATION_SET_ACTIVE: 'automation:set-active',
+  AUTOMATION_DELETE: 'automation:delete',
+  AUTOMATION_DETAILS_LIST: 'automation:details-list',
+  AUTOMATION_UPDATED: 'automation:updated',
 
   // Webview registration (embedded browser tabs)
   WEBVIEW_REGISTER: 'webview:register',
