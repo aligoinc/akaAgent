@@ -5,6 +5,7 @@ import CampaignPage from './pages/CampaignPage'
 import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
 import ReportPage from './pages/ReportPage'
 import AutomationPage from './pages/AutomationPage'
+import ContentTemplatePage from './pages/ContentTemplatePage'
 import LoginPage from './pages/LoginPage'
 import WorkflowEditorV2 from './components/v2/WorkflowEditorV2'
 import { useThemeStore } from './stores/themeStore'
@@ -58,7 +59,7 @@ export default function App() {
   } = useCampaignStore()
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
-  const [activePage, setActivePage] = useState<'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
+  const [activePage, setActivePage] = useState<'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports'>('campaigns')
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null)
   const browserOpenRequestSeq = useRef(0)
   const [showDataScan, setShowDataScan] = useState(false)
@@ -335,7 +336,6 @@ export default function App() {
           onOpenDataScan={() => setShowDataScan(true)}
           onOpenMediaLibrary={() => setShowMediaLibrary(true)}
           onOpenProxyManager={openProxyManager}
-          onOpenContentTemplates={() => setShowContentTemplates(true)}
           onOpenDataGroups={() => setShowDataGroups(true)}
           onOpenAccountInfo={() => setShowAccountProfile(true)}
           onOpenGeneralSettings={() => openGeneralSettings()}
@@ -373,6 +373,10 @@ export default function App() {
 
           <div style={{ display: activePage === 'automations' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <AutomationPage isActive={activePage === 'automations'} />
+          </div>
+
+          <div style={{ display: activePage === 'content-templates' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <ContentTemplatePage isActive={activePage === 'content-templates'} />
           </div>
 
           {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}

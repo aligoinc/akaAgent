@@ -1,4 +1,4 @@
-import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, ContentTemplate, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings } from '../../shared/types'
+import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -221,9 +221,16 @@ export class SupabaseService {
 
   // =========== CONTENT TEMPLATES ===========
   listContentTemplates() { return contentTemplateRepo.listContentTemplates() }
-  createContentTemplate(template: Partial<ContentTemplate>) { return contentTemplateRepo.createContentTemplate(template) }
-  updateContentTemplate(id: number, updates: Partial<ContentTemplate>) { return contentTemplateRepo.updateContentTemplate(id, updates) }
+  createContentTemplate(template: CreateContentTemplateInput) { return contentTemplateRepo.createContentTemplate(template) }
+  updateContentTemplate(id: number, updates: UpdateContentTemplateInput) { return contentTemplateRepo.updateContentTemplate(id, updates) }
   deleteContentTemplate(id: number) { return contentTemplateRepo.deleteContentTemplate(id) }
+  listContentTemplateGroups() { return contentTemplateRepo.listContentTemplateGroups() }
+  createContentTemplateGroup(input: CreateContentTemplateGroupInput) { return contentTemplateRepo.createContentTemplateGroup(input) }
+  updateContentTemplateGroup(id: number, updates: UpdateContentTemplateGroupInput) {
+    return contentTemplateRepo.updateContentTemplateGroup(id, updates)
+  }
+  deleteContentTemplateGroup(id: number) { return contentTemplateRepo.deleteContentTemplateGroup(id) }
+  listContentTemplateContentTypes() { return contentTemplateRepo.listContentTemplateContentTypes() }
 
   // =========== MEDIA LIBRARY ===========
   getMediaStorageSettings() { return mediaFileRepo.getMediaStorageSettings() }

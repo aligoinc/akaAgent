@@ -1,5 +1,5 @@
 import { parseDocument } from 'htmlparser2'
-import { findContentVariantSeparatorIndexes } from './contentSpin'
+import { escapeContentVariantSeparators, findContentVariantSeparatorIndexes } from './contentSpin'
 
 interface HtmlNodeLike {
   type?: string
@@ -151,6 +151,38 @@ const collectFormattedText = (nodes: HtmlNodeLike[]): string => nodes
     ? String(node.data || '')
     : collectFormattedText(getChildren(node)))
   .join('')
+
+/**
+ * Treats one rich document as an atomic campaign variant by escaping visible
+ * pipes that would otherwise be interpreted as top-level separators.
+ */
+export const escapeFormattedContentVariantSeparators = (html: unknown): string => {
+  const sanitized = sanitizeFormattedContent(html)
+  const nodes = parseFragment(sanitized)
+  const separatorIndexes = new Set(findContentVariantSeparatorIndexes(collectFormattedText(nodes)))
+  if (separatorIndexes.size === 0) return sanitized
+
+  let textOffset = 0
+  const transformText = (text: string): string => {
+    let escaped = ''
+    for (let index = 0; index < text.length; index += 1) {
+      if (separatorIndexes.has(textOffset + index)) escaped += '\\'
+      escaped += text[index]
+    }
+    textOffset += text.length
+    return escaped
+  }
+
+  return nodes.map(node => serializeNode(node, transformText)).join('')
+}
+
+/** Serializes atomic rich documents to the formatted Simple variant syntax. */
+export const serializeFormattedContentVariants = (variants: unknown[]): string => (
+  variants
+    .map(variant => escapeFormattedContentVariantSeparators(variant))
+    .filter(variant => !isFormattedContentEmpty(variant))
+    .join('|')
+)
 
 interface FormattedVariantSplitState {
   separatorIndexes: Set<number>
@@ -394,22 +426,10 @@ export const formattedContentToPlainText = (html: unknown): string => {
     .replace(new RegExp(PLAIN_INDENT_MARKER, 'g'), '  ')
 }
 
-const escapePlainContentVariantSeparators = (content: string): string => {
-  const separatorIndexes = new Set(findContentVariantSeparatorIndexes(content))
-  if (separatorIndexes.size === 0) return content
-
-  let escaped = ''
-  for (let index = 0; index < content.length; index += 1) {
-    if (separatorIndexes.has(index)) escaped += '\\'
-    escaped += content[index]
-  }
-  return escaped
-}
-
 /** Converts rich Simple content to the equivalent plain variant expression. */
 export const formattedContentToPlainCampaignContent = (html: unknown): string => (
   splitFormattedContentVariants(html)
-    .map(variant => escapePlainContentVariantSeparators(formattedContentToPlainText(variant)))
+    .map(variant => escapeContentVariantSeparators(formattedContentToPlainText(variant)))
     .join('|')
 )
 

@@ -173,6 +173,36 @@ export function splitContentVariants(
   return [trim ? raw.trim() : raw]
 }
 
+/**
+ * Escapes only pipes that the campaign parser would otherwise treat as
+ * top-level variant separators. Pipes inside spintax/template tokens and
+ * already escaped pipes are preserved.
+ */
+export function escapeContentVariantSeparators(
+  content: string | undefined | null
+): string {
+  const value = String(content || '')
+  const separatorIndexes = new Set(findContentVariantSeparatorIndexes(value))
+  if (separatorIndexes.size === 0) return value
+
+  let escaped = ''
+  for (let index = 0; index < value.length; index += 1) {
+    if (separatorIndexes.has(index)) escaped += '\\'
+    escaped += value[index]
+  }
+  return escaped
+}
+
+/** Serializes atomic variants back to the campaign's top-level pipe syntax. */
+export function serializeContentVariants(
+  variants: Array<string | undefined | null>
+): string {
+  return variants
+    .map(variant => escapeContentVariantSeparators(String(variant || '').trim()))
+    .filter(Boolean)
+    .join('|')
+}
+
 function renderSpin(
   content: string,
   chooseOption: (renderedOptions: string[]) => string,
