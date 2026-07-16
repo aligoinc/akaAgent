@@ -143,7 +143,10 @@ function parseFacebookUrl(value: string): URL | null {
   }
 }
 
-function extractUid(value: string | undefined, contactType: ContactType): string {
+export function normalizeAccountContactUid(
+  value: string | null | undefined,
+  contactType: ContactType
+): string {
   const raw = String(value || '').trim()
   if (!raw) return ''
   if (contactType === 'email') return raw.toLocaleLowerCase('en-US')
@@ -208,7 +211,7 @@ function normalizeContactUrl(uid: string, url: string | undefined, contactType: 
 
 function normalizeContact(contact: Partial<AutoAccountContact>): Partial<AutoAccountContact> {
   const contactType = contact.contactType as ContactType
-  const uid = extractUid(contact.uid || contact.url, contactType)
+  const uid = normalizeAccountContactUid(contact.uid || contact.url, contactType)
   let name = String(contact.name || '').replace(/\s+/g, ' ').trim()
   let lastActivityText = ''
   const extraData = toRecord(contact.extraData)
@@ -651,7 +654,7 @@ function getUploadTargetValue(row: CampaignImportDataRow, actionId: string, cont
   if (contactType === 'campaign_input') {
     return String(row.uid || row.phone || row.email || '').trim()
   }
-  return extractUid(String(row.uid || '').trim(), contactType)
+  return normalizeAccountContactUid(String(row.uid || '').trim(), contactType)
 }
 
 function normalizeUploadCampaignRow(
@@ -808,7 +811,7 @@ export async function finalizeContactDataset(
 
   const contactUids = Array.from(new Set(
     (Array.isArray(input.contactUids) ? input.contactUids : [])
-      .map(value => extractUid(String(value || ''), input.contactType))
+      .map(value => normalizeAccountContactUid(String(value || ''), input.contactType))
       .filter(Boolean)
   ))
   const { data, error } = await client().rpc('aka_agent_finalize_contact_dataset', {

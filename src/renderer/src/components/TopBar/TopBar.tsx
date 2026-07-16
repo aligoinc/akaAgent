@@ -21,7 +21,8 @@ import {
   Settings,
   SlidersHorizontal,
   Sun,
-  User
+  User,
+  Zap
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -29,7 +30,7 @@ import { useUiStore } from '../../stores/uiStore'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-type AppPage = 'campaigns' | 'workflow-editor' | 'browsers' | 'reports'
+type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'reports'
 
 interface TopBarProps {
   activePage: AppPage
@@ -115,6 +116,13 @@ export default function TopBar({
         icon: <Layers size={18} />,
         active: activePage === 'campaigns',
         onClick: () => onPageChange('campaigns')
+      },
+      {
+        key: 'automations',
+        label: 'Tự động hóa',
+        icon: <Zap size={18} />,
+        active: activePage === 'automations',
+        onClick: () => onPageChange('automations')
       },
       {
         key: 'browsers',

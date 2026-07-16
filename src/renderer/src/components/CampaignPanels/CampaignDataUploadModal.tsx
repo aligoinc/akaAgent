@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, X } from 'lucide-react'
+import { CheckCircle2, FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, X } from 'lucide-react'
 import jsQR from 'jsqr'
 import { read, utils } from 'xlsx'
 import {
@@ -11,7 +11,8 @@ import {
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { useUiStore } from '../../stores/uiStore'
 
-type ImportTab = 'textbox' | 'image' | 'sheet' | 'excel'
+type ImportTab = 'textbox' | 'image' | 'sheet' | 'akabizTemplate' | 'excel'
+type TemplateReadStatus = 'idle' | 'reading' | 'success' | 'error'
 type ImportField = keyof Pick<CampaignImportDataRow, 'name' | 'phone' | 'uid' | 'email' | 'info1' | 'info2' | 'info3' | 'info4' | 'info5'>
 type ColumnMap = Partial<Record<ImportField, string>>
 
@@ -31,7 +32,6 @@ interface CampaignDataUploadModalProps {
   actionId: string
   actionName?: string
   accountIds: number[]
-  initialTab?: ImportTab
   onClose: () => void
   onInsert: (rows: Partial<CampaignInputData>[]) => void
 }
@@ -47,10 +47,12 @@ const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const FACEBOOK_FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
+const FACEBOOK_COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const isZaloJoinGroupLinkAction = (actionId?: string | null): boolean => actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
 const isZaloAddGroupMemberAction = (actionId?: string | null): boolean => actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID
 const isFacebookJoinGroupAction = (actionId?: string | null): boolean => actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
 const isFacebookFindDataSearchAction = (actionId?: string | null): boolean => actionId === FACEBOOK_FIND_DATA_SEARCH_ACTION_ID
+const isFacebookCommentSeedingPostAction = (actionId?: string | null): boolean => actionId === FACEBOOK_COMMENT_SEEDING_POST_ACTION_ID
 
 const getCellText = (value: unknown): string => {
   if (value === null || value === undefined) return ''
@@ -66,7 +68,7 @@ const getCellText = (value: unknown): string => {
 }
 
 const normalizeUid = (value: unknown): string => {
-  const text = getCellText(value).replace(/\s+/g, '')
+  const text = getCellText(value).replace(/\s+/g, '').replace(/\/+$/g, '')
   const lower = text.toLowerCase()
   if (!text || ['uid', 'url', 'link', 'group', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
   return text
@@ -203,6 +205,12 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
   if (isFacebookFindDataSearchAction(actionId)) {
     return [
       { key: 'uid', label: 'Từ khóa', required: true },
+      ...INFO_FIELDS
+    ]
+  }
+  if (isFacebookCommentSeedingPostAction(actionId)) {
+    return [
+      { key: 'uid', label: 'Link bài post', required: true },
       ...INFO_FIELDS
     ]
   }
@@ -374,6 +382,177 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
   return output
 }
 
+const normalizeTemplateHeader = (value: unknown): string => getCellText(value)
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/đ/g, 'd')
+  .replace(/\s+/g, '')
+
+const isAkabizTemplateHeaderRow = (row: unknown[]): boolean => {
+  const headers = row.slice(0, 4).map(normalizeTemplateHeader)
+  return (
+    ['ten', 'name', 'fullname', 'hoten'].includes(headers[0] || '') &&
+    ['uid', 'url', 'link'].includes(headers[1] || '') &&
+    ['sdt', 'phone', 'mobile', 'sodienthoai'].includes(headers[2] || '') &&
+    ['email', 'emailaddress'].includes(headers[3] || '')
+  )
+}
+
+const buildAkabizTemplateRows = (
+  rows: unknown[][],
+  platform: CampaignImportPlatform,
+  actionId: string
+): CampaignImportDataRow[] => {
+  const seen = new Set<string>()
+  const output: CampaignImportDataRow[] = []
+
+  const pushUnique = (row: CampaignImportDataRow, key: string): void => {
+    const normalizedKey = key.trim().toLowerCase()
+    if (!normalizedKey || seen.has(normalizedKey)) return
+    seen.add(normalizedKey)
+    output.push(row)
+  }
+
+  for (const sourceRow of rows) {
+    if (!Array.isArray(sourceRow)) continue
+    const row = sourceRow.slice(0, 9)
+    if (row.every(cell => !getCellText(cell)) || isAkabizTemplateHeaderRow(row)) continue
+
+    const rawName = getCellText(row[0])
+    const rawUid = getCellText(row[1])
+    const rawPhone = getCellText(row[2])
+    const rawEmail = getCellText(row[3])
+    const baseRow: CampaignImportDataRow = {
+      name: rawName,
+      uid: normalizeUid(rawUid),
+      phone: rawPhone,
+      email: rawEmail,
+      info1: getCellText(row[4]),
+      info2: getCellText(row[5]),
+      info3: getCellText(row[6]),
+      info4: getCellText(row[7]),
+      info5: getCellText(row[8])
+    }
+
+    if (isZaloJoinGroupLinkAction(actionId)) {
+      const link = normalizeZaloGroupInviteLink(rawUid) || normalizeZaloGroupInviteLink(rawName)
+      if (!link) continue
+      pushUnique({
+        ...baseRow,
+        name: rawName,
+        phone: '',
+        uid: link,
+        email: ''
+      }, link)
+      continue
+    }
+
+    if (isFacebookJoinGroupAction(actionId)) {
+      const uid = normalizeUid(rawUid) || normalizeUid(rawName)
+      if (!uid) continue
+      pushUnique({
+        ...baseRow,
+        name: rawName,
+        phone: '',
+        uid,
+        email: ''
+      }, uid)
+      continue
+    }
+
+    if (isFacebookFindDataSearchAction(actionId)) {
+      const keyword = normalizeFindDataSearchKeyword(rawUid) || normalizeFindDataSearchKeyword(rawName)
+      if (!keyword) continue
+      pushUnique({
+        ...baseRow,
+        name: '',
+        phone: '',
+        uid: keyword,
+        email: ''
+      }, keyword)
+      continue
+    }
+
+    if (isFacebookCommentSeedingPostAction(actionId)) {
+      const uid = normalizeUid(rawUid) || normalizeUid(rawName)
+      if (!uid) continue
+      pushUnique({
+        ...baseRow,
+        name: '',
+        phone: '',
+        uid,
+        email: ''
+      }, uid)
+      continue
+    }
+
+    if (isZaloAddGroupMemberAction(actionId)) {
+      const phone = normalizeVietnamMobilePhone(rawPhone) ||
+        normalizeVietnamMobilePhone(rawUid) ||
+        normalizeVietnamMobilePhone(rawName)
+      if (!phone) continue
+      pushUnique({
+        ...baseRow,
+        name: normalizeVietnamMobilePhone(rawName) === phone ? '' : rawName,
+        phone,
+        phoneCarrier: getVietnamMobileCarrier(phone) || null,
+        uid: '',
+        email: ''
+      }, phone)
+      continue
+    }
+
+    if (platform === 'zalo' || platform === 'sms') {
+      const phone = normalizeVietnamMobilePhone(rawPhone)
+      if (!phone) continue
+      pushUnique({
+        ...baseRow,
+        phone,
+        phoneCarrier: getVietnamMobileCarrier(phone) || null
+      }, phone)
+      continue
+    }
+
+    if (platform === 'email') {
+      const email = rawEmail.toLowerCase()
+      if (!isValidEmailInputDataValue(email)) continue
+      pushUnique({ ...baseRow, email }, email)
+      continue
+    }
+
+    const uid = normalizeUid(rawUid)
+    if (!uid) continue
+    pushUnique({ ...baseRow, uid }, uid)
+  }
+
+  return output
+}
+
+const formatTemplateFileSize = (size: number): string => {
+  if (size < 1024) return `${size} B`
+  const kilobytes = size / 1024
+  if (kilobytes < 1024) return `${kilobytes.toFixed(1).replace(/\.0$/, '')} KB`
+  const megabytes = kilobytes / 1024
+  return `${megabytes.toFixed(1).replace(/\.0$/, '')} MB`
+}
+
+const getTemplateFileType = (fileName: string): string => {
+  const extension = fileName.split('.').pop()?.trim()
+  return extension ? extension.toUpperCase() : 'FILE'
+}
+
+const hasAkabizTemplateFileSignature = (bytes: Uint8Array, fileName: string): boolean => {
+  const extension = fileName.split('.').pop()?.trim().toLowerCase()
+  if (extension === 'csv') return true
+  if (extension === 'xlsx') return bytes[0] === 0x50 && bytes[1] === 0x4b
+  if (extension === 'xls') {
+    const oleSignature = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]
+    return oleSignature.every((value, index) => bytes[index] === value)
+  }
+  return false
+}
+
 const detectColumnFromHeader = (rows: unknown[][], labels: string[]): string => {
   const header = rows[0] || []
   const normalizedLabels = labels.map(label => label.toLowerCase())
@@ -498,18 +677,21 @@ export default function CampaignDataUploadModal({
   actionId,
   actionName,
   accountIds,
-  initialTab = 'textbox',
   onClose,
   onInsert
 }: CampaignDataUploadModalProps) {
   const showAlert = useUiStore(state => state.showAlert)
   const fields = useMemo(() => getFieldsForPlatform(platform, actionId), [platform, actionId])
-  const [activeTab, setActiveTab] = useState<ImportTab>(initialTab)
+  const [activeTab, setActiveTab] = useState<ImportTab>('textbox')
   const [datasetName, setDatasetName] = useState('')
   const [textContent, setTextContent] = useState('')
   const [txtFileName, setTxtFileName] = useState('')
   const [imageDataUrl, setImageDataUrl] = useState('')
   const [sheetLink, setSheetLink] = useState('')
+  const [templateFile, setTemplateFile] = useState<File | null>(null)
+  const [templateRows, setTemplateRows] = useState<CampaignImportDataRow[]>([])
+  const [templateStatus, setTemplateStatus] = useState<TemplateReadStatus>('idle')
+  const [templateError, setTemplateError] = useState('')
   const [excelFile, setExcelFile] = useState<File | null>(null)
   const [excelFileName, setExcelFileName] = useState('')
   const [excelRows, setExcelRows] = useState<unknown[][]>([])
@@ -522,16 +704,21 @@ export default function CampaignDataUploadModal({
   const [saving, setSaving] = useState(false)
   const sourceRevisionRef = useRef(0)
   const asyncOperationRef = useRef(0)
+  const templateFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     sourceRevisionRef.current += 1
     asyncOperationRef.current += 1
-    setActiveTab(initialTab)
+    setActiveTab('textbox')
     setDatasetName('')
     setTextContent('')
     setTxtFileName('')
     setImageDataUrl('')
     setSheetLink('')
+    setTemplateFile(null)
+    setTemplateRows([])
+    setTemplateStatus('idle')
+    setTemplateError('')
     setExcelFile(null)
     setExcelFileName('')
     setExcelRows([])
@@ -542,7 +729,8 @@ export default function CampaignDataUploadModal({
     setFormattedSourceLink(null)
     setLoading(false)
     setSaving(false)
-  }, [platform, actionId, initialTab])
+    if (templateFileInputRef.current) templateFileInputRef.current.value = ''
+  }, [platform, actionId])
 
   const excelHeaders = useMemo(() => {
     const maxCols = excelRows.reduce((max, row) => Math.max(max, row.length), 0)
@@ -652,6 +840,80 @@ export default function CampaignDataUploadModal({
     }
   }
 
+  const readAkabizTemplateFile = async (file?: File | null): Promise<void> => {
+    if (!file) return
+    invalidateFormattedPreview()
+    const sourceRevision = sourceRevisionRef.current
+    const operation = ++asyncOperationRef.current
+    setTemplateFile(file)
+    setTemplateRows([])
+    setTemplateStatus('reading')
+    setTemplateError('')
+    setLoading(true)
+
+    const failRead = (message: string): void => {
+      if (sourceRevisionRef.current !== sourceRevision || asyncOperationRef.current !== operation) return
+      setTemplateRows([])
+      setTemplateStatus('error')
+      setTemplateError(message)
+      setPreviewRows([])
+      setFormattedImportSource(null)
+      setFormattedSourceLink(null)
+      showAlert(message, 'error')
+    }
+
+    try {
+      if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+        failRead('Vui lòng chọn file Excel .xlsx, .xls hoặc .csv.')
+        return
+      }
+
+      const fileBytes = new Uint8Array(await file.arrayBuffer())
+      if (!hasAkabizTemplateFileSignature(fileBytes, file.name)) {
+        failRead('Có lỗi xảy ra khi đọc file Excel. Vui lòng kiểm tra lại định dạng file.')
+        return
+      }
+
+      const workbook = read(fileBytes, { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      if (!sheet) {
+        failRead('File Excel trống hoặc không đọc được sheet đầu tiên.')
+        return
+      }
+
+      const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
+      const normalized = buildAkabizTemplateRows(rows, platform, actionId)
+      if (sourceRevisionRef.current !== sourceRevision || asyncOperationRef.current !== operation) return
+      if (normalized.length === 0) {
+        failRead('File Excel trống hoặc không có data hợp lệ.')
+        return
+      }
+
+      setTemplateRows(normalized)
+      setTemplateStatus('success')
+      setTemplateError('')
+      setPreviewRows(normalized)
+      setFormattedImportSource('akabizTemplate')
+      setFormattedSourceLink(null)
+    } catch (err) {
+      console.error('Lỗi khi đọc file Excel template akaBiz:', err)
+      failRead('Có lỗi xảy ra khi đọc file Excel. Vui lòng kiểm tra lại định dạng file.')
+    } finally {
+      if (asyncOperationRef.current === operation) setLoading(false)
+    }
+  }
+
+  const clearAkabizTemplateFile = (): void => {
+    if (loading || saving) return
+    invalidateFormattedPreview()
+    asyncOperationRef.current += 1
+    setTemplateFile(null)
+    setTemplateRows([])
+    setTemplateStatus('idle')
+    setTemplateError('')
+    if (templateFileInputRef.current) templateFileInputRef.current.value = ''
+  }
+
   const buildRowsFromText = (): CampaignImportDataRow[] => {
     return splitTextItems(textContent).map(value => {
       if (isZaloJoinGroupLinkAction(actionId)) return { uid: value }
@@ -683,6 +945,7 @@ export default function CampaignDataUploadModal({
 
   const handleFormatData = async (): Promise<void> => {
     if (loading || saving) return
+    if (activeTab === 'akabizTemplate') return
     invalidateFormattedPreview()
     const sourceRevision = sourceRevisionRef.current
     const operation = ++asyncOperationRef.current
@@ -787,7 +1050,7 @@ export default function CampaignDataUploadModal({
         platform,
         actionId,
         actionName: actionName?.trim() || undefined,
-        importSource: formattedImportSource,
+        importSource: formattedImportSource === 'akabizTemplate' ? 'excel' : formattedImportSource,
         sourceLink: formattedSourceLink,
         rows: previewRows
       })
@@ -819,11 +1082,20 @@ export default function CampaignDataUploadModal({
   const renderTabButton = (tab: ImportTab, label: string) => (
     <button
       type="button"
+      id={`campaign-import-tab-${tab}`}
+      role="tab"
+      aria-selected={activeTab === tab}
+      aria-controls="campaign-import-tab-panel"
       className={`campaign-import-tab${activeTab === tab ? ' active' : ''}`}
       onClick={() => {
         if (tab === activeTab) return
         setActiveTab(tab)
         invalidateFormattedPreview()
+        if (tab === 'akabizTemplate' && templateStatus === 'success' && templateRows.length > 0) {
+          setPreviewRows(templateRows)
+          setFormattedImportSource('akabizTemplate')
+          setFormattedSourceLink(null)
+        }
       }}
       disabled={loading || saving}
     >
@@ -832,7 +1104,7 @@ export default function CampaignDataUploadModal({
   )
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 3600 }}>
+    <div className="modal-overlay campaign-import-modal-overlay">
       <div className="modal campaign-import-modal" onMouseDown={event => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">Upload dữ liệu</div>
@@ -856,15 +1128,21 @@ export default function CampaignDataUploadModal({
             />
           </div>
 
-          <div className="campaign-import-tabs">
+          <div className="campaign-import-tabs" role="tablist" aria-label="Nguồn nhập dữ liệu">
             {renderTabButton('textbox', 'Form txt')}
             {renderTabButton('image', 'Ảnh')}
             {renderTabButton('sheet', 'Link sheet')}
+            {renderTabButton('akabizTemplate', 'Từ template Excel akaBiz')}
             {renderTabButton('excel', 'File Excel/CSV của khách hàng')}
           </div>
 
           {activeTab === 'textbox' && (
-            <div className="campaign-import-tab-panel">
+            <div
+              id="campaign-import-tab-panel"
+              className="campaign-import-tab-panel"
+              role="tabpanel"
+              aria-labelledby="campaign-import-tab-textbox"
+            >
               <label className="campaign-import-label" htmlFor="campaign-import-textbox">
                 Form: Copy vào hoặc tải từ file txt
               </label>
@@ -895,7 +1173,12 @@ export default function CampaignDataUploadModal({
           )}
 
           {activeTab === 'image' && (
-            <div className="campaign-import-tab-panel">
+            <div
+              id="campaign-import-tab-panel"
+              className="campaign-import-tab-panel"
+              role="tabpanel"
+              aria-labelledby="campaign-import-tab-image"
+            >
               <label className="campaign-import-label">Ảnh: Tải lên hoặc dán vào</label>
               <div className="campaign-import-image-drop" onPaste={handleImagePaste} tabIndex={0}>
                 {imageDataUrl ? (
@@ -921,7 +1204,12 @@ export default function CampaignDataUploadModal({
           )}
 
           {activeTab === 'sheet' && (
-            <div className="campaign-import-tab-panel">
+            <div
+              id="campaign-import-tab-panel"
+              className="campaign-import-tab-panel"
+              role="tabpanel"
+              aria-labelledby="campaign-import-tab-sheet"
+            >
               <label className="campaign-import-label" htmlFor="campaign-import-sheet-link">
                 Link sheet (đúng format akaBiz)
               </label>
@@ -940,8 +1228,99 @@ export default function CampaignDataUploadModal({
             </div>
           )}
 
+          {activeTab === 'akabizTemplate' && (
+            <div
+              id="campaign-import-tab-panel"
+              className="campaign-import-tab-panel"
+              role="tabpanel"
+              aria-labelledby="campaign-import-tab-akabizTemplate"
+            >
+              <label className="campaign-import-label" htmlFor="campaign-import-akabiz-template-file">
+                Tải file theo template Excel akaBiz
+              </label>
+              <div
+                className={`campaign-import-template-file${templateFile ? ' has-file' : ''}`}
+                aria-disabled={loading || saving}
+              >
+                <input
+                  ref={templateFileInputRef}
+                  id="campaign-import-akabiz-template-file"
+                  className="campaign-import-template-file-input"
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  tabIndex={-1}
+                  disabled={loading || saving}
+                  onChange={event => {
+                    const file = event.currentTarget.files?.[0]
+                    event.currentTarget.value = ''
+                    void readAkabizTemplateFile(file)
+                  }}
+                />
+                <button
+                  type="button"
+                  className="campaign-import-template-file-picker"
+                  onClick={() => templateFileInputRef.current?.click()}
+                  disabled={loading || saving}
+                  aria-label={templateFile ? `Chọn file khác thay cho ${templateFile.name}` : 'Chọn file Excel/CSV theo template akaBiz'}
+                >
+                  <span className="campaign-import-template-file-icon" aria-hidden="true">
+                    <Upload size={20} />
+                  </span>
+                  <span className="campaign-import-template-file-copy">
+                    <span className="campaign-import-template-file-title">
+                      {templateFile?.name || 'Chọn file Excel/CSV'}
+                    </span>
+                    <span className="campaign-import-template-file-meta">
+                      {templateFile
+                        ? `${formatTemplateFileSize(templateFile.size)} • ${getTemplateFileType(templateFile.name)}`
+                        : 'Hỗ trợ .xlsx, .xls và .csv'}
+                    </span>
+                  </span>
+                </button>
+                {templateFile && (
+                  <button
+                    type="button"
+                    className="campaign-import-template-file-remove"
+                    onClick={event => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      clearAkabizTemplateFile()
+                    }}
+                    disabled={loading || saving}
+                    title="Xóa file đã chọn"
+                    aria-label="Xóa file Excel template đã chọn"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              <div className="campaign-import-hint">Dữ liệu sẽ được tự động đọc theo cấu trúc chuẩn.</div>
+              {templateStatus !== 'idle' && (
+                <div
+                  className={`campaign-import-template-status ${templateStatus}`}
+                  role={templateStatus === 'error' ? 'alert' : 'status'}
+                  aria-live="polite"
+                >
+                  {templateStatus === 'reading' && <RefreshCw size={14} className="spin" />}
+                  {templateStatus === 'success' && <CheckCircle2 size={15} />}
+                  {templateStatus === 'error' && <X size={15} />}
+                  <span>
+                    {templateStatus === 'reading' && 'Đang đọc dữ liệu...'}
+                    {templateStatus === 'success' && `Đã đọc ${templateRows.length} data hợp lệ`}
+                    {templateStatus === 'error' && templateError}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'excel' && (
-            <div className="campaign-import-tab-panel">
+            <div
+              id="campaign-import-tab-panel"
+              className="campaign-import-tab-panel"
+              role="tabpanel"
+              aria-labelledby="campaign-import-tab-excel"
+            >
               <label className="campaign-import-skip-header">
                 <input
                   type="checkbox"
@@ -1008,12 +1387,14 @@ export default function CampaignDataUploadModal({
             </div>
           )}
 
-          <div className="campaign-import-format-row">
-            <button className="btn btn-secondary" onClick={() => void handleFormatData()} disabled={loading || saving}>
-              {loading ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />}
-              Format chuẩn dữ liệu
-            </button>
-          </div>
+          {activeTab !== 'akabizTemplate' && (
+            <div className="campaign-import-format-row">
+              <button className="btn btn-secondary" onClick={() => void handleFormatData()} disabled={loading || saving}>
+                {loading ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />}
+                Format chuẩn dữ liệu
+              </button>
+            </div>
+          )}
 
           <div className="campaign-import-preview-table">
             <table className="campaign-grid">
