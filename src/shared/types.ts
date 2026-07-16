@@ -1457,15 +1457,82 @@ export interface AkaBizContactTag {
   updatedAt?: string
 }
 
+export type ContentTemplateChannelName = 'sms' | 'zalo' | 'facebook' | 'email'
+
+export interface ContentTemplateVariant {
+  text: string
+}
+
+export interface ContentTemplateChannelConfig {
+  enabled: boolean
+  variants: ContentTemplateVariant[]
+  formattedContentEnabled?: boolean
+  /** Email-only: one subject shared by every body variant. */
+  subject?: string
+  /** Email-only: true when variant text contains sanitized HTML. */
+  isHtml?: boolean
+}
+
+export type ContentTemplateChannels = Partial<Record<ContentTemplateChannelName, ContentTemplateChannelConfig>>
+
 export interface ContentTemplate {
   id: number
   name: string
   content: string
+  baseContentHtml: string | null
+  groupId: number | null
+  groupName: string | null
+  contentTypeId: number | null
+  imageUrls: string[]
+  channels: ContentTemplateChannels
   isDelete: boolean
   staffId?: number
-  organizationId?: number
+  organizationId?: number | null
   createdAt?: string
   updatedAt?: string
+}
+
+export interface CreateContentTemplateInput {
+  name: string
+  /** Plain-text fallback used by older app versions. */
+  content: string
+  baseContentHtml?: string | null
+  groupId?: number | null
+  imageUrls?: string[]
+  channels?: ContentTemplateChannels
+}
+
+export type UpdateContentTemplateInput = Partial<CreateContentTemplateInput>
+
+export interface ContentTemplateGroup {
+  id: number
+  name: string
+  description: string | null
+  order: number
+  isActive: boolean
+  isDelete: boolean
+  templateCount: number
+  staffId?: number
+  organizationId?: number | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CreateContentTemplateGroupInput {
+  name: string
+  description?: string | null
+  order?: number
+  isActive?: boolean
+}
+
+export type UpdateContentTemplateGroupInput = Partial<CreateContentTemplateGroupInput>
+
+export interface ContentTemplateContentType {
+  id: number
+  name: ContentTemplateChannelName
+  label: string
+  order: number
+  isActive: boolean
 }
 
 export interface EmailNotificationSettings {
@@ -1835,6 +1902,11 @@ export const IPC_EVENTS = {
   DB_CREATE_CONTENT_TEMPLATE: 'db:create-content-template',
   DB_UPDATE_CONTENT_TEMPLATE: 'db:update-content-template',
   DB_DELETE_CONTENT_TEMPLATE: 'db:delete-content-template',
+  DB_LIST_CONTENT_TEMPLATE_GROUPS: 'db:list-content-template-groups',
+  DB_CREATE_CONTENT_TEMPLATE_GROUP: 'db:create-content-template-group',
+  DB_UPDATE_CONTENT_TEMPLATE_GROUP: 'db:update-content-template-group',
+  DB_DELETE_CONTENT_TEMPLATE_GROUP: 'db:delete-content-template-group',
+  DB_LIST_CONTENT_TEMPLATE_CONTENT_TYPES: 'db:list-content-template-content-types',
 
   // Media Library
   MEDIA_STORAGE_SETTINGS_GET: 'media:storage-settings:get',

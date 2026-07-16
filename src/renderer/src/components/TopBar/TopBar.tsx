@@ -30,7 +30,7 @@ import { useUiStore } from '../../stores/uiStore'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'reports'
+type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports'
 
 interface TopBarProps {
   activePage: AppPage
@@ -38,7 +38,6 @@ interface TopBarProps {
   onOpenDataScan: () => void
   onOpenMediaLibrary: () => void
   onOpenProxyManager: () => void
-  onOpenContentTemplates: () => void
   onOpenDataGroups: () => void
   onOpenAccountInfo: () => void
   onOpenGeneralSettings: () => void
@@ -71,7 +70,6 @@ export default function TopBar({
   onOpenDataScan,
   onOpenMediaLibrary,
   onOpenProxyManager,
-  onOpenContentTemplates,
   onOpenDataGroups,
   onOpenAccountInfo,
   onOpenGeneralSettings,
@@ -159,7 +157,8 @@ export default function TopBar({
         key: 'content-templates',
         label: 'Mẫu nội dung',
         icon: <FileText size={18} />,
-        onClick: onOpenContentTemplates
+        active: activePage === 'content-templates',
+        onClick: () => onPageChange('content-templates')
       },
       {
         key: 'reports',
@@ -184,7 +183,6 @@ export default function TopBar({
   }, [
     activePage,
     canOpenWorkflowEditor,
-    onOpenContentTemplates,
     onOpenDataGroups,
     onOpenDataScan,
     onOpenMediaLibrary,

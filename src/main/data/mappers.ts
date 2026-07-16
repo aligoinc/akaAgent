@@ -1,4 +1,4 @@
-import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
+import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ContentTemplateChannelConfig, ContentTemplateChannelName, ContentTemplateChannels, ContentTemplateContentType, ContentTemplateGroup, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   const flatformType = row.flatform_type as string
@@ -324,16 +324,103 @@ export function mapAccountContactGroupFromDB(row: Record<string, unknown>): Auto
   }
 }
 
-export function mapContentTemplateFromDB(row: Record<string, unknown>): ContentTemplate {
+function normalizeContentTemplateVariants(value: unknown): Array<{ text: string }> {
+  const values = Array.isArray(value) ? value : value === null || value === undefined ? [] : [value]
+  return values.flatMap(item => {
+    if (typeof item === 'string') return [{ text: item }]
+    if (!item || typeof item !== 'object') return []
+    const text = (item as Record<string, unknown>).text
+    return typeof text === 'string' ? [{ text }] : []
+  })
+}
+
+function normalizeContentTemplateChannel(value: unknown): ContentTemplateChannelConfig | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const source = value as Record<string, unknown>
+  const variants = normalizeContentTemplateVariants(
+    Array.isArray(source.variants) ? source.variants : source.text
+  )
+  const config: ContentTemplateChannelConfig = {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : variants.length > 0,
+    variants
+  }
+  if (typeof source.formattedContentEnabled === 'boolean') {
+    config.formattedContentEnabled = source.formattedContentEnabled
+  }
+  if (typeof source.subject === 'string') config.subject = source.subject
+  if (typeof source.isHtml === 'boolean') config.isHtml = source.isHtml
+  return config
+}
+
+function normalizeContentTemplateImages(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
+function joinedContentGroupName(row: Record<string, unknown>): string | null {
+  const relation = row.content_group ?? row.auto_content_groups
+  const group = Array.isArray(relation) ? relation[0] : relation
+  if (!group || typeof group !== 'object') return null
+  const name = (group as Record<string, unknown>).name
+  return typeof name === 'string' ? name : null
+}
+
+export function mapContentTemplateFromDB(
+  row: Record<string, unknown>,
+  channelNameById: ReadonlyMap<string, ContentTemplateChannelName> = new Map()
+): ContentTemplate {
+  const channels: ContentTemplateChannels = {}
+  const rawChannels = row.channels
+  if (rawChannels && typeof rawChannels === 'object' && !Array.isArray(rawChannels)) {
+    for (const [id, rawConfig] of Object.entries(rawChannels as Record<string, unknown>)) {
+      const channelName = channelNameById.get(id)
+      if (!channelName) continue
+      const config = normalizeContentTemplateChannel(rawConfig)
+      if (config) channels[channelName] = config
+    }
+  }
+
   return {
     id: row.id as number,
     name: row.name as string,
     content: (row.content as string) || '',
-    isDelete: row.is_delete as boolean,
+    baseContentHtml: (row.base_content_html as string | null | undefined) ?? null,
+    groupId: (row.group_id as number | null | undefined) ?? null,
+    groupName: joinedContentGroupName(row),
+    contentTypeId: (row.content_type_id as number | null | undefined) ?? null,
+    imageUrls: normalizeContentTemplateImages(row.image_urls),
+    channels,
+    isDelete: (row.is_delete as boolean | null | undefined) ?? false,
     staffId: row.staff_id as number | undefined,
-    organizationId: row.organization_id as number | undefined,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string
+    organizationId: (row.organization_id as number | null | undefined) ?? null,
+    createdAt: row.created_at as string | undefined,
+    updatedAt: row.updated_at as string | undefined
+  }
+}
+
+export function mapContentTemplateGroupFromDB(row: Record<string, unknown>): ContentTemplateGroup {
+  return {
+    id: Number(row.id),
+    name: String(row.name || ''),
+    description: (row.description as string | null | undefined) ?? null,
+    order: Number.isFinite(Number(row.stt)) ? Number(row.stt) : 100,
+    isActive: (row.is_active as boolean | null | undefined) ?? true,
+    isDelete: (row.is_delete as boolean | null | undefined) ?? false,
+    templateCount: Number.isFinite(Number(row.template_count)) ? Number(row.template_count) : 0,
+    staffId: row.staff_id as number | undefined,
+    organizationId: (row.organization_id as number | null | undefined) ?? null,
+    createdAt: row.created_at as string | undefined,
+    updatedAt: row.updated_at as string | undefined
+  }
+}
+
+export function mapContentTemplateContentTypeFromDB(row: Record<string, unknown>): ContentTemplateContentType {
+  return {
+    id: Number(row.id),
+    name: row.name as ContentTemplateChannelName,
+    label: String(row.description || row.name || ''),
+    order: Number.isFinite(Number(row.stt_by_type)) ? Number(row.stt_by_type) : 100,
+    isActive: (row.is_active as boolean | null | undefined) ?? true
   }
 }
 

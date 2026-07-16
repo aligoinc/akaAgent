@@ -20,6 +20,10 @@ import {
   CampaignMediaSnapshot,
   CampaignExtraSettings,
   ContentTemplate,
+  ContentTemplateChannelName,
+  ContentTemplateChannels,
+  ContentTemplateGroup,
+  CreateContentTemplateInput,
   isValidEmailInputDataValue,
   ZaloLabelOption
 } from '../../../../shared/types'
@@ -46,7 +50,7 @@ import {
   getCampaignActionDailySendLimit
 } from '../../utils/entitlements'
 import { countSmsContentVariants } from '../../../../shared/smsContent'
-import { renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
+import { renderContentSpinMax, serializeContentVariants, splitContentVariants } from '../../../../shared/contentSpin'
 import {
   findInvalidAdvancedContentItemIndex,
   normalizeAdvancedContentItems
@@ -54,12 +58,19 @@ import {
 import {
   formattedContentToPlainCampaignContent,
   formattedContentToPlainText,
+  escapeFormattedContentVariantSeparators,
   isFormattedContentEmpty,
   plainTextToFormattedContent,
   sanitizeFormattedContent,
+  serializeFormattedContentVariants,
   splitFormattedContentVariants,
   supportsFormattedContent
 } from '../../../../shared/formattedContent'
+import {
+  contentTemplateImagesToSnapshots,
+  getContentTemplateSearchText,
+  resolveContentTemplate
+} from './contentTemplateCampaignUtils'
 
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
@@ -153,12 +164,14 @@ interface ContentTemplatePickerModalState {
   target: AiContentTarget
   title: string
   searchQuery: string
+  groupId: number | null
 }
 
 interface ContentTemplateSaveModalState {
   target: AiContentTarget
   name: string
   content: string
+  groupId: number | null
 }
 
 interface CampaignSaveBundleItem {
@@ -1549,6 +1562,7 @@ export default function CampaignFormModal({
   const [campaignPickerModal, setCampaignPickerModal] = useState<CampaignPickerModalState | null>(null)
   const [campaignPickerRefreshing, setCampaignPickerRefreshing] = useState(false)
   const [contentTemplates, setContentTemplates] = useState<ContentTemplate[]>([])
+  const [contentTemplateGroups, setContentTemplateGroups] = useState<ContentTemplateGroup[]>([])
   const [contentTemplatesLoading, setContentTemplatesLoading] = useState(false)
   const [contentTemplatePicker, setContentTemplatePicker] = useState<ContentTemplatePickerModalState | null>(null)
   const [contentTemplateSaveModal, setContentTemplateSaveModal] = useState<ContentTemplateSaveModalState | null>(null)
@@ -3187,8 +3201,14 @@ export default function CampaignFormModal({
     if (!window.electronAPI?.listContentTemplates) return
     setContentTemplatesLoading(true)
     try {
-      const rows = await window.electronAPI.listContentTemplates()
+      const [rows, groups] = await Promise.all([
+        window.electronAPI.listContentTemplates(),
+        window.electronAPI.listContentTemplateGroups
+          ? window.electronAPI.listContentTemplateGroups()
+          : Promise.resolve([] as ContentTemplateGroup[])
+      ])
       setContentTemplates(rows)
+      setContentTemplateGroups(groups)
     } catch (err) {
       showAlert(formatIpcErrorMessage(err, 'Không thể tải mẫu nội dung.'), 'error')
     } finally {
@@ -3550,21 +3570,31 @@ export default function CampaignFormModal({
     setContentTemplatePicker({
       target,
       title: `Chọn mẫu cho ${CONTENT_TEMPLATE_TARGET_LABELS[target]}`,
-      searchQuery: ''
+      searchQuery: '',
+      groupId: null
     })
     if (contentTemplates.length === 0) void loadContentTemplates()
   }
 
   const openSaveContentTemplateModal = (target: AiContentTarget) => {
     const rawContent = getAiContentValue(target)
-    const content = target === 'content' && isFormattedContentEnabled
-      ? formattedContentToPlainCampaignContent(rawContent)
-      : rawContent.trim()
+    const content = target === 'content' && isAdvancedContentMode
+      ? serializeContentVariants(normalizedAdvancedContentItems.map(item => (
+        isRichContentEditorEnabled ? formattedContentToPlainText(item.content) : item.content
+      )))
+      : target === 'content' && isRichContentEditorEnabled
+        ? formattedContentToPlainCampaignContent(rawContent)
+        : rawContent.trim()
     if (!content) {
       showAlert('Vui lòng nhập nội dung trước khi lưu mẫu.', 'error')
       return
     }
-    setContentTemplateSaveModal({ target, name: '', content })
+    setContentTemplateSaveModal({
+      target,
+      name: '',
+      content,
+      groupId: contentTemplateGroups.find(group => group.isActive)?.id || null
+    })
   }
 
   const openContentTemplateManager = () => {
@@ -3755,30 +3785,111 @@ export default function CampaignFormModal({
     </button>
   )
 
+  const getContentTemplateTargetChannel = (target: AiContentTarget): ContentTemplateChannelName => {
+    if (target !== 'content') return 'facebook'
+    if (selectedActionPlatform === 'sms' || selectedActionPlatform === 'zalo' || selectedActionPlatform === 'facebook' || selectedActionPlatform === 'email') {
+      return selectedActionPlatform
+    }
+    if (isSmsCampaign) return 'sms'
+    if (isEmailCampaign) return 'email'
+    if (isZaloMessageCampaign) return 'zalo'
+    return 'facebook'
+  }
+
   const applyContentTemplate = (template: ContentTemplate) => {
     if (!contentTemplatePicker) return
     const target = contentTemplatePicker.target
-    const currentRawContent = getAiContentValue(target)
-    const currentContent = target === 'content' && isFormattedContentEnabled
-      ? formattedContentToPlainCampaignContent(currentRawContent)
-      : currentRawContent.trim()
-    const nextContent = target === 'content' && isFormattedContentEnabled
-      ? plainTextToFormattedContent(template.content)
-      : template.content
-    const nextComparableContent = target === 'content' && isFormattedContentEnabled
-      ? formattedContentToPlainCampaignContent(nextContent)
-      : nextContent.trim()
-    const doApply = () => {
-      setAiContentValue(target, nextContent)
-      setContentTemplatePicker(null)
-      showAlert('Đã áp dụng mẫu nội dung.', 'success')
+    const channelName = getContentTemplateTargetChannel(target)
+    const resolved = resolveContentTemplate(template, channelName)
+    if (resolved.variants.length === 0) {
+      showAlert('Mẫu này chưa có nội dung phù hợp với chiến dịch.', 'error')
+      return
     }
 
-    if (currentContent && currentContent !== nextComparableContent) {
+    const targetSupportsRich = target === 'content' && (
+      channelName === 'email' || supportsFormattedContent(formData.actionId)
+    )
+    const applyRich = resolved.rich && targetSupportsRich
+    const variants = resolved.rich && !applyRich
+      ? resolved.variants.map(variant => formattedContentToPlainText(variant)).filter(Boolean)
+      : resolved.variants
+    if (variants.length === 0) {
+      showAlert('Mẫu này không còn nội dung sau khi chuyển sang văn bản thường.', 'error')
+      return
+    }
+
+    const { snapshots, invalidCount } = target === 'content' && channelName !== 'sms'
+      ? contentTemplateImagesToSnapshots(template.imageUrls)
+      : { snapshots: [] as CampaignMediaSnapshot[], invalidCount: 0 }
+    const useAdvanced = target === 'content' && channelName !== 'sms' && variants.length > 1
+    const firstContent = applyRich
+      ? escapeFormattedContentVariantSeparators(variants[0])
+      : serializeContentVariants([variants[0]])
+    const serializedContent = applyRich
+      ? serializeFormattedContentVariants(variants)
+      : serializeContentVariants(variants)
+
+    const doApply = () => {
+      if (target !== 'content') {
+        setAiContentValue(target, serializeContentVariants(variants))
+      } else {
+        setFormData(current => ({
+          ...current,
+          content: useAdvanced ? firstContent : serializedContent,
+          advancedContentEnabled: useAdvanced,
+          advancedContentItems: useAdvanced
+            ? variants.map(variant => createAdvancedContentItem({
+              content: variant,
+              mediaOption: snapshots.length > 0 ? 'all' : 'none',
+              mediaItems: snapshots,
+              randomMediaCount: 3
+            }))
+            : [],
+          images: useAdvanced ? [] : snapshots,
+          imageOption: !useAdvanced && snapshots.length > 0 ? 'all' : 'none',
+          randomImageCount: 3,
+          formattedContentEnabled: channelName !== 'email' && applyRich && supportsFormattedContent(current.actionId),
+          rewriteContentEachRun: applyRich ? false : current.rewriteContentEachRun,
+          postWithBackground: applyRich || snapshots.length > 0 ? false : current.postWithBackground,
+          zaloMessageSendMode: applyRich ? 'normal' : current.zaloMessageSendMode,
+          emailSubject: channelName === 'email' && resolved.source === 'channel'
+            ? String(resolved.subject || '')
+            : current.emailSubject,
+          emailBodyIsHtml: channelName === 'email' ? applyRich : current.emailBodyIsHtml
+        }))
+      }
+      setContentTemplatePicker(null)
+      showAlert(
+        invalidCount > 0
+          ? `Đã áp dụng mẫu và bỏ qua ${invalidCount} URL ảnh không hợp lệ.`
+          : 'Đã áp dụng mẫu nội dung.',
+        invalidCount > 0 ? 'info' : 'success'
+      )
+    }
+
+    const currentContent = target === 'content' && isAdvancedContentMode
+      ? normalizedAdvancedContentItems.map(item => item.content).join('\n')
+      : getAiContentValue(target).trim()
+    const replacesMedia = target === 'content' && (
+      formData.images.length > 0 ||
+      normalizedAdvancedContentItems.some(item => (item.mediaItems || []).length > 0) ||
+      snapshots.length > 0
+    )
+    const compatibilityChanges = target === 'content' && (
+      (formData.postWithBackground && (applyRich || snapshots.length > 0)) ||
+      (formData.zaloMessageSendMode === 'share' && applyRich)
+    )
+
+    if (currentContent || replacesMedia || compatibilityChanges) {
+      const replacedParts = [
+        currentContent ? 'nội dung' : '',
+        replacesMedia ? 'media' : '',
+        compatibilityChanges ? 'các tùy chọn không tương thích' : ''
+      ].filter(Boolean).join(', ')
       showConfirm(
-        'Nội dung hiện tại sẽ được thay bằng mẫu đã chọn.',
+        `Mẫu đã chọn sẽ thay ${replacedParts} hiện tại của chiến dịch.`,
         doApply,
-        { title: 'Áp dụng mẫu nội dung', confirmText: 'Thay nội dung', variant: 'primary' }
+        { title: 'Áp dụng mẫu nội dung', confirmText: 'Áp dụng mẫu', variant: 'primary' }
       )
       return
     }
@@ -3789,13 +3900,13 @@ export default function CampaignFormModal({
   const saveCurrentContentTemplate = async () => {
     if (!contentTemplateSaveModal) return
     const name = contentTemplateSaveModal.name.trim()
-    const content = contentTemplateSaveModal.content.trim()
+    const groupId = contentTemplateSaveModal.groupId
     if (!name) {
       showAlert('Vui lòng nhập tên mẫu nội dung.', 'error')
       return
     }
-    if (!content) {
-      showAlert('Vui lòng nhập nội dung mẫu.', 'error')
+    if (!groupId) {
+      showAlert('Vui lòng chọn nhóm mẫu nội dung.', 'error')
       return
     }
     if (!window.electronAPI?.createContentTemplate) {
@@ -3803,27 +3914,126 @@ export default function CampaignFormModal({
       return
     }
 
-    setContentTemplateSaving(true)
-    try {
-      await window.electronAPI.createContentTemplate({ name, content })
-      setContentTemplateSaveModal(null)
-      await loadContentTemplates()
-      showAlert('Đã lưu mẫu nội dung.', 'success')
-    } catch (err) {
-      showAlert(formatIpcErrorMessage(err, 'Không thể lưu mẫu nội dung.'), 'error')
-    } finally {
-      setContentTemplateSaving(false)
+    const target = contentTemplateSaveModal.target
+    const channelName = getContentTemplateTargetChannel(target)
+    const rich = target === 'content' && (
+      (channelName === 'email' && formData.emailBodyIsHtml) ||
+      (channelName !== 'email' && isFormattedContentEnabled)
+    )
+    const rawVariants = target === 'content' && isAdvancedContentMode
+      ? normalizedAdvancedContentItems.map(item => item.content)
+      : rich
+        ? splitFormattedContentVariants(getAiContentValue(target))
+        : splitContentVariants(getAiContentValue(target), { fallbackToRaw: true })
+    const variants = rawVariants.filter(variant => rich
+      ? !isFormattedContentEmpty(variant)
+      : String(variant || '').trim().length > 0)
+    if (variants.length === 0) {
+      showAlert('Vui lòng nhập nội dung trước khi lưu mẫu.', 'error')
+      return
     }
+
+    const plainVariants = rich
+      ? variants.map(variant => formattedContentToPlainText(variant))
+      : variants
+    const content = serializeContentVariants(plainVariants)
+    const baseContentHtml = rich
+      ? serializeFormattedContentVariants(variants)
+      : plainTextToFormattedContent(content)
+    const channels: ContentTemplateChannels = {}
+    channels[channelName] = {
+      enabled: true,
+      variants: variants.map(text => ({ text: rich ? sanitizeFormattedContent(text) : text })),
+      ...(channelName === 'email'
+        ? { subject: formData.emailSubject.trim(), isHtml: rich }
+        : { formattedContentEnabled: rich })
+    }
+
+    const getCloudImageUrls = (items: CampaignMediaInput[]): { urls: string[]; skipped: number } => {
+      let skipped = 0
+      const urls = items.flatMap(item => {
+        if (!isCampaignMediaImage(item)) {
+          skipped += 1
+          return []
+        }
+        const cloudUrl = getCampaignMediaCloudUrl(item).trim()
+        if (!/^https?:\/\//i.test(cloudUrl)) {
+          skipped += 1
+          return []
+        }
+        return [cloudUrl]
+      })
+      return { urls: Array.from(new Set(urls)).slice(0, 10), skipped }
+    }
+
+    let imageUrls: string[] = []
+    let mediaWarning = ''
+    if (target === 'content' && channelName !== 'sms') {
+      if (isAdvancedContentMode) {
+        const mediaSets = normalizedAdvancedContentItems.map(item => (
+          item.mediaOption === 'none'
+            ? { urls: [] as string[], skipped: 0 }
+            : getCloudImageUrls(item.mediaItems || [])
+        ))
+        const firstKey = JSON.stringify(mediaSets[0]?.urls || [])
+        const hasDifferentMedia = mediaSets.some(set => JSON.stringify(set.urls) !== firstKey)
+        const skipped = mediaSets.reduce((sum, set) => sum + set.skipped, 0)
+        if (hasDifferentMedia) {
+          mediaWarning = 'Các nội dung nâng cao đang dùng bộ media khác nhau. Mẫu chỉ lưu một bộ ảnh dùng chung nên lần lưu này sẽ chỉ lưu nội dung.'
+        } else {
+          imageUrls = mediaSets[0]?.urls || []
+          if (skipped > 0) mediaWarning = `Có ${skipped} media không phải ảnh cloud nên sẽ không được lưu vào mẫu.`
+        }
+      } else if (formData.imageOption !== 'none') {
+        const media = getCloudImageUrls(formData.images)
+        imageUrls = media.urls
+        if (media.skipped > 0) mediaWarning = `Có ${media.skipped} media chưa có URL cloud hoặc không phải ảnh nên sẽ không được lưu vào mẫu.`
+      }
+    }
+
+    const payload: CreateContentTemplateInput = {
+      name,
+      groupId,
+      content,
+      baseContentHtml,
+      imageUrls,
+      channels
+    }
+    const persist = async () => {
+      setContentTemplateSaving(true)
+      try {
+        await window.electronAPI.createContentTemplate(payload)
+        setContentTemplateSaveModal(null)
+        await loadContentTemplates()
+        window.dispatchEvent(new Event('content-templates-updated'))
+        showAlert('Đã lưu mẫu nội dung.', 'success')
+      } catch (err) {
+        showAlert(formatIpcErrorMessage(err, 'Không thể lưu mẫu nội dung.'), 'error')
+      } finally {
+        setContentTemplateSaving(false)
+      }
+    }
+
+    if (mediaWarning) {
+      showConfirm(
+        `${mediaWarning}\n\nBạn có muốn tiếp tục lưu mẫu không?`,
+        persist,
+        { title: 'Media không thể lưu đầy đủ', confirmText: 'Lưu mẫu', variant: 'primary' }
+      )
+      return
+    }
+    await persist()
   }
 
   const renderContentTemplateToolbar = (target: AiContentTarget) => (
-    <div className="content-template-inline-toolbar">
+    <div className="content-template-inline-toolbar" aria-label="Công cụ mẫu nội dung">
       {target === 'content' && isMessageCampaign && !isZaloShareMessageMode && renderMessagePersonalizationDropdown('content')}
       {renderContentPreviewButton(target)}
       <button
         type="button"
         className="btn btn-ghost content-template-inline-button"
         onClick={() => openContentTemplatePicker(target)}
+        title="Chọn mẫu nội dung"
       >
         <FileText size={15} />
         <span>Chọn mẫu</span>
@@ -3832,6 +4042,7 @@ export default function CampaignFormModal({
         type="button"
         className="btn btn-ghost content-template-inline-button"
         onClick={() => openSaveContentTemplateModal(target)}
+        title="Lưu nội dung hiện tại thành mẫu"
       >
         <Save size={15} />
         <span>Lưu mẫu</span>
@@ -10418,10 +10629,11 @@ export default function CampaignFormModal({
   const renderAdvancedContentEditor = () => (
     <div className="campaign-advanced-content-editor">
       <div className="campaign-advanced-content-header">
-        <div>
+        <div className="campaign-advanced-content-heading">
           <strong>Nội dung nâng cao</strong>
           <span className="campaign-advanced-content-count">{normalizedAdvancedContentItems.length} nội dung</span>
         </div>
+        {renderContentTemplateToolbar('content')}
       </div>
 
       {formData.advancedContentItems.length === 0 ? (
@@ -10699,28 +10911,65 @@ export default function CampaignFormModal({
   const renderContentTemplatePickerModal = () => {
     if (!contentTemplatePicker) return null
     const query = contentTemplatePicker.searchQuery.trim().toLowerCase()
-    const filteredTemplates = query
-      ? contentTemplates.filter(template => `${template.name}\n${template.content}`.toLowerCase().includes(query))
-      : contentTemplates
+    const targetChannel = getContentTemplateTargetChannel(contentTemplatePicker.target)
+    const filteredTemplates = contentTemplates.filter(template => (
+      (contentTemplatePicker.groupId === null || template.groupId === contentTemplatePicker.groupId) &&
+      (!query || getContentTemplateSearchText(template).includes(query))
+    ))
+    const channelLabels: Record<ContentTemplateChannelName, string> = {
+      sms: 'SMS',
+      zalo: 'Zalo',
+      facebook: 'Facebook',
+      email: 'Email'
+    }
 
     return (
-      <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: 3100 }}>
+      <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: Math.max(3100, (modalZIndex || 3000) + 100) }}>
         <div className="content-template-picker-modal">
           <div className="modal-header">
             <span className="modal-title">{contentTemplatePicker.title}</span>
-            <button type="button" className="btn-icon" onClick={() => setContentTemplatePicker(null)}>
+            <button
+              type="button"
+              className="btn-icon"
+              onClick={() => setContentTemplatePicker(null)}
+              title="Đóng"
+              aria-label="Đóng danh sách mẫu nội dung"
+            >
               <X size={18} />
             </button>
           </div>
           <div className="content-template-picker-body">
-            <div className="content-template-picker-search">
-              <Search size={15} />
-              <input
-                value={contentTemplatePicker.searchQuery}
-                onChange={event => setContentTemplatePicker(prev => prev ? { ...prev, searchQuery: event.target.value } : prev)}
-                placeholder="Tìm mẫu nội dung"
-              />
-              <button type="button" className="btn-icon" onClick={() => void loadContentTemplates()} disabled={contentTemplatesLoading} title="Load lại danh sách">
+            <div className="content-template-picker-toolbar">
+              <label className="content-template-picker-search">
+                <Search size={15} />
+                <input
+                  value={contentTemplatePicker.searchQuery}
+                  onChange={event => setContentTemplatePicker(prev => prev ? { ...prev, searchQuery: event.target.value } : prev)}
+                  placeholder="Tìm mẫu nội dung"
+                  aria-label="Tìm mẫu nội dung"
+                />
+              </label>
+              <select
+                className="stepper-select content-template-picker-group-select"
+                value={contentTemplatePicker.groupId ?? ''}
+                onChange={event => setContentTemplatePicker(prev => prev
+                  ? { ...prev, groupId: event.target.value ? Number(event.target.value) : null }
+                  : prev)}
+                aria-label="Lọc theo nhóm mẫu"
+              >
+                <option value="">Tất cả nhóm</option>
+                {contentTemplateGroups.map(group => (
+                  <option key={group.id} value={group.id}>{group.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn-icon content-template-picker-refresh"
+                onClick={() => void loadContentTemplates()}
+                disabled={contentTemplatesLoading}
+                title="Tải lại danh sách"
+                aria-label="Tải lại danh sách mẫu nội dung"
+              >
                 <RefreshCw size={15} className={contentTemplatesLoading ? 'spin' : ''} />
               </button>
             </div>
@@ -10736,8 +10985,36 @@ export default function CampaignFormModal({
                   className="content-template-picker-item"
                   onClick={() => applyContentTemplate(template)}
                 >
-                  <span>{template.name}</span>
-                  <p>{template.content}</p>
+                  <div className="content-template-picker-item-header">
+                    <span className="content-template-picker-item-title">{template.name}</span>
+                  </div>
+                  <div className="content-template-picker-item-meta">
+                    <span className="content-template-picker-group-badge">{template.groupName || 'Chưa phân nhóm'}</span>
+                    {!!template.baseContentHtml?.trim() && (
+                      <span className="content-template-picker-channel-badge base">Nội dung cơ bản</span>
+                    )}
+                    {Object.entries(template.channels).map(([channelName, config]) => (
+                      config?.enabled
+                        ? (
+                            <span
+                              className={`content-template-picker-channel-badge ${channelName}`}
+                              key={channelName}
+                            >
+                              {channelLabels[channelName as ContentTemplateChannelName]}
+                            </span>
+                          )
+                        : null
+                    ))}
+                  </div>
+                  <p className="content-template-picker-item-excerpt">{template.content}</p>
+                  <div className="content-template-picker-item-footer">
+                    <span>
+                      {template.channels[targetChannel]?.enabled
+                        ? `${template.channels[targetChannel]?.variants.length || 0} biến thể ${channelLabels[targetChannel]}`
+                        : 'Dùng Nội dung cơ bản'}
+                    </span>
+                    {template.imageUrls.length > 0 && <span>{template.imageUrls.length} ảnh</span>}
+                  </div>
                 </button>
               ))}
             </div>
@@ -10753,32 +11030,60 @@ export default function CampaignFormModal({
   const renderContentTemplateSaveModal = () => {
     if (!contentTemplateSaveModal) return null
     return (
-      <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: 3100 }}>
+      <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: Math.max(3100, (modalZIndex || 3000) + 100) }}>
         <div className="content-template-save-modal">
           <div className="modal-header">
             <span className="modal-title">Lưu mẫu cho {CONTENT_TEMPLATE_TARGET_LABELS[contentTemplateSaveModal.target]}</span>
-            <button type="button" className="btn-icon" onClick={() => setContentTemplateSaveModal(null)} disabled={contentTemplateSaving}>
+            <button
+              type="button"
+              className="btn-icon"
+              onClick={() => setContentTemplateSaveModal(null)}
+              disabled={contentTemplateSaving}
+              title="Đóng"
+              aria-label="Đóng form lưu mẫu"
+            >
               <X size={18} />
             </button>
           </div>
-          <div className="content-template-save-body">
+          <div className="content-template-save-body content-template-save-form">
             <div className="stepper-form-group">
-              <label>Tên mẫu</label>
+              <label>Tên mẫu <span className="required">*</span></label>
               <input
                 className="stepper-input"
                 value={contentTemplateSaveModal.name}
                 onChange={event => setContentTemplateSaveModal(prev => prev ? { ...prev, name: event.target.value } : prev)}
                 placeholder="Nhập tên mẫu nội dung"
                 disabled={contentTemplateSaving}
+                autoFocus
               />
             </div>
             <div className="stepper-form-group">
-              <label>Nội dung mẫu</label>
+              <label>Nhóm mẫu <span className="required">*</span></label>
+              <select
+                className="stepper-select"
+                value={contentTemplateSaveModal.groupId ?? ''}
+                onChange={event => setContentTemplateSaveModal(prev => prev
+                  ? { ...prev, groupId: event.target.value ? Number(event.target.value) : null }
+                  : prev)}
+                disabled={contentTemplateSaving}
+                aria-label="Chọn nhóm mẫu nội dung"
+              >
+                <option value="">Chọn nhóm mẫu</option>
+                {contentTemplateGroups.filter(group => group.isActive).map(group => (
+                  <option key={group.id} value={group.id}>{group.name}</option>
+                ))}
+              </select>
+              {contentTemplateGroups.filter(group => group.isActive).length === 0 && (
+                <div className="schedule-hint">Chưa có nhóm hoạt động. Hãy tạo nhóm trong Quản lý mẫu trước.</div>
+              )}
+            </div>
+            <div className="stepper-form-group">
+              <label>Nội dung sẽ lưu</label>
               <textarea
                 className="stepper-textarea content-template-save-textarea"
                 value={contentTemplateSaveModal.content}
-                onChange={event => setContentTemplateSaveModal(prev => prev ? { ...prev, content: event.target.value } : prev)}
                 rows={6}
+                readOnly
                 disabled={contentTemplateSaving}
               />
             </div>
