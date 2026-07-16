@@ -4,6 +4,7 @@ import AppUtilityTopbar from './components/TopBar/AppUtilityTopbar'
 import CampaignPage from './pages/CampaignPage'
 import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
 import ReportPage from './pages/ReportPage'
+import AutomationPage from './pages/AutomationPage'
 import LoginPage from './pages/LoginPage'
 import WorkflowEditorV2 from './components/v2/WorkflowEditorV2'
 import { useThemeStore } from './stores/themeStore'
@@ -57,7 +58,7 @@ export default function App() {
   } = useCampaignStore()
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
-  const [activePage, setActivePage] = useState<'campaigns' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
+  const [activePage, setActivePage] = useState<'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'reports'>('campaigns')
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null)
   const browserOpenRequestSeq = useRef(0)
   const [showDataScan, setShowDataScan] = useState(false)
@@ -337,6 +338,10 @@ export default function App() {
 
           <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <ReportPage isActive={activePage === 'reports'} />
+          </div>
+
+          <div style={{ display: activePage === 'automations' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <AutomationPage isActive={activePage === 'automations'} />
           </div>
 
           {/* Conditional render thay display:none để ReactFlow measure container đúng khi mount */}

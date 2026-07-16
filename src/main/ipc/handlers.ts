@@ -11,6 +11,7 @@ import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupC
 import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { ZaloServerClient } from '../services/zaloServerClient'
 import { DailyMaintenanceCoordinator } from '../services/dailyMaintenanceCoordinator'
+import { AutomationProcessor } from '../services/automationProcessor'
 import { startAccountPoller, type AccountPollerController } from '../domain/accounts/accountPoller'
 
 import { registerBrowserHandlers } from './handlers/browserHandlers'
@@ -28,10 +29,12 @@ import { registerMediaHandlers } from './handlers/mediaHandlers'
 import { registerCustomerFeedbackHandlers } from './handlers/customerFeedbackHandlers'
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
+import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
   isCurrentUserZaloServerEnabled,
-  setCurrentUser
+  setCurrentUser,
+  setCurrentUserCredentials
 } from '../data/currentUser'
 import {
   loadLoginSettingsForCurrentDevice,
@@ -182,6 +185,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     emailRuntime,
     { runtimeTarget: 'desktop', maintenanceCoordinator: dailyMaintenance }
   )
+  const automationProcessor = new AutomationProcessor({
+    runtimeTarget: 'desktop',
+    onUpdated: event => emitAutomationUpdated(mainWindow, event)
+  })
   campaignScheduler.setPageRegistry(pageRegistry)
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime, zaloRuntime)
   zaloRealtimeGroupManager = new ZaloRealtimeGroupCampaignManager(supabase, zaloRuntime, mainWindow)
@@ -323,6 +330,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     try {
       contactLoader.stopAll()
       campaignScheduler.stop()
+      await automationProcessor.stop()
       accountPollerController?.blockZaloRuntime()
       zaloServerClient.stop()
       runtimeCredentials = null
@@ -335,6 +343,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       console.error(`[AuthSessionExpiry] ${reason}: failed to clean up expired session:`, err)
     } finally {
       clearZaloLocalStartupHandoffBlock()
+      setCurrentUserCredentials(null)
       setCurrentUser(null)
       notifyRendererSessionExpired()
     }
@@ -712,6 +721,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         cancelLocalHandoffRetry()
         contactLoader.stopAll()
         campaignScheduler.stop()
+        await automationProcessor.stop()
         accountPollerController?.blockZaloRuntime()
         zaloServerClient.stop()
         runtimeCredentials = null
@@ -801,6 +811,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         zaloServerClient.start(user, username, password)
         syncZaloBackgroundForCurrentUser('login')
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
+        await automationProcessor.start()
         if (requiresLocalHandoff) scheduleLocalZaloHandoffRetry(handoffGeneration, 0)
       }
     },
@@ -809,6 +820,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       cancelLocalHandoffRetry()
       contactLoader.stopAll()
       campaignScheduler.stop()
+      await automationProcessor.stop()
       accountPollerController?.blockZaloRuntime()
       zaloServerClient.stop()
       runtimeCredentials = null
@@ -840,6 +852,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerCustomerFeedbackHandlers()
   registerEmailNotificationHandlers(supabase)
   registerReportHandlers(supabase)
+  registerAutomationHandlers(mainWindow)
   registerBrowserHandlers(webviewRegistry, pageRegistry)
   registerCampaignHandlers(supabase, {
     requestPauseCampaign: async (campaignId) => {
