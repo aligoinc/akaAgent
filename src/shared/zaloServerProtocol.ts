@@ -38,6 +38,12 @@ export interface ZaloServerOperationSnapshot {
   error?: string
 }
 
+/** Cached live operation state exposed by the desktop main process to its renderer. */
+export interface ZaloServerOperationStateSnapshot {
+  serverStartedAt: string | null
+  operations: ZaloServerOperationSnapshot[]
+}
+
 export interface ZaloServerStaffSnapshot {
   staffId: number
   organizationId: number
@@ -99,6 +105,13 @@ export interface ZaloServerRuntimeHandoffResponse {
   ownership: ZaloServerHandoffOwnership
   requiresDesktopRecovery: boolean
   runningState?: ZaloServerHandoffRunningState
+}
+
+export interface ZaloServerDesktopHandoffReadyResponse {
+  success: boolean
+  serverReady: boolean
+  serverStarted: boolean
+  alreadyRunning: boolean
 }
 
 export type ZaloServerCommandName =

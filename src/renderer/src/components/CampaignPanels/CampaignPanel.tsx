@@ -502,7 +502,8 @@ const CAMPAIGN_PLATFORM_SORT_ORDER = new Map<string, number>([
 const DETAIL_DOCK_MIN_HEIGHT = 220
 const DETAIL_DOCK_LIST_MIN_HEIGHT = 220
 const DETAIL_DOCK_MAX_HEIGHT_RESERVE = 16
-const CAMPAIGN_LIST_REFRESH_INTERVAL_MS = 10_000
+const LOCAL_CAMPAIGN_LIST_REFRESH_INTERVAL_MS = 10_000
+const SERVER_CAMPAIGN_LIST_REFRESH_INTERVAL_MS = 30_000
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
@@ -2103,6 +2104,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     loadCampaignInputData, loadCampaignDetails, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
+  const isZaloServer = useAuthStore(s => !!s.user?.isZaloServer)
   const entitlements = useAuthStore(s => s.user?.entitlements)
   const canManageCampaignActions = isAdminAkabiz
   const canViewAllFindDataLogs = isAdminAkabiz
@@ -2215,7 +2217,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
       refreshInFlight = true
       try {
-        await loadCampaigns()
+        await loadCampaigns(isZaloServer ? { silent: true } : undefined)
       } finally {
         refreshInFlight = false
         markInitialCampaignLoadSettled()
@@ -2226,7 +2228,9 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
     const intervalId = window.setInterval(() => {
       void refreshCampaignsIfVisible()
-    }, CAMPAIGN_LIST_REFRESH_INTERVAL_MS)
+    }, isZaloServer
+      ? SERVER_CAMPAIGN_LIST_REFRESH_INTERVAL_MS
+      : LOCAL_CAMPAIGN_LIST_REFRESH_INTERVAL_MS)
 
     const handleVisibilityChange = () => {
       if (isAppWindowVisible()) {
@@ -2234,13 +2238,15 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    if (isZaloServer) window.addEventListener('focus', refreshCampaignsIfVisible)
 
     return () => {
       isDisposed = true
       window.clearInterval(intervalId)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (isZaloServer) window.removeEventListener('focus', refreshCampaignsIfVisible)
     }
-  }, [isActive, loadCampaigns])
+  }, [isActive, isZaloServer, loadCampaigns])
 
   useEffect(() => {
     if (!window.electronAPI?.onZaloLoginQrEvent) return

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { FolderCog, Loader2, Plus, ServerCog, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -16,6 +16,8 @@ import AccountGroupManagerModal from './AccountGroupManagerModal'
 import ProxyManagerModal from './ProxyManagerModal'
 import { useUiStore } from '../../stores/uiStore'
 import { canUsePlatform, getFirstAllowedPlatform } from '../../utils/entitlements'
+import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
+import type { ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
 
 interface AccountPanelProps {
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
@@ -85,6 +87,38 @@ const formatQrRemaining = (seconds: number): string => {
   return `${String(minutes).padStart(2, '0')}:${String(restSeconds).padStart(2, '0')}`
 }
 
+const QR_EVENT_STATUSES = new Set<ZaloLoginQrEvent['status']>([
+  'qr', 'expired', 'scanned', 'declined', 'success', 'cancelled', 'error'
+])
+
+const mapServerQrOperation = (operation: ZaloServerOperationSnapshot): ZaloLoginQrEvent | null => {
+  if (!operation.accountId) return null
+  const result = operation.result && typeof operation.result === 'object' && !Array.isArray(operation.result)
+    ? operation.result as Record<string, unknown>
+    : {}
+  const resultStatus = String(result.status || '') as ZaloLoginQrEvent['status']
+  const status = QR_EVENT_STATUSES.has(resultStatus)
+    ? resultStatus
+    : operation.status === 'completed'
+      ? 'success'
+      : operation.status === 'cancelled'
+        ? 'cancelled'
+        : operation.status === 'failed'
+          ? 'error'
+          : 'qr'
+  return {
+    accountId: operation.accountId,
+    operationId: operation.operationId,
+    status,
+    message: typeof result.message === 'string'
+      ? result.message
+      : operation.error || (operation.status === 'running' ? 'Đang chờ trạng thái đăng nhập Zalo...' : undefined),
+    qrImage: typeof result.qrImage === 'string' ? result.qrImage : undefined,
+    displayName: typeof result.displayName === 'string' ? result.displayName : undefined,
+    avatarUrl: typeof result.avatarUrl === 'string' ? result.avatarUrl : undefined
+  }
+}
+
 const getPlatformLabel = (platform: string): string => {
   switch (platform) {
     case 'facebook': return 'Facebook'
@@ -114,6 +148,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     deleteProxy
   } = useCampaignStore()
   const entitlements = useAuthStore(state => state.user?.entitlements)
+  const isZaloServer = useAuthStore(state => state.user?.isZaloServer === true)
+  const serverOperationState = useZaloServerOperationState(isZaloServer)
   const canUseFacebookAccount = canUsePlatform('facebook', entitlements)
   const canUseZaloFeature = canUsePlatform('zalo', entitlements)
   const canUseEmailFeature = canUsePlatform('email', entitlements)
@@ -134,8 +170,12 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [zaloLoginAccount, setZaloLoginAccount] = useState<AutoAccount | null>(null)
   const [zaloLoginEvent, setZaloLoginEvent] = useState<ZaloLoginQrEvent | null>(null)
   const [zaloLoginStarting, setZaloLoginStarting] = useState(false)
+  const [zaloLoginCancelling, setZaloLoginCancelling] = useState(false)
   const [zaloQrExpiresAt, setZaloQrExpiresAt] = useState<number | null>(null)
   const [zaloQrRemainingSeconds, setZaloQrRemainingSeconds] = useState<number | null>(null)
+  const trackedServerQrOperationIdRef = useRef<string | null>(null)
+  const handledServerQrOperationIdsRef = useRef<Set<string>>(new Set())
+  const previousServerStartedAtRef = useRef<string | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     flatformType: defaultAccountPlatform,
@@ -170,6 +210,14 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   useEffect(() => {
     if (!window.electronAPI?.onZaloLoginQrEvent) return
     return window.electronAPI.onZaloLoginQrEvent((event) => {
+      if (isZaloServer && event.operationId) {
+        if (handledServerQrOperationIdsRef.current.has(event.operationId)) return
+        trackedServerQrOperationIdRef.current = event.operationId
+        if (['success', 'error', 'expired', 'declined', 'cancelled'].includes(event.status)) {
+          handledServerQrOperationIdsRef.current.add(event.operationId)
+          trackedServerQrOperationIdRef.current = null
+        }
+      }
       const activeAccountId = zaloLoginAccount?.id
       if (activeAccountId && event.accountId !== activeAccountId) return
 
@@ -194,7 +242,114 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         useUiStore.getState().showAlert(event.message || 'Đăng nhập Zalo thất bại', 'error')
       }
     })
-  }, [loadAccounts, zaloLoginAccount?.id])
+  }, [isZaloServer, loadAccounts, zaloLoginAccount?.id])
+
+  useEffect(() => {
+    if (!isZaloServer || !serverOperationState) return
+    const previousServerStartedAt = previousServerStartedAtRef.current
+    const serverRestarted = !!previousServerStartedAt &&
+      !!serverOperationState.serverStartedAt &&
+      previousServerStartedAt !== serverOperationState.serverStartedAt
+    previousServerStartedAtRef.current = serverOperationState.serverStartedAt
+
+    const qrOperations = serverOperationState.operations
+      .filter(operation => operation.command === 'zalo.loginQr.start' && !!operation.accountId)
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+    const trackedOperationId = trackedServerQrOperationIdRef.current
+    const trackedOperation = trackedOperationId
+      ? qrOperations.find(operation => operation.operationId === trackedOperationId)
+      : undefined
+
+    if (trackedOperationId && !trackedOperation) {
+      if (!serverOperationState.serverStartedAt) return
+      trackedServerQrOperationIdRef.current = null
+      setZaloLoginStarting(false)
+      setZaloQrExpiresAt(null)
+      setZaloQrRemainingSeconds(null)
+      setZaloLoginAccount(null)
+      setZaloLoginEvent(null)
+      useUiStore.getState().showAlert(
+        serverRestarted
+          ? 'App server đã khởi động lại; đăng nhập QR trước đó đã kết thúc.'
+          : 'Đăng nhập QR không còn tồn tại trên app server.',
+        'error'
+      )
+      return
+    }
+
+    const settleTerminalOperation = (
+      terminalOperation: ZaloServerOperationSnapshot,
+      wasTracked: boolean
+    ) => {
+      if (handledServerQrOperationIdsRef.current.has(terminalOperation.operationId)) return
+      handledServerQrOperationIdsRef.current.add(terminalOperation.operationId)
+      void loadAccounts()
+
+      // A terminal operation already present in the hello snapshot still needs
+      // a silent account refresh, but should not replay an old notification.
+      if (!wasTracked) return
+
+      trackedServerQrOperationIdRef.current = null
+      setZaloLoginStarting(false)
+      setZaloQrExpiresAt(null)
+      setZaloQrRemainingSeconds(null)
+      const event = mapServerQrOperation(terminalOperation)
+      if (!event) {
+        setZaloLoginAccount(null)
+        setZaloLoginEvent(null)
+        return
+      }
+      if (event.status === 'success') {
+        setZaloLoginAccount(null)
+        setZaloLoginEvent(null)
+        useUiStore.getState().showAlert(event.message || 'Đăng nhập Zalo thành công', 'success')
+        return
+      }
+      if (event.status === 'cancelled') {
+        setZaloLoginAccount(null)
+        setZaloLoginEvent(null)
+        return
+      }
+      setZaloLoginEvent(event)
+      if (event.status === 'error' || event.status === 'declined') {
+        useUiStore.getState().showAlert(event.message || 'Đăng nhập Zalo thất bại', 'error')
+      }
+    }
+
+    if (trackedOperation && trackedOperation.status !== 'running') {
+      settleTerminalOperation(trackedOperation, true)
+      return
+    }
+
+    const runningOperation = trackedOperation || qrOperations.find(operation => (
+      operation.status === 'running' &&
+      !handledServerQrOperationIdsRef.current.has(operation.operationId)
+    ))
+    if (runningOperation) {
+      const account = accounts.find(item => item.id === runningOperation.accountId && item.flatformType === 'zalo')
+      if (!account) return
+      trackedServerQrOperationIdRef.current = runningOperation.operationId
+      const event = mapServerQrOperation(runningOperation)
+      setZaloLoginAccount(account)
+      setZaloLoginStarting(event?.status === 'qr' && !event.qrImage)
+      if (event) {
+        setZaloLoginEvent(event)
+        if (event.status === 'qr' && event.qrImage) {
+          const updatedAt = Date.parse(runningOperation.updatedAt)
+          const expiresAt = (Number.isFinite(updatedAt) ? updatedAt : Date.now()) + ZALO_QR_TTL_MS
+          setZaloQrExpiresAt(expiresAt)
+          setZaloQrRemainingSeconds(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)))
+        } else if (event.status !== 'qr') {
+          setZaloQrExpiresAt(null)
+          setZaloQrRemainingSeconds(null)
+        }
+      }
+      return
+    }
+
+    const terminalOperation = qrOperations.find(operation => operation.status !== 'running')
+    if (terminalOperation) settleTerminalOperation(terminalOperation, false)
+  }, [accounts, isZaloServer, loadAccounts, serverOperationState])
 
   useEffect(() => {
     if (!zaloQrExpiresAt || !zaloLoginAccount) return
@@ -477,6 +632,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       return
     }
     setZaloLoginAccount(account)
+    trackedServerQrOperationIdRef.current = null
     setZaloLoginEvent({ accountId: account.id, status: 'qr', message: 'Đang tạo mã QR...' })
     setZaloQrExpiresAt(null)
     setZaloQrRemainingSeconds(null)
@@ -502,14 +658,53 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleCloseZaloLogin = async () => {
+    if (zaloLoginCancelling) return
     const accountId = zaloLoginAccount?.id
-    const shouldCancel = !['success', 'error', 'expired', 'cancelled'].includes(zaloLoginEvent?.status || '')
-    setZaloLoginAccount(null)
-    setZaloLoginEvent(null)
-    setZaloQrExpiresAt(null)
-    setZaloQrRemainingSeconds(null)
-    if (accountId && shouldCancel) {
+    const shouldCancel = !['success', 'error', 'expired', 'declined', 'cancelled'].includes(zaloLoginEvent?.status || '')
+    const operationId = trackedServerQrOperationIdRef.current
+    const closeModal = () => {
+      setZaloLoginAccount(null)
+      setZaloLoginEvent(null)
+      setZaloQrExpiresAt(null)
+      setZaloQrRemainingSeconds(null)
+      trackedServerQrOperationIdRef.current = null
+    }
+
+    if (!accountId || !shouldCancel) {
+      if (operationId) handledServerQrOperationIdsRef.current.add(operationId)
+      closeModal()
+      return
+    }
+
+    // Keep the long-standing local behavior: closing the modal immediately
+    // requests cancellation without making the UI depend on a local callback.
+    if (!isZaloServer) {
+      closeModal()
       await window.electronAPI?.cancelZaloLoginQr?.(accountId).catch(() => {})
+      return
+    }
+
+    setZaloLoginCancelling(true)
+    try {
+      const result = await window.electronAPI?.cancelZaloLoginQr?.(accountId)
+      if (!result?.success) {
+        throw new Error(result?.reason || 'App server chưa xác nhận huỷ đăng nhập QR.')
+      }
+      if (operationId) handledServerQrOperationIdsRef.current.add(operationId)
+      closeModal()
+    } catch (error) {
+      const operationAlreadySettled = !!operationId && (
+        handledServerQrOperationIdsRef.current.has(operationId) ||
+        trackedServerQrOperationIdRef.current !== operationId
+      )
+      if (!operationAlreadySettled) {
+        useUiStore.getState().showAlert(
+          getErrorMessage(error, 'Không thể huỷ đăng nhập QR trên app server. Vui lòng thử lại.'),
+          'error'
+        )
+      }
+    } finally {
+      setZaloLoginCancelling(false)
     }
   }
 
@@ -912,7 +1107,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                 <strong>Đăng nhập Zalo</strong>
                 <div style={zaloModalSubTextStyle}>{zaloLoginAccount.name}</div>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={handleCloseZaloLogin}>Đóng</button>
+              <button className="btn btn-ghost btn-sm" onClick={handleCloseZaloLogin} disabled={zaloLoginCancelling}>
+                {zaloLoginCancelling ? 'Đang đóng...' : 'Đóng'}
+              </button>
             </div>
             <div style={zaloQrBodyStyle}>
               {zaloLoginEvent?.qrImage ? (

@@ -2,8 +2,11 @@ import { ipcMain } from 'electron'
 import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
-interface CampaignPauseController {
-  requestPauseCampaign(campaignId: number): Promise<Campaign>
+interface CampaignStatusController {
+  requestCampaignStatus(
+    campaignId: number,
+    status: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>
+  ): Promise<Campaign>
 }
 
 interface CampaignRealtimeRefreshController {
@@ -60,7 +63,7 @@ async function assertCanUpdateCampaignFromRenderer(
 
 export function registerCampaignHandlers(
   supabase: SupabaseService,
-  campaignPauseController: CampaignPauseController,
+  campaignStatusController: CampaignStatusController,
   realtimeRefreshController?: CampaignRealtimeRefreshController
 ): void {
   // Campaign Actions
@@ -97,9 +100,15 @@ export function registerCampaignHandlers(
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: Partial<Campaign> | null | undefined) => {
     const payload = updates || {}
-    if (isStatusOnlyCampaignUpdate(payload) && payload.status === 'tạm dừng') {
-      const campaign = await campaignPauseController.requestPauseCampaign(id)
-      realtimeRefreshController?.refreshSoon('campaign-paused')
+    if (
+      isStatusOnlyCampaignUpdate(payload)
+      && (payload.status === 'tạm dừng' || payload.status === 'chờ xử lý')
+    ) {
+      await assertCanUpdateCampaignFromRenderer(supabase, id, payload)
+      const campaign = await campaignStatusController.requestCampaignStatus(id, payload.status)
+      realtimeRefreshController?.refreshSoon(
+        payload.status === 'tạm dừng' ? 'campaign-paused' : 'campaign-resumed'
+      )
       return campaign
     }
     await assertCanUpdateCampaignFromRenderer(supabase, id, payload)

@@ -52,6 +52,12 @@ export class SupabaseService {
   listAccounts() { return accountRepo.listAccounts() }
   createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }
   updateAccount(id: number, updates: Partial<AutoAccount>) { return accountRepo.updateAccount(id, updates) }
+  setZaloServerAccountStatus(id: number, status: accountRepo.ZaloServerAccountControlStatus) {
+    return accountRepo.setZaloServerAccountStatus(id, status)
+  }
+  updateClaimedZaloServerAccount(id: number, updates: Partial<AutoAccount>) {
+    return accountRepo.updateClaimedZaloServerAccount(id, updates)
+  }
   clearAccountMobileDevice(id: number) { return accountRepo.clearAccountMobileDevice(id) }
   deleteAccount(id: number) { return accountRepo.deleteAccount(id) }
   getEligibleAccounts() { return accountRepo.getEligibleAccounts() }
@@ -111,6 +117,27 @@ export class SupabaseService {
   listCampaigns() { return campaignRepo.listCampaigns() }
   createCampaign(campaign: Partial<Campaign>) { return campaignRepo.createCampaign(campaign) }
   updateCampaign(id: number, updates: Partial<Campaign>) { return campaignRepo.updateCampaign(id, updates) }
+  updateClaimedZaloServerCampaign(id: number, updates: Partial<Campaign>) {
+    return campaignRepo.updateClaimedZaloServerCampaign(id, updates)
+  }
+  reopenCompletedZaloServerCampaignAfterInputInsert(id: number, expectedActionId: string) {
+    return campaignRepo.reopenCompletedZaloServerCampaignAfterInputInsert(id, expectedActionId)
+  }
+  setZaloServerCampaignStatus(id: number, status: campaignRepo.ZaloServerControlStatus) {
+    return campaignRepo.setZaloServerCampaignStatus(id, status)
+  }
+  getZaloServerRunControlState(campaignId: number, accountId: number) {
+    return campaignRepo.getZaloServerRunControlState(campaignId, accountId)
+  }
+  claimZaloServerRunUnit(campaignId: number, accountId: number, inputDataIds: number[]) {
+    return campaignRepo.claimZaloServerRunUnit(campaignId, accountId, inputDataIds)
+  }
+  finalizeZaloServerCampaign(campaignId: number, note?: string | null) {
+    return campaignRepo.finalizeZaloServerCampaign(campaignId, note)
+  }
+  advanceZaloServerMultiDailySlot(campaignId: number, accountId: number, nextSchedule: string) {
+    return campaignRepo.advanceZaloServerMultiDailySlot(campaignId, accountId, nextSchedule)
+  }
   deleteCampaign(id: number) { return campaignRepo.deleteCampaign(id) }
   cloneCampaign(id: number) { return campaignRepo.cloneCampaign(id) }
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }

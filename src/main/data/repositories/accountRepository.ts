@@ -68,6 +68,16 @@ export interface ZaloAccountUpsertInput {
   metadata?: Record<string, unknown>
 }
 
+export type ZaloServerAccountControlStatus = 'chờ xử lý' | 'tạm dừng'
+
+export interface ZaloServerAccountStatusResult {
+  ok: boolean
+  reason: 'updated' | 'already_target' | 'not_found' | 'runtime_not_owner' | 'invalid_transition' | string
+  accountId: number
+  accountStatus: string | null
+  campaignStatus: string | null
+}
+
 function normalizeRateLimitMinutes(value: unknown): number {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
@@ -246,6 +256,70 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
 
   if (error) throw new Error(`Failed to update account: ${error.message}`)
   return mapAccountFromDB(toDbRow(data))
+}
+
+export async function setZaloServerAccountStatus(
+  accountId: number,
+  status: ZaloServerAccountControlStatus
+): Promise<ZaloServerAccountStatusResult> {
+  const normalizedAccountId = Math.floor(Number(accountId))
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for Zalo Server control')
+  }
+  if (status !== 'chờ xử lý' && status !== 'tạm dừng') {
+    throw new Error('Zalo Server account status must be pending or paused')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_set_zalo_server_account_status', {
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_status: status
+  })
+  if (error) {
+    throw new Error(
+      `Failed to update Zalo Server account status atomically: ${error.message}. ` +
+      'Ensure migration v172 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Zalo Server account control returned no result')
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'invalid_transition'),
+    accountId: Number(row.account_id || normalizedAccountId),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status)
+  }
+}
+
+/** Preserve a newer client pause/resume while the server settles a claimed run. */
+export async function updateClaimedZaloServerAccount(
+  id: number,
+  updates: Partial<AutoAccount>
+): Promise<AutoAccount> {
+  const u = requireCurrentUser()
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (updates.status !== undefined) payload.status = updates.status
+  if (updates.loginStatus !== undefined) payload.login_status = updates.loginStatus
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive
+
+  const { data, error } = await client()
+    .from('auto_accounts')
+    .update(payload)
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('status', 'đang chạy')
+    .select(ACCOUNT_SELECT)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to update claimed Zalo Server account: ${error.message}`)
+  if (data) return mapAccountFromDB(toDbRow(data))
+
+  const current = await getAccount(id)
+  if (!current) throw new Error('Không tìm thấy tài khoản Zalo Server sau xung đột trạng thái')
+  return current
 }
 
 export async function clearAccountMobileDevice(id: number): Promise<AutoAccount> {
@@ -600,7 +674,7 @@ export async function claimZaloAccountRuntimeOperation(
   if (error) {
     throw new Error(
       `Failed to claim Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
     )
   }
 
@@ -647,7 +721,7 @@ export async function releaseZaloAccountRuntimeOperation(
   if (error) {
     throw new Error(
       `Failed to release Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
     )
   }
   return data === true
@@ -665,7 +739,7 @@ export async function inspectStaffZaloRunningState(staffId: number): Promise<Sta
   if (error) {
     throw new Error(
       `Failed to inspect Zalo running state: ${error.message}. ` +
-      'Ensure migration v163 is applied; server handoff was not started.'
+      'Ensure migration v171 is applied; server handoff was not started.'
     )
   }
 
@@ -706,7 +780,7 @@ export async function recoverServerZaloRunningState(
   if (error) {
     throw new Error(
       `Failed to recover server Zalo state atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no non-atomic fallback was attempted.'
+      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
     )
   }
 
@@ -764,7 +838,7 @@ export async function resetDesktopRunningStatuses(
   if (error) {
     throw new Error(
       `Failed to reset desktop runtime state atomically: ${error.message}. ` +
-      'Ensure migration v163 is applied; no cross-platform fallback was attempted.'
+      'Ensure migration v171 is applied; no cross-platform fallback was attempted.'
     )
   }
 

@@ -19,6 +19,7 @@ import {
   type ZaloServerClientMessage,
   type ZaloServerCommandName,
   type ZaloServerCommandResponse,
+  type ZaloServerDesktopHandoffReadyResponse,
   type ZaloServerRuntimeEvent,
   type ZaloServerRuntimeHandoffResponse,
   type ZaloServerOperationSnapshot,
@@ -39,6 +40,12 @@ const CONTROL_REVALIDATION_INTERVAL_MS = 50_000
 const CONTROL_TICKET_MAX_TTL_SECONDS = 60
 const USED_TICKET_LIMIT = 100_000
 const CONTROL_ACCESS_CACHE_MS = 45_000
+const DESKTOP_DETACHED_OPERATION_COMMANDS = new Set<ZaloServerCommandName>([
+  'zalo.loginQr.start',
+  'contacts.loadFriends',
+  'contacts.loadGroups',
+  'contacts.loadZaloGroupMembers'
+])
 
 interface LoginAttemptKeys {
   identity: string
@@ -111,6 +118,11 @@ export interface ZaloServerGatewayOptions {
   port?: number
   authenticate(username: string, password: string): Promise<AuthenticatedStaff>
   handoffToDesktop(username: string, password: string): Promise<ZaloServerRuntimeHandoffResponse>
+  desktopHandoffReady(
+    username: string,
+    password: string,
+    expectedModeRevision: string
+  ): Promise<ZaloServerDesktopHandoffReadyResponse>
   getSnapshot(staffId?: number): ZaloServerSnapshot
   getOperations(staffId: number): ZaloServerOperationSnapshot[]
   executeCommand(staffId: number, command: ZaloServerCommandName, args: unknown[]): Promise<unknown>
@@ -289,13 +301,9 @@ export class ZaloServerGateway {
     this.publishToStaffClients(event, false)
   }
 
-  /**
-   * Operation lifecycle is control-protocol state, not a user-facing log. Only
-   * browser/PWA clients use it; reconnects recover the current operation list
-   * from the hello snapshot instead of replaying old running/completed events.
-   */
+  /** Operation lifecycle is control state, not a user-facing activity log. */
   publishControl(event: ZaloServerRuntimeEvent): void {
-    this.publishToStaffClients(event, true)
+    this.publishToStaffClients(event, false)
   }
 
   private publishToStaffClients(event: ZaloServerRuntimeEvent, controlOnly: boolean): void {
@@ -418,6 +426,35 @@ export class ZaloServerGateway {
         return
       }
 
+      if (request.method === 'POST' && url.pathname === '/api/runtime-handoff-ready') {
+        const body = await readJsonBody(request)
+        const username = String(body.username || '').trim()
+        const password = String(body.password || '')
+        const expectedModeRevision = String(body.expectedModeRevision || '').trim()
+        if (!username || !password || !expectedModeRevision) {
+          json(response, 400, { error: 'Thiếu tên đăng nhập, mật khẩu hoặc revision bàn giao' })
+          return
+        }
+        const loginKeys = this.getLoginAttemptKeys(request, username)
+        if (!this.allowLoginAttempt(loginKeys)) {
+          json(response, 429, { error: 'Đăng nhập quá nhiều lần. Vui lòng thử lại sau.' })
+          return
+        }
+        const result = await this.options.desktopHandoffReady(
+          username,
+          password,
+          expectedModeRevision
+        )
+        if (this.stopping) {
+          response.setHeader('Connection', 'close')
+          json(response, 503, { error: 'Server đang dừng' })
+          return
+        }
+        this.loginAttempts.delete(loginKeys.identity)
+        json(response, 200, result)
+        return
+      }
+
       if (request.method === 'GET' && url.pathname === '/api/snapshot') {
         const session = this.resolveSession(getBearerToken(request))
         if (!session) {
@@ -519,7 +556,8 @@ export class ZaloServerGateway {
         client.socket.send(JSON.stringify({
           type: 'hello',
           snapshot: this.options.getSnapshot(session.staffId),
-          events: this.getBufferedEvents(session.staffId)
+          events: this.getBufferedEvents(session.staffId),
+          operations: this.options.getOperations(session.staffId)
         }))
         this.options.onClientCountChanged?.()
         return
@@ -557,7 +595,9 @@ export class ZaloServerGateway {
       const args = Array.isArray(message.args) ? message.args : []
       const result = auth.kind === 'control'
         ? await this.startAuthorizedControlOperation(client, message.command, args)
-        : await this.options.executeCommand(auth.staffId, message.command, args)
+        : DESKTOP_DETACHED_OPERATION_COMMANDS.has(message.command)
+          ? this.options.startControlOperation(auth.staffId, message.command, args)
+          : await this.options.executeCommand(auth.staffId, message.command, args)
       response = { type: 'command-result', requestId: message.requestId, ok: true, result }
     } catch (error) {
       response = {

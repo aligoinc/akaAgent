@@ -5,6 +5,7 @@ import {
   ZALO_SERVER_IPC,
   ZALO_SERVER_OPERATION_UPDATED_CHANNEL,
   type ZaloServerCommandName,
+  type ZaloServerDesktopHandoffReadyResponse,
   type ZaloServerOperationSnapshot,
   type ZaloServerOperationStatus,
   type ZaloServerRuntimeEvent,
@@ -33,8 +34,11 @@ import { ZaloRuntimeService } from '../../main/services/zaloRuntimeService'
 import type { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
 
 const RECONCILE_INTERVAL_MS = 60_000
+const RECONCILE_LIFECYCLE_CONCURRENCY = 25
 const RECENT_EVENT_LIMIT = 1000
 const RECENT_OPERATION_LIMIT_PER_STAFF = 200
+const SNAPSHOT_BROADCAST_COALESCE_MS = 50
+const ZALO_SERVER_MODE_DISABLED_MESSAGE = 'Gói Zalo của doanh nghiệp đã chuyển về chế độ chạy local'
 
 interface StaffRuntime {
   user: ZaloServerRuntimeUser
@@ -51,6 +55,7 @@ interface StaffRuntime {
   qrAccountClaims: Map<number, 'chờ xử lý' | 'tạm dừng'>
   qrReleasePromises: Map<number, Promise<void>>
   controlOperationIds: Map<number, string>
+  ownsZaloRuntimeState: boolean
   stopDeferred: boolean
 }
 
@@ -119,6 +124,7 @@ export class ZaloServerRuntimeManager {
   private lastDiscoveredStaffIds = new Set<number>()
   private readonly handoffRequiredStaffIds = new Set<number>()
   private readonly operations = new Map<string, ZaloServerOperationSnapshot>()
+  private snapshotNotifyTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly options: ZaloServerRuntimeManagerOptions) {}
 
@@ -167,11 +173,6 @@ export class ZaloServerRuntimeManager {
       if (this.state === 'stopping' || this.state === 'stopped') {
         throw new Error('akaAgent Zalo Server đang dừng')
       }
-      if (!await runWithCurrentUser(user, () => loadStaffZaloServerMode(user.staffId))) {
-        const existing = this.runtimes.get(user.staffId)
-        if (existing) await this.stopRuntime(user.staffId)
-        return
-      }
       if (this.initialDiscoveryComplete && !this.lastDiscoveredStaffIds.has(user.staffId)) {
         this.handoffRequiredStaffIds.add(user.staffId)
       }
@@ -190,7 +191,10 @@ export class ZaloServerRuntimeManager {
           return
         }
         Object.assign(existing.user, user)
-        if (existing.state === 'running' || existing.state === 'starting') {
+        if (
+          (existing.state === 'running' || existing.state === 'starting') &&
+          existing.ownsZaloRuntimeState
+        ) {
           this.options.ownershipStore.claim(user.staffId, user.zaloRuntimeModeRevision)
         }
         if (existing.state === 'waiting') {
@@ -247,14 +251,14 @@ export class ZaloServerRuntimeManager {
 
         const runtime = this.runtimes.get(normalizedStaffId)
         const wasWaitingForDesktop = runtime?.state === 'waiting'
-        const wasServerOwned = !!runtime && !wasWaitingForDesktop
+        const wasServerOwned = runtime?.ownsZaloRuntimeState === true
 
         if (runtime) {
           await this.stopRuntime(normalizedStaffId)
         }
 
         const remainingRuntime = this.runtimes.get(normalizedStaffId)
-        const processServerOwned = !!remainingRuntime && remainingRuntime.state !== 'waiting'
+        const processServerOwned = remainingRuntime?.ownsZaloRuntimeState === true
         const supabase = runtime?.supabase || remainingRuntime?.supabase || new SupabaseService()
         const liveIsZaloServer = await loadStaffZaloServerMode(normalizedStaffId)
 
@@ -302,6 +306,63 @@ export class ZaloServerRuntimeManager {
           ownership,
           requiresDesktopRecovery: !settled,
           ...(settled ? {} : { runningState })
+        }
+      })
+    )
+  }
+
+  async acceptDesktopHandoffReady(
+    user: ZaloServerRuntimeUser,
+    expectedModeRevision: string
+  ): Promise<ZaloServerDesktopHandoffReadyResponse> {
+    const staffId = this.normalizePositiveId(user.staffId, 'Staff ID')
+    const normalizedExpectedRevision = String(expectedModeRevision || '').trim()
+    if (!normalizedExpectedRevision) throw new Error('runtime_mode_revision_mismatch')
+    const runtimeUser: ZaloServerRuntimeUser = { ...user }
+
+    return this.runStaffLifecycle(staffId, () =>
+      runWithCurrentUser(runtimeUser, async (): Promise<ZaloServerDesktopHandoffReadyResponse> => {
+        const liveMode = await loadStaffZaloServerModeSnapshot(staffId)
+        if (!liveMode.isZaloServer) {
+          throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
+        }
+        if (liveMode.revision !== normalizedExpectedRevision) {
+          throw new Error('runtime_mode_revision_mismatch')
+        }
+        runtimeUser.isZaloServer = true
+        runtimeUser.zaloRuntimeModeRevision = liveMode.revision
+
+        const existing = this.runtimes.get(staffId)
+        if (existing?.state === 'running') {
+          return {
+            success: true,
+            serverReady: true,
+            serverStarted: false,
+            alreadyRunning: true
+          }
+        }
+
+        if (existing) await this.stopRuntime(staffId)
+        if (this.runtimes.has(staffId)) {
+          return {
+            success: false,
+            serverReady: false,
+            serverStarted: false,
+            alreadyRunning: false
+          }
+        }
+
+        // Only the server may recover after the desktop declares every local
+        // Zalo producer idle. startRuntime revalidates the current entitlement
+        // revision and performs recovery before enabling scheduler/commands.
+        await this.startRuntime(runtimeUser, false, normalizedExpectedRevision)
+        const serverReady = this.runtimes.get(staffId)?.state === 'running'
+        if (serverReady) this.handoffRequiredStaffIds.delete(staffId)
+        return {
+          success: serverReady,
+          serverReady,
+          serverStarted: serverReady,
+          alreadyRunning: false
         }
       })
     )
@@ -361,7 +422,14 @@ export class ZaloServerRuntimeManager {
             const reason = result && typeof result === 'object'
               ? String((result as { reason?: unknown }).reason || 'Không thể bắt đầu đăng nhập QR')
               : 'Không thể bắt đầu đăng nhập QR'
-            this.updateOperation(operation.operationId, 'failed', safeResult, reason)
+            if (this.operations.get(operation.operationId)?.status === 'running') {
+              this.updateOperation(operation.operationId, 'failed', safeResult, reason)
+              runtime.eventWindow?.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, {
+                accountId,
+                status: 'error',
+                message: reason
+              })
+            }
           }
           return
         }
@@ -384,7 +452,17 @@ export class ZaloServerRuntimeManager {
         }
       })
       .catch(error => {
-        this.updateOperation(operation.operationId, 'failed', undefined, this.errorMessage(error))
+        const reason = this.errorMessage(error)
+        if (this.operations.get(operation.operationId)?.status === 'running') {
+          this.updateOperation(operation.operationId, 'failed', undefined, reason)
+          if (command === 'zalo.loginQr.start') {
+            runtime.eventWindow?.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, {
+              accountId,
+              status: 'error',
+              message: reason
+            })
+          }
+        }
       })
 
     return { ...operation }
@@ -412,7 +490,7 @@ export class ZaloServerRuntimeManager {
       command === 'contacts.cancel' ||
       command === 'zalo.loginQr.cancel'
     if (!transitionCommand && !await loadStaffZaloServerMode(staffId)) {
-      throw new Error('Staff đã được chuyển về chế độ chạy Zalo local')
+      throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
     }
     if (this.runtimes.get(staffId) !== runtime || runtime.state !== 'running') {
       throw new Error('Runtime Zalo của staff đang dừng')
@@ -469,7 +547,7 @@ export class ZaloServerRuntimeManager {
           )
           if (!claim.claimed || !claim.previousStatus) {
             const reason = claim.reason === 'runtime_not_owner'
-              ? 'Staff đã được chuyển về chế độ chạy Zalo local'
+              ? ZALO_SERVER_MODE_DISABLED_MESSAGE
               : 'Tài khoản Zalo đang thực hiện một tác vụ khác'
             throw new Error(reason)
           }
@@ -608,22 +686,32 @@ export class ZaloServerRuntimeManager {
         if (!this.lastDiscoveredStaffIds.has(staffId)) this.handoffRequiredStaffIds.add(staffId)
       }
     }
-    await Promise.allSettled(users.map(async user => {
+    await runWithConcurrency(users, RECONCILE_LIFECYCLE_CONCURRENCY, async user => {
       try {
         await this.ensureUser(user)
       } catch (error) {
         console.error(`[ZaloServerRuntimeManager] Failed to start staff ${user.staffId}:`, error)
       }
-    }))
-    for (const staffId of Array.from(this.runtimes.keys())) {
-      if (!activeStaffIds.has(staffId)) await this.stopRuntimeSerialized(staffId)
-    }
+    })
+    const staleStaffIds = Array.from(this.runtimes.keys())
+      .filter(staffId => !activeStaffIds.has(staffId))
+    await runWithConcurrency(staleStaffIds, RECONCILE_LIFECYCLE_CONCURRENCY, async staffId => {
+      try {
+        await this.stopRuntimeSerialized(staffId)
+      } catch (error) {
+        console.error(`[ZaloServerRuntimeManager] Failed to stop staff ${staffId}:`, error)
+      }
+    })
     this.lastDiscoveredStaffIds = activeStaffIds
     this.initialDiscoveryComplete = true
     this.notifySnapshot()
   }
 
-  private async startRuntime(user: ZaloServerRuntimeUser, waitForDesktopHandoff: boolean): Promise<void> {
+  private async startRuntime(
+    user: ZaloServerRuntimeUser,
+    waitForDesktopHandoff: boolean,
+    expectedModeRevision?: string
+  ): Promise<void> {
     const runtime: StaffRuntime = {
       user,
       state: 'starting',
@@ -639,6 +727,7 @@ export class ZaloServerRuntimeManager {
       qrAccountClaims: new Map(),
       qrReleasePromises: new Map(),
       controlOperationIds: new Map(),
+      ownsZaloRuntimeState: false,
       stopDeferred: false
     }
     this.runtimes.set(user.staffId, runtime)
@@ -717,20 +806,25 @@ export class ZaloServerRuntimeManager {
         const liveModeBeforeRecovery = await loadStaffZaloServerModeSnapshot(user.staffId)
         this.assertRuntimeMayStart(runtime)
         if (!liveModeBeforeRecovery.isZaloServer) {
-          throw new Error('Staff đã được chuyển về chế độ chạy Zalo local')
+          throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
         }
-        // xmin is the staff-row revision, so unrelated profile/device updates
-        // also change it. While the live flag remains true, adopt the latest
-        // revision without interrupting server work; actual local startup must
-        // pass through the serialized handoff endpoint above.
+        if (expectedModeRevision && liveModeBeforeRecovery.revision !== expectedModeRevision) {
+          throw new Error('runtime_mode_revision_mismatch')
+        }
+        // The revision belongs to the effective organization entitlement.
+        // While the live flag remains true, adopt the latest revision without
+        // interrupting server work; actual local startup must pass through the
+        // serialized handoff endpoint above.
         user.zaloRuntimeModeRevision = liveModeBeforeRecovery.revision
-        // Persist before recovery/start. If this process dies afterwards,
-        // only this VPS marker authorizes recovery on the next launch.
-        this.options.ownershipStore.claim(user.staffId, liveModeBeforeRecovery.revision)
         await supabase.recoverServerZaloRunningState(user.staffId, {
           expectedModeRevision: liveModeBeforeRecovery.revision,
           requireServerMode: true
         })
+        // The atomic recovery succeeded, so this runtime is now authorized to
+        // settle subsequent server claims. Persist before maintenance/warmup;
+        // if the process dies afterwards, only this VPS marker may recover.
+        this.options.ownershipStore.claim(user.staffId, liveModeBeforeRecovery.revision)
+        runtime.ownsZaloRuntimeState = true
         this.assertRuntimeMayStart(runtime)
         await maintenance.ensureReady()
         this.assertRuntimeMayStart(runtime)
@@ -739,13 +833,19 @@ export class ZaloServerRuntimeManager {
         const liveModeAfterWarmup = await loadStaffZaloServerModeSnapshot(user.staffId)
         this.assertRuntimeMayStart(runtime)
         if (!liveModeAfterWarmup.isZaloServer) {
-          throw new Error('Staff đã được chuyển về chế độ chạy Zalo local')
+          throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
+        }
+        if (expectedModeRevision && liveModeAfterWarmup.revision !== expectedModeRevision) {
+          throw new Error('runtime_mode_revision_mismatch')
         }
         user.zaloRuntimeModeRevision = liveModeAfterWarmup.revision
         this.options.ownershipStore.claim(user.staffId, liveModeAfterWarmup.revision)
         this.assertRuntimeMayStart(runtime)
         realtimeManager.start()
-        scheduler.start()
+        // Spread database discovery/claim bursts when many staff runtimes are
+        // created together after a VPS restart. This is only an initial delay;
+        // it does not cap staff, accounts or concurrent workers.
+        scheduler.start({ initialDelayMs: Math.floor(Math.random() * 30_001) })
       })
       if (waitingForDesktop) return
       this.assertRuntimeMayStart(runtime)
@@ -804,10 +904,11 @@ export class ZaloServerRuntimeManager {
         // mode flag. The flag may have changed to local while this runtime was
         // still settling. Waiting runtimes return above and never recover
         // desktop-owned rows.
-        if (runtime.supabase) {
+        if (runtime.supabase && runtime.ownsZaloRuntimeState) {
           await runtime.supabase.recoverServerZaloRunningState(staffId)
+          runtime.ownsZaloRuntimeState = false
+          this.options.ownershipStore.release(staffId)
         }
-        this.options.ownershipStore.release(staffId)
         runtime.stopDeferred = false
         runtime.lastError = null
       } catch (error) {
@@ -1117,6 +1218,14 @@ export class ZaloServerRuntimeManager {
   }
 
   private notifySnapshot(): void {
+    if (this.snapshotNotifyTimer) return
+    this.snapshotNotifyTimer = setTimeout(() => {
+      this.snapshotNotifyTimer = null
+      this.flushSnapshot()
+    }, SNAPSHOT_BROADCAST_COALESCE_MS)
+  }
+
+  private flushSnapshot(): void {
     this.options.broadcastSnapshot()
     const adminWindow = this.options.adminWindow()
     try {
@@ -1165,4 +1274,21 @@ export class ZaloServerRuntimeManager {
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
   }
+}
+
+async function runWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return
+  const workerCount = Math.min(Math.max(1, Math.floor(concurrency)), items.length)
+  let nextIndex = 0
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex]
+      nextIndex += 1
+      await worker(item)
+    }
+  }))
 }

@@ -209,6 +209,7 @@ export interface ZaloLoginQrStartResult {
 
 export interface ZaloLoginQrEvent {
   accountId: number
+  operationId?: string
   status: 'qr' | 'expired' | 'scanned' | 'declined' | 'success' | 'cancelled' | 'error'
   message?: string
   qrImage?: string
@@ -1186,6 +1187,7 @@ export interface ContactLoadCompleted {
   contactType: ContactType
   result: ContactLoadResult
   runKey?: string
+  operationId?: string
 }
 
 export interface ContactLoadProgress {
@@ -1193,6 +1195,7 @@ export interface ContactLoadProgress {
   contactType?: ContactType
   runKey?: string
   message: string
+  operationId?: string
 }
 
 export interface AutoAccountContact {
@@ -1297,8 +1300,8 @@ export interface AuthSessionExpiredPayload {
 }
 
 /**
- * Main -> renderer notification emitted when the Zalo runtime target stored in
- * org_staff changes after the current desktop session was initialized.
+ * Main -> renderer notification emitted when the effective organization Zalo
+ * entitlement changes runtime target after the desktop session was initialized.
  * The running session deliberately keeps its original target until app restart.
  */
 export interface ZaloRuntimeRestartRequiredPayload {
@@ -1533,6 +1536,10 @@ export const IPC_EVENTS = {
   AUTH_SESSION_EXPIRED: 'auth:session-expired',
   AUTH_USER_UPDATED: 'auth:user-updated',
   AUTH_ZALO_RUNTIME_RESTART_REQUIRED: 'auth:zalo-runtime-restart-required',
+
+  // Desktop renderer view of live operations owned by akaAgent Zalo Server
+  ZALO_SERVER_OPERATION_STATE_GET: 'zalo-server:operation-state:get',
+  ZALO_SERVER_OPERATION_STATE_UPDATED: 'zalo-server:operation-state:updated',
 
   // App
   APP_GET_STARTUP_SETTING: 'app:get-startup-setting',

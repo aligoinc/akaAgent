@@ -11,6 +11,9 @@ import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
 import type { AuthEntitlements } from '../../../../shared/types'
+import type { ContactLoadResult } from '../../../../shared/types'
+import type { ZaloServerCommandName, ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
+import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
 
 export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_post_likes' | 'facebook_profile_friends' | 'facebook_group_members' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers' | 'upload_data'
 type DataScanPlatform = 'facebook' | 'zalo' | 'email' | 'sms'
@@ -249,6 +252,20 @@ const formatExportTimestamp = (date = new Date()) => {
 }
 
 const formatCount = (value: number) => new Intl.NumberFormat('vi-VN').format(value)
+
+const getServerContactLoadResult = (operation: ZaloServerOperationSnapshot): ContactLoadResult => {
+  const value = operation.result && typeof operation.result === 'object' && !Array.isArray(operation.result)
+    ? operation.result as Partial<ContactLoadResult>
+    : {}
+  const count = Number(value.count)
+  return {
+    ...value,
+    success: typeof value.success === 'boolean' ? value.success : operation.status === 'completed',
+    count: Number.isFinite(count) && count >= 0 ? count : 0,
+    stopped: value.stopped === true || operation.status === 'cancelled',
+    error: value.error || operation.error
+  }
+}
 
 const formatDatasetOptionDate = (value?: string) => {
   if (!value) return ''
@@ -943,12 +960,19 @@ export default function DataScanModal({
 }: DataScanModalProps) {
   const { accounts, loadAccounts } = useCampaignStore()
   const entitlements = useAuthStore(state => state.user?.entitlements)
+  const isZaloServer = useAuthStore(state => state.user?.isZaloServer === true)
+  const serverOperationState = useZaloServerOperationState(isZaloServer)
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
   const mountedRef = useRef(true)
   const scanRunIdRef = useRef(0)
   const stoppedScanIdsRef = useRef<Set<number>>(new Set())
   const completedScanIdsRef = useRef<Set<number>>(new Set())
+  const trackedServerScanOperationIdRef = useRef<string | null>(null)
+  const handledServerScanOperationIdsRef = useRef<Set<string>>(new Set())
+  const previousServerStartedAtRef = useRef<string | null>(null)
+  const scanLoadingRef = useRef(false)
+  const scanStoppingRef = useRef(false)
   const contactsLoadIdRef = useRef(0)
   const contactGroupsLoadIdRef = useRef(0)
   const contactDatasetsLoadIdRef = useRef(0)
@@ -969,6 +993,7 @@ export default function DataScanModal({
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
   const [loading, setLoading] = useState(false)
   const [scanLoading, setScanLoading] = useState(false)
+  const [scanStopping, setScanStopping] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<number>>(new Set())
@@ -1051,6 +1076,13 @@ export default function DataScanModal({
   const isZaloGroupMembersAction = action === ZALO_GROUP_MEMBERS_ACTION_ID
   const isZaloRemarketingCustomersAction = action === ZALO_REMARKETING_CUSTOMERS_ACTION_ID
   const isUploadDataAction = action === UPLOAD_DATA_ACTION_ID
+  const serverScanCommand: ZaloServerCommandName | null = action === 'zalo_friends'
+    ? 'contacts.loadFriends'
+    : action === 'zalo_groups'
+      ? 'contacts.loadGroups'
+      : isZaloGroupMembersAction
+        ? 'contacts.loadZaloGroupMembers'
+        : null
   const datasetScanType = DATASET_SCAN_TYPE_BY_ACTION[action]
   const normalizedPostCommentersUrl = useMemo(
     () => normalizeFacebookPostUrlForCompare(postCommentersUrl),
@@ -1237,6 +1269,14 @@ export default function DataScanModal({
       mountedRef.current = false
     }
   }, [])
+
+  useEffect(() => {
+    scanLoadingRef.current = scanLoading
+  }, [scanLoading])
+
+  useEffect(() => {
+    trackedServerScanOperationIdRef.current = null
+  }, [accountId, serverScanCommand])
 
   useEffect(() => {
     if (!zaloRemarketingActionDropdownOpen) return
@@ -2292,18 +2332,34 @@ export default function DataScanModal({
 
   useEffect(() => {
     if (!window.electronAPI?.onContactsProgress) return
-    const unsubscribe = window.electronAPI.onContactsProgress(({ accountId: progressAccountId, contactType, message }) => {
+    const unsubscribe = window.electronAPI.onContactsProgress(({ accountId: progressAccountId, contactType, message, operationId }) => {
       if (progressAccountId !== undefined && accountId !== '' && progressAccountId !== accountId) return
       if (contactType !== undefined && contactType !== actionDef.contactType) return
-      setProgressMessages(prev => [...prev.slice(-4), message])
+      if (isZaloServer && operationId) {
+        const operation = serverOperationState?.operations.find(item => item.operationId === operationId)
+        if (operation && serverScanCommand && operation.command !== serverScanCommand) return
+        if (handledServerScanOperationIdsRef.current.has(operationId)) return
+      }
+      setProgressMessages(prev => (
+        prev[prev.length - 1] === message
+          ? prev
+          : [...prev.slice(-4), message]
+      ))
     })
     return unsubscribe
-  }, [accountId, actionDef.contactType])
+  }, [accountId, actionDef.contactType, isZaloServer, serverOperationState, serverScanCommand])
 
   useEffect(() => {
     if (!window.electronAPI?.onContactsCompleted || accountId === '') return
-    const unsubscribe = window.electronAPI.onContactsCompleted(async ({ accountId: completedAccountId, contactType, result }) => {
+    const unsubscribe = window.electronAPI.onContactsCompleted(async ({ accountId: completedAccountId, contactType, result, operationId }) => {
       if (completedAccountId !== accountId || contactType !== actionDef.contactType) return
+      if (isZaloServer && operationId) {
+        const operation = serverOperationState?.operations.find(item => item.operationId === operationId)
+        if (operation && serverScanCommand && operation.command !== serverScanCommand) return
+        const trackedOperationId = trackedServerScanOperationIdRef.current
+        if (trackedOperationId && trackedOperationId !== operationId) return
+        trackedServerScanOperationIdRef.current = operationId
+      }
 
       const scanId = scanRunIdRef.current
       if (scanId === 0) return
@@ -2327,6 +2383,13 @@ export default function DataScanModal({
         if (!completedGroupUrl || completedGroupUrl !== normalizedGroupMembersUrl) return
       }
       completedScanIdsRef.current.add(scanId)
+      if (operationId) {
+        handledServerScanOperationIdsRef.current.add(operationId)
+        if (trackedServerScanOperationIdRef.current === operationId) {
+          trackedServerScanOperationIdRef.current = null
+        }
+      }
+      scanLoadingRef.current = false
       setScanLoading(false)
       setMinimized(false)
       if (isPostCommentersAction && result.sourcePostUrl) {
@@ -2380,6 +2443,7 @@ export default function DataScanModal({
     isPostLikesAction,
     isProfileFriendsAction,
     isZaloGroupMembersAction,
+    isZaloServer,
     loadCachedContacts,
     loadContactDatasets,
     loadContactGroups,
@@ -2387,11 +2451,170 @@ export default function DataScanModal({
     loadZaloGroupOptions,
     refreshPageInboxContactsAfterScan,
     resetPagedContactSelection,
+    serverOperationState,
+    serverScanCommand,
     normalizedGroupMembersUrl,
     normalizedPostCommentersUrl,
     normalizedPostLikesUrl,
     normalizedProfileFriendsUrl,
     showAlert
+  ])
+
+  const settleServerScanOperation = useCallback(async (
+    operation: ZaloServerOperationSnapshot,
+    notify: boolean
+  ) => {
+    const result = getServerContactLoadResult(operation)
+    const scanId = scanRunIdRef.current
+    completedScanIdsRef.current.add(scanId)
+    scanLoadingRef.current = false
+    setScanLoading(false)
+    setMinimized(false)
+
+    try {
+      if (isZaloGroupMembersAction && result.zaloGroupId) {
+        setZaloGroupMemberGroupId(String(result.zaloGroupId))
+      }
+      if (result.datasetId) {
+        setSelectedDatasetId(result.datasetId)
+        await loadContactDatasets(result.datasetId)
+      }
+      if (result.success || result.datasetId) {
+        resetPagedContactSelection()
+        setPageInboxPage(1)
+      }
+      if (result.datasetId) {
+        // The dataset effect loads its rows after metadata has been refreshed.
+      } else if (isZaloGroupMembersAction && result.zaloGroupId) {
+        await loadZaloGroupMemberContactsForGroup(String(result.zaloGroupId))
+        await loadZaloGroupOptions()
+      } else {
+        await loadCachedContacts(result.success ? 1 : undefined, undefined, { force: true })
+      }
+      await loadContactGroups()
+    } catch (error) {
+      console.error('Failed to refresh recovered Zalo Server scan:', error)
+      if (notify) showAlert('Tác vụ quét đã kết thúc nhưng không thể tải lại dữ liệu.', 'error')
+      return
+    }
+
+    if (!notify || result.stopped) return
+    if (result.success) {
+      showAlert(`Đã tải ${result.count} data.`, 'success')
+    } else {
+      showAlert(result.error || 'Tải data thất bại.', 'error')
+    }
+  }, [
+    isZaloGroupMembersAction,
+    loadCachedContacts,
+    loadContactDatasets,
+    loadContactGroups,
+    loadZaloGroupMemberContactsForGroup,
+    loadZaloGroupOptions,
+    resetPagedContactSelection,
+    showAlert
+  ])
+
+  useEffect(() => {
+    if (
+      !isZaloServer ||
+      !serverOperationState ||
+      accountId === '' ||
+      !serverScanCommand
+    ) return
+
+    const previousServerStartedAt = previousServerStartedAtRef.current
+    const serverRestarted = !!previousServerStartedAt &&
+      !!serverOperationState.serverStartedAt &&
+      previousServerStartedAt !== serverOperationState.serverStartedAt
+    previousServerStartedAtRef.current = serverOperationState.serverStartedAt
+
+    const operations = serverOperationState.operations
+      .filter(operation => operation.accountId === accountId && operation.command === serverScanCommand)
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+    const trackedOperationId = trackedServerScanOperationIdRef.current
+    const trackedOperation = trackedOperationId
+      ? operations.find(operation => operation.operationId === trackedOperationId)
+      : undefined
+
+    if (trackedOperationId && !trackedOperation) {
+      if (!serverOperationState.serverStartedAt) return
+      trackedServerScanOperationIdRef.current = null
+      handledServerScanOperationIdsRef.current.add(trackedOperationId)
+      const now = new Date().toISOString()
+      const missingOperation: ZaloServerOperationSnapshot = {
+        operationId: trackedOperationId,
+        staffId: 0,
+        organizationId: 0,
+        command: serverScanCommand,
+        accountId,
+        status: 'failed',
+        startedAt: now,
+        updatedAt: now,
+        completedAt: now,
+        error: serverRestarted
+          ? 'App server đã khởi động lại; tác vụ quét trước đó đã kết thúc.'
+          : 'Tác vụ quét không còn tồn tại trên app server.'
+      }
+      void settleServerScanOperation(missingOperation, scanLoadingRef.current)
+      return
+    }
+
+    if (trackedOperation && trackedOperation.status !== 'running') {
+      if (handledServerScanOperationIdsRef.current.has(trackedOperation.operationId)) {
+        trackedServerScanOperationIdRef.current = null
+        scanLoadingRef.current = false
+        setScanLoading(false)
+        setMinimized(false)
+        return
+      }
+      handledServerScanOperationIdsRef.current.add(trackedOperation.operationId)
+      trackedServerScanOperationIdRef.current = null
+      void settleServerScanOperation(trackedOperation, scanLoadingRef.current)
+      return
+    }
+
+    const runningOperation = trackedOperation || operations.find(operation => (
+      operation.status === 'running' &&
+      !handledServerScanOperationIdsRef.current.has(operation.operationId)
+    ))
+    if (runningOperation) {
+      if (!trackedOperationId) {
+        const scanId = scanRunIdRef.current + 1
+        scanRunIdRef.current = scanId
+        stoppedScanIdsRef.current.delete(scanId)
+        completedScanIdsRef.current.delete(scanId)
+      }
+      trackedServerScanOperationIdRef.current = runningOperation.operationId
+      scanLoadingRef.current = true
+      setScanLoading(true)
+      setProgressExpanded(true)
+      const value = runningOperation.result && typeof runningOperation.result === 'object' && !Array.isArray(runningOperation.result)
+        ? runningOperation.result as Record<string, unknown>
+        : {}
+      if (typeof value.message === 'string' && value.message.trim()) {
+        const message = value.message.trim()
+        setProgressMessages(previous => (
+          previous[previous.length - 1] === message
+            ? previous
+            : [...previous.slice(-4), message]
+        ))
+      }
+      return
+    }
+
+    const terminalOperation = operations.find(operation => operation.status !== 'running')
+    if (!terminalOperation || handledServerScanOperationIdsRef.current.has(terminalOperation.operationId)) return
+    handledServerScanOperationIdsRef.current.add(terminalOperation.operationId)
+    // On a cold renderer start, refresh rows for a terminal hello snapshot
+    // once, without replaying a stale success/error notification.
+    void settleServerScanOperation(terminalOperation, false)
+  }, [
+    accountId,
+    isZaloServer,
+    serverOperationState,
+    serverScanCommand,
+    settleServerScanOperation
   ])
 
   const matchesStatusFilter = useCallback((contact: AutoAccountContact) => {
@@ -3019,6 +3242,8 @@ export default function DataScanModal({
       return
     }
 
+    trackedServerScanOperationIdRef.current = null
+    scanLoadingRef.current = true
     setScanLoading(true)
     setProgressMessages([])
     setProgressExpanded(true)
@@ -3053,6 +3278,7 @@ export default function DataScanModal({
       if (completedScanIdsRef.current.has(scanId)) return
 
       const wasStopped = stoppedScanIdsRef.current.has(scanId) || result.stopped
+      scanLoadingRef.current = false
       setScanLoading(false)
       setMinimized(false)
       if (isPostCommentersAction && result.sourcePostUrl) {
@@ -3100,12 +3326,14 @@ export default function DataScanModal({
     } catch (err: any) {
       if (!mountedRef.current) return
       if (scanRunIdRef.current !== scanId || stoppedScanIdsRef.current.has(scanId)) return
+      if (completedScanIdsRef.current.has(scanId)) return
       console.error('Failed to scan data:', err)
       showAlert(err?.message || 'Tải data thất bại.', 'error')
     } finally {
       const wasStopped = stoppedScanIdsRef.current.has(scanId)
       stoppedScanIdsRef.current.delete(scanId)
       if (mountedRef.current && scanRunIdRef.current === scanId && !wasStopped) {
+        scanLoadingRef.current = false
         setScanLoading(false)
         setMinimized(false)
       }
@@ -3113,22 +3341,80 @@ export default function DataScanModal({
   }
 
   const cancelScan = async () => {
-    if (!accountId || !window.electronAPI?.cancelContactLoad) return
+    if (!accountId || !window.electronAPI?.cancelContactLoad) {
+      throw new Error('Không thể gửi yêu cầu dừng quét data.')
+    }
+    const result = await window.electronAPI.cancelContactLoad(accountId)
+    if (!result?.success) {
+      const reason = result && typeof result === 'object' && 'reason' in result
+        ? String((result as { reason?: unknown }).reason || '')
+        : ''
+      throw new Error(reason || 'App server chưa xác nhận dừng quét data.')
+    }
+    return result
+  }
+
+  const finalizeStoppedScan = (scanId: number, operationId: string | null) => {
+    stoppedScanIdsRef.current.add(scanId)
+    if (operationId) handledServerScanOperationIdsRef.current.add(operationId)
+    if (scanRunIdRef.current !== scanId) return
+    if (!operationId || trackedServerScanOperationIdRef.current === operationId) {
+      trackedServerScanOperationIdRef.current = null
+    }
+    scanLoadingRef.current = false
+    setScanLoading(false)
+    setMinimized(false)
+  }
+
+  const stopScan = async (closeAfterStop: boolean) => {
+    if (scanStoppingRef.current) return
+    const scanId = scanRunIdRef.current
+    const operationId = trackedServerScanOperationIdRef.current
+
+    // Local scans keep the existing immediate-stop behavior. Only the remote
+    // runtime needs an acknowledgement before its snapshot is ignored.
+    if (!isZaloServer) {
+      if (closeAfterStop) {
+        await cancelScan().catch(err => console.warn('Failed to cancel contact load:', err))
+        onClose()
+      } else {
+        finalizeStoppedScan(scanId, operationId)
+        void cancelScan().catch(err => console.warn('Failed to cancel contact load:', err))
+      }
+      return
+    }
+
+    scanStoppingRef.current = true
+    setScanStopping(true)
     try {
-      await window.electronAPI.cancelContactLoad(accountId)
-    } catch (err) {
-      console.warn('Failed to cancel contact load:', err)
+      await cancelScan()
+      finalizeStoppedScan(scanId, operationId)
+      if (closeAfterStop) onClose()
+    } catch (error) {
+      const operationAlreadySettled = completedScanIdsRef.current.has(scanId) || !!operationId && (
+        handledServerScanOperationIdsRef.current.has(operationId) ||
+        trackedServerScanOperationIdRef.current !== operationId
+      )
+      if (operationAlreadySettled) {
+        if (closeAfterStop) onClose()
+      } else {
+        const message = error instanceof Error && error.message.trim()
+          ? error.message
+          : 'Không thể dừng quét data trên app server. Vui lòng thử lại.'
+        showAlert(message, 'error')
+      }
+    } finally {
+      scanStoppingRef.current = false
+      if (mountedRef.current) setScanStopping(false)
     }
   }
 
   const handleStopScan = () => {
-    stoppedScanIdsRef.current.add(scanRunIdRef.current)
-    setScanLoading(false)
-    setMinimized(false)
-    cancelScan()
+    void stopScan(false)
   }
 
   const handleClose = () => {
+    if (scanStoppingRef.current) return
     if (!scanLoading) {
       onClose()
       return
@@ -3137,8 +3423,7 @@ export default function DataScanModal({
     showConfirm(
       'Tắt form sẽ dừng quá trình quét data đang chạy. Bạn có chắc muốn tắt form không?',
       async () => {
-        await cancelScan()
-        onClose()
+        await stopScan(true)
       },
       { title: 'Dừng quét data', confirmText: 'Dừng và tắt', variant: 'danger' }
     )
@@ -3323,7 +3608,7 @@ export default function DataScanModal({
                 {minimized ? <Maximize2 size={17} /> : <Minimize2 size={17} />}
               </button>
             )}
-            <button className="btn-icon" onClick={handleClose} title="Đóng">
+            <button className="btn-icon" onClick={handleClose} title="Đóng" disabled={scanStopping}>
               <X size={18} />
             </button>
           </div>
@@ -3342,9 +3627,10 @@ export default function DataScanModal({
               <button
                 className="btn btn-danger btn-sm"
                 onClick={handleStopScan}
+                disabled={scanStopping}
               >
                 <Square size={13} />
-                Dừng
+                {scanStopping ? 'Đang dừng...' : 'Dừng'}
               </button>
             </div>
           </div>
@@ -3634,9 +3920,10 @@ export default function DataScanModal({
                 <button
                   className="btn btn-danger data-scan-load-button"
                   onClick={handleStopScan}
+                  disabled={scanStopping}
                 >
                   <Square size={14} />
-                  Dừng
+                  {scanStopping ? 'Đang dừng...' : 'Dừng'}
                 </button>
               ) : (
                 <button
@@ -4545,7 +4832,7 @@ export default function DataScanModal({
             Xuất Excel
           </button>
           <div className="data-scan-footer-right">
-            <button className="btn btn-ghost" onClick={handleClose}>{onSelect ? 'Huỷ' : 'Đóng'}</button>
+            <button className="btn btn-ghost" onClick={handleClose} disabled={scanStopping}>{onSelect ? 'Huỷ' : 'Đóng'}</button>
             {onSelect && supportsContactGroups && (
               <button
                 className="btn btn-secondary"
