@@ -1,4 +1,4 @@
--- Fix the automation worker claim RPC after migration v171.
+-- Fix the automation worker claim RPC after migration v174.
 --
 -- The function returns a column named target_campaign_id. In PL/pgSQL that
 -- output column is also a variable, so ON CONFLICT (target_campaign_id) is

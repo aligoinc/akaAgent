@@ -1,7 +1,7 @@
--- Rollback smoke test for migration_v174_automation_delay_exact_time_and_status_scope.sql.
+-- Rollback smoke test for migration_v177_automation_delay_exact_time_and_status_scope.sql.
 --
--- Run after v174 is applied. This file verifies the public RPC shape, exact
--- wall-clock schedule calculation and immutable snapshot. The v173 smoke test
+-- Run after v177 is applied. This file verifies the public RPC shape, exact
+-- wall-clock schedule calculation and immutable snapshot. The v176 smoke test
 -- remains the full claim/materialize/idempotency/status-state regression test;
 -- both tests should be run for an automation release.
 
@@ -35,12 +35,12 @@ BEGIN
     AND proc.proname = 'aka_agent_validate_automation_rule';
 
   IF v_save_count <> 1 OR v_save_args <> 22 OR v_save_defaults <> 7 THEN
-    RAISE EXCEPTION 'v174_smoke: save RPC mismatch (%/%/%)',
+    RAISE EXCEPTION 'v177_smoke: save RPC mismatch (%/%/%)',
       v_save_count, v_save_args, v_save_defaults;
   END IF;
 
   IF v_validate_count <> 1 OR v_validate_args <> 20 OR v_validate_defaults <> 8 THEN
-    RAISE EXCEPTION 'v174_smoke: validate RPC mismatch (%/%/%)',
+    RAISE EXCEPTION 'v177_smoke: validate RPC mismatch (%/%/%)',
       v_validate_count, v_validate_args, v_validate_defaults;
   END IF;
 
@@ -52,12 +52,12 @@ BEGIN
       AND column_name = 'delay_exact_time'
       AND data_type = 'time without time zone'
   ) THEN
-    RAISE EXCEPTION 'v174_smoke: delay_exact_time is missing';
+    RAISE EXCEPTION 'v177_smoke: delay_exact_time is missing';
   END IF;
 END;
 $preflight$;
 
-CREATE TEMP TABLE v174_smoke_context (
+CREATE TEMP TABLE v177_smoke_context (
   marker text PRIMARY KEY,
   staff_id bigint NOT NULL,
   organization_id bigint NOT NULL,
@@ -69,11 +69,11 @@ CREATE TEMP TABLE v174_smoke_context (
   source_detail_id bigint
 ) ON COMMIT DROP;
 
-INSERT INTO pg_temp.v174_smoke_context (
+INSERT INTO pg_temp.v177_smoke_context (
   marker, staff_id, organization_id, account_id, action_id, source_campaign_id
 )
 SELECT
-  '__codex_v174_exact_schedule_smoke__',
+  '__codex_v177_exact_schedule_smoke__',
   campaign.staff_id,
   campaign.organization_id,
   campaign.account_id,
@@ -119,13 +119,13 @@ DECLARE
   v_source_input_id bigint;
   v_source_detail_id bigint;
 BEGIN
-  SELECT * INTO STRICT v_context FROM pg_temp.v174_smoke_context;
+  SELECT * INTO STRICT v_context FROM pg_temp.v177_smoke_context;
 
   IF NOT pg_try_advisory_xact_lock(hashtextextended(
     'auto_automation_graph:' || v_context.staff_id::text || ':' || v_context.organization_id::text,
     0
   )) THEN
-    RAISE EXCEPTION 'v174_smoke: selected tenant is busy';
+    RAISE EXCEPTION 'v177_smoke: selected tenant is busy';
   END IF;
 
   INSERT INTO public.auto_campaigns (
@@ -161,13 +161,13 @@ BEGIN
     v_context.account_id,
     v_context.marker || ':action',
     v_context.marker || ':status',
-    'v174 rollback smoke',
+    'v177 rollback smoke',
     '{}'::jsonb,
     false,
     '2026-07-16 07:00:00+07'::timestamptz
   ) RETURNING id INTO v_source_detail_id;
 
-  UPDATE pg_temp.v174_smoke_context
+  UPDATE pg_temp.v177_smoke_context
   SET target_campaign_id = v_target_campaign_id,
       source_input_id = v_source_input_id,
       source_detail_id = v_source_detail_id;
@@ -181,7 +181,7 @@ DECLARE
   v_rule_id bigint;
   v_execution record;
 BEGIN
-  SELECT * INTO STRICT v_context FROM pg_temp.v174_smoke_context;
+  SELECT * INTO STRICT v_context FROM pg_temp.v177_smoke_context;
 
   FOR v_case IN
     SELECT *
@@ -231,7 +231,7 @@ BEGIN
       OR v_execution.config_snapshot ->> 'schedule_time_zone' <> 'Asia/Ho_Chi_Minh'
       OR (v_execution.config_snapshot ->> 'scheduled_at')::timestamptz IS DISTINCT FROM v_case.expected_at
     THEN
-      RAISE EXCEPTION 'v174_smoke: schedule failed for % (got %, expected %, snapshot %)',
+      RAISE EXCEPTION 'v177_smoke: schedule failed for % (got %, expected %, snapshot %)',
         v_case.label, v_execution.scheduled_at, v_case.expected_at, v_execution.config_snapshot;
     END IF;
   END LOOP;
@@ -240,7 +240,7 @@ BEGIN
     UPDATE public.auto_automation
     SET delay_exact_time = '24:00'::time
     WHERE id = v_rule_id;
-    RAISE EXCEPTION 'v174_smoke: 24:00 was accepted';
+    RAISE EXCEPTION 'v177_smoke: 24:00 was accepted';
   EXCEPTION
     WHEN check_violation THEN NULL;
   END;
@@ -248,7 +248,7 @@ END;
 $schedule_math$;
 
 SELECT jsonb_build_object(
-  'test', 'migration_v174_automation_delay_exact_time_and_status_scope_smoke',
+  'test', 'migration_v177_automation_delay_exact_time_and_status_scope_smoke',
   'passed', true,
   'persistent_marker_rows', 0
 ) AS result;

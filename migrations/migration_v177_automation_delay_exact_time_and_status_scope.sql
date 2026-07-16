@@ -68,65 +68,65 @@ ALTER TABLE public.auto_automation
 COMMENT ON COLUMN public.auto_automation.delay_exact_time IS
   'Optional Asia/Ho_Chi_Minh HH:mm alignment after the full after_delay duration has elapsed.';
 
--- Rename v173 signatures before adding optional arguments. PostgREST does not
+-- Rename v176 signatures before adding optional arguments. PostgREST does not
 -- support overloaded functions, so every public RPC name must resolve to one
 -- callable signature only.
-DO $rename_v173_signatures$
+DO $rename_v176_signatures$
 BEGIN
   IF to_regprocedure(
     'public.auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone)'
   ) IS NOT NULL
     AND to_regprocedure(
-      'public.auto_validate_automation_rule_v173_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone)'
+      'public.auto_validate_automation_rule_v176_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone)'
     ) IS NULL THEN
     ALTER FUNCTION public.auto_validate_automation_rule_internal(
       bigint, bigint, bigint, bigint, bigint, text, bigint,
       text, integer, integer, timestamptz, boolean, boolean,
       integer, text, time without time zone
-    ) RENAME TO auto_validate_automation_rule_v173_internal;
+    ) RENAME TO auto_validate_automation_rule_v176_internal;
   END IF;
 
   IF to_regprocedure(
     'public.aka_agent_validate_automation_rule(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,text,text,integer,text,time without time zone)'
   ) IS NOT NULL
     AND to_regprocedure(
-      'public.aka_agent_validate_automation_rule_v173_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,text,text,integer,text,time without time zone)'
+      'public.aka_agent_validate_automation_rule_v176_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,text,text,integer,text,time without time zone)'
     ) IS NULL THEN
     ALTER FUNCTION public.aka_agent_validate_automation_rule(
       bigint, bigint, bigint, bigint, bigint, text, bigint,
       text, integer, integer, timestamptz, boolean, boolean, text, text,
       integer, text, time without time zone
-    ) RENAME TO aka_agent_validate_automation_rule_v173_internal;
+    ) RENAME TO aka_agent_validate_automation_rule_v176_internal;
   END IF;
 
   IF to_regprocedure(
     'public.aka_agent_save_automation(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone)'
   ) IS NOT NULL
     AND to_regprocedure(
-      'public.aka_agent_save_automation_v173_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone)'
+      'public.aka_agent_save_automation_v176_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone)'
     ) IS NULL THEN
     ALTER FUNCTION public.aka_agent_save_automation(
       bigint, bigint, bigint, text, bigint, bigint, text, bigint,
       text, integer, integer, timestamptz, text, boolean, jsonb, text, text,
       integer, text, time without time zone
-    ) RENAME TO aka_agent_save_automation_v173_internal;
+    ) RENAME TO aka_agent_save_automation_v176_internal;
   END IF;
 END;
-$rename_v173_signatures$;
+$rename_v176_signatures$;
 
-REVOKE ALL ON FUNCTION public.auto_validate_automation_rule_v173_internal(
+REVOKE ALL ON FUNCTION public.auto_validate_automation_rule_v176_internal(
   bigint, bigint, bigint, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, boolean, boolean,
   integer, text, time without time zone
 ) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.aka_agent_validate_automation_rule_v173_internal(
+REVOKE ALL ON FUNCTION public.aka_agent_validate_automation_rule_v176_internal(
   bigint, bigint, bigint, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, boolean, boolean, text, text,
   integer, text, time without time zone
 ) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.aka_agent_save_automation_v173_internal(
+REVOKE ALL ON FUNCTION public.aka_agent_save_automation_v176_internal(
   bigint, bigint, bigint, text, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, text, boolean, jsonb, text, text,
   integer, text, time without time zone
@@ -164,7 +164,7 @@ DECLARE
   v_result jsonb;
   v_schedule_mode text := lower(NULLIF(btrim(COALESCE(p_schedule_mode, '')), ''));
 BEGIN
-  v_result := public.auto_validate_automation_rule_v173_internal(
+  v_result := public.auto_validate_automation_rule_v176_internal(
     p_staff_id,
     p_organization_id,
     p_automation_id,
@@ -392,7 +392,7 @@ BEGIN
         )
       );
     ELSE
-      -- Legacy clients continue to submit actionCode + statusValue. The v173
+      -- Legacy clients continue to submit actionCode + statusValue. The v176
       -- implementation remains the compatibility resolver/create path.
       v_normalized_statuses := v_normalized_statuses || jsonb_build_array(
         jsonb_build_object(
@@ -472,7 +472,7 @@ BEGIN
   );
 
   IF p_automation_id IS NOT NULL THEN
-    -- v173 temporarily neutralizes the schedule to immediate. Clear the new
+    -- v176 temporarily neutralizes the schedule to immediate. Clear the new
     -- field first so that neutral state remains constraint-valid.
     UPDATE public.auto_automation AS automation
     SET delay_exact_time = NULL
@@ -482,7 +482,7 @@ BEGIN
       AND automation.is_delete = false;
   END IF;
 
-  v_saved := public.aka_agent_save_automation_v173_internal(
+  v_saved := public.aka_agent_save_automation_v176_internal(
     p_staff_id,
     p_organization_id,
     p_automation_id,

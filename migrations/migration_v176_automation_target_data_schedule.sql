@@ -109,43 +109,43 @@ COMMENT ON COLUMN public.auto_automation.daily_time IS
   'Nearest daily wall-clock time in Asia/Ho_Chi_Minh; each source result still enqueues only once.';
 
 -- PostgreSQL identifies a function by name plus input argument types. Rename
--- the v171 functions before publishing the appended optional parameters so
+-- the v174 functions before publishing the appended optional parameters so
 -- PostgREST sees exactly one callable function per RPC name, never an overload.
 ALTER FUNCTION public.auto_validate_automation_rule_internal(
   bigint, bigint, bigint, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, boolean, boolean
-) RENAME TO auto_validate_automation_rule_v171_internal;
+) RENAME TO auto_validate_automation_rule_v174_internal;
 
 ALTER FUNCTION public.aka_agent_validate_automation_rule(
   bigint, bigint, bigint, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, boolean, boolean, text, text
-) RENAME TO aka_agent_validate_automation_rule_v171_internal;
+) RENAME TO aka_agent_validate_automation_rule_v174_internal;
 
 ALTER FUNCTION public.aka_agent_save_automation(
   bigint, bigint, bigint, text, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, text, boolean, jsonb, text, text
-) RENAME TO auto_save_automation_v171_internal;
+) RENAME TO auto_save_automation_v174_internal;
 
 ALTER FUNCTION public.materialize_auto_automation_detail(
   bigint, bigint, bigint, text, jsonb, text, text
-) RENAME TO materialize_auto_automation_detail_v171_internal;
+) RENAME TO materialize_auto_automation_detail_v174_internal;
 
-REVOKE ALL ON FUNCTION public.auto_validate_automation_rule_v171_internal(
+REVOKE ALL ON FUNCTION public.auto_validate_automation_rule_v174_internal(
   bigint, bigint, bigint, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, boolean, boolean
 ) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.aka_agent_validate_automation_rule_v171_internal(
+REVOKE ALL ON FUNCTION public.aka_agent_validate_automation_rule_v174_internal(
   bigint, bigint, bigint, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, boolean, boolean, text, text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.auto_save_automation_v171_internal(
+REVOKE ALL ON FUNCTION public.auto_save_automation_v174_internal(
   bigint, bigint, bigint, text, bigint, bigint, text, bigint,
   text, integer, integer, timestamptz, text, boolean, jsonb, text, text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.materialize_auto_automation_detail_v171_internal(
+REVOKE ALL ON FUNCTION public.materialize_auto_automation_detail_v174_internal(
   bigint, bigint, bigint, text, jsonb, text, text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
@@ -604,7 +604,7 @@ BEGIN
     END CASE;
   END IF;
 
-  -- The v171 implementation still owns name/status replacement, tenant
+  -- The v174 implementation still owns name/status replacement, tenant
   -- checks, activation boundaries and config-version increments. Put an
   -- existing row into a constraint-valid neutral schedule, invoke that proven
   -- implementation, then atomically persist the validated canonical schedule.
@@ -624,7 +624,7 @@ BEGIN
       AND automation.is_delete = false;
   END IF;
 
-  v_saved := public.auto_save_automation_v171_internal(
+  v_saved := public.auto_save_automation_v174_internal(
     p_staff_id,
     p_organization_id,
     p_automation_id,
@@ -855,7 +855,7 @@ CREATE TRIGGER trg_aka_agent_prepare_automation_detail_schedule
   FOR EACH ROW
   EXECUTE FUNCTION public.aka_agent_prepare_automation_detail_schedule();
 
--- Initial v171 executions used the future run schedule as their first claim
+-- Initial v174 executions used the future run schedule as their first claim
 -- time. Make only never-attempted queued rows immediately claimable; deliberate
 -- retry backoff (attempt_count > 0) remains untouched.
 UPDATE public.auto_automation_detail AS detail
@@ -1028,7 +1028,7 @@ BEGIN
 END;
 $$;
 
--- Keep the proven v171 materialization/idempotency behavior, then make the
+-- Keep the proven v174 materialization/idempotency behavior, then make the
 -- campaign runtime schedule exactly match its earliest pending input. This
 -- corrects a stale/past campaign.schedule without ever changing
 -- auto_campaigns.original_schedule.
@@ -1058,7 +1058,7 @@ BEGIN
     p_auth_password
   );
 
-  v_result := public.materialize_auto_automation_detail_v171_internal(
+  v_result := public.materialize_auto_automation_detail_v174_internal(
     p_staff_id,
     p_organization_id,
     p_automation_detail_id,
@@ -1078,7 +1078,7 @@ BEGIN
       AND detail.target_input_data_id IS NOT NULL;
 
     IF v_target_campaign_id IS NOT NULL THEN
-      -- The v171 materialized path already holds this row lock; the
+      -- The v174 materialized path already holds this row lock; the
       -- already-materialized path does not. Lock in both paths so the
       -- scheduler cannot complete the final pending input between MIN() and
       -- the campaign update, which would otherwise reopen a completed target.
