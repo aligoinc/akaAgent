@@ -27,6 +27,7 @@ const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const VOICE_CALL_ACTION_ID = 'voice_call'
 
 export function isCommentSeedingCampaign(actionId: string): boolean {
   return actionId === COMMENT_SEEDING_FEED_ACTION_ID || actionId === COMMENT_SEEDING_POST_ACTION_ID
@@ -69,6 +70,7 @@ export function getAccountActionName(actionCode: string): string {
     case 'zalo_change_alias': return 'Đổi tên Zalo'
     case 'email_send': return 'Gửi email'
     case 'sms_send': return 'Gửi SMS'
+    case 'voice_call': return 'Gọi tự động qua SIM'
     default: return actionCode
   }
 }
@@ -279,6 +281,9 @@ function getDefaultCampaignActionDescriptors(campaign: Campaign): CampaignAction
       break
     case SMS_SEND_ACTION_ID:
       actions.push({ code: 'sms_send', name: 'Gửi SMS' })
+      break
+    case VOICE_CALL_ACTION_ID:
+      actions.push({ code: 'voice_call', name: 'Gọi tự động qua SIM' })
       break
   }
 

@@ -11,7 +11,7 @@ import {
   normalizeEmailInputDataValue
 } from '../../shared/types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone } from '../../shared/phone'
-import { renderSmsInputContent } from '../../shared/smsContent'
+import { renderSmsInputContent, renderVoiceCallInputContent } from '../../shared/smsContent'
 import { normalizeAccountContactUid } from '../data/repositories/accountContactRepository'
 import {
   claimAutomationDetails,
@@ -152,16 +152,23 @@ function buildTargetInput(claim: ClaimedAutomationDetail): JsonRecord {
   }
   if (!target.name) target.name = dataValue
 
-  if (claim.targetActionId === 'sms_send') {
+  if (claim.targetActionId === 'sms_send' || claim.targetActionId === 'voice_call') {
     const campaign = getTargetCampaignSnapshot(claim)
     const inputRow = target as Partial<CampaignInputData>
-    const content = renderSmsInputContent({
+    const renderInputContent = claim.targetActionId === 'voice_call'
+      ? renderVoiceCallInputContent
+      : renderSmsInputContent
+    const content = renderInputContent({
       content: text(campaign.content),
       schedule: nullableText(campaign.schedule) || undefined,
       originalSchedule: nullableText(firstDefined(campaign, 'originalSchedule', 'original_schedule')),
       extraSettings: asRecord(firstDefined(campaign, 'extraSettings', 'extra_settings')) as Campaign['extraSettings']
     }, inputRow, claim.targetRowIndex, claim.scheduledAt)
-    if (!content) throw new Error('Chiến dịch SMS đích chưa có nội dung hợp lệ.')
+    if (!content) {
+      throw new Error(claim.targetActionId === 'voice_call'
+        ? 'Chiến dịch gọi tự động đích chưa có nội dung hợp lệ.'
+        : 'Chiến dịch SMS đích chưa có nội dung hợp lệ.')
+    }
     target.content = content
   }
 

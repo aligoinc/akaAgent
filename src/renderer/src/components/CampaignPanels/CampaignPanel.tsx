@@ -171,6 +171,7 @@ interface FindDataLogRow {
 const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
 const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
 const SMS_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung SMS', 'Lịch gửi']
+const VOICE_CALL_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung cuộc gọi', 'Lịch gọi']
 const BLOCK_SCREENSHOT_EVENT_TYPE = 'browser_screenshot'
 const FIND_DATA_LOG_EXPORT_HEADERS = [
   'Thời gian',
@@ -209,6 +210,19 @@ interface SmsCampaignDetailInfo {
   sentAt: string
   deliveredAt: string
   deviceId: string
+}
+
+interface VoiceCallCampaignDetailInfo {
+  phone: string
+  simSlot: string
+  content: string
+  detectionMode: string
+  profileCode: string
+  answerVerified: boolean
+  audioDurationMs: string
+  hangupOutcome: string
+  errorCode: string
+  errorMessage: string
 }
 
 interface CampaignDetailTargetInfo {
@@ -359,6 +373,44 @@ const getSmsCampaignDetailTitle = (detail: CampaignDetail): string => {
   ].filter(Boolean).join('\n') || '-'
 }
 
+const getVoiceCallCampaignDetailInfo = (detail: CampaignDetail): VoiceCallCampaignDetailInfo => {
+  const data = detail.data
+  const simSlot = readDetailDataText(data, 'simSlot')
+  const answerVerifiedValue = data?.answerVerified
+  const profileKey = readDetailDataText(data, 'profileKey', 'profileCode')
+  const profileVersion = readDetailDataText(data, 'profileVersion')
+  return {
+    phone: readDetailDataText(data, 'phone', 'targetPhone'),
+    simSlot: simSlot ? `SIM ${simSlot}` : '-',
+    content: readDetailDataText(data, 'content', 'messageContent'),
+    detectionMode: readDetailDataText(data, 'answerDetectionMode', 'detectionMode') || '-',
+    profileCode: profileKey
+      ? `${profileKey}${profileVersion ? ` v${profileVersion}` : ''}`
+      : '-',
+    answerVerified: answerVerifiedValue === true || answerVerifiedValue === 'true',
+    audioDurationMs: readDetailDataText(data, 'audioDurationMs', 'playbackDurationMs'),
+    hangupOutcome: readDetailDataText(data, 'hangupOutcome') || '-',
+    errorCode: readDetailDataText(data, 'errorCode'),
+    errorMessage: readDetailDataText(data, 'errorMessage')
+  }
+}
+
+const getVoiceCallCampaignDetailTitle = (detail: CampaignDetail): string => {
+  const voice = getVoiceCallCampaignDetailInfo(detail)
+  return [
+    detail.log || '',
+    voice.phone ? `SĐT: ${voice.phone}` : '',
+    voice.simSlot !== '-' ? voice.simSlot : '',
+    voice.detectionMode !== '-' ? `Nhận biết: ${voice.detectionMode}` : '',
+    `Xác minh bắt máy: ${voice.answerVerified ? 'Có' : 'Không'}`,
+    voice.profileCode !== '-' ? `Profile: ${voice.profileCode}` : '',
+    voice.audioDurationMs ? `Thời lượng phát: ${voice.audioDurationMs} ms` : '',
+    voice.hangupOutcome !== '-' ? `Ngắt cuộc gọi: ${voice.hangupOutcome}` : '',
+    voice.errorMessage ? `Lỗi: ${voice.errorMessage}` : '',
+    voice.errorCode ? `Mã lỗi: ${voice.errorCode}` : ''
+  ].filter(Boolean).join('\n') || '-'
+}
+
 const POST_SEARCH_LOG_EXPORT_HEADERS = [
   'Thời gian',
   'Hành động',
@@ -424,6 +476,7 @@ const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FIND_DATA_ACTION_IDS = new Set([FIND_DATA_GROUP_ACTION_ID, FIND_DATA_SEARCH_ACTION_ID])
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const VOICE_CALL_ACTION_ID = 'voice_call'
 const FACEBOOK_GROUP_POST_ACTION_ID = 'facebook_group_post'
 const FACEBOOK_PAGE_POST_ACTION_ID = 'facebook_page_post'
 const FACEBOOK_MESSAGE_FRIEND_ACTION_ID = 'facebook_message_friend'
@@ -1134,6 +1187,7 @@ const normalizeCampaignPlatform = (value: string | undefined | null) => {
 
 const inferCampaignPlatformFromActionId = (actionId: string) => {
   const normalized = actionId.toLowerCase()
+  if (normalized === VOICE_CALL_ACTION_ID) return 'sms'
   if (normalized.startsWith('facebook_')) return 'facebook'
   if (normalized.startsWith('zalo_')) return 'zalo'
   if (normalized.startsWith('sms_')) return 'sms'
@@ -1579,7 +1633,7 @@ const isAddDataSupportedForCampaign = (campaign?: Campaign | null): boolean => (
 )
 
 const getAddDataImportPlatform = (campaign: Campaign, action?: CampaignAction): CampaignImportPlatform => {
-  if (campaign.actionId === SMS_SEND_ACTION_ID) return 'sms'
+  if (campaign.actionId === SMS_SEND_ACTION_ID || campaign.actionId === VOICE_CALL_ACTION_ID) return 'sms'
   if (campaign.actionId === EMAIL_SEND_ACTION_ID) return 'email'
   if (action?.flatformType === 'zalo') return 'zalo'
   return 'facebook'
@@ -1722,6 +1776,7 @@ const getAddDataScanSources = (campaign: Campaign): AddCampaignDataScanSource[] 
       }]
     case ZALO_MESSAGE_PHONE_ACTION_ID:
     case SMS_SEND_ACTION_ID:
+    case VOICE_CALL_ACTION_ID:
       return [{
         key: 'page_inbox_phones',
         label: 'Từ người inbox fanpage',
@@ -2986,6 +3041,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const isSelectedFindDataCampaign = !!selectedCampaign && FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)
   const isSelectedEmailCampaign = selectedCampaign?.actionId === EMAIL_SEND_ACTION_ID
   const isSelectedSmsCampaign = selectedCampaign?.actionId === SMS_SEND_ACTION_ID
+  const isSelectedVoiceCallCampaign = selectedCampaign?.actionId === VOICE_CALL_ACTION_ID
+  const isSelectedMobileManagedSmsCampaign = isSelectedSmsCampaign || isSelectedVoiceCallCampaign
   const isSelectedEmailClickTrackingCampaign = isSelectedEmailCampaign && selectedCampaign?.extraSettings?.emailCheckLinkClicks === true
   const isSelectedCommentSeedingFeedCampaign = selectedCampaign?.actionId === COMMENT_SEEDING_FEED_ACTION_ID
   const filteredCampaignInputData = useMemo(() => {
@@ -3038,10 +3095,10 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     return getCampaignDetailTargetColumns(selectedCampaign)
   }, [selectedCampaign?.actionId])
   const campaignDetailExportTargetColumns = useMemo(
-    () => isSelectedSmsCampaign
+    () => isSelectedMobileManagedSmsCampaign
       ? campaignDetailTargetColumns.filter(column => column.key !== 'phone')
       : campaignDetailTargetColumns,
-    [campaignDetailTargetColumns, isSelectedSmsCampaign]
+    [campaignDetailTargetColumns, isSelectedMobileManagedSmsCampaign]
   )
   const actionDetailStatusOptions = useMemo<CampaignFilterOption[]>(() => {
     const optionMap = new Map(CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS.map(option => [option.value, option]))
@@ -3291,6 +3348,22 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   }
 
   const renderCampaignDetailLog = (detail: CampaignDetail) => {
+    if (isSelectedVoiceCallCampaign) {
+      const voice = getVoiceCallCampaignDetailInfo(detail)
+      return (
+        <div className="sms-detail-history-cell">
+          <div className="campaign-detail-log-text">{detail.log || '-'}</div>
+          <div className="sms-detail-meta">
+            <span>{voice.answerVerified ? 'Đã xác minh bắt máy' : 'Không xác minh bắt máy'}</span>
+            {voice.detectionMode !== '-' && <span>Nhận biết: {voice.detectionMode}</span>}
+            {voice.profileCode !== '-' && <span>Profile: {voice.profileCode}</span>}
+            {voice.audioDurationMs && <span>Phát: {voice.audioDurationMs} ms</span>}
+            {voice.hangupOutcome !== '-' && <span>Ngắt: {voice.hangupOutcome}</span>}
+            {voice.errorMessage && <span>Lỗi: {voice.errorMessage}</span>}
+          </div>
+        </div>
+      )
+    }
     if (isSelectedSmsCampaign) {
       const sms = getSmsCampaignDetailInfo(detail)
       return (
@@ -3433,6 +3506,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   }
 
   const getCampaignDetailLogTitle = (detail: CampaignDetail) => {
+    if (isSelectedVoiceCallCampaign) return getVoiceCallCampaignDetailTitle(detail)
     if (isSelectedSmsCampaign) return getSmsCampaignDetailTitle(detail)
     const postUrl = typeof detail.postUrl === 'string' ? detail.postUrl.trim() : ''
     return [detail.log || '', postUrl].filter(Boolean).join('\n') || '-'
@@ -3455,6 +3529,27 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     try {
       const rows = filteredCampaignDetails.map((detail, index) => {
         const targetInfo = getCampaignDetailTargetInfo(detail)
+        if (isSelectedVoiceCallCampaign) {
+          const voice = getVoiceCallCampaignDetailInfo(detail)
+          return {
+            STT: index + 1,
+            'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
+            'SĐT': voice.phone || exportTargetValue(targetInfo.phone),
+            ...buildTargetExportFields(targetInfo, campaignDetailExportTargetColumns),
+            'SIM': voice.simSlot === '-' ? '' : voice.simSlot,
+            'Hành động': detail.actionName || '',
+            'Trạng thái': detail.status,
+            'Nội dung cuộc gọi': voice.content,
+            'Xác minh bắt máy': voice.answerVerified ? 'Có' : 'Không',
+            'Cách nhận biết': voice.detectionMode === '-' ? '' : voice.detectionMode,
+            'Profile thiết bị': voice.profileCode === '-' ? '' : voice.profileCode,
+            'Thời lượng phát (ms)': voice.audioDurationMs,
+            'Kết quả ngắt máy': voice.hangupOutcome === '-' ? '' : voice.hangupOutcome,
+            'Mã lỗi': voice.errorCode,
+            'Lỗi': voice.errorMessage,
+            'Chi tiết': detail.log || ''
+          }
+        }
         if (isSelectedSmsCampaign) {
           const sms = getSmsCampaignDetailInfo(detail)
           return {
@@ -3488,7 +3583,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
         }
       })
       const sheet = utils.json_to_sheet(rows)
-      sheet['!cols'] = isSelectedSmsCampaign
+      sheet['!cols'] = isSelectedMobileManagedSmsCampaign
         ? [
           { wch: 6 },
           { wch: 22 },
@@ -3791,8 +3886,12 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     }
 
     try {
-      const headers = isSelectedSmsCampaign ? SMS_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS : CAMPAIGN_INPUT_DATA_EXPORT_HEADERS
-      const rows = isSelectedSmsCampaign
+      const headers = isSelectedVoiceCallCampaign
+        ? VOICE_CALL_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS
+        : isSelectedSmsCampaign
+          ? SMS_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS
+          : CAMPAIGN_INPUT_DATA_EXPORT_HEADERS
+      const rows = isSelectedMobileManagedSmsCampaign
         ? [
           headers,
           ...selectedInputDataRows.map(item => [
@@ -3823,7 +3922,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           ])
         ]
       const sheet = utils.aoa_to_sheet(rows)
-      sheet['!cols'] = isSelectedSmsCampaign
+      sheet['!cols'] = isSelectedMobileManagedSmsCampaign
         ? [
           { wch: 24 },
           { wch: 18 },
@@ -5086,7 +5185,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                             />
                           </th>
 	                          <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Tên</th>
-	                          {isSelectedSmsCampaign ? (
+	                          {isSelectedMobileManagedSmsCampaign ? (
 	                            <>
 		                              <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>SĐT</th>
 		                              <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Nhà mạng</th>
@@ -5095,8 +5194,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 		                              <th style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info3</th>
 		                              <th style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info4</th>
 		                              <th style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info5</th>
-		                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung SMS</th>
-		                              <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Lịch gửi</th>
+		                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>{isSelectedVoiceCallCampaign ? 'Nội dung cuộc gọi' : 'Nội dung SMS'}</th>
+		                              <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>{isSelectedVoiceCallCampaign ? 'Lịch gọi' : 'Lịch gửi'}</th>
 	                            </>
 	                          ) : (
 	                            <>
@@ -5120,7 +5219,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                               />
                             </td>
 	                            <td title={d.name || '-'} style={{ minWidth: 120 }}>{d.name || '-'}</td>
-	                            {isSelectedSmsCampaign ? (
+	                            {isSelectedMobileManagedSmsCampaign ? (
 	                              <>
 		                                <td title={d.phone || '-'} style={{ minWidth: 96 }}>{d.phone || '-'}</td>
 		                                <td title={formatInputDataPhoneCarrier(d)} style={{ minWidth: 88 }}>{formatInputDataPhoneCarrier(d)}</td>
@@ -5193,7 +5292,17 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
-                        {isSelectedSmsCampaign ? (
+                        {isSelectedVoiceCallCampaign ? (
+                          <tr>
+                            <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
+                            <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>SĐT</th>
+                            <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>SIM</th>
+                            <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                            <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung cuộc gọi</th>
+                            <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Xác minh bắt máy</th>
+                            <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
+                          </tr>
+                        ) : isSelectedSmsCampaign ? (
                           <tr>
                             <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
                             <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>SĐT</th>
@@ -5223,13 +5332,23 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                           const statusLabel = getDetailStatusLabel(a.status)
                           const detailLogTitle = getCampaignDetailLogTitle(a)
                           const smsDetail = isSelectedSmsCampaign ? getSmsCampaignDetailInfo(a) : null
+                          const voiceDetail = isSelectedVoiceCallCampaign ? getVoiceCallCampaignDetailInfo(a) : null
                           const targetInfo = getCampaignDetailTargetInfo(a)
                           return (
                             <tr key={a.id}>
                               <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
                                 {createdAtLabel}
                               </td>
-                              {isSelectedSmsCampaign ? (
+                              {isSelectedVoiceCallCampaign ? (
+                                <>
+                                  <td title={voiceDetail?.phone || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                    {voiceDetail?.phone || '-'}
+                                  </td>
+                                  <td title={voiceDetail?.simSlot || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                    {voiceDetail?.simSlot || '-'}
+                                  </td>
+                                </>
+                              ) : isSelectedSmsCampaign ? (
                                 <>
                                   <td title={smsDetail?.phone || '-'} style={{ whiteSpace: 'nowrap' }}>
                                     {smsDetail?.phone || '-'}
@@ -5265,6 +5384,16 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                                   {statusLabel}
                                 </span>
                               </td>
+                              {isSelectedVoiceCallCampaign && (
+                                <>
+                                  <td className="campaign-detail-sms-content-cell" title={voiceDetail?.content || '-'}>
+                                    {voiceDetail?.content || '-'}
+                                  </td>
+                                  <td title={voiceDetail?.answerVerified ? 'Đã xác minh bắt máy' : 'Không xác minh bắt máy'}>
+                                    {voiceDetail?.answerVerified ? 'Đã xác minh' : 'Không xác minh'}
+                                  </td>
+                                </>
+                              )}
                               {isSelectedSmsCampaign && (
                                 <td className="campaign-detail-sms-content-cell" title={smsDetail?.content || '-'}>
                                   {smsDetail?.content || '-'}

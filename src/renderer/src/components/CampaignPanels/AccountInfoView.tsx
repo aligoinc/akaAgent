@@ -37,6 +37,31 @@ const getMobileDeviceLabel = (account: AutoAccount): string => {
   return [deviceName, platform].filter(Boolean).join(' - ') || account.mobileDeviceId
 }
 
+const getVoiceCallCapability = (account: AutoAccount) => {
+  const capability = account.mobileDeviceInfo?.voiceCall
+  if (!capability || !account.mobileDeviceId) {
+    return { label: 'Chưa cài APK phù hợp', detail: 'Thiết bị chưa gửi capability gọi tự động.' }
+  }
+  const status = capability.capabilityStatus || capability.status
+  if (status === 'blocked') {
+    return { label: 'Bị chặn', detail: capability.blockedReason || 'Thiếu quyền hoặc cấu hình thiết bị.' }
+  }
+  if (status === 'exact_profile' || status === 'exact') {
+    const profileKey = capability.profileKey || capability.profileCode
+    const profile = profileKey
+      ? `${profileKey}${capability.profileVersion ? ` v${capability.profileVersion}` : ''}`
+      : 'profile đã chứng nhận'
+    return { label: 'Nhận biết chính xác', detail: profile }
+  }
+  if (status === 'fallback_ready' || status === 'fallback') {
+    return {
+      label: `Fallback ${capability.fallbackDelaySeconds || 15} giây`,
+      detail: 'Kết quả bắt máy không được xác minh.'
+    }
+  }
+  return { label: 'Chưa cài APK phù hợp', detail: capability.blockedReason || 'Thiết bị chưa sẵn sàng.' }
+}
+
 export default function AccountInfoView({ account, mode = 'modal', onClose }: AccountInfoViewProps) {
   const [rows, setRows] = useState<AccountActionOverview[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +69,7 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
   const [enablingActionCode, setEnablingActionCode] = useState<string | null>(null)
   const isModal = mode === 'modal'
   const isSmsAccount = account.flatformType === 'sms'
+  const voiceCallCapability = getVoiceCallCapability(account)
 
   const loadOverview = useCallback(async () => {
     if (!window.electronAPI?.getAccountActionOverview) return
@@ -131,6 +157,17 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
               <div className="account-info-field">
                 <span>Lần dùng mobile</span>
                 <strong>{formatDateTime(account.mobileDeviceLastSeenAt || account.mobileDeviceRegisteredAt)}</strong>
+              </div>
+              <div className="account-info-field" title={voiceCallCapability.detail}>
+                <span>Gọi tự động</span>
+                <strong>{voiceCallCapability.label}</strong>
+              </div>
+              <div className="account-info-field">
+                <span>Heartbeat gọi</span>
+                <strong>{formatDateTime(
+                  account.mobileDeviceInfo?.voiceCall?.heartbeatAt
+                    || account.mobileDeviceInfo?.voiceCall?.lastHeartbeatAt
+                )}</strong>
               </div>
             </>
           )}

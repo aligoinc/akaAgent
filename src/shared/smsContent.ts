@@ -158,3 +158,24 @@ export function renderSmsInputContent(
 
   return normalizeSmsContentForSend(rendered, getSmsContentOptions(campaign.extraSettings))
 }
+
+/**
+ * Voice-call content shares SMS token/spintax materialization, but it must
+ * always preserve Vietnamese diacritics and line breaks for server-side TTS.
+ */
+export function renderVoiceCallInputContent(
+  campaign: Pick<Campaign, 'content' | 'schedule' | 'originalSchedule'> & { extraSettings?: Campaign['extraSettings'] },
+  row: Partial<CampaignInputData>,
+  rowIndex: number,
+  scheduleOverride?: string | null
+): string {
+  return renderSmsInputContent({
+    ...campaign,
+    extraSettings: {
+      ...(campaign.extraSettings || {}),
+      advancedContentEnabled: false,
+      smsUseUnicode: true,
+      smsKeepNewLines: true
+    }
+  }, row, rowIndex, scheduleOverride)
+}

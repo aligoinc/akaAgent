@@ -24,7 +24,7 @@ import {
   ZaloRemarketingCustomerListQuery
 } from '../../../shared/types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone, type VietnamMobileCarrier } from '../../../shared/phone'
-import { renderSmsInputContent } from '../../../shared/smsContent'
+import { renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -52,6 +52,8 @@ const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const VOICE_CALL_ACTION_ID = 'voice_call'
+const MOBILE_MANAGED_SMS_ACTION_IDS = [SMS_SEND_ACTION_ID, VOICE_CALL_ACTION_ID] as const
 const ZALO_FRIEND_AUTO_TARGET_MODES = new Set(['all_friends', 'tagged_friends'])
 const ZALO_REMARKETING_SOURCE_ACTION_IDS = [
   ZALO_MESSAGE_PHONE_ACTION_ID,
@@ -433,8 +435,19 @@ function firstText(...values: unknown[]): string {
   return ''
 }
 
-function isSmsCampaignAction(actionId?: string | null): boolean {
-  return actionId === SMS_SEND_ACTION_ID
+function isMobileManagedSmsCampaignAction(actionId?: string | null): boolean {
+  return actionId === SMS_SEND_ACTION_ID || actionId === VOICE_CALL_ACTION_ID
+}
+
+function renderMobileManagedInputContent(
+  campaign: Pick<Campaign, 'actionId' | 'content' | 'schedule' | 'originalSchedule'> & { extraSettings?: Campaign['extraSettings'] },
+  row: Partial<CampaignInputData>,
+  rowIndex: number,
+  scheduleOverride?: string | null
+): string {
+  return campaign.actionId === VOICE_CALL_ACTION_ID
+    ? renderVoiceCallInputContent(campaign, row, rowIndex, scheduleOverride)
+    : renderSmsInputContent(campaign, row, rowIndex, scheduleOverride)
 }
 
 async function countActiveCampaignInputData(campaignId: number): Promise<number> {
@@ -564,12 +577,13 @@ interface VietnamDateTimeParts {
   second: number
 }
 
-function isSmsActionCode(actionCode?: string | null): boolean {
-  return String(actionCode || '').trim() === SMS_SEND_ACTION_ID
+function isMobileManagedSmsActionCode(actionCode?: string | null): boolean {
+  const normalized = String(actionCode || '').trim()
+  return normalized === SMS_SEND_ACTION_ID || normalized === VOICE_CALL_ACTION_ID
 }
 
 function shouldCountDetailByDefault(actionCode: string | null | undefined, status: CampaignDetailStatus): boolean {
-  if (isSmsActionCode(actionCode)) return true
+  if (isMobileManagedSmsActionCode(actionCode)) return true
   return LIMIT_COUNT_STATUSES.includes(status)
 }
 
@@ -622,7 +636,7 @@ async function countLimitDetailsInWindow(
     .eq('action_code', actionCode)
     .is('counts_toward_limit', null)
     .gte('created_at', timeFrameStartIso)
-  const scopedLegacyQuery = isSmsActionCode(actionCode)
+  const scopedLegacyQuery = isMobileManagedSmsCampaignAction(actionCode)
     ? legacyQuery
     : legacyQuery.in('status', LIMIT_COUNT_STATUSES)
 
@@ -655,7 +669,7 @@ async function getOldestLimitDetailCreatedAtInWindow(
     .eq('action_code', actionCode)
     .is('counts_toward_limit', null)
     .gte('created_at', timeFrameStartIso)
-  const scopedLegacyQuery = isSmsActionCode(actionCode)
+  const scopedLegacyQuery = isMobileManagedSmsCampaignAction(actionCode)
     ? legacyQuery
     : legacyQuery.in('status', LIMIT_COUNT_STATUSES)
 
@@ -1196,7 +1210,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const u = requireCurrentUser()
   await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
   const entitlements = await loadCurrentUserEffectiveEntitlements()
-  const isSmsCampaign = isSmsCampaignAction(campaign.actionId)
+  const isSmsCampaign = isMobileManagedSmsCampaignAction(campaign.actionId)
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
@@ -1239,7 +1253,7 @@ function smsMaterializationTouched(updates: Partial<Campaign>): boolean {
 }
 
 async function rematerializeSmsInputData(campaign: Campaign, updateSchedule: boolean): Promise<void> {
-  if (!isSmsCampaignAction(campaign.actionId)) return
+  if (!isMobileManagedSmsCampaignAction(campaign.actionId)) return
   const rows = await listCampaignInputData(campaign.id)
   const schedule = campaign.schedule || campaign.originalSchedule || null
 
@@ -1247,7 +1261,7 @@ async function rematerializeSmsInputData(campaign: Campaign, updateSchedule: boo
     const row = rows[index]
     if (row.status !== 'chờ xử lý' && row.status !== 'tạm dừng') continue
     const payload: Record<string, unknown> = {
-      content: renderSmsInputContent(campaign, row, index, updateSchedule ? schedule : undefined),
+      content: renderMobileManagedInputContent(campaign, row, index, updateSchedule ? schedule : undefined),
       phone_carrier: normalizeCampaignInputPhoneCarrier(row.phone, row.phoneCarrier)
     }
     if (updateSchedule) payload.schedule = schedule
@@ -1276,7 +1290,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   } else if (smsMaterializationTouched(updates)) {
     targetActionId = await getCampaignActionIdForCurrentUser(id, u.staffId)
   }
-  const isSmsCampaign = isSmsCampaignAction(targetActionId)
+  const isSmsCampaign = isMobileManagedSmsCampaignAction(targetActionId)
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.actionId !== undefined) payload.action_id = updates.actionId
@@ -1319,7 +1333,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
 
   if (error) throw new Error(`Failed to update campaign: ${error.message}`)
   const updatedCampaign = mapCampaignFromDB(data)
-  if (isSmsCampaignAction(updatedCampaign.actionId) && smsMaterializationTouched(updates)) {
+  if (isMobileManagedSmsCampaignAction(updatedCampaign.actionId) && smsMaterializationTouched(updates)) {
     await rematerializeSmsInputData(
       updatedCampaign,
       updates.actionId !== undefined || updates.schedule !== undefined || updates.originalSchedule !== undefined
@@ -1514,12 +1528,13 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
 
   if (origActions && origActions.length > 0) {
     const clonedCampaignForRender = {
+      actionId: origCamp.action_id as string,
       content: origCamp.content as string | undefined,
       schedule: origCamp.schedule as string | undefined,
       originalSchedule: (origCamp.original_schedule as string | null | undefined) ?? null,
       extraSettings: normalizeRecord(origCamp.extra_settings) as Campaign['extraSettings']
     }
-    const isSmsClone = isSmsCampaignAction(origCamp.action_id as string)
+    const isSmsClone = isMobileManagedSmsCampaignAction(origCamp.action_id as string)
     const actionsToInsert = origActions.map((d, index) => ({
       campaign_id: newCamp.id,
       input_id: d.input_id != null ? (inputIdMap.get(d.input_id as number) ?? null) : null,
@@ -1534,7 +1549,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       info4: d.info4,
       info5: d.info5,
       content: isSmsClone
-        ? renderSmsInputContent(clonedCampaignForRender, mapCampaignInputDataFromDB(d), index, d.schedule as string | null | undefined)
+        ? renderMobileManagedInputContent(clonedCampaignForRender, mapCampaignInputDataFromDB(d), index, d.schedule as string | null | undefined)
         : d.content,
       note: d.note,
       status: 'chờ xử lý',
@@ -1644,7 +1659,7 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
     .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
     .eq('is_delete', false)
-    .neq('action_id', SMS_SEND_ACTION_ID)
+    .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
     .lte('schedule', now.toISOString())
     .or(`daily_stop_time.is.null,daily_stop_time.gte.${currentVietnamTime}`)
     .order('schedule', { ascending: true })
@@ -1655,7 +1670,7 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
   return (data || []).map(row => mapCampaignFromDB(row))
 }
 
-export async function getDueSmsCampaignsForLimitCheck(accountId: number): Promise<Campaign[]> {
+export async function getDueMobileManagedCampaignsForLimitCheck(accountId: number): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const now = new Date()
   const { data, error } = await client()
@@ -1665,10 +1680,10 @@ export async function getDueSmsCampaignsForLimitCheck(accountId: number): Promis
     .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
     .eq('is_delete', false)
-    .eq('action_id', SMS_SEND_ACTION_ID)
+    .in('action_id', [...MOBILE_MANAGED_SMS_ACTION_IDS])
     .lte('schedule', now.toISOString())
 
-  if (error) throw new Error(`Failed to get due SMS campaigns for limit check: ${error.message}`)
+  if (error) throw new Error(`Failed to get due mobile-managed campaigns for limit check: ${error.message}`)
   return (data || []).map(row => mapCampaignFromDB(row))
 }
 
@@ -1687,7 +1702,7 @@ export async function maintainCampaignSchedules(
     .select(`*, auto_campaign_actions(name), ${accountRelation}`)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
-    .neq('action_id', SMS_SEND_ACTION_ID)
+    .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
     .not('schedule', 'is', null)
     .lt('schedule', todayStart.toISOString())
     .in('status', ['chờ xử lý', 'hoàn thành'])
@@ -1880,7 +1895,7 @@ async function listStaffCampaignIds(staffId: number, context: string): Promise<n
     .from('auto_campaigns')
     .select('id')
     .eq('staff_id', staffId)
-    .neq('action_id', SMS_SEND_ACTION_ID)
+    .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
 
   if (error) {
     console.error(`Failed to list staff campaign ids for ${context}:`, error.message)
@@ -1895,7 +1910,7 @@ export async function resetRunningCampaignStatuses(staffId: number): Promise<voi
     .from('auto_campaigns')
     .update({ status: 'chờ xử lý' })
     .eq('staff_id', staffId)
-    .neq('action_id', SMS_SEND_ACTION_ID)
+    .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
     .eq('status', 'đang chạy')
 
   if (error) console.error('Failed to reset campaign statuses:', error.message)
@@ -2891,7 +2906,7 @@ export async function createCampaignInputData(action: Partial<CampaignInputData>
     ? await getCampaignActionIdForCurrentUser(campaignId, u.staffId)
     : null
   if (actionId) await ensureCurrentUserCanUseCampaignAction(actionId)
-  const isSmsInputData = isSmsCampaignAction(actionId)
+  const isSmsInputData = isMobileManagedSmsCampaignAction(actionId)
   let inputAction = action
   if (isSmsInputData && Number.isFinite(campaignId) && campaignId > 0) {
     const campaign = await getCampaign(campaignId)
@@ -2902,7 +2917,7 @@ export async function createCampaignInputData(action: Partial<CampaignInputData>
         ...action,
         phone: normalizeVietnamMobilePhone(action.phone),
         schedule: schedule || undefined,
-        content: renderSmsInputContent(campaign, { ...action, schedule: schedule || undefined }, rowIndex, schedule)
+        content: renderMobileManagedInputContent(campaign, { ...action, schedule: schedule || undefined }, rowIndex, schedule)
       }
     }
   }
@@ -2981,7 +2996,7 @@ export async function updateCampaignInputData(id: number, updates: Partial<Campa
   const payload: any = {}
   const shouldUpdateCarrier = updates.phone !== undefined || updates.phoneCarrier !== undefined
   const actionId = shouldUpdateCarrier ? await getCampaignActionIdForInputData(id) : null
-  const isSmsInputData = isSmsCampaignAction(actionId)
+  const isSmsInputData = isMobileManagedSmsCampaignAction(actionId)
   if (updates.inputId !== undefined) payload.input_id = updates.inputId
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.phone !== undefined) {
@@ -3078,7 +3093,7 @@ function getAppendInputDataDedupeKeys(row: Partial<CampaignInputData>, actionId?
 
 function normalizeAppendInputDataRow(row: Partial<CampaignInputData>, actionId: string): Partial<CampaignInputData> {
   const requirement = getCampaignInputDataRequirement(actionId)
-  const shouldNormalizePhone = requirement?.field === 'phone' || requirement?.field === 'phone_or_uid' || isSmsCampaignAction(actionId)
+  const shouldNormalizePhone = requirement?.field === 'phone' || requirement?.field === 'phone_or_uid' || isMobileManagedSmsCampaignAction(actionId)
   const phone = shouldNormalizePhone
     ? normalizeVietnamMobilePhone(row.phone)
     : String(row.phone || '').trim()
@@ -3203,7 +3218,7 @@ export async function addCampaignInputDataRows(
   }
 
   const campaignSchedule = scheduleDate.toISOString()
-  const isSmsTarget = isSmsCampaignAction(campaign.actionId)
+  const isSmsTarget = isMobileManagedSmsCampaignAction(campaign.actionId)
   const smsRowIndexOffset = isSmsTarget && validRows.length > 0 ? await countActiveCampaignInputData(campaignId) : 0
   const payload = validRows.map((row, rowIndex) => ({
     campaign_id: campaignId,
@@ -3218,7 +3233,7 @@ export async function addCampaignInputDataRows(
     info3: row.info3 || null,
     info4: row.info4 || null,
     info5: row.info5 || null,
-    content: isSmsTarget ? renderSmsInputContent(campaign, row, smsRowIndexOffset + rowIndex, campaignSchedule) : (row.content || null),
+    content: isSmsTarget ? renderMobileManagedInputContent(campaign, row, smsRowIndexOffset + rowIndex, campaignSchedule) : (row.content || null),
     status: 'chờ xử lý',
     note: '',
     schedule: isSmsTarget ? campaignSchedule : null
@@ -3379,7 +3394,7 @@ export async function addCampaignInputDataToCampaign(
       continue
     }
 
-    const isSmsTarget = isSmsCampaignAction(target.actionId)
+    const isSmsTarget = isMobileManagedSmsCampaignAction(target.actionId)
     const smsRowIndexOffset = isSmsTarget ? await countActiveCampaignInputData(target.id) : 0
     const payload = validRows.map((row, rowIndex) => {
       const phone = isSmsTarget ? normalizeVietnamMobilePhone(row.phone) : (row.phone || '')
@@ -3396,7 +3411,7 @@ export async function addCampaignInputDataToCampaign(
         info3: row.info3 || null,
         info4: row.info4 || null,
         info5: row.info5 || null,
-        content: isSmsTarget ? renderSmsInputContent(target, row, smsRowIndexOffset + rowIndex, campaignSchedule) : (row.content || null),
+        content: isSmsTarget ? renderMobileManagedInputContent(target, row, smsRowIndexOffset + rowIndex, campaignSchedule) : (row.content || null),
         status: 'chờ xử lý',
         note: '',
         schedule: isSmsTarget ? campaignSchedule : null

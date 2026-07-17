@@ -353,7 +353,7 @@ export async function ensureCurrentUserEmailFeatureActive(): Promise<void> {
 export function getCampaignActionFeature(actionId?: string | null, flatformType?: string | null): EntitlementFeature {
   const normalizedActionId = String(actionId || '').trim()
   const normalizedPlatform = String(flatformType || '').trim().toLowerCase()
-  if (normalizedActionId === 'sms_send' || normalizedPlatform === 'sms') return 'sms'
+  if (normalizedActionId === 'sms_send' || normalizedActionId === 'voice_call' || normalizedPlatform === 'sms') return 'sms'
   if (normalizedActionId === 'email_send' || normalizedPlatform === 'email') return 'email'
   if (ZALO_CAMPAIGN_ACTION_IDS.has(normalizedActionId) || normalizedPlatform === 'zalo') return 'zalo'
   if (FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS.has(normalizedActionId)) return 'facebookFanpage'
@@ -363,7 +363,7 @@ export function getCampaignActionFeature(actionId?: string | null, flatformType?
 export function getAccountActionFeature(actionCode?: string | null, flatformType?: string | null): EntitlementFeature {
   const normalizedActionCode = String(actionCode || '').trim()
   const normalizedPlatform = String(flatformType || '').trim().toLowerCase()
-  if (normalizedPlatform === 'sms' || normalizedActionCode === 'sms_send') return 'sms'
+  if (normalizedPlatform === 'sms' || normalizedActionCode === 'sms_send' || normalizedActionCode === 'voice_call') return 'sms'
   if (normalizedPlatform === 'email' || normalizedActionCode === 'email_send') return 'email'
   if (normalizedPlatform === 'zalo' || ZALO_ACCOUNT_ACTION_CODES.has(normalizedActionCode)) return 'zalo'
   if (FACEBOOK_FANPAGE_ACCOUNT_ACTION_CODES.has(normalizedActionCode)) return 'facebookFanpage'

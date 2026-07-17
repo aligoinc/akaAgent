@@ -105,6 +105,10 @@ const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const VOICE_CALL_ACTION_ID = 'voice_call'
+const VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES = 60
+const VOICE_CALL_AI_DISCLOSURE = 'Đây là cuộc gọi tự động sử dụng giọng nói AI.'
+const VOICE_CALL_MAX_TTS_INPUT_CHARS = 4096
 
 const FIND_DATA_ACTION_IDS = new Set([FIND_DATA_GROUP_ACTION_ID, FIND_DATA_SEARCH_ACTION_ID])
 const COMMENT_SEEDING_ACTION_IDS = new Set([COMMENT_SEEDING_FEED_ACTION_ID, COMMENT_SEEDING_POST_ACTION_ID])
@@ -121,7 +125,8 @@ const MESSAGE_CAMPAIGN_ACTION_IDS = new Set([
   ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID,
   ZALO_MESSAGE_GROUP_ACTION_ID,
   EMAIL_SEND_ACTION_ID,
-  SMS_SEND_ACTION_ID
+  SMS_SEND_ACTION_ID,
+  VOICE_CALL_ACTION_ID
 ])
 const MESSAGE_CONTENT_TOGGLE_ACTION_IDS = new Set([
   MESSAGE_UID_ACTION_ID,
@@ -155,7 +160,8 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_tag_contact: 'Gắn tag Zalo',
   zalo_change_alias: 'Đổi tên Zalo',
   email_send: 'Gửi email',
-  sms_send: 'Gửi SMS'
+  sms_send: 'Gửi SMS',
+  voice_call: 'Gọi tự động qua SIM'
 }
 
 const ACTION_LIMIT_UNITS: Record<string, string> = {
@@ -179,7 +185,8 @@ const ACTION_LIMIT_UNITS: Record<string, string> = {
   zalo_join_group_link: 'group',
   zalo_cancel_sent_friend_request: 'lời mời',
   email_send: 'email',
-  sms_send: 'tin nhắn'
+  sms_send: 'tin nhắn',
+  voice_call: 'cuộc gọi'
 }
 
 const getActionCodeLabel = (code: string) => ACTION_CODE_LABELS[code] || code
@@ -322,7 +329,7 @@ const getCampaignPlatform = (campaign: Campaign, action?: CampaignAction): strin
   String(action?.flatformType || '').trim().toLowerCase() ||
   (campaign.actionId.startsWith('zalo_') ? 'zalo' :
     campaign.actionId === EMAIL_SEND_ACTION_ID ? 'email' :
-      campaign.actionId === SMS_SEND_ACTION_ID ? 'sms' : 'facebook')
+      (campaign.actionId === SMS_SEND_ACTION_ID || campaign.actionId === VOICE_CALL_ACTION_ID) ? 'sms' : 'facebook')
 
 const getLimitActionCodes = (campaign: Campaign, action?: CampaignAction): string[] => {
   const configuredCodes = action?.limitCheckActionCodes || []
@@ -379,7 +386,8 @@ const getInitialLimitFormState = (campaign: Campaign): CampaignLimitFormState =>
   const fallback: ActionLimitForm = {
     dailyLimit: actionLimits.dailyLimit ?? 30,
     rateLimitCount: actionLimits.rateLimitCount ?? 9,
-    rateLimitMinutes: actionLimits.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES
+    rateLimitMinutes: actionLimits.rateLimitMinutes
+      ?? (campaign.actionId === VOICE_CALL_ACTION_ID ? VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES : DEFAULT_RATE_LIMIT_MINUTES)
   }
   const byActionCode = Object.fromEntries(
     Object.entries(actionLimits.byActionCode || {}).map(([code, limit]) => [
@@ -718,6 +726,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   const extra = campaign.extraSettings || {}
   const isEmailCampaign = actionId === EMAIL_SEND_ACTION_ID
   const isSmsCampaign = actionId === SMS_SEND_ACTION_ID
+  const isVoiceCallCampaign = actionId === VOICE_CALL_ACTION_ID
+  const isMobileManagedSmsCampaign = isSmsCampaign || isVoiceCallCampaign
   const canUseFormattedContent = supportsFormattedContent(actionId)
   const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
@@ -760,7 +770,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     extra.postAsReels === true
   const canUsePostBackground = isPostBackgroundCampaign && !isPostBackgroundDisabled
   const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground && !isFormattedContentEnabled
-  const showMainMedia = showMainContentSection && !isSmsCampaign && !isFacebookJoinGroupCampaign && !isFacebookGroupInviteCampaign
+  const showMainMedia = showMainContentSection && !isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && !isFacebookGroupInviteCampaign
   const showCommentContent = isCommentSeedingCampaign || (isFacebookGroupPostCampaign && extra.enableComment === true)
   const showPostBumpContent = isFacebookGroupPostCampaign && extra.enablePostBump === true
   const showNewsfeedCommentContent = isNewsfeedInteractionCampaign && extra.enableComment === true
@@ -773,7 +783,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   ) && extra.enableAddFriend === true
   const hasAnyEditableField = showMainContentSection || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
-  const canUseAdvancedContentMode = showMainContentSection && !isCommentSeedingCampaign && !isSmsCampaign
+  const canUseAdvancedContentMode = showMainContentSection && !isCommentSeedingCampaign && !isMobileManagedSmsCampaign
   const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
 
   const convertFormattedStateToPlain = (current: CampaignContentFormState): CampaignContentFormState => {
@@ -832,13 +842,13 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     }
 
     const invalidIndex = findInvalidAdvancedContentItemIndex(normalizedAdvancedContentItems, {
-      allowMediaOnly: !isSmsCampaign,
+      allowMediaOnly: !isMobileManagedSmsCampaign,
       contentIsEmpty: isRichContentEditorEnabled ? isFormattedContentEmpty : undefined
     })
     if (invalidIndex < 0) return true
 
     showAlert(
-      isSmsCampaign
+      isMobileManagedSmsCampaign
         ? `Nội dung nâng cao số ${invalidIndex + 1} chưa có nội dung SMS.`
         : `Nội dung nâng cao số ${invalidIndex + 1} đang rỗng. Vui lòng nhập nội dung hoặc chọn media, hoặc xoá nội dung này.`,
       'error'
@@ -847,7 +857,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   }
 
   const validateAdvancedContentMedia = (): boolean => {
-    if (!isAdvancedContentMode || isSmsCampaign) return true
+    if (!isAdvancedContentMode || isMobileManagedSmsCampaign) return true
 
     for (let index = 0; index < normalizedAdvancedContentItems.length; index += 1) {
       const item = normalizedAdvancedContentItems[index]
@@ -1162,6 +1172,13 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   }
 
   const renderSmsContentOptions = () => {
+    if (isVoiceCallCampaign) {
+      return (
+        <div className="schedule-hint">
+          Hệ thống luôn thêm câu “Đây là cuộc gọi tự động sử dụng giọng nói AI.” trước nội dung; audio tối đa 90 giây và không tự gọi lại.
+        </div>
+      )
+    }
     if (!isSmsCampaign) return null
 
     return (
@@ -1187,7 +1204,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   }
 
   const renderAdvancedContentItemMedia = (item: CampaignAdvancedContentItem) => {
-    if (isSmsCampaign) return null
+    if (isMobileManagedSmsCampaign) return null
 
     const mediaItems = item.mediaItems || []
     const mediaOption = item.mediaOption || 'none'
@@ -1406,19 +1423,28 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
           ? splitFormattedContentVariants(formData.content).length > 0
           : formData.content.trim().length > 0
       const hasSelectedMainMedia = isAdvancedContentMode
-        ? !isSmsCampaign && normalizedAdvancedContentItems.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
-        : !isSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
+        ? !isMobileManagedSmsCampaign && normalizedAdvancedContentItems.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
+        : !isMobileManagedSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
       if (!isUsingSourceContent && !hasMainContentText && !hasSelectedMainMedia) {
         showAlert(
           isEmailCampaign
             ? 'Vui lòng nhập nội dung email hoặc chọn ít nhất một tệp đính kèm.'
             : isSmsCampaign
               ? 'Vui lòng nhập nội dung tin nhắn SMS.'
+              : isVoiceCallCampaign
+                ? 'Vui lòng nhập nội dung cuộc gọi tự động.'
               : isMessageCampaign
                 ? `Vui lòng nhập nội dung tin nhắn hoặc chọn ít nhất một ${isZaloMessageCampaign ? 'file' : 'ảnh'}.`
                 : 'Vui lòng nhập nội dung chiến dịch hoặc chọn ít nhất một ảnh.',
           'error'
         )
+        return
+      }
+    }
+    if (isVoiceCallCampaign) {
+      const ttsInputLength = `${VOICE_CALL_AI_DISCLOSURE} ${renderContentSpinMax(formData.content)}`.trim().length
+      if (ttsInputLength > VOICE_CALL_MAX_TTS_INPUT_CHARS) {
+        showAlert(`Nội dung cuộc gọi sau khi thêm thông báo giọng nói AI không được vượt quá ${VOICE_CALL_MAX_TTS_INPUT_CHARS.toLocaleString('vi-VN')} ký tự.`, 'error')
         return
       }
     }
@@ -1462,15 +1488,15 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
           const normalizedItem = isFormattedContentEnabled
             ? { ...item, content: sanitizeFormattedContent(item.content) }
             : item
-          return isSmsCampaign
+          return isMobileManagedSmsCampaign
             ? { ...normalizedItem, mediaOption: 'none' as const, mediaItems: [] }
             : normalizedItem
         })
         nextExtraSettings.formattedContentEnabled = isFormattedContentEnabled
-        nextExtraSettings.rewriteContentEachRun = isSmsCampaign || isFormattedContentEnabled || (isEmailCampaign && formData.emailBodyIsHtml)
+        nextExtraSettings.rewriteContentEachRun = isMobileManagedSmsCampaign || isFormattedContentEnabled || (isEmailCampaign && formData.emailBodyIsHtml)
           ? false
           : formData.rewriteContentEachRun
-        nextExtraSettings.imageOption = (isSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption
+        nextExtraSettings.imageOption = (isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption
         nextExtraSettings.randomImageCount = formData.randomImageCount
       }
       if (isEmailCampaign) {
@@ -1514,7 +1540,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       await updateCampaign(campaign.id, {
         ...(showMainContentSection ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
         extraSettings: nextExtraSettings,
-        ...(showMainMedia ? { images: isSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
+        ...(showMainMedia ? { images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
       })
       showAlert('Đã cập nhật nội dung và media.', 'success')
       shouldClose = true
@@ -1649,7 +1675,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
                 <>
                   {renderAdvancedContentEditor()}
                   {renderSmsContentOptions()}
-                  {!isSmsCampaign && !isRichContentEditorEnabled && (
+                  {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && (
                     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
                       <input
                         type="checkbox"
@@ -1681,7 +1707,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
                   {renderSmsContentOptions()}
 
-                  {!isSmsCampaign && !isRichContentEditorEnabled && (
+                  {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && (
                     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
                       <input
                         type="checkbox"

@@ -148,7 +148,7 @@ export class SupabaseService {
     return campaignRepo.claimCampaignRuntime(campaignId, accountId, runtimeTarget)
   }
   getPendingCampaigns(accountId: number) { return campaignRepo.getPendingCampaigns(accountId) }
-  getDueSmsCampaignsForLimitCheck(accountId: number) { return campaignRepo.getDueSmsCampaignsForLimitCheck(accountId) }
+  getDueMobileManagedCampaignsForLimitCheck(accountId: number) { return campaignRepo.getDueMobileManagedCampaignsForLimitCheck(accountId) }
   maintainCampaignSchedules() { return campaignRepo.maintainCampaignSchedules() }
   maintainZaloCampaignSchedules() { return campaignRepo.maintainZaloCampaignSchedules() }
   maintainNonZaloCampaignSchedules() { return campaignRepo.maintainNonZaloCampaignSchedules() }

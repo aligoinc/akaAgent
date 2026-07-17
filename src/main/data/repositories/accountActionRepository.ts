@@ -12,6 +12,8 @@ import {
 const client = () => getSupabaseClient()
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const SMS_SEND_ACTION_CODE = 'sms_send'
+const VOICE_CALL_ACTION_CODE = 'voice_call'
+const VOICE_CALL_RATE_LIMIT_MINUTES = 60
 const RATED_ACTION_STATUSES = ['thành công', 'thất bại']
 const TRANSIENT_RETRY_DELAY_MS = 300
 
@@ -25,8 +27,9 @@ function normalizeRateLimitMinutes(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_MINUTES
 }
 
-function isSmsActionCode(actionCode?: string | null): boolean {
-  return String(actionCode || '').trim() === SMS_SEND_ACTION_CODE
+function isMobileManagedSmsActionCode(actionCode?: string | null): boolean {
+  const normalized = String(actionCode || '').trim()
+  return normalized === SMS_SEND_ACTION_CODE || normalized === VOICE_CALL_ACTION_CODE
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -275,7 +278,7 @@ async function loadWindowActionCounts(
         .eq('action_code', actionCode)
         .is('counts_toward_limit', null)
         .gte('created_at', timeFrameStart)
-      return isSmsActionCode(actionCode) ? query : query.in('status', RATED_ACTION_STATUSES)
+      return isMobileManagedSmsActionCode(actionCode) ? query : query.in('status', RATED_ACTION_STATUSES)
     }
 
     const [explicitResult, legacyResult] = await Promise.all([
@@ -306,7 +309,8 @@ function getOverviewWindowMinutes(
   groupSettings: AccountGroupSettings | null
 ): number {
   return normalizeRateLimitMinutes(
-    groupSettings?.byActionCode?.[actionCode]?.rateLimitMinutes ?? accountRateLimitMinutes
+    groupSettings?.byActionCode?.[actionCode]?.rateLimitMinutes
+      ?? (actionCode === VOICE_CALL_ACTION_CODE ? VOICE_CALL_RATE_LIMIT_MINUTES : accountRateLimitMinutes)
   )
 }
 
