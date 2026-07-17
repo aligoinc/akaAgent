@@ -32,9 +32,10 @@ Migration thêm một cột vào `org_organization_product`:
 - `is_zalo_server=false`: toàn bộ staff của organization chạy Zalo trên app desktop;
 - `is_zalo_server=true`: toàn bộ staff của organization chạy Zalo trên app server.
 
-Chỉ row product Zalo `16`/`18` còn hạn, chưa soft-delete và mới nhất theo
-`created_at DESC, id DESC` có hiệu lực. Cột cũ cùng tên trên `org_staff` chỉ được
-giữ để binary cũ không lỗi schema và không còn quyết định runtime.
+Với mỗi product Zalo `16` và `18`, hệ thống chọn riêng row còn hạn, chưa
+soft-delete và mới nhất theo `created_at DESC, id DESC`. Cột cũ cùng tên trên
+`org_staff` chỉ được giữ để binary cũ không lỗi schema và không còn quyết định
+runtime.
 
 Migration đồng thời tạo các RPC transaction để:
 
@@ -44,13 +45,20 @@ Migration đồng thời tạo các RPC transaction để:
 - kiểm tra trạng thái Zalo đang chạy trong lúc bàn giao;
 - recovery Zalo server sau khi app bị tắt đột ngột;
 - recovery runtime desktop theo đúng phạm vi.
-- đọc cờ kèm revision `entitlement_id:xmin` của row organization product để loại
-  marker VPS cũ sau mọi lần đổi mode.
+- đọc cờ kèm revision bắt đầu bằng `entitlement_id:xmin` và chứa revision của
+  cả hai product hiệu lực để loại marker VPS cũ sau mọi lần đổi mode.
 - discover toàn bộ staff chạy server bằng RPC keyset tối đa 1.000 row mỗi trang,
   không query entitlement/mode riêng cho từng organization.
 
-Product 16 và product 18 đều cấp cùng quyền Zalo. Nếu organization có cả hai,
-app lấy cả giới hạn và chế độ runtime từ entitlement Zalo còn hạn được tạo sau cùng.
+Product 16 luôn cấp tài khoản Zalo mã QR. Product 18 cấp Zalo trình duyệt khi
+`is_zalo_show_web=true`, ngược lại cấp Zalo mã QR. Khi có quyền Web, desktop chạy
+Web và các account QR hợp lệ ở local; VPS không chạy Zalo nhưng cờ
+`is_zalo_server` vẫn được giữ để tự có hiệu lực lại sau khi tắt Web và khởi động
+lại app. Giới hạn account và số gửi/ngày lấy mức lớn nhất của hai row hiệu lực.
+
+Migration v182 không thể phục hồi những cờ Server đã bị v179 xoá trước đây.
+Organization bị ảnh hưởng cần bật lại `is_zalo_server=true` một lần sau deploy;
+từ v182 trở đi bật Web không còn tự xoá cờ này.
 
 Migration không backfill từ staff và mọi row hiện tại mặc định `false`. Sau khi đã
 deploy API, desktop và app server mới, bật server trên đúng row entitlement cần dùng:

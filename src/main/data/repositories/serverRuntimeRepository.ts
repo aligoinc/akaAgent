@@ -2,7 +2,6 @@ import type { AuthAccountProduct, AuthEntitlements, AuthUser } from '../../../sh
 import { getAuthProductById } from '../../../shared/authProductCatalog'
 import { getSupabaseClient } from '../supabaseClient'
 import {
-  DEFAULT_DEMO_DAILY_SEND_LIMIT,
   ZALO_PRODUCT_IDS,
   emptyAuthEntitlements,
   loadOrganizationAccountProducts,
@@ -117,6 +116,7 @@ async function buildServerAuthUser(
     useTestWorkflow: !!staff.use_test_workflow,
     isZaloServer: resolvedModeSnapshot.isZaloServer,
     isZaloShowWeb: resolvedModeSnapshot.isZaloShowWeb,
+    zaloAccountCapabilities: { qr: true, web: false },
     entitlements: context.entitlements,
     accountProducts: context.accountProducts,
     zaloRuntimeModeRevision: resolvedModeSnapshot.revision
@@ -157,9 +157,9 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
     : String(row.package_type).trim() || null
   const maxAccounts = normalizePositiveInteger(row.max_accounts)
   const configuredDailySendLimit = normalizePositiveInteger(row.max_sends_per_day)
-  const dailySendLimit = packageType?.toLowerCase() === 'demo'
-    ? configuredDailySendLimit ?? DEFAULT_DEMO_DAILY_SEND_LIMIT
-    : configuredDailySendLimit
+  // v182 discovery already aggregates both effective Zalo products and
+  // applies the demo fallback only when every effective package is demo.
+  const dailySendLimit = configuredDailySendLimit
   const entitlements = emptyAuthEntitlements()
   entitlements.zalo = true
   entitlements.dailySendLimits.zalo = dailySendLimit
@@ -169,6 +169,7 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
   const packageName = String(row.package_name || '').trim()
   const productCatalogItem = getAuthProductById(productId)
   const accountProduct: AuthAccountProduct = {
+    organizationProductId: entitlementId,
     feature: 'zalo',
     productId,
     productName,
@@ -192,6 +193,7 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
     useTestWorkflow: row.use_test_workflow === true,
     isZaloServer: true,
     isZaloShowWeb: false,
+    zaloAccountCapabilities: { qr: true, web: false },
     entitlements,
     accountProducts: [accountProduct],
     zaloRuntimeModeRevision: revision
@@ -341,8 +343,8 @@ export async function loadActiveZaloServerUser(
 }
 
 /**
- * Discover every active staff in an organization whose newest active Zalo
- * entitlement (product 16 or 18) selects the server runtime.
+ * Discover every active staff whose organization currently grants QR, does
+ * not grant Web, and has at least one effective Zalo product requesting Server.
  * This does not read passwords or bind/check a device.
  */
 export async function listActiveZaloServerUsers(): Promise<ZaloServerRuntimeUser[]> {

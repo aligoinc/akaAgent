@@ -49,9 +49,12 @@ export class SupabaseService {
 
   // =========== ACCOUNTS ===========
   getAccount(id: number) { return accountRepo.getAccount(id) }
+  getAccountIgnoringCapability(id: number) { return accountRepo.getAccountIgnoringCapability(id) }
   listAccounts() { return accountRepo.listAccounts() }
   createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }
-  updateAccount(id: number, updates: Partial<AutoAccount>) { return accountRepo.updateAccount(id, updates) }
+  updateAccount(id: number, updates: Partial<AutoAccount>, options?: accountRepo.UpdateAccountOptions) {
+    return accountRepo.updateAccount(id, updates, options)
+  }
   setZaloServerAccountStatus(id: number, status: accountRepo.ZaloServerAccountControlStatus) {
     return accountRepo.setZaloServerAccountStatus(id, status)
   }
@@ -67,8 +70,12 @@ export class SupabaseService {
   updateAccountZaloSession(id: number, input: { zaloAccountId: number; session: ZaloSessionCredentials; verified?: boolean; clearError?: boolean }) {
     return accountRepo.updateAccountZaloSession(id, input)
   }
-  markAccountZaloSessionCheck(id: number, result: { ok: boolean; error?: string | null }) {
-    return accountRepo.markAccountZaloSessionCheck(id, result)
+  markAccountZaloSessionCheck(
+    id: number,
+    result: { ok: boolean; error?: string | null },
+    expectedShowWeb: boolean
+  ) {
+    return accountRepo.markAccountZaloSessionCheck(id, result, expectedShowWeb)
   }
   updateAccountZaloWebSession(id: number, input: { zaloAccountId: number; verified: boolean; error?: string | null }) {
     return accountRepo.updateAccountZaloWebSession(id, input)

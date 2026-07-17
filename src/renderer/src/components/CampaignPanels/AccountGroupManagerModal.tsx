@@ -9,6 +9,7 @@ import {
   getAccountActionDailySendLimit,
   getFirstAllowedPlatform
 } from '../../utils/entitlements'
+import { getAccountPlatformLabel } from '../../utils/accountLabels'
 
 interface AccountGroupManagerModalProps {
   groups: AutoAccountGroup[]
@@ -476,7 +477,12 @@ export default function AccountGroupManagerModal({
                             />
                             <span>
                               <strong>{account.name}</strong>
-                              {!isSmsAccount && <em>{account.status} - {account.loginStatus}</em>}
+                              {!isSmsAccount && (
+                                <em>
+                                  {account.flatformType === 'zalo' ? `${getAccountPlatformLabel(account)} - ` : ''}
+                                  {account.status} - {account.loginStatus}
+                                </em>
+                              )}
                             </span>
                           </label>
                         )
@@ -537,7 +543,10 @@ export default function AccountGroupManagerModal({
                           />
                           <span>
                             <strong>{account.name}</strong>
-                            <em>{account.accountGroupName ? `Đang ở nhóm ${account.accountGroupName}` : 'Chưa thuộc nhóm'}</em>
+                            <em>
+                              {account.flatformType === 'zalo' ? `${getAccountPlatformLabel(account)} - ` : ''}
+                              {account.accountGroupName ? `Đang ở nhóm ${account.accountGroupName}` : 'Chưa thuộc nhóm'}
+                            </em>
                           </span>
                         </label>
                       )

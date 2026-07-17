@@ -5,6 +5,7 @@ import { AutoAccount, AutoAccountContact, AutoAccountContactGroup, ContactType }
 import { normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
+import { getAccountPlatformLabel } from '../../utils/accountLabels'
 
 type DataGroupPlatform = 'facebook' | 'zalo'
 type DataGroupContactType = Extract<ContactType, 'person' | 'group' | 'page'>
@@ -609,7 +610,7 @@ export default function DataGroupManagerModal({
               <option value="">Chọn tài khoản</option>
               {availableAccounts.map(account => (
                 <option key={account.id} value={account.id}>
-                  {account.name} ({account.flatformType})
+                  {account.name} ({getAccountPlatformLabel(account)})
                 </option>
               ))}
             </select>

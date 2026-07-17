@@ -16,6 +16,7 @@ import AccountGroupManagerModal from './AccountGroupManagerModal'
 import ProxyManagerModal from './ProxyManagerModal'
 import { useUiStore } from '../../stores/uiStore'
 import { canUsePlatform, getFirstAllowedPlatform } from '../../utils/entitlements'
+import { getAccountPlatformLabel, isZaloWebAccount } from '../../utils/accountLabels'
 import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
 import type { ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
 
@@ -119,16 +120,6 @@ const mapServerQrOperation = (operation: ZaloServerOperationSnapshot): ZaloLogin
   }
 }
 
-const getPlatformLabel = (platform: string): string => {
-  switch (platform) {
-    case 'facebook': return 'Facebook'
-    case 'zalo': return 'Zalo'
-    case 'email': return 'Email'
-    case 'sms': return 'SMS'
-    default: return platform
-  }
-}
-
 export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
   const {
     accounts,
@@ -147,12 +138,15 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     updateProxy,
     deleteProxy
   } = useCampaignStore()
-  const entitlements = useAuthStore(state => state.user?.entitlements)
-  const isZaloServer = useAuthStore(state => state.user?.isZaloServer === true)
-  const isZaloShowWeb = useAuthStore(state => state.user?.isZaloShowWeb === true)
+  const authUser = useAuthStore(state => state.user)
+  const entitlements = authUser?.entitlements
+  const isZaloServer = authUser?.isZaloServer === true
+  const zaloAccountCapabilities = authUser?.zaloAccountCapabilities
   const serverOperationState = useZaloServerOperationState(isZaloServer)
   const canUseFacebookAccount = canUsePlatform('facebook', entitlements)
   const canUseZaloFeature = canUsePlatform('zalo', entitlements)
+  const canUseZaloQr = zaloAccountCapabilities?.qr === true
+  const canUseZaloWeb = zaloAccountCapabilities?.web === true
   const canUseEmailFeature = canUsePlatform('email', entitlements)
   const allowedAccountPlatforms = useMemo(
     () => ['facebook', 'zalo', 'email'].filter(platform => canUsePlatform(platform, entitlements)),
@@ -180,6 +174,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [formData, setFormData] = useState({
     name: '',
     flatformType: defaultAccountPlatform,
+    isZaloShowWeb: defaultAccountPlatform === 'zalo' && !canUseZaloQr && canUseZaloWeb,
     accountGroupId: null as number | null,
     proxyId: null as number | null
   })
@@ -200,13 +195,36 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }, [loadAccounts, loadAccountGroups, loadProxies])
 
   useEffect(() => {
+    if (!editingAccount && formData.flatformType === 'zalo') {
+      if (formData.isZaloShowWeb && !canUseZaloWeb && canUseZaloQr) {
+        setFormData(prev => ({ ...prev, isZaloShowWeb: false }))
+        return
+      }
+      if (!formData.isZaloShowWeb && !canUseZaloQr && canUseZaloWeb) {
+        setFormData(prev => ({ ...prev, isZaloShowWeb: true }))
+        return
+      }
+    }
     if (!formData.flatformType || allowedAccountPlatforms.includes(formData.flatformType)) return
-    setFormData(prev => ({ ...prev, flatformType: defaultAccountPlatform, accountGroupId: null }))
+    setFormData(prev => ({
+      ...prev,
+      flatformType: defaultAccountPlatform,
+      isZaloShowWeb: defaultAccountPlatform === 'zalo' && !canUseZaloQr && canUseZaloWeb,
+      accountGroupId: null
+    }))
     if (formData.flatformType === 'email') {
       setEmailConfig({ ...EMPTY_EMAIL_CONFIG })
       setOriginalEmailConfig(null)
     }
-  }, [allowedAccountPlatforms, defaultAccountPlatform, formData.flatformType])
+  }, [
+    allowedAccountPlatforms,
+    canUseZaloQr,
+    canUseZaloWeb,
+    defaultAccountPlatform,
+    editingAccount,
+    formData.flatformType,
+    formData.isZaloShowWeb
+  ])
 
   useEffect(() => {
     if (!window.electronAPI?.onZaloLoginQrEvent) return
@@ -327,7 +345,11 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       !handledServerQrOperationIdsRef.current.has(operation.operationId)
     ))
     if (runningOperation) {
-      const account = accounts.find(item => item.id === runningOperation.accountId && item.flatformType === 'zalo')
+      const account = accounts.find(item => (
+        item.id === runningOperation.accountId
+        && item.flatformType === 'zalo'
+        && !isZaloWebAccount(item)
+      ))
       if (!account) return
       trackedServerQrOperationIdRef.current = runningOperation.operationId
       const event = mapServerQrOperation(runningOperation)
@@ -363,7 +385,13 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }, [zaloQrExpiresAt, zaloLoginAccount?.id])
 
   const resetForm = () => {
-    setFormData({ name: '', flatformType: defaultAccountPlatform, accountGroupId: null, proxyId: null })
+    setFormData({
+      name: '',
+      flatformType: defaultAccountPlatform,
+      isZaloShowWeb: defaultAccountPlatform === 'zalo' && !canUseZaloQr && canUseZaloWeb,
+      accountGroupId: null,
+      proxyId: null
+    })
     setEmailConfig({ ...EMPTY_EMAIL_CONFIG })
     setOriginalEmailConfig(null)
   }
@@ -420,6 +448,23 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   const formAccountGroups = accountGroups.filter(group => group.flatformType === formData.flatformType && group.isActive)
   const activeProxies = proxies.filter(proxy => proxy.isActive && !proxy.isDelete)
+  const formAccountType = formData.flatformType === 'zalo'
+    ? (formData.isZaloShowWeb ? 'zalo_web' : 'zalo_qr')
+    : formData.flatformType
+  const editingZaloAccount = editingAccount?.flatformType === 'zalo'
+  const showZaloQrOption = canUseZaloQr || Boolean(editingAccount && editingZaloAccount && !isZaloWebAccount(editingAccount))
+  const showZaloWebOption = canUseZaloWeb || Boolean(editingAccount && editingZaloAccount && isZaloWebAccount(editingAccount))
+  const canChangeAccountType = !editingAccount || (editingZaloAccount && canUseZaloQr && canUseZaloWeb)
+
+  const handleAccountTypeChange = (value: string) => {
+    const nextPlatform = value === 'zalo_qr' || value === 'zalo_web' ? 'zalo' : value
+    setFormData(prev => ({
+      ...prev,
+      flatformType: nextPlatform,
+      isZaloShowWeb: value === 'zalo_web',
+      accountGroupId: prev.flatformType === nextPlatform ? prev.accountGroupId : null
+    }))
+  }
 
   const handleSubmit = async () => {
     if (savingAccount || !formData.name.trim()) return
@@ -446,6 +491,14 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         useUiStore.getState().showAlert('Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.', 'error')
         return
       }
+      if (formData.flatformType === 'zalo' && formData.isZaloShowWeb && !canUseZaloWeb) {
+        useUiStore.getState().showAlert('Gói Zalo Trình duyệt chưa được kích hoạt hoặc đã hết hạn.', 'error')
+        return
+      }
+      if (formData.flatformType === 'zalo' && !formData.isZaloShowWeb && !canUseZaloQr) {
+        useUiStore.getState().showAlert('Gói Zalo mã QR chưa được kích hoạt hoặc đã hết hạn.', 'error')
+        return
+      }
       if (formData.flatformType === 'facebook' && !canUseFacebookAccount) {
         useUiStore.getState().showAlert('Tính năng Facebook chưa được kích hoạt hoặc đã hết hạn.', 'error')
         return
@@ -454,16 +507,21 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       const payload = {
         name: formData.name,
         flatformType: formData.flatformType,
+        isZaloShowWeb: formData.flatformType === 'zalo' && formData.isZaloShowWeb,
         accountGroupId: formData.accountGroupId,
         proxyId: formData.proxyId
       }
 
       let accountId: number
       let createdZaloAccount: AutoAccount | null = null
+      let changedZaloAccount: AutoAccount | null = null
       let createdFacebookAccount: AutoAccount | null = null
       if (editingAccount) {
-        await updateAccount(editingAccount.id, payload)
+        const zaloSubtypeChanged = editingAccount.flatformType === 'zalo'
+          && isZaloWebAccount(editingAccount) !== payload.isZaloShowWeb
+        const updated = await updateAccount(editingAccount.id, payload)
         accountId = editingAccount.id
+        if (zaloSubtypeChanged) changedZaloAccount = updated
         if (proxyChanged) {
           if (editingAccount.flatformType === 'zalo') {
             useUiStore.getState().showAlert('Đã lưu proxy thành công.', 'success')
@@ -498,7 +556,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       setEditingAccount(null)
       resetForm()
       if (createdZaloAccount) {
-        await handleZaloLoginQr(createdZaloAccount)
+        await handleZaloLogin(createdZaloAccount)
+      } else if (changedZaloAccount) {
+        await handleZaloLogin(changedZaloAccount)
       } else if (createdFacebookAccount) {
         useUiStore.getState().showAlert(
           `Đã thêm tài khoản Facebook "${createdFacebookAccount.name}" thành công.`,
@@ -535,6 +595,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setFormData({
       name: account.name,
       flatformType: account.flatformType,
+      isZaloShowWeb: isZaloWebAccount(account),
       accountGroupId: account.accountGroupId ?? null,
       proxyId: account.proxyId ?? null
     })
@@ -623,12 +684,12 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     }
   }
 
-  const handleZaloLoginQr = async (account: AutoAccount) => {
+  const handleZaloLogin = async (account: AutoAccount) => {
     if (!canUseZaloFeature) {
       useUiStore.getState().showAlert('Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.', 'error')
       return
     }
-    if (isZaloShowWeb) {
+    if (isZaloWebAccount(account)) {
       onNavigateToBrowser?.({ accountId: account.id, reloadAfterOpen: false })
       return
     }
@@ -714,7 +775,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleCheckZaloSession = async (account: AutoAccount) => {
-    if (isZaloShowWeb) {
+    if (isZaloWebAccount(account)) {
       if (!window.electronAPI?.checkZaloWebLogin) {
         useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
         return
@@ -754,9 +815,10 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }
 
   const handleLogoutZalo = async (account: AutoAccount) => {
+    const isWebAccount = isZaloWebAccount(account)
     if (
-      (isZaloShowWeb && !window.electronAPI?.logoutZaloWeb)
-      || (!isZaloShowWeb && !window.electronAPI?.logoutZalo)
+      (isWebAccount && !window.electronAPI?.logoutZaloWeb)
+      || (!isWebAccount && !window.electronAPI?.logoutZalo)
     ) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
       return
@@ -764,7 +826,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     useUiStore.getState().showConfirm(
       `Đăng xuất Zalo khỏi tài khoản "${account.name}"?`,
       async () => {
-        if (isZaloShowWeb) {
+        if (isWebAccount) {
           const result = await window.electronAPI.logoutZaloWeb(account.id)
           await loadAccounts()
           useUiStore.getState().showAlert(
@@ -882,16 +944,25 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                 </div>
 
                 <div className="stepper-form-group">
-                  <label>Nền tảng</label>
+                  <label>Loại tài khoản</label>
                   <select
-                    value={formData.flatformType}
-                    onChange={e => setFormData(prev => ({ ...prev, flatformType: e.target.value, accountGroupId: null }))}
+                    value={formAccountType}
+                    onChange={e => handleAccountTypeChange(e.target.value)}
                     className="stepper-input"
-                    disabled={!!editingAccount}
+                    disabled={!canChangeAccountType}
                   >
-                    {canUseFacebookAccount && <option value="facebook">Facebook</option>}
-                    {canUseZaloFeature && <option value="zalo">Zalo</option>}
-                    {canUseEmailFeature && <option value="email">Email</option>}
+                    {(!editingAccount || editingAccount.flatformType === 'facebook') && canUseFacebookAccount && (
+                      <option value="facebook">Facebook</option>
+                    )}
+                    {(!editingAccount || editingZaloAccount) && showZaloQrOption && (
+                      <option value="zalo_qr">Zalo (mã QR)</option>
+                    )}
+                    {(!editingAccount || editingZaloAccount) && showZaloWebOption && (
+                      <option value="zalo_web">Zalo (trình duyệt)</option>
+                    )}
+                    {(!editingAccount || editingAccount.flatformType === 'email') && canUseEmailFeature && (
+                      <option value="email">Email</option>
+                    )}
                   </select>
                 </div>
 
@@ -1038,7 +1109,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                     <span className="account-card-name-text" title={account.name}>{account.name}</span>
                   </div>
                   <div className="account-card-meta">
-                    <span className="account-tag" style={{ color: 'var(--accent-info)' }}>{getPlatformLabel(account.flatformType)}</span>
+                    <span className="account-tag" style={{ color: 'var(--accent-info)' }}>{getAccountPlatformLabel(account)}</span>
                     {!isSmsAccount && (
                       <span style={{ color: getLoginColor(account.loginStatus), fontSize: '10px' }}>{account.loginStatus}</span>
                     )}
@@ -1072,7 +1143,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           onViewBrowser={handleViewBrowser}
           onReloadPage={handleReloadPage}
           onCheckLogin={handleCheckLogin}
-          onZaloLoginQr={handleZaloLoginQr}
+          onZaloLogin={handleZaloLogin}
           onCheckZaloSession={handleCheckZaloSession}
           onLogoutZalo={handleLogoutZalo}
           onResetSmsMobileDevice={handleResetSmsMobileDevice}
@@ -1188,7 +1259,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={() => handleZaloLoginQr(zaloLoginAccount)}
+                    onClick={() => handleZaloLogin(zaloLoginAccount)}
                     disabled={zaloLoginStarting}
                     style={zaloRetryButtonStyle}
                   >

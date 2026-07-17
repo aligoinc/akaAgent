@@ -30,12 +30,14 @@ import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, 
 import { requireCurrentUser } from '../currentUser'
 import { formatStoredCampaignLogLine } from '../../../shared/campaignLogFormat'
 import * as accountActionRepo from './accountActionRepository'
+import * as accountRepo from './accountRepository'
 import * as errorPolicyRepo from './errorPolicyRepository'
 import {
   canUseCampaignActionWithEntitlements,
   ensureCurrentUserCanUseCampaignAction,
   getAccountActionDailySendLimit,
   getCampaignActionDailySendLimit,
+  loadCurrentUserZaloAccountCapabilities,
   loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
 
@@ -1154,11 +1156,11 @@ export async function listCampaigns(): Promise<Campaign[]> {
 export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloRealtimeGroupCampaignSnapshot[]> {
   const u = requireCurrentUser()
   const entitlements = await loadCurrentUserEffectiveEntitlements()
-  if (!entitlements.zalo) return []
+  if (!entitlements.zalo || !loadCurrentUserZaloAccountCapabilities().qr) return []
 
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name, login_status, status, is_active)')
+    .select('*, auto_campaign_actions(name), auto_accounts(name, login_status, status, is_active, is_zalo_show_web)')
     .eq('staff_id', u.staffId)
     .eq('action_id', ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
     .eq('is_delete', false)
@@ -1166,14 +1168,15 @@ export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloReal
 
   if (error) throw new Error(`Không thể tải danh sách chiến dịch Zalo theo thời gian thực: ${error.message}`)
 
-  return (data || []).map(row => {
+  return (data || []).flatMap(row => {
     const account = (row as Record<string, any>).auto_accounts || {}
-    return {
+    if (account.is_zalo_show_web === true) return []
+    return [{
       campaign: mapCampaignFromDB(row),
       accountLoginStatus: String(account.login_status || ''),
       accountStatus: String(account.status || ''),
       accountIsActive: account.is_active !== false
-    }
+    }]
   })
 }
 
@@ -1209,12 +1212,16 @@ export async function enqueueZaloRealtimeGroupEvent(
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
   await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
+  const accountId = Math.floor(Number(campaign.accountId))
+  if (!Number.isSafeInteger(accountId) || accountId <= 0 || !await accountRepo.getAccount(accountId)) {
+    throw new Error('Tài khoản chiến dịch không tồn tại hoặc không phù hợp với gói hiện tại.')
+  }
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   const isSmsCampaign = isMobileManagedSmsCampaignAction(campaign.actionId)
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
-    account_id: campaign.accountId,
+    account_id: accountId,
     status: campaign.status || 'chờ xử lý',
     schedule: campaign.schedule || null,
     original_schedule: campaign.originalSchedule ?? campaign.schedule ?? null,
@@ -1280,6 +1287,12 @@ async function rematerializeSmsInputData(campaign: Campaign, updateSchedule: boo
 
 export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
+  if (updates.accountId !== undefined) {
+    const accountId = Math.floor(Number(updates.accountId))
+    if (!Number.isSafeInteger(accountId) || accountId <= 0 || !await accountRepo.getAccount(accountId)) {
+      throw new Error('Tài khoản chiến dịch không tồn tại hoặc không phù hợp với gói hiện tại.')
+    }
+  }
   let targetActionId: string | null | undefined = updates.actionId
   if (updates.actionId !== undefined) {
     await ensureCurrentUserCanUseCampaignAction(updates.actionId)
@@ -1294,7 +1307,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.actionId !== undefined) payload.action_id = updates.actionId
-  if (updates.accountId !== undefined) payload.account_id = updates.accountId
+  if (updates.accountId !== undefined) payload.account_id = Math.floor(Number(updates.accountId))
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.schedule !== undefined) payload.schedule = updates.schedule
   if (updates.originalSchedule !== undefined) payload.original_schedule = updates.originalSchedule

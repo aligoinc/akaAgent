@@ -49,6 +49,7 @@ import {
   getAccountActionDailySendLimit,
   getCampaignActionDailySendLimit
 } from '../../utils/entitlements'
+import { getAccountPlatformLabel, isZaloWebAccount } from '../../utils/accountLabels'
 import { countSmsContentVariants } from '../../../../shared/smsContent'
 import { renderContentSpinMax, serializeContentVariants, splitContentVariants } from '../../../../shared/contentSpin'
 import {
@@ -1229,8 +1230,9 @@ export default function CampaignFormModal({
     createCampaign, updateCampaign,
     createCampaignInputData
   } = useCampaignStore()
-  const entitlements = useAuthStore(state => state.user?.entitlements)
-  const isZaloShowWeb = useAuthStore(state => state.user?.isZaloShowWeb === true)
+  const authUser = useAuthStore(state => state.user)
+  const entitlements = authUser?.entitlements
+  const canUseZaloQrAccount = authUser?.zaloAccountCapabilities?.qr === true
   const canUseEmailFeature = !!entitlements?.email
   const canUseInternalSmsFeature = !!entitlements?.sms
   const canUseFanpageFeature = !!entitlements?.facebookFanpage
@@ -1825,9 +1827,9 @@ export default function CampaignFormModal({
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
-      .filter(action => !isZaloShowWeb || action.id !== ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
+      .filter(action => canUseZaloQrAccount || action.id !== ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
       .sort(compareCampaignActionsByPlatform),
-    [campaignActions, entitlements, isZaloShowWeb]
+    [campaignActions, canUseZaloQrAccount, entitlements]
   )
   const campaignActionPlatformOptions = useMemo(() => {
     const platforms = new Set<string>()
@@ -1872,9 +1874,12 @@ export default function CampaignFormModal({
   })
   const selectableAccounts = useMemo(
     () => actionPlatformForAccountSelection
-      ? accounts.filter(account => normalizeCampaignActionPlatform(account.flatformType) === actionPlatformForAccountSelection)
+      ? accounts.filter(account => (
+        normalizeCampaignActionPlatform(account.flatformType) === actionPlatformForAccountSelection
+        && (formData.actionId !== ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID || !isZaloWebAccount(account))
+      ))
       : accounts,
-    [accounts, actionPlatformForAccountSelection]
+    [accounts, actionPlatformForAccountSelection, formData.actionId]
   )
   const selectedCampaignNameAccount = useMemo(() => {
     if (formData.accountIds.length !== 1) return null
@@ -1923,11 +1928,12 @@ export default function CampaignFormModal({
     : selectedPostBumpAccounts.length === 1
       ? selectedPostBumpAccounts[0].name
       : `Đã chọn ${selectedPostBumpAccounts.length} tài khoản`
-  const getAccountIdsForPlatform = (accountIds: number[], platform: string): number[] => {
+  const getAccountIdsForPlatform = (accountIds: number[], platform: string, actionId = formData.actionId): number[] => {
     if (!platform) return accountIds
     return accountIds.filter(id => {
       const account = accounts.find(item => item.id === id)
       return normalizeCampaignActionPlatform(account?.flatformType) === platform
+        && (actionId !== ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID || !account || !isZaloWebAccount(account))
     })
   }
   const invalidateCampaignNameAiRequest = () => {
@@ -1978,7 +1984,7 @@ export default function CampaignFormModal({
   const handleActionChange = (actionId: string) => {
     const nextAction = availableCampaignActions.find(action => action.id === actionId)
     const nextPlatform = normalizeCampaignActionPlatform(nextAction?.flatformType)
-    const nextAccountIds = getAccountIdsForPlatform(formData.accountIds, nextPlatform || selectedActionPlatformFilter)
+    const nextAccountIds = getAccountIdsForPlatform(formData.accountIds, nextPlatform || selectedActionPlatformFilter, actionId)
     if (
       actionId !== formData.actionId ||
       nextAccountIds.length !== formData.accountIds.length ||
@@ -1995,7 +2001,7 @@ export default function CampaignFormModal({
       return {
         ...compatibleState,
         actionId,
-        accountIds: getAccountIdsForPlatform(prev.accountIds, nextPlatform || selectedActionPlatformFilter),
+        accountIds: getAccountIdsForPlatform(prev.accountIds, nextPlatform || selectedActionPlatformFilter, actionId),
         ...([SMS_SEND_ACTION_ID, VOICE_CALL_ACTION_ID].includes(actionId)
         ? {
           imageOption: 'none' as const,
@@ -11262,7 +11268,13 @@ export default function CampaignFormModal({
                           {formData.accountIds.length === 0
                             ? '-- Chọn tài khoản --'
                             : formData.accountIds.length === 1
-                              ? accounts.find(a => a.id === formData.accountIds[0])?.name || 'Đã chọn 1 tài khoản'
+                              ? (() => {
+                                const account = accounts.find(a => a.id === formData.accountIds[0])
+                                if (!account) return 'Đã chọn 1 tài khoản'
+                                return account.flatformType === 'zalo'
+                                  ? `${account.name} — ${getAccountPlatformLabel(account)}`
+                                  : account.name
+                              })()
                               : `Đã chọn ${formData.accountIds.length} tài khoản`}
                         </span>
                         <ChevronDown size={16} style={{ flexShrink: 0, transform: isAccountDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
@@ -11305,8 +11317,11 @@ export default function CampaignFormModal({
                                               }
                                             }}
                                           />
-                                          <span className="account-select-account-label" title={isSmsAccount ? a.name : `${a.name} (${a.loginStatus || '-'})`}>
+                                          <span className="account-select-account-label" title={isSmsAccount ? a.name : `${a.name} — ${getAccountPlatformLabel(a)} (${a.loginStatus || '-'})`}>
                                             <span className="account-select-account-name">{a.name}</span>
+                                            {a.flatformType === 'zalo' && (
+                                              <span className="account-select-login-status"> — {getAccountPlatformLabel(a)}</span>
+                                            )}
                                             {!isSmsAccount && (
                                               <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
                                                 {' '}({a.loginStatus || '-'})
@@ -11350,8 +11365,11 @@ export default function CampaignFormModal({
                                             }
                                           }}
                                         />
-                                        <span className="account-select-account-label" title={isSmsAccount ? a.name : `${a.name} (${a.loginStatus || '-'})`}>
+                                        <span className="account-select-account-label" title={isSmsAccount ? a.name : `${a.name} — ${getAccountPlatformLabel(a)} (${a.loginStatus || '-'})`}>
                                           <span className="account-select-account-name">{a.name}</span>
+                                          {a.flatformType === 'zalo' && (
+                                            <span className="account-select-login-status"> — {getAccountPlatformLabel(a)}</span>
+                                          )}
                                           {!isSmsAccount && (
                                             <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
                                               {' '}({a.loginStatus || '-'})

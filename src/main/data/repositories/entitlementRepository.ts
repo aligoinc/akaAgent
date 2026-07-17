@@ -1,9 +1,18 @@
-import { AuthAccountProduct, AuthEntitlementFeature, AuthEntitlements, AuthUser } from '../../../shared/types'
+import {
+  AuthAccountProduct,
+  AuthEntitlementFeature,
+  AuthEntitlements,
+  AuthUser,
+  AutoAccount,
+  ZaloAccountCapabilities
+} from '../../../shared/types'
 import {
   AUTH_PRODUCT_BY_FEATURE,
   AUTH_PRODUCT_IDS,
   AUTH_PRODUCTS_BY_FEATURE,
+  AUTH_ZALO_CONFIGURABLE_PRODUCT_ID,
   AUTH_ZALO_PRODUCT_IDS,
+  AUTH_ZALO_QR_PRODUCT_ID,
   getAuthProductById
 } from '../../../shared/authProductCatalog'
 import { getVietnamDayStart } from '../../../shared/vietnamTime'
@@ -18,6 +27,8 @@ export const FACEBOOK_CORE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookCore.pro
 export const FACEBOOK_FANPAGE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId
 export const EMAIL_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.email.productId
 export const ZALO_PRODUCT_IDS = AUTH_ZALO_PRODUCT_IDS
+export const ZALO_QR_PRODUCT_ID = AUTH_ZALO_QR_PRODUCT_ID
+export const ZALO_CONFIGURABLE_PRODUCT_ID = AUTH_ZALO_CONFIGURABLE_PRODUCT_ID
 export const SMS_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.sms.productId
 export const AKA_AGENT_PRODUCT_ID = FACEBOOK_CORE_PRODUCT_ID
 export const DEFAULT_DEMO_DAILY_SEND_LIMIT = 30
@@ -28,6 +39,8 @@ export const FACEBOOK_CORE_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Facebook c
 export const FACEBOOK_FANPAGE_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Facebook Fanpage chưa được kích hoạt hoặc đã hết hạn.'
 export const EMAIL_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Email chưa được kích hoạt hoặc đã hết hạn.'
 export const ZALO_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.'
+export const ZALO_QR_FEATURE_UNAVAILABLE_MESSAGE = 'Gói hiện tại không hỗ trợ tài khoản Zalo (mã QR).'
+export const ZALO_WEB_FEATURE_UNAVAILABLE_MESSAGE = 'Gói hiện tại không hỗ trợ tài khoản Zalo (trình duyệt).'
 export const SMS_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng SMS chưa được kích hoạt hoặc đã hết hạn.'
 
 export const FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS = new Set([
@@ -92,7 +105,17 @@ interface OrganizationProductRow {
   package_type?: string | null
   max_sends_per_day?: number | string | null
   max_accounts?: number | string | null
+  is_zalo_show_web?: boolean | null
   created_at?: string | null
+}
+
+export interface OrganizationEntitlementAccess {
+  entitlements: AuthEntitlements
+  zaloAccountCapabilities: ZaloAccountCapabilities
+}
+
+export function emptyZaloAccountCapabilities(): ZaloAccountCapabilities {
+  return { qr: false, web: false }
 }
 
 export function emptyAuthEntitlements(): AuthEntitlements {
@@ -192,22 +215,49 @@ function compareNewestOrganizationProduct(
   return Number(right.id || 0) - Number(left.id || 0)
 }
 
-function getNewestZaloProductRow(
+function getNewestProductRow(
   rows: OrganizationProductRow[],
+  productId: number,
   activeOnly: boolean
 ): OrganizationProductRow | null {
   const candidates = rows.filter(row => (
-    ZALO_PRODUCT_IDS.includes(Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]) &&
+    Number(row.product_id) === productId &&
     (!activeOnly || isExpirationActive(row.expiration_date))
   ))
   candidates.sort(compareNewestOrganizationProduct)
   return candidates[0] || null
 }
 
-function getPreferredLimitRows(feature: EntitlementFeature, rows: OrganizationProductRow[]): OrganizationProductRow[] {
-  if (feature !== 'zalo') return rows
-  const newestActiveRow = getNewestZaloProductRow(rows, true)
-  return newestActiveRow ? [newestActiveRow] : []
+function getEffectiveZaloProductRows(
+  rows: OrganizationProductRow[],
+  activeOnly: boolean
+): OrganizationProductRow[] {
+  return ZALO_PRODUCT_IDS
+    .map(productId => getNewestProductRow(rows, productId, activeOnly))
+    .filter((row): row is OrganizationProductRow => !!row)
+}
+
+function getZaloDailySendLimit(rows: OrganizationProductRow[]): number | null {
+  const activeRows = rows.filter(row => isExpirationActive(row.expiration_date))
+  const configuredLimits = activeRows
+    .map(row => normalizePositiveInteger(row.max_sends_per_day))
+    .filter((limit): limit is number => limit !== null)
+  if (configuredLimits.length > 0) return Math.max(...configuredLimits)
+
+  const hasPaidPackage = activeRows.some(row => String(row.package_type || '').trim().toLowerCase() !== 'demo')
+  if (hasPaidPackage) return null
+  return activeRows.length > 0 ? DEFAULT_DEMO_DAILY_SEND_LIMIT : null
+}
+
+function resolveZaloAccountCapabilities(rows: OrganizationProductRow[]): ZaloAccountCapabilities {
+  const activeRows = getEffectiveZaloProductRows(rows, true)
+  const hasProduct16 = activeRows.some(row => Number(row.product_id) === ZALO_QR_PRODUCT_ID)
+  const product18 = activeRows.find(row => Number(row.product_id) === ZALO_CONFIGURABLE_PRODUCT_ID)
+  const product18UsesWeb = product18?.is_zalo_show_web === true
+  return {
+    qr: hasProduct16 || (!!product18 && !product18UsesWeb),
+    web: !!product18 && product18UsesWeb
+  }
 }
 
 function hasAnyEntitlement(entitlements: Partial<AuthEntitlements> | null | undefined): boolean {
@@ -224,11 +274,13 @@ export function getFeatureUnavailableMessage(feature: EntitlementFeature): strin
   return FEATURE_UNAVAILABLE_MESSAGES[feature]
 }
 
-export async function loadOrganizationEntitlements(organizationId: number): Promise<AuthEntitlements> {
+export async function loadOrganizationEntitlementAccess(
+  organizationId: number
+): Promise<OrganizationEntitlementAccess> {
   const entitlements = emptyAuthEntitlements()
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('id, product_id, expiration_date, package_type, max_sends_per_day, max_accounts, created_at')
+    .select('id, product_id, expiration_date, package_type, max_sends_per_day, max_accounts, is_zalo_show_web, created_at')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)
@@ -243,19 +295,36 @@ export async function loadOrganizationEntitlements(organizationId: number): Prom
   const rows = (data || []) as unknown as OrganizationProductRow[]
   for (const [feature, productIds] of Object.entries(FEATURE_PRODUCT_IDS) as Array<[EntitlementFeature, readonly number[]]>) {
     const featureRows = rows.filter(row => productIds.includes(Number(row.product_id)))
-    const limitRows = getPreferredLimitRows(feature, featureRows)
-    entitlements[feature] = featureRows.some(row => isExpirationActive(row.expiration_date))
-    entitlements.dailySendLimits[feature] = getFeatureDailySendLimitFromProducts(limitRows)
-    entitlements.accountLimits[feature] = getFeatureAccountLimit(limitRows)
+    const effectiveRows = feature === 'zalo'
+      ? getEffectiveZaloProductRows(featureRows, true)
+      : featureRows
+    entitlements[feature] = effectiveRows.some(row => isExpirationActive(row.expiration_date))
+    entitlements.dailySendLimits[feature] = feature === 'zalo'
+      ? getZaloDailySendLimit(effectiveRows)
+      : getFeatureDailySendLimitFromProducts(effectiveRows)
+    entitlements.accountLimits[feature] = getFeatureAccountLimit(effectiveRows)
   }
 
-  return entitlements
+  return {
+    entitlements,
+    zaloAccountCapabilities: resolveZaloAccountCapabilities(rows)
+  }
+}
+
+export async function loadOrganizationEntitlements(organizationId: number): Promise<AuthEntitlements> {
+  return (await loadOrganizationEntitlementAccess(organizationId)).entitlements
+}
+
+export async function loadOrganizationZaloAccountCapabilities(
+  organizationId: number
+): Promise<ZaloAccountCapabilities> {
+  return (await loadOrganizationEntitlementAccess(organizationId)).zaloAccountCapabilities
 }
 
 export async function loadOrganizationAccountProducts(organizationId: number): Promise<AuthAccountProduct[]> {
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('id, product_id, product_name, package_name, package_type, expiration_date, max_accounts, created_at')
+    .select('id, product_id, product_name, package_name, package_type, expiration_date, max_accounts, is_zalo_show_web, created_at')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)
@@ -268,20 +337,26 @@ export async function loadOrganizationAccountProducts(organizationId: number): P
   }
 
   const rows = (data || []) as unknown as OrganizationProductRow[]
-  const newestActiveZaloRow = getNewestZaloProductRow(rows, true)
-  const effectiveZaloRow = newestActiveZaloRow || getNewestZaloProductRow(rows, false)
   const effectiveRows = rows.filter(row => !ZALO_PRODUCT_IDS.includes(
     Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
   ))
-  if (effectiveZaloRow) effectiveRows.push(effectiveZaloRow)
+  for (const productId of ZALO_PRODUCT_IDS) {
+    const effectiveZaloRow = getNewestProductRow(rows, productId, true)
+      || getNewestProductRow(rows, productId, false)
+    if (effectiveZaloRow) effectiveRows.push(effectiveZaloRow)
+  }
   effectiveRows.sort(compareNewestOrganizationProduct)
 
   return effectiveRows.map(row => {
+    const organizationProductId = Number(row.id)
     const productId = Number(row.product_id)
     const productCatalogItem = getAuthProductById(Number.isFinite(productId) ? productId : null)
     const productName = String(row.product_name || '').trim()
     const packageName = String(row.package_name || '').trim()
     return {
+      organizationProductId: Number.isSafeInteger(organizationProductId) && organizationProductId > 0
+        ? organizationProductId
+        : null,
       feature: productCatalogItem?.feature ?? null,
       productId: Number.isFinite(productId) ? productId : null,
       productName,
@@ -322,6 +397,66 @@ export function hasCurrentUserEmailFeatureEntitlement(): boolean {
 
 export async function loadCurrentUserEffectiveEntitlements(): Promise<AuthEntitlements> {
   return normalizeAuthEntitlements(requireCurrentUser().entitlements)
+}
+
+type ZaloCapabilityUser = Partial<Pick<
+  AuthUser,
+  'entitlements' | 'isZaloShowWeb' | 'zaloAccountCapabilities'
+>>
+
+/**
+ * Normalize the startup capability snapshot. The legacy fallback keeps an old
+ * persisted AuthUser usable for one upgrade login; newly built users always
+ * include zaloAccountCapabilities explicitly.
+ */
+export function getUserZaloAccountCapabilities(
+  user: ZaloCapabilityUser | null | undefined
+): ZaloAccountCapabilities {
+  const capabilities = user?.zaloAccountCapabilities
+  if (capabilities && typeof capabilities.qr === 'boolean' && typeof capabilities.web === 'boolean') {
+    return { qr: capabilities.qr, web: capabilities.web }
+  }
+
+  const hasLegacyZaloEntitlement = user?.entitlements?.zalo === true
+  const legacyWeb = hasLegacyZaloEntitlement && user?.isZaloShowWeb === true
+  return {
+    qr: hasLegacyZaloEntitlement && !legacyWeb,
+    web: legacyWeb
+  }
+}
+
+export function loadCurrentUserZaloAccountCapabilities(): ZaloAccountCapabilities {
+  return getUserZaloAccountCapabilities(requireCurrentUser())
+}
+
+export function canUseZaloAccountWithCapabilities(
+  accountOrShowWeb: Pick<AutoAccount, 'isZaloShowWeb'> | boolean,
+  capabilities: Partial<ZaloAccountCapabilities> | null | undefined
+): boolean {
+  const isShowWeb = typeof accountOrShowWeb === 'boolean'
+    ? accountOrShowWeb
+    : accountOrShowWeb.isZaloShowWeb === true
+  return isShowWeb ? capabilities?.web === true : capabilities?.qr === true
+}
+
+export function canUseAccountWithEntitlementsAndCapabilities(
+  account: Pick<AutoAccount, 'flatformType' | 'isZaloShowWeb'>,
+  entitlements: Partial<AuthEntitlements> | null | undefined,
+  zaloAccountCapabilities: Partial<ZaloAccountCapabilities> | null | undefined
+): boolean {
+  if (!canUseAccountPlatformWithEntitlements(account.flatformType, entitlements)) return false
+  return String(account.flatformType || '').trim().toLowerCase() !== 'zalo'
+    || canUseZaloAccountWithCapabilities(account, zaloAccountCapabilities)
+}
+
+export async function ensureCurrentUserCanUseZaloAccountType(isZaloShowWeb: boolean): Promise<void> {
+  await ensureCurrentUserFeatureActive('zalo')
+  const capabilities = loadCurrentUserZaloAccountCapabilities()
+  if (!canUseZaloAccountWithCapabilities(isZaloShowWeb, capabilities)) {
+    throw new Error(isZaloShowWeb
+      ? ZALO_WEB_FEATURE_UNAVAILABLE_MESSAGE
+      : ZALO_QR_FEATURE_UNAVAILABLE_MESSAGE)
+  }
 }
 
 export async function isCurrentUserFeatureActive(feature: EntitlementFeature): Promise<boolean> {

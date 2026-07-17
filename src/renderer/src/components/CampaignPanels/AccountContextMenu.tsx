@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { useAuthStore } from '../../stores/authStore'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
   Info, FolderCog, QrCode, LogOut, Smartphone
 } from 'lucide-react'
 import { AutoAccount } from '../../../../shared/types'
+import { isZaloWebAccount } from '../../utils/accountLabels'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -23,7 +23,7 @@ interface AccountContextMenuProps {
   onViewBrowser: (accountId: number) => void
   onReloadPage: (account: AutoAccount) => void
   onCheckLogin: (account: AutoAccount) => void
-  onZaloLoginQr: (account: AutoAccount) => void
+  onZaloLogin: (account: AutoAccount) => void
   onCheckZaloSession: (account: AutoAccount) => void
   onLogoutZalo: (account: AutoAccount) => void
   onResetSmsMobileDevice: (account: AutoAccount) => void
@@ -45,7 +45,7 @@ export default function AccountContextMenu({
   onViewBrowser,
   onReloadPage,
   onCheckLogin,
-  onZaloLoginQr,
+  onZaloLogin,
   onCheckZaloSession,
   onLogoutZalo,
   onResetSmsMobileDevice,
@@ -99,9 +99,9 @@ export default function AccountContextMenu({
   }, [onClose])
 
   const isPaused = account.status === 'tạm dừng'
-  const isZaloShowWeb = useAuthStore(state => state.user?.isZaloShowWeb === true)
   const isDisabled = !account.isActive
   const isZalo = account.flatformType === 'zalo'
+  const isZaloShowWeb = isZaloWebAccount(account)
   const isSmsAccount = account.flatformType === 'sms'
   const isBrowserless = BROWSERLESS_PLATFORMS.has(account.flatformType)
     && !(account.flatformType === 'zalo' && isZaloShowWeb)
@@ -155,9 +155,9 @@ export default function AccountContextMenu({
           <>
             <button
               className="context-menu-item"
-              onClick={() => handleAction(() => onZaloLoginQr(account))}
+              onClick={() => handleAction(() => onZaloLogin(account))}
             >
-              <QrCode size={14} />
+              {isZaloShowWeb ? <Globe size={14} /> : <QrCode size={14} />}
               <span>{isZaloShowWeb ? 'Mở Zalo Web để đăng nhập' : (account.hasZaloSession ? 'Đăng nhập lại Zalo' : 'Đăng nhập Zalo QR')}</span>
             </button>
             <button

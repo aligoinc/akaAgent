@@ -413,6 +413,10 @@ export class ZaloWebRuntimeService {
     return wc && !wc.isDestroyed() ? wc : null
   }
 
+  async clearForAccountTypeChange(accountId: number): Promise<void> {
+    await this.clearPersistentSession(accountId, false)
+  }
+
   async loadLoginPage(wc: WebContents | null): Promise<void> {
     if (wc && !wc.isDestroyed()) await wc.loadURL(ZALO_CHAT_ORIGIN)
   }

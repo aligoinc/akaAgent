@@ -55,6 +55,8 @@ export interface AutoAccount {
   id: number
   name: string
   flatformType: string
+  /** Zalo runtime subtype. Always false for non-Zalo accounts. */
+  isZaloShowWeb: boolean
   username?: string | null
   password?: string | null
   mobileDeviceId?: string | null
@@ -1635,6 +1637,8 @@ export interface ZaloRuntimeRestartRequiredPayload {
 }
 
 export interface AuthAccountProduct {
+  /** Source org_organization_product row used to resolve this effective product. */
+  organizationProductId: number | null
   feature: AuthEntitlementFeature | null
   productId: number | null
   productName: string
@@ -1647,6 +1651,13 @@ export interface AuthAccountProduct {
   isActive: boolean
 }
 
+export interface ZaloAccountCapabilities {
+  /** Zalo QR/zca-js accounts backed by auto_accounts.zalo_session. */
+  qr: boolean
+  /** Zalo Web accounts backed by the local Chromium partition. */
+  web: boolean
+}
+
 export interface AuthUser {
   staffId: number
   organizationId: number
@@ -1657,7 +1668,10 @@ export interface AuthUser {
   isAdminAkabiz: boolean
   useTestWorkflow: boolean
   isZaloServer: boolean
+  /** Legacy organization-level snapshot kept only for restart compatibility. */
   isZaloShowWeb: boolean
+  /** Account subtypes granted when this app session started. */
+  zaloAccountCapabilities: ZaloAccountCapabilities
   entitlements: AuthEntitlements
   accountProducts: AuthAccountProduct[]
   deviceLabel?: string | null

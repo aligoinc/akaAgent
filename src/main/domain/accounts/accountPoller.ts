@@ -99,7 +99,11 @@ async function checkZaloWebviewAccounts(
     if (!canContinue()) break
     if (!connected) continue
     const account = accountById.get(accountId)
-    if (account?.flatformType !== 'zalo' || account.loginStatus !== 'đã đăng nhập') continue
+    if (
+      account?.flatformType !== 'zalo' ||
+      !account.isZaloShowWeb ||
+      account.loginStatus !== 'đã đăng nhập'
+    ) continue
     const wcId = webviewRegistry.getWebContentsId(accountId)
     if (!wcId) continue
 
@@ -110,7 +114,7 @@ async function checkZaloWebviewAccounts(
       await accountRepo.markAccountZaloSessionCheck(accountId, {
         ok: false,
         error: 'Zalo Web đã đăng xuất'
-      })
+      }, true)
       hasChanges = true
       console.log(`[AutoCheck] Zalo Web account ${accountId}: đã đăng nhập -> chưa đăng nhập`)
     } catch (err) {
@@ -128,12 +132,11 @@ async function checkZaloApiAccounts(
   canReleaseClaim: () => boolean
 ): Promise<boolean> {
   if (!zaloRuntime) return false
-  const isZaloShowWeb = getCurrentUser()?.isZaloShowWeb === true
   let hasChanges = false
   for (const account of accounts) {
     if (!canContinue()) break
     if (account.flatformType !== 'zalo' || account.loginStatus !== 'đã đăng nhập') continue
-    if (isZaloShowWeb) {
+    if (account.isZaloShowWeb) {
       if (!zaloRuntime.hasVerifiedWebSession(account.id)) continue
     } else if (!account.hasZaloSession) {
       continue
@@ -205,7 +208,9 @@ export function startAccountPoller(
       const canCheckZalo = !getZaloRuntimeRestartRequired() &&
         !isZaloLocalStartupHandoffBlocked() &&
         !isCurrentUserZaloServerEnabled()
-      const shouldCheckZaloWeb = canCheckZalo && user.isZaloShowWeb
+      const shouldCheckZaloWeb = canCheckZalo && accounts.some(account => (
+        account.flatformType === 'zalo' && account.isZaloShowWeb
+      ))
       const shouldCheckZaloApi = canCheckZalo &&
         now - lastZaloAutoCheckAt >= ZALO_AUTO_CHECK_INTERVAL
       let hasZaloChanges = false

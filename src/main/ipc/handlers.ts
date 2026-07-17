@@ -55,8 +55,10 @@ import {
 } from '../data/repositories/zaloRuntimeModeRepository'
 import {
   ACCOUNT_EXPIRED_MESSAGE,
+  getUserZaloAccountCapabilities,
   loadOrganizationAccountProducts,
-  loadOrganizationEntitlements
+  loadOrganizationEntitlementAccess,
+  ZALO_CONFIGURABLE_PRODUCT_ID
 } from '../data/repositories/entitlementRepository'
 import { readBlockScreenshotDataUrl } from '../services/blockScreenshotService'
 import { readCampaignPreviewFileDataUrl } from '../services/campaignPreviewFileService'
@@ -371,7 +373,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     // Show Web is intentionally a restart-only setting. Do not add handoff,
     // ownership, cleanup or "mode changed while running" coordination here;
     // the user closes and reopens the app to apply the new browser mode.
-    if (activationUser?.isZaloShowWeb || liveIsZaloShowWeb) {
+    if ((activationUser?.isZaloShowWeb || liveIsZaloShowWeb) && !liveIsZaloServer) {
       restartRequiredActivation = Promise.resolve()
       return restartRequiredActivation
     }
@@ -479,9 +481,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   const ensureDesktopZaloHandoffBeforeExit = async (): Promise<void> => {
     const sessionUser = getCurrentUser()
-    // Server control clients and Show Web never participate in the
-    // local<->server handoff path.
-    if (sessionUser?.isZaloServer || sessionUser?.isZaloShowWeb) return
+    // Server control clients do not own local Zalo work. A session with Web
+    // capability may still own QR accounts (product 16), so it must not skip
+    // the existing local<->server handoff checks.
+    if (sessionUser?.isZaloServer) return
     if (sessionUser) {
       await settleDesktopHandoffMarkerBeforeExit(
         sessionUser.staffId,
@@ -642,10 +645,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     sessionExpiryCheckRunning = true
     try {
-      const [liveEntitlements, liveAccountProducts] = await Promise.all([
-        loadOrganizationEntitlements(checkedUser.organizationId),
+      const [liveEntitlementAccess, liveAccountProducts] = await Promise.all([
+        loadOrganizationEntitlementAccess(checkedUser.organizationId),
         loadOrganizationAccountProducts(checkedUser.organizationId)
       ])
+      const liveEntitlements = liveEntitlementAccess.entitlements
       const currentUser = getCurrentUser()
       if (!currentUser || currentUser.staffId !== checkedUser.staffId) return
 
@@ -654,16 +658,44 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         return
       }
 
+      // Only a Show Web flag change on an active product 18 is restart-only.
+      // Removing/expiring product 18 must hide Web accounts immediately, even
+      // when product 16 keeps the organization's general Zalo entitlement alive.
+      const currentConfigurableZaloProduct = currentUser.accountProducts.find(product => (
+        product.productId === ZALO_CONFIGURABLE_PRODUCT_ID && product.isActive
+      ))
+      const liveConfigurableZaloProduct = liveAccountProducts.find(product => (
+        product.productId === ZALO_CONFIGURABLE_PRODUCT_ID && product.isActive
+      ))
+      const hasSameEffectiveConfigurableZaloProduct = (
+        currentConfigurableZaloProduct?.organizationProductId != null &&
+        currentConfigurableZaloProduct.organizationProductId === liveConfigurableZaloProduct?.organizationProductId
+      )
+      const hasRestartOnlyWebFlagChange = (
+        hasSameEffectiveConfigurableZaloProduct &&
+        getUserZaloAccountCapabilities(currentUser).web !== liveEntitlementAccess.zaloAccountCapabilities.web
+      )
+      const nextZaloAccountCapabilities = hasRestartOnlyWebFlagChange
+        ? getUserZaloAccountCapabilities(currentUser)
+        : liveEntitlementAccess.zaloAccountCapabilities
       const updatedUser = {
         ...currentUser,
         entitlements: liveEntitlements,
-        accountProducts: liveAccountProducts
+        accountProducts: liveAccountProducts,
+        zaloAccountCapabilities: nextZaloAccountCapabilities
       }
       const entitlementsChanged = !authEntitlementsEqual(currentUser.entitlements, liveEntitlements)
       const accountProductsChanged = JSON.stringify(currentUser.accountProducts || []) !== JSON.stringify(liveAccountProducts)
+      const zaloCapabilitiesChanged = JSON.stringify(currentUser.zaloAccountCapabilities)
+        !== JSON.stringify(nextZaloAccountCapabilities)
       const pendingRuntimeRestart = getZaloRuntimeRestartRequired()
       const runtimeModeChanged = !!pendingRuntimeRestart
-      if (reason !== 'login' && (entitlementsChanged || accountProductsChanged || runtimeModeChanged)) {
+      if (reason !== 'login' && (
+        entitlementsChanged ||
+        accountProductsChanged ||
+        zaloCapabilitiesChanged ||
+        runtimeModeChanged
+      )) {
         if (pendingRuntimeRestart) {
           void activateZaloRuntimeRestartRequired(
             pendingRuntimeRestart.databaseIsZaloServer,
@@ -747,6 +779,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   const syncZaloBackgroundForCurrentUser = (_reason: string): void => {
     const user = getCurrentUser()
+    const zaloCapabilities = getUserZaloAccountCapabilities(user)
     if (isZaloLocalStartupHandoffBlocked()) {
       zaloRealtimeGroupManager?.stop()
       zaloRuntime.clearAll()
@@ -757,15 +790,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       zaloRuntime.clearAll()
       return
     }
-    if (user?.entitlements?.zalo && user.isZaloShowWeb) {
-      // The visible browser tab owns this session. Do not warm zca-js cookies
-      // from DB and do not start the realtime listener in Web mode.
-      zaloRealtimeGroupManager?.stop()
-      return
-    }
-    if (user?.entitlements?.zalo) {
+    if (user?.entitlements?.zalo && zaloCapabilities.qr) {
+      // Only QR accounts use stored zca-js sessions and realtime. Web accounts
+      // remain attached independently through their visible browser tabs.
       warmZaloSessions()
       zaloRealtimeGroupManager?.start()
+      return
+    }
+
+    if (user?.entitlements?.zalo && zaloCapabilities.web) {
+      zaloRealtimeGroupManager?.stop()
+      // Web-only organizations must not keep a hidden zca-js listener/session
+      // alive, while their visible Chromium tabs remain attached.
+      zaloRuntime.clearQrRuntime()
       return
     }
 
@@ -1098,7 +1135,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       const requiresLocalHandoff = !!(
         loginUser &&
         !loginUser.isZaloServer &&
-        !loginUser.isZaloShowWeb &&
+        getUserZaloAccountCapabilities(loginUser).qr &&
         loginUser.entitlements.zalo
       )
       const handoffGeneration = requiresLocalHandoff
@@ -1117,7 +1154,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
               0
             )
           }
-        } else if (loginUser && !loginUser.isZaloShowWeb) {
+        } else if (loginUser && getUserZaloAccountCapabilities(loginUser).qr) {
           // A local-mode login can clear a stale marker immediately after the
           // entitlement has switched back; it does not start a VPS runtime.
           await acknowledgeDesktopHandoffMarker(
@@ -1192,10 +1229,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       // round trip before their initial URL can load. ZaloRuntimeService still
       // verifies the account/platform server-side before attaching Web mode.
       if (platformType !== 'zalo') return
-      const user = getCurrentUser()
-      if (!user?.isZaloShowWeb) {
-        throw new Error('Organization không chạy Zalo Web')
-      }
       await zaloRuntime.attachWebSession(accountId, webContents)
     },
     onUnregister: (accountId) => {
@@ -1208,8 +1241,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!campaign) throw new Error('Không tìm thấy chiến dịch.')
 
       const account = await supabase.getAccount(campaign.accountId)
+      if (!account && String(campaign.actionId || '').startsWith('zalo_')) {
+        throw new Error('Tài khoản Zalo của chiến dịch không còn phù hợp với gói hiện tại.')
+      }
       if (account?.flatformType === 'zalo') {
-        if (shouldRouteCurrentUserZaloCleanupToServer()) {
+        if (!account.isZaloShowWeb && shouldRouteCurrentUserZaloCleanupToServer()) {
           const result = await supabase.setZaloServerCampaignStatus(campaignId, status)
           if (!result.ok) {
             if (result.reason === 'runtime_not_owner') {

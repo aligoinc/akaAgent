@@ -83,6 +83,7 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
           isActive={isActive}
           filterAccountId={filterAccountId}
           onClearFilter={() => setFilterAccountId(null)}
+          onNavigateToBrowser={onNavigateToBrowser}
           onOpenGeneralSettings={onOpenGeneralSettings}
           onOpenContentTemplates={onOpenContentTemplates}
           onAskAssistant={handleAskAssistant}

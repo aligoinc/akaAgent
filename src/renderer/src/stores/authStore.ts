@@ -277,13 +277,15 @@ export const useAuthStore = create<AuthState>()((set) => ({
   }),
 
   handleUserUpdated: (user) => set((state) => ({
-    // The runtime target is a startup invariant. Periodic user refreshes may
-    // update entitlements, but must not hot-switch Zalo within this process.
+    // Server/Web runtime ownership is a startup invariant. Main preserves a
+    // pending Web-mode switch while still allowing package add/remove/expiry
+    // to refresh the compatible QR capability.
     user: state.user && state.user.staffId === user.staffId
       ? {
           ...user,
           isZaloServer: state.user.isZaloServer,
-          isZaloShowWeb: state.user.isZaloShowWeb
+          isZaloShowWeb: state.user.isZaloShowWeb,
+          zaloAccountCapabilities: user.zaloAccountCapabilities || state.user.zaloAccountCapabilities
         }
       : user,
     errorMessage: null

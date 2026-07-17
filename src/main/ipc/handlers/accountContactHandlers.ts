@@ -50,7 +50,7 @@ export function registerAccountContactHandlers(
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_FRIENDS, async (_, accountId: number) => {
     await ensureContactAccess(supabase, accountId, 'person')
     const account = await supabase.getAccount(accountId)
-    if (account?.flatformType === 'zalo' && await shouldRouteCurrentUserZaloToServer()) {
+    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb && await shouldRouteCurrentUserZaloToServer()) {
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.loadFriends', accountId)
     }
@@ -60,7 +60,7 @@ export function registerAccountContactHandlers(
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_GROUPS, async (_, accountId: number) => {
     await ensureContactAccess(supabase, accountId, 'group')
     const account = await supabase.getAccount(accountId)
-    if (account?.flatformType === 'zalo' && await shouldRouteCurrentUserZaloToServer()) {
+    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb && await shouldRouteCurrentUserZaloToServer()) {
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.loadGroups', accountId)
     }
@@ -99,7 +99,8 @@ export function registerAccountContactHandlers(
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_ZALO_GROUP_MEMBERS, async (_, accountId: number, request: ZaloGroupMemberScanRequest) => {
     await ensureContactAccess(supabase, accountId, 'zalo_tag')
-    if (await shouldRouteCurrentUserZaloToServer()) {
+    const account = await supabase.getAccount(accountId)
+    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb && await shouldRouteCurrentUserZaloToServer()) {
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.loadZaloGroupMembers', accountId, request)
     }
@@ -108,7 +109,7 @@ export function registerAccountContactHandlers(
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_CANCEL_LOAD, async (_, accountId: number) => {
     const account = await supabase.getAccount(accountId).catch(() => null)
-    if (account?.flatformType === 'zalo' && shouldRouteCurrentUserZaloCleanupToServer()) {
+    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb && shouldRouteCurrentUserZaloCleanupToServer()) {
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.cancel', accountId)
     }
