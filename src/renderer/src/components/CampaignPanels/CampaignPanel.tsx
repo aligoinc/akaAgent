@@ -34,11 +34,13 @@ import CampaignInfoView from './CampaignInfoView'
 import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import { canUsePlatform } from '../../utils/entitlements'
+import { isZaloWebAccount } from '../../utils/accountLabels'
 
 interface CampaignPanelProps {
   isActive: boolean
   filterAccountId?: number | null
   onClearFilter?: () => void
+  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
   onOpenContentTemplates?: () => void
   onAskAssistant?: (campaignId: number) => void
@@ -2144,7 +2146,7 @@ function AddDataToCurrentCampaignModal({
   )
 }
 
-export default function CampaignPanel({ isActive, filterAccountId, onClearFilter, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
+export default function CampaignPanel({ isActive, filterAccountId, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
     campaignInputData, loadingCampaignInputData,
@@ -3976,7 +3978,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     }
   }
 
-  const handleZaloLoginQr = async (campaign: Campaign, account: AutoAccount | undefined) => {
+  const handleZaloLogin = async (campaign: Campaign, account: AutoAccount | undefined) => {
     if (!account) {
       showAlert('Không tìm thấy tài khoản của chiến dịch.', 'error')
       return
@@ -3985,13 +3987,23 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       showAlert('Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.', 'error')
       return
     }
+
+    setOpenCampaignActionMenuId(null)
+    setSelectedCampaignId(campaign.id)
+    if (isZaloWebAccount(account)) {
+      if (!onNavigateToBrowser) {
+        showAlert('Không thể mở trình duyệt Zalo.', 'error')
+        return
+      }
+      onNavigateToBrowser({ accountId: account.id, reloadAfterOpen: false })
+      return
+    }
+
     if (!window.electronAPI?.startZaloLoginQr) {
       showAlert('Tính năng này cần Electron API.', 'error')
       return
     }
 
-    setOpenCampaignActionMenuId(null)
-    setSelectedCampaignId(campaign.id)
     setZaloLoginAccount(account)
     setZaloLoginEvent({ accountId: account.id, status: 'qr', message: 'Đang tạo mã QR...' })
     setZaloLoginStarting(true)
@@ -4893,7 +4905,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                               <button
                                 type="button"
                                 className="campaign-action-menu-item"
-                                onClick={() => handleZaloLoginQr(campaign, account)}
+                                onClick={() => handleZaloLogin(campaign, account)}
                                 role="menuitem"
                               >
                                 <LogIn size={14} />

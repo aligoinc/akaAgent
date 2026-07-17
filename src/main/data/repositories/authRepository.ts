@@ -11,7 +11,7 @@ import {
   ACCOUNT_EXPIRED_MESSAGE,
   ensureAkaAgentSubscriptionActive,
   loadOrganizationAccountProducts,
-  loadOrganizationEntitlements
+  loadOrganizationEntitlementAccess
 } from './entitlementRepository'
 import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
 
@@ -169,11 +169,12 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     )
   }
 
-  const [entitlements, accountProducts, zaloRuntimeMode] = await Promise.all([
-    loadOrganizationEntitlements(staffRow.organization_id),
+  const [entitlementAccess, accountProducts, zaloRuntimeMode] = await Promise.all([
+    loadOrganizationEntitlementAccess(staffRow.organization_id),
     loadOrganizationAccountProducts(staffRow.organization_id),
     loadStaffZaloServerModeSnapshot(staffRow.id)
   ])
+  const { entitlements, zaloAccountCapabilities } = entitlementAccess
 
   return {
     staffId: staffRow.id,
@@ -184,8 +185,9 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     organizationName: (org?.name as string) || '',
     isAdminAkabiz: !!staffRow.is_admin_akabiz,
     useTestWorkflow: !!staffRow.use_test_workflow,
-    isZaloServer: zaloRuntimeMode.isZaloServer,
-    isZaloShowWeb: zaloRuntimeMode.isZaloShowWeb,
+    isZaloServer: zaloRuntimeMode.isZaloServer && !zaloAccountCapabilities.web,
+    isZaloShowWeb: zaloAccountCapabilities.web,
+    zaloAccountCapabilities,
     entitlements,
     accountProducts,
     deviceLabel: deviceRecord.device_label || null,

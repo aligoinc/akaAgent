@@ -957,7 +957,7 @@ export class CampaignScheduler {
 
         // Browserless campaigns such as Zalo API flows do not mount a webview tab.
         const hasBrowserCampaigns = campaigns.some(campaign => !this.isBrowserlessCampaign(campaign))
-          || (account.flatformType === 'zalo' && getCurrentUser()?.isZaloShowWeb === true)
+          || (account.flatformType === 'zalo' && account.isZaloShowWeb === true)
         if (hasBrowserCampaigns && !this.webviewRegistry.isRegistered(account.id)) {
           this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở tab trình duyệt. Bỏ qua.`)
           continue
@@ -1029,14 +1029,14 @@ export class CampaignScheduler {
   private shouldProcessAccountForRuntime(account: AutoAccount): boolean {
     const isZaloAccount = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZaloAccount && this.zaloRuntimeStopRequested) return false
-    if (this.runtimeTarget === 'server') return isZaloAccount
-    return !(isZaloAccount && isCurrentUserZaloServerEnabled())
+    if (this.runtimeTarget === 'server') return isZaloAccount && !account.isZaloShowWeb
+    return !isZaloAccount || account.isZaloShowWeb || !isCurrentUserZaloServerEnabled()
   }
 
   private isRealtimeCampaignDisabledForRuntime(account: AutoAccount, campaign: Campaign): boolean {
     return this.runtimeTarget === 'desktop'
       && account.flatformType === 'zalo'
-      && getCurrentUser()?.isZaloShowWeb === true
+      && account.isZaloShowWeb === true
       && campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID
   }
 
@@ -5746,6 +5746,7 @@ export class CampaignScheduler {
   private isServerZaloCampaign(account: AutoAccount, campaign: Campaign): boolean {
     return this.runtimeTarget === 'server' &&
       String(account.flatformType || '').trim().toLowerCase() === 'zalo' &&
+      !account.isZaloShowWeb &&
       String(campaign.actionId || '').trim().toLowerCase().startsWith('zalo_')
   }
 

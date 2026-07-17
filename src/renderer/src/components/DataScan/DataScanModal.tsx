@@ -10,6 +10,7 @@ import DataGroupManagerModal from './DataGroupManagerModal'
 import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
+import { getAccountPlatformLabel } from '../../utils/accountLabels'
 import type { AuthEntitlements } from '../../../../shared/types'
 import type { ContactLoadResult } from '../../../../shared/types'
 import type { ZaloServerCommandName, ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
@@ -3674,14 +3675,22 @@ export default function DataScanModal({
                   >
                     <option value="">Chọn tài khoản</option>
                     {platformAccounts.map(account => (
-                      <option key={account.id} value={account.id}>{account.name}</option>
+                      <option key={account.id} value={account.id}>
+                        {account.flatformType === 'zalo'
+                          ? `${account.name} — ${getAccountPlatformLabel(account)}`
+                          : account.name}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="stepper-form-group">
                   <label>Loại tài khoản</label>
-                  <input className="stepper-input" value={selectedAccount?.flatformType || ''} disabled />
+                  <input
+                    className="stepper-input"
+                    value={selectedAccount ? getAccountPlatformLabel(selectedAccount) : ''}
+                    disabled
+                  />
                 </div>
               </div>
 

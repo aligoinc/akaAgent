@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useCampaignStore } from '../stores/campaignStore'
 import { AutoAccount } from '../../../shared/types'
-import { useAuthStore } from '../stores/authStore'
+import { getAccountPlatformLabel, isZaloWebAccount } from '../utils/accountLabels'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -26,7 +26,6 @@ interface BrowserPageProps {
 
 export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPageProps) {
   const { accounts, loadingAccounts, loadAccounts } = useCampaignStore()
-  const isZaloShowWeb = useAuthStore(state => state.user?.isZaloShowWeb === true)
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
   const [preparedProxyByAccountId, setPreparedProxyByAccountId] = useState<Map<number, number | null>>(new Map())
   const [accountsLoadAttempted, setAccountsLoadAttempted] = useState(false)
@@ -49,7 +48,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
   const browserAccounts = accounts.filter(account => (
     account.isActive
     && !ALWAYS_BROWSERLESS_PLATFORMS.has(account.flatformType)
-    && (account.flatformType !== 'zalo' || isZaloShowWeb)
+    && (account.flatformType !== 'zalo' || isZaloWebAccount(account))
   ))
 
   // Load accounts on mount
@@ -346,7 +345,9 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
               className={`browser-tab ${activeAccountId === account.id ? 'active' : ''} ${backgroundPreviews.get(account.id)?.active ? 'is-running' : ''}`}
               onClick={() => setActiveAccountId(account.id)}
             >
-              <span className="browser-tab-label">{account.name}</span>
+              <span className="browser-tab-label" title={`${account.name} — ${getAccountPlatformLabel(account)}`}>
+                {account.name}{account.flatformType === 'zalo' ? ' — Zalo (trình duyệt)' : ''}
+              </span>
               <span className="browser-tab-platform">{account.flatformType}</span>
               {backgroundPreviews.get(account.id)?.active && <span className="browser-tab-live-dot" />}
             </div>

@@ -1,5 +1,5 @@
 import { ipcMain, webContents, BrowserWindow } from 'electron'
-import { AutoAccountContact, AutoProxy, IPC_EVENTS, ProxyTestRequest, ZaloLabelOption, EmailAccountConfig } from '../../../shared/types'
+import { AutoAccount, AutoAccountContact, AutoProxy, IPC_EVENTS, ProxyTestRequest, ZaloLabelOption, EmailAccountConfig } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
@@ -8,13 +8,13 @@ import { EmailRuntimeService } from '../../services/emailRuntimeService'
 import { ZaloServerClient } from '../../services/zaloServerClient'
 import {
   ensureCurrentUserCanUseAccountPlatform,
+  ensureCurrentUserCanUseZaloAccountType,
   ensureCurrentUserFeatureActive
 } from '../../data/repositories/entitlementRepository'
 import {
   shouldRouteCurrentUserZaloCleanupToServer,
   shouldRouteCurrentUserZaloToServer
 } from '../../data/repositories/zaloRuntimeModeRepository'
-import { isCurrentUserZaloShowWeb } from '../../data/currentUser'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -26,10 +26,10 @@ const PLATFORM_URLS: Record<string, string> = {
 const ALWAYS_BROWSERLESS_PLATFORMS = new Set(['email', 'sms'])
 const BROWSERLESS_ACCOUNT_REASON = 'Tài khoản này không dùng trình duyệt trong phiên bản này'
 
-function isBrowserlessPlatform(flatformType: string): boolean {
-  const platform = String(flatformType || '').trim().toLowerCase()
+function isBrowserlessAccount(account: Pick<AutoAccount, 'flatformType' | 'isZaloShowWeb'>): boolean {
+  const platform = String(account.flatformType || '').trim().toLowerCase()
   return ALWAYS_BROWSERLESS_PLATFORMS.has(platform)
-    || (platform === 'zalo' && !isCurrentUserZaloShowWeb())
+    || (platform === 'zalo' && !account.isZaloShowWeb)
 }
 
 function mapZaloLabelContact(contact: AutoAccountContact): ZaloLabelOption {
@@ -89,6 +89,22 @@ export function registerAccountHandlers(
   const localQrReleasePromises = new Map<number, Promise<void>>()
   const activeLocalOperations = new Set<Promise<unknown>>()
   let runtimeClaimsAbandoned = false
+
+  const requireZaloAccount = async (accountId: number): Promise<AutoAccount> => {
+    const account = await supabase.getAccount(accountId)
+    if (!account || account.flatformType !== 'zalo') {
+      throw new Error('Không tìm thấy tài khoản Zalo phù hợp với gói hiện tại')
+    }
+    return account
+  }
+
+  const shouldRouteZaloAccountToServer = async (account: AutoAccount): Promise<boolean> => (
+    !account.isZaloShowWeb && await shouldRouteCurrentUserZaloToServer()
+  )
+
+  const shouldRouteZaloAccountCleanupToServer = (account: AutoAccount): boolean => (
+    !account.isZaloShowWeb && shouldRouteCurrentUserZaloCleanupToServer()
+  )
 
   const trackLocalOperation = <T>(operation: Promise<T>): Promise<T> => {
     activeLocalOperations.add(operation)
@@ -186,48 +202,80 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
     const normalizedUpdates = updates || {}
+    const existing = await supabase.getAccount(id)
     const updateKeys = Object.keys(normalizedUpdates)
     const statusOnly = updateKeys.length === 1 && updateKeys[0] === 'status'
     const requestedStatus = normalizedUpdates.status
     if (
       statusOnly
       && (requestedStatus === 'chờ xử lý' || requestedStatus === 'tạm dừng')
-      && shouldRouteCurrentUserZaloCleanupToServer()
+      && existing?.flatformType === 'zalo'
+      && shouldRouteZaloAccountCleanupToServer(existing)
     ) {
-      const existing = await supabase.getAccount(id)
-      if (existing?.flatformType === 'zalo') {
-        const result = await supabase.setZaloServerAccountStatus(id, requestedStatus)
-        if (!result.ok) {
-          if (result.reason === 'runtime_not_owner') {
-            throw new Error('Organization không còn chạy Zalo Server. Vui lòng tắt và mở lại ứng dụng.')
-          }
-          if (result.reason === 'not_found') throw new Error('Không tìm thấy tài khoản Zalo.')
-          if (result.reason === 'invalid_transition') {
-            throw new Error('Trạng thái tài khoản đã thay đổi. Vui lòng thử lại.')
-          }
-          throw new Error('Không thể cập nhật trạng thái tài khoản Zalo Server.')
+      const result = await supabase.setZaloServerAccountStatus(id, requestedStatus)
+      if (!result.ok) {
+        if (result.reason === 'runtime_not_owner') {
+          throw new Error('Organization không còn chạy Zalo Server. Vui lòng tắt và mở lại ứng dụng.')
         }
-        const account = await supabase.getAccount(id)
-        if (!account) throw new Error('Không tìm thấy tài khoản Zalo.')
-        sendAccountStatusUpdated(mainWindow)
-        return account
+        if (result.reason === 'not_found') throw new Error('Không tìm thấy tài khoản Zalo.')
+        if (result.reason === 'invalid_transition') {
+          throw new Error('Trạng thái tài khoản đã thay đổi. Vui lòng thử lại.')
+        }
+        throw new Error('Không thể cập nhật trạng thái tài khoản Zalo Server.')
+      }
+      const account = await supabase.getAccount(id)
+      if (!account) throw new Error('Không tìm thấy tài khoản Zalo.')
+      sendAccountStatusUpdated(mainWindow)
+      return account
+    }
+
+    const changesZaloType = existing?.flatformType === 'zalo'
+      && (normalizedUpdates.flatformType === undefined || normalizedUpdates.flatformType === 'zalo')
+      && typeof normalizedUpdates.isZaloShowWeb === 'boolean'
+      && existing.isZaloShowWeb !== normalizedUpdates.isZaloShowWeb
+    let zaloTypeChangePreviousStatus: PreviousZaloAccountStatus | undefined
+    if (changesZaloType) {
+      if (existing.status === 'đang chạy') {
+        throw new Error('Không thể đổi loại tài khoản Zalo khi tài khoản đang chạy.')
+      }
+      // Validate the destination before clearing either local session. Cleanup is
+      // deliberately performed before the DB commit so a cleanup failure remains
+      // retryable and cannot leave the account stored as the new runtime type.
+      await ensureCurrentUserCanUseZaloAccountType(normalizedUpdates.isZaloShowWeb)
+      if (!zaloRuntime) throw new Error('Runtime Zalo chưa sẵn sàng để đổi loại tài khoản.')
+      if (existing.isActive) {
+        zaloTypeChangePreviousStatus = await claimLocalZaloOperation(id, false)
       }
     }
 
-    const account = await supabase.updateAccount(id, normalizedUpdates)
-    if (normalizedUpdates.flatformType !== undefined) {
-      if (!shouldRouteCurrentUserZaloCleanupToServer()) {
-        zaloRuntime?.invalidateAccount(id)
+    let zaloTypeChangePersisted = false
+    try {
+      if (changesZaloType) await zaloRuntime!.resetAccountTypeSession(id)
+      const account = await supabase.updateAccount(
+        id,
+        normalizedUpdates,
+        changesZaloType ? { zaloTypeChangePreviousStatus } : undefined
+      )
+      zaloTypeChangePersisted = changesZaloType
+      if (!changesZaloType && normalizedUpdates.flatformType !== undefined && existing) {
+        if (!shouldRouteZaloAccountCleanupToServer(existing)) zaloRuntime?.invalidateAccount(id)
       }
+      if (changesZaloType) sendAccountStatusUpdated(mainWindow)
+      return account
+    } catch (error) {
+      if (zaloTypeChangePreviousStatus && !zaloTypeChangePersisted) {
+        await releaseLocalZaloOperation(id, zaloTypeChangePreviousStatus)
+      }
+      throw error
     }
-    return account
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_ACCOUNT, async (_, id: number) => {
+    const existing = await supabase.getAccount(id)
     if (webviewRegistry.isRegistered(id)) {
       webviewRegistry.unregister(id)
     }
-    if (shouldRouteCurrentUserZaloCleanupToServer()) {
+    if (existing?.flatformType === 'zalo' && shouldRouteZaloAccountCleanupToServer(existing)) {
       void zaloServerClient?.executeCommand('zalo.runtime.invalidate', id).catch(() => {})
     } else {
       zaloRuntime?.invalidateAccount(id)
@@ -277,7 +325,7 @@ export function registerAccountHandlers(
     const account = await supabase.getAccount(accountId)
     if (!account) return { success: false, reason: 'Không tìm thấy tài khoản' }
     await ensureCurrentUserCanUseAccountPlatform(account.flatformType)
-    if (isBrowserlessPlatform(account.flatformType)) {
+    if (isBrowserlessAccount(account)) {
       return { success: false, reason: BROWSERLESS_ACCOUNT_REASON }
     }
     await proxyRuntime.prepareAccountSession(account)
@@ -289,10 +337,12 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, async (_, accountId: number) => {
+    if (!await supabase.getAccount(accountId)) throw new Error('Không tìm thấy tài khoản phù hợp với gói hiện tại')
     return supabase.listAccountActionOverview(accountId)
   })
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, async (_, accountId: number, actionCode: string) => {
+    if (!await supabase.getAccount(accountId)) throw new Error('Không tìm thấy tài khoản phù hợp với gói hiện tại')
     const status = await supabase.enableAccountActionNow(accountId, actionCode)
     sendAccountStatusUpdated(mainWindow)
     return status
@@ -306,10 +356,11 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_START, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
-    if (isCurrentUserZaloShowWeb()) {
+    const account = await requireZaloAccount(accountId)
+    if (account.isZaloShowWeb) {
       return { success: false, accountId, reason: 'Hãy mở tab Zalo Web để đăng nhập' }
     }
-    if (await shouldRouteCurrentUserZaloToServer()) {
+    if (await shouldRouteZaloAccountToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.loginQr.start', accountId)
         ?? { success: false, accountId, reason: 'Chưa kết nối akaAgent Zalo Server' }
     }
@@ -345,7 +396,8 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGIN_QR_CANCEL, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
-    if (shouldRouteCurrentUserZaloCleanupToServer()) {
+    const account = await requireZaloAccount(accountId)
+    if (shouldRouteZaloAccountCleanupToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.loginQr.cancel', accountId)
         ?? { success: false, accountId, reason: 'Chưa kết nối akaAgent Zalo Server' }
     }
@@ -362,7 +414,8 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_CHECK_SESSION, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
-    if (await shouldRouteCurrentUserZaloToServer()) {
+    const account = await requireZaloAccount(accountId)
+    if (await shouldRouteZaloAccountToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.session.check', accountId)
         ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }
     }
@@ -375,7 +428,8 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_LOGOUT, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
-    if (await shouldRouteCurrentUserZaloToServer()) {
+    const account = await requireZaloAccount(accountId)
+    if (await shouldRouteZaloAccountToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.logout', accountId)
         ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }
     }
@@ -388,6 +442,7 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_LIST_LABELS, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
+    await requireZaloAccount(accountId)
     const contacts = await supabase.listContacts(accountId, 'zalo_tag')
     return contacts
       .map(mapZaloLabelContact)
@@ -396,16 +451,13 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_SYNC_LABELS, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
-    if (await shouldRouteCurrentUserZaloToServer()) {
+    const account = await requireZaloAccount(accountId)
+    if (await shouldRouteZaloAccountToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.labels.sync', accountId)
         ?? Promise.reject(new Error('Chưa kết nối akaAgent Zalo Server'))
     }
     if (!zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     return runClaimedLocalZaloOperation(accountId, true, async () => {
-      const account = await supabase.getAccount(accountId)
-      if (!account || account.flatformType !== 'zalo') {
-        throw new Error('Tài khoản không phải Zalo')
-      }
       const labels = await zaloRuntime.listLabels(accountId)
       if (labels.length === 0) {
         await supabase.deleteContacts(accountId, 'zalo_tag')
@@ -451,7 +503,8 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, async (_, accountId: number, flatformType: string) => {
     const account = await supabase.getAccount(accountId)
-    if (isBrowserlessPlatform(flatformType) || (account && isBrowserlessPlatform(account.flatformType))) {
+    if (!account) return { success: false, reason: 'Không tìm thấy tài khoản' }
+    if (isBrowserlessAccount(account)) {
       return { success: false, reason: BROWSERLESS_ACCOUNT_REASON }
     }
     const wcId = webviewRegistry.getWebContentsId(accountId)
@@ -463,8 +516,8 @@ export function registerAccountHandlers(
       if (!wc || wc.isDestroyed()) {
         return { success: false, reason: 'Tab trình duyệt không khả dụng' }
       }
-      const url = PLATFORM_URLS[flatformType] || 'about:blank'
-      if (account) await proxyRuntime.prepareAccountSession(account)
+      const url = PLATFORM_URLS[account.flatformType] || PLATFORM_URLS[flatformType] || 'about:blank'
+      await proxyRuntime.prepareAccountSession(account)
       wc.loadURL(url)
       return { success: true }
     } catch (err: any) {
@@ -515,8 +568,9 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_CHECK_ZALO_WEB_LOGIN, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
-    if (!isCurrentUserZaloShowWeb()) {
-      return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Organization không chạy Zalo Web' }
+    const account = await requireZaloAccount(accountId)
+    if (!account.isZaloShowWeb) {
+      return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tài khoản Zalo này không dùng trình duyệt' }
     }
     if (!zaloRuntime) {
       return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
@@ -532,7 +586,8 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_LOGOUT_ZALO_WEB, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
-    if (!isCurrentUserZaloShowWeb()) return { success: false, reason: 'Organization không chạy Zalo Web' }
+    const account = await requireZaloAccount(accountId)
+    if (!account.isZaloShowWeb) return { success: false, reason: 'Tài khoản Zalo này không dùng trình duyệt' }
     if (!zaloRuntime) return { success: false, reason: 'Zalo runtime chưa sẵn sàng' }
     const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.logout(accountId))
     sendAccountStatusUpdated(mainWindow)

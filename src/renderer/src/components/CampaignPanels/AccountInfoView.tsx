@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, RotateCcw, RefreshCw, X } from 'lucide-react'
 import { AccountActionOverview, AutoAccount } from '../../../../shared/types'
+import { getAccountPlatformLabel } from '../../utils/accountLabels'
 
 type AccountInfoViewMode = 'modal' | 'dock'
 
@@ -138,7 +139,7 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
         <div className="account-info-summary">
           <div className="account-info-field">
             <span>Nền tảng</span>
-            <strong>{account.flatformType}</strong>
+            <strong>{getAccountPlatformLabel(account)}</strong>
           </div>
           {isSmsAccount && (
             <>

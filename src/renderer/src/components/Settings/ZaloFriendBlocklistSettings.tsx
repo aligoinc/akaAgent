@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, Pencil, Plus, RefreshCw, Search, Trash2, UserMinus, UserPlus, X } from 'lucide-react'
 import { AutoAccount, AutoAccountContact, AutoAccountContactGroup } from '../../../../shared/types'
 import { useUiStore } from '../../stores/uiStore'
+import { getAccountPlatformLabel } from '../../utils/accountLabels'
 
 function formatIpcError(err: unknown, fallback: string): string {
   let message = err instanceof Error
@@ -312,7 +313,9 @@ export default function ZaloFriendBlocklistSettings() {
                 {accounts.length === 0 ? (
                   <option value="">Chưa có tài khoản Zalo</option>
                 ) : accounts.map(account => (
-                  <option key={account.id} value={account.id}>{account.name}</option>
+                  <option key={account.id} value={account.id}>
+                    {account.name} — {getAccountPlatformLabel(account)}
+                  </option>
                 ))}
               </select>
             </div>

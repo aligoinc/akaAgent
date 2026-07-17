@@ -8,6 +8,7 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
     id: row.id as number,
     name: row.name as string,
     flatformType,
+    isZaloShowWeb: flatformType === 'zalo' && row.is_zalo_show_web === true,
     username: isSmsAccount ? ((row.username as string | null | undefined) ?? null) : null,
     password: isSmsAccount ? ((row.password as string | null | undefined) ?? null) : null,
     mobileDeviceId: (row.mobile_device_id as string | null | undefined) ?? null,

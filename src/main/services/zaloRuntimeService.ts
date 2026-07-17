@@ -6,7 +6,6 @@ import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrS
 import { SupabaseService } from './supabase'
 import type { ZaloAccountRuntimeTarget } from '../data/repositories/accountRepository'
 import type { ZaloOutgoingText } from './zaloFormattedContent'
-import { isCurrentUserZaloShowWeb } from '../data/currentUser'
 import { ZaloWebRuntimeService } from './zaloWebRuntimeService'
 
 export type { ZaloOutgoingText, ZaloStyledText } from './zaloFormattedContent'
@@ -391,11 +390,11 @@ export class ZaloRuntimeService {
   }
 
   async attachWebSession(accountId: number, webContents: WebContents): Promise<void> {
-    if (!isCurrentUserZaloShowWeb()) throw new Error('Organization không chạy Zalo Web')
     const account = await this.supabase.getAccount(accountId)
     if (!account || account.flatformType !== 'zalo') {
       throw new Error('Không tìm thấy tài khoản Zalo')
     }
+    if (!account.isZaloShowWeb) throw new Error('Tài khoản Zalo này không dùng trình duyệt')
     await this.webRuntime.attach(accountId, webContents)
   }
 
@@ -411,14 +410,23 @@ export class ZaloRuntimeService {
     this.webRuntime.invalidate(accountId)
   }
 
-  async startLoginQr(accountId: number): Promise<ZaloLoginQrStartResult> {
-    if (isCurrentUserZaloShowWeb()) {
-      return { success: false, accountId, reason: 'Hãy mở tab Zalo Web để đăng nhập' }
+  async resetAccountTypeSession(accountId: number): Promise<void> {
+    const qrSettled = await this.cancelLoginQrAndWait(accountId)
+    if (!qrSettled) {
+      throw new Error('Phiên đăng nhập QR trước chưa dừng an toàn. Vui lòng thử lại sau.')
     }
+    this.invalidateAccount(accountId)
+    await this.webRuntime.clearForAccountTypeChange(accountId)
+  }
+
+  async startLoginQr(accountId: number): Promise<ZaloLoginQrStartResult> {
     const account = await this.supabase.getAccount(accountId)
     if (!account) return { success: false, accountId, reason: 'Không tìm thấy tài khoản' }
     if (account.flatformType !== 'zalo') {
       return { success: false, accountId, reason: 'Tài khoản không phải nền tảng Zalo' }
+    }
+    if (account.isZaloShowWeb) {
+      return { success: false, accountId, reason: 'Hãy mở tab Zalo Web để đăng nhập' }
     }
 
     const previousLoginSettled = await this.cancelLoginQrAndWait(accountId)
@@ -489,10 +497,10 @@ export class ZaloRuntimeService {
   }
 
   async ensureApi(accountId: number): Promise<API> {
-    if (isCurrentUserZaloShowWeb()) {
-      const account = await this.supabase.getAccount(accountId)
-      if (!account) throw new Error('Không tìm thấy tài khoản')
-      if (account.flatformType !== 'zalo') throw new Error('Tài khoản không phải nền tảng Zalo')
+    const account = await this.supabase.getAccount(accountId)
+    if (!account) throw new Error('Không tìm thấy tài khoản')
+    if (account.flatformType !== 'zalo') throw new Error('Tài khoản không phải nền tảng Zalo')
+    if (account.isZaloShowWeb) {
       return this.webRuntime.ensureApi(accountId)
     }
     const entry = await this.supabase.getAccountZaloSession(accountId)
@@ -552,10 +560,22 @@ export class ZaloRuntimeService {
   }
 
   async ensureRealtimeListenerReady(accountId: number): Promise<void> {
-    if (isCurrentUserZaloShowWeb()) {
+    const cacheVersion = this.cacheVersion
+    const accountVersion = this.getAccountCacheVersion(accountId)
+    const account = await this.supabase.getAccount(accountId)
+    if (!account || account.flatformType !== 'zalo') {
+      throw new Error('Không tìm thấy tài khoản Zalo')
+    }
+    if (account.isZaloShowWeb) {
       throw new Error('Zalo Web chưa hỗ trợ chiến dịch realtime')
     }
     const api = await this.ensureApi(accountId)
+    if (
+      this.cacheVersion !== cacheVersion
+      || this.getAccountCacheVersion(accountId) !== accountVersion
+    ) {
+      throw new Error('Runtime Zalo đã được reset trong lúc khởi động listener')
+    }
     await this.ensureZaloListenerReady(accountId, api)
   }
 
@@ -598,14 +618,25 @@ export class ZaloRuntimeService {
         false
       )
       if (!claim.claimed || !claim.previousStatus) continue
+      let verificationSucceeded = false
       try {
         if (this.warmSessionClaimsAbandoned) return
         await this.verifyAccountSession(entry.account.id)
+        verificationSucceeded = true
         if (this.cacheVersion !== version) return
-        const account = await this.supabase.markAccountZaloSessionCheck(entry.account.id, { ok: true })
+        const account = await this.supabase.markAccountZaloSessionCheck(entry.account.id, { ok: true }, false)
         this.updateCachedVerification(account)
       } catch (err) {
         if (this.cacheVersion !== version) return
+        if (verificationSucceeded) {
+          console.warn('[ZaloRuntime] Verified QR session but could not persist its status:', {
+            accountId: entry.account.id,
+            message: this.getErrorMessage(err)
+          })
+          continue
+        }
+        const currentQrEntry = await this.supabase.getAccountZaloSession(entry.account.id).catch(() => null)
+        if (!currentQrEntry) continue
         const message = this.getErrorMessage(err)
         console.warn('[ZaloRuntime] Failed to warm stored session', {
           accountId: entry.account.id,
@@ -615,7 +646,7 @@ export class ZaloRuntimeService {
         await this.supabase.markAccountZaloSessionCheck(entry.account.id, {
           ok: false,
           error: message
-        }).catch(() => {})
+        }, false).catch(() => {})
       } finally {
         if (!this.warmSessionClaimsAbandoned) {
           await this.supabase.releaseZaloAccountRuntimeOperation(
@@ -635,13 +666,18 @@ export class ZaloRuntimeService {
 
   invalidateAccount(accountId: number): void {
     this.accountCacheVersions.set(accountId, this.getAccountCacheVersion(accountId) + 1)
-    this.stopZaloListener(accountId)
-    this.apiCache.delete(accountId)
-    this.apiLoginInflight.delete(accountId)
+    this.clearQrAccountRuntimeCache(accountId)
+    this.verifyInflight.delete(accountId)
     this.webRuntime.invalidateApi(accountId)
   }
 
-  clearAll(options: { preserveActiveQrLogins?: boolean } = {}): void {
+  private clearQrAccountRuntimeCache(accountId: number): void {
+    this.stopZaloListener(accountId)
+    this.apiCache.delete(accountId)
+    this.apiLoginInflight.delete(accountId)
+  }
+
+  clearQrRuntime(options: { preserveActiveQrLogins?: boolean } = {}): void {
     this.cacheVersion += 1
     for (const active of this.activeQrLogins.values()) {
       active.cancelRequested = true
@@ -654,15 +690,19 @@ export class ZaloRuntimeService {
     this.apiLoginInflight.clear()
     this.verifyInflight.clear()
     this.accountCacheVersions.clear()
+  }
+
+  clearAll(options: { preserveActiveQrLogins?: boolean } = {}): void {
+    this.clearQrRuntime(options)
     this.webRuntime.clearAll()
   }
 
   async checkSession(accountId: number): Promise<ZaloSessionCheckResult> {
-    if (isCurrentUserZaloShowWeb()) {
-      const current = await this.supabase.getAccount(accountId)
-      if (!current || current.flatformType !== 'zalo') {
-        return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Không tìm thấy tài khoản Zalo' }
-      }
+    const current = await this.supabase.getAccount(accountId)
+    if (!current || current.flatformType !== 'zalo') {
+      return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Không tìm thấy tài khoản Zalo' }
+    }
+    if (current.isZaloShowWeb) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         let checkedApi: API | null = null
         try {
@@ -693,7 +733,7 @@ export class ZaloRuntimeService {
           const account = await this.supabase.markAccountZaloSessionCheck(accountId, {
             ok: false,
             error: message
-          })
+          }, true)
           return { success: true, loggedIn: false, status: account.loginStatus, reason: message, account }
         }
       }
@@ -715,25 +755,59 @@ export class ZaloRuntimeService {
       return { success: false, loggedIn: false, status: entry.account.loginStatus, reason: 'Tài khoản không phải nền tảng Zalo' }
     }
     if (!entry.session) {
-      const account = await this.supabase.markAccountZaloSessionCheck(accountId, { ok: false, error: 'Chưa có session Zalo' })
+      const account = await this.supabase.markAccountZaloSessionCheck(
+        accountId,
+        { ok: false, error: 'Chưa có session Zalo' },
+        false
+      )
       return { success: true, loggedIn: false, status: account.loginStatus, reason: 'Chưa có session Zalo', account }
     }
 
     try {
       await this.verifyAccountSession(accountId)
-      const account = await this.supabase.markAccountZaloSessionCheck(accountId, { ok: true })
+    } catch (err) {
+      const runtimeChanged = await this.getQrRuntimeChangedResult(accountId)
+      if (runtimeChanged) return runtimeChanged
+      const message = this.getErrorMessage(err)
+      this.invalidateAccount(accountId)
+      const account = await this.supabase.markAccountZaloSessionCheck(
+        accountId,
+        { ok: false, error: message },
+        false
+      )
+      return { success: true, loggedIn: false, status: account.loginStatus, reason: message, account }
+    }
+
+    try {
+      const account = await this.supabase.markAccountZaloSessionCheck(accountId, { ok: true }, false)
       this.updateCachedVerification(account)
       return { success: true, loggedIn: true, status: account.loginStatus, account }
     } catch (err) {
-      const message = this.getErrorMessage(err)
-      this.invalidateAccount(accountId)
-      const account = await this.supabase.markAccountZaloSessionCheck(accountId, { ok: false, error: message })
-      return { success: true, loggedIn: false, status: account.loginStatus, reason: message, account }
+      const runtimeChanged = await this.getQrRuntimeChangedResult(accountId)
+      if (runtimeChanged) return runtimeChanged
+      throw err
+    }
+  }
+
+  private async getQrRuntimeChangedResult(accountId: number): Promise<ZaloSessionCheckResult | null> {
+    const account = await this.supabase.getAccount(accountId)
+    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb) return null
+    const status = account?.loginStatus || 'chưa đăng nhập'
+    return {
+      success: false,
+      loggedIn: status === 'đã đăng nhập',
+      status,
+      reason: 'Loại hoặc quyền tài khoản Zalo đã thay đổi trong lúc kiểm tra phiên',
+      account: account || undefined
     }
   }
 
   async logout(accountId: number): Promise<ZaloSessionCheckResult> {
-    if (isCurrentUserZaloShowWeb()) {
+    const current = await this.supabase.getAccount(accountId)
+    if (!current || current.flatformType !== 'zalo') {
+      return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Không tìm thấy tài khoản Zalo' }
+    }
+    if (current.isZaloShowWeb) {
       const webContents = await this.webRuntime.clearForLogout(accountId)
       const account = await this.supabase.clearAccountZaloSession(accountId)
       await this.webRuntime.loadLoginPage(webContents)
@@ -1431,7 +1505,9 @@ export class ZaloRuntimeService {
       ? { ...outgoing, attachments: safeAttachments }
       : outgoing
     const needsUploadCallback = safeAttachments.some(item => requiresZaloUploadCallback(String(item || '')))
-    const isWebRuntime = isCurrentUserZaloShowWeb()
+    const account = await this.supabase.getAccount(accountId)
+    if (!account || account.flatformType !== 'zalo') throw new Error('Không tìm thấy tài khoản Zalo')
+    const isWebRuntime = account.isZaloShowWeb === true
     if (isWebRuntime && safeAttachments.some(item => !isZaloWebSupportedAttachment(String(item || '')))) {
       throw new Error('Zalo Web hiện chỉ hỗ trợ ảnh JPG, JPEG, PNG, WEBP hoặc GIF')
     }
@@ -1799,7 +1875,11 @@ export class ZaloRuntimeService {
       if (!isCurrentLogin() || active.expired) return
       this.logLoginQrFailure(account.id, err)
       const message = this.getErrorMessage(err)
-      await this.supabase.markAccountZaloSessionCheck(account.id, { ok: false, error: message }).catch(() => {})
+      await this.supabase.markAccountZaloSessionCheck(
+        account.id,
+        { ok: false, error: message },
+        false
+      ).catch(() => {})
       this.emitLoginQrEvent({
         accountId: account.id,
         status: 'error',
@@ -2215,8 +2295,10 @@ export class ZaloRuntimeService {
     const inflight = this.verifyInflight.get(accountId)
     if (inflight) return inflight
 
+    const cacheVersion = this.cacheVersion
+    const accountVersion = this.getAccountCacheVersion(accountId)
     let promise!: Promise<void>
-    promise = this.verifyAccountSessionOnce(accountId)
+    promise = this.verifyAccountSessionOnce(accountId, cacheVersion, accountVersion)
       .finally(() => {
         if (this.verifyInflight.get(accountId) === promise) {
           this.verifyInflight.delete(accountId)
@@ -2227,18 +2309,40 @@ export class ZaloRuntimeService {
     return promise
   }
 
-  private async verifyAccountSessionOnce(accountId: number): Promise<void> {
+  private assertQrRuntimeGeneration(
+    accountId: number,
+    cacheVersion: number,
+    accountVersion: number
+  ): void {
+    if (
+      this.cacheVersion !== cacheVersion
+      || this.getAccountCacheVersion(accountId) !== accountVersion
+    ) {
+      throw new Error('Runtime Zalo QR đã được reset trong lúc xác thực phiên')
+    }
+  }
+
+  private async verifyAccountSessionOnce(
+    accountId: number,
+    cacheVersion: number,
+    accountVersion: number
+  ): Promise<void> {
     try {
       const api = await this.ensureApi(accountId)
+      this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
       await this.verifyAuthenticatedApi(api)
+      this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
     } catch (firstErr) {
+      this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
       console.warn('[ZaloRuntime] Zalo API verification failed, retrying with a fresh session login', {
         accountId,
         message: this.getErrorMessage(firstErr)
       })
-      this.invalidateAccount(accountId)
+      this.clearQrAccountRuntimeCache(accountId)
       const retryApi = await this.ensureApi(accountId)
+      this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
       await this.verifyAuthenticatedApi(retryApi)
+      this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
     }
   }
 

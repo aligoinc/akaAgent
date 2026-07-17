@@ -5,11 +5,13 @@ import { requireCurrentUser } from '../currentUser'
 import * as accountGroupRepo from './accountGroupRepository'
 import * as proxyRepo from './proxyRepository'
 import {
-  canUseAccountPlatformWithEntitlements,
+  canUseAccountWithEntitlementsAndCapabilities,
   ensureCurrentUserCanUseAccountPlatform,
+  ensureCurrentUserCanUseZaloAccountType,
   ensureCurrentUserEmailFeatureActive,
   ensureCurrentUserFeatureActive,
   getAccountPlatformLimit,
+  loadCurrentUserZaloAccountCapabilities,
   loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
 
@@ -19,6 +21,7 @@ const ACCOUNT_SELECT = [
   'id',
   'name',
   'flatform_type',
+  'is_zalo_show_web',
   'username',
   'password',
   'mobile_device_id',
@@ -92,6 +95,25 @@ function getPlatformDisplayName(flatformType: string | null | undefined): string
 }
 
 async function countStaffAccountsByPlatform(staffId: number, flatformType: string): Promise<number> {
+  if (flatformType === 'zalo') {
+    const capabilities = loadCurrentUserZaloAccountCapabilities()
+    if (!capabilities.qr && !capabilities.web) return 0
+
+    let query = client()
+      .from('auto_accounts')
+      .select('id', { count: 'exact', head: true })
+      .eq('staff_id', staffId)
+      .eq('flatform_type', 'zalo')
+      .eq('is_delete', false)
+    if (capabilities.qr !== capabilities.web) {
+      query = query.eq('is_zalo_show_web', capabilities.web)
+    }
+
+    const { count, error } = await query
+    if (error) throw new Error(`Failed to count Zalo accounts: ${error.message}`)
+    return count || 0
+  }
+
   const { count, error } = await client()
     .from('auto_accounts')
     .select('id', { count: 'exact', head: true })
@@ -116,7 +138,7 @@ async function ensureAccountQuotaAvailable(staffId: number, flatformType: string
   )
 }
 
-export async function getAccount(id: number): Promise<AutoAccount | null> {
+export async function getAccountIgnoringCapability(id: number): Promise<AutoAccount | null> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -130,8 +152,19 @@ export async function getAccount(id: number): Promise<AutoAccount | null> {
   return data ? mapAccountFromDB(toDbRow(data)) : null
 }
 
+export async function getAccount(id: number): Promise<AutoAccount | null> {
+  const account = await getAccountIgnoringCapability(id)
+  if (!account) return null
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  return canUseAccountWithEntitlementsAndCapabilities(
+    account,
+    entitlements,
+    loadCurrentUserZaloAccountCapabilities()
+  ) ? account : null
+}
+
 export async function getAccountZaloSession(id: number): Promise<AccountZaloSession | null> {
-  await ensureCurrentUserFeatureActive('zalo')
+  await ensureCurrentUserCanUseZaloAccountType(false)
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -139,6 +172,8 @@ export async function getAccountZaloSession(id: number): Promise<AccountZaloSess
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
+    .eq('flatform_type', 'zalo')
+    .eq('is_zalo_show_web', false)
     .maybeSingle()
 
   if (error) throw new Error(`Failed to get account Zalo session: ${error.message}`)
@@ -151,6 +186,8 @@ export async function getAccountZaloSession(id: number): Promise<AccountZaloSess
 
 export async function listZaloAccountsWithSession(): Promise<AccountZaloSession[]> {
   await ensureCurrentUserFeatureActive('zalo')
+  const capabilities = loadCurrentUserZaloAccountCapabilities()
+  if (!capabilities.qr) return []
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -158,6 +195,7 @@ export async function listZaloAccountsWithSession(): Promise<AccountZaloSession[
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .eq('flatform_type', 'zalo')
+    .eq('is_zalo_show_web', false)
     .not('zalo_session', 'is', null)
     .order('created_at', { ascending: false })
 
@@ -173,6 +211,7 @@ export async function listZaloAccountsWithSession(): Promise<AccountZaloSession[
 export async function listAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
   const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const zaloAccountCapabilities = loadCurrentUserZaloAccountCapabilities()
   const { data, error } = await client()
     .from('auto_accounts')
     .select(ACCOUNT_SELECT)
@@ -183,19 +222,29 @@ export async function listAccounts(): Promise<AutoAccount[]> {
   if (error) throw new Error(`Failed to list accounts: ${error.message}`)
   return (data || [])
     .map(row => mapAccountFromDB(toDbRow(row)))
-    .filter(account => canUseAccountPlatformWithEntitlements(account.flatformType, entitlements))
+    .filter(account => canUseAccountWithEntitlementsAndCapabilities(
+      account,
+      entitlements,
+      zaloAccountCapabilities
+    ))
 }
 
 export async function createAccount(account: Partial<AutoAccount>): Promise<AutoAccount> {
   const u = requireCurrentUser()
   const flatformType = account.flatformType || 'facebook'
+  const isZaloShowWeb = flatformType === 'zalo' && account.isZaloShowWeb === true
+  if (flatformType !== 'zalo' && account.isZaloShowWeb === true) {
+    throw new Error('Chỉ tài khoản Zalo mới được sử dụng chế độ trình duyệt.')
+  }
   await ensureCurrentUserCanUseAccountPlatform(flatformType)
+  if (flatformType === 'zalo') await ensureCurrentUserCanUseZaloAccountType(isZaloShowWeb)
   await ensureAccountQuotaAvailable(u.staffId, flatformType)
   const accountGroupId = await accountGroupRepo.validateAccountGroupForAccount(account.accountGroupId, flatformType)
   const proxyId = await proxyRepo.validateProxyForAccount(account.proxyId)
   const payload = {
     name: account.name,
     flatform_type: flatformType,
+    is_zalo_show_web: isZaloShowWeb,
     login_status: account.loginStatus || 'ch\u01b0a \u0111\u0103ng nh\u1eadp',
     status: account.status || 'ch\u1edd x\u1eed l\u00fd',
     is_active: account.isActive ?? true,
@@ -216,19 +265,42 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
   return mapAccountFromDB(toDbRow(data))
 }
 
-export async function updateAccount(id: number, updates: Partial<AutoAccount>): Promise<AutoAccount> {
+export interface UpdateAccountOptions {
+  zaloTypeChangePreviousStatus?: 'chờ xử lý' | 'tạm dừng'
+}
+
+export async function updateAccount(
+  id: number,
+  updates: Partial<AutoAccount>,
+  options: UpdateAccountOptions = {}
+): Promise<AutoAccount> {
   const u = requireCurrentUser()
   const payload: any = { updated_at: new Date().toISOString() }
   const current = await getAccount(id)
   if (!current) throw new Error('Không tìm thấy tài khoản')
   const targetFlatformType = updates.flatformType ?? current.flatformType
+  if (targetFlatformType !== 'zalo' && updates.isZaloShowWeb === true) {
+    throw new Error('Chỉ tài khoản Zalo mới được sử dụng chế độ trình duyệt.')
+  }
+  const targetIsZaloShowWeb = targetFlatformType === 'zalo'
+    ? (updates.isZaloShowWeb ?? (current.flatformType === 'zalo' && current.isZaloShowWeb))
+    : false
   await ensureCurrentUserCanUseAccountPlatform(targetFlatformType)
   await ensureCurrentUserCanUseAccountPlatform(current.flatformType)
+  if (current.flatformType === 'zalo') {
+    await ensureCurrentUserCanUseZaloAccountType(current.isZaloShowWeb)
+  }
+  if (targetFlatformType === 'zalo') {
+    await ensureCurrentUserCanUseZaloAccountType(targetIsZaloShowWeb)
+  }
   if (updates.flatformType !== undefined && targetFlatformType !== current.flatformType) {
     await ensureAccountQuotaAvailable(u.staffId, targetFlatformType)
   }
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.flatformType !== undefined) payload.flatform_type = updates.flatformType
+  if (updates.isZaloShowWeb !== undefined || updates.flatformType !== undefined) {
+    payload.is_zalo_show_web = targetIsZaloShowWeb
+  }
   if (updates.loginStatus !== undefined) payload.login_status = updates.loginStatus
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.isActive !== undefined) payload.is_active = updates.isActive
@@ -246,15 +318,72 @@ export async function updateAccount(id: number, updates: Partial<AutoAccount>): 
     payload.proxy_id = proxyId
   }
 
-  const { data, error } = await client()
+  const changesZaloRuntimeType = (
+    current.flatformType === 'zalo' &&
+    targetFlatformType === 'zalo' &&
+    targetIsZaloShowWeb !== current.isZaloShowWeb
+  )
+  const changesToOrFromZalo = (
+    targetFlatformType !== current.flatformType &&
+    (targetFlatformType === 'zalo' || current.flatformType === 'zalo')
+  )
+  if (changesZaloRuntimeType) {
+    const claimedPreviousStatus = options.zaloTypeChangePreviousStatus
+    if (claimedPreviousStatus) {
+      if (current.status !== 'đang chạy') {
+        throw new Error('Quyền giữ chỗ tài khoản Zalo đã hết hiệu lực. Vui lòng thử lại.')
+      }
+      payload.status = claimedPreviousStatus
+    } else if (current.status === 'đang chạy') {
+      throw new Error('Không thể đổi loại tài khoản Zalo khi tài khoản đang chạy.')
+    } else {
+      // The account status belongs to the runtime. A renderer payload must not
+      // silently resume a paused account while changing QR <-> Web.
+      delete payload.status
+    }
+    Object.assign(payload, {
+      zalo_account_id: null,
+      zalo_session: null,
+      zalo_session_updated_at: null,
+      zalo_session_last_verified_at: null,
+      zalo_session_last_error: null,
+      login_status: 'chưa đăng nhập'
+    })
+  } else if (changesToOrFromZalo) {
+    Object.assign(payload, {
+      zalo_account_id: null,
+      zalo_session: null,
+      zalo_session_updated_at: null,
+      zalo_session_last_verified_at: null,
+      zalo_session_last_error: null,
+      login_status: 'chưa đăng nhập',
+      status: 'chờ xử lý'
+    })
+  }
+
+  let updateQuery = client()
     .from('auto_accounts')
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
+  if (changesZaloRuntimeType) {
+    updateQuery = updateQuery
+      .eq('flatform_type', 'zalo')
+      .eq('is_zalo_show_web', current.isZaloShowWeb)
+    updateQuery = options.zaloTypeChangePreviousStatus
+      ? updateQuery.eq('status', 'đang chạy')
+      : updateQuery.neq('status', 'đang chạy')
+  }
+  const { data, error } = await updateQuery
     .select(ACCOUNT_SELECT)
-    .single()
+    .maybeSingle()
 
   if (error) throw new Error(`Failed to update account: ${error.message}`)
+  if (!data) {
+    throw new Error(changesZaloRuntimeType
+      ? 'Tài khoản Zalo đã bắt đầu chạy hoặc loại tài khoản đã thay đổi. Vui lòng thử lại.'
+      : 'Không tìm thấy tài khoản')
+  }
   return mapAccountFromDB(toDbRow(data))
 }
 
@@ -310,6 +439,8 @@ export async function updateClaimedZaloServerAccount(
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
+    .eq('flatform_type', 'zalo')
+    .eq('is_zalo_show_web', false)
     .eq('status', 'đang chạy')
     .select(ACCOUNT_SELECT)
     .maybeSingle()
@@ -376,6 +507,22 @@ export async function upsertZaloAccount(input: ZaloAccountUpsertInput): Promise<
   return mapZaloAccountFromDB(toDbRow(data))
 }
 
+async function requireCompatibleZaloAccount(
+  id: number,
+  expectedShowWeb?: boolean
+): Promise<AutoAccount> {
+  const account = await getAccount(id)
+  if (!account || account.flatformType !== 'zalo') {
+    throw new Error('Không tìm thấy tài khoản Zalo phù hợp với gói hiện tại.')
+  }
+  if (expectedShowWeb !== undefined && account.isZaloShowWeb !== expectedShowWeb) {
+    throw new Error(expectedShowWeb
+      ? 'Tài khoản này không phải Zalo (trình duyệt).'
+      : 'Tài khoản này không phải Zalo (mã QR).')
+  }
+  return account
+}
+
 export async function updateAccountZaloSession(
   id: number,
   input: {
@@ -385,7 +532,8 @@ export async function updateAccountZaloSession(
     clearError?: boolean
   }
 ): Promise<AutoAccount> {
-  await ensureCurrentUserFeatureActive('zalo')
+  await ensureCurrentUserCanUseZaloAccountType(false)
+  await requireCompatibleZaloAccount(id, false)
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const payload = {
@@ -403,6 +551,9 @@ export async function updateAccountZaloSession(
     .update(removeUndefined(payload))
     .eq('id', id)
     .eq('staff_id', u.staffId)
+    .eq('flatform_type', 'zalo')
+    .eq('is_zalo_show_web', false)
+    .eq('is_delete', false)
     .select(ACCOUNT_SELECT)
     .single()
 
@@ -412,9 +563,11 @@ export async function updateAccountZaloSession(
 
 export async function markAccountZaloSessionCheck(
   id: number,
-  result: { ok: boolean; error?: string | null }
+  result: { ok: boolean; error?: string | null },
+  expectedShowWeb: boolean
 ): Promise<AutoAccount> {
   await ensureCurrentUserFeatureActive('zalo')
+  await requireCompatibleZaloAccount(id, expectedShowWeb)
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const payload = {
@@ -429,6 +582,9 @@ export async function markAccountZaloSessionCheck(
     .update(removeUndefined(payload))
     .eq('id', id)
     .eq('staff_id', u.staffId)
+    .eq('flatform_type', 'zalo')
+    .eq('is_zalo_show_web', expectedShowWeb)
+    .eq('is_delete', false)
     .select(ACCOUNT_SELECT)
     .single()
 
@@ -448,7 +604,8 @@ export async function updateAccountZaloWebSession(
     error?: string | null
   }
 ): Promise<AutoAccount> {
-  await ensureCurrentUserFeatureActive('zalo')
+  await ensureCurrentUserCanUseZaloAccountType(true)
+  await requireCompatibleZaloAccount(id, true)
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const { data, error } = await client()
@@ -465,6 +622,7 @@ export async function updateAccountZaloWebSession(
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('flatform_type', 'zalo')
+    .eq('is_zalo_show_web', true)
     .eq('is_delete', false)
     .select(ACCOUNT_SELECT)
     .single()
@@ -475,6 +633,7 @@ export async function updateAccountZaloWebSession(
 
 export async function clearAccountZaloSession(id: number): Promise<AutoAccount> {
   await ensureCurrentUserFeatureActive('zalo')
+  await requireCompatibleZaloAccount(id)
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -608,6 +767,7 @@ export async function deleteAccount(id: number): Promise<void> {
 export async function getEligibleAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
   const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const zaloAccountCapabilities = loadCurrentUserZaloAccountCapabilities()
   const { data, error } = await client()
     .from('auto_accounts')
     .select(ACCOUNT_SELECT)
@@ -618,7 +778,11 @@ export async function getEligibleAccounts(): Promise<AutoAccount[]> {
   if (error) throw new Error(`Failed to get eligible accounts: ${error.message}`)
   return (data || [])
     .map(row => mapAccountFromDB(toDbRow(row)))
-    .filter(account => canUseAccountPlatformWithEntitlements(account.flatformType, entitlements))
+    .filter(account => canUseAccountWithEntitlementsAndCapabilities(
+      account,
+      entitlements,
+      zaloAccountCapabilities
+    ))
 }
 
 export async function resetRunningAccountStatuses(staffId: number): Promise<void> {
