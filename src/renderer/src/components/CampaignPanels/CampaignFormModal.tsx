@@ -299,7 +299,8 @@ const ACTION_CODE_LABELS: Record<string, string> = {
   zalo_tag_contact: 'Gắn tag Zalo',
   zalo_change_alias: 'Đổi tên Zalo',
   email_send: 'Gửi email',
-  sms_send: 'Gửi SMS'
+  sms_send: 'Gửi SMS',
+  voice_call: 'Gọi tự động qua SIM'
 }
 
 const getActionCodeLabel = (code: string) => ACTION_CODE_LABELS[code] || code
@@ -325,7 +326,8 @@ const ACTION_LIMIT_UNITS: Record<string, string> = {
   zalo_join_group_link: 'group',
   zalo_cancel_sent_friend_request: 'lời mời',
   email_send: 'email',
-  sms_send: 'tin nhắn'
+  sms_send: 'tin nhắn',
+  voice_call: 'cuộc gọi'
 }
 
 const getActionLimitUnit = (code: string) => ACTION_LIMIT_UNITS[code] || 'lượt'
@@ -447,6 +449,10 @@ const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const VOICE_CALL_ACTION_ID = 'voice_call'
+const VOICE_CALL_AI_DISCLOSURE = 'Đây là cuộc gọi tự động sử dụng giọng nói AI.'
+const VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES = 60
+const VOICE_CALL_MAX_TTS_INPUT_CHARS = 4096
 const EXTERNAL_SMS_STATUS_OPTIONS = [
   { value: 'thành công', label: 'Thành công' },
   { value: 'thất bại', label: 'Thất bại' },
@@ -540,7 +546,8 @@ const MESSAGE_CAMPAIGN_ACTIONS = new Set([
   ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID,
   ZALO_MESSAGE_GROUP_ACTION_ID,
   EMAIL_SEND_ACTION_ID,
-  SMS_SEND_ACTION_ID
+  SMS_SEND_ACTION_ID,
+  VOICE_CALL_ACTION_ID
 ])
 const ZALO_REALTIME_TRIGGER_OPTIONS: Array<{ value: ZaloRealtimeTrigger; label: string }> = [
   { value: 'join', label: 'Nhắn tin, kết bạn đến những người THAM GIA vào group theo thời gian thực' },
@@ -1372,7 +1379,8 @@ export default function CampaignFormModal({
     newsfeedCommentUseAI: campaign?.extraSettings?.newsfeedCommentUseAI ?? false,
     dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
     rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
-    rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES,
+    rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes
+      ?? (initialActionId === VOICE_CALL_ACTION_ID ? VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES : DEFAULT_RATE_LIMIT_MINUTES),
     continueWhenActionLimitReached: initialContinueWhenActionLimitReached,
     actionLimitsByCode: Object.fromEntries(
       Object.entries(campaign?.extraSettings?.actionLimits?.byActionCode || {}).map(([code, limit]) => [
@@ -1380,7 +1388,8 @@ export default function CampaignFormModal({
         toActionLimitForm(limit, {
           dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
           rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
-          rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES
+          rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes
+            ?? (initialActionId === VOICE_CALL_ACTION_ID ? VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES : DEFAULT_RATE_LIMIT_MINUTES)
         })
       ])
     ) as Record<string, ActionLimitForm>,
@@ -1604,6 +1613,8 @@ export default function CampaignFormModal({
   const isMessageCampaign = MESSAGE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isEmailCampaign = formData.actionId === EMAIL_SEND_ACTION_ID
   const isSmsCampaign = formData.actionId === SMS_SEND_ACTION_ID
+  const isVoiceCallCampaign = formData.actionId === VOICE_CALL_ACTION_ID
+  const isMobileManagedSmsCampaign = isSmsCampaign || isVoiceCallCampaign
   const canUseFormattedContent = supportsFormattedContent(formData.actionId)
   const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
@@ -1646,7 +1657,7 @@ export default function CampaignFormModal({
     () => accounts.filter(account => account.flatformType === 'sms' && !account.isDelete && account.isActive !== false),
     [accounts]
   )
-  const isPhoneInputCampaign = isZaloMessagePhoneCampaign || isSmsCampaign
+  const isPhoneInputCampaign = isZaloMessagePhoneCampaign || isMobileManagedSmsCampaign
   const isPhoneOrUidInputCampaign = isZaloAddGroupMemberCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share' && !isFormattedContentEnabled
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
@@ -1791,7 +1802,7 @@ export default function CampaignFormModal({
     (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage) &&
     (!isZaloMessageFriendRecommendationCampaign || formData.enableMessage)
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
-  const canUseAdvancedContentMode = canShowContentSection && !isCommentSeedingCampaign && !isSmsCampaign
+  const canUseAdvancedContentMode = canShowContentSection && !isCommentSeedingCampaign && !isMobileManagedSmsCampaign
   const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
   const hasMainContentText = isAdvancedContentMode
     ? normalizedAdvancedContentItems.some(item => isRichContentEditorEnabled
@@ -1801,14 +1812,14 @@ export default function CampaignFormModal({
       ? splitFormattedContentVariants(formData.content).length > 0
       : formData.content.trim().length > 0
   const hasSelectedMainMedia = isAdvancedContentMode
-    ? !isSmsCampaign && normalizedAdvancedContentItems.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
-    : !isSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
+    ? !isMobileManagedSmsCampaign && normalizedAdvancedContentItems.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
+    : !isMobileManagedSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
   const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 4 : 5)
-      : isSmsCampaign
+      : isMobileManagedSmsCampaign
         ? (isEditingSavedCampaign ? 9 : 10)
         : (isEditingSavedCampaign ? 5 : 6)
   const availableCampaignActions = useMemo(
@@ -1985,13 +1996,20 @@ export default function CampaignFormModal({
         ...compatibleState,
         actionId,
         accountIds: getAccountIdsForPlatform(prev.accountIds, nextPlatform || selectedActionPlatformFilter),
-        ...(actionId === SMS_SEND_ACTION_ID
+        ...([SMS_SEND_ACTION_ID, VOICE_CALL_ACTION_ID].includes(actionId)
         ? {
           imageOption: 'none' as const,
           images: [],
           commentImageOption: 'none' as const,
           commentImages: [],
-          sleepBetweenActions: DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS
+          sleepBetweenActions: actionId === SMS_SEND_ACTION_ID
+            ? DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS
+            : DEFAULT_SLEEP_BETWEEN_ACTIONS,
+          dailyLimit: actionId === VOICE_CALL_ACTION_ID ? 30 : prev.dailyLimit,
+          rateLimitCount: actionId === VOICE_CALL_ACTION_ID ? 9 : prev.rateLimitCount,
+          rateLimitMinutes: actionId === VOICE_CALL_ACTION_ID
+            ? VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES
+            : prev.rateLimitMinutes
         }
         : {})
       }
@@ -2155,12 +2173,12 @@ export default function CampaignFormModal({
   const showLimitsSection = canUseSleepBetweenActions || generalLimitActionCodes.length > 0 || isCommentSeedingFeedCampaign
   const showContentSection = canShowContentSection
   const visibleScheduleFields: StepDef['fields'] = [
-    ...(isSmsCampaign ? [] : [{ key: 'scheduleType', label: 'Loại lịch' }]),
+    ...(isMobileManagedSmsCampaign ? [] : [{ key: 'scheduleType', label: 'Loại lịch' }]),
     { key: 'schedule', label: 'Ngày chạy' },
-    ...(isSmsCampaign || formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
-    ...(!isSmsCampaign && formData.scheduleType === 'weekly' ? [{ key: 'scheduleWeekDays', label: 'Lịch tuần' }] : []),
-    ...(!isSmsCampaign && formData.scheduleType === 'monthly' ? [{ key: 'scheduleDays', label: 'Lịch tháng' }] : []),
-    ...(isSmsCampaign ? [] : [{ key: 'dailyStopTime', label: 'Giờ dừng' }])
+    ...(isMobileManagedSmsCampaign || formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
+    ...(!isMobileManagedSmsCampaign && formData.scheduleType === 'weekly' ? [{ key: 'scheduleWeekDays', label: 'Lịch tuần' }] : []),
+    ...(!isMobileManagedSmsCampaign && formData.scheduleType === 'monthly' ? [{ key: 'scheduleDays', label: 'Lịch tháng' }] : []),
+    ...(isMobileManagedSmsCampaign ? [] : [{ key: 'dailyStopTime', label: 'Giờ dừng' }])
   ]
   const visibleLimitFields: StepDef['fields'] = [
     ...(canUseSleepBetweenActions ? [{ key: 'sleepBetweenActions', label: 'Nghỉ giữa 2 lần' }] : []),
@@ -2348,7 +2366,7 @@ export default function CampaignFormModal({
                 ]
                 : [
                   { key: 'content', label: 'Nội dung tin nhắn' },
-                  ...(isSmsCampaign ? [] : [{ key: 'images', label: 'Media' }])
+                  ...(isMobileManagedSmsCampaign ? [] : [{ key: 'images', label: 'Media' }])
                 ]
             }
           }
@@ -3663,7 +3681,7 @@ export default function CampaignFormModal({
     if (target === 'content') {
       if (isEmailCampaign) return 'email'
       if (isZaloMessageCampaign) return 'zalo'
-      if (isSmsCampaign) return 'generic'
+      if (isMobileManagedSmsCampaign) return 'generic'
       if (isMessageCampaign || isFacebookGroupPostCampaign || isTimelinePostCampaign || isPagePostCampaign) return 'facebook'
     }
     return 'generic'
@@ -3692,6 +3710,7 @@ export default function CampaignFormModal({
       if (isEmailCampaign) return 'Email xem trước với dữ liệu mẫu'
       if (isZaloMessageCampaign) return 'Tin nhắn Zalo xem trước với dữ liệu mẫu'
       if (isSmsCampaign) return 'Tin nhắn SMS xem trước với dữ liệu mẫu'
+      if (isVoiceCallCampaign) return 'Nội dung cuộc gọi AI xem trước với dữ liệu mẫu'
       if (isMessageCampaign) return 'Tin nhắn Facebook xem trước với dữ liệu mẫu'
       if (isPagePostCampaign) return 'Bài đăng fanpage xem trước với dữ liệu mẫu'
       if (isTimelinePostCampaign) return 'Bài đăng trang cá nhân xem trước với dữ liệu mẫu'
@@ -3792,7 +3811,7 @@ export default function CampaignFormModal({
     if (selectedActionPlatform === 'sms' || selectedActionPlatform === 'zalo' || selectedActionPlatform === 'facebook' || selectedActionPlatform === 'email') {
       return selectedActionPlatform
     }
-    if (isSmsCampaign) return 'sms'
+    if (isMobileManagedSmsCampaign) return 'sms'
     if (isEmailCampaign) return 'email'
     if (isZaloMessageCampaign) return 'zalo'
     return 'facebook'
@@ -4236,13 +4255,13 @@ export default function CampaignFormModal({
     }
 
     const invalidIndex = findInvalidAdvancedContentItemIndex(normalizedAdvancedContentItems, {
-      allowMediaOnly: !isSmsCampaign,
+      allowMediaOnly: !isMobileManagedSmsCampaign,
       contentIsEmpty: isRichContentEditorEnabled ? isFormattedContentEmpty : undefined
     })
     if (invalidIndex < 0) return true
 
     showAlert(
-      isSmsCampaign
+      isMobileManagedSmsCampaign
         ? `Nội dung nâng cao số ${invalidIndex + 1} chưa có nội dung SMS.`
         : `Nội dung nâng cao số ${invalidIndex + 1} đang rỗng. Vui lòng nhập nội dung hoặc chọn media, hoặc xoá nội dung này.`,
       'error'
@@ -4251,7 +4270,7 @@ export default function CampaignFormModal({
   }
 
   const validateAdvancedContentMedia = (): boolean => {
-    if (!isAdvancedContentMode || isSmsCampaign) return true
+    if (!isAdvancedContentMode || isMobileManagedSmsCampaign) return true
 
     for (let index = 0; index < normalizedAdvancedContentItems.length; index += 1) {
       const item = normalizedAdvancedContentItems[index]
@@ -4314,7 +4333,9 @@ export default function CampaignFormModal({
     }
 
     return formData.accountIds.map((accountId, index) => {
-      const accountRateLimitMinutes = getAccountRateLimitMinutes(accountId)
+      const accountRateLimitMinutes = isVoiceCallCampaign
+        ? VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES
+        : getAccountRateLimitMinutes(accountId)
       const defaultLimit = {
         dailyLimit: clampDailyLimitToEntitlement(formData.dailyLimit, campaignDailyLimitCap),
         rateLimitCount: formData.rateLimitCount,
@@ -4370,10 +4391,10 @@ export default function CampaignFormModal({
         ? setDateTimeLocalTime(formData.schedule, normalizedMultiDailySlots[0])
         : formData.schedule
       const formSchedule = toIsoDateTimeValue(scheduleInput)
-      const normalizedScheduleEndDate = formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isSmsCampaign
+      const normalizedScheduleEndDate = formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign
         ? null
         : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null)
-      const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign || isSmsCampaign ? 'daily' : formData.scheduleType
+      const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign ? 'daily' : formData.scheduleType
       const normalizedScheduleDays = normalizedScheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
       const normalizedScheduleWeekDays = normalizedScheduleType === 'weekly' ? formData.scheduleWeekDays : ''
       const normalizedFindData = normalizeFindDataFlagState(formData, { isSearchCampaign: isFindDataSearchCampaign })
@@ -4440,7 +4461,7 @@ export default function CampaignFormModal({
           const normalizedItem = formattedContentForSave
             ? { ...item, content: sanitizeFormattedContent(item.content) }
             : item
-          return isSmsCampaign
+          return isMobileManagedSmsCampaign
             ? { ...normalizedItem, mediaOption: 'none' as const, mediaItems: [] }
             : normalizedItem
         })
@@ -4456,18 +4477,18 @@ export default function CampaignFormModal({
           originalSchedule: formSchedule,
           scheduleType: normalizedScheduleType,
           scheduleEndDate: normalizedScheduleEndDate,
-          dailyStopTime: isSmsCampaign ? null : (formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null),
+          dailyStopTime: isMobileManagedSmsCampaign ? null : (formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null),
           scheduleDays: normalizedScheduleDays,
           scheduleWeekDays: normalizedScheduleWeekDays,
-          continueNextDay: isSmsCampaign ? true : ((isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign) ? false : formData.continueNextDay),
+          continueNextDay: isMobileManagedSmsCampaign ? true : ((isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign) ? false : formData.continueNextDay),
           refreshData: (isZaloMessageBirthdayCampaign || isZaloMessageFriendRecommendationCampaign || isZaloCancelSentFriendRequestCampaign)
             ? true
-            : (isSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
+            : (isMobileManagedSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
           content: formattedContentForSave ? sanitizeFormattedContent(formData.content) : formData.content,
           extraSettings: {
             sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
             postWithBackground: formattedContentForSave ? false : isPostBackgroundActive,
-            rewriteContentEachRun: isSmsCampaign || formattedContentForSave || (isEmailCampaign && formData.emailBodyIsHtml) ? false : formData.rewriteContentEachRun,
+            rewriteContentEachRun: isMobileManagedSmsCampaign || formattedContentForSave || (isEmailCampaign && formData.emailBodyIsHtml) ? false : formData.rewriteContentEachRun,
             formattedContentEnabled: formattedContentForSave,
             advancedContentEnabled: canUseAdvancedContentMode ? formData.advancedContentEnabled : false,
             advancedContentItems: advancedContentItemsForSave,
@@ -4495,7 +4516,7 @@ export default function CampaignFormModal({
               continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
               byActionCode
             },
-            imageOption: (isSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
+            imageOption: (isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
             randomImageCount: formData.randomImageCount,
             commentImageOption: formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none',
             commentImages: formData.commentImages.slice(0, 1),
@@ -4531,6 +4552,12 @@ export default function CampaignFormModal({
             emailCheckLinkClicks: isEmailCampaign ? formData.emailCheckLinkClicks : false,
             smsUseUnicode: isSmsCampaign ? formData.smsUseUnicode : undefined,
             smsKeepNewLines: isSmsCampaign ? formData.smsKeepNewLines : undefined,
+            voiceCall: isVoiceCallCampaign ? {
+              schemaVersion: 1,
+              fallbackDelaySeconds: 15,
+              maxAudioSeconds: 90,
+              noRetry: true
+            } : undefined,
             internalSmsEnabled: usesInternalSmsPush ? formData.internalSmsEnabled : false,
             internalSmsAccountIds: usesInternalSmsPush && formData.internalSmsEnabled ? getCampaignIdList(formData.internalSmsAccountIds) : [],
             internalSmsContent: usesInternalSmsPush && formData.internalSmsEnabled ? formData.internalSmsContent.trim() : '',
@@ -4679,7 +4706,7 @@ export default function CampaignFormModal({
               ? getCampaignIdList(formData.findFacebookGroupJoinTargetCampaignIds)
               : []
           } as CampaignExtraSettings,
-          images: isSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images
+          images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images
         },
         details: (accountChunks[index] || []).map(detail => ({ ...detail }))
       }
@@ -4839,7 +4866,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập số lời mời cần huỷ lớn hơn 0.', 'error')
       return
     }
-    if (!isSmsCampaign && showContentSection && !isFacebookJoinGroupCampaign && !isAdvancedContentMode && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
+    if (!isMobileManagedSmsCampaign && showContentSection && !isFacebookJoinGroupCampaign && !isAdvancedContentMode && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
       return
     }
     if (!validateAdvancedContentItems()) {
@@ -4848,7 +4875,7 @@ export default function CampaignFormModal({
     if (!validateAdvancedContentMedia()) {
       return
     }
-    if (!isSmsCampaign && !validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
+    if (!isMobileManagedSmsCampaign && !validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
       return
     }
     if (isNewsfeedInteractionCampaign) {
@@ -4902,12 +4929,21 @@ export default function CampaignFormModal({
           ? 'Vui lòng nhập nội dung email hoặc chọn ít nhất một tệp đính kèm.'
         : isSmsCampaign
           ? 'Vui lòng nhập nội dung tin nhắn SMS.'
+        : isVoiceCallCampaign
+          ? 'Vui lòng nhập nội dung cuộc gọi tự động.'
         : isMessageCampaign
           ? `Vui lòng nhập nội dung tin nhắn hoặc chọn ít nhất một ${isZaloMessageCampaign ? 'file' : 'ảnh'}.`
           : 'Vui lòng nhập nội dung chiến dịch hoặc chọn ít nhất một ảnh.',
         'error'
       )
       return
+    }
+    if (isVoiceCallCampaign) {
+      const ttsInputLength = `${VOICE_CALL_AI_DISCLOSURE} ${renderContentSpinMax(formData.content)}`.trim().length
+      if (ttsInputLength > VOICE_CALL_MAX_TTS_INPUT_CHARS) {
+        showAlert(`Nội dung cuộc gọi sau khi thêm thông báo giọng nói AI không được vượt quá ${VOICE_CALL_MAX_TTS_INPUT_CHARS.toLocaleString('vi-VN')} ký tự.`, 'error')
+        return
+      }
     }
     const postBackgroundError = getPostBackgroundValidationError()
     if (postBackgroundError) {
@@ -6086,10 +6122,10 @@ export default function CampaignFormModal({
     const dateTokenName = MESSAGE_DATE_OPTIONS.find(opt => opt.value === messageDateOption)?.token || 'TODAY'
     const dateToken = `#{${dateTokenName}(${messageDateFormat})}`
     const selectedDateLabel = dateOptions.find(opt => opt.value === messageDateOption)?.label || dateOptions[0]?.label || ''
-    const excelTokens = isSmsCampaign
+    const excelTokens = isMobileManagedSmsCampaign
       ? ['INPUT_FULLNAME', 'PHONE', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
       : ['INPUT_FULLNAME', 'PHONE', 'EMAIL', 'INFO1', 'INFO2', 'INFO3', 'INFO4', 'INFO5']
-    const showCustomerTokens = isSmsCampaign ? false : (target === 'content' ? !isEmailCampaign : true)
+    const showCustomerTokens = isMobileManagedSmsCampaign ? false : (target === 'content' ? !isEmailCampaign : true)
     const showExcelTokens = target === 'content'
       ? isPhoneInputCampaign || isEmailCampaign
       : target === 'internalSmsContent'
@@ -10208,6 +10244,18 @@ export default function CampaignFormModal({
   )
 
   const renderSmsContentMeta = (showCounts = true) => {
+    if (isVoiceCallCampaign) {
+      return (
+        <div className="sms-content-meta">
+          <div className="schedule-hint">
+            <strong>Thông báo bắt buộc:</strong> “{VOICE_CALL_AI_DISCLOSURE}” sẽ được hệ thống tự thêm trước nội dung và không thể tắt.
+          </div>
+          <div className="schedule-hint" style={{ marginTop: 6 }}>
+            Thiết bị đã chứng nhận sẽ nhận biết lúc bắt máy; thiết bị khác tự phát sau 15 giây. Audio TTS tối đa 90 giây và mỗi SĐT chỉ gọi một lần.
+          </div>
+        </div>
+      )
+    }
     if (!isSmsCampaign) return null
 
     return (
@@ -10367,6 +10415,7 @@ export default function CampaignFormModal({
 
   const getCampaignContentLabel = (): string => {
     if (isEmailCampaign) return formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email'
+    if (isVoiceCallCampaign) return 'Nội dung cuộc gọi tự động'
     if (isFormattedContentEnabled) return 'Nội dung có định dạng'
     if (isMessageCampaign) return 'Nội dung tin nhắn'
     return 'Nội dung chiến dịch'
@@ -10378,6 +10427,9 @@ export default function CampaignFormModal({
     }
     if (isEmailCampaign) {
       return 'Nhập nội dung email. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở email 1, nội dung 2 ở email 2...'
+    }
+    if (isVoiceCallCampaign) {
+      return 'Nhập nội dung sẽ được chuyển thành giọng nói. Dùng dấu | để luân phiên nội dung và token để cá nhân hoá từng người nhận.'
     }
     if (isMessageCampaign) {
       return 'Nhập nội dung tin nhắn. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở mục tiêu 1, nội dung 2 ở mục tiêu 2...'
@@ -10408,7 +10460,7 @@ export default function CampaignFormModal({
       )}
       {showHint && renderSmsContentMeta()}
       {showHint && !isRichContentEditorEnabled && renderCampaignContentHint()}
-      {showHint && !isSmsCampaign && !isFacebookJoinGroupCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+      {showHint && !isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
     </>
   )
 
@@ -10496,7 +10548,7 @@ export default function CampaignFormModal({
   }
 
   const renderAdvancedContentItemMedia = (item: CampaignAdvancedContentItem) => {
-    if (isSmsCampaign) return null
+    if (isMobileManagedSmsCampaign) return null
 
     const mediaItems = item.mediaItems || []
     const mediaOption = item.mediaOption || 'none'
@@ -11499,7 +11551,7 @@ export default function CampaignFormModal({
 
               {!collapsedSections['schedule'] && (
                 <div className="stepper-section-body">
-                  {!isSmsCampaign && <div className="stepper-form-group">
+                  {!isMobileManagedSmsCampaign && <div className="stepper-form-group">
                     <label>Lịch</label>
                     <div className="schedule-radio-group">
                       {([['daily', 'Hàng ngày'], ['weekly', 'Theo tuần'], ['monthly', 'Theo tháng']] as const).map(([value, label]) => (
@@ -11538,7 +11590,7 @@ export default function CampaignFormModal({
                         className="stepper-input"
                       />
                     </div>
-                    {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && !isSmsCampaign && (
+                    {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && !isMobileManagedSmsCampaign && (
                       <div className="stepper-form-group schedule-end-date-field">
                         <label>Ngày kết thúc</label>
                         <input
@@ -11549,13 +11601,13 @@ export default function CampaignFormModal({
                         />
                       </div>
                     )}
-                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isSmsCampaign) && (
+                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign) && (
                       <div className="stepper-form-group schedule-end-date-field schedule-placeholder-field" aria-hidden="true" />
                     )}
                   </div>
 
                   {/* Monthly days */}
-                  {formData.scheduleType === 'monthly' && !isSmsCampaign && (
+                  {formData.scheduleType === 'monthly' && !isMobileManagedSmsCampaign && (
                     <div className="stepper-form-group">
                       <label>Lịch tháng</label>
                       <input
@@ -11570,7 +11622,7 @@ export default function CampaignFormModal({
                   )}
 
                   {/* Weekly days */}
-                  {formData.scheduleType === 'weekly' && !isSmsCampaign && (
+                  {formData.scheduleType === 'weekly' && !isMobileManagedSmsCampaign && (
                     <div className="stepper-form-group">
                       <label>Lịch tuần</label>
                       <div className="schedule-weekday-group">
@@ -11592,7 +11644,7 @@ export default function CampaignFormModal({
                   )}
 
                   {/* Conditional checkbox based on schedule type */}
-                  {formData.scheduleType === 'daily' && !isSmsCampaign && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
+                  {formData.scheduleType === 'daily' && !isMobileManagedSmsCampaign && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
@@ -11605,7 +11657,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isSmsCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
+                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isMobileManagedSmsCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
@@ -11618,7 +11670,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {!isSmsCampaign && <div className="stepper-form-group" style={{ maxWidth: 320 }}>
+                  {!isMobileManagedSmsCampaign && <div className="stepper-form-group" style={{ maxWidth: 320 }}>
                     <label className="schedule-checkbox-label">
                       <input
                         type="checkbox"
@@ -11675,7 +11727,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {!isSmsCampaign && renderMultiDailyTimeSlotsSection()}
+                  {!isMobileManagedSmsCampaign && renderMultiDailyTimeSlotsSection()}
                 </div>
               )}
             </div>
@@ -11898,7 +11950,7 @@ export default function CampaignFormModal({
                         <>
                           {renderAdvancedContentEditor()}
                           {renderSmsContentMeta(false)}
-                          {!isSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+                          {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
                         </>
                       ) : (
                         <>
@@ -11915,7 +11967,7 @@ export default function CampaignFormModal({
                               </div>
                               {renderSmsContentMeta()}
                               {!isRichContentEditorEnabled && renderCampaignContentHint()}
-                              {!isSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+                              {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
                             </div>
                           ) : (
                             <div className="stepper-form-group">
@@ -11925,7 +11977,7 @@ export default function CampaignFormModal({
                             </div>
                           )}
 
-                          {!isSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
+                          {!isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
                         </>
                       )}
                     </>
@@ -12457,7 +12509,7 @@ export default function CampaignFormModal({
                               <th className="campaign-grid-index-col">STT</th>
                               <th>Tên</th>
                               <th>Số điện thoại</th>
-                              {isSmsCampaign ? (
+                              {isMobileManagedSmsCampaign ? (
                                 <>
                                   <th>Nhà mạng</th>
                                   <th>Info1</th>
@@ -12515,7 +12567,7 @@ export default function CampaignFormModal({
                                     <td>
                                       <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." disabled={isEditingSavedCampaign} />
                                     </td>
-                                    {isSmsCampaign ? (
+                                    {isMobileManagedSmsCampaign ? (
                                       <>
                                         <td title={formatInputDataPhoneCarrier(d)}>
                                           <span>{formatInputDataPhoneCarrier(d)}</span>

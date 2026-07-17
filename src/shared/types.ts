@@ -4,6 +4,53 @@ import { normalizeVietnamMobilePhone, type VietnamMobileCarrier } from './phone'
 // Campaign Automation Types
 // ============================================
 
+export type VoiceCallCapabilityStatus =
+  | 'exact_profile'
+  | 'fallback_ready'
+  | 'unavailable'
+  | 'blocked'
+  // Backward-compatible aliases emitted by early capability builds.
+  | 'exact'
+  | 'fallback'
+
+export interface MobileVoiceCallCapability {
+  capabilityVersion?: number
+  capabilityStatus?: VoiceCallCapabilityStatus
+  status?: VoiceCallCapabilityStatus
+  manufacturer?: string
+  model?: string
+  sdkInt?: number
+  defaultDialerPackage?: string
+  defaultDialerVersion?: string
+  dialerPackage?: string
+  dialerVersion?: string
+  selectedSimSlot?: number
+  selectedSubscriptionId?: number
+  callPhoneGranted?: boolean
+  callPermissionGranted?: boolean
+  accessibilityEnabled?: boolean
+  profileKey?: string
+  profileCode?: string
+  profileVersion?: number
+  answerDetectionMode?: 'profile' | 'accessibility_profile' | 'fallback_delay'
+  detectionMode?: 'profile' | 'accessibility_profile' | 'fallback_delay'
+  fallbackDelaySeconds?: number
+  heartbeatAt?: string
+  lastHeartbeatAt?: string
+  blockedReason?: string
+}
+
+export interface MobileDeviceInfo extends Record<string, unknown> {
+  voiceCall?: MobileVoiceCallCapability
+}
+
+export interface VoiceCallCampaignSettings {
+  schemaVersion: 1
+  fallbackDelaySeconds: number
+  maxAudioSeconds: number
+  noRetry: true
+}
+
 export interface AutoAccount {
   id: number
   name: string
@@ -11,7 +58,7 @@ export interface AutoAccount {
   username?: string | null
   password?: string | null
   mobileDeviceId?: string | null
-  mobileDeviceInfo?: Record<string, unknown> | null
+  mobileDeviceInfo?: MobileDeviceInfo | null
   mobileDeviceRegisteredAt?: string | null
   mobileDeviceLastSeenAt?: string | null
   loginStatus: string
@@ -418,6 +465,7 @@ export interface CampaignExtraSettings {
   emailCheckLinkClicks?: boolean // Kiểm tra click vào link trong email_send
   smsUseUnicode?: boolean        // SMS giữ tiếng Việt có dấu; false thì bỏ dấu trước khi gửi
   smsKeepNewLines?: boolean      // SMS giữ xuống dòng; false thì bỏ \r/\n trước khi gửi
+  voiceCall?: VoiceCallCampaignSettings // Gọi tự động qua SIM bằng app mobile akaBizSms
   internalSmsEnabled?: boolean   // Zalo message phone/group member: kiêm gửi SMS bằng campaign sms_send nội bộ
   internalSmsAccountIds?: number[]
   internalSmsContent?: string
@@ -672,6 +720,7 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   zalo_join_group_link: { field: 'uid', label: 'Link group Zalo' },
   zalo_cancel_sent_friend_request: { field: 'uid', label: 'UID lời mời kết bạn Zalo đã gửi' },
   sms_send: { field: 'phone', label: 'SĐT SMS' },
+  voice_call: { field: 'phone', label: 'SĐT gọi tự động' },
   email_send: { field: 'email', label: 'email người nhận' }
 }
 

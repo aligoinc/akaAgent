@@ -80,7 +80,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
   }, [accountActions, formData.flatformType])
 
   const selectedCodeSet = useMemo(() => new Set(formData.limitCheckActionCodes), [formData.limitCheckActionCodes])
-  const isMobileManagedSmsAction = formData.id.trim() === 'sms_send'
+  const isMobileManagedSmsAction = ['sms_send', 'voice_call'].includes(formData.id.trim())
 
   const openCreateForm = () => {
     setEditingAction(null)

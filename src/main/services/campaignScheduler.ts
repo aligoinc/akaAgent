@@ -427,6 +427,8 @@ const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
 const SMS_SEND_ACTION_ID = 'sms_send'
+const VOICE_CALL_ACTION_ID = 'voice_call'
+const MOBILE_MANAGED_SMS_ACTION_IDS = new Set([SMS_SEND_ACTION_ID, VOICE_CALL_ACTION_ID])
 const EXTERNAL_SMS_ZALO_ACTION_IDS = new Set([
   ZALO_MESSAGE_PHONE_ACTION_ID,
   ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID
@@ -935,7 +937,7 @@ export class CampaignScheduler {
         if (!this.shouldProcessAccountForRuntime(account)) continue
 
         if (this.isSmsAccount(account)) {
-          await this.refreshDueSmsCampaignLimitNotes(account)
+          await this.refreshDueMobileManagedCampaignLimitNotes(account)
           continue
         }
 
@@ -1042,19 +1044,19 @@ export class CampaignScheduler {
     return String(account.flatformType || '').trim().toLowerCase() === 'sms'
   }
 
-  private async refreshDueSmsCampaignLimitNotes(account: AutoAccount): Promise<void> {
-    const campaigns = await this.supabase.getDueSmsCampaignsForLimitCheck(account.id)
+  private async refreshDueMobileManagedCampaignLimitNotes(account: AutoAccount): Promise<void> {
+    const campaigns = await this.supabase.getDueMobileManagedCampaignsForLimitCheck(account.id)
     for (const campaign of campaigns) {
       try {
-        await this.refreshSmsCampaignLimitNote(account, campaign)
+        await this.refreshMobileManagedCampaignLimitNote(account, campaign)
       } catch (err) {
-        console.error(`Failed to refresh SMS campaign limit note for campaign ${campaign.id}:`, err)
+        console.error(`Failed to refresh mobile-managed campaign limit note for campaign ${campaign.id}:`, err)
       }
     }
   }
 
-  private async refreshSmsCampaignLimitNote(account: AutoAccount, campaign: Campaign): Promise<void> {
-    if (campaign.actionId !== SMS_SEND_ACTION_ID) return
+  private async refreshMobileManagedCampaignLimitNote(account: AutoAccount, campaign: Campaign): Promise<void> {
+    if (!MOBILE_MANAGED_SMS_ACTION_IDS.has(campaign.actionId)) return
 
     try {
       await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
@@ -5503,7 +5505,8 @@ export class CampaignScheduler {
       'zalo_message_friend',
       'zalo_message_group',
       'email_send',
-      'sms_send'
+      'sms_send',
+      'voice_call'
     ]
     return messageCodes.some(code => skippedActionCodes.has(code))
   }

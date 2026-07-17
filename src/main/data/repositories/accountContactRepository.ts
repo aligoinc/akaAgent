@@ -599,7 +599,7 @@ const UPLOAD_GROUP_ACTIONS = new Set([
   'zalo_message_group'
 ])
 const UPLOAD_PAGE_ACTIONS = new Set(['facebook_page_post'])
-const UPLOAD_PHONE_ACTIONS = new Set(['zalo_message_phone', 'zalo_add_group_member', 'sms_send'])
+const UPLOAD_PHONE_ACTIONS = new Set(['zalo_message_phone', 'zalo_add_group_member', 'sms_send', 'voice_call'])
 
 interface NormalizedUploadContact {
   name: string
@@ -626,7 +626,7 @@ function uploadActionMatchesPlatform(actionId: string, platform: SaveUploadDatas
   if (actionId.startsWith('facebook_')) return platform === 'facebook'
   if (actionId.startsWith('zalo_')) return platform === 'zalo'
   if (actionId === 'email_send') return platform === 'email'
-  if (actionId === 'sms_send') return platform === 'sms'
+  if (actionId === 'sms_send' || actionId === 'voice_call') return platform === 'sms'
   return true
 }
 
