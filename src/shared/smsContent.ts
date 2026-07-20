@@ -1,7 +1,8 @@
 import {
   findInvalidAdvancedContentItemIndex,
   getAdvancedContentItems,
-  isAdvancedContentItemValid
+  isAdvancedContentItemValid,
+  MAX_ADVANCED_CONTENT_ITEMS
 } from './advancedContent'
 import { renderContentSpin, renderContentSpinMax, splitContentVariants } from './contentSpin'
 import { normalizeVietnamMobilePhone } from './phone'
@@ -72,6 +73,9 @@ function cycleSmsContentVariant(
     const items = getAdvancedContentItems(campaign.extraSettings)
     if (items.length === 0) {
       throw new Error('Nội dung nâng cao SMS chưa có nội dung nào.')
+    }
+    if (items.length > MAX_ADVANCED_CONTENT_ITEMS) {
+      throw new Error(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`)
     }
     const invalidIndex = findInvalidAdvancedContentItemIndex(items, { allowMediaOnly: false })
     if (invalidIndex >= 0) {

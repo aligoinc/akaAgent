@@ -152,6 +152,12 @@ export interface CampaignAdvancedContentItem {
   mediaOption?: 'none' | 'all' | 'random'
   mediaItems?: CampaignMediaInput[]
   randomMediaCount?: number
+  /** Email subject captured together with this advanced-content variant. */
+  emailSubject?: string
+  /** Source metadata is a save-time snapshot; runtimes must not query the template tables. */
+  sourceTemplateId?: number
+  sourceTemplateName?: string
+  sourceVariantIndex?: number
 }
 
 export const MEDIA_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
@@ -436,6 +442,15 @@ export interface CampaignActionLimitSettings extends ActionLimitConfig {
   continueWhenActionLimitReached?: boolean
 }
 
+export interface CampaignAdvancedContentManualDraft {
+  content: string
+  advancedContentItems: CampaignAdvancedContentItem[]
+  formattedContentEnabled: boolean
+  emailSubject: string
+  emailBodyIsHtml: boolean
+  rewriteContentEachRun: boolean
+}
+
 export interface CampaignExtraSettings {
   sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
   postWithBackground?: boolean   // Đăng bài profile/page UI/group với phông nền Facebook
@@ -443,6 +458,16 @@ export interface CampaignExtraSettings {
   formattedContentEnabled?: boolean // Nội dung chính là HTML rich-text cho facebook_group_post và các chiến dịch Zalo nhắn tin hỗ trợ
   advancedContentEnabled?: boolean
   advancedContentItems?: CampaignAdvancedContentItem[]
+  advancedContentSource?: 'manual' | 'group_snapshot'
+  advancedContentGroupSnapshot?: {
+    groupId: number
+    groupName: string
+    capturedAt: string
+    templateCount: number
+    itemCount: number
+  }
+  // Bản nháp Simple/Thủ công độc lập với dữ liệu runtime khi dùng snapshot nhóm.
+  advancedContentManualDraft?: CampaignAdvancedContentManualDraft
   enableComment?: boolean        // kiếm comment
   commentGroupMode?: 'all' | 'pending_only' | 'published_only' // group nào được comment sau khi đăng bài group
   commentType?: 'own' | 'others' | 'all' // comment vào bài mình / bài khác / tất cả
@@ -1508,7 +1533,13 @@ export interface AkaBizContactTag {
   updatedAt?: string
 }
 
-export type ContentTemplateChannelName = 'sms' | 'zalo' | 'facebook' | 'email'
+export type ContentTemplateChannelName =
+  | 'sms'
+  | 'zalo_message'
+  | 'facebook_post'
+  | 'facebook_message'
+  | 'facebook_comment'
+  | 'email'
 
 export interface ContentTemplateVariant {
   text: string
@@ -1517,10 +1548,13 @@ export interface ContentTemplateVariant {
 export interface ContentTemplateChannelConfig {
   enabled: boolean
   variants: ContentTemplateVariant[]
+  /** Media is scoped to this channel, never shared or resolved from legacy image_urls. */
+  imageUrls: string[]
+  /** Zalo Message / Facebook Post only: variants contain sanitized rich HTML. */
   formattedContentEnabled?: boolean
   /** Email-only: one subject shared by every body variant. */
   subject?: string
-  /** Email-only: true when variant text contains sanitized HTML. */
+  /** Email-only: variants contain sanitized HTML. */
   isHtml?: boolean
 }
 
@@ -1529,12 +1563,8 @@ export type ContentTemplateChannels = Partial<Record<ContentTemplateChannelName,
 export interface ContentTemplate {
   id: number
   name: string
-  content: string
-  baseContentHtml: string | null
   groupId: number | null
   groupName: string | null
-  contentTypeId: number | null
-  imageUrls: string[]
   channels: ContentTemplateChannels
   isDelete: boolean
   staffId?: number
@@ -1545,12 +1575,8 @@ export interface ContentTemplate {
 
 export interface CreateContentTemplateInput {
   name: string
-  /** Plain-text fallback used by older app versions. */
-  content: string
-  baseContentHtml?: string | null
   groupId?: number | null
-  imageUrls?: string[]
-  channels?: ContentTemplateChannels
+  channels: ContentTemplateChannels
 }
 
 export type UpdateContentTemplateInput = Partial<CreateContentTemplateInput>

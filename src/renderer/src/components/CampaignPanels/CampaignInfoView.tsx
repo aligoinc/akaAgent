@@ -331,17 +331,35 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const extra = campaign.extraSettings || {}
   const actionId = campaign.actionId
   const isFormattedContent = supportsFormattedContent(actionId) && extra.formattedContentEnabled === true
-  const displayCampaignContent = extra.advancedContentEnabled && Array.isArray(extra.advancedContentItems) && extra.advancedContentItems.length > 0
-    ? extra.advancedContentItems
-      .map(item => isFormattedContent ? formattedContentToPlainText(item.content) : String(item.content || '').trim())
+  const isRichCampaignContent = isFormattedContent || (actionId === 'email_send' && extra.emailBodyIsHtml === true)
+  const advancedContentItems = Array.isArray(extra.advancedContentItems) ? extra.advancedContentItems : []
+  const displayCampaignContent = extra.advancedContentEnabled && advancedContentItems.length > 0
+    ? advancedContentItems
+      .map(item => isRichCampaignContent ? formattedContentToPlainText(item.content) : String(item.content || '').trim())
       .filter(Boolean)
       .join('\n\n———\n\n')
-    : isFormattedContent
+    : isRichCampaignContent
       ? splitFormattedContentVariants(campaign.content)
         .map(formattedContentToPlainText)
         .filter(Boolean)
         .join('\n\n———\n\n')
       : campaign.content
+  const advancedContentSourceLabel = extra.advancedContentSource === 'group_snapshot'
+    ? 'Snapshot nhóm mẫu (chỉ đọc)'
+    : 'Thủ công'
+  const advancedItemSourceSummary = advancedContentItems
+    .map((item, index) => item.sourceTemplateName
+      ? `${index + 1}. ${item.sourceTemplateName}${item.sourceVariantIndex !== undefined ? ` — biến thể ${item.sourceVariantIndex + 1}` : ''}`
+      : '')
+    .filter(Boolean)
+    .join('\n')
+  const advancedEmailSubjectSummary = actionId === 'email_send'
+    ? advancedContentItems
+      .map((item, index) => `${index + 1}. ${textOrDash(item.emailSubject ?? (
+        extra.advancedContentSource === 'group_snapshot' ? '' : extra.emailSubject
+      ))}`)
+      .join('\n')
+    : ''
   const scheduleType = campaign.scheduleType || 'daily'
   const linkedSourceCampaigns = findLinkedSourceCampaigns(campaign, campaigns)
   const rawEnabledActionCodes = extra.actionLimits?.enabledActionCodes
@@ -593,7 +611,32 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           {
             label: 'Định dạng nội dung',
             value: <span className="campaign-info-chip">Có định dạng</span>,
-            hidden: !isFormattedContent
+            hidden: !isRichCampaignContent
+          },
+          {
+            label: 'Nguồn nội dung nâng cao',
+            value: advancedContentSourceLabel,
+            hidden: !extra.advancedContentEnabled
+          },
+          {
+            label: 'Nhóm snapshot',
+            value: extra.advancedContentGroupSnapshot
+              ? `${extra.advancedContentGroupSnapshot.groupName} (#${extra.advancedContentGroupSnapshot.groupId}) · ${extra.advancedContentGroupSnapshot.templateCount} mẫu · ${extra.advancedContentGroupSnapshot.itemCount} nội dung · ${formatDateTime(extra.advancedContentGroupSnapshot.capturedAt)}`
+              : '-',
+            fullWidth: true,
+            hidden: extra.advancedContentSource !== 'group_snapshot'
+          },
+          {
+            label: 'Nguồn từng nội dung',
+            value: textOrDash(advancedItemSourceSummary),
+            fullWidth: true,
+            hidden: !advancedItemSourceSummary
+          },
+          {
+            label: 'Tiêu đề theo nội dung',
+            value: textOrDash(advancedEmailSubjectSummary),
+            fullWidth: true,
+            hidden: !extra.advancedContentEnabled || actionId !== 'email_send'
           },
           { label: 'Nội dung chính', value: textOrDash(displayCampaignContent), fullWidth: true },
           { label: 'Ảnh bài đăng', value: formatImageSummary(campaign.images) },

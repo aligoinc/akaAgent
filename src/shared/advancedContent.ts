@@ -7,6 +7,8 @@ export interface AdvancedContentValidationOptions {
   contentIsEmpty?: (content: string) => boolean
 }
 
+export const MAX_ADVANCED_CONTENT_ITEMS = 100
+
 const MEDIA_OPTIONS = new Set<AdvancedContentMediaOption>(['none', 'all', 'random'])
 
 const normalizeMediaOption = (value: unknown): AdvancedContentMediaOption => {
@@ -36,14 +38,35 @@ export const normalizeAdvancedContentItems = (items: unknown): CampaignAdvancedC
       const mediaItems = Array.isArray(item.mediaItems)
         ? item.mediaItems as CampaignMediaInput[]
         : []
-
-      return {
+      const normalizedItem: CampaignAdvancedContentItem = {
         id,
         content: String(item.content ?? ''),
         mediaOption,
         mediaItems,
         randomMediaCount: normalizeRandomMediaCount(item.randomMediaCount)
       }
+
+      // These fields are immutable snapshot metadata. Runtime deliberately
+      // does not dereference sourceTemplateId; preserving it here only keeps
+      // campaign edit/view round-trips lossless.
+      if (item.emailSubject !== undefined && item.emailSubject !== null) {
+        normalizedItem.emailSubject = String(item.emailSubject)
+      }
+      const sourceTemplateId = Math.floor(Number(item.sourceTemplateId))
+      if (Number.isSafeInteger(sourceTemplateId) && sourceTemplateId > 0) {
+        normalizedItem.sourceTemplateId = sourceTemplateId
+      }
+      if (item.sourceTemplateName !== undefined && item.sourceTemplateName !== null) {
+        normalizedItem.sourceTemplateName = String(item.sourceTemplateName)
+      }
+      if (item.sourceVariantIndex !== undefined && item.sourceVariantIndex !== null) {
+        const sourceVariantIndex = Math.floor(Number(item.sourceVariantIndex))
+        if (Number.isSafeInteger(sourceVariantIndex) && sourceVariantIndex >= 0) {
+          normalizedItem.sourceVariantIndex = sourceVariantIndex
+        }
+      }
+
+      return normalizedItem
     })
     .filter((item): item is CampaignAdvancedContentItem => Boolean(item))
 }

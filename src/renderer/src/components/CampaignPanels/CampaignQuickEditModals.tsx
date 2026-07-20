@@ -8,10 +8,15 @@ import type {
   CampaignAdvancedContentItem,
   CampaignExtraSettings,
   CampaignMediaInput,
-  CampaignMediaSnapshot
+  CampaignMediaSnapshot,
+  ContentTemplateChannelName
 } from '../../../../shared/types'
 import { renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
-import { findInvalidAdvancedContentItemIndex, normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
+import {
+  findInvalidAdvancedContentItemIndex,
+  MAX_ADVANCED_CONTENT_ITEMS,
+  normalizeAdvancedContentItems
+} from '../../../../shared/advancedContent'
 import {
   formattedContentToPlainCampaignContent,
   formattedContentToPlainText,
@@ -41,6 +46,7 @@ type QuickMediaPickerTarget = 'post' | 'comment' | { kind: 'advanced'; itemId: s
 interface CampaignQuickEditModalProps {
   campaign: Campaign
   action?: CampaignAction
+  onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
   onClose: () => void
 }
 
@@ -76,6 +82,27 @@ interface CampaignContentFormState {
   friendRequestMessage: string
   postBumpContent: string
   newsfeedCommentContent: string
+}
+
+type AdvancedContentManualDraft = NonNullable<CampaignExtraSettings['advancedContentManualDraft']>
+
+const projectAdvancedContentManualDraftToPlain = (
+  draft: AdvancedContentManualDraft | undefined
+): AdvancedContentManualDraft | undefined => {
+  if (!draft) return undefined
+  const wasRich = draft.formattedContentEnabled === true || draft.emailBodyIsHtml === true
+  return {
+    ...draft,
+    content: wasRich
+      ? formattedContentToPlainCampaignContent(draft.content)
+      : String(draft.content || ''),
+    advancedContentItems: normalizeAdvancedContentItems(draft.advancedContentItems).map(item => ({
+      ...item,
+      content: wasRich ? formattedContentToPlainText(item.content) : item.content
+    })),
+    formattedContentEnabled: false,
+    emailBodyIsHtml: false
+  }
 }
 
 const DEFAULT_RATE_LIMIT_MINUTES = 65
@@ -136,6 +163,16 @@ const MESSAGE_CONTENT_TOGGLE_ACTION_IDS = new Set([
   ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID,
   ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
 ])
+
+const getQuickEditContentTemplateChannel = (actionId: string): ContentTemplateChannelName | undefined => {
+  if (actionId === SMS_SEND_ACTION_ID) return 'sms'
+  if (actionId === EMAIL_SEND_ACTION_ID) return 'email'
+  if (COMMENT_SEEDING_ACTION_IDS.has(actionId)) return 'facebook_comment'
+  if (actionId.startsWith('zalo_message_')) return 'zalo_message'
+  if (['facebook_message_friend', MESSAGE_UID_ACTION_ID, 'facebook_page_to_message'].includes(actionId)) return 'facebook_message'
+  if (['facebook_timeline_post', PAGE_POST_ACTION_ID, FACEBOOK_GROUP_POST_ACTION_ID].includes(actionId)) return 'facebook_post'
+  return undefined
+}
 
 const ACTION_CODE_LABELS: Record<string, string> = {
   fb_post_group: 'Đăng bài group',
@@ -305,7 +342,11 @@ const createAdvancedContentItem = (overrides: Partial<CampaignAdvancedContentIte
   content: overrides.content || '',
   mediaOption: overrides.mediaOption || 'none',
   mediaItems: overrides.mediaItems ? [...overrides.mediaItems] : [],
-  randomMediaCount: overrides.randomMediaCount || 3
+  randomMediaCount: overrides.randomMediaCount || 3,
+  ...(overrides.emailSubject !== undefined ? { emailSubject: overrides.emailSubject } : {}),
+  ...(overrides.sourceTemplateId !== undefined ? { sourceTemplateId: overrides.sourceTemplateId } : {}),
+  ...(overrides.sourceTemplateName !== undefined ? { sourceTemplateName: overrides.sourceTemplateName } : {}),
+  ...(overrides.sourceVariantIndex !== undefined ? { sourceVariantIndex: overrides.sourceVariantIndex } : {})
 })
 
 const isCampaignMediaImage = (item: CampaignMediaInput): boolean => {
@@ -416,7 +457,9 @@ const getInitialContentFormState = (campaign: Campaign): CampaignContentFormStat
   return {
     content: campaign.content || '',
     formattedContentEnabled: extra.formattedContentEnabled ?? false,
-    advancedContentEnabled: extra.advancedContentEnabled ?? false,
+    advancedContentEnabled: extra.advancedContentSource === 'group_snapshot' && !!extra.advancedContentGroupSnapshot
+      ? true
+      : (extra.advancedContentEnabled ?? false),
     advancedContentItems: normalizeAdvancedContentItems(extra.advancedContentItems),
     emailSubject: extra.emailSubject || '',
     emailBodyIsHtml: extra.emailBodyIsHtml ?? false,
@@ -715,7 +758,7 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
   )
 }
 
-export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: CampaignQuickEditModalProps) {
+export function CampaignContentMediaUpdateModal({ campaign, action, onOpenContentTemplates, onClose }: CampaignQuickEditModalProps) {
   const updateCampaign = useCampaignStore(state => state.updateCampaign)
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
@@ -723,11 +766,13 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   const [mediaPickerTarget, setMediaPickerTarget] = useState<QuickMediaPickerTarget | null>(null)
   const [formData, setFormData] = useState<CampaignContentFormState>(() => getInitialContentFormState(campaign))
   const actionId = campaign.actionId
+  const contentTemplateChannel = getQuickEditContentTemplateChannel(actionId)
   const extra = campaign.extraSettings || {}
   const isEmailCampaign = actionId === EMAIL_SEND_ACTION_ID
   const isSmsCampaign = actionId === SMS_SEND_ACTION_ID
   const isVoiceCallCampaign = actionId === VOICE_CALL_ACTION_ID
   const isMobileManagedSmsCampaign = isSmsCampaign || isVoiceCallCampaign
+  const isGroupSnapshotSource = extra.advancedContentSource === 'group_snapshot' && !!extra.advancedContentGroupSnapshot
   const canUseFormattedContent = supportsFormattedContent(actionId)
   const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
@@ -760,8 +805,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     !isFacebookGroupInviteCampaign &&
     actionId !== ZALO_JOIN_GROUP_LINK_ACTION_ID &&
     actionId !== ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID &&
-    (!isToggleableMessageContentCampaign || hasMessageEnabled) &&
-    !isCommentSeedingCampaign
+    (!isToggleableMessageContentCampaign || hasMessageEnabled)
   const isPostBackgroundCampaign = actionId === 'facebook_timeline_post' || actionId === PAGE_POST_ACTION_ID || actionId === FACEBOOK_GROUP_POST_ACTION_ID
   const isPostBackgroundDisabled =
     (actionId === PAGE_POST_ACTION_ID && extra.pagePostMode === 'api') ||
@@ -770,8 +814,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     extra.postAsReels === true
   const canUsePostBackground = isPostBackgroundCampaign && !isPostBackgroundDisabled
   const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground && !isFormattedContentEnabled
-  const showMainMedia = showMainContentSection && !isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && !isFacebookGroupInviteCampaign
-  const showCommentContent = isCommentSeedingCampaign || (isFacebookGroupPostCampaign && extra.enableComment === true)
+  const showMainMedia = showMainContentSection && !isCommentSeedingCampaign && !isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && !isFacebookGroupInviteCampaign
+  const showCommentContent = isFacebookGroupPostCampaign && extra.enableComment === true
   const showPostBumpContent = isFacebookGroupPostCampaign && extra.enablePostBump === true
   const showNewsfeedCommentContent = isNewsfeedInteractionCampaign && extra.enableComment === true
   const showFriendRequestMessage = (
@@ -783,8 +827,13 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   ) && extra.enableAddFriend === true
   const hasAnyEditableField = showMainContentSection || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
-  const canUseAdvancedContentMode = showMainContentSection && !isCommentSeedingCampaign && !isMobileManagedSmsCampaign
+  const canUseAdvancedContentMode = showMainContentSection && !isVoiceCallCampaign && contentTemplateChannel !== undefined
   const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
+  const getAdvancedEmailSubject = (item: CampaignAdvancedContentItem): string => (
+    item.emailSubject == null && !isGroupSnapshotSource
+      ? formData.emailSubject
+      : String(item.emailSubject ?? '')
+  )
 
   const convertFormattedStateToPlain = (current: CampaignContentFormState): CampaignContentFormState => {
     const plainContent = formattedContentToPlainCampaignContent(current.content)
@@ -795,6 +844,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     return {
       ...current,
       formattedContentEnabled: false,
+      emailBodyIsHtml: false,
       content: plainContent,
       advancedContentEnabled: current.advancedContentEnabled,
       advancedContentItems: plainAdvancedItems
@@ -840,12 +890,25 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       showAlert('Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.', 'error')
       return false
     }
+    if (normalizedAdvancedContentItems.length > MAX_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
+      return false
+    }
 
     const invalidIndex = findInvalidAdvancedContentItemIndex(normalizedAdvancedContentItems, {
       allowMediaOnly: !isMobileManagedSmsCampaign,
       contentIsEmpty: isRichContentEditorEnabled ? isFormattedContentEmpty : undefined
     })
-    if (invalidIndex < 0) return true
+    if (invalidIndex < 0) {
+      if (isEmailCampaign) {
+        const missingSubjectIndex = normalizedAdvancedContentItems.findIndex(item => !getAdvancedEmailSubject(item).trim())
+        if (missingSubjectIndex >= 0) {
+          showAlert(`Vui lòng nhập tiêu đề email cho nội dung nâng cao số ${missingSubjectIndex + 1}.`, 'error')
+          return false
+        }
+      }
+      return true
+    }
 
     showAlert(
       isMobileManagedSmsCampaign
@@ -933,10 +996,11 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
             const currentItems = item.mediaItems || []
             const currentKeys = new Set(currentItems.map(getCampaignMediaStableKey))
             const nextItems = acceptedItems.filter(media => !currentKeys.has(getCampaignMediaStableKey(media)))
+            const mergedItems = [...currentItems, ...nextItems]
             return {
               ...item,
               mediaOption: item.mediaOption === 'none' ? 'all' : item.mediaOption,
-              mediaItems: [...currentItems, ...nextItems]
+              mediaItems: isCommentSeedingCampaign ? mergedItems.slice(0, 1) : mergedItems
             }
           })
         }
@@ -1111,13 +1175,24 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
   }
 
   const addAdvancedContentItem = () => {
+    if (formData.advancedContentItems.length >= MAX_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
+      return
+    }
     setFormData(prev => ({
       ...prev,
-      advancedContentItems: [...prev.advancedContentItems, createAdvancedContentItem()]
+      advancedContentItems: [
+        ...prev.advancedContentItems,
+        createAdvancedContentItem(isEmailCampaign ? { emailSubject: prev.emailSubject } : {})
+      ]
     }))
   }
 
   const duplicateAdvancedContentItem = (item: CampaignAdvancedContentItem) => {
+    if (formData.advancedContentItems.length >= MAX_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
+      return
+    }
     setFormData(prev => ({
       ...prev,
       advancedContentItems: [
@@ -1126,7 +1201,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
           content: item.content,
           mediaOption: item.mediaOption || 'none',
           mediaItems: [...(item.mediaItems || [])],
-          randomMediaCount: item.randomMediaCount || 3
+          randomMediaCount: item.randomMediaCount || 3,
+          emailSubject: item.emailSubject
         })
       ]
     }))
@@ -1155,6 +1231,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
             type="button"
             className={!formData.advancedContentEnabled ? 'active' : ''}
             onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: false }))}
+            disabled={isGroupSnapshotSource}
           >
             Đơn giản
           </button>
@@ -1162,11 +1239,16 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
             type="button"
             className={formData.advancedContentEnabled ? 'active' : ''}
             onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: true }))}
+            disabled={isGroupSnapshotSource}
           >
             Nâng cao
           </button>
         </div>
-        <div className="campaign-content-mode-note">{note}</div>
+        <div className="campaign-content-mode-note">
+          {isGroupSnapshotSource
+            ? `Snapshot chỉ đọc từ nhóm “${extra.advancedContentGroupSnapshot?.groupName || '-'}”. Hãy mở form sửa đầy đủ để chuyển sang Thủ công.`
+            : note}
+        </div>
       </div>
     )
   }
@@ -1205,6 +1287,12 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
   const renderAdvancedContentItemMedia = (item: CampaignAdvancedContentItem) => {
     if (isMobileManagedSmsCampaign) return null
+    if (isGroupSnapshotSource) {
+      const mediaCount = (item.mediaItems || []).length
+      return mediaCount > 0
+        ? <div className="schedule-hint" style={{ marginTop: 8 }}>{mediaCount} media trong snapshot.</div>
+        : null
+    }
 
     const mediaItems = item.mediaItems || []
     const mediaOption = item.mediaOption || 'none'
@@ -1337,27 +1425,49 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     <div className="campaign-advanced-content-editor">
       <div className="campaign-advanced-content-header">
         <div>
-          <strong>Nội dung nâng cao</strong>
+          <strong>{isGroupSnapshotSource ? 'Snapshot nội dung từ nhóm mẫu' : 'Nội dung nâng cao'}</strong>
           <span className="campaign-advanced-content-count">{normalizedAdvancedContentItems.length} nội dung</span>
         </div>
       </div>
 
+      {isGroupSnapshotSource && extra.advancedContentGroupSnapshot && (
+        <div style={{ marginBottom: 10 }}>
+          <div className="schedule-hint">
+            {extra.advancedContentGroupSnapshot.groupName} · {extra.advancedContentGroupSnapshot.templateCount} mẫu · {extra.advancedContentGroupSnapshot.itemCount} nội dung · {new Date(extra.advancedContentGroupSnapshot.capturedAt).toLocaleString('vi-VN')}. Nguồn này chỉ đọc trong sửa nhanh.
+          </div>
+          {onOpenContentTemplates && contentTemplateChannel && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: 8 }}
+              onClick={() => onOpenContentTemplates(contentTemplateChannel)}
+            >
+              <FileText size={14} /> Mở kho mẫu đúng kênh
+            </button>
+          )}
+        </div>
+      )}
+
       {formData.advancedContentItems.length === 0 ? (
         <div className="campaign-advanced-content-entry">
           <div className="campaign-advanced-content-empty">Chưa có nội dung nâng cao.</div>
-          <div className="campaign-advanced-content-add-row">
+          {!isGroupSnapshotSource && <div className="campaign-advanced-content-add-row">
             <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
               <Plus size={14} />
               <span>Thêm nội dung</span>
             </button>
-          </div>
+          </div>}
         </div>
       ) : formData.advancedContentItems.map((item, index) => (
         <div className="campaign-advanced-content-entry" key={item.id}>
           <div className="campaign-advanced-content-card">
             <div className="campaign-advanced-content-card-header">
-              <strong>Nội dung {index + 1}</strong>
-              <div className="campaign-advanced-content-actions">
+              <strong>
+                Nội dung {index + 1}
+                {item.sourceTemplateName ? ` · ${item.sourceTemplateName}` : ''}
+                {item.sourceVariantIndex !== undefined ? ` · biến thể ${item.sourceVariantIndex + 1}` : ''}
+              </strong>
+              {!isGroupSnapshotSource && <div className="campaign-advanced-content-actions">
                 <button
                   type="button"
                   className="btn-icon"
@@ -1374,9 +1484,28 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
                 >
                   <Trash2 size={14} />
                 </button>
-              </div>
+              </div>}
             </div>
-            {isRichContentEditorEnabled ? (
+            {isEmailCampaign && (
+              <div className="stepper-form-group" style={{ marginBottom: 10 }}>
+                <label>Tiêu đề email <span className="required">*</span></label>
+                <input
+                  type="text"
+                  className="stepper-input"
+                  value={getAdvancedEmailSubject(item)}
+                  onChange={event => setAdvancedContentItem(item.id, { emailSubject: event.target.value })}
+                  readOnly={isGroupSnapshotSource}
+                />
+              </div>
+            )}
+            {isGroupSnapshotSource ? (
+              <textarea
+                className="stepper-textarea"
+                value={isRichContentEditorEnabled ? formattedContentToPlainText(item.content) : item.content}
+                rows={5}
+                readOnly
+              />
+            ) : isRichContentEditorEnabled ? (
               <EmailHtmlEditor
                 value={item.content}
                 onChange={html => setAdvancedContentItem(item.id, { content: html })}
@@ -1392,7 +1521,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
             )}
             {renderAdvancedContentItemMedia(item)}
           </div>
-          {index === formData.advancedContentItems.length - 1 && (
+          {!isGroupSnapshotSource && index === formData.advancedContentItems.length - 1 && (
             <div className="campaign-advanced-content-add-row">
               <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
                 <Plus size={14} />
@@ -1410,7 +1539,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       showAlert('Loại chiến dịch này không có nội dung hoặc media để cập nhật.', 'info')
       return
     }
-    if (isEmailCampaign && !formData.emailSubject.trim()) {
+    if (isEmailCampaign && !isAdvancedContentMode && !formData.emailSubject.trim()) {
       showAlert('Vui lòng nhập tiêu đề email.', 'error')
       return
     }
@@ -1419,11 +1548,15 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
         ? normalizedAdvancedContentItems.some(item => isRichContentEditorEnabled
           ? !isFormattedContentEmpty(item.content)
           : String(item.content || '').trim().length > 0)
+        : isCommentSeedingCampaign
+          ? formData.commentContent.trim().length > 0
         : isRichContentEditorEnabled
           ? splitFormattedContentVariants(formData.content).length > 0
           : formData.content.trim().length > 0
       const hasSelectedMainMedia = isAdvancedContentMode
         ? !isMobileManagedSmsCampaign && normalizedAdvancedContentItems.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
+        : isCommentSeedingCampaign
+          ? formData.commentImageOption !== 'none' && formData.commentImages.length > 0
         : !isMobileManagedSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
       if (!isUsingSourceContent && !hasMainContentText && !hasSelectedMainMedia) {
         showAlert(
@@ -1473,6 +1606,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
     if (showMainMedia && !isAdvancedContentMode && !validateSelectedMedia(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) return
     if (!validateAdvancedContentItems()) return
     if (!validateAdvancedContentMedia()) return
+    if (isCommentSeedingCampaign && !isAdvancedContentMode && !validateSelectedMedia('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
     if (showCommentContent && !validateSelectedMedia('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
 
     setSaving(true)
@@ -1484,23 +1618,66 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
       if (showMainContentSection) {
         nextExtraSettings.advancedContentEnabled = canUseAdvancedContentMode ? formData.advancedContentEnabled : false
-        nextExtraSettings.advancedContentItems = normalizedAdvancedContentItems.map(item => {
-          const normalizedItem = isFormattedContentEnabled
-            ? { ...item, content: sanitizeFormattedContent(item.content) }
-            : item
-          return isMobileManagedSmsCampaign
-            ? { ...normalizedItem, mediaOption: 'none' as const, mediaItems: [] }
-            : normalizedItem
-        })
+        const convertedGroupSnapshotItems = isGroupSnapshotSource &&
+          extra.formattedContentEnabled === true &&
+          !isFormattedContentEnabled
+          ? (extra.advancedContentItems || []).map(item => ({
+              ...item,
+              content: formattedContentToPlainText(item.content)
+            }))
+          : extra.advancedContentItems
+        nextExtraSettings.advancedContentItems = isGroupSnapshotSource
+          ? convertedGroupSnapshotItems
+          : normalizedAdvancedContentItems.map(item => {
+            const itemWithLegacyEmailSubject = isEmailCampaign && item.emailSubject == null
+              ? { ...item, emailSubject: formData.emailSubject.trim() }
+              : item
+            const normalizedItem = isFormattedContentEnabled
+              ? { ...itemWithLegacyEmailSubject, content: sanitizeFormattedContent(item.content) }
+              : itemWithLegacyEmailSubject
+            if (isCommentSeedingCampaign) {
+              const mediaItems = (normalizedItem.mediaItems || []).slice(0, 1)
+              return {
+                ...normalizedItem,
+                mediaOption: mediaItems.length > 0 && normalizedItem.mediaOption !== 'none' ? 'all' as const : 'none' as const,
+                mediaItems,
+                randomMediaCount: 1
+              }
+            }
+            return isMobileManagedSmsCampaign
+              ? { ...normalizedItem, mediaOption: 'none' as const, mediaItems: [] }
+              : normalizedItem
+          })
         nextExtraSettings.formattedContentEnabled = isFormattedContentEnabled
         nextExtraSettings.rewriteContentEachRun = isMobileManagedSmsCampaign || isFormattedContentEnabled || (isEmailCampaign && formData.emailBodyIsHtml)
           ? false
           : formData.rewriteContentEachRun
         nextExtraSettings.imageOption = (isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption
         nextExtraSettings.randomImageCount = formData.randomImageCount
+        if (isAdvancedContentMode) {
+          nextExtraSettings.advancedContentSource = isGroupSnapshotSource ? 'group_snapshot' : 'manual'
+          nextExtraSettings.advancedContentGroupSnapshot = isGroupSnapshotSource
+            ? extra.advancedContentGroupSnapshot
+            : undefined
+        }
+        const groupSnapshotMustUsePlain = isGroupSnapshotSource && (
+          (!isEmailCampaign && !canUseFormattedContent) ||
+          isPostBackgroundActive ||
+          formData.zaloMessageSendMode === 'share'
+        )
+        if (groupSnapshotMustUsePlain) {
+          nextExtraSettings.advancedContentManualDraft = projectAdvancedContentManualDraftToPlain(
+            extra.advancedContentManualDraft
+          )
+        }
       }
       if (isEmailCampaign) {
-        nextExtraSettings.emailSubject = formData.emailSubject.trim()
+        const firstAdvancedEmailSubject = normalizedAdvancedContentItems[0]?.emailSubject
+        nextExtraSettings.emailSubject = isAdvancedContentMode
+          ? String(firstAdvancedEmailSubject == null && !isGroupSnapshotSource
+            ? formData.emailSubject
+            : firstAdvancedEmailSubject ?? '').trim()
+          : formData.emailSubject.trim()
         nextExtraSettings.emailBodyIsHtml = formData.emailBodyIsHtml
         nextExtraSettings.emailCheckLinkClicks = formData.emailCheckLinkClicks
       }
@@ -1521,7 +1698,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       if (isZaloMessageCampaign) {
         nextExtraSettings.zaloMessageSendMode = isFormattedContentEnabled ? 'normal' : formData.zaloMessageSendMode
       }
-      if (showCommentContent) {
+      if (showCommentContent || isCommentSeedingCampaign) {
         nextExtraSettings.commentContent = formData.commentContent
         nextExtraSettings.rewriteCommentContentEachRun = formData.rewriteCommentContentEachRun
         nextExtraSettings.commentImageOption = formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none'
@@ -1538,7 +1715,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       }
 
       await updateCampaign(campaign.id, {
-        ...(showMainContentSection ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
+        ...(showMainContentSection && !isCommentSeedingCampaign ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
         extraSettings: nextExtraSettings,
         ...(showMainMedia ? { images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
       })
@@ -1618,25 +1795,33 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
               {isEmailCampaign && (
                 <>
-                  <div className="stepper-form-group">
-                    <label>Tiêu đề email <span className="required">*</span></label>
-                    <input
-                      type="text"
-                      className="stepper-input"
-                      value={formData.emailSubject}
-                      onChange={event => setFormData(prev => ({ ...prev, emailSubject: event.target.value }))}
-                    />
-                  </div>
+                  {!isAdvancedContentMode && (
+                    <div className="stepper-form-group">
+                      <label>Tiêu đề email <span className="required">*</span></label>
+                      <input
+                        type="text"
+                        className="stepper-input"
+                        value={formData.emailSubject}
+                        onChange={event => setFormData(prev => ({ ...prev, emailSubject: event.target.value }))}
+                      />
+                    </div>
+                  )}
                   <div className="campaign-quick-toggle-row">
                     <label className="schedule-checkbox-label">
                       <input
                         type="checkbox"
                         checked={formData.emailBodyIsHtml}
-                        onChange={event => setFormData(prev => ({
-                          ...prev,
-                          emailBodyIsHtml: event.target.checked,
-                          rewriteContentEachRun: event.target.checked ? false : prev.rewriteContentEachRun
-                        }))}
+                        disabled={isGroupSnapshotSource}
+                        onChange={event => {
+                          const checked = event.target.checked
+                          setFormData(current => checked
+                            ? {
+                                ...current,
+                                emailBodyIsHtml: true,
+                                rewriteContentEachRun: false
+                              }
+                            : convertFormattedStateToPlain(current))
+                        }}
                       />
                       <span>Nội dung dạng HTML</span>
                     </label>
@@ -1654,7 +1839,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
 
               {renderContentModeSegmented()}
 
-              {canUseFormattedContent && (
+              {canUseFormattedContent && !isGroupSnapshotSource && (
                 <div className="stepper-form-group">
                   <label className="schedule-checkbox-label">
                     <input
@@ -1679,16 +1864,43 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
                     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
                       <input
                         type="checkbox"
-                        checked={formData.rewriteContentEachRun}
-                        onChange={event => setFormData(prev => ({ ...prev, rewriteContentEachRun: event.target.checked }))}
+                        checked={isCommentSeedingCampaign
+                          ? formData.rewriteCommentContentEachRun
+                          : formData.rewriteContentEachRun}
+                        onChange={event => setFormData(prev => isCommentSeedingCampaign
+                          ? { ...prev, rewriteCommentContentEachRun: event.target.checked }
+                          : { ...prev, rewriteContentEachRun: event.target.checked })}
                       />
-                      <span>Viết nội dung cho mỗi lượt chạy</span>
+                      <span>{isCommentSeedingCampaign
+                        ? 'Viết nội dung comment cho mỗi lượt chạy'
+                        : 'Viết nội dung cho mỗi lượt chạy'}</span>
                     </label>
                   )}
                 </>
               ) : (
                 <>
-                  <div className="stepper-form-group">
+                  {isCommentSeedingCampaign ? (
+                    <>
+                      <div className="stepper-form-group">
+                        <label>Nội dung comment</label>
+                        <textarea
+                          className="stepper-textarea"
+                          value={formData.commentContent}
+                          onChange={event => setFormData(prev => ({ ...prev, commentContent: event.target.value }))}
+                          rows={6}
+                        />
+                      </div>
+                      <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
+                        <input
+                          type="checkbox"
+                          checked={formData.rewriteCommentContentEachRun}
+                          onChange={event => setFormData(prev => ({ ...prev, rewriteCommentContentEachRun: event.target.checked }))}
+                        />
+                        <span>Viết nội dung comment cho mỗi lượt chạy</span>
+                      </label>
+                      {renderMediaPicker('comment', 'Ảnh comment')}
+                    </>
+                  ) : <div className="stepper-form-group">
                     <label>{isEmailCampaign ? (formData.emailBodyIsHtml ? 'Nội dung HTML' : 'Nội dung email') : isFormattedContentEnabled ? 'Nội dung có định dạng' : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung chiến dịch'}</label>
                     {isRichContentEditorEnabled ? (
                       <EmailHtmlEditor
@@ -1703,11 +1915,11 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
                         rows={8}
                       />
                     )}
-                  </div>
+                  </div>}
 
                   {renderSmsContentOptions()}
 
-                  {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && (
+                  {!isCommentSeedingCampaign && !isMobileManagedSmsCampaign && !isRichContentEditorEnabled && (
                     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
                       <input
                         type="checkbox"
@@ -1718,7 +1930,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
                     </label>
                   )}
 
-                  {showMainMedia && renderMediaPicker('post', isEmailCampaign ? 'Tệp đính kèm' : 'Media')}
+                  {!isCommentSeedingCampaign && showMainMedia && renderMediaPicker('post', isEmailCampaign ? 'Tệp đính kèm' : 'Media')}
                 </>
               )}
             </div>
@@ -1823,7 +2035,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onClose }: C
       {mediaPickerTarget && (
         <MediaLibraryModal
           pickerMode={mediaPickerTarget !== 'comment' && (isZaloMessageCampaign || isEmailCampaign) ? 'file' : 'image'}
-          maxSelect={mediaPickerTarget === 'comment' ? 1 : undefined}
+          maxSelect={mediaPickerTarget === 'comment' || (typeof mediaPickerTarget === 'object' && isCommentSeedingCampaign) ? 1 : undefined}
           onConfirm={handleMediaPickerConfirm}
           onClose={() => setMediaPickerTarget(null)}
         />

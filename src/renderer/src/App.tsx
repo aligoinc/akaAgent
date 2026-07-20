@@ -25,6 +25,7 @@ import MediaLibraryModal from './components/Media/MediaLibraryModal'
 import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
 import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeedbackLauncher'
 import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
+import type { ContentTemplateChannelName } from '../../shared/types'
 
 type UpdatePromptSource = 'startup' | 'manual'
 
@@ -66,6 +67,7 @@ export default function App() {
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [showProxyManager, setShowProxyManager] = useState(false)
   const [showContentTemplates, setShowContentTemplates] = useState(false)
+  const [contentTemplateInitialChannel, setContentTemplateInitialChannel] = useState<ContentTemplateChannelName | undefined>()
   const [showDataGroups, setShowDataGroups] = useState(false)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
@@ -351,7 +353,10 @@ export default function App() {
               isActive={activePage === 'campaigns'}
               onNavigateToBrowser={requestOpenBrowser}
               onOpenGeneralSettings={openGeneralSettings}
-              onOpenContentTemplates={() => setShowContentTemplates(true)}
+              onOpenContentTemplates={(initialChannel) => {
+                setContentTemplateInitialChannel(initialChannel)
+                setShowContentTemplates(true)
+              }}
             />
           </div>
 
@@ -409,7 +414,13 @@ export default function App() {
         />
       )}
       {showContentTemplates && (
-        <ContentTemplateManagerModal onClose={() => setShowContentTemplates(false)} />
+        <ContentTemplateManagerModal
+          initialChannel={contentTemplateInitialChannel}
+          onClose={() => {
+            setShowContentTemplates(false)
+            setContentTemplateInitialChannel(undefined)
+          }}
+        />
       )}
       {showDataGroups && (
         <DataGroupManagerModal onClose={() => setShowDataGroups(false)} />
