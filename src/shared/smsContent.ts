@@ -1,8 +1,7 @@
 import {
   findInvalidAdvancedContentItemIndex,
   getAdvancedContentItems,
-  isAdvancedContentItemValid,
-  MAX_ADVANCED_CONTENT_ITEMS
+  isAdvancedContentItemValid
 } from './advancedContent'
 import { renderContentSpin, renderContentSpinMax, splitContentVariants } from './contentSpin'
 import { normalizeVietnamMobilePhone } from './phone'
@@ -17,6 +16,8 @@ export interface SmsContentCount {
   countChar: number
   countSms: number
 }
+
+export const MAX_SMS_ADVANCED_CONTENT_ITEMS = 100
 
 const VIETNAMESE_DIACRITIC_PATTERN = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
@@ -74,8 +75,8 @@ function cycleSmsContentVariant(
     if (items.length === 0) {
       throw new Error('Nội dung nâng cao SMS chưa có nội dung nào.')
     }
-    if (items.length > MAX_ADVANCED_CONTENT_ITEMS) {
-      throw new Error(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`)
+    if (items.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      throw new Error(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`)
     }
     const invalidIndex = findInvalidAdvancedContentItemIndex(items, { allowMediaOnly: false })
     if (invalidIndex >= 0) {

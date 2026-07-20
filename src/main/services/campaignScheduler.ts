@@ -18,9 +18,9 @@ import {
 import {
   findInvalidAdvancedContentItemIndex,
   getAdvancedContentItems,
-  MAX_ADVANCED_CONTENT_ITEMS,
   selectAdvancedContentItem
 } from '../../shared/advancedContent'
+import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../shared/smsContent'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -12013,8 +12013,8 @@ export class CampaignScheduler {
     if (items.length === 0) {
       return 'Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.'
     }
-    if (items.length > MAX_ADVANCED_CONTENT_ITEMS) {
-      return `Nội dung nâng cao chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`
+    if (campaign.actionId === SMS_SEND_ACTION_ID && items.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      return `Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`
     }
     if (campaign.actionId === EMAIL_SEND_ACTION_ID) {
       const missingSubjectIndex = items.findIndex(item => {

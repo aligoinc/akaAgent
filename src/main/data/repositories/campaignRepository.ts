@@ -24,8 +24,8 @@ import {
   ZaloRemarketingCustomerListQuery
 } from '../../../shared/types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone, type VietnamMobileCarrier } from '../../../shared/phone'
-import { renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
-import { getAdvancedContentItems, MAX_ADVANCED_CONTENT_ITEMS } from '../../../shared/advancedContent'
+import { MAX_SMS_ADVANCED_CONTENT_ITEMS, renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
+import { getAdvancedContentItems } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -1268,8 +1268,8 @@ function assertAdvancedContentPersistenceContract(
 ): void {
   if (extraSettings?.advancedContentEnabled !== true) return
   const items = getAdvancedContentItems(extraSettings)
-  if (items.length > MAX_ADVANCED_CONTENT_ITEMS) {
-    throw new Error(`Nội dung nâng cao chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`)
+  if (actionId === SMS_SEND_ACTION_ID && items.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+    throw new Error(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`)
   }
   if (actionId === VOICE_CALL_ACTION_ID) {
     throw new Error('Cuộc gọi tự động không hỗ trợ nội dung nâng cao.')

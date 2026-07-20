@@ -51,11 +51,10 @@ import {
   getCampaignActionDailySendLimit
 } from '../../utils/entitlements'
 import { getAccountPlatformLabel, isZaloWebAccount } from '../../utils/accountLabels'
-import { countSmsContentVariants } from '../../../../shared/smsContent'
+import { countSmsContentVariants, MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../../../shared/smsContent'
 import { renderContentSpinMax, serializeContentVariants, splitContentVariants } from '../../../../shared/contentSpin'
 import {
   findInvalidAdvancedContentItemIndex,
-  MAX_ADVANCED_CONTENT_ITEMS,
   normalizeAdvancedContentItems
 } from '../../../../shared/advancedContent'
 import {
@@ -283,8 +282,6 @@ const CONTENT_TEMPLATE_TARGET_LABELS: Record<AiContentTarget, string> = {
   commentContent: 'nội dung comment',
   postBumpContent: 'nội dung up tin'
 }
-
-const MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS = MAX_ADVANCED_CONTENT_ITEMS
 
 const FACEBOOK_POST_TEMPLATE_ACTIONS = new Set([
   'facebook_timeline_post',
@@ -4586,8 +4583,8 @@ export default function CampaignFormModal({
       showAlert('Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.', 'error')
       return false
     }
-    if (normalizedAdvancedContentItems.length > MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS) {
-      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS} mục.`, 'error')
+    if (isSmsCampaign && normalizedAdvancedContentItems.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return false
     }
 
@@ -4774,9 +4771,9 @@ export default function CampaignFormModal({
         )
         return null
       }
-      if (candidate.variantCount > MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS) {
+      if (isSmsCampaign && candidate.variantCount > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
         showAlert(
-          `Nhóm “${latestGroup.name}” có ${candidate.variantCount} nội dung, vượt giới hạn snapshot ${MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS}. Snapshot cũ được giữ nguyên.`,
+          `Nhóm “${latestGroup.name}” có ${candidate.variantCount} nội dung SMS, vượt giới hạn ${MAX_SMS_ADVANCED_CONTENT_ITEMS} của chiến dịch SMS. Snapshot cũ được giữ nguyên.`,
           'error'
         )
         return null
@@ -11114,8 +11111,8 @@ export default function CampaignFormModal({
   }
 
   const addAdvancedContentItem = () => {
-    if (formData.advancedContentItems.length >= MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS) {
-      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS} mục.`, 'error')
+    if (isSmsCampaign && formData.advancedContentItems.length >= MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return
     }
     setFormData(prev => {
@@ -11129,8 +11126,8 @@ export default function CampaignFormModal({
   }
 
   const duplicateAdvancedContentItem = (item: CampaignAdvancedContentItem) => {
-    if (formData.advancedContentItems.length >= MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS) {
-      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS} mục.`, 'error')
+    if (isSmsCampaign && formData.advancedContentItems.length >= MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return
     }
     setFormData(prev => {
@@ -11242,8 +11239,8 @@ export default function CampaignFormModal({
     const candidate = contentTemplateGroupCandidate
     const isInactiveCandidate = candidateContentTemplateGroup?.isActive === false
     const hasZeroCompatibleItems = !!candidate && candidate.variantCount === 0
-    const exceedsSnapshotLimit = !!candidate && candidate.variantCount > MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS
-    const candidateCanBeUsed = !!candidate && !isInactiveCandidate && !hasZeroCompatibleItems && !exceedsSnapshotLimit
+    const exceedsSmsSnapshotLimit = isSmsCampaign && !!candidate && candidate.variantCount > MAX_SMS_ADVANCED_CONTENT_ITEMS
+    const candidateCanBeUsed = !!candidate && !isInactiveCandidate && !hasZeroCompatibleItems && !exceedsSmsSnapshotLimit
     const isPendingCandidate = candidateCanBeUsed && pendingContentTemplateGroupId === candidate.groupId
     const pendingCandidateNeedsAttention = !!candidate && !candidateCanBeUsed && pendingContentTemplateGroupId === candidate.groupId
     const isSavedCandidate = !!candidate && savedAdvancedContentSource === 'group_snapshot' && savedAdvancedGroupSnapshot?.groupId === candidate.groupId
@@ -11254,8 +11251,8 @@ export default function CampaignFormModal({
         ? (channel
             ? `Không thể dùng nhóm này cho chiến dịch ${getAdvancedContentCampaignLabel(channel)} vì nhóm chưa có mẫu ${getContentTemplateChannelLabel(channel)}.`
             : 'Không thể dùng nhóm này cho chiến dịch hiện tại vì nhóm chưa có mẫu phù hợp.')
-        : exceedsSnapshotLimit
-          ? `Nhóm có ${candidate?.variantCount || 0} nội dung, vượt giới hạn snapshot ${MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS}. Hãy giảm số biến thể trước khi dùng.`
+        : exceedsSmsSnapshotLimit
+          ? `Nhóm có ${candidate?.variantCount || 0} nội dung SMS, vượt giới hạn ${MAX_SMS_ADVANCED_CONTENT_ITEMS} của chiến dịch SMS. Hãy giảm số biến thể trước khi dùng.`
           : null
 
     return (
@@ -12018,8 +12015,8 @@ export default function CampaignFormModal({
       : null
     const groupIsInactive = group?.isActive === false
     const groupHasNoCompatibleItems = !!groupCandidate && groupCandidate.variantCount === 0
-    const groupExceedsSnapshotLimit = !!groupCandidate && groupCandidate.variantCount > MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS
-    const groupCanBeUsed = !!groupCandidate && !groupIsInactive && !groupHasNoCompatibleItems && !groupExceedsSnapshotLimit
+    const groupExceedsSmsSnapshotLimit = isSmsCampaign && !!groupCandidate && groupCandidate.variantCount > MAX_SMS_ADVANCED_CONTENT_ITEMS
+    const groupCanBeUsed = !!groupCandidate && !groupIsInactive && !groupHasNoCompatibleItems && !groupExceedsSmsSnapshotLimit
     const groupIsPending = pendingContentTemplateGroupId === previewContentTemplateGroupId
     const groupIsSaved = savedAdvancedContentSource === 'group_snapshot' && savedAdvancedGroupSnapshot?.groupId === previewContentTemplateGroupId
     const selectedTemplate = templates.find(template => template.id === previewContentTemplateId) || templates[0] || null
@@ -12040,8 +12037,8 @@ export default function CampaignFormModal({
         ? (advancedContentTargetChannel
             ? `Không thể dùng nhóm này cho chiến dịch ${getAdvancedContentCampaignLabel(advancedContentTargetChannel)} vì nhóm chưa có mẫu ${getContentTemplateChannelLabel(advancedContentTargetChannel)}.`
             : 'Nhóm chưa có nội dung phù hợp với chiến dịch hiện tại.')
-        : groupExceedsSnapshotLimit
-          ? `Nhóm có ${groupCandidate?.variantCount || 0} nội dung, vượt giới hạn snapshot ${MAX_ADVANCED_CONTENT_SNAPSHOT_ITEMS}.`
+        : groupExceedsSmsSnapshotLimit
+          ? `Nhóm có ${groupCandidate?.variantCount || 0} nội dung SMS, vượt giới hạn ${MAX_SMS_ADVANCED_CONTENT_ITEMS} của chiến dịch SMS.`
           : null
     const previewTitleId = `campaign-group-preview-title-${previewContentTemplateGroupId}-${modalZIndex || 3000}`
 
@@ -12235,7 +12232,7 @@ export default function CampaignFormModal({
                       <FileText size={14} /> Thêm mẫu {advancedContentTargetChannel ? getContentTemplateChannelLabel(advancedContentTargetChannel) : ''}
                     </button>
                   )}
-                  {(groupIsInactive || groupExceedsSnapshotLimit) && (
+                  {(groupIsInactive || groupExceedsSmsSnapshotLimit) && (
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
