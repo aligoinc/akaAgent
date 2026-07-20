@@ -12,9 +12,9 @@ import type {
   ContentTemplateChannelName
 } from '../../../../shared/types'
 import { renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
+import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../../../shared/smsContent'
 import {
   findInvalidAdvancedContentItemIndex,
-  MAX_ADVANCED_CONTENT_ITEMS,
   normalizeAdvancedContentItems
 } from '../../../../shared/advancedContent'
 import {
@@ -890,8 +890,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
       showAlert('Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.', 'error')
       return false
     }
-    if (normalizedAdvancedContentItems.length > MAX_ADVANCED_CONTENT_ITEMS) {
-      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
+    if (isSmsCampaign && normalizedAdvancedContentItems.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return false
     }
 
@@ -1175,8 +1175,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   }
 
   const addAdvancedContentItem = () => {
-    if (formData.advancedContentItems.length >= MAX_ADVANCED_CONTENT_ITEMS) {
-      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
+    if (isSmsCampaign && formData.advancedContentItems.length >= MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return
     }
     setFormData(prev => ({
@@ -1189,8 +1189,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   }
 
   const duplicateAdvancedContentItem = (item: CampaignAdvancedContentItem) => {
-    if (formData.advancedContentItems.length >= MAX_ADVANCED_CONTENT_ITEMS) {
-      showAlert(`Nội dung nâng cao Thủ công chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
+    if (isSmsCampaign && formData.advancedContentItems.length >= MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return
     }
     setFormData(prev => ({

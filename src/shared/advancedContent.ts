@@ -7,8 +7,6 @@ export interface AdvancedContentValidationOptions {
   contentIsEmpty?: (content: string) => boolean
 }
 
-export const MAX_ADVANCED_CONTENT_ITEMS = 100
-
 const MEDIA_OPTIONS = new Set<AdvancedContentMediaOption>(['none', 'all', 'random'])
 
 const normalizeMediaOption = (value: unknown): AdvancedContentMediaOption => {
