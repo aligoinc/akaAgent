@@ -11365,7 +11365,6 @@ export default function CampaignFormModal({
                       <div className="campaign-advanced-group-summary-copy">
                         <div className="campaign-advanced-group-summary-title">
                           <strong>{candidate.groupName}</strong>
-                          <span>ID #{candidate.groupId}</span>
                         </div>
                         <div>{candidate.totalTemplateCount} mẫu · {candidate.variantCount} biến thể phù hợp</div>
                       </div>
@@ -11439,17 +11438,17 @@ export default function CampaignFormModal({
         <div className="campaign-content-mode-segmented" role="group" aria-label="Chế độ nội dung">
           <button
             type="button"
-            className={formData.advancedContentEnabled ? 'active' : ''}
-            onClick={switchToAdvancedContentMode}
-          >
-            Nâng cao
-          </button>
-          <button
-            type="button"
             className={!formData.advancedContentEnabled ? 'active' : ''}
             onClick={switchToSimpleContentMode}
           >
             Đơn giản
+          </button>
+          <button
+            type="button"
+            className={formData.advancedContentEnabled ? 'active' : ''}
+            onClick={switchToAdvancedContentMode}
+          >
+            Nâng cao
           </button>
         </div>
         <div className="campaign-content-mode-note">{note}</div>
@@ -12106,10 +12105,12 @@ export default function CampaignFormModal({
                     <div className="content-template-picker-item-header">
                       <span className="content-template-picker-item-title">{template.name}</span>
                       <span
-                        className={`campaign-group-preview-use-badge${templateWillBeUsed ? ' will-use' : ''}`}
+                        className={`campaign-group-preview-status-icon ${templateWillBeUsed ? 'will-use' : 'skipped'}`}
+                        role="img"
+                        aria-label={templateWillBeUsed ? 'Mẫu sẽ được dùng' : 'Mẫu sẽ bị bỏ qua'}
                         title={templateWillBeUsed ? 'Mẫu này sẽ được đưa vào snapshot chiến dịch' : 'Mẫu này không có nội dung phù hợp và sẽ bị bỏ qua'}
                       >
-                        {templateWillBeUsed ? 'Sẽ dùng' : 'Bỏ qua'}
+                        {templateWillBeUsed ? <Check size={15} aria-hidden="true" /> : <X size={15} aria-hidden="true" />}
                       </span>
                     </div>
                     <div className="content-template-picker-item-meta">
@@ -12140,10 +12141,12 @@ export default function CampaignFormModal({
                         <span>{selectedTemplateWillBeUsed ? 'Mẫu này có nội dung phù hợp với chiến dịch' : 'Mẫu này sẽ không được đưa vào chiến dịch'}</span>
                       </div>
                       <span
-                        className={`campaign-group-preview-use-badge${selectedTemplateWillBeUsed ? ' will-use' : ''}`}
+                        className={`campaign-group-preview-status-icon ${selectedTemplateWillBeUsed ? 'will-use' : 'skipped'}`}
+                        role="img"
+                        aria-label={selectedTemplateWillBeUsed ? 'Mẫu sẽ được dùng' : 'Mẫu sẽ bị bỏ qua'}
                         title={selectedTemplateWillBeUsed ? 'Mẫu này sẽ được đưa vào snapshot chiến dịch' : 'Mẫu này không có nội dung phù hợp và sẽ bị bỏ qua'}
                       >
-                        {selectedTemplateWillBeUsed ? 'Sẽ dùng' : 'Bỏ qua'}
+                        {selectedTemplateWillBeUsed ? <Check size={15} aria-hidden="true" /> : <X size={15} aria-hidden="true" />}
                       </span>
                     </div>
 
