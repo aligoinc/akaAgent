@@ -331,7 +331,9 @@ function GroupManagerDialog({
             <div className="ctw-form-field"><label>Tên nhóm <span>*</span></label><input className="stepper-input" value={form.name} onChange={event => setForm(previous => ({ ...previous, name: event.target.value }))} disabled={busy} /></div>
             <div className="ctw-form-field"><label>Mô tả</label><textarea className="stepper-textarea" rows={4} value={form.description} onChange={event => setForm(previous => ({ ...previous, description: event.target.value }))} disabled={busy} /></div>
             <div className="ctw-form-field compact"><label>Thứ tự hiển thị</label><input className="stepper-input" type="number" value={form.order} onChange={event => setForm(previous => ({ ...previous, order: Number(event.target.value) || 0 }))} disabled={busy} /></div>
-            <Toggle checked={form.isActive} onChange={isActive => setForm(previous => ({ ...previous, isActive }))} label="Đang hoạt động" disabled={busy} />
+            <div className="ctw-group-status-row">
+              <Toggle checked={form.isActive} onChange={isActive => setForm(previous => ({ ...previous, isActive }))} label="Đang hoạt động" disabled={busy} />
+            </div>
             <div className="ctw-group-form-actions"><button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy}>{busy ? <Loader2 size={15} className="ctw-spin" /> : form.id ? <Save size={15} /> : <Plus size={15} />}{form.id ? 'Lưu thay đổi' : 'Thêm nhóm'}</button></div>
           </section>
           <section className="ctw-group-list-card">
