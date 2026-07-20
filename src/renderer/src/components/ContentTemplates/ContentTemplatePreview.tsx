@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Image as ImageIcon, Mail, MessageCircle, Send } from 'lucide-react'
+import type { ContentTemplateChannelName } from '../../../../shared/types'
 import { renderContentSpin } from '../../../../shared/contentSpin'
 import {
   formattedContentToZaloPreviewHtml,
@@ -9,7 +10,7 @@ import {
 } from '../../../../shared/formattedContent'
 import { renderPreviewSampleTokens } from '../CampaignPanels/ContentPreviewModal'
 
-export type TemplatePreviewChannel = 'base' | 'sms' | 'zalo' | 'facebook' | 'email'
+export type TemplatePreviewChannel = ContentTemplateChannelName
 
 interface ContentTemplatePreviewProps {
   channel: TemplatePreviewChannel
@@ -17,14 +18,6 @@ interface ContentTemplatePreviewProps {
   formatted?: boolean
   subject?: string
   imageUrls?: string[]
-}
-
-const CHANNEL_LABELS: Record<TemplatePreviewChannel, string> = {
-  base: 'Nội dung cơ bản',
-  sms: 'SMS',
-  zalo: 'Zalo',
-  facebook: 'Facebook',
-  email: 'Email'
 }
 
 const renderPlainSample = (value: string): string =>
@@ -35,10 +28,10 @@ const renderRichSample = (value: string, channel: TemplatePreviewChannel): strin
     sanitizeFormattedContent(value),
     text => renderPreviewSampleTokens(renderContentSpin(text))
   )
-  return channel === 'zalo' ? formattedContentToZaloPreviewHtml(transformed) : transformed
+  return channel === 'zalo_message' ? formattedContentToZaloPreviewHtml(transformed) : transformed
 }
 
-function SharedImagePreview({ imageUrls }: { imageUrls: string[] }) {
+function ChannelImagePreview({ imageUrls }: { imageUrls: string[] }) {
   if (imageUrls.length === 0) return null
   const visible = imageUrls.slice(0, 4)
 
@@ -47,9 +40,7 @@ function SharedImagePreview({ imageUrls }: { imageUrls: string[] }) {
       {visible.map((url, index) => (
         <div className="ctw-preview-image" key={`${url}-${index}`}>
           <img src={url} alt={`Ảnh ${index + 1}`} />
-          {index === 3 && imageUrls.length > 4 && (
-            <span>+{imageUrls.length - 4}</span>
-          )}
+          {index === 3 && imageUrls.length > 4 && <span>+{imageUrls.length - 4}</span>}
         </div>
       ))}
     </div>
@@ -78,10 +69,11 @@ export default function ContentTemplatePreview({
   )
   const renderedSubject = useMemo(() => renderPlainSample(subject), [subject])
   const richIsEmpty = formatted && isFormattedContentEmpty(renderedRich)
-
   const contentNode = formatted && !richIsEmpty
     ? <div className="ctw-preview-rich" dangerouslySetInnerHTML={{ __html: renderedRich }} />
     : <div className="ctw-preview-plain">{renderedPlain || 'Nội dung xem trước sẽ hiển thị tại đây.'}</div>
+
+  const chatPreview = channel === 'sms' || channel === 'zalo_message' || channel === 'facebook_message'
 
   return (
     <div className="ctw-preview-panel">
@@ -94,50 +86,60 @@ export default function ContentTemplatePreview({
               className={variantIndex === index ? 'active' : ''}
               onClick={() => setVariantIndex(index)}
             >
-              Biến thể {index + 1}
+              Nội dung {index + 1}
             </button>
           ))}
         </div>
       )}
 
       <div className={`ctw-preview-stage ${channel}`}>
-        {channel === 'sms' && (
-          <div className="ctw-preview-phone sms">
-            <div className="ctw-preview-phone-bar">Tin nhắn</div>
+        {chatPreview && (
+          <div className={`ctw-preview-phone ${channel}`}>
+            <div className="ctw-preview-phone-bar">
+              {channel === 'sms' ? (
+                <><span className="ctw-preview-avatar sms">KH</span><div><strong>0987 654 321</strong><small>SMS/MMS</small></div></>
+              ) : (
+                <><span className={`ctw-preview-avatar ${channel}`}>MA</span><div><strong>Nguyễn Minh Anh</strong><small>Đang hoạt động</small></div></>
+              )}
+            </div>
             <div className="ctw-preview-chat-date">Hôm nay, 09:41</div>
             <div className="ctw-preview-message-row">
-              <div className="ctw-preview-message-bubble">{contentNode}</div>
-            </div>
-            <div className="ctw-preview-composer"><span>Tin nhắn văn bản</span><Send size={15} /></div>
-          </div>
-        )}
-
-        {channel === 'zalo' && (
-          <div className="ctw-preview-phone zalo">
-            <div className="ctw-preview-phone-bar">
-              <span className="ctw-preview-avatar zalo">MA</span>
-              <strong>Nguyễn Minh Anh</strong>
-            </div>
-            <div className="ctw-preview-chat-date">Hôm nay</div>
-            <div className="ctw-preview-message-row">
               <div className="ctw-preview-message-bubble">
-                <SharedImagePreview imageUrls={imageUrls} />
+                {channel !== 'sms' && <ChannelImagePreview imageUrls={imageUrls} />}
                 {contentNode}
               </div>
             </div>
-            <div className="ctw-preview-composer"><MessageCircle size={15} /><span>Nhập tin nhắn</span><Send size={15} /></div>
+            <div className="ctw-preview-composer">
+              {channel !== 'sms' && <MessageCircle size={15} />}
+              <span>{channel === 'sms' ? 'Tin nhắn văn bản' : 'Nhập tin nhắn'}</span>
+              <Send size={15} />
+            </div>
           </div>
         )}
 
-        {channel === 'facebook' && (
+        {channel === 'facebook_post' && (
           <div className="ctw-preview-facebook-card">
             <div className="ctw-preview-facebook-head">
               <span className="ctw-preview-avatar facebook">MA</span>
               <div><strong>Nguyễn Minh Anh</strong><span>Vừa xong · 🌐</span></div>
             </div>
             <div className="ctw-preview-facebook-content">{contentNode}</div>
-            <SharedImagePreview imageUrls={imageUrls} />
+            <ChannelImagePreview imageUrls={imageUrls} />
             <div className="ctw-preview-facebook-actions"><span>Thích</span><span>Bình luận</span><span>Chia sẻ</span></div>
+          </div>
+        )}
+
+        {channel === 'facebook_comment' && (
+          <div className="ctw-preview-facebook-card comment">
+            <div className="ctw-preview-facebook-head muted">
+              <span className="ctw-preview-avatar facebook">BA</span>
+              <div><strong>Bài đăng mẫu</strong><span>Vừa xong · 🌐</span></div>
+            </div>
+            <div className="ctw-preview-comment-row">
+              <span className="ctw-preview-avatar facebook">MA</span>
+              <div className="ctw-preview-comment-bubble"><strong>Nguyễn Minh Anh</strong>{contentNode}</div>
+            </div>
+            <ChannelImagePreview imageUrls={imageUrls} />
           </div>
         )}
 
@@ -149,18 +151,8 @@ export default function ContentTemplatePreview({
             <div className="ctw-preview-email-subject">{renderedSubject || 'Chưa có tiêu đề email'}</div>
             <div className="ctw-preview-email-body">{contentNode}</div>
             {imageUrls.length > 0 && (
-              <div className="ctw-preview-attachments">
-                <ImageIcon size={15} /> {imageUrls.length} ảnh đính kèm
-              </div>
+              <div className="ctw-preview-attachments"><ImageIcon size={15} /> {imageUrls.length} ảnh đính kèm</div>
             )}
-          </div>
-        )}
-
-        {channel === 'base' && (
-          <div className="ctw-preview-base-card">
-            <div className="ctw-preview-base-label">{CHANNEL_LABELS[channel]}</div>
-            <div className="ctw-preview-base-content">{contentNode}</div>
-            <SharedImagePreview imageUrls={imageUrls} />
           </div>
         )}
       </div>

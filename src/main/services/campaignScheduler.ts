@@ -4,7 +4,7 @@ import { extname, join } from 'path'
 import { tmpdir } from 'os'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import { renderContentSpin, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
@@ -18,6 +18,7 @@ import {
 import {
   findInvalidAdvancedContentItemIndex,
   getAdvancedContentItems,
+  MAX_ADVANCED_CONTENT_ITEMS,
   selectAdvancedContentItem
 } from '../../shared/advancedContent'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
@@ -6432,8 +6433,14 @@ export class CampaignScheduler {
       else if (commentType === 'all') for (let i = 0; i < commentCount; i++) commentIndices.push(i + 1)
       else for (let i = 0; i < commentCount; i++) commentIndices.push(i + 2)
     }
+    const useAdvancedCommentContent = this.shouldUseAdvancedCommentContent(campaign)
     const rawCommentVariants = this.splitContentVariants(extra.commentContent)
-    const selectedRawPostContent = this.getRawCampaignContentForIndex(campaign, detailIndex)
+    const selectedAdvancedContentItem = this.shouldUseAdvancedContent(campaign)
+      ? selectAdvancedContentItem(campaign.extraSettings, detailIndex)
+      : null
+    const selectedRawPostContent = useAdvancedCommentContent
+      ? ''
+      : this.getRawCampaignContentForIndex(campaign, detailIndex)
     const selectedPostContent = campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
       ? ''
       : formattedContentEnabled
@@ -6443,28 +6450,60 @@ export class CampaignScheduler {
         : this.isBrowserlessCampaign(campaign)
           ? selectedRawPostContent
           : this.renderSpinContent(selectedRawPostContent)
-    const storedCommentImageOption = String(extra.commentImageOption || 'none')
-    const commentImageOption = storedCommentImageOption === 'none' ? 'none' : 'all'
-    const shouldUseCommentImages = enableComment && commentImageOption === 'all'
-    const validPostImages = postWithBackground
+    const validPostImages = postWithBackground || useAdvancedCommentContent
       ? []
       : await this.resolveCampaignMediaForIndex(campaign, detailIndex, postWithBackground, mediaTempPaths)
-    const validCommentImages = shouldUseCommentImages
-      ? await this.resolveMediaSelection(extra.commentImages || [], 'all', 1, mediaTempPaths)
-      : []
-    const selectedCommentImages = shouldUseCommentImages ? validCommentImages : []
-    const commentBatchCount = Math.max(commentIndices.length, Number(extra.postsPerTarget ?? commentCount), 1)
-    const commentVariants = Array.from({ length: commentBatchCount }, (_, k) =>
-      this.renderSpinContent(this.cycleVariant(rawCommentVariants, k))
-    )
-    const commentImageBatches = Array.from({ length: commentBatchCount }, () =>
-      [...selectedCommentImages]
-    )
+    const commentBatchCount = useAdvancedCommentContent && campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID
+      ? 1
+      : Math.max(commentIndices.length, Number(extra.postsPerTarget ?? commentCount), 1)
+    let commentVariants: string[]
+    let commentImageBatches: string[][]
+    let commentImageOption: 'none' | 'all'
+
+    if (useAdvancedCommentContent) {
+      // Keep rotation deterministic across both axes: all slots of target 0,
+      // then all slots of target 1, and so on. Only the saved campaign
+      // snapshot participates; source template/group metadata is never read.
+      const advancedBatches: Array<{ text: string; images: string[] }> = []
+      for (let slotIndex = 0; slotIndex < commentBatchCount; slotIndex++) {
+        const linearIndex = detailIndex * commentBatchCount + slotIndex
+        const item = selectAdvancedContentItem(campaign.extraSettings, linearIndex)
+        advancedBatches.push({
+          text: this.renderSpinContent(item?.content || ''),
+          images: enableComment
+            ? await this.resolveAdvancedCommentMedia(item, mediaTempPaths)
+            : []
+        })
+      }
+      commentVariants = advancedBatches.map(batch => batch.text)
+      commentImageBatches = advancedBatches.map(batch => batch.images)
+      commentImageOption = commentImageBatches.some(images => images.length > 0) ? 'all' : 'none'
+    } else {
+      const storedCommentImageOption = String(extra.commentImageOption || 'none')
+      commentImageOption = storedCommentImageOption === 'none' ? 'none' : 'all'
+      const shouldUseCommentImages = enableComment && commentImageOption === 'all'
+      const validCommentImages = shouldUseCommentImages
+        ? await this.resolveMediaSelection(extra.commentImages || [], 'all', 1, mediaTempPaths)
+        : []
+      const selectedCommentImages = shouldUseCommentImages ? validCommentImages : []
+      commentVariants = Array.from({ length: commentBatchCount }, (_, k) =>
+        this.renderSpinContent(this.cycleVariant(rawCommentVariants, k))
+      )
+      commentImageBatches = Array.from({ length: commentBatchCount }, () =>
+        [...selectedCommentImages]
+      )
+    }
     const commentIterations = commentIndices.map((position, k) => ({
       position,
       text: this.cycleVariant(commentVariants, k),
       images: commentImageBatches[k] || []
     }))
+    const legacyAdvancedEmailSubject = extra.advancedContentSource === 'group_snapshot'
+      ? ''
+      : String(extra.emailSubject ?? '')
+    const selectedEmailSubject = campaign.actionId === EMAIL_SEND_ACTION_ID && selectedAdvancedContentItem
+      ? String(selectedAdvancedContentItem.emailSubject ?? legacyAdvancedEmailSubject)
+      : (extra.emailSubject || '')
 
     return {
       campaignId: campaign.id,
@@ -6487,7 +6526,12 @@ export class CampaignScheduler {
       commentCount,
       commentIterations,
       commentVariants,
-      commentImages: commentImageBatches[0] || [],
+      // Legacy comment blocks fall back to `commentImages` whenever the
+      // current batch has no image. Advanced items intentionally allow an
+      // empty image batch, so keep that fallback empty to avoid reusing the
+      // first item's image for later image-less items. Simple mode preserves
+      // the existing shared-image behavior.
+      commentImages: useAdvancedCommentContent ? [] : (commentImageBatches[0] || []),
       commentImageBatches,
       commentImageOption: enableComment ? commentImageOption : 'none',
       enablePostLike,
@@ -6589,7 +6633,7 @@ export class CampaignScheduler {
       targetPhone: detail?.phone || '',
       // Email
       targetEmail: detail?.email || '',
-      emailSubject: extra.emailSubject || '',
+      emailSubject: selectedEmailSubject,
       emailBodyIsHtml: extra.emailBodyIsHtml === true,
       emailCheckLinkClicks: extra.emailCheckLinkClicks === true,
       friendRequestMessage: extra.friendRequestMessage || '',
@@ -11926,6 +11970,13 @@ export class CampaignScheduler {
     return this.isAdvancedContentEnabled(campaign) && this.campaignUsesMainContent(campaign)
   }
 
+  private shouldUseAdvancedCommentContent(campaign: Campaign): boolean {
+    return this.isAdvancedContentEnabled(campaign) && (
+      campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID ||
+      campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID
+    )
+  }
+
   private campaignUsesMainContent(campaign: Campaign): boolean {
     const extra = campaign.extraSettings || {}
     if (
@@ -11936,7 +11987,8 @@ export class CampaignScheduler {
       campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID ||
       campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID ||
       campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID ||
-      campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
+      campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID ||
+      campaign.actionId === VOICE_CALL_ACTION_ID
     ) {
       return false
     }
@@ -11954,12 +12006,29 @@ export class CampaignScheduler {
   }
 
   private getAdvancedContentConfigError(campaign: Campaign, allowMediaOnly: boolean): string | null {
-    if (!this.shouldUseAdvancedContent(campaign)) return null
+    const usesMainContent = this.shouldUseAdvancedContent(campaign)
+    const usesStandaloneCommentContent = this.shouldUseAdvancedCommentContent(campaign)
+    if (!usesMainContent && !usesStandaloneCommentContent) return null
     const items = getAdvancedContentItems(campaign.extraSettings)
     if (items.length === 0) {
       return 'Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.'
     }
-    const invalidIndex = this.isFormattedContentCampaign(campaign)
+    if (items.length > MAX_ADVANCED_CONTENT_ITEMS) {
+      return `Nội dung nâng cao chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`
+    }
+    if (campaign.actionId === EMAIL_SEND_ACTION_ID) {
+      const missingSubjectIndex = items.findIndex(item => {
+        const legacySubject = campaign.extraSettings?.advancedContentSource === 'group_snapshot'
+          ? ''
+          : campaign.extraSettings?.emailSubject ?? ''
+        const subject = item.emailSubject ?? legacySubject
+        return !String(subject).trim()
+      })
+      if (missingSubjectIndex >= 0) {
+        return `Nội dung nâng cao Email số ${missingSubjectIndex + 1} chưa có tiêu đề.`
+      }
+    }
+    const invalidIndex = usesMainContent && this.isFormattedContentCampaign(campaign)
       ? items.findIndex(item => {
           const hasContent = !isFormattedContentEmpty(item.content)
           const hasMedia = item.mediaOption !== 'none' && Array.isArray(item.mediaItems) && item.mediaItems.length > 0
@@ -12014,6 +12083,21 @@ export class CampaignScheduler {
       extra.randomImageCount || 3,
       mediaTempPaths
     )
+  }
+
+  private async resolveAdvancedCommentMedia(
+    item: CampaignAdvancedContentItem | null,
+    mediaTempPaths: string[] = []
+  ): Promise<string[]> {
+    if (!item || item.mediaOption === 'none') return []
+    const mediaItems = Array.isArray(item.mediaItems) ? item.mediaItems : []
+    if (mediaItems.length === 0) return []
+
+    // Facebook comment supports one image. `random` chooses one from the
+    // item's snapshot; `all` deterministically uses its first snapshot media.
+    return item.mediaOption === 'random'
+      ? this.resolveMediaSelection(mediaItems, 'random', 1, mediaTempPaths)
+      : this.resolveMediaSelection(mediaItems.slice(0, 1), 'all', 1, mediaTempPaths)
   }
 
   /**

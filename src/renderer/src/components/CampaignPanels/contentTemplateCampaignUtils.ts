@@ -1,32 +1,94 @@
 import type {
+  CampaignAdvancedContentItem,
   CampaignMediaSnapshot,
   ContentTemplate,
-  ContentTemplateChannelName
+  ContentTemplateChannelConfig,
+  ContentTemplateChannelName,
+  ContentTemplateGroup
 } from '../../../../shared/types'
-import { splitContentVariants } from '../../../../shared/contentSpin'
 import {
   isFormattedContentEmpty,
-  sanitizeFormattedContent,
-  splitFormattedContentVariants
+  plainTextToFormattedContent,
+  sanitizeFormattedContent
 } from '../../../../shared/formattedContent'
 
 export interface ResolvedContentTemplate {
   variants: string[]
+  variantIndexes: number[]
   rich: boolean
-  source: 'channel' | 'base'
   subject?: string
-  isHtml?: boolean
+  imageUrls: string[]
+  skippedVariantCount: number
 }
 
-const getEnabledChannelVariants = (
+export interface ContentTemplateGroupCandidate {
+  groupId: number
+  groupName: string
+  totalTemplateCount: number
+  compatibleTemplateCount: number
+  variantCount: number
+  skippedTemplateCount: number
+  skippedVariantCount: number
+  invalidMediaCount: number
+  rich: boolean
+  items: CampaignAdvancedContentItem[]
+}
+
+export const isRichContentTemplateChannel = (
+  channelName: ContentTemplateChannelName,
+  channel?: ContentTemplateChannelConfig
+): boolean => {
+  if (channelName === 'email') return channel?.isHtml === true
+  if (channelName === 'zalo_message' || channelName === 'facebook_post') {
+    return channel?.formattedContentEnabled === true
+  }
+  return false
+}
+
+export const getContentTemplateChannelLabel = (channelName: ContentTemplateChannelName): string => {
+  const labels: Record<ContentTemplateChannelName, string> = {
+    sms: 'SMS',
+    zalo_message: 'Tin nhắn Zalo',
+    facebook_post: 'Facebook Post',
+    facebook_message: 'Facebook Message',
+    facebook_comment: 'Facebook Comment',
+    email: 'Email'
+  }
+  return labels[channelName]
+}
+
+const normalizeExactChannelVariants = (
   template: ContentTemplate,
   channelName: ContentTemplateChannelName
-): string[] => {
+): { variants: string[]; variantIndexes: number[]; skippedVariantCount: number } => {
   const channel = template.channels[channelName]
-  if (!channel?.enabled) return []
-  return (channel.variants || [])
-    .map(variant => String(variant?.text || '').trim())
-    .filter(Boolean)
+  if (!channel?.enabled) return { variants: [], variantIndexes: [], skippedVariantCount: 0 }
+
+  const rich = isRichContentTemplateChannel(channelName, channel)
+  let skippedVariantCount = 0
+  const variantIndexes: number[] = []
+  const variants = (channel.variants || []).flatMap((variant, variantIndex) => {
+    const raw = String(variant?.text || '')
+    if (rich) {
+      const sanitized = sanitizeFormattedContent(raw)
+      if (isFormattedContentEmpty(sanitized)) {
+        skippedVariantCount += 1
+        return []
+      }
+      variantIndexes.push(variantIndex)
+      return [sanitized]
+    }
+
+    const text = raw.trim()
+    if (!text) {
+      skippedVariantCount += 1
+      return []
+    }
+    variantIndexes.push(variantIndex)
+    return [text]
+  })
+
+  return { variants, variantIndexes, skippedVariantCount }
 }
 
 export const resolveContentTemplate = (
@@ -34,39 +96,19 @@ export const resolveContentTemplate = (
   channelName: ContentTemplateChannelName
 ): ResolvedContentTemplate => {
   const channel = template.channels[channelName]
-  const channelVariants = getEnabledChannelVariants(template, channelName)
-  if (channel && channelVariants.length > 0) {
-    const rich = channelName === 'email'
-      ? channel.isHtml === true
-      : channel.formattedContentEnabled === true
-    return {
-      variants: rich
-        ? channelVariants
-          .map(variant => sanitizeFormattedContent(variant))
-          .filter(variant => !isFormattedContentEmpty(variant))
-        : channelVariants,
-      rich,
-      source: 'channel',
-      subject: channelName === 'email' ? String(channel.subject || '') : undefined,
-      isHtml: channelName === 'email' ? channel.isHtml === true : undefined
-    }
-  }
+  const normalized = normalizeExactChannelVariants(template, channelName)
+  const subject = channelName === 'email' ? String(channel?.subject || '').trim() : undefined
 
-  const baseHtml = String(template.baseContentHtml || '').trim()
-  if (baseHtml) {
-    return {
-      variants: splitFormattedContentVariants(baseHtml),
-      rich: true,
-      source: 'base',
-      isHtml: channelName === 'email'
-    }
-  }
-
+  // Email templates without a subject are not compatible with email campaigns.
+  const variants = channelName === 'email' && !subject ? [] : normalized.variants
+  const variantIndexes = variants.length > 0 ? normalized.variantIndexes : []
   return {
-    variants: splitContentVariants(template.content, { fallbackToRaw: true }),
-    rich: false,
-    source: 'base',
-    isHtml: false
+    variants,
+    variantIndexes,
+    rich: isRichContentTemplateChannel(channelName, channel),
+    subject,
+    imageUrls: channel?.enabled ? (channel.imageUrls || []) : [],
+    skippedVariantCount: normalized.skippedVariantCount
   }
 }
 
@@ -112,10 +154,85 @@ export const contentTemplateImagesToSnapshots = (
   return { snapshots, invalidCount }
 }
 
+const getChannelMediaLimit = (channelName: ContentTemplateChannelName): number => {
+  if (channelName === 'sms') return 0
+  if (channelName === 'facebook_comment') return 1
+  return 10
+}
+
+export const buildContentTemplateGroupCandidate = (
+  templates: ContentTemplate[],
+  group: Pick<ContentTemplateGroup, 'id' | 'name'>,
+  channelName: ContentTemplateChannelName
+): ContentTemplateGroupCandidate => {
+  const groupTemplates = templates.filter(template => template.groupId === group.id && !template.isDelete)
+  const items: CampaignAdvancedContentItem[] = []
+  const richItemIds = new Set<string>()
+  let compatibleTemplateCount = 0
+  let skippedTemplateCount = 0
+  let skippedVariantCount = 0
+  let invalidMediaCount = 0
+  const mediaLimit = getChannelMediaLimit(channelName)
+
+  for (const template of groupTemplates) {
+    const resolved = resolveContentTemplate(template, channelName)
+    skippedVariantCount += resolved.skippedVariantCount
+    if (resolved.variants.length === 0) {
+      skippedTemplateCount += 1
+      continue
+    }
+
+    compatibleTemplateCount += 1
+    const media = mediaLimit > 0
+      ? contentTemplateImagesToSnapshots(resolved.imageUrls)
+      : { snapshots: [] as CampaignMediaSnapshot[], invalidCount: 0 }
+    invalidMediaCount += media.invalidCount
+    const snapshots = media.snapshots.slice(0, mediaLimit)
+
+    resolved.variants.forEach((content, variantIndex) => {
+      const id = `template-${template.id}-variant-${variantIndex + 1}`
+      if (resolved.rich) richItemIds.add(id)
+      items.push({
+        id,
+        content,
+        mediaOption: snapshots.length > 0 ? 'all' : 'none',
+        mediaItems: snapshots,
+        randomMediaCount: 3,
+        ...(channelName === 'email' ? { emailSubject: resolved.subject || '' } : {}),
+        sourceTemplateId: template.id,
+        sourceTemplateName: template.name,
+        sourceVariantIndex: resolved.variantIndexes[variantIndex] ?? variantIndex
+      })
+    })
+  }
+
+  const rich = richItemIds.size > 0
+  const normalizedItems = rich
+    ? items.map(item => richItemIds.has(item.id)
+      ? item
+      : { ...item, content: plainTextToFormattedContent(item.content) })
+    : items
+
+  return {
+    groupId: group.id,
+    groupName: group.name,
+    totalTemplateCount: groupTemplates.length,
+    compatibleTemplateCount,
+    variantCount: normalizedItems.length,
+    skippedTemplateCount,
+    skippedVariantCount,
+    invalidMediaCount,
+    rich,
+    items: normalizedItems
+  }
+}
+
 export const getContentTemplateSearchText = (template: ContentTemplate): string => {
   const channelText = Object.values(template.channels)
-    .flatMap(channel => channel?.variants || [])
-    .map(variant => variant.text)
+    .flatMap(channel => [
+      String(channel?.subject || ''),
+      ...(channel?.variants || []).map(variant => variant.text)
+    ])
     .join('\n')
-  return `${template.name}\n${template.groupName || ''}\n${template.content}\n${channelText}`.toLocaleLowerCase('vi-VN')
+  return `${template.name}\n${template.groupName || ''}\n${channelText}`.toLocaleLowerCase('vi-VN')
 }

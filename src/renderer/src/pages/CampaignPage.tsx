@@ -3,12 +3,13 @@ import AccountPanel from '../components/CampaignPanels/AccountPanel'
 import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
 import type { GeneralSettingsMenu } from '../components/Settings/GeneralSettingsModal'
+import type { ContentTemplateChannelName } from '../../../shared/types'
 
 interface CampaignPageProps {
   isActive: boolean
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
-  onOpenContentTemplates?: () => void
+  onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
 }
 
 export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates }: CampaignPageProps) {

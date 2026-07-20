@@ -19,6 +19,7 @@ import {
   type CampaignInputStatus,
   type CampaignRelationSummary,
   type CampaignRunEvent,
+  type ContentTemplateChannelName,
   type EmailCampaignLinkTrackingSummary,
   type ZaloLoginQrEvent
 } from '../../../../shared/types'
@@ -42,7 +43,7 @@ interface CampaignPanelProps {
   onClearFilter?: () => void
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
-  onOpenContentTemplates?: () => void
+  onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
   onAskAssistant?: (campaignId: number) => void
 }
 
@@ -4644,6 +4645,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           <CampaignContentMediaUpdateModal
             campaign={contentMediaUpdateCampaign}
             action={actionById.get(contentMediaUpdateCampaign.actionId)}
+            onOpenContentTemplates={onOpenContentTemplates}
             onClose={() => {
               setContentMediaUpdateCampaign(null)
               loadCampaigns()

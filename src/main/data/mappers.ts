@@ -338,12 +338,11 @@ function normalizeContentTemplateVariants(value: unknown): Array<{ text: string 
 function normalizeContentTemplateChannel(value: unknown): ContentTemplateChannelConfig | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const source = value as Record<string, unknown>
-  const variants = normalizeContentTemplateVariants(
-    Array.isArray(source.variants) ? source.variants : source.text
-  )
+  const variants = normalizeContentTemplateVariants(source.variants)
   const config: ContentTemplateChannelConfig = {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : variants.length > 0,
-    variants
+    variants,
+    imageUrls: []
   }
   if (typeof source.formattedContentEnabled === 'boolean') {
     config.formattedContentEnabled = source.formattedContentEnabled
@@ -372,24 +371,26 @@ export function mapContentTemplateFromDB(
 ): ContentTemplate {
   const channels: ContentTemplateChannels = {}
   const rawChannels = row.channels
+  const rawChannelImages = row.channel_image_urls && typeof row.channel_image_urls === 'object' && !Array.isArray(row.channel_image_urls)
+    ? row.channel_image_urls as Record<string, unknown>
+    : {}
   if (rawChannels && typeof rawChannels === 'object' && !Array.isArray(rawChannels)) {
     for (const [id, rawConfig] of Object.entries(rawChannels as Record<string, unknown>)) {
       const channelName = channelNameById.get(id)
       if (!channelName) continue
       const config = normalizeContentTemplateChannel(rawConfig)
-      if (config) channels[channelName] = config
+      if (config) {
+        config.imageUrls = normalizeContentTemplateImages(rawChannelImages[id])
+        channels[channelName] = config
+      }
     }
   }
 
   return {
     id: row.id as number,
     name: row.name as string,
-    content: (row.content as string) || '',
-    baseContentHtml: (row.base_content_html as string | null | undefined) ?? null,
     groupId: (row.group_id as number | null | undefined) ?? null,
     groupName: joinedContentGroupName(row),
-    contentTypeId: (row.content_type_id as number | null | undefined) ?? null,
-    imageUrls: normalizeContentTemplateImages(row.image_urls),
     channels,
     isDelete: (row.is_delete as boolean | null | undefined) ?? false,
     staffId: row.staff_id as number | undefined,

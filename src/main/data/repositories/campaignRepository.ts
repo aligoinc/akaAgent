@@ -25,6 +25,7 @@ import {
 } from '../../../shared/types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone, type VietnamMobileCarrier } from '../../../shared/phone'
 import { renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
+import { getAdvancedContentItems, MAX_ADVANCED_CONTENT_ITEMS } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -1218,6 +1219,8 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   }
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   const isSmsCampaign = isMobileManagedSmsCampaignAction(campaign.actionId)
+  const extraSettings = clampCampaignExtraSettingsDailyLimits(campaign.extraSettings, campaign.actionId, entitlements)
+  assertAdvancedContentPersistenceContract(campaign.actionId, extraSettings)
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
@@ -1233,7 +1236,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     continue_next_day: isSmsCampaign ? true : (campaign.continueNextDay ?? false),
     refresh_data: isSmsCampaign ? true : (campaign.refreshData ?? false),
     content: campaign.content || '',
-    extra_settings: clampCampaignExtraSettingsDailyLimits(campaign.extraSettings, campaign.actionId, entitlements),
+    extra_settings: extraSettings,
     images: campaign.images || [],
     log: '',
     note: campaign.note ?? null,
@@ -1251,12 +1254,92 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   return mapCampaignFromDB(data)
 }
 
-function smsMaterializationTouched(updates: Partial<Campaign>): boolean {
+function smsMaterializationUpdateRequested(updates: Partial<Campaign>): boolean {
   return updates.actionId !== undefined ||
     updates.content !== undefined ||
     updates.schedule !== undefined ||
     updates.originalSchedule !== undefined ||
     updates.extraSettings !== undefined
+}
+
+function assertAdvancedContentPersistenceContract(
+  actionId: string | null | undefined,
+  extraSettings: Campaign['extraSettings'] | null | undefined
+): void {
+  if (extraSettings?.advancedContentEnabled !== true) return
+  const items = getAdvancedContentItems(extraSettings)
+  if (items.length > MAX_ADVANCED_CONTENT_ITEMS) {
+    throw new Error(`Nội dung nâng cao chỉ được tối đa ${MAX_ADVANCED_CONTENT_ITEMS} mục.`)
+  }
+  if (actionId === VOICE_CALL_ACTION_ID) {
+    throw new Error('Cuộc gọi tự động không hỗ trợ nội dung nâng cao.')
+  }
+  if (actionId === 'email_send') {
+    const missingSubjectIndex = items.findIndex(item => {
+      const legacySubject = extraSettings.advancedContentSource === 'group_snapshot'
+        ? ''
+        : extraSettings.emailSubject ?? ''
+      const subject = item.emailSubject ?? legacySubject
+      return !String(subject).trim()
+    })
+    if (missingSubjectIndex >= 0) {
+      throw new Error(`Nội dung nâng cao Email số ${missingSubjectIndex + 1} chưa có tiêu đề.`)
+    }
+  }
+}
+
+function getSmsExtraSettingsMaterializationFingerprint(
+  extraSettings: Campaign['extraSettings'] | null | undefined
+): string {
+  const advancedContentEnabled = extraSettings?.advancedContentEnabled === true
+  return JSON.stringify({
+    advancedContentEnabled,
+    advancedContentItems: advancedContentEnabled
+      ? getAdvancedContentItems(extraSettings).map(item => item.content)
+      : [],
+    smsUseUnicode: extraSettings?.smsUseUnicode ?? false,
+    smsKeepNewLines: extraSettings?.smsKeepNewLines ?? false
+  })
+}
+
+function smsMaterializationTouched(
+  updates: Partial<Campaign>,
+  actionId: string | null | undefined,
+  previousExtraSettings?: Campaign['extraSettings'] | null
+): boolean {
+  if (
+    updates.actionId !== undefined ||
+    updates.content !== undefined ||
+    updates.schedule !== undefined ||
+    updates.originalSchedule !== undefined
+  ) {
+    return true
+  }
+  if (updates.extraSettings === undefined) return false
+  // Voice-call input rows also materialize their TTS payload. Advanced content
+  // is intentionally unsupported there, but any voice settings change must
+  // keep the existing rematerialization behavior.
+  if (actionId === VOICE_CALL_ACTION_ID) return true
+  if (actionId !== SMS_SEND_ACTION_ID) return false
+  return getSmsExtraSettingsMaterializationFingerprint(previousExtraSettings) !==
+    getSmsExtraSettingsMaterializationFingerprint(updates.extraSettings)
+}
+
+async function getCampaignExtraSettingsForCurrentUser(
+  campaignId: number,
+  staffId: number
+): Promise<Campaign['extraSettings']> {
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('extra_settings')
+    .eq('id', campaignId)
+    .eq('staff_id', staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to load campaign SMS settings: ${error.message}`)
+  if (!data) throw new Error('Không tìm thấy chiến dịch.')
+  return (normalizeRecord((data as Record<string, unknown>).extra_settings) || {}) as Campaign['extraSettings']
 }
 
 async function rematerializeSmsInputData(campaign: Campaign, updateSchedule: boolean): Promise<void> {
@@ -1285,6 +1368,40 @@ async function rematerializeSmsInputData(campaign: Campaign, updateSchedule: boo
   }
 }
 
+async function pauseCampaignAfterMobileContentUpdateFailure(
+  campaignId: number,
+  staffId: number
+): Promise<boolean> {
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .update({
+      status: 'tạm dừng',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', campaignId)
+    .eq('staff_id', staffId)
+    .eq('is_delete', false)
+    .in('status', ['chờ xử lý', 'đang chạy', 'tạm dừng'])
+    .select('id')
+    .maybeSingle()
+
+  if (error) {
+    console.error('Failed to pause campaign after mobile content update failure:', error)
+    return false
+  }
+  return Boolean(data)
+}
+
+function getMobileContentUpdateFailureMessage(actionId: string, paused: boolean): string {
+  const contentLabel = actionId === VOICE_CALL_ACTION_ID ? 'cuộc gọi tự động' : 'SMS'
+  if (!paused) {
+    return `Cập nhật nội dung ${contentLabel} chưa hoàn tất và ứng dụng chưa thể tự tạm dừng chiến dịch. ` +
+      'Hãy tạm dừng chiến dịch, mở Sửa chiến dịch, bấm Lưu lại, rồi mới tiếp tục.'
+  }
+  return `Cập nhật nội dung ${contentLabel} chưa hoàn tất. Chiến dịch đã được tạm dừng. ` +
+    'Hãy mở Sửa chiến dịch, bấm Lưu lại, rồi tiếp tục chiến dịch.'
+}
+
 export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
   if (updates.accountId !== undefined) {
@@ -1300,9 +1417,12 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
     const currentActionId = await getCampaignActionIdForCurrentUser(id, u.staffId)
     targetActionId = currentActionId
     await ensureCurrentUserCanUseCampaignAction(currentActionId)
-  } else if (smsMaterializationTouched(updates)) {
+  } else if (smsMaterializationUpdateRequested(updates)) {
     targetActionId = await getCampaignActionIdForCurrentUser(id, u.staffId)
   }
+  const previousSmsExtraSettings = updates.extraSettings !== undefined && targetActionId === SMS_SEND_ACTION_ID
+    ? await getCampaignExtraSettingsForCurrentUser(id, u.staffId)
+    : undefined
   const isSmsCampaign = isMobileManagedSmsCampaignAction(targetActionId)
   const payload: any = { updated_at: new Date().toISOString() }
   if (updates.name !== undefined) payload.name = updates.name
@@ -1321,7 +1441,9 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   if (updates.content !== undefined) payload.content = updates.content
   if (updates.extraSettings !== undefined) {
     const entitlements = await loadCurrentUserEffectiveEntitlements()
-    payload.extra_settings = clampCampaignExtraSettingsDailyLimits(updates.extraSettings, targetActionId, entitlements)
+    const extraSettings = clampCampaignExtraSettingsDailyLimits(updates.extraSettings, targetActionId, entitlements)
+    assertAdvancedContentPersistenceContract(targetActionId, extraSettings)
+    payload.extra_settings = extraSettings
   }
   if (updates.images !== undefined) payload.images = updates.images
   if (updates.log !== undefined) payload.log = updates.log
@@ -1346,11 +1468,20 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
 
   if (error) throw new Error(`Failed to update campaign: ${error.message}`)
   const updatedCampaign = mapCampaignFromDB(data)
-  if (isMobileManagedSmsCampaignAction(updatedCampaign.actionId) && smsMaterializationTouched(updates)) {
-    await rematerializeSmsInputData(
-      updatedCampaign,
-      updates.actionId !== undefined || updates.schedule !== undefined || updates.originalSchedule !== undefined
-    )
+  if (
+    isMobileManagedSmsCampaignAction(updatedCampaign.actionId) &&
+    smsMaterializationTouched(updates, updatedCampaign.actionId, previousSmsExtraSettings)
+  ) {
+    try {
+      await rematerializeSmsInputData(
+        updatedCampaign,
+        updates.actionId !== undefined || updates.schedule !== undefined || updates.originalSchedule !== undefined
+      )
+    } catch (materializationError) {
+      console.error('Failed to update mobile-managed campaign input content:', materializationError)
+      const paused = await pauseCampaignAfterMobileContentUpdateFailure(id, u.staffId)
+      throw new Error(getMobileContentUpdateFailureMessage(updatedCampaign.actionId, paused))
+    }
   }
   return updatedCampaign
 }
