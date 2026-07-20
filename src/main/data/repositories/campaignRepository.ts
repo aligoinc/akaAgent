@@ -102,15 +102,6 @@ const VIETNAM_MOBILE_CARRIER_CODES = new Set<VietnamMobileCarrier>([
   'wintel',
   'unknown'
 ])
-const FIND_DATA_TARGET_FIELDS = [
-  'findUidTargetCampaignIds',
-  'findPostLinkTargetCampaignIds',
-  'findPhoneZaloMessagePhoneTargetCampaignIds',
-  'findZaloGroupLinkJoinTargetCampaignIds',
-  'findFacebookGroupPostTargetCampaignIds',
-  'findFacebookGroupCommentTargetCampaignIds',
-  'findFacebookGroupJoinTargetCampaignIds'
-] as const
 const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
   'name',
   'accountId',
@@ -215,17 +206,6 @@ const uniquePositiveIds = (ids: number[]): number[] => Array.from(new Set(
     .map(id => Number(id))
     .filter(id => Number.isFinite(id) && id > 0)
 ))
-
-const getLinkedFindDataTargetIds = (extraSettings: unknown): number[] => {
-  const extra = (extraSettings && typeof extraSettings === 'object')
-    ? extraSettings as Record<string, unknown>
-    : {}
-
-  return uniquePositiveIds(FIND_DATA_TARGET_FIELDS.flatMap(field => {
-    const value = extra[field]
-    return Array.isArray(value) ? value.map(id => Number(id)) : []
-  }))
-}
 
 const chunkArray = <T>(items: T[], size: number): T[][] => {
   const chunks: T[][] = []
@@ -1555,7 +1535,7 @@ export async function deleteCampaign(id: number): Promise<void> {
   const u = requireCurrentUser()
   const { data: campaign, error: fetchError } = await client()
     .from('auto_campaigns')
-    .select('id, status, extra_settings')
+    .select('id, status')
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
@@ -1565,11 +1545,6 @@ export async function deleteCampaign(id: number): Promise<void> {
   if (!campaign) throw new Error('Không tìm thấy chiến dịch cần xoá.')
   if (campaign.status === 'đang chạy') {
     throw new Error('Không thể xoá chiến dịch đang chạy.')
-  }
-
-  const linkedTargetIds = getLinkedFindDataTargetIds((campaign as { extra_settings?: unknown }).extra_settings)
-  if (linkedTargetIds.length > 0) {
-    throw new Error(`Không thể xoá chiến dịch nguồn đang gắn với chiến dịch khác (#${linkedTargetIds.join(', #')}).`)
   }
 
   const { error } = await client()
