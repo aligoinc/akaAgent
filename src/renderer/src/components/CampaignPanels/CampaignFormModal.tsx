@@ -60,7 +60,6 @@ import {
 import {
   formattedContentToPlainCampaignContent,
   formattedContentToPlainText,
-  escapeFormattedContentVariantSeparators,
   isFormattedContentEmpty,
   plainTextToFormattedContent,
   sanitizeFormattedContent,
@@ -323,9 +322,9 @@ const getAdvancedContentCampaignLabel = (channelName: ContentTemplateChannelName
   const labels: Record<ContentTemplateChannelName, string> = {
     sms: 'SMS',
     zalo_message: 'Tin nhắn Zalo',
-    facebook_post: 'Bài đăng Facebook',
+    facebook_post: 'Đăng bài Facebook',
     facebook_message: 'Tin nhắn Facebook',
-    facebook_comment: 'Bình luận Facebook',
+    facebook_comment: 'Comment Facebook',
     email: 'Email'
   }
   return labels[channelName]
@@ -1435,16 +1434,6 @@ export default function CampaignFormModal({
         rewriteContentEachRun: campaign?.extraSettings?.rewriteContentEachRun === true
       }
   const initialAdvancedContentItems = initialManualDraft.advancedContentItems
-  const hasPriorManualAdvancedContent = campaign?.extraSettings?.advancedContentEnabled === true ||
-    initialAdvancedContentItems.length > 0
-  const initialAdvancedContentSourceMode: AdvancedContentSourceMode = campaign
-    ? (savedAdvancedContentSource === 'group_snapshot' && savedAdvancedGroupSnapshot
-        ? 'group'
-        : hasPriorManualAdvancedContent
-          ? 'manual'
-          : 'group')
-    : 'group'
-
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
     actionId: initialActionId,
@@ -1651,7 +1640,10 @@ export default function CampaignFormModal({
     findFacebookGroupCommentTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || [] as number[],
     findFacebookGroupJoinTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || [] as number[]
   })
-  const [advancedContentSourceMode, setAdvancedContentSourceMode] = useState<AdvancedContentSourceMode>(initialAdvancedContentSourceMode)
+  // Advanced content is group-only. Keep the union-shaped state locally so the
+  // legacy save helpers can continue preserving dormant manual drafts while
+  // every interactive Advanced flow is forced through a template snapshot.
+  const [advancedContentSourceMode] = useState<AdvancedContentSourceMode>('group')
   const [candidateContentTemplateGroupId, setCandidateContentTemplateGroupId] = useState<number | null>(
     savedAdvancedGroupSnapshot?.groupId ?? null
   )
@@ -1660,15 +1652,10 @@ export default function CampaignFormModal({
     initialAdvancedContentItems
   )
   const savedGroupAdvancedContentItemsRef = useRef<CampaignAdvancedContentItem[]>(
-    initialAdvancedContentSourceMode === 'group'
+    hasSavedAdvancedGroupSnapshot
       ? initialActiveAdvancedContentItems
       : []
   )
-  useEffect(() => {
-    if (advancedContentSourceMode === 'manual') {
-      manualAdvancedContentItemsRef.current = normalizeAdvancedContentItems(formData.advancedContentItems)
-    }
-  }, [advancedContentSourceMode, formData.advancedContentItems])
   const campaignNameValueRef = useRef(formData.name)
   const campaignNameUserEditedRef = useRef(Boolean((campaign?.name || '').trim()))
   const lastAiCampaignNameRef = useRef('')
@@ -4146,10 +4133,6 @@ export default function CampaignFormModal({
       ? contentTemplateImagesToSnapshots(resolved.imageUrls)
       : { snapshots: [] as CampaignMediaSnapshot[], invalidCount: 0 }
     const snapshots = channelName === 'facebook_comment' ? resolvedSnapshots.slice(0, 1) : resolvedSnapshots
-    const useAdvanced = target === 'content' && canUseAdvancedContentMode && (isAdvancedContentMode || variants.length > 1)
-    const firstContent = applyRich
-      ? escapeFormattedContentVariantSeparators(variants[0])
-      : serializeContentVariants([variants[0]])
     const serializedContent = applyRich
       ? serializeFormattedContentVariants(variants)
       : serializeContentVariants(variants)
@@ -4165,26 +4148,14 @@ export default function CampaignFormModal({
       } else if (target !== 'content') {
         setAiContentValue(target, serializeContentVariants(variants))
       } else {
-        setAdvancedContentSourceMode('manual')
         setPendingContentTemplateGroupId(null)
         setFormData(current => ({
           ...current,
-          content: useAdvanced ? firstContent : serializedContent,
-          advancedContentEnabled: useAdvanced,
-          advancedContentItems: useAdvanced
-            ? variants.map((variant, variantIndex) => createAdvancedContentItem({
-              content: variant,
-              mediaOption: snapshots.length > 0 ? 'all' : 'none',
-              mediaItems: snapshots,
-              randomMediaCount: 3,
-              ...(channelName === 'email' ? { emailSubject: String(resolved.subject || '') } : {}),
-              sourceTemplateId: template.id,
-              sourceTemplateName: template.name,
-              sourceVariantIndex: resolved.variantIndexes[variantIndex] ?? variantIndex
-            }))
-            : [],
-          images: useAdvanced ? [] : snapshots,
-          imageOption: !useAdvanced && snapshots.length > 0 ? 'all' : 'none',
+          content: serializedContent,
+          advancedContentEnabled: false,
+          advancedContentItems: [],
+          images: snapshots,
+          imageOption: snapshots.length > 0 ? 'all' : 'none',
           randomImageCount: 3,
           formattedContentEnabled: channelName !== 'email' && applyRich && supportsFormattedContent(current.actionId),
           rewriteContentEachRun: applyRich ? false : current.rewriteContentEachRun,
@@ -11168,32 +11139,12 @@ export default function CampaignFormModal({
     })
   }
 
-  const switchAdvancedContentSource = (nextMode: AdvancedContentSourceMode) => {
-    if (nextMode === advancedContentSourceMode) return
-
-    if (nextMode === 'group') {
-      manualAdvancedContentItemsRef.current = normalizeAdvancedContentItems(formData.advancedContentItems)
-      setAdvancedContentSourceMode('group')
-      setCandidateContentTemplateGroupId(current => current ?? savedAdvancedGroupSnapshot?.groupId ?? null)
-      return
-    }
-
-    setAdvancedContentSourceMode('manual')
-    setPendingContentTemplateGroupId(null)
-    setFormData(prev => ({
-      ...prev,
-      // The immutable group snapshot is deliberately not copied into Manual.
-      advancedContentItems: manualAdvancedContentItemsRef.current
-    }))
-  }
-
   const switchToSimpleContentMode = () => {
     if (advancedContentSourceMode !== 'group') {
       setFormData(prev => ({ ...prev, advancedContentEnabled: false }))
       return
     }
 
-    setAdvancedContentSourceMode('manual')
     setPendingContentTemplateGroupId(null)
     setFormData(current => ({
       ...current,
@@ -11207,7 +11158,6 @@ export default function CampaignFormModal({
   const switchToAdvancedContentMode = () => {
     if (formData.advancedContentEnabled) return
     manualAdvancedContentItemsRef.current = normalizeAdvancedContentItems(formData.advancedContentItems)
-    setAdvancedContentSourceMode('group')
     setCandidateContentTemplateGroupId(current => current ?? savedAdvancedGroupSnapshot?.groupId ?? null)
     setFormData(prev => ({ ...prev, advancedContentEnabled: true }))
   }
@@ -11262,35 +11212,11 @@ export default function CampaignFormModal({
             <span className="campaign-advanced-source-card-icon"><FolderOpen size={17} /></span>
             <div className="campaign-advanced-source-card-copy">
               <strong>Nguồn nội dung nâng cao</strong>
-              <span>Chọn nhóm mẫu có sẵn hoặc tự soạn từng nội dung mới.</span>
+              <span>Chọn nhóm mẫu có sẵn để tạo snapshot nội dung cho chiến dịch.</span>
             </div>
           </div>
 
           <div className="campaign-advanced-source-card-body">
-            <div className="campaign-advanced-source-mode-row">
-              <div className="campaign-content-mode-segmented" role="group" aria-label="Nguồn nội dung nâng cao">
-                <button
-                  type="button"
-                  className={advancedContentSourceMode === 'group' ? 'active' : ''}
-                  onClick={() => switchAdvancedContentSource('group')}
-                >
-                  Nhóm mẫu
-                </button>
-                <button
-                  type="button"
-                  className={advancedContentSourceMode === 'manual' ? 'active' : ''}
-                  onClick={() => switchAdvancedContentSource('manual')}
-                >
-                  Thủ công
-                </button>
-              </div>
-              <div className="campaign-advanced-source-mode-note">
-                {advancedContentSourceMode === 'group'
-                  ? 'Nội dung phù hợp được chụp thành snapshot khi lưu chiến dịch; runtime chỉ dùng snapshot đã lưu.'
-                  : 'Tạo và chỉnh sửa từng nội dung nâng cao trực tiếp trong chiến dịch.'}
-              </div>
-            </div>
-
             {advancedContentSourceMode === 'group' ? (
               <div className="campaign-advanced-group-picker">
                 <label>Chọn nhóm mẫu cho {channel ? getContentTemplateChannelLabel(channel) : 'hành động đã chọn'} <span className="required">*</span></label>
@@ -12168,8 +12094,8 @@ export default function CampaignFormModal({
                             {channelName === 'facebook_post'
                               ? 'Đăng bài Facebook'
                               : channelName === 'facebook_message'
-                                ? 'Messenger'
-                                : 'Bình luận'}
+                                ? 'Tin nhắn Facebook'
+                                : 'Comment Facebook'}
                           </button>
                         ))}
                       </div>

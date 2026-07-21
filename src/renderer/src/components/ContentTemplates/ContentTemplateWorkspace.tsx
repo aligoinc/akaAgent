@@ -68,16 +68,16 @@ const CHANNEL_META: Record<ContentTemplateChannelName, {
     description: 'Nội dung và ảnh riêng cho các chiến dịch nhắn tin Zalo.'
   },
   facebook_post: {
-    label: 'Facebook Post', shortLabel: 'Facebook Post', mono: 'f', maxImages: 10, richCapable: true,
+    label: 'Đăng bài Facebook', shortLabel: 'Đăng bài Facebook', mono: 'f', maxImages: 10, richCapable: true,
     description: 'Nội dung dùng cho bài đăng Facebook profile, page hoặc group.'
   },
   facebook_message: {
-    label: 'Facebook Message', shortLabel: 'Facebook Message', mono: 'f', maxImages: 10, richCapable: false,
-    description: 'Tin nhắn Messenger dạng văn bản thường.'
+    label: 'Tin nhắn Facebook', shortLabel: 'Tin nhắn Facebook', mono: 'f', maxImages: 10, richCapable: false,
+    description: 'Tin nhắn Facebook dạng văn bản thường.'
   },
   facebook_comment: {
-    label: 'Facebook Comment', shortLabel: 'Facebook Comment', mono: 'f', maxImages: 1, richCapable: false,
-    description: 'Bình luận Facebook dạng văn bản thường, tối đa một ảnh.'
+    label: 'Comment Facebook', shortLabel: 'Comment Facebook', mono: 'f', maxImages: 1, richCapable: false,
+    description: 'Comment Facebook dạng văn bản thường, tối đa một ảnh.'
   },
   email: {
     label: 'Email', shortLabel: 'Email', mono: '@', maxImages: 10, richCapable: true,
