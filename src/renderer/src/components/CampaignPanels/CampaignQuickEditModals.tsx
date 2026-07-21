@@ -773,6 +773,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   const isVoiceCallCampaign = actionId === VOICE_CALL_ACTION_ID
   const isMobileManagedSmsCampaign = isSmsCampaign || isVoiceCallCampaign
   const isGroupSnapshotSource = extra.advancedContentSource === 'group_snapshot' && !!extra.advancedContentGroupSnapshot
+  const isLegacyManualAdvancedSource = extra.advancedContentEnabled === true && !isGroupSnapshotSource
+  const isAdvancedContentReadOnly = isGroupSnapshotSource || isLegacyManualAdvancedSource
   const canUseFormattedContent = supportsFormattedContent(actionId)
   const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
@@ -825,7 +827,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
     actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
     actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
   ) && extra.enableAddFriend === true
-  const hasAnyEditableField = showMainContentSection || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
+  const hasAnyEditableField = (!isLegacyManualAdvancedSource && showMainContentSection) || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
   const canUseAdvancedContentMode = showMainContentSection && !isVoiceCallCampaign && contentTemplateChannel !== undefined
   const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
@@ -1231,7 +1233,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
             type="button"
             className={!formData.advancedContentEnabled ? 'active' : ''}
             onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: false }))}
-            disabled={isGroupSnapshotSource}
+            disabled={isAdvancedContentReadOnly}
           >
             Đơn giản
           </button>
@@ -1239,14 +1241,16 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
             type="button"
             className={formData.advancedContentEnabled ? 'active' : ''}
             onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: true }))}
-            disabled={isGroupSnapshotSource}
+            disabled={isAdvancedContentReadOnly}
           >
             Nâng cao
           </button>
         </div>
         <div className="campaign-content-mode-note">
           {isGroupSnapshotSource
-            ? `Snapshot chỉ đọc từ nhóm “${extra.advancedContentGroupSnapshot?.groupName || '-'}”. Hãy mở form sửa đầy đủ để chuyển sang Thủ công.`
+            ? `Snapshot chỉ đọc từ nhóm “${extra.advancedContentGroupSnapshot?.groupName || '-'}”. Hãy mở form sửa đầy đủ để đổi hoặc cập nhật Nhóm mẫu.`
+            : isLegacyManualAdvancedSource
+              ? 'Nội dung nâng cao thủ công cũ chỉ đọc. Hãy mở form sửa đầy đủ và chọn Nhóm mẫu để thay đổi nguồn nội dung.'
             : note}
         </div>
       </div>
@@ -1269,6 +1273,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
           <input
             type="checkbox"
             checked={formData.smsUseUnicode}
+            disabled={isLegacyManualAdvancedSource}
             onChange={event => setFormData(prev => ({ ...prev, smsUseUnicode: event.target.checked }))}
           />
           <span>Tiếng Việt có dấu</span>
@@ -1277,6 +1282,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
           <input
             type="checkbox"
             checked={formData.smsKeepNewLines}
+            disabled={isLegacyManualAdvancedSource}
             onChange={event => setFormData(prev => ({ ...prev, smsKeepNewLines: event.target.checked }))}
           />
           <span>Không loại bỏ xuống dòng</span>
@@ -1287,10 +1293,10 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
 
   const renderAdvancedContentItemMedia = (item: CampaignAdvancedContentItem) => {
     if (isMobileManagedSmsCampaign) return null
-    if (isGroupSnapshotSource) {
+    if (isAdvancedContentReadOnly) {
       const mediaCount = (item.mediaItems || []).length
       return mediaCount > 0
-        ? <div className="schedule-hint" style={{ marginTop: 8 }}>{mediaCount} media trong snapshot.</div>
+        ? <div className="schedule-hint" style={{ marginTop: 8 }}>{mediaCount} media chỉ đọc.</div>
         : null
     }
 
@@ -1425,7 +1431,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
     <div className="campaign-advanced-content-editor">
       <div className="campaign-advanced-content-header">
         <div>
-          <strong>{isGroupSnapshotSource ? 'Snapshot nội dung từ nhóm mẫu' : 'Nội dung nâng cao'}</strong>
+          <strong>{isGroupSnapshotSource ? 'Snapshot nội dung từ nhóm mẫu' : isLegacyManualAdvancedSource ? 'Nội dung nâng cao cũ (chỉ đọc)' : 'Nội dung nâng cao'}</strong>
           <span className="campaign-advanced-content-count">{normalizedAdvancedContentItems.length} nội dung</span>
         </div>
       </div>
@@ -1448,10 +1454,16 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         </div>
       )}
 
+      {isLegacyManualAdvancedSource && (
+        <div className="schedule-hint" style={{ marginBottom: 10 }}>
+          Chiến dịch vẫn tiếp tục chạy bằng nội dung nâng cao thủ công đã lưu. Muốn thay đổi nội dung, hãy mở form sửa đầy đủ và chọn Nhóm mẫu.
+        </div>
+      )}
+
       {formData.advancedContentItems.length === 0 ? (
         <div className="campaign-advanced-content-entry">
           <div className="campaign-advanced-content-empty">Chưa có nội dung nâng cao.</div>
-          {!isGroupSnapshotSource && <div className="campaign-advanced-content-add-row">
+          {!isAdvancedContentReadOnly && <div className="campaign-advanced-content-add-row">
             <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
               <Plus size={14} />
               <span>Thêm nội dung</span>
@@ -1467,7 +1479,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
                 {item.sourceTemplateName ? ` · ${item.sourceTemplateName}` : ''}
                 {item.sourceVariantIndex !== undefined ? ` · biến thể ${item.sourceVariantIndex + 1}` : ''}
               </strong>
-              {!isGroupSnapshotSource && <div className="campaign-advanced-content-actions">
+              {!isAdvancedContentReadOnly && <div className="campaign-advanced-content-actions">
                 <button
                   type="button"
                   className="btn-icon"
@@ -1494,11 +1506,11 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
                   className="stepper-input"
                   value={getAdvancedEmailSubject(item)}
                   onChange={event => setAdvancedContentItem(item.id, { emailSubject: event.target.value })}
-                  readOnly={isGroupSnapshotSource}
+                  readOnly={isAdvancedContentReadOnly}
                 />
               </div>
             )}
-            {isGroupSnapshotSource ? (
+            {isAdvancedContentReadOnly ? (
               <textarea
                 className="stepper-textarea"
                 value={isRichContentEditorEnabled ? formattedContentToPlainText(item.content) : item.content}
@@ -1521,7 +1533,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
             )}
             {renderAdvancedContentItemMedia(item)}
           </div>
-          {!isGroupSnapshotSource && index === formData.advancedContentItems.length - 1 && (
+          {!isAdvancedContentReadOnly && index === formData.advancedContentItems.length - 1 && (
             <div className="campaign-advanced-content-add-row">
               <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
                 <Plus size={14} />
@@ -1539,11 +1551,11 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
       showAlert('Loại chiến dịch này không có nội dung hoặc media để cập nhật.', 'info')
       return
     }
-    if (isEmailCampaign && !isAdvancedContentMode && !formData.emailSubject.trim()) {
+    if (!isLegacyManualAdvancedSource && isEmailCampaign && !isAdvancedContentMode && !formData.emailSubject.trim()) {
       showAlert('Vui lòng nhập tiêu đề email.', 'error')
       return
     }
-    if (showMainContentSection) {
+    if (showMainContentSection && !isLegacyManualAdvancedSource) {
       const hasMainContentText = isAdvancedContentMode
         ? normalizedAdvancedContentItems.some(item => isRichContentEditorEnabled
           ? !isFormattedContentEmpty(item.content)
@@ -1598,14 +1610,14 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
       showAlert('Nội dung kết bạn không được quá 150 ký tự.', 'error')
       return
     }
-    const postBackgroundError = getPostBackgroundValidationError()
+    const postBackgroundError = isLegacyManualAdvancedSource ? null : getPostBackgroundValidationError()
     if (postBackgroundError) {
       showAlert(postBackgroundError, 'error')
       return
     }
-    if (showMainMedia && !isAdvancedContentMode && !validateSelectedMedia(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) return
-    if (!validateAdvancedContentItems()) return
-    if (!validateAdvancedContentMedia()) return
+    if (!isLegacyManualAdvancedSource && showMainMedia && !isAdvancedContentMode && !validateSelectedMedia(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) return
+    if (!isLegacyManualAdvancedSource && !validateAdvancedContentItems()) return
+    if (!isLegacyManualAdvancedSource && !validateAdvancedContentMedia()) return
     if (isCommentSeedingCampaign && !isAdvancedContentMode && !validateSelectedMedia('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
     if (showCommentContent && !validateSelectedMedia('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
 
@@ -1616,7 +1628,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         ...(campaign.extraSettings || {})
       }
 
-      if (showMainContentSection) {
+      if (showMainContentSection && !isLegacyManualAdvancedSource) {
         nextExtraSettings.advancedContentEnabled = canUseAdvancedContentMode ? formData.advancedContentEnabled : false
         const convertedGroupSnapshotItems = isGroupSnapshotSource &&
           extra.formattedContentEnabled === true &&
@@ -1672,20 +1684,24 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         }
       }
       if (isEmailCampaign) {
-        const firstAdvancedEmailSubject = normalizedAdvancedContentItems[0]?.emailSubject
-        nextExtraSettings.emailSubject = isAdvancedContentMode
-          ? String(firstAdvancedEmailSubject == null && !isGroupSnapshotSource
-            ? formData.emailSubject
-            : firstAdvancedEmailSubject ?? '').trim()
-          : formData.emailSubject.trim()
-        nextExtraSettings.emailBodyIsHtml = formData.emailBodyIsHtml
-        nextExtraSettings.emailCheckLinkClicks = formData.emailCheckLinkClicks
+        if (!isLegacyManualAdvancedSource) {
+          const firstAdvancedEmailSubject = normalizedAdvancedContentItems[0]?.emailSubject
+          nextExtraSettings.emailSubject = isAdvancedContentMode
+            ? String(firstAdvancedEmailSubject == null && !isGroupSnapshotSource
+              ? formData.emailSubject
+              : firstAdvancedEmailSubject ?? '').trim()
+            : formData.emailSubject.trim()
+          nextExtraSettings.emailBodyIsHtml = formData.emailBodyIsHtml
+        }
+        if (!isLegacyManualAdvancedSource) {
+          nextExtraSettings.emailCheckLinkClicks = formData.emailCheckLinkClicks
+        }
       }
-      if (isSmsCampaign) {
+      if (isSmsCampaign && !isLegacyManualAdvancedSource) {
         nextExtraSettings.smsUseUnicode = formData.smsUseUnicode
         nextExtraSettings.smsKeepNewLines = formData.smsKeepNewLines
       }
-      if (isPostBackgroundCampaign) {
+      if (isPostBackgroundCampaign && !isLegacyManualAdvancedSource) {
         nextExtraSettings.postWithBackground = isFormattedContentEnabled ? false : isPostBackgroundActive
         if (isPostBackgroundActive) {
           nextExtraSettings.copyContentFromSource = false
@@ -1695,10 +1711,10 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
           nextExtraSettings.postAsReels = false
         }
       }
-      if (isZaloMessageCampaign) {
+      if (isZaloMessageCampaign && !isLegacyManualAdvancedSource) {
         nextExtraSettings.zaloMessageSendMode = isFormattedContentEnabled ? 'normal' : formData.zaloMessageSendMode
       }
-      if (showCommentContent || isCommentSeedingCampaign) {
+      if (showCommentContent || (isCommentSeedingCampaign && !isLegacyManualAdvancedSource)) {
         nextExtraSettings.commentContent = formData.commentContent
         nextExtraSettings.rewriteCommentContentEachRun = formData.rewriteCommentContentEachRun
         nextExtraSettings.commentImageOption = formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none'
@@ -1715,9 +1731,9 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
       }
 
       await updateCampaign(campaign.id, {
-        ...(showMainContentSection && !isCommentSeedingCampaign ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
+        ...(showMainContentSection && !isCommentSeedingCampaign && !isLegacyManualAdvancedSource ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
         extraSettings: nextExtraSettings,
-        ...(showMainMedia ? { images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
+        ...(showMainMedia && !isLegacyManualAdvancedSource ? { images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
       })
       showAlert('Đã cập nhật nội dung và media.', 'success')
       shouldClose = true
@@ -1768,7 +1784,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
                     <input
                       type="checkbox"
                       checked={isPostBackgroundActive}
-                      disabled={isPostBackgroundDisabled}
+                      disabled={isPostBackgroundDisabled || isLegacyManualAdvancedSource}
                       onChange={event => {
                         const checked = event.target.checked
                         const apply = () => setFormData(current => {
@@ -1811,7 +1827,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
                       <input
                         type="checkbox"
                         checked={formData.emailBodyIsHtml}
-                        disabled={isGroupSnapshotSource}
+                        disabled={isAdvancedContentReadOnly}
                         onChange={event => {
                           const checked = event.target.checked
                           setFormData(current => checked
@@ -1829,6 +1845,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
                       <input
                         type="checkbox"
                         checked={formData.emailCheckLinkClicks}
+                        disabled={isLegacyManualAdvancedSource}
                         onChange={event => setFormData(prev => ({ ...prev, emailCheckLinkClicks: event.target.checked }))}
                       />
                       <span>Kiểm tra click vào link</span>
@@ -1839,7 +1856,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
 
               {renderContentModeSegmented()}
 
-              {canUseFormattedContent && !isGroupSnapshotSource && (
+              {canUseFormattedContent && !isAdvancedContentReadOnly && (
                 <div className="stepper-form-group">
                   <label className="schedule-checkbox-label">
                     <input
@@ -1860,7 +1877,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
                 <>
                   {renderAdvancedContentEditor()}
                   {renderSmsContentOptions()}
-                  {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && (
+                  {!isAdvancedContentReadOnly && !isMobileManagedSmsCampaign && !isRichContentEditorEnabled && (
                     <label className="schedule-checkbox-label campaign-rewrite-run-toggle">
                       <input
                         type="checkbox"

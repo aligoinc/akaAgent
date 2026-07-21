@@ -49,9 +49,9 @@ export const getContentTemplateChannelLabel = (channelName: ContentTemplateChann
   const labels: Record<ContentTemplateChannelName, string> = {
     sms: 'SMS',
     zalo_message: 'Tin nhắn Zalo',
-    facebook_post: 'Facebook Post',
-    facebook_message: 'Facebook Message',
-    facebook_comment: 'Facebook Comment',
+    facebook_post: 'Đăng bài Facebook',
+    facebook_message: 'Tin nhắn Facebook',
+    facebook_comment: 'Comment Facebook',
     email: 'Email'
   }
   return labels[channelName]
