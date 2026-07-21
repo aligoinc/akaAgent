@@ -861,7 +861,7 @@ export class PageController {
     }
   }
 
-  /** Drag-and-drop file qua DragEvent — dùng cho FB composer/messenger */
+  /** Drag-and-drop file vào một editor target — dùng cho FB composer/messenger */
   async dropFile(selector: string, filePaths: string[]): Promise<{ fileCount: number }> {
     if (!filePaths || filePaths.length === 0) return { fileCount: 0 }
     const resolved = await this.resolveFilePaths(filePaths)
@@ -903,30 +903,29 @@ export class PageController {
             dt.effectAllowed = 'all';
             dt.dropEffect = 'copy';
 
-            var targets = [];
-            function addTarget(el) {
-              if (el && targets.indexOf(el) === -1) targets.push(el);
+            var target = b;
+            var isEditor = false;
+            try {
+              isEditor = b.isContentEditable || b.matches('textarea, [role="textbox"]');
+            } catch (e) {}
+            if (!isEditor) {
+              target = b.querySelector('[contenteditable]:not([contenteditable="false"])')
+                || b.querySelector('[role="textbox"]')
+                || b.querySelector('textarea')
+                || b;
             }
-            addTarget(b);
-            addTarget(b.querySelector('[contenteditable="true"]'));
-            addTarget(b.querySelector('[role="textbox"]'));
-            addTarget(b.querySelector('[aria-label*="Photo"], [aria-label*="photo"], [aria-label*="Ảnh"], [aria-label*="ảnh"]'));
-            addTarget(c.querySelector('[role="dialog"] [contenteditable="true"]'));
-            addTarget(c.querySelector('[role="dialog"]'));
 
             ['dragenter', 'dragover', 'drop'].forEach(function(name) {
-              targets.forEach(function(target) {
-                var eventInit = { bubbles: true, cancelable: true, composed: true, dataTransfer: dt, view: c.defaultView };
-                var d;
-                try {
-                  d = new DragEvent(name, eventInit);
-                } catch (e) {
-                  d = c.createEvent('DragEvent');
-                  d.initEvent(name, true, true);
-                }
-                try { Object.defineProperty(d, 'dataTransfer', { value: dt }); } catch (e) {}
-                target.dispatchEvent(d);
-              });
+              var eventInit = { bubbles: true, cancelable: true, composed: true, dataTransfer: dt, view: c.defaultView };
+              var d;
+              try {
+                d = new DragEvent(name, eventInit);
+              } catch (e) {
+                d = c.createEvent('DragEvent');
+                d.initEvent(name, true, true);
+              }
+              try { Object.defineProperty(d, 'dataTransfer', { value: dt }); } catch (e) {}
+              target.dispatchEvent(d);
             });
 
             if (a.parentElement) a.parentElement.removeChild(a);
