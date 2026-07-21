@@ -30,7 +30,6 @@ export class SupabaseService {
     await campaignRepo.resetCampaignNotes(staffId)
     await campaignRepo.resetRunningCampaignInputStatuses(staffId)
     await campaignRepo.resetRunningCampaignInputDataStatuses(staffId)
-    await accountActionRepo.enableDueAccountActions()
   }
 
   recoverServerZaloRunningState(staffId: number, options?: accountRepo.ServerZaloRecoveryOptions) {
@@ -42,9 +41,7 @@ export class SupabaseService {
   }
 
   async resetDesktopRunningStatuses(staffId: number, excludeZalo: boolean, zaloUncertainNoRetry = false) {
-    const result = await accountRepo.resetDesktopRunningStatuses(staffId, excludeZalo, zaloUncertainNoRetry)
-    await accountActionRepo.enableDueAccountActions()
-    return result
+    return accountRepo.resetDesktopRunningStatuses(staffId, excludeZalo, zaloUncertainNoRetry)
   }
 
   // =========== ACCOUNTS ===========
@@ -54,6 +51,23 @@ export class SupabaseService {
   createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }
   updateAccount(id: number, updates: Partial<AutoAccount>, options?: accountRepo.UpdateAccountOptions) {
     return accountRepo.updateAccount(id, updates, options)
+  }
+  claimNonZaloAccountRuntimeOperation(
+    id: number,
+    flatformType: string,
+    previousStatus: accountRepo.AccountRuntimePreviousStatus,
+    requiresLogin = true
+  ) {
+    return accountRepo.claimNonZaloAccountRuntimeOperation(id, flatformType, previousStatus, requiresLogin)
+  }
+  releaseNonZaloAccountRuntimeOperation(
+    id: number,
+    flatformType: string,
+    previousStatus: accountRepo.AccountRuntimePreviousStatus,
+    claimToken: string,
+    staffId?: number
+  ) {
+    return accountRepo.releaseNonZaloAccountRuntimeOperation(id, flatformType, previousStatus, claimToken, staffId)
   }
   setZaloServerAccountStatus(id: number, status: accountRepo.ZaloServerAccountControlStatus) {
     return accountRepo.setZaloServerAccountStatus(id, status)
@@ -91,9 +105,10 @@ export class SupabaseService {
   releaseZaloAccountRuntimeOperation(
     id: number,
     runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,
-    previousStatus: 'chờ xử lý' | 'tạm dừng'
+    previousStatus: 'chờ xử lý' | 'tạm dừng',
+    staffId?: number
   ) {
-    return accountRepo.releaseZaloAccountRuntimeOperation(id, runtimeTarget, previousStatus)
+    return accountRepo.releaseZaloAccountRuntimeOperation(id, runtimeTarget, previousStatus, staffId)
   }
   inspectStaffZaloRunningState(staffId: number) { return accountRepo.inspectStaffZaloRunningState(staffId) }
   getAccountEmailSession(id: number) { return accountRepo.getAccountEmailSession(id) }

@@ -20,6 +20,14 @@ interface ActiveContactLoad {
   runtimePlatform: 'zalo' | 'other'
 }
 
+type AccountRuntimePreviousStatus = 'chờ xử lý' | 'tạm dừng'
+interface AccountRuntimeScanClaim {
+  previousStatus: AccountRuntimePreviousStatus
+  claimToken: string | null
+  staffId: number | null
+}
+const ACCOUNT_RELEASE_RETRY_DELAYS_MS = [500, 1500] as const
+
 interface ContactLoadOptions {
   workflowName?: string
   targetUrl?: string
@@ -416,12 +424,16 @@ export class ContactLoader {
       targetUrl: 'https://business.facebook.com/content_management'
     })
     const runnableAccount = latestAccount!
-    const previousStatus = runnableAccount.status as 'chờ xử lý' | 'tạm dừng'
+    let runtimeClaim: AccountRuntimeScanClaim = {
+      previousStatus: runnableAccount.status as AccountRuntimePreviousStatus,
+      claimToken: null,
+      staffId: null
+    }
     const variables = loadState.variables
     let claimedAccount = false
 
     try {
-      await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
+      runtimeClaim = await this.claimAccountForScan(runnableAccount)
       claimedAccount = true
 
       this.sendProgress(`🔄 Đang lấy token để quét inbox page ${normalizedPageName || normalizedPageUid}...`, {
@@ -590,14 +602,14 @@ export class ContactLoader {
         error: errMsg
       }, loadState.runKey)
     } finally {
+      if (claimedAccount) {
+        await this.restoreAccountStatus(runnableAccount, runtimeClaim)
+      }
       if (this.activeLoads.get(accountId) === loadState) {
         this.activeLoads.delete(accountId)
         this.cancelledLoads.delete(accountId)
         this.stopBackgroundPreview(accountId)
         this.backgroundPages.destroy(accountId)
-        if (claimedAccount) {
-          await this.restoreAccountStatus(accountId, previousStatus)
-        }
       }
     }
   }
@@ -680,12 +692,16 @@ export class ContactLoader {
       targetUrl: 'zalo://friends',
       runtimePlatform: 'zalo'
     })
-    let previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
+    let runtimeClaim: AccountRuntimeScanClaim = {
+      previousStatus: latestAccount!.status as AccountRuntimePreviousStatus,
+      claimToken: null,
+      staffId: null
+    }
     const variables = loadState.variables
     let claimedAccount = false
 
     try {
-      previousStatus = await this.claimZaloAccountForScan(accountId)
+      runtimeClaim = await this.claimAccountForScan(latestAccount!)
       claimedAccount = true
 
       if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
@@ -798,12 +814,12 @@ export class ContactLoader {
         error: errMsg
       }, loadState.runKey)
     } finally {
+      if (claimedAccount) {
+        await this.restoreAccountStatus(latestAccount!, runtimeClaim)
+      }
       if (this.activeLoads.get(accountId) === loadState) {
         this.activeLoads.delete(accountId)
         this.cancelledLoads.delete(accountId)
-        if (claimedAccount) {
-          await this.restoreAccountStatus(accountId, previousStatus)
-        }
       }
     }
   }
@@ -897,12 +913,16 @@ export class ContactLoader {
       targetUrl: 'zalo://groups',
       runtimePlatform: 'zalo'
     })
-    let previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
+    let runtimeClaim: AccountRuntimeScanClaim = {
+      previousStatus: latestAccount!.status as AccountRuntimePreviousStatus,
+      claimToken: null,
+      staffId: null
+    }
     const variables = loadState.variables
     let claimedAccount = false
 
     try {
-      previousStatus = await this.claimZaloAccountForScan(accountId)
+      runtimeClaim = await this.claimAccountForScan(latestAccount!)
       claimedAccount = true
 
       if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
@@ -1018,12 +1038,12 @@ export class ContactLoader {
         error: errMsg
       }, loadState.runKey)
     } finally {
+      if (claimedAccount) {
+        await this.restoreAccountStatus(latestAccount!, runtimeClaim)
+      }
       if (this.activeLoads.get(accountId) === loadState) {
         this.activeLoads.delete(accountId)
         this.cancelledLoads.delete(accountId)
-        if (claimedAccount) {
-          await this.restoreAccountStatus(accountId, previousStatus)
-        }
       }
     }
   }
@@ -1094,13 +1114,17 @@ export class ContactLoader {
       targetUrl: scanTarget || undefined,
       runtimePlatform: 'zalo'
     })
-    let previousStatus = latestAccount!.status as 'chờ xử lý' | 'tạm dừng'
+    let runtimeClaim: AccountRuntimeScanClaim = {
+      previousStatus: latestAccount!.status as AccountRuntimePreviousStatus,
+      claimToken: null,
+      staffId: null
+    }
     const variables = loadState.variables
     let claimedAccount = false
     let datasetContext: ContactDatasetScanContext | null = null
 
     try {
-      previousStatus = await this.claimZaloAccountForScan(accountId)
+      runtimeClaim = await this.claimAccountForScan(latestAccount!)
       claimedAccount = true
 
       if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
@@ -1309,12 +1333,12 @@ export class ContactLoader {
         error: errMsg
       }, loadState.runKey)
     } finally {
+      if (claimedAccount) {
+        await this.restoreAccountStatus(latestAccount!, runtimeClaim)
+      }
       if (this.activeLoads.get(accountId) === loadState) {
         this.activeLoads.delete(accountId)
         this.cancelledLoads.delete(accountId)
-        if (claimedAccount) {
-          await this.restoreAccountStatus(accountId, previousStatus)
-        }
       }
     }
   }
@@ -1376,12 +1400,16 @@ export class ContactLoader {
 
     const loadState = this.startLoad(accountId, contactType, workflow.defaultVariables, options)
     const runnableAccount = latestAccount!
-    const previousStatus = runnableAccount.status as 'chờ xử lý' | 'tạm dừng'
+    let runtimeClaim: AccountRuntimeScanClaim = {
+      previousStatus: runnableAccount.status as AccountRuntimePreviousStatus,
+      claimToken: null,
+      staffId: null
+    }
     const variables = loadState.variables
     let claimedAccount = false
 
     try {
-      await this.updateAccountAndBroadcast(accountId, { status: 'đang chạy' })
+      runtimeClaim = await this.claimAccountForScan(runnableAccount)
       claimedAccount = true
 
       this.sendProgress(`🔄 Đang load danh sách ${typeName}...`, {
@@ -1606,14 +1634,14 @@ export class ContactLoader {
         error: errMsg
       }, loadState.runKey)
     } finally {
+      if (claimedAccount) {
+        await this.restoreAccountStatus(runnableAccount, runtimeClaim)
+      }
       if (this.activeLoads.get(accountId) === loadState) {
         this.activeLoads.delete(accountId)
         this.cancelledLoads.delete(accountId)
         this.stopBackgroundPreview(accountId)
         this.backgroundPages.destroy(accountId)
-        if (claimedAccount) {
-          await this.restoreAccountStatus(accountId, previousStatus)
-        }
       }
     }
   }
@@ -1938,8 +1966,7 @@ export class ContactLoader {
     }
     const existing = this.activeLoads.get(accountId)
     if (existing) {
-      existing.variables.contactScanCancelled = true
-      existing.controller.abort()
+      throw new Error('Tài khoản đang quét data. Vui lòng đợi tác vụ hiện tại hoàn tất rồi thử lại.')
     }
 
     this.cancelledLoads.delete(accountId)
@@ -2435,17 +2462,40 @@ export class ContactLoader {
     return 'Đang quét page nền'
   }
 
-  private async updateAccountAndBroadcast(id: number, updates: Partial<AutoAccount>): Promise<AutoAccount> {
-    const updated = await this.supabase.updateAccount(id, updates)
+  private broadcastAccountStatusUpdated(): void {
     try {
       this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
     } catch {}
-    return updated
+  }
+
+  private async claimAccountForScan(account: AutoAccount): Promise<AccountRuntimeScanClaim> {
+    if (String(account.flatformType || '').trim().toLowerCase() === 'zalo') {
+      return this.claimZaloAccountForScan(account.id)
+    }
+
+    const previousStatus = account.status
+    if (previousStatus !== 'chờ xử lý' && previousStatus !== 'tạm dừng') {
+      throw new Error('Tài khoản đang chạy chiến dịch hoặc tác vụ khác.')
+    }
+    const claim = await this.supabase.claimNonZaloAccountRuntimeOperation(
+      account.id,
+      account.flatformType,
+      previousStatus
+    )
+    if (!claim.claimed || !claim.previousStatus || !claim.claimToken) {
+      throw new Error('Tài khoản đang chạy chiến dịch hoặc tác vụ khác.')
+    }
+    this.broadcastAccountStatusUpdated()
+    return {
+      previousStatus: claim.previousStatus,
+      claimToken: claim.claimToken,
+      staffId: claim.staffId
+    }
   }
 
   private async claimZaloAccountForScan(
     accountId: number
-  ): Promise<'chờ xử lý' | 'tạm dừng'> {
+  ): Promise<AccountRuntimeScanClaim> {
     if (this.zaloRuntimeClaimsAbandoned) {
       throw new Error('Runtime Zalo của phiên cũ đang đóng. Vui lòng mở lại ứng dụng.')
     }
@@ -2456,25 +2506,55 @@ export class ContactLoader {
         : 'Tài khoản đang chạy chiến dịch hoặc tác vụ khác.'
       throw new Error(reason)
     }
-    try {
-      this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
-    } catch {}
-    return claim.previousStatus
+    this.broadcastAccountStatusUpdated()
+    return {
+      previousStatus: claim.previousStatus,
+      claimToken: null,
+      staffId: claim.staffId
+    }
   }
 
-  private async restoreAccountStatus(accountId: number, previousStatus: 'chờ xử lý' | 'tạm dừng'): Promise<void> {
-    if (this.zaloRuntimeClaimsAbandoned) return
-    try {
-      const released = await this.supabase.releaseZaloAccountRuntimeOperation(
-        accountId,
-        this.zaloRuntimeTarget,
-        previousStatus
-      )
-      if (released) {
-        try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+  private async restoreAccountStatus(
+    account: AutoAccount,
+    claim: AccountRuntimeScanClaim
+  ): Promise<void> {
+    const isZalo = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
+    if (isZalo && this.zaloRuntimeClaimsAbandoned) return
+    if (!isZalo && !claim.claimToken) {
+      console.error('Failed to restore account after contact scan: missing non-Zalo claim token')
+      return
+    }
+    if (!claim.staffId) {
+      console.error('Failed to restore account after contact scan: missing runtime staff identity')
+      return
+    }
+
+    const retryDelays = isZalo ? [] : ACCOUNT_RELEASE_RETRY_DELAYS_MS
+    for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+      try {
+        const released = isZalo
+          ? await this.supabase.releaseZaloAccountRuntimeOperation(
+            account.id,
+            this.zaloRuntimeTarget,
+            claim.previousStatus,
+            claim.staffId
+          )
+          : await this.supabase.releaseNonZaloAccountRuntimeOperation(
+            account.id,
+            account.flatformType,
+            claim.previousStatus,
+            claim.claimToken!,
+            claim.staffId
+          )
+        if (released) this.broadcastAccountStatusUpdated()
+        return
+      } catch (err) {
+        if (attempt >= retryDelays.length) {
+          console.error('Failed to restore account after contact scan:', err)
+          return
+        }
+        await this.sleep(retryDelays[attempt])
       }
-    } catch (err) {
-      console.error('Failed to restore account after contact scan:', err)
     }
   }
 

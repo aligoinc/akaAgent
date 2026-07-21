@@ -59,16 +59,12 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
         password: snapshot.savedCredentials.password
       })
       if (hooks.afterLogin) {
-        try {
-          await hooks.afterLogin({
-            user,
-            username: snapshot.savedCredentials.username,
-            password: snapshot.savedCredentials.password,
-            automatic: true
-          })
-        } catch (err) {
-          console.error('Post-login hook failed:', err)
-        }
+        await hooks.afterLogin({
+          user,
+          username: snapshot.savedCredentials.username,
+          password: snapshot.savedCredentials.password,
+          automatic: true
+        })
       }
       return {
         ...snapshot,
@@ -94,12 +90,14 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     syncStartupSetting(savedOptions.startupEnabled)
     setCurrentUser(user)
     setCurrentUserCredentials({ username, password })
-    if (hooks.afterLogin) {
-      try {
+    try {
+      if (hooks.afterLogin) {
         await hooks.afterLogin({ user, username, password, automatic: false })
-      } catch (err) {
-        console.error('Post-login hook failed:', err)
       }
+    } catch (err) {
+      setCurrentUserCredentials(null)
+      setCurrentUser(null)
+      throw err
     }
     return user
   })
