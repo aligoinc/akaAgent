@@ -71,6 +71,13 @@ const LOCAL_ZALO_HANDOFF_RETRY_INTERVAL_MS = 30 * 1000
 const DESKTOP_HANDOFF_ACK_RETRY_INTERVAL_MS = 30 * 1000
 const SESSION_EXPIRY_DAILY_CHECK_HOUR = 0
 const SESSION_EXPIRY_DAILY_CHECK_MINUTE = 5
+const LOGIN_RECOVERY_MAX_ATTEMPTS = 3
+const LOGIN_RECOVERY_RETRY_DELAYS_MS = [1000, 3000] as const
+const LOGIN_RECOVERY_FAILED_MESSAGE = 'Không thể khôi phục trạng thái tác vụ sau 3 lần thử. Ứng dụng chưa khởi chạy automation để tránh chạy trùng. Vui lòng kiểm tra kết nối và đăng nhập lại.'
+
+const waitForRecoveryRetry = (delayMs: number): Promise<void> => (
+  new Promise(resolve => setTimeout(resolve, delayMs))
+)
 
 function getNextVietnamSessionExpiryCheckDelayMs(now = new Date()): number {
   const vietnamNowMs = now.getTime() + VIETNAM_UTC_OFFSET_MS
@@ -528,52 +535,64 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     reason: 'login' | 'logout' | 'quit',
     options: { excludeZalo?: boolean; zaloUncertainNoRetry?: boolean } = {}
   ): Promise<boolean> => {
-    const user = getCurrentUser()
-    if (!user) return false
-    try {
-      const [schedulerIdle, contactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle] = await Promise.all([
-        campaignScheduler.waitForIdle(30_000),
-        contactLoader.waitForIdle(30_000),
-        zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
-        accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
-        accountPollerController?.waitForZaloIdle(30_000) ?? Promise.resolve(true),
-        zaloRuntime.waitForWarmSessionsIdle(30_000)
-      ])
-      if (!schedulerIdle || !contactLoaderIdle || !realtimeIdle || !directOperationsIdle || !accountPollerIdle || !warmSessionsIdle) {
-        // Every producer has already been blocked/aborted before logout/quit.
-        // Finish with the atomic DB barrier so the next runtime cannot wait on
-        // orphaned rows forever. Running Zalo inputs are completed no-retry.
-        console.warn(`[Recovery] ${reason}: cleanup timeout; applying final atomic DB recovery barrier.`)
+    const maxAttempts = reason === 'login' ? LOGIN_RECOVERY_MAX_ATTEMPTS : 1
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const user = getCurrentUser()
+      if (!user) return false
+
+      try {
+        const [schedulerIdle, contactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle] = await Promise.all([
+          campaignScheduler.waitForIdle(30_000),
+          contactLoader.waitForIdle(30_000),
+          zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
+          accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
+          accountPollerController?.waitForZaloIdle(30_000) ?? Promise.resolve(true),
+          zaloRuntime.waitForWarmSessionsIdle(30_000)
+        ])
+        if (!schedulerIdle || !contactLoaderIdle || !realtimeIdle || !directOperationsIdle || !accountPollerIdle || !warmSessionsIdle) {
+          throw new Error('Các tiến trình automation chưa dừng hoàn toàn; recovery đã được hoãn để tránh chạy trùng.')
+        }
+
+        campaignScheduler.abandonZaloRuntimeClaims()
+        contactLoader.abandonZaloRuntimeClaims()
+        zaloRealtimeGroupManager?.abandonZaloRuntimeClaims()
+        zaloRuntime.abandonWarmSessionClaims()
+        accountZaloOperations?.abandonClaims()
+        accountPollerController?.abandonZaloClaims()
+        const excludeZalo = desktopZaloOwnershipRelinquished || (options.excludeZalo ?? (
+          user.isZaloServer || isZaloLocalStartupHandoffBlocked()
+        ))
+        // QR rows excluded by ownership remain untouched. Any Zalo row that the
+        // desktop recovery is allowed to settle (including Web) is no-retry.
+        const zaloUncertainNoRetry = options.zaloUncertainNoRetry ?? true
+        const recoveryResult = await supabase.resetDesktopRunningStatuses(
+          user.staffId,
+          excludeZalo,
+          zaloUncertainNoRetry
+        )
+        if (!excludeZalo && recoveryResult.excludeZalo && !user.isZaloServer) {
+          // The product switched local -> server after the pre-exit mode check
+          // but before this atomic RPC acquired its entitlement lock. No Zalo
+          // row was reset, so finish the same proven-idle server handoff now.
+          await activateZaloRuntimeRestartRequired(true)
+        }
+        try {
+          await supabase.enableDueAccountActions()
+        } catch (error) {
+          console.warn(`[Recovery] ${reason}: status recovery succeeded but due account actions could not be enabled:`, error)
+        }
+        return true
+      } catch (err) {
+        console.error(`[Recovery] ${reason}: attempt ${attempt}/${maxAttempts} failed:`, err)
+        if (attempt < maxAttempts) {
+          const retryDelay = LOGIN_RECOVERY_RETRY_DELAYS_MS[attempt - 1] ?? LOGIN_RECOVERY_RETRY_DELAYS_MS.at(-1)!
+          await waitForRecoveryRetry(retryDelay)
+        }
       }
-      campaignScheduler.abandonZaloRuntimeClaims()
-      contactLoader.abandonZaloRuntimeClaims()
-      zaloRealtimeGroupManager?.abandonZaloRuntimeClaims()
-      zaloRuntime.abandonWarmSessionClaims()
-      accountZaloOperations?.abandonClaims()
-      accountPollerController?.abandonZaloClaims()
-      const excludeZalo = desktopZaloOwnershipRelinquished || (options.excludeZalo ?? (
-        user.isZaloServer || isZaloLocalStartupHandoffBlocked()
-      ))
-      // Whenever this desktop is responsible for Zalo cleanup, a running
-      // input/input-data row has an unknown outcome and must never be queued
-      // again automatically. Server-owned or handoff-blocked Zalo stays intact.
-      const zaloUncertainNoRetry = options.zaloUncertainNoRetry ?? !excludeZalo
-      const recoveryResult = await supabase.resetDesktopRunningStatuses(
-        user.staffId,
-        excludeZalo,
-        zaloUncertainNoRetry
-      )
-      if (!excludeZalo && recoveryResult.excludeZalo && !user.isZaloServer) {
-        // The product switched local -> server after the pre-exit mode check
-        // but before this atomic RPC acquired its entitlement lock. No Zalo
-        // row was reset, so finish the same proven-idle server handoff now.
-        await activateZaloRuntimeRestartRequired(true)
-      }
-      return true
-    } catch (err) {
-      console.error(`[Recovery] ${reason}: failed to reset running statuses:`, err)
-      return false
     }
+
+    return false
   }
 
   let sessionExpiryTimer: ReturnType<typeof setTimeout> | null = null
@@ -1163,12 +1182,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
             { username, password }
           )
         }
-        await runScopedRecovery('login', requiresLocalHandoff ? { excludeZalo: true } : undefined)
-        await runScheduleMaintenance('login')
-      } finally {
+        const recovered = await runScopedRecovery(
+          'login',
+          requiresLocalHandoff ? { excludeZalo: true } : undefined
+        )
+        if (!recovered) throw new Error(LOGIN_RECOVERY_FAILED_MESSAGE)
+
+        try {
+          await runScheduleMaintenance('login')
+        } catch (error) {
+          console.warn('[Maintenance] login: recovery succeeded but schedule maintenance failed:', error)
+        }
         await runSessionExpiryCheck('login')
         const user = getCurrentUser()
-        if (!user) return
+        if (!user) throw new Error(ACCOUNT_EXPIRED_MESSAGE)
         campaignScheduler.resetZaloRuntimeClaims()
         contactLoader.resetZaloRuntimeClaims()
         zaloRealtimeGroupManager?.resetZaloRuntimeClaims()
@@ -1180,6 +1207,33 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
         await automationProcessor.start()
         if (requiresLocalHandoff) scheduleLocalZaloHandoffRetry(handoffGeneration, 0)
+      } catch (error) {
+        cancelLocalHandoffRetry()
+        cancelDesktopHandoffAckRetry()
+        contactLoader.stopAll()
+        campaignScheduler.stop()
+        await automationProcessor.stop().catch(() => {})
+        accountPollerController?.blockZaloRuntime()
+        zaloServerClient.stop()
+        zaloRealtimeGroupManager?.stop()
+        await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait()).catch(() => {})
+        const cleanupIdle = await Promise.all([
+          campaignScheduler.waitForIdle(30_000),
+          contactLoader.waitForIdle(30_000),
+          automationProcessor.waitForIdle(30_000),
+          zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
+          accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
+          accountPollerController?.waitForZaloIdle(30_000) ?? Promise.resolve(true),
+          zaloRuntime.waitForWarmSessionsIdle(30_000)
+        ])
+        if (cleanupIdle.some(idle => !idle)) {
+          console.warn('[Recovery] login cleanup did not become fully idle before auth was cleared.')
+        }
+        zaloRuntime.clearAll()
+        emailRuntime.clearAll()
+        runtimeCredentials = null
+        clearZaloLocalStartupHandoffBlock()
+        throw error
       }
     },
     beforeLogout: async () => {

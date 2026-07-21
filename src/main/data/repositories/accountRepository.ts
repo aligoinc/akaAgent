@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { AutoAccount, ZaloAccount, ZaloSessionCredentials, EmailAccountConfig } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountFromDB, mapZaloAccountFromDB } from '../mappers'
@@ -821,12 +822,18 @@ export interface DesktopRecoveryResult {
 }
 
 export type ZaloAccountRuntimeTarget = 'desktop' | 'server'
+export type AccountRuntimePreviousStatus = 'chờ xử lý' | 'tạm dừng'
 
 export interface ZaloAccountRuntimeOperationClaim {
   claimed: boolean
   accountId: number
+  staffId: number
   previousStatus: 'chờ xử lý' | 'tạm dừng' | null
   reason: string | null
+}
+
+export interface NonZaloAccountRuntimeOperationClaim extends ZaloAccountRuntimeOperationClaim {
+  claimToken: string | null
 }
 
 export interface StaffZaloRunningState {
@@ -849,6 +856,150 @@ function normalizeRecoveryStaffId(staffId: number): number {
     throw new Error('Staff ID must be a positive integer for runtime recovery')
   }
   return normalizedStaffId
+}
+
+function normalizeRuntimeAccountId(accountId: number, operation: string): number {
+  const normalizedAccountId = Math.floor(Number(accountId))
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error(`Account ID must be a positive integer for ${operation}`)
+  }
+  return normalizedAccountId
+}
+
+function normalizeNonZaloRuntimePlatform(flatformType: string): string {
+  const normalizedFlatformType = String(flatformType || '').trim().toLowerCase()
+  if (normalizedFlatformType !== 'facebook' && normalizedFlatformType !== 'email') {
+    throw new Error('Non-Zalo runtime platform must be Facebook or Email')
+  }
+  return normalizedFlatformType
+}
+
+function assertRuntimePreviousStatus(
+  previousStatus: string
+): asserts previousStatus is AccountRuntimePreviousStatus {
+  if (previousStatus !== 'chờ xử lý' && previousStatus !== 'tạm dừng') {
+    throw new Error('Previous account status is invalid')
+  }
+}
+
+/** Reserve a Facebook/Email account through the staff-scoped DB lock/RPC. */
+export async function claimNonZaloAccountRuntimeOperation(
+  accountId: number,
+  flatformType: string,
+  previousStatus: AccountRuntimePreviousStatus,
+  requiresLogin = true
+): Promise<NonZaloAccountRuntimeOperationClaim> {
+  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'non-Zalo runtime claim')
+  const normalizedFlatformType = normalizeNonZaloRuntimePlatform(flatformType)
+  assertRuntimePreviousStatus(previousStatus)
+
+  const u = requireCurrentUser()
+  const claimToken = randomUUID()
+  const cleanupAmbiguousClaim = async (): Promise<void> => {
+    try {
+      const { error: cleanupError } = await client().rpc('release_non_zalo_account_runtime_operation', {
+        p_account_id: normalizedAccountId,
+        p_staff_id: u.staffId,
+        p_platform: normalizedFlatformType,
+        p_previous_status: previousStatus,
+        p_claim_token: claimToken
+      })
+      if (cleanupError) {
+        console.warn('Failed to clean up an ambiguous non-Zalo account claim:', cleanupError.message)
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to clean up an ambiguous non-Zalo account claim:', cleanupError)
+    }
+  }
+  const { data, error } = await (async () => {
+    try {
+      return await client().rpc('claim_non_zalo_account_runtime_operation', {
+        p_account_id: normalizedAccountId,
+        p_staff_id: u.staffId,
+        p_platform: normalizedFlatformType,
+        p_previous_status: previousStatus,
+        p_claim_token: claimToken,
+        p_requires_login: requiresLogin === true
+      })
+    } catch (claimError) {
+      await cleanupAmbiguousClaim()
+      const message = claimError instanceof Error ? claimError.message : String(claimError)
+      throw new Error(
+        `Failed to claim non-Zalo account operation atomically: ${message}. ` +
+        'Ensure migration v184 is applied; no non-atomic fallback was attempted.'
+      )
+    }
+  })()
+
+  if (error) {
+    await cleanupAmbiguousClaim()
+    throw new Error(
+      `Failed to claim non-Zalo account operation atomically: ${error.message}. ` +
+      'Ensure migration v184 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const rawPayload = Array.isArray(data) ? data[0] : data
+  if (!rawPayload || typeof rawPayload !== 'object') {
+    await cleanupAmbiguousClaim()
+    throw new Error('Non-Zalo account operation claim completed without a valid result payload')
+  }
+  const payload = rawPayload as Record<string, unknown>
+  const returnedPreviousStatus = payload.previous_status === 'chờ xử lý' || payload.previous_status === 'tạm dừng'
+    ? payload.previous_status
+    : null
+  const returnedClaimToken = typeof payload.claim_token === 'string' && payload.claim_token.trim()
+    ? payload.claim_token.trim()
+    : null
+  const claimed = payload.claimed === true
+  if (claimed && (!returnedPreviousStatus || returnedClaimToken !== claimToken)) {
+    await cleanupAmbiguousClaim()
+    throw new Error('Non-Zalo account operation claim completed without an ownership token')
+  }
+  return {
+    claimed,
+    accountId: normalizeRecoveryCount(payload.account_id ?? normalizedAccountId),
+    staffId: u.staffId,
+    previousStatus: returnedPreviousStatus,
+    claimToken: claimed ? claimToken : null,
+    reason: typeof payload.reason === 'string' ? payload.reason : null
+  }
+}
+
+/** Restore only a still-running Facebook/Email claim under the same staff lock. */
+export async function releaseNonZaloAccountRuntimeOperation(
+  accountId: number,
+  flatformType: string,
+  previousStatus: AccountRuntimePreviousStatus,
+  claimToken: string,
+  staffId?: number
+): Promise<boolean> {
+  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'non-Zalo runtime release')
+  const normalizedFlatformType = normalizeNonZaloRuntimePlatform(flatformType)
+  assertRuntimePreviousStatus(previousStatus)
+  const normalizedClaimToken = String(claimToken || '').trim()
+  if (!normalizedClaimToken) {
+    throw new Error('Non-Zalo runtime claim token is required for release')
+  }
+
+  const runtimeStaffId = staffId === undefined
+    ? requireCurrentUser().staffId
+    : normalizeRecoveryStaffId(staffId)
+  const { data, error } = await client().rpc('release_non_zalo_account_runtime_operation', {
+    p_account_id: normalizedAccountId,
+    p_staff_id: runtimeStaffId,
+    p_platform: normalizedFlatformType,
+    p_previous_status: previousStatus,
+    p_claim_token: normalizedClaimToken
+  })
+
+  if (error) {
+    throw new Error(
+      `Failed to release non-Zalo account operation atomically: ${error.message}. ` +
+      'Ensure migration v184 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+  return data === true
 }
 
 export async function claimZaloAccountRuntimeOperation(
@@ -890,6 +1041,7 @@ export async function claimZaloAccountRuntimeOperation(
   return {
     claimed: payload.claimed === true,
     accountId: normalizeRecoveryCount(payload.account_id ?? normalizedAccountId),
+    staffId: u.staffId,
     previousStatus,
     reason: typeof payload.reason === 'string' ? payload.reason : null
   }
@@ -898,7 +1050,8 @@ export async function claimZaloAccountRuntimeOperation(
 export async function releaseZaloAccountRuntimeOperation(
   accountId: number,
   runtimeTarget: ZaloAccountRuntimeTarget,
-  previousStatus: 'chờ xử lý' | 'tạm dừng'
+  previousStatus: 'chờ xử lý' | 'tạm dừng',
+  staffId?: number
 ): Promise<boolean> {
   const normalizedAccountId = Math.floor(Number(accountId))
   if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
@@ -911,10 +1064,12 @@ export async function releaseZaloAccountRuntimeOperation(
     throw new Error('Previous Zalo account status is invalid')
   }
 
-  const u = requireCurrentUser()
+  const runtimeStaffId = staffId === undefined
+    ? requireCurrentUser().staffId
+    : normalizeRecoveryStaffId(staffId)
   const { data, error } = await client().rpc('release_zalo_account_runtime_operation', {
     p_account_id: normalizedAccountId,
-    p_staff_id: u.staffId,
+    p_staff_id: runtimeStaffId,
     p_runtime_target: runtimeTarget,
     p_previous_status: previousStatus
   })
@@ -1030,7 +1185,7 @@ export async function resetDesktopRunningStatuses(
   const u = requireCurrentUser()
   if (u.staffId !== normalizedStaffId) throw new Error('Cannot reset another staff runtime')
   const shouldExcludeZalo = excludeZalo === true
-  const { data, error } = await client().rpc('reset_desktop_running_statuses', {
+  const { data, error } = await client().rpc('reset_desktop_running_statuses_no_retry', {
     p_staff_id: normalizedStaffId,
     p_exclude_zalo: shouldExcludeZalo,
     p_zalo_uncertain_no_retry: zaloUncertainNoRetry === true
@@ -1039,7 +1194,7 @@ export async function resetDesktopRunningStatuses(
   if (error) {
     throw new Error(
       `Failed to reset desktop runtime state atomically: ${error.message}. ` +
-      'Ensure migration v171 is applied; no cross-platform fallback was attempted.'
+      'Ensure migration v184 is applied; no cross-platform fallback was attempted.'
     )
   }
 
@@ -1056,8 +1211,12 @@ export async function resetDesktopRunningStatuses(
     accountsReset: normalizeRecoveryCount(payload.accounts_reset),
     campaignsReset: normalizeRecoveryCount(payload.campaigns_reset),
     campaignNotesReset: normalizeRecoveryCount(payload.campaign_notes_reset),
-    campaignInputsReset: normalizeRecoveryCount(payload.campaign_inputs_reset),
-    campaignInputDataReset: normalizeRecoveryCount(payload.campaign_input_data_reset)
+    campaignInputsReset:
+      normalizeRecoveryCount(payload.campaign_inputs_reset) +
+      normalizeRecoveryCount(payload.non_zalo_campaign_inputs_completed),
+    campaignInputDataReset:
+      normalizeRecoveryCount(payload.campaign_input_data_reset) +
+      normalizeRecoveryCount(payload.non_zalo_campaign_input_data_completed)
   }
 }
 
