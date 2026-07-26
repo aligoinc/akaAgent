@@ -1,4 +1,4 @@
-import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings } from '../../shared/types'
+import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignDetail, CampaignDetailPageQuery, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, MoveDataGroupMembersRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -16,6 +16,7 @@ import * as reportRepo from '../data/repositories/reportRepository'
 import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogRepository'
 import * as systemSettingsRepo from '../data/repositories/systemSettingsRepository'
 import * as emailTrackingRepo from '../data/repositories/emailTrackingRepository'
+import * as dataGroupRepo from '../data/repositories/dataGroupRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -187,6 +188,7 @@ export class SupabaseService {
 
   // =========== CAMPAIGN INPUT DATA (việc-cần-làm) ===========
   listCampaignInputData(campaignId: number) { return campaignRepo.listCampaignInputData(campaignId) }
+  listCampaignInputDataPage(query: CampaignInputDataPageQuery) { return campaignRepo.listCampaignInputDataPage(query) }
   listCampaignRelationSummaries(campaignIds: number[]) { return campaignRepo.listCampaignRelationSummaries(campaignIds) }
   createCampaignInputData(action: Partial<CampaignInputData>) { return campaignRepo.createCampaignInputData(action) }
   createSmsCampaignInputDataSnapshot(action: Partial<CampaignInputData>) { return campaignRepo.createSmsCampaignInputDataSnapshot(action) }
@@ -207,6 +209,7 @@ export class SupabaseService {
   // =========== CAMPAIGN DETAILS (per-milestone log) ===========
   listCampaignDetailsByInputData(inputDataId: number) { return campaignRepo.listCampaignDetailsByInputData(inputDataId) }
   listCampaignDetailsByCampaign(campaignId: number) { return campaignRepo.listCampaignDetailsByCampaign(campaignId) }
+  listCampaignDetailsPage(query: CampaignDetailPageQuery) { return campaignRepo.listCampaignDetailsPage(query) }
   createCampaignDetail(action: CreateCampaignDetailInput) { return campaignRepo.createCampaignDetail(action) }
   deleteCampaignDetail(id: number) { return campaignRepo.deleteCampaignDetail(id) }
   createEmailMessageTracking(input: emailTrackingRepo.CreateEmailMessageTrackingInput) {
@@ -381,8 +384,8 @@ export class SupabaseService {
   deleteContactGroup(groupId: number) {
     return accountContactRepo.deleteContactGroup(groupId)
   }
-  listContactGroupContacts(groupId: number) {
-    return accountContactRepo.listContactGroupContacts(groupId)
+  listContactGroupContacts(groupId: number, accountId: number, contactType?: ContactType) {
+    return accountContactRepo.listContactGroupContacts(groupId, undefined, { accountId, contactType })
   }
   listAkaBizContactTags() {
     return contactTagRepo.listAkaBizContactTags()
@@ -407,6 +410,79 @@ export class SupabaseService {
   }
   removeContactsFromGroup(groupId: number, contactIds: number[]) {
     return accountContactRepo.removeContactsFromGroup(groupId, contactIds)
+  }
+  listDataGroups(query?: DataGroupListQuery) {
+    return dataGroupRepo.listDataGroups(query)
+  }
+  createDataGroup(request: CreateDataGroupRequest) {
+    return dataGroupRepo.createDataGroup(request)
+  }
+  updateDataGroup(request: UpdateDataGroupRequest) {
+    return dataGroupRepo.updateDataGroup(request)
+  }
+  deleteDataGroup(groupId: number, requestId: string, detachAutomations = true) {
+    return dataGroupRepo.deleteDataGroup(groupId, requestId, detachAutomations)
+  }
+  duplicateDataGroup(groupId: number, name: string | null, requestId: string) {
+    return dataGroupRepo.duplicateDataGroup(groupId, name, requestId)
+  }
+  listDataGroupMembers(query: DataGroupMemberListQuery) {
+    return dataGroupRepo.listDataGroupMembers(query)
+  }
+  listDataGroupMemberIds(query: DataGroupMemberListQuery) {
+    return dataGroupRepo.listDataGroupMemberIds(query)
+  }
+  listDataGroupDatasets(groupId: number) {
+    return dataGroupRepo.listDataGroupDatasets(groupId)
+  }
+  getDataGroupLatestIngestStats(groupId: number) {
+    return dataGroupRepo.getDataGroupLatestIngestStats(groupId)
+  }
+  exportDataGroupMembers(query: DataGroupMemberListQuery) {
+    return dataGroupRepo.exportDataGroupMembers(query)
+  }
+  ingestDataGroup(request: DataGroupIngestRequest) {
+    return dataGroupRepo.ingestDataGroup(request)
+  }
+  removeDataGroupMembers(request: DataGroupMemberMutationRequest) {
+    return dataGroupRepo.removeDataGroupMembers(request)
+  }
+  moveDataGroupMembers(request: MoveDataGroupMembersRequest) {
+    return dataGroupRepo.moveDataGroupMembers(request)
+  }
+  bindCampaignDataGroupSource(request: BindCampaignDataGroupSourceRequest) {
+    return dataGroupRepo.bindCampaignDataGroupSource(request)
+  }
+  snapshotDataGroupToCampaign(request: SnapshotDataGroupToCampaignRequest) {
+    return dataGroupRepo.snapshotDataGroupToCampaign(request)
+  }
+  preflightCampaignDataGroupChange(campaignId: number, groupId: number) {
+    return dataGroupRepo.preflightCampaignDataGroupChange(campaignId, groupId)
+  }
+  createCampaignCreationBundle(request: CreateCampaignBundleRequest) {
+    return dataGroupRepo.createCampaignCreationBundle(request)
+  }
+  getCampaignDataGroupSource(campaignId: number) {
+    return dataGroupRepo.getCampaignDataGroupSource(campaignId)
+  }
+  stopCampaignDataGroupSource(campaignId: number, requestId: string, reason?: string) {
+    return dataGroupRepo.stopCampaignDataGroupSource(campaignId, requestId, reason)
+  }
+  reactivateCampaignDataGroupSource(campaignId: number, requestId: string) {
+    return dataGroupRepo.reactivateCampaignDataGroupSource(campaignId, requestId)
+  }
+  finalizeDataGroupCampaign(
+    campaignId: number,
+    note?: string | null,
+    runtimeContext?: dataGroupRepo.DataGroupRuntimeContext
+  ) {
+    return dataGroupRepo.finalizeDataGroupCampaign(campaignId, note, runtimeContext)
+  }
+  finalizeExpiredDataGroupCampaigns(
+    limit?: number,
+    runtimeContext?: dataGroupRepo.DataGroupRuntimeContext
+  ) {
+    return dataGroupRepo.finalizeExpiredDataGroupCampaigns(limit, runtimeContext)
   }
   listZaloFriendBlocklists(accountId: number) {
     return accountContactRepo.listZaloFriendBlocklists(accountId)

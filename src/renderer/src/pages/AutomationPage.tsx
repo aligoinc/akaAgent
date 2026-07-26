@@ -76,7 +76,8 @@ const EMPTY_OPTIONS: AutomationOptions = {
   actions: [],
   campaigns: [],
   triggerOptions: [],
-  contactGroups: []
+  contactGroups: [],
+  dataGroups: []
 }
 
 const DEFAULT_FILTERS: AutomationFilters = {
@@ -99,7 +100,7 @@ const ACTION_FALLBACKS: AutomationOptions['actions'] = [
   {
     id: 'campaign_detail_route',
     name: 'Theo trạng thái chiến dịch',
-    description: 'Chuyển dữ liệu từ chiến dịch A sang chiến dịch B theo kết quả chạy.',
+    description: 'Chuyển dữ liệu từ chiến dịch nguồn đến chiến dịch đích, Nhóm data, hoặc cả hai.',
     isAvailable: true,
     isActive: true,
     sortOrder: 1
@@ -249,6 +250,10 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
   const groupById = useMemo(
     () => new Map(options.contactGroups.map(group => [group.id, group])),
     [options.contactGroups]
+  )
+  const dataGroupById = useMemo(
+    () => new Map(options.dataGroups.map(group => [group.id, group])),
+    [options.dataGroups]
   )
 
   const loadOptions = useCallback(async () => {
@@ -547,8 +552,14 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
 
   const hasFilters = Object.values(filters).some(Boolean)
   const selectedSource = selected ? campaignById.get(selected.sourceCampaignId) : undefined
-  const selectedTarget = selected ? campaignById.get(selected.targetCampaignId) : undefined
-  const selectedGroup = selected?.targetContactGroupId ? groupById.get(selected.targetContactGroupId) : undefined
+  const selectedTarget = selected?.targetCampaignId
+    ? campaignById.get(selected.targetCampaignId)
+    : undefined
+  const selectedLegacyGroup = selected?.targetContactGroupId ? groupById.get(selected.targetContactGroupId) : undefined
+  const selectedDataGroup = selected?.targetDataGroupId ? dataGroupById.get(selected.targetDataGroupId) : undefined
+  const selectedDataGroupName = selectedDataGroup?.name
+    || selected?.targetDataGroupName
+    || selectedLegacyGroup?.name
   const selectedTriggerLabel = selected
     ? selected.triggerConditions.map(formatAutomationTriggerLabel).join(', ')
     : ''
@@ -685,7 +696,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
             <ChevronDown size={14} />
           </label>
           <label className="automation-filter-field">
-            <span>Chiến dịch B</span>
+            <span>Chiến dịch đích</span>
             <select value={filters.targetCampaignId} onChange={event => updateFilter('targetCampaignId', event.target.value)}>
               <option value="">Tất cả</option>
               {options.campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
@@ -724,7 +735,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
             <div className="automation-state-panel">
               <Zap size={30} />
               <strong>{hasFilters ? 'Không có kết quả phù hợp' : 'Chưa có tự động hóa'}</strong>
-              <p>{hasFilters ? 'Thử thay đổi hoặc xóa bộ lọc hiện tại.' : 'Tạo quy tắc đầu tiên để nối dữ liệu giữa hai chiến dịch.'}</p>
+              <p>{hasFilters ? 'Thử thay đổi hoặc xóa bộ lọc hiện tại.' : 'Tạo quy tắc đầu tiên để chuyển dữ liệu đến chiến dịch, Nhóm data, hoặc cả hai.'}</p>
               {hasFilters ? (
                 <button type="button" className="automation-button" onClick={clearFilters}><FilterX size={15} /> Xóa bộ lọc</button>
               ) : (
@@ -751,8 +762,8 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                     <th><SortableHeader field="isActive" label="Trạng thái tự động hóa" sort={sort} onSort={handleSort} /></th>
                     <th>Chiến dịch A</th>
                     <th>Trạng thái kết quả A</th>
-                    <th>Chiến dịch B</th>
-                    <th>Lịch chạy dữ liệu B</th>
+                    <th>Đích nhận</th>
+                    <th>Lịch chuyển dữ liệu</th>
                     <th>Ghi chú</th>
                     <th aria-label="Hành động" />
                   </tr>
@@ -761,7 +772,22 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                   {items.map(automation => {
                     const isSelected = automation.id === selectedId
                     const source = campaignById.get(automation.sourceCampaignId)
-                    const target = campaignById.get(automation.targetCampaignId)
+                    const target = automation.targetCampaignId
+                      ? campaignById.get(automation.targetCampaignId)
+                      : undefined
+                    const dataGroup = automation.targetDataGroupId
+                      ? dataGroupById.get(automation.targetDataGroupId)
+                      : undefined
+                    const campaignDestination = automation.targetCampaignName
+                      || target?.name
+                      || (automation.targetCampaignId ? `#${automation.targetCampaignId}` : '')
+                    const groupDestination = automation.targetDataGroupName
+                      || dataGroup?.name
+                      || (automation.targetDataGroupId ? `#${automation.targetDataGroupId}` : '')
+                    const destinationLabel = [
+                      campaignDestination,
+                      groupDestination
+                    ].filter(Boolean).join(' + ')
                     const scheduleLabel = formatAutomationScheduleLabel(automation)
                     return (
                       <tr
@@ -816,8 +842,12 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                           </div>
                         </td>
                         <td>
-                          <strong>{automation.targetCampaignName || target?.name || `#${automation.targetCampaignId}`}</strong>
-                          <small>{automation.targetAccountName || target?.accountName || automation.targetActionName || target?.actionName}</small>
+                          <strong title={destinationLabel || undefined}>{destinationLabel || '—'}</strong>
+                          <small>
+                            {campaignDestination
+                              ? automation.targetAccountName || target?.accountName || automation.targetActionName || target?.actionName
+                              : 'Nhóm data'}
+                          </small>
                         </td>
                         <td>
                           <strong title={scheduleLabel}>{scheduleLabel}</strong>
@@ -915,10 +945,14 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                   </strong>
                 </div>
                 <div><span>Dữ liệu đồng nhất</span><strong>{DATA_TYPE_LABELS[selected.dataType]}</strong></div>
-                <div><span>Chiến dịch B</span><strong>{selected.targetCampaignName || selectedTarget?.name || `#${selected.targetCampaignId}`}</strong><small>{selected.targetAccountName || selectedTarget?.accountName}</small></div>
-                <div><span>Nhóm dữ liệu</span><strong>{selectedGroup?.name || 'Không thêm vào nhóm'}</strong></div>
                 <div>
-                  <span>Lịch chạy dữ liệu B</span>
+                  <span>Chiến dịch đích</span>
+                  <strong>{selected.targetCampaignName || selectedTarget?.name || (selected.targetCampaignId ? `#${selected.targetCampaignId}` : 'Không chọn')}</strong>
+                  <small>{selected.targetAccountName || selectedTarget?.accountName}</small>
+                </div>
+                <div><span>Nhóm data đích</span><strong>{selectedDataGroupName || 'Không thêm vào nhóm'}</strong></div>
+                <div>
+                  <span>Lịch chuyển dữ liệu</span>
                   <strong title={selectedScheduleLabel}>{selectedScheduleLabel}</strong>
                 </div>
                 <div><span>Dữ liệu gần nhất</span><strong>{formatDateTime(selected.lastDataAt)}</strong></div>
@@ -942,34 +976,67 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                       <th>Dữ liệu</th>
                       <th>Kết quả A</th>
                       <th>Thời điểm kích hoạt</th>
-                      <th>Input chiến dịch B</th>
-                      <th>Kết quả B</th>
+                      <th>Input chiến dịch đích</th>
+                      <th>Kết quả chiến dịch đích</th>
                       <th>Nhóm data</th>
                       <th>Trạng thái</th>
                     </tr>
                   </thead>
                   <tbody>
                     {details.map(detail => {
-                      const tone = getExecutionTone(detail.status)
+                      const groupSyncIncomplete = !!(
+                        detail.targetDataGroupId
+                        || detail.targetDataGroupSyncStatus
+                      )
+                        && detail.status === 'đã thêm'
+                        && detail.targetDataGroupSyncStatus !== 'completed'
+                      const tone = groupSyncIncomplete
+                        ? 'warning'
+                        : getExecutionTone(detail.status)
                       const StatusIcon = tone === 'success' ? CircleCheck : tone === 'error' ? CircleX : tone === 'warning' ? CircleAlert : Database
+                      const hasCampaignDestination = detail.targetCampaignId !== null
+                        && detail.targetCampaignId !== undefined
+                      const groupDestinationLabel = detail.targetDataGroupName
+                        || (detail.targetDataGroupId ? `#${detail.targetDataGroupId}` : '')
+                      const statusLabel = groupSyncIncomplete
+                        ? detail.targetDataGroupSyncStatus === 'failed'
+                          ? 'Một phần lỗi'
+                          : detail.targetDataGroupSyncStatus === 'skipped'
+                            ? 'Một phần bỏ qua'
+                            : 'Chờ Nhóm data'
+                        : detail.status
                       return (
                         <tr key={detail.id}>
                           <td><strong>{detail.dataValue || '—'}</strong><small>{DATA_TYPE_LABELS[detail.dataType]}</small></td>
                           <td><strong>{detail.sourceStatus || '—'}</strong><small>Detail #{detail.sourceCampaignDetailId}</small></td>
                           <td><strong>{formatDateTime(detail.scheduledAt)}</strong><small>Kích hoạt: {formatDateTime(detail.triggeredAt)}</small></td>
-                          <td><strong>{detail.targetInputDataId ? `#${detail.targetInputDataId}` : 'Chưa tạo'}</strong><small>Input chiến dịch B</small></td>
                           <td>
-                            <strong>{detail.targetResultStatus || 'Chưa có kết quả'}</strong>
+                            <strong>{hasCampaignDestination ? (detail.targetInputDataId ? `#${detail.targetInputDataId}` : 'Chưa tạo') : 'Không áp dụng'}</strong>
+                            <small>{hasCampaignDestination ? 'Input chiến dịch đích' : 'Chỉ chuyển vào Nhóm data'}</small>
+                          </td>
+                          <td>
+                            <strong>{hasCampaignDestination ? (detail.targetResultStatus || 'Chưa có kết quả') : 'Không áp dụng'}</strong>
                             <small>
-                              {detail.targetResultCount
+                              {!hasCampaignDestination
+                                ? 'Không có chiến dịch đích'
+                                : detail.targetResultCount
                                 ? `${detail.targetResultCount} kết quả · ${formatDateTime(detail.processedAt)}`
                                 : detail.processedAt ? `Xử lý: ${formatDateTime(detail.processedAt)}` : 'Đang chờ xử lý'}
                             </small>
                           </td>
-                          <td><span className="automation-data-group-chip">{detail.targetContactGroupName || selectedGroup?.name || '—'}</span></td>
                           <td>
-                            <span className={`automation-execution-status is-${tone}`}><StatusIcon size={14} /> {detail.status}</span>
-                            {detail.errorMessage && <small className="is-error" title={detail.errorMessage}>{detail.errorMessage}</small>}
+                            <span className="automation-data-group-chip">{groupDestinationLabel || detail.targetContactGroupName || '—'}</span>
+                            {detail.targetDataGroupSyncStatus && (
+                              <small>Đồng bộ: {detail.targetDataGroupSyncStatus}</small>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`automation-execution-status is-${tone}`}><StatusIcon size={14} /> {statusLabel}</span>
+                            {(detail.errorMessage || detail.targetDataGroupSyncError) && (
+                              <small className="is-error" title={detail.errorMessage || detail.targetDataGroupSyncError || ''}>
+                                {detail.errorMessage || detail.targetDataGroupSyncError}
+                              </small>
+                            )}
                           </td>
                         </tr>
                       )

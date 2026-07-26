@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { CheckCircle2, FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, X } from 'lucide-react'
 import jsQR from 'jsqr'
 import { read, utils } from 'xlsx'
@@ -6,10 +7,13 @@ import {
   CampaignImportDataRow,
   CampaignImportPlatform,
   CampaignInputData,
+  ContactDatasetImportSource,
+  getCampaignInputDataRequirement,
   isValidEmailInputDataValue
 } from '../../../../shared/types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { useUiStore } from '../../stores/uiStore'
+import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
 
 type ImportTab = 'textbox' | 'image' | 'sheet' | 'akabizTemplate' | 'excel'
 type TemplateReadStatus = 'idle' | 'reading' | 'success' | 'error'
@@ -27,6 +31,13 @@ interface FieldDef {
   required?: boolean
 }
 
+export interface CampaignDataUploadSubmission {
+  datasetName: string
+  importSource: ContactDatasetImportSource
+  sourceLink: string | null
+  rows: Partial<CampaignInputData>[]
+}
+
 interface CampaignDataUploadModalProps {
   platform: CampaignImportPlatform
   actionId: string
@@ -34,6 +45,14 @@ interface CampaignDataUploadModalProps {
   accountIds: number[]
   onClose: () => void
   onInsert: (rows: Partial<CampaignInputData>[]) => void
+  /** Optional external sink used by Data Group; skips legacy account-scoped dataset persistence. */
+  onSubmitRows?: (submission: CampaignDataUploadSubmission) => void | Promise<void>
+  contextSlot?: ReactNode
+  title?: string
+  datasetNameLabel?: string
+  showDatasetName?: boolean
+  layout?: 'default' | 'data-group'
+  submitLabel?: string
 }
 
 const INFO_FIELDS: FieldDef[] = [
@@ -48,11 +67,25 @@ const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const FACEBOOK_FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FACEBOOK_COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
+const MAX_IMPORT_ROW_COUNT = 10_000
+const IMPORT_ROW_LIMIT_MESSAGE = 'Mỗi lần chỉ được nhập tối đa 10.000 dòng dữ liệu. Vui lòng chia nhỏ dữ liệu rồi thử lại.'
 const isZaloJoinGroupLinkAction = (actionId?: string | null): boolean => actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
 const isZaloAddGroupMemberAction = (actionId?: string | null): boolean => actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID
 const isFacebookJoinGroupAction = (actionId?: string | null): boolean => actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
 const isFacebookFindDataSearchAction = (actionId?: string | null): boolean => actionId === FACEBOOK_FIND_DATA_SEARCH_ACTION_ID
 const isFacebookCommentSeedingPostAction = (actionId?: string | null): boolean => actionId === FACEBOOK_COMMENT_SEEDING_POST_ACTION_ID
+
+type ImportTargetField = 'phone' | 'uid' | 'email' | 'phone_or_uid'
+
+const getImportTargetField = (platform: CampaignImportPlatform, actionId: string): ImportTargetField => {
+  const requiredField = getCampaignInputDataRequirement(actionId)?.field
+  if (requiredField === 'phone' || requiredField === 'uid' || requiredField === 'email' || requiredField === 'phone_or_uid') {
+    return requiredField
+  }
+  if (platform === 'zalo' || platform === 'sms') return 'phone'
+  if (platform === 'email') return 'email'
+  return 'uid'
+}
 
 const getCellText = (value: unknown): string => {
   if (value === null || value === undefined) return ''
@@ -65,6 +98,15 @@ const getCellText = (value: unknown): string => {
     return Number.isFinite(parsed) ? Math.trunc(parsed).toString() : text
   }
   return text
+}
+
+const countNonEmptyImportRows = (rows: unknown[][]): number => rows.reduce(
+  (count, row) => count + (row.some(cell => getCellText(cell)) ? 1 : 0),
+  0
+)
+
+const assertImportRowLimit = (rowCount: number): void => {
+  if (rowCount > MAX_IMPORT_ROW_COUNT) throw new Error(IMPORT_ROW_LIMIT_MESSAGE)
 }
 
 const normalizeUid = (value: unknown): string => {
@@ -191,7 +233,8 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
   if (isZaloAddGroupMemberAction(actionId)) {
     return [
       { key: 'name', label: 'Tên' },
-      { key: 'phone', label: 'Số điện thoại', required: true },
+      { key: 'phone', label: 'Số điện thoại' },
+      { key: 'uid', label: 'UID Zalo' },
       ...INFO_FIELDS
     ]
   }
@@ -214,17 +257,18 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
       ...INFO_FIELDS
     ]
   }
-  if (platform === 'zalo' || platform === 'sms') {
+  const targetField = getImportTargetField(platform, actionId)
+  if (targetField === 'phone') {
     return [
       { key: 'name', label: 'Tên' },
       { key: 'phone', label: platform === 'sms' ? 'Số điện thoại SMS' : 'Số điện thoại', required: true },
       ...INFO_FIELDS
     ]
   }
-  if (platform === 'facebook') {
+  if (targetField === 'uid') {
     return [
       { key: 'name', label: 'Tên' },
-      { key: 'uid', label: 'Uid', required: true },
+      { key: 'uid', label: getCampaignInputDataRequirement(actionId)?.label || 'Uid', required: true },
       ...INFO_FIELDS
     ]
   }
@@ -341,14 +385,16 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
     }
     if (isZaloAddGroupMemberAction(actionId)) {
       const phone = normalizeVietnamMobilePhone(row.phone)
-      if (!phone || seen.has(phone)) continue
-      seen.add(phone)
+      const uid = phone ? '' : normalizeUid(row.uid)
+      const key = phone ? `phone:${phone}` : uid ? `uid:${uid.toLowerCase()}` : ''
+      if (!key || seen.has(key)) continue
+      seen.add(key)
       output.push({
         ...row,
         name: getCellText(row.name),
         phone,
         phoneCarrier: getVietnamMobileCarrier(phone) || null,
-        uid: '',
+        uid,
         email: ''
       })
       continue
@@ -363,11 +409,12 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
       info5: getCellText(row.info5)
     }
     let key = ''
-    if (platform === 'zalo' || platform === 'sms') {
+    const targetField = getImportTargetField(platform, actionId)
+    if (targetField === 'phone') {
       item.phone = normalizeVietnamMobilePhone(row.phone)
       item.phoneCarrier = getVietnamMobileCarrier(item.phone) || null
       key = item.phone
-    } else if (platform === 'facebook') {
+    } else if (targetField === 'uid') {
       item.uid = normalizeUid(row.uid)
       key = item.uid
     } else {
@@ -387,22 +434,44 @@ const normalizeTemplateHeader = (value: unknown): string => getCellText(value)
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
   .replace(/đ/g, 'd')
-  .replace(/\s+/g, '')
+  .replace(/[^a-z0-9]/g, '')
 
-const isAkabizTemplateHeaderRow = (row: unknown[]): boolean => {
-  const headers = row.slice(0, 4).map(normalizeTemplateHeader)
-  return (
-    ['ten', 'name', 'fullname', 'hoten'].includes(headers[0] || '') &&
-    ['uid', 'url', 'link'].includes(headers[1] || '') &&
-    ['sdt', 'phone', 'mobile', 'sodienthoai'].includes(headers[2] || '') &&
-    ['email', 'emailaddress'].includes(headers[3] || '')
-  )
+interface AkabizTemplateSchema {
+  headerIndex: number
+  columns: Record<'name' | 'uid' | 'phone' | 'email' | 'info1' | 'info2' | 'info3' | 'info4' | 'info5', number>
+}
+
+const AKABIZ_TEMPLATE_HEADER_ALIASES: Record<keyof AkabizTemplateSchema['columns'], string[]> = {
+  name: ['ten', 'name', 'fullname', 'hoten'],
+  uid: ['uid', 'url', 'link'],
+  phone: ['sdt', 'phone', 'mobile', 'sodienthoai'],
+  email: ['email', 'emailaddress'],
+  info1: ['info1'],
+  info2: ['info2'],
+  info3: ['info3'],
+  info4: ['info4'],
+  info5: ['info5']
+}
+
+const findAkabizTemplateSchema = (rows: unknown[][]): AkabizTemplateSchema | null => {
+  const orderedFields = Object.keys(AKABIZ_TEMPLATE_HEADER_ALIASES) as Array<keyof AkabizTemplateSchema['columns']>
+  for (let headerIndex = 0; headerIndex < Math.min(rows.length, 20); headerIndex += 1) {
+    const normalizedHeaders = (rows[headerIndex] || []).map(normalizeTemplateHeader)
+    const isCurrentTemplate = orderedFields.every((field, index) => (
+      AKABIZ_TEMPLATE_HEADER_ALIASES[field].includes(normalizedHeaders[index] || '')
+    ))
+    if (!isCurrentTemplate) continue
+    const columns = Object.fromEntries(orderedFields.map((field, index) => [field, index])) as AkabizTemplateSchema['columns']
+    return { headerIndex, columns }
+  }
+  return null
 }
 
 const buildAkabizTemplateRows = (
   rows: unknown[][],
   platform: CampaignImportPlatform,
-  actionId: string
+  actionId: string,
+  schema: AkabizTemplateSchema
 ): CampaignImportDataRow[] => {
   const seen = new Set<string>()
   const output: CampaignImportDataRow[] = []
@@ -414,25 +483,29 @@ const buildAkabizTemplateRows = (
     output.push(row)
   }
 
-  for (const sourceRow of rows) {
-    if (!Array.isArray(sourceRow)) continue
-    const row = sourceRow.slice(0, 9)
-    if (row.every(cell => !getCellText(cell)) || isAkabizTemplateHeaderRow(row)) continue
+  const valueAt = (row: unknown[], field: keyof AkabizTemplateSchema['columns']): string => {
+    const index = schema.columns[field]
+    return index >= 0 ? getCellText(row[index]) : ''
+  }
 
-    const rawName = getCellText(row[0])
-    const rawUid = getCellText(row[1])
-    const rawPhone = getCellText(row[2])
-    const rawEmail = getCellText(row[3])
+  for (const sourceRow of rows.slice(schema.headerIndex + 1)) {
+    if (!Array.isArray(sourceRow)) continue
+    if (sourceRow.every(cell => !getCellText(cell))) continue
+
+    const rawName = valueAt(sourceRow, 'name')
+    const rawUid = valueAt(sourceRow, 'uid')
+    const rawPhone = valueAt(sourceRow, 'phone')
+    const rawEmail = valueAt(sourceRow, 'email')
     const baseRow: CampaignImportDataRow = {
       name: rawName,
       uid: normalizeUid(rawUid),
       phone: rawPhone,
       email: rawEmail,
-      info1: getCellText(row[4]),
-      info2: getCellText(row[5]),
-      info3: getCellText(row[6]),
-      info4: getCellText(row[7]),
-      info5: getCellText(row[8])
+      info1: valueAt(sourceRow, 'info1'),
+      info2: valueAt(sourceRow, 'info2'),
+      info3: valueAt(sourceRow, 'info3'),
+      info4: valueAt(sourceRow, 'info4'),
+      info5: valueAt(sourceRow, 'info5')
     }
 
     if (isZaloJoinGroupLinkAction(actionId)) {
@@ -491,19 +564,21 @@ const buildAkabizTemplateRows = (
       const phone = normalizeVietnamMobilePhone(rawPhone) ||
         normalizeVietnamMobilePhone(rawUid) ||
         normalizeVietnamMobilePhone(rawName)
-      if (!phone) continue
+      const uid = phone ? '' : normalizeUid(rawUid)
+      if (!phone && !uid) continue
       pushUnique({
         ...baseRow,
-        name: normalizeVietnamMobilePhone(rawName) === phone ? '' : rawName,
+        name: phone && normalizeVietnamMobilePhone(rawName) === phone ? '' : rawName,
         phone,
         phoneCarrier: getVietnamMobileCarrier(phone) || null,
-        uid: '',
+        uid,
         email: ''
-      }, phone)
+      }, phone ? `phone:${phone}` : `uid:${uid}`)
       continue
     }
 
-    if (platform === 'zalo' || platform === 'sms') {
+    const targetField = getImportTargetField(platform, actionId)
+    if (targetField === 'phone') {
       const phone = normalizeVietnamMobilePhone(rawPhone)
       if (!phone) continue
       pushUnique({
@@ -514,7 +589,7 @@ const buildAkabizTemplateRows = (
       continue
     }
 
-    if (platform === 'email') {
+    if (targetField === 'email') {
       const email = rawEmail.toLowerCase()
       if (!isValidEmailInputDataValue(email)) continue
       pushUnique({ ...baseRow, email }, email)
@@ -551,6 +626,14 @@ const hasAkabizTemplateFileSignature = (bytes: Uint8Array, fileName: string): bo
     return oleSignature.every((value, index) => bytes[index] === value)
   }
   return false
+}
+
+const readUploadedWorkbook = (bytes: Uint8Array, fileName: string) => {
+  if (/\.csv$/i.test(fileName)) {
+    const csvText = new TextDecoder('utf-8').decode(bytes)
+    return read(csvText, { type: 'string', raw: true, codepage: 65001 })
+  }
+  return read(bytes, { type: 'array' })
 }
 
 const detectColumnFromHeader = (rows: unknown[][], labels: string[]): string => {
@@ -658,13 +741,15 @@ const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlat
   }
   if (isZaloAddGroupMemberAction(actionId)) {
     return {
-      phone: detectPhoneColumn(rows)
+      phone: detectPhoneColumn(rows),
+      uid: detectColumnFromHeader(rows, ['uid', 'zalo uid', 'zalo_uid'])
     }
   }
-  if (platform === 'zalo' || platform === 'sms') {
+  const targetField = getImportTargetField(platform, actionId)
+  if (targetField === 'phone') {
     return { phone: detectPhoneColumn(rows) }
   }
-  if (platform === 'facebook') {
+  if (targetField === 'uid') {
     return {
       uid: detectColumnFromHeader(rows, ['uid', 'url', 'link', 'profile', 'facebook']) || detectNonWhitespaceColumn(rows)
     }
@@ -678,15 +763,24 @@ export default function CampaignDataUploadModal({
   actionName,
   accountIds,
   onClose,
-  onInsert
+  onInsert,
+  onSubmitRows,
+  contextSlot,
+  title = 'Upload dữ liệu',
+  datasetNameLabel = 'Tên nhóm dữ liệu',
+  showDatasetName = true,
+  layout = 'default',
+  submitLabel = 'Chèn xuống chi tiết'
 }: CampaignDataUploadModalProps) {
   const showAlert = useUiStore(state => state.showAlert)
+  const isDataGroupLayout = layout === 'data-group'
   const fields = useMemo(() => getFieldsForPlatform(platform, actionId), [platform, actionId])
   const [activeTab, setActiveTab] = useState<ImportTab>('textbox')
-  const [datasetName, setDatasetName] = useState('')
+  const [datasetName, setDatasetName] = useState(() => createDefaultDataGroupName())
   const [textContent, setTextContent] = useState('')
   const [txtFileName, setTxtFileName] = useState('')
   const [imageDataUrl, setImageDataUrl] = useState('')
+  const [imageSourceName, setImageSourceName] = useState('')
   const [sheetLink, setSheetLink] = useState('')
   const [templateFile, setTemplateFile] = useState<File | null>(null)
   const [templateRows, setTemplateRows] = useState<CampaignImportDataRow[]>([])
@@ -710,10 +804,11 @@ export default function CampaignDataUploadModal({
     sourceRevisionRef.current += 1
     asyncOperationRef.current += 1
     setActiveTab('textbox')
-    setDatasetName('')
+    setDatasetName(createDefaultDataGroupName())
     setTextContent('')
     setTxtFileName('')
     setImageDataUrl('')
+    setImageSourceName('')
     setSheetLink('')
     setTemplateFile(null)
     setTemplateRows([])
@@ -747,6 +842,7 @@ export default function CampaignDataUploadModal({
       }))
     ]
   }, [excelHeaders, excelRows, skipExcelHeader])
+  const textInputCount = useMemo(() => splitTextItems(textContent).length, [textContent])
 
   const invalidateFormattedPreview = (): void => {
     sourceRevisionRef.current += 1
@@ -765,8 +861,16 @@ export default function CampaignDataUploadModal({
     const reader = new FileReader()
     reader.onload = event => {
       if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
+        const content = String(event.target?.result || '')
+        if (splitTextItems(content).length > MAX_IMPORT_ROW_COUNT) {
+          setTxtFileName('')
+          setTextContent('')
+          showAlert(IMPORT_ROW_LIMIT_MESSAGE, 'error')
+          if (asyncOperationRef.current === operation) setLoading(false)
+          return
+        }
         invalidateFormattedPreview()
-        setTextContent(String(event.target?.result || ''))
+        setTextContent(content)
       }
       if (asyncOperationRef.current === operation) setLoading(false)
     }
@@ -785,6 +889,14 @@ export default function CampaignDataUploadModal({
     const sourceRevision = sourceRevisionRef.current
     const operation = ++asyncOperationRef.current
     setLoading(true)
+    const imageTimestamp = Number.isFinite(file.lastModified) && file.lastModified > 0
+      ? new Date(file.lastModified).toLocaleString('vi-VN')
+      : ''
+    setImageSourceName(
+      imageTimestamp
+        ? `${file.name || 'Ảnh tải lên'} · ${imageTimestamp}`
+        : file.name || 'Ảnh tải lên'
+    )
     const reader = new FileReader()
     reader.onload = event => {
       if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
@@ -824,10 +936,20 @@ export default function CampaignDataUploadModal({
     setExcelFileName(file.name)
     setLoading(true)
     try {
-      const workbook = read(new Uint8Array(await file.arrayBuffer()), { type: 'array' })
+      const fileBytes = new Uint8Array(await file.arrayBuffer())
+      const workbook = readUploadedWorkbook(fileBytes, file.name)
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
+      const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false })
       if (sourceRevisionRef.current !== sourceRevision || asyncOperationRef.current !== operation) return
+      const importRows = skipExcelHeader ? rows.slice(1) : rows
+      if (countNonEmptyImportRows(importRows) > MAX_IMPORT_ROW_COUNT) {
+        setExcelFile(null)
+        setExcelFileName('')
+        setExcelRows([])
+        setColumnMap(createEmptyColumnMap())
+        showAlert(IMPORT_ROW_LIMIT_MESSAGE, 'error')
+        return
+      }
       invalidateFormattedPreview()
       setExcelRows(rows)
       setColumnMap(detectRequiredColumnMap(rows, platform, actionId))
@@ -874,18 +996,35 @@ export default function CampaignDataUploadModal({
         return
       }
 
-      const workbook = read(fileBytes, { type: 'array' })
+      const workbook = readUploadedWorkbook(fileBytes, file.name)
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       if (!sheet) {
         failRead('File Excel trống hoặc không đọc được sheet đầu tiên.')
         return
       }
 
-      const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
-      const normalized = buildAkabizTemplateRows(rows, platform, actionId)
+      const rows = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false })
+      const schema = findAkabizTemplateSchema(rows)
+      if (!schema) {
+        failRead('File không đúng cấu trúc template akaBiz (Fullname, Uid, Mobile, Email, Info1…Info5).')
+        return
+      }
+      if (countNonEmptyImportRows(rows.slice(schema.headerIndex + 1)) > MAX_IMPORT_ROW_COUNT) {
+        failRead(IMPORT_ROW_LIMIT_MESSAGE)
+        return
+      }
+      const normalized = buildAkabizTemplateRows(rows, platform, actionId, schema)
       if (sourceRevisionRef.current !== sourceRevision || asyncOperationRef.current !== operation) return
       if (normalized.length === 0) {
-        failRead('File Excel trống hoặc không có data hợp lệ.')
+        const targetField = getImportTargetField(platform, actionId)
+        const targetHint = targetField === 'phone'
+          ? 'Số điện thoại trong cột Mobile'
+          : targetField === 'email'
+            ? 'Email trong cột Email'
+            : targetField === 'phone_or_uid'
+              ? 'Số điện thoại trong cột Mobile hoặc UID trong cột Uid'
+              : `${getCampaignInputDataRequirement(actionId)?.label || 'UID'} trong cột Uid`
+        failRead(`File đúng template nhưng không có ${targetHint} hợp lệ cho chiến dịch này.`)
         return
       }
 
@@ -919,11 +1058,12 @@ export default function CampaignDataUploadModal({
       if (isZaloJoinGroupLinkAction(actionId)) return { uid: value }
       if (isZaloAddGroupMemberAction(actionId)) {
         const phone = normalizeVietnamMobilePhone(value)
-        return phone ? { phone } : {}
+        return phone ? { phone, uid: '' } : { phone: '', uid: value }
       }
-      if (platform === 'zalo' || platform === 'sms') return { phone: value }
-      if (platform === 'facebook') return { uid: value }
-      return { email: value }
+      const targetField = getImportTargetField(platform, actionId)
+      if (targetField === 'phone') return { phone: value }
+      if (targetField === 'email') return { email: value }
+      return { uid: value }
     })
   }
 
@@ -943,75 +1083,82 @@ export default function CampaignDataUploadModal({
       })
   }
 
-  const handleFormatData = async (): Promise<void> => {
-    if (loading || saving) return
-    if (activeTab === 'akabizTemplate') return
-    invalidateFormattedPreview()
-    const sourceRevision = sourceRevisionRef.current
-    const operation = ++asyncOperationRef.current
+  const collectCurrentImport = async (): Promise<{
+    rows: CampaignImportDataRow[]
+    importSource: ImportTab
+    sourceLink: string | null
+  }> => {
     const importSource = activeTab
     const sourceLink = sheetLink.trim()
     const sourceImage = imageDataUrl
-    setLoading(true)
-    try {
-      let rows: CampaignImportDataRow[] = []
-      if (importSource === 'textbox') {
-        rows = buildRowsFromText()
-      } else if (importSource === 'excel') {
-        if (!excelFile) {
-          showAlert('Vui lòng tải file Excel.', 'error')
-          return
-        }
-        const invalidColumn = fields.find(field => columnMap[field.key] && columnLetterToIndex(columnMap[field.key] || '') === null)
-        if (invalidColumn) {
-          showAlert(`Cột ${invalidColumn.label} không hợp lệ. Vui lòng chọn lại cột.`, 'error')
-          return
-        }
-        rows = buildRowsFromExcel()
-      } else if (importSource === 'sheet') {
-        if (!sourceLink) {
-          showAlert('Vui lòng nhập link sheet.', 'error')
-          return
-        }
-        rows = await window.electronAPI.loadCampaignDataFromSheet({
-          linkSheet: sourceLink,
-          platform,
-          actionId
-        })
-      } else {
-        if (!sourceImage) {
-          showAlert('Vui lòng tải hoặc dán ảnh.', 'error')
-          return
-        }
-        if (isZaloJoinGroupLinkAction(actionId)) {
-          const qrData = await decodeQrDataFromDataUrl(sourceImage).catch(() => '')
-          const qrLink = normalizeZaloGroupInviteLink(qrData)
-          rows = qrLink
-            ? [{ uid: qrLink }]
-            : await window.electronAPI.extractCampaignDataFromImage({
-              imageDataUrl: sourceImage,
-              platform,
-              actionId
-            })
-        } else {
-          rows = await window.electronAPI.extractCampaignDataFromImage({
+    let rows: CampaignImportDataRow[] = []
+    if (importSource === 'akabizTemplate') {
+      if (templateStatus === 'reading') throw new Error('File template đang được đọc. Vui lòng chờ trong giây lát.')
+      if (templateStatus !== 'success' || templateRows.length === 0) {
+        throw new Error('Vui lòng chọn file Excel theo template akaBiz.')
+      }
+      rows = templateRows
+    } else if (importSource === 'textbox') {
+      rows = buildRowsFromText()
+    } else if (importSource === 'excel') {
+      if (!excelFile) throw new Error('Vui lòng tải file Excel.')
+      const invalidColumn = fields.find(field => columnMap[field.key] && columnLetterToIndex(columnMap[field.key] || '') === null)
+      if (invalidColumn) throw new Error(`Cột ${invalidColumn.label} không hợp lệ. Vui lòng chọn lại cột.`)
+      rows = buildRowsFromExcel()
+    } else if (importSource === 'sheet') {
+      if (!sourceLink) throw new Error('Vui lòng nhập link sheet.')
+      rows = await window.electronAPI.loadCampaignDataFromSheet({
+        linkSheet: sourceLink,
+        platform,
+        actionId
+      })
+    } else {
+      if (!sourceImage) throw new Error('Vui lòng tải hoặc dán ảnh.')
+      if (isZaloJoinGroupLinkAction(actionId)) {
+        const qrData = await decodeQrDataFromDataUrl(sourceImage).catch(() => '')
+        const qrLink = normalizeZaloGroupInviteLink(qrData)
+        rows = qrLink
+          ? [{ uid: qrLink }]
+          : await window.electronAPI.extractCampaignDataFromImage({
             imageDataUrl: sourceImage,
             platform,
             actionId
           })
-        }
+      } else {
+        rows = await window.electronAPI.extractCampaignDataFromImage({
+          imageDataUrl: sourceImage,
+          platform,
+          actionId
+        })
       }
+    }
 
+    assertImportRowLimit(rows.length)
+    const normalized = importSource === 'akabizTemplate'
+      ? rows
+      : normalizeRows(rows, platform, actionId)
+    assertImportRowLimit(normalized.length)
+    if (normalized.length === 0) throw new Error('Không có data hợp lệ.')
+    return {
+      rows: normalized,
+      importSource,
+      sourceLink: importSource === 'sheet' ? sourceLink : null
+    }
+  }
+
+  const handleFormatData = async (): Promise<void> => {
+    if (loading || saving || activeTab === 'akabizTemplate') return
+    invalidateFormattedPreview()
+    const sourceRevision = sourceRevisionRef.current
+    const operation = ++asyncOperationRef.current
+    setLoading(true)
+    try {
+      const result = await collectCurrentImport()
       if (sourceRevisionRef.current !== sourceRevision || asyncOperationRef.current !== operation) return
-      const normalized = normalizeRows(rows, platform, actionId)
-      if (normalized.length === 0) {
-        showAlert('Không có data hợp lệ.', 'error')
-        return
-      }
-      setPreviewRows(normalized)
-      setFormattedImportSource(importSource)
-      setFormattedSourceLink(importSource === 'sheet' ? sourceLink : null)
-      showAlert(`Đã format ${normalized.length} data hợp lệ.`, 'success')
+      setPreviewRows(result.rows)
+      setFormattedImportSource(result.importSource)
+      setFormattedSourceLink(result.sourceLink)
+      showAlert(`Đã format ${result.rows.length} data hợp lệ.`, 'success')
     } catch (err) {
       if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
         showAlert(err instanceof Error ? err.message : 'Không thể format dữ liệu.', 'error')
@@ -1021,20 +1168,64 @@ export default function CampaignDataUploadModal({
     }
   }
 
-  const handleInsert = async (): Promise<void> => {
-    if (previewRows.length === 0) {
-      showAlert('Vui lòng format dữ liệu trước khi chèn.', 'error')
+  const insertFormattedRows = async (
+    rows: CampaignImportDataRow[],
+    importSource: ImportTab,
+    sourceLink: string | null
+  ): Promise<void> => {
+    if (rows.length > MAX_IMPORT_ROW_COUNT) {
+      showAlert(IMPORT_ROW_LIMIT_MESSAGE, 'error')
       return
     }
-    if (!formattedImportSource) {
-      showAlert('Vui lòng format lại dữ liệu trước khi chèn.', 'error')
-      return
-    }
-    const normalizedName = datasetName.trim()
+    const automaticDatasetName = (() => {
+      if (importSource === 'textbox') return txtFileName.trim() || 'Nhập thủ công'
+      if (importSource === 'image') return imageSourceName.trim() || 'Ảnh dán'
+      if (importSource === 'sheet') {
+        const link = sourceLink?.trim() || sheetLink.trim()
+        if (!link) return 'Link sheet'
+        try {
+          const url = new URL(link)
+          const googleSheetId = url.pathname.match(/\/spreadsheets\/d\/([^/]+)/i)?.[1]
+          return googleSheetId ? `Google Sheet · ${googleSheetId}` : `Link sheet · ${url.hostname}`
+        } catch {
+          return 'Link sheet'
+        }
+      }
+      if (importSource === 'akabizTemplate') {
+        return templateFile?.name.trim() || 'Template Excel akaBiz'
+      }
+      if (importSource === 'excel') return excelFileName.trim() || 'File Excel/CSV'
+      return 'Dữ liệu tải lên'
+    })()
+    const normalizedName = (showDatasetName ? datasetName.trim() : automaticDatasetName).slice(0, 255)
     if (!normalizedName) {
       showAlert('Vui lòng nhập tên nhóm dữ liệu.', 'error')
       return
     }
+    const normalizedRows = rows.map(row => ({
+      ...row,
+      note: '',
+      status: 'chờ xử lý' as const
+    }))
+
+    if (onSubmitRows) {
+      setSaving(true)
+      try {
+        await onSubmitRows({
+          datasetName: normalizedName,
+          importSource: importSource === 'akabizTemplate' ? 'excel' : importSource,
+          sourceLink,
+          rows: normalizedRows
+        })
+        onClose()
+      } catch (err) {
+        showAlert(err instanceof Error ? err.message : 'Không thể thêm data.', 'error')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
     const normalizedAccountIds = Array.from(new Set(accountIds))
       .filter(accountId => Number.isSafeInteger(accountId) && accountId > 0)
     if (normalizedAccountIds.length === 0) {
@@ -1050,9 +1241,9 @@ export default function CampaignDataUploadModal({
         platform,
         actionId,
         actionName: actionName?.trim() || undefined,
-        importSource: formattedImportSource === 'akabizTemplate' ? 'excel' : formattedImportSource,
-        sourceLink: formattedSourceLink,
-        rows: previewRows
+        importSource: importSource === 'akabizTemplate' ? 'excel' : importSource,
+        sourceLink,
+        rows
       })
       if (!result.success) {
         throw new Error('Không thể lưu nhóm dữ liệu.')
@@ -1072,6 +1263,19 @@ export default function CampaignDataUploadModal({
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleInsert = async (): Promise<void> => {
+    if (loading || saving) return
+    if (previewRows.length === 0) {
+      showAlert('Vui lòng format dữ liệu trước khi chèn.', 'error')
+      return
+    }
+    if (!formattedImportSource) {
+      showAlert('Vui lòng format lại dữ liệu trước khi chèn.', 'error')
+      return
+    }
+    await insertFormattedRows(previewRows, formattedImportSource, formattedSourceLink)
   }
 
   const updateColumn = (field: ImportField, value: string): void => {
@@ -1103,30 +1307,43 @@ export default function CampaignDataUploadModal({
     </button>
   )
 
-  return (
-    <div className="modal-overlay campaign-import-modal-overlay">
-      <div className="modal campaign-import-modal" onMouseDown={event => event.stopPropagation()}>
+  const layoutClass = isDataGroupLayout ? ' is-data-group' : ''
+  const modalContent = (
+    <div
+      className={`modal-overlay campaign-import-modal-overlay${layoutClass}`}
+      onMouseDown={event => {
+        if (event.target === event.currentTarget && !loading && !saving) onClose()
+      }}
+    >
+      <div className={`modal campaign-import-modal${layoutClass}`} onMouseDown={event => event.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title">Upload dữ liệu</div>
+          <div className="modal-title">{title}</div>
           <button className="btn-icon" onClick={onClose} title="Đóng" disabled={loading || saving}>
             <X size={18} />
           </button>
         </div>
 
         <div className="modal-body campaign-import-body">
-          <div className="stepper-form-group campaign-import-dataset-name">
-            <label htmlFor="campaign-import-dataset-name">Tên nhóm dữ liệu</label>
-            <input
-              id="campaign-import-dataset-name"
-              className="stepper-input"
-              value={datasetName}
-              onChange={event => setDatasetName(event.target.value)}
-              placeholder="Ví dụ: Khách hàng quan tâm tháng 7"
-              maxLength={255}
-              disabled={saving}
-              autoFocus
-            />
-          </div>
+          {showDatasetName && (
+            <div className="stepper-form-group campaign-import-dataset-name">
+              <label htmlFor="campaign-import-dataset-name">
+                {datasetNameLabel}<span className="required">*</span>
+              </label>
+              <input
+                id="campaign-import-dataset-name"
+                className="stepper-input"
+                value={datasetName}
+                onChange={event => setDatasetName(event.target.value)}
+                maxLength={255}
+                disabled={saving}
+                required
+                aria-required="true"
+                autoFocus
+              />
+            </div>
+          )}
+
+          {contextSlot}
 
           <div className="campaign-import-tabs" role="tablist" aria-label="Nguồn nhập dữ liệu">
             {renderTabButton('textbox', 'Form txt')}
@@ -1150,25 +1367,42 @@ export default function CampaignDataUploadModal({
                 id="campaign-import-textbox"
                 className="campaign-import-textarea"
                 value={textContent}
+                autoFocus={!showDatasetName}
                 disabled={loading || saving}
                 onChange={event => {
                   invalidateFormattedPreview()
                   setTextContent(event.target.value)
                 }}
               />
-              <div className="campaign-import-hint">Mỗi dữ liệu cách nhau bởi ký tự xuống dòng hoặc dấu phẩy</div>
-              <div className="campaign-import-hint">Hệ thống sẽ loại bỏ ký tự đặc biệt sau đó verify dữ liệu đúng chuẩn input</div>
-              <label className="btn btn-secondary campaign-import-file-button">
-                <Upload size={14} /> Tải file txt
-                <input
-                  type="file"
-                  accept=".txt"
-                  hidden
-                  disabled={loading || saving}
-                  onChange={event => readTextFile(event.target.files?.[0])}
-                />
-              </label>
-              {txtFileName && <div className="text-muted campaign-import-file-name">{txtFileName}</div>}
+              {isDataGroupLayout ? (
+                <div className="campaign-import-hint">
+                  Mỗi dữ liệu cách nhau bởi ký tự xuống dòng hoặc dấu phẩy. Hệ thống sẽ verify đúng chuẩn input.
+                </div>
+              ) : (
+                <>
+                  <div className="campaign-import-hint">Mỗi dữ liệu cách nhau bởi ký tự xuống dòng hoặc dấu phẩy</div>
+                  <div className="campaign-import-hint">Hệ thống sẽ loại bỏ ký tự đặc biệt sau đó verify dữ liệu đúng chuẩn input</div>
+                </>
+              )}
+              <div className={isDataGroupLayout ? 'campaign-import-file-meta-row' : undefined}>
+                <label className="btn btn-secondary campaign-import-file-button">
+                  <Upload size={14} /> Tải file txt
+                  <input
+                    type="file"
+                    accept=".txt"
+                    hidden
+                    disabled={loading || saving}
+                    onChange={event => readTextFile(event.target.files?.[0])}
+                  />
+                </label>
+                {isDataGroupLayout ? (
+                  <span className="text-muted campaign-import-file-name">
+                    {txtFileName || (textInputCount > 0 ? `${textInputCount.toLocaleString('vi-VN')} dòng dữ liệu` : 'Chưa có dữ liệu')}
+                  </span>
+                ) : txtFileName ? (
+                  <div className="text-muted campaign-import-file-name">{txtFileName}</div>
+                ) : null}
+              </div>
             </div>
           )}
 
@@ -1427,13 +1661,15 @@ export default function CampaignDataUploadModal({
           <button
             className="btn btn-primary"
             onClick={() => void handleInsert()}
-            disabled={loading || saving || previewRows.length === 0 || !datasetName.trim()}
+            disabled={loading || saving || previewRows.length === 0 || (showDatasetName && !datasetName.trim())}
           >
             {saving ? <RefreshCw size={14} className="spin" /> : null}
-            {saving ? 'Đang lưu...' : 'Chèn xuống chi tiết'}
+            {saving ? 'Đang lưu...' : submitLabel}
           </button>
         </div>
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }

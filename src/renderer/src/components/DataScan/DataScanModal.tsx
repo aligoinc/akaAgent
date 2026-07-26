@@ -11,13 +11,14 @@ import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
 import { getAccountPlatformLabel } from '../../utils/accountLabels'
-import type { AuthEntitlements } from '../../../../shared/types'
+import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
+import type { AuthEntitlements, DataGroup } from '../../../../shared/types'
 import type { ContactLoadResult } from '../../../../shared/types'
 import type { ZaloServerCommandName, ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
 import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
 
 export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_post_likes' | 'facebook_profile_friends' | 'facebook_group_members' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers' | 'upload_data'
-type DataScanPlatform = 'facebook' | 'zalo' | 'email' | 'sms'
+export type DataScanPlatform = 'facebook' | 'zalo' | 'email' | 'sms'
 type PageInboxTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days'
 interface PageInboxAppliedFilters {
   pageUid: string
@@ -77,6 +78,15 @@ interface DataScanActionDef {
   loadingText: string
 }
 
+export interface DataScanSelectionContext {
+  action: DataScanAction
+  datasetId?: number
+  datasetName?: string
+  accountId?: number
+  platform: DataScanPlatform
+  contactType: ContactType
+}
+
 interface DataScanModalProps {
   initialAction?: DataScanAction
   initialAccountId?: number
@@ -88,8 +98,9 @@ interface DataScanModalProps {
   lockAction?: boolean
   lockAccount?: boolean
   lockPageInboxPage?: boolean
+  targetDataGroup?: Pick<DataGroup, 'id' | 'name' | 'color'>
   onClose: () => void
-  onSelect?: (contacts: AutoAccountContact[]) => void
+  onSelect?: (contacts: AutoAccountContact[], context: DataScanSelectionContext) => void | Promise<void>
 }
 
 const DATA_SCAN_ACTIONS: DataScanActionDef[] = [
@@ -956,6 +967,7 @@ export default function DataScanModal({
   lockAction = false,
   lockAccount = false,
   lockPageInboxPage = false,
+  targetDataGroup,
   onClose,
   onSelect
 }: DataScanModalProps) {
@@ -965,6 +977,7 @@ export default function DataScanModal({
   const serverOperationState = useZaloServerOperationState(isZaloServer)
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
+  const isDataGroupTargetMode = targetDataGroup != null
   const mountedRef = useRef(true)
   const scanRunIdRef = useRef(0)
   const stoppedScanIdsRef = useRef<Set<number>>(new Set())
@@ -994,6 +1007,7 @@ export default function DataScanModal({
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
   const [loading, setLoading] = useState(false)
   const [scanLoading, setScanLoading] = useState(false)
+  const [selectingOutput, setSelectingOutput] = useState(false)
   const [scanStopping, setScanStopping] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -1077,6 +1091,9 @@ export default function DataScanModal({
   const isZaloGroupMembersAction = action === ZALO_GROUP_MEMBERS_ACTION_ID
   const isZaloRemarketingCustomersAction = action === ZALO_REMARKETING_CUSTOMERS_ACTION_ID
   const isUploadDataAction = action === UPLOAD_DATA_ACTION_ID
+  // Uploaded datasets still need an explicit source selector. Scan datasets
+  // remain internal snapshots and should not appear as a user-facing filter.
+  const showDatasetFilter = isUploadDataAction
   const serverScanCommand: ZaloServerCommandName | null = action === 'zalo_friends'
     ? 'contacts.loadFriends'
     : action === 'zalo_groups'
@@ -1113,6 +1130,7 @@ export default function DataScanModal({
   const supportsContactGroups = !isPageInboxAction
     && !isZaloRemarketingCustomersAction
     && (effectiveContactType === 'person' || effectiveContactType === 'group' || effectiveContactType === 'page')
+  const showLegacyContactGroupControls = supportsContactGroups && !isDataGroupTargetMode
   const platformAccounts = useMemo(
     () => isUploadDataAction
       ? accounts.filter(account => ['facebook', 'zalo', 'email', 'sms'].includes(account.flatformType))
@@ -1470,6 +1488,13 @@ export default function DataScanModal({
     setPageInboxExcludedIds(new Set())
   }, [])
 
+  const clearHiddenScanDatasetSelection = useCallback(() => {
+    if (showDatasetFilter) return
+    setSelectedDatasetId('')
+    setPageInboxPage(1)
+    resetPagedContactSelection()
+  }, [resetPagedContactSelection, showDatasetFilter])
+
   useEffect(() => {
     setContactGroupFilterId('')
     setPageInboxPage(1)
@@ -1478,7 +1503,7 @@ export default function DataScanModal({
 
   useEffect(() => {
     if (contactGroupFilterId === '') return
-    if (!supportsContactGroups) {
+    if (!showLegacyContactGroupControls) {
       setContactGroupFilterId('')
       return
     }
@@ -1531,12 +1556,12 @@ export default function DataScanModal({
     const normalizedLink = extractZaloGroupLink(value)
     if (!normalizedLink) return ''
     const matchedGroup = findLinkedZaloGroupByLink(normalizedLink)
+    clearHiddenScanDatasetSelection()
     setZaloGroupMemberMode('group_link')
     setZaloGroupMemberLink(normalizedLink)
     setZaloGroupMemberGroupId(matchedGroup?.uid || '')
-    setSelectedIds(new Set())
     return normalizedLink
-  }, [findLinkedZaloGroupByLink])
+  }, [clearHiddenScanDatasetSelection, findLinkedZaloGroupByLink])
 
   const decodeZaloQrImage = useCallback(async (file: File | null | undefined) => {
     if (!file) return
@@ -1972,15 +1997,16 @@ export default function DataScanModal({
     } finally {
       if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) setGroupsLoading(false)
     }
-  }, [accountId, effectiveContactType, showAlert, supportsContactGroups])
+  }, [accountId, effectiveContactType, showAlert, showLegacyContactGroupControls])
 
   const loadContactsForGroup = useCallback(async (groupId: number, force = false): Promise<AutoAccountContact[]> => {
     if (!window.electronAPI) return []
+    if (typeof accountId !== 'number') return []
     if (!force && groupContactCache[groupId]) return groupContactCache[groupId]
-    const data = await window.electronAPI.listContactGroupContacts(groupId)
+    const data = await window.electronAPI.listContactGroupContacts(groupId, accountId, effectiveContactType)
     setGroupContactCache(prev => ({ ...prev, [groupId]: data }))
     return data
-  }, [groupContactCache])
+  }, [accountId, effectiveContactType, groupContactCache])
 
   const handleManagedContactGroupsChanged = useCallback(async () => {
     const loadId = contactGroupsLoadIdRef.current + 1
@@ -2009,7 +2035,7 @@ export default function DataScanModal({
       const nextSelectedGroupIds = Array.from(selectedGroupIds).filter(groupId => currentGroupIds.has(groupId))
       const nextGroupContactCache: Record<number, AutoAccountContact[]> = {}
       await Promise.all(nextSelectedGroupIds.map(async groupId => {
-        nextGroupContactCache[groupId] = await window.electronAPI.listContactGroupContacts(groupId)
+        nextGroupContactCache[groupId] = await window.electronAPI.listContactGroupContacts(groupId, accountId, effectiveContactType)
       }))
       if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
 
@@ -2823,6 +2849,7 @@ export default function DataScanModal({
   }
 
   const handlePageInboxPageChange = (value: string) => {
+    clearHiddenScanDatasetSelection()
     setPageInboxPageUid(value)
   }
 
@@ -2899,58 +2926,6 @@ export default function DataScanModal({
     const selectedContacts = await loadSelectedContacts()
     const rawContacts = [...selectedContacts, ...selectedGroupContacts]
     return dedupeOnOutput ? dedupeContacts(rawContacts) : rawContacts
-  }
-
-  const handleRenameContactGroup = async (group: AutoAccountContactGroup, name: string) => {
-    if (!window.electronAPI) return
-    const normalizedName = name.trim()
-    if (!normalizedName || normalizedName === group.name) return
-    try {
-      const updated = await window.electronAPI.updateContactGroup(group.id, normalizedName)
-      setContactGroups(prev => prev.map(item => item.id === group.id ? { ...item, ...updated } : item))
-      setAllContactGroups(prev => prev.map(item => item.id === group.id ? { ...item, ...updated } : item))
-      showAlert('Đã đổi tên nhóm data.', 'success')
-    } catch (err: any) {
-      console.error('Failed to rename contact group:', err)
-      showAlert(err?.message || 'Không thể đổi tên nhóm data.', 'error')
-      throw err
-    }
-  }
-
-  const handleDeleteContactGroup = (group: AutoAccountContactGroup) => {
-    if (!window.electronAPI) return
-    showConfirm(
-      `Xoá nhóm "${group.name}"? Data gốc sẽ không bị xoá.`,
-      async () => {
-        try {
-          await window.electronAPI.deleteContactGroup(group.id)
-          setContactGroups(prev => prev.filter(item => item.id !== group.id))
-          setAllContactGroups(prev => prev.filter(item => item.id !== group.id))
-          setContactGroupFilterId(prev => prev === group.id ? '' : prev)
-          setSelectedGroupIds(prev => {
-            const next = new Set(prev)
-            next.delete(group.id)
-            return next
-          })
-          setGroupContactCache(prev => {
-            const next = { ...prev }
-            delete next[group.id]
-            return next
-          })
-          setActiveGroupId(prev => prev === group.id ? null : prev)
-          setModalSelectedGroupIds(prev => {
-            const next = new Set(prev)
-            next.delete(group.id)
-            return next
-          })
-          showAlert('Đã xoá nhóm data.', 'success')
-        } catch (err: any) {
-          console.error('Failed to delete contact group:', err)
-          showAlert(err?.message || 'Không thể xoá nhóm data.', 'error')
-        }
-      },
-      { title: 'Xoá nhóm data', confirmText: 'Xoá', variant: 'danger' }
-    )
   }
 
   const handleToggleGroupOutput = async (groupId: number) => {
@@ -3113,8 +3088,8 @@ export default function DataScanModal({
   }
 
   const handleZaloGroupMemberModeChange = (mode: ZaloGroupMemberScanMode) => {
+    clearHiddenScanDatasetSelection()
     setZaloGroupMemberMode(mode)
-    setSelectedIds(new Set())
     if (mode === 'joined_group') {
       setZaloGroupMemberGroupId(prev => (
         prev && joinedZaloGroupOptions.some(group => group.uid === prev)
@@ -3134,20 +3109,20 @@ export default function DataScanModal({
   }
 
   const handleJoinedZaloGroupChange = (groupId: string) => {
+    clearHiddenScanDatasetSelection()
     setZaloGroupMemberGroupId(groupId)
-    setSelectedIds(new Set())
   }
 
   const handleLinkedZaloGroupChange = (groupId: string) => {
+    clearHiddenScanDatasetSelection()
     setZaloGroupMemberGroupId(groupId)
-    setSelectedIds(new Set())
     const group = linkedZaloGroupOptions.find(item => item.uid === groupId)
     setZaloGroupMemberLink(group ? getZaloGroupContactLink(group) : '')
   }
 
   const handleZaloGroupMemberLinkChange = (value: string) => {
+    clearHiddenScanDatasetSelection()
     setZaloGroupMemberLink(value)
-    setSelectedIds(new Set())
     const normalizedLink = normalizeZaloGroupLink(value)
     const matchedGroup = normalizedLink ? findLinkedZaloGroupByLink(normalizedLink) : null
     setZaloGroupMemberGroupId(matchedGroup?.uid || '')
@@ -3574,18 +3549,33 @@ export default function DataScanModal({
   }
 
   const handleSelect = async () => {
-    if (!onSelect) return
+    if (!onSelect || selectingOutput) return
+    setSelectingOutput(true)
     try {
       const selected = await loadOutputContacts()
       if (selected.length === 0) {
-        showAlert('Vui lòng tích chọn data trước khi chọn.', 'error')
+        showAlert(
+          isDataGroupTargetMode
+            ? 'Vui lòng tích chọn data trước khi thêm vào nhóm.'
+            : 'Vui lòng tích chọn data trước khi chọn.',
+          'error'
+        )
         return
       }
-      onSelect(selected)
+      await onSelect(selected, {
+        action,
+        datasetId: selectedDataset?.id,
+        datasetName: selectedDataset?.name,
+        accountId: accountId || undefined,
+        platform: selectedDataset?.flatformType as DataScanPlatform || actionDef.platform as DataScanPlatform,
+        contactType: selectedDataset?.contactType || actionDef.contactType
+      })
       onClose()
     } catch (err) {
       console.error('Failed to select scan data:', err)
-      showAlert('Không thể chọn data.', 'error')
+      if (!isDataGroupTargetMode) showAlert('Không thể chọn data.', 'error')
+    } finally {
+      if (mountedRef.current) setSelectingOutput(false)
     }
   }
 
@@ -3594,9 +3584,17 @@ export default function DataScanModal({
       <div className={`campaign-full-modal data-scan-modal ${minimized ? 'minimized' : ''}`}>
         <div className="modal-header data-scan-header">
           <div>
-            <div className="modal-title">Quét data</div>
+            <div className="modal-title">
+              {isDataGroupTargetMode ? 'Quét data để thêm vào nhóm' : 'Quét data'}
+            </div>
             <div className="data-scan-subtitle">
-              Tổng {formatCount(currentTotalCount)} data
+              <span>Tổng {formatCount(currentTotalCount)} data</span>
+              {targetDataGroup && (
+                <span className="data-scan-target-group">
+                  <span className="data-scan-target-group-dot" style={{ background: targetDataGroup.color }} />
+                  Nhóm đích: <strong>{targetDataGroup.name}</strong>
+                </span>
+              )}
             </div>
           </div>
           <div className="data-scan-header-actions">
@@ -3609,7 +3607,7 @@ export default function DataScanModal({
                 {minimized ? <Maximize2 size={17} /> : <Minimize2 size={17} />}
               </button>
             )}
-            <button className="btn-icon" onClick={handleClose} title="Đóng" disabled={scanStopping}>
+            <button className="btn-icon" onClick={handleClose} title="Đóng" disabled={scanStopping || selectingOutput}>
               <X size={18} />
             </button>
           </div>
@@ -3701,7 +3699,10 @@ export default function DataScanModal({
                     <input
                       className="stepper-input"
                       value={postCommentersUrl}
-                      onChange={event => setPostCommentersUrl(event.target.value)}
+                      onChange={event => {
+                        clearHiddenScanDatasetSelection()
+                        setPostCommentersUrl(event.target.value)
+                      }}
                       placeholder="Dán link bài post Facebook..."
                       disabled={scanLoading}
                     />
@@ -3728,7 +3729,10 @@ export default function DataScanModal({
                     <input
                       className="stepper-input"
                       value={postLikesUrl}
-                      onChange={event => setPostLikesUrl(event.target.value)}
+                      onChange={event => {
+                        clearHiddenScanDatasetSelection()
+                        setPostLikesUrl(event.target.value)
+                      }}
                       placeholder="Dán link bài post Facebook..."
                       disabled={scanLoading}
                     />
@@ -3755,7 +3759,10 @@ export default function DataScanModal({
                     <input
                       className="stepper-input"
                       value={profileFriendsUrl}
-                      onChange={event => setProfileFriendsUrl(event.target.value)}
+                      onChange={event => {
+                        clearHiddenScanDatasetSelection()
+                        setProfileFriendsUrl(event.target.value)
+                      }}
                       placeholder="Dán link/UID profile Facebook..."
                       disabled={scanLoading}
                     />
@@ -3782,7 +3789,10 @@ export default function DataScanModal({
                     <input
                       className="stepper-input"
                       value={groupMembersUrl}
-                      onChange={event => setGroupMembersUrl(event.target.value)}
+                      onChange={event => {
+                        clearHiddenScanDatasetSelection()
+                        setGroupMembersUrl(event.target.value)
+                      }}
                       placeholder="Dán link/UID group Facebook..."
                       disabled={scanLoading}
                     />
@@ -3952,14 +3962,14 @@ export default function DataScanModal({
                   }
                 >
                   <RefreshCw size={14} />
-                  Tải data
+                  {isDataGroupTargetMode ? 'Quét data' : 'Tải data'}
                 </button>
               )}
             </div>}
           </div>
 
           <div className="data-scan-filter-section">
-            <div className={`data-scan-filter-header${hasZaloTagFilters ? ' has-zalo-tags' : ''}${supportsContactGroups ? ' has-contact-group-filter' : ''}${hasStatusFilter ? ' has-status-filter' : ''}${datasetScanType ? ' has-dataset-filter' : ''}`}>
+            <div className={`data-scan-filter-header${hasZaloTagFilters ? ' has-zalo-tags' : ''}${showLegacyContactGroupControls ? ' has-contact-group-filter' : ''}${hasStatusFilter ? ' has-status-filter' : ''}${showDatasetFilter ? ' has-dataset-filter' : ''}`}>
               <div className="stepper-form-group data-scan-search-group">
                 <label aria-hidden="true">&nbsp;</label>
                 <label className="data-scan-search">
@@ -3977,7 +3987,7 @@ export default function DataScanModal({
                   />
                 </label>
               </div>
-              {datasetScanType && (
+              {showDatasetFilter && (
                 <div className="stepper-form-group data-scan-filter-dataset">
                   <label>Danh sách data</label>
                   <select
@@ -4140,7 +4150,7 @@ export default function DataScanModal({
                   </div>
                 </>
               )}
-              {supportsContactGroups && (
+              {showLegacyContactGroupControls && (
                 <div className="stepper-form-group data-scan-filter-contact-group">
                   <label>Nhóm data</label>
                   <select
@@ -4357,12 +4367,12 @@ export default function DataScanModal({
                   checked={dedupeOnOutput}
                   onChange={event => setDedupeOnOutput(event.target.checked)}
                 />
-                <span>Lọc trùng dữ liệu khi chọn, xuất excel</span>
+                <span>{isDataGroupTargetMode ? 'Lọc trùng dữ liệu khi thêm vào nhóm, xuất excel' : 'Lọc trùng dữ liệu khi chọn, xuất excel'}</span>
               </label>
               <span>
                 {`${formatCount(pagedSelectedCount)} đã tích chọn`}
               </span>
-              {selectedGroupIds.size > 0 && <span>{selectedGroupIds.size} nhóm đã chọn</span>}
+              {showLegacyContactGroupControls && selectedGroupIds.size > 0 && <span>{selectedGroupIds.size} nhóm đã chọn</span>}
             </div>
           </div>
 
@@ -4678,7 +4688,7 @@ export default function DataScanModal({
               />
               <button className="btn btn-secondary" onClick={selectRange} disabled={currentTotalCount === 0}>Tích chọn</button>
             </div>
-            {supportsContactGroups && (
+            {showLegacyContactGroupControls && (
               <div className="data-scan-group-actions">
                 <button
                   className="btn btn-secondary data-scan-group-action-button"
@@ -4701,7 +4711,7 @@ export default function DataScanModal({
 
         </div>
 
-        {supportsContactGroups && showGroupPanel && (
+        {showLegacyContactGroupControls && showGroupPanel && (
           <DataGroupManagerModal
             initialAccountId={typeof accountId === 'number' ? accountId : null}
             initialGroupId={activeContactGroup?.contactType === effectiveContactType ? activeGroupId : null}
@@ -4715,7 +4725,7 @@ export default function DataScanModal({
           />
         )}
 
-        {supportsContactGroups && showGroupSelectionModal && (
+        {showLegacyContactGroupControls && showGroupSelectionModal && (
           <DataScanGroupSelectionModal
             contactType={effectiveContactType}
             platform={selectedPlatform}
@@ -4728,7 +4738,7 @@ export default function DataScanModal({
           />
         )}
 
-        {supportsContactGroups && showAddGroupModal && (
+        {showLegacyContactGroupControls && showAddGroupModal && (
           <div
             className="data-scan-group-modal-backdrop"
             onClick={() => {
@@ -4788,32 +4798,43 @@ export default function DataScanModal({
                 {!showNewGroupInput ? (
                   <button
                     className="btn btn-secondary data-scan-new-group-toggle"
-                    onClick={() => setShowNewGroupInput(true)}
+                    onClick={() => {
+                      setNewGroupName(createDefaultDataGroupName())
+                      setShowNewGroupInput(true)
+                    }}
                     disabled={savingGroupMembers}
                   >
                     <Plus size={14} />
                     Hoặc thêm mới nhóm
                   </button>
                 ) : (
-                  <div className="data-scan-new-group-row">
-                    <input
-                      className="stepper-input"
-                      value={newGroupName}
-                      onChange={event => setNewGroupName(event.target.value)}
-                      placeholder="Tên nhóm mới..."
-                      disabled={savingGroupMembers}
-                      autoFocus
-                    />
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => {
-                        setShowNewGroupInput(false)
-                        setNewGroupName('')
-                      }}
-                      disabled={savingGroupMembers}
-                    >
-                      Chọn nhóm có sẵn
-                    </button>
+                  <div className="data-scan-new-group-field">
+                    <label htmlFor="data-scan-new-group-name">
+                      Tên nhóm dữ liệu<span className="required">*</span>
+                    </label>
+                    <div className="data-scan-new-group-row">
+                      <input
+                        id="data-scan-new-group-name"
+                        className="stepper-input"
+                        value={newGroupName}
+                        onChange={event => setNewGroupName(event.target.value)}
+                        maxLength={255}
+                        disabled={savingGroupMembers}
+                        autoFocus
+                        required
+                        aria-required="true"
+                      />
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => {
+                          setShowNewGroupInput(false)
+                          setNewGroupName('')
+                        }}
+                        disabled={savingGroupMembers}
+                      >
+                        Chọn nhóm có sẵn
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -4841,8 +4862,8 @@ export default function DataScanModal({
             Xuất Excel
           </button>
           <div className="data-scan-footer-right">
-            <button className="btn btn-ghost" onClick={handleClose} disabled={scanStopping}>{onSelect ? 'Huỷ' : 'Đóng'}</button>
-            {onSelect && supportsContactGroups && (
+            <button className="btn btn-ghost" onClick={handleClose} disabled={scanStopping || selectingOutput}>{onSelect ? 'Huỷ' : 'Đóng'}</button>
+            {onSelect && showLegacyContactGroupControls && (
               <button
                 className="btn btn-secondary"
                 onClick={() => setShowGroupSelectionModal(true)}
@@ -4852,9 +4873,9 @@ export default function DataScanModal({
               </button>
             )}
             {onSelect && (
-              <button className="btn btn-primary" onClick={handleSelect}>
+              <button className="btn btn-primary" onClick={handleSelect} disabled={selectingOutput}>
                 <Check size={14} />
-                Chọn
+                {selectingOutput ? (isDataGroupTargetMode ? 'Đang thêm...' : 'Đang chọn...') : (isDataGroupTargetMode ? 'Thêm vào nhóm' : 'Chọn')}
               </button>
             )}
           </div>

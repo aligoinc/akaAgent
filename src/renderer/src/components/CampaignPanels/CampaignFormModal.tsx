@@ -12,6 +12,7 @@ import {
   AutoAccountContact,
   AutoAccountContactGroup,
   Campaign,
+  CampaignDataTargetSourceMode,
   CampaignAction,
   CampaignImportPlatform,
   CampaignInputData,
@@ -19,16 +20,19 @@ import {
   CampaignMediaInput,
   CampaignMediaSnapshot,
   CampaignExtraSettings,
+  DataGroup,
   ContentTemplate,
   ContentTemplateChannelName,
   ContentTemplateChannels,
   ContentTemplateGroup,
   CreateContentTemplateInput,
+  actionSupportsDataGroup,
   isValidEmailInputDataValue,
   ZaloLabelOption
 } from '../../../../shared/types'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
+import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
@@ -170,6 +174,7 @@ interface ContentTemplatePickerModalState {
   title: string
   searchQuery: string
   groupId: number | null
+  selectedTemplateId: number | null
 }
 
 interface ContentTemplateSaveModalState {
@@ -182,6 +187,12 @@ interface ContentTemplateSaveModalState {
 interface CampaignSaveBundleItem {
   campaignPayload: Partial<Campaign>
   details: Partial<CampaignInputData>[]
+  dataGroupSnapshots: DirectDataGroupSnapshotIntent[]
+}
+
+interface DirectDataGroupSnapshotIntent {
+  groupId: number
+  groupName: string
 }
 
 interface InternalCampaignDraft {
@@ -202,6 +213,7 @@ interface CampaignFormModalProps {
   lockedActionId?: string
   initialAccountIds?: number[]
   initialDetails?: Partial<CampaignInputData>[]
+  initialDataGroupSnapshots?: DirectDataGroupSnapshotIntent[]
   draftPickerSourceType?: InternalCampaignPickerSourceType
   draftRequiredTargetField?: FindDataTargetCampaignField | null
   onSaveDraft?: (draft: InternalCampaignDraft) => void
@@ -541,6 +553,59 @@ const VOICE_CALL_ACTION_ID = 'voice_call'
 const VOICE_CALL_AI_DISCLOSURE = 'Đây là cuộc gọi tự động sử dụng giọng nói AI.'
 const VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES = 60
 const VOICE_CALL_MAX_TTS_INPUT_CHARS = 4096
+const DATA_GROUP_BUNDLE_RETRY_STORAGE_PREFIX = 'aka-agent:data-group-bundle-retry:'
+
+const stableSerializeForDataGroupBundle = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(stableSerializeForDataGroupBundle).join(',')}]`
+  const record = value as Record<string, unknown>
+  // A fresh content-template snapshot gets a new capture timestamp on every
+  // Save click even when the user's effective campaign intent is unchanged.
+  // Excluding that audit-only value keeps a partial multi-account bundle retry
+  // on the original request id instead of creating a second set of children.
+  return `{${Object.keys(record).filter(key => key !== 'capturedAt').sort().map(key => (
+    `${JSON.stringify(key)}:${stableSerializeForDataGroupBundle(record[key])}`
+  )).join(',')}}`
+}
+
+const hashDataGroupBundlePayload = async (value: unknown): Promise<string> => {
+  const serialized = stableSerializeForDataGroupBundle(value)
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized))
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+  }
+  let hash = 2166136261
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+const readStoredDataGroupBundleRequestId = (storageKey: string): string | null => {
+  try {
+    return window.localStorage.getItem(storageKey)
+  } catch {
+    return null
+  }
+}
+
+const storeDataGroupBundleRequestId = (storageKey: string, requestId: string): void => {
+  try {
+    window.localStorage.setItem(storageKey, requestId)
+  } catch {
+    // The in-memory ref still preserves idempotency for this modal session.
+  }
+}
+
+const clearStoredDataGroupBundleRequestId = (storageKey: string | null): void => {
+  if (!storageKey) return
+  try {
+    window.localStorage.removeItem(storageKey)
+  } catch {
+    // A stale retry hint is harmless: a ready bundle is itself idempotent.
+  }
+}
 const EXTERNAL_SMS_STATUS_OPTIONS = [
   { value: 'thành công', label: 'Thành công' },
   { value: 'thất bại', label: 'Thất bại' },
@@ -1281,6 +1346,18 @@ const FOUND_DATA_HANDLING_STEP: StepDef = {
   fields: [{ key: 'foundDataHandling', label: 'Xử lý data' }]
 }
 
+const DATA_TARGET_SOURCE_STEP: StepDef = {
+  id: 'dataTargetSource',
+  title: 'Cách thêm data vào chiến dịch',
+  fields: [{ key: 'dataTargetSourceMode', label: 'Nguồn data' }]
+}
+
+const DATA_GROUP_TARGET_STEP: StepDef = {
+  id: 'details',
+  title: 'Chọn data bằng cách chọn nhóm',
+  fields: [{ key: 'dataGroupId', label: 'Nhóm data' }]
+}
+
 const getFindDataSourceStep = (label: string): StepDef => ({
   id: 'findDataSources',
   title: label,
@@ -1309,6 +1386,7 @@ export default function CampaignFormModal({
   lockedActionId,
   initialAccountIds,
   initialDetails,
+  initialDataGroupSnapshots,
   draftPickerSourceType,
   draftRequiredTargetField,
   onSaveDraft,
@@ -1438,6 +1516,8 @@ export default function CampaignFormModal({
     name: campaign?.name || '',
     actionId: initialActionId,
     accountIds: initialAccountIds?.length ? initialAccountIds : (campaign?.accountId ? [campaign.accountId] : [] as number[]),
+    dataTargetSourceMode: (campaign?.dataTargetSourceMode || 'direct') as CampaignDataTargetSourceMode,
+    dataGroupId: campaign?.dataGroupId ?? null as number | null,
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
     scheduleEndDate: initEndDate(),
@@ -1661,6 +1741,8 @@ export default function CampaignFormModal({
   const lastAiCampaignNameRef = useRef('')
   const campaignNameAiRequestSeqRef = useRef(0)
   const campaignNameAiCacheRef = useRef<Map<string, string>>(new Map())
+  const dataGroupBundleRequestIdRef = useRef<string | null>(null)
+  const dataGroupBundleFingerprintRef = useRef<string | null>(null)
   const [expandedRateLimitMinuteActions, setExpandedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
   const [editedRateLimitMinuteActions, setEditedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
   const [mediaPickerTarget, setMediaPickerTarget] = useState<MainMediaPickerTarget | null>(null)
@@ -1707,6 +1789,22 @@ export default function CampaignFormModal({
   const findDataSourceSelectionTouchedRef = useRef(false)
   const findDataSourceSelectionScopeRef = useRef('')
   const [campaignPickerModal, setCampaignPickerModal] = useState<CampaignPickerModalState | null>(null)
+  const [dataGroupPickerOpen, setDataGroupPickerOpen] = useState(false)
+  const [dataGroupPickerMode, setDataGroupPickerMode] = useState<'source' | 'append'>('source')
+  const [directDataGroupSnapshots, setDirectDataGroupSnapshots] = useState<DirectDataGroupSnapshotIntent[]>(() => {
+    const snapshotsByGroupId = new Map<number, DirectDataGroupSnapshotIntent>()
+    for (const snapshot of initialDataGroupSnapshots || []) {
+      const groupId = Number(snapshot.groupId)
+      if (!Number.isSafeInteger(groupId) || groupId <= 0 || snapshotsByGroupId.has(groupId)) continue
+      snapshotsByGroupId.set(groupId, {
+        groupId,
+        groupName: String(snapshot.groupName || '').trim() || `Nhóm ${groupId}`
+      })
+    }
+    return Array.from(snapshotsByGroupId.values())
+  })
+  const [selectedDataGroupName, setSelectedDataGroupName] = useState('')
+  const [selectedDataGroup, setSelectedDataGroup] = useState<DataGroup | null>(null)
   const [campaignPickerRefreshing, setCampaignPickerRefreshing] = useState(false)
   const [contentTemplates, setContentTemplates] = useState<ContentTemplate[]>([])
   const [contentTemplateGroups, setContentTemplateGroups] = useState<ContentTemplateGroup[]>([])
@@ -1739,6 +1837,7 @@ export default function CampaignFormModal({
     initialCampaign?: Campaign | null
     initialAccountIds?: number[]
     initialDetails?: Partial<CampaignInputData>[]
+    initialDataGroupSnapshots?: DirectDataGroupSnapshotIntent[]
     submitLabel?: string
     autoSelectOnSave?: boolean
   } | null>(null)
@@ -1750,6 +1849,8 @@ export default function CampaignFormModal({
 
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
+  const canUseDataGroupSource = actionSupportsDataGroup(formData.actionId)
+  const isDataGroupSource = canUseDataGroupSource && formData.dataTargetSourceMode === 'data_group'
   const isMessageCampaign = MESSAGE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isEmailCampaign = formData.actionId === EMAIL_SEND_ACTION_ID
   const isSmsCampaign = formData.actionId === SMS_SEND_ACTION_ID
@@ -1819,6 +1920,8 @@ export default function CampaignFormModal({
   const canUseRerunAfterCompletion = isFindDataCampaign || isCommentSeedingFeedCampaign || isNewsfeedInteractionCampaign
   const canUseSleepBetweenActions = formData.actionId !== 'facebook_timeline_post' && !isNewsfeedInteractionCampaign && !isFacebookGroupInviteCampaign
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
+  const isSavedDataGroupIdentityLocked = isEditingSavedCampaign && campaign?.dataTargetSourceMode === 'data_group'
+  const hasPendingDirectDataGroupSnapshots = canUseDataGroupSource && !isDataGroupSource && directDataGroupSnapshots.length > 0
   const hasZaloFriendRecommendationMaterialized = isZaloMessageFriendRecommendationCampaign && isEditingSavedCampaign && Boolean(campaign?.extraSettings?.zaloFriendRecommendationDataMaterializedAt)
   const zaloFriendRecommendationMaterializedCount = campaign?.extraSettings?.zaloFriendRecommendationMaterializedCount ?? 0
   const hasZaloCancelFriendRequestMaterialized = isZaloCancelSentFriendRequestCampaign && isEditingSavedCampaign && Boolean(campaign?.extraSettings?.zaloCancelFriendRequestDataMaterializedAt)
@@ -2178,7 +2281,7 @@ export default function CampaignFormModal({
   }
   const handleActionPlatformSelect = (platform: string) => {
     const normalizedPlatform = normalizeCampaignActionPlatform(platform)
-    if (!normalizedPlatform || (draftMode && !!lockedActionId)) return
+    if (!normalizedPlatform || (draftMode && !!lockedActionId) || isSavedDataGroupIdentityLocked) return
 
     const currentAction = availableCampaignActions.find(action => action.id === formData.actionId)
     const currentPlatform = normalizeCampaignActionPlatform(currentAction?.flatformType)
@@ -2226,6 +2329,7 @@ export default function CampaignFormModal({
     })
   }
   const handleActionChange = (actionId: string) => {
+    if (isSavedDataGroupIdentityLocked) return
     const nextAction = availableCampaignActions.find(action => action.id === actionId)
     const nextPlatform = normalizeCampaignActionPlatform(nextAction?.flatformType)
     const nextAccountIds = getAccountIdsForPlatform(formData.accountIds, nextPlatform || selectedActionPlatformFilter, actionId)
@@ -2288,7 +2392,7 @@ export default function CampaignFormModal({
               type="button"
               className={`campaign-action-platform-tag is-${option.value}${isSelected ? ' is-active' : ''}`}
               onClick={() => handleActionPlatformSelect(option.value)}
-              disabled={draftMode && !!lockedActionId}
+              disabled={(draftMode && !!lockedActionId) || isSavedDataGroupIdentityLocked}
               aria-pressed={isSelected}
             >
               <span className={`campaign-action-platform-mark is-${option.value}`} />
@@ -2300,7 +2404,7 @@ export default function CampaignFormModal({
     )
   }
   const toggleSelectableAccounts = (accountIds: number[]) => {
-    if (isSingleAccountSelection || accountIds.length === 0) return
+    if (isSavedDataGroupIdentityLocked || isSingleAccountSelection || accountIds.length === 0) return
     invalidateCampaignNameAiRequest()
     setFormData(prev => {
       const selectedIds = new Set(prev.accountIds)
@@ -2313,6 +2417,7 @@ export default function CampaignFormModal({
     })
   }
   const toggleSelectableAccount = (accountId: number, checked: boolean) => {
+    if (isSavedDataGroupIdentityLocked) return
     invalidateCampaignNameAiRequest()
     setFormData(prev => ({
       ...prev,
@@ -2322,6 +2427,7 @@ export default function CampaignFormModal({
     }))
   }
   const selectSingleAccount = (accountId: number) => {
+    if (isSavedDataGroupIdentityLocked) return
     if (formData.accountIds.length !== 1 || formData.accountIds[0] !== accountId) {
       invalidateCampaignNameAiRequest()
     }
@@ -2345,6 +2451,47 @@ export default function CampaignFormModal({
   }
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
+
+  useEffect(() => {
+    const groupId = Number(formData.dataGroupId)
+    if (!Number.isSafeInteger(groupId) || groupId <= 0) {
+      setSelectedDataGroupName('')
+      setSelectedDataGroup(null)
+      return
+    }
+
+    let disposed = false
+    const hydrateSelectedGroupName = async () => {
+      const pageSize = 200
+      let offset = 0
+      try {
+        while (!disposed) {
+          const page = await window.electronAPI.listDataGroups({ offset, limit: pageSize })
+          const selectedGroup = page.groups.find(group => group.id === groupId)
+          if (selectedGroup) {
+            setSelectedDataGroupName(selectedGroup.name)
+            setSelectedDataGroup(selectedGroup)
+            return
+          }
+          offset += page.groups.length
+          if (page.groups.length === 0 || offset >= page.total) break
+        }
+        if (!disposed) {
+          setSelectedDataGroupName('Nhóm data không còn hoạt động')
+          setSelectedDataGroup(null)
+        }
+      } catch (error) {
+        console.error('Failed to resolve selected Data Group name:', error)
+        if (!disposed) {
+          setSelectedDataGroupName('Nhóm data hiện tại')
+          setSelectedDataGroup(null)
+        }
+      }
+    }
+
+    void hydrateSelectedGroupName()
+    return () => { disposed = true }
+  }, [formData.dataGroupId])
 
   useEffect(() => {
     if (selectedActionPlatform) {
@@ -2469,7 +2616,7 @@ export default function CampaignFormModal({
     }
     return [step]
   })
-  const STEPS = applyVisibleStepFields((() => {
+  const baseSteps = applyVisibleStepFields((() => {
     if (!hasSelectedCampaignAction) return ALL_STEPS.filter(s => s.id === 'general')
     if (isSimpleCampaign) {
       if (isNewsfeedInteractionCampaign) {
@@ -2720,6 +2867,11 @@ export default function CampaignFormModal({
     }
     return ALL_STEPS.filter(s => s.id !== 'extra' || showExtraSection)
   })())
+  const STEPS = canUseDataGroupSource && !isSimpleCampaign
+    ? baseSteps.flatMap(step => step.id === 'details'
+      ? [DATA_TARGET_SOURCE_STEP, isDataGroupSource ? DATA_GROUP_TARGET_STEP : step]
+      : [step])
+    : baseSteps
   const getSectionNumber = (stepId: string) => Math.max(1, STEPS.findIndex(s => s.id === stepId) + 1)
   const stepIdsKey = STEPS.map(s => s.id).join('|')
 
@@ -2831,6 +2983,7 @@ export default function CampaignFormModal({
   const detailEntryCount = isFindDataSearchCampaign && !isEditingSavedCampaign
     ? findDataSearchKeywordRows.length
     : details.length
+  const directDataSourceSelectionCount = detailEntryCount + directDataGroupSnapshots.length
   const [deletedIds, setDeletedIds] = useState<number[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [akabizIntegrations, setAkaBizIntegrations] = useState<AkaBizIntegrations | null>(null)
@@ -2907,6 +3060,14 @@ export default function CampaignFormModal({
   useEffect(() => {
     campaignNameValueRef.current = formData.name
   }, [formData.name])
+
+  useEffect(() => {
+    if (canUseDataGroupSource) return
+    setDirectDataGroupSnapshots([])
+    setFormData(previous => previous.dataTargetSourceMode === 'direct' && previous.dataGroupId === null
+      ? previous
+      : { ...previous, dataTargetSourceMode: 'direct', dataGroupId: null })
+  }, [canUseDataGroupSource])
 
   useEffect(() => {
     const requestSeq = campaignNameAiRequestSeqRef.current + 1
@@ -3748,6 +3909,12 @@ export default function CampaignFormModal({
       case 'dailyLimit': return formData.dailyLimit >= 0
       case 'rateLimitCount': return formData.rateLimitCount >= 0
       case 'rateLimitMinutes': return formData.rateLimitMinutes >= 0
+      case 'dataTargetSourceMode':
+        return !isDataGroupSource || (
+          Number.isSafeInteger(Number(formData.dataGroupId)) && Number(formData.dataGroupId) > 0
+        )
+      case 'dataGroupId':
+        return Number.isSafeInteger(Number(formData.dataGroupId)) && Number(formData.dataGroupId) > 0
       case 'content': return !requiresMainContentOrMedia || hasMainContentText || hasSelectedMainMedia
       case 'emailSubject': return isAdvancedContentMode
         ? advancedContentDisplayItems.length > 0 && advancedContentDisplayItems.every(item => String(
@@ -3809,7 +3976,10 @@ export default function CampaignFormModal({
           getCampaignIdList(formData.externalSmsShopIds).length > 0 &&
           !!formData.externalSmsContent.trim() &&
           formData.externalSmsStatuses.length > 0
-      case 'details': return hideDetailsSection || detailEntryCount > 0 || hasSelectedFindDataSourceCampaign
+      case 'details':
+        return isDataGroupSource
+          ? Number.isSafeInteger(Number(formData.dataGroupId)) && Number(formData.dataGroupId) > 0
+          : hideDetailsSection || detailEntryCount > 0 || hasPendingDirectDataGroupSnapshots || hasSelectedFindDataSourceCampaign
       default: return false
     }
   }
@@ -3872,7 +4042,8 @@ export default function CampaignFormModal({
       target,
       title: `Chọn mẫu cho ${CONTENT_TEMPLATE_TARGET_LABELS[target]}`,
       searchQuery: '',
-      groupId: null
+      groupId: null,
+      selectedTemplateId: null
     })
     if (contentTemplates.length === 0) void loadContentTemplates()
   }
@@ -4820,9 +4991,9 @@ export default function CampaignFormModal({
     const accountChunks: Partial<CampaignInputData>[][] = []
     const numAccounts = formData.accountIds.length
     const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
-    const detailSource = shouldDiscardDetailsForSave || hideDetailsSection ? [] : detailRows
+    const detailSource = isDataGroupSource || shouldDiscardDetailsForSave || hideDetailsSection ? [] : detailRows
 
-    if (formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
+    if (!isDataGroupSource && !hasPendingDirectDataGroupSnapshots && formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
       for (let i = 0; i < numAccounts; i++) {
         accountChunks.push([])
       }
@@ -5041,6 +5212,8 @@ export default function CampaignFormModal({
           name: formData.name,
           actionId: formData.actionId,
           accountId,
+          dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct',
+          dataGroupId: isDataGroupSource ? formData.dataGroupId : null,
           ...(cloneFromId ? { status: 'tạm dừng' } : {}),
           schedule: formSchedule,
           originalSchedule: formSchedule,
@@ -5050,7 +5223,9 @@ export default function CampaignFormModal({
           scheduleDays: normalizedScheduleDays,
           scheduleWeekDays: normalizedScheduleWeekDays,
           continueNextDay: isMobileManagedSmsCampaign ? true : ((isNewsfeedInteractionCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupRealtimeCampaign) ? false : formData.continueNextDay),
-          refreshData: (isZaloMessageBirthdayCampaign || isZaloMessageFriendRecommendationCampaign || isZaloCancelSentFriendRequestCampaign)
+          refreshData: isDataGroupSource
+            ? false
+            : (isZaloMessageBirthdayCampaign || isZaloMessageFriendRecommendationCampaign || isZaloCancelSentFriendRequestCampaign)
             ? true
             : (isMobileManagedSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
           content: contentForSave,
@@ -5123,7 +5298,7 @@ export default function CampaignFormModal({
             postBumpRotationIndex: formData.postBumpRotationIndex,
             enableMessage: effectiveEnableMessage,
             enableAddFriend: effectiveEnableAddFriend,
-            useSuggestedFriends: effectiveUseSuggestedFriends,
+            useSuggestedFriends: isDataGroupSource ? false : effectiveUseSuggestedFriends,
             suggestedFriendsCount: effectiveSuggestedFriendsCount,
             emailSubject: isEmailCampaign
               ? (isSavingGroupSnapshot
@@ -5189,7 +5364,7 @@ export default function CampaignFormModal({
             zaloCancelFriendRequestMaterializedCount: isZaloCancelSentFriendRequestCampaign && !cloneFromId
               ? (campaign?.extraSettings?.zaloCancelFriendRequestMaterializedCount ?? 0)
               : 0,
-            zaloFriendTargetMode: isZaloMessageFriendCampaign ? formData.zaloFriendTargetMode : 'selected',
+            zaloFriendTargetMode: isDataGroupSource ? 'selected' : (isZaloMessageFriendCampaign ? formData.zaloFriendTargetMode : 'selected'),
             zaloFriendSourceTagIds: selectedZaloFriendSourceTagIds,
             zaloFriendSourceTagNames: selectedZaloFriendSourceTagNames,
             zaloFriendDataMaterializedAt: isZaloMessageFriendCampaign && isZaloFriendAutoDataMode && !cloneFromId
@@ -5253,12 +5428,12 @@ export default function CampaignFormModal({
             searchGroupMineOnly: isFindDataSearchCampaign ? formData.searchGroupMineOnly : false,
             minSearchGroupMembers: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupMembers) || 0) : 0,
             minSearchGroupPostsPerDay: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupPostsPerDay) || 0) : 0,
-            findDataRerunEnabled: canUseRerunAfterCompletion ? formData.findDataRerunEnabled : false,
+            findDataRerunEnabled: !isDataGroupSource && canUseRerunAfterCompletion ? formData.findDataRerunEnabled : false,
             findDataRerunAfterHours: canUseRerunAfterCompletion
               ? normalizeHourValue(formData.findDataRerunAfterHours)
               : DEFAULT_FIND_DATA_RERUN_AFTER_HOURS,
-            multiDailyTimeSlotsEnabled: isMultiDailyTimeSlotsCampaign ? formData.multiDailyTimeSlotsEnabled : false,
-            multiDailyTimeSlots: isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled
+            multiDailyTimeSlotsEnabled: !isDataGroupSource && isMultiDailyTimeSlotsCampaign ? formData.multiDailyTimeSlotsEnabled : false,
+            multiDailyTimeSlots: !isDataGroupSource && isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled
               ? normalizedMultiDailySlots.join(',')
               : '',
             isFindPostByKeywords: canUsePostContentConditionsForSave ? formData.isFindPostByKeywords : false,
@@ -5290,7 +5465,10 @@ export default function CampaignFormModal({
           } as CampaignExtraSettings,
           images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images
         },
-        details: (accountChunks[index] || []).map(detail => ({ ...detail }))
+        details: (accountChunks[index] || []).map(detail => ({ ...detail })),
+        dataGroupSnapshots: isDataGroupSource || !canUseDataGroupSource
+          ? []
+          : directDataGroupSnapshots.map(snapshot => ({ ...snapshot }))
       }
     })
   }
@@ -5299,6 +5477,10 @@ export default function CampaignFormModal({
     if (savingCampaign) return
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
+      return
+    }
+    if (isDataGroupSource && (!Number.isSafeInteger(formData.dataGroupId) || Number(formData.dataGroupId) <= 0)) {
+      showAlert('Vui lòng chọn Nhóm data cho chiến dịch.', 'error')
       return
     }
     if (isEmailCampaign && !canUseEmailFeature) {
@@ -5548,7 +5730,7 @@ export default function CampaignFormModal({
       : details
     const validDetails = isEditingSavedCampaign ? details : normalizeCampaignInputDataForSave(detailRowsForSave)
     const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
-    if (canUseRerunAfterCompletion && formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
+    if (!isDataGroupSource && canUseRerunAfterCompletion && formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
       showAlert('Vui lòng nhập số giờ chạy lại lớn hơn hoặc bằng 1.', 'error')
       return
     }
@@ -5645,28 +5827,28 @@ export default function CampaignFormModal({
           return
         }
       }
-      if (!isEditingSavedCampaign && validDetails.length === 0) {
+      if (!isDataGroupSource && !isEditingSavedCampaign && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots) {
         showAlert(isFindDataSearchCampaign ? 'Vui lòng thêm ít nhất một từ khóa vào danh sách data.' : 'Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
         return
       }
     }
-    if (!isEditingSavedCampaign && formData.actionId === 'facebook_group_post' && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && formData.actionId === 'facebook_group_post' && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots && !hasSelectedFindDataSourceCampaign) {
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isFacebookJoinGroupCampaign && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && isFacebookJoinGroupCampaign && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots && !hasSelectedFindDataSourceCampaign) {
       showAlert('Vui lòng thêm ít nhất một group vào danh sách data.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isFacebookGroupInviteCampaign && validDetails.length === 0) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && isFacebookGroupInviteCampaign && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots) {
       showAlert('Vui lòng chọn ít nhất một bạn bè cần mời.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isZaloAddGroupMemberCampaign && validDetails.length === 0) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && isZaloAddGroupMemberCampaign && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots) {
       showAlert('Vui lòng thêm ít nhất một SĐT hoặc UID Zalo vào danh sách data.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isPagePostCampaign && validDetails.length === 0) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && isPagePostCampaign && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots) {
       showAlert('Vui lòng chọn ít nhất một fanpage.', 'error')
       return
     }
@@ -5674,7 +5856,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng chọn ít nhất một hành động nhắn tin hoặc kết bạn.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign && !isDraftTargetFromFindData) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && isMessageCampaign && !hideDetailsSection && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots && !hasSelectedFindDataSourceCampaign && !isDraftTargetFromFindData) {
       showAlert(
         isMessageUidCampaign
           ? 'Vui lòng thêm ít nhất một UID vào danh sách data.'
@@ -5701,7 +5883,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng chọn khách inbox Page từ form Quét data để xác định Page cần gửi tin.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isSuggestedFriendsUidCampaign && normalizeSuggestedFriendsCount(formData.suggestedFriendsCount) < 1) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && isSuggestedFriendsUidCampaign && normalizeSuggestedFriendsCount(formData.suggestedFriendsCount) < 1) {
       showAlert('Vui lòng nhập số lượng đề xuất lớn hơn 0.', 'error')
       return
     }
@@ -5710,7 +5892,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập nội dung comment hoặc chọn ảnh comment.', 'error')
       return
     }
-    if (!isEditingSavedCampaign && isCommentSeedingCampaign && validDetails.length === 0 && !hasSelectedFindDataSourceCampaign) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && isCommentSeedingCampaign && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots && !hasSelectedFindDataSourceCampaign) {
       showAlert(
         isCommentSeedingPostCampaign
           ? 'Vui lòng thêm ít nhất một link bài post vào danh sách mục tiêu.'
@@ -5736,7 +5918,7 @@ export default function CampaignFormModal({
       }
     }
 
-    if (!isEditingSavedCampaign && !hideDetailsSection) {
+    if (!isDataGroupSource && !isEditingSavedCampaign && !hideDetailsSection) {
       setDetails(validDetails)
     }
 
@@ -5783,30 +5965,124 @@ export default function CampaignFormModal({
       }
 
       const saveBundleItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
+      const generatedSaveRequestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `campaign-data-group-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      let dataGroupBundleRetryStorageKey: string | null = null
+      let dataGroupBundleFingerprint: string | null = null
+      if (isDataGroupSource && !campaign?.id) {
+        dataGroupBundleFingerprint = await hashDataGroupBundlePayload({
+          version: 1,
+          items: saveBundleItems
+        })
+        dataGroupBundleRetryStorageKey = `${DATA_GROUP_BUNDLE_RETRY_STORAGE_PREFIX}${dataGroupBundleFingerprint}`
+      }
+      const persistedBundleRequestId = dataGroupBundleRetryStorageKey
+        ? readStoredDataGroupBundleRequestId(dataGroupBundleRetryStorageKey)
+        : null
+      const inMemoryBundleRequestId = dataGroupBundleFingerprintRef.current === dataGroupBundleFingerprint
+        ? dataGroupBundleRequestIdRef.current
+        : null
+      const saveRequestId = isDataGroupSource
+        ? (inMemoryBundleRequestId || persistedBundleRequestId || generatedSaveRequestId)
+        : generatedSaveRequestId
+      if (isDataGroupSource) {
+        dataGroupBundleRequestIdRef.current = saveRequestId
+        dataGroupBundleFingerprintRef.current = dataGroupBundleFingerprint
+        if (dataGroupBundleRetryStorageKey) {
+          storeDataGroupBundleRequestId(dataGroupBundleRetryStorageKey, saveRequestId)
+        }
+      }
+      const creationBundle = isDataGroupSource && !campaign?.id
+        ? await window.electronAPI.createCampaignCreationBundle({
+            requestId: saveRequestId,
+            expectedCampaignCount: saveBundleItems.length
+          })
+        : null
       const savedCampaignIds: number[] = []
       const savedCampaignPayloadById = new Map<number, Partial<Campaign>>()
       const stagedCampaignFinalStatusById = new Map<number, string>()
+      const emptySnapshotCampaigns: Array<{ campaignId: number; campaignName: string }> = []
 
       const createCampaignWithInputDataSafely = async (
         campaignPayload: Partial<Campaign>,
-        campaignDetails: Partial<CampaignInputData>[]
+        campaignDetails: Partial<CampaignInputData>[],
+        dataGroupSnapshots: DirectDataGroupSnapshotIntent[] = []
       ): Promise<Campaign> => {
         const finalStatus = campaignPayload.status ?? 'chờ xử lý'
+        const usesAtomicProvisioningBarrier = campaignPayload.dataTargetSourceMode === 'data_group' && !!creationBundle
         const savedCampaign = await createCampaign({
           ...campaignPayload,
-          status: 'tạm dừng'
+          status: usesAtomicProvisioningBarrier ? finalStatus : 'tạm dừng'
         })
 
         try {
-          for (const detail of campaignDetails) {
-            await createCampaignInputData({
-              ...detail,
-              id: undefined,
-              campaignId: savedCampaign.id
+          if (campaignPayload.dataTargetSourceMode === 'direct' && dataGroupSnapshots.length > 0) {
+            const campaignSchedule = String(campaignPayload.schedule || savedCampaign.schedule || '').trim()
+            if (!campaignSchedule) {
+              throw new Error('Không thể xác định lịch chạy để thêm snapshot Nhóm data.')
+            }
+            let materializedInputCount = 0
+            for (const snapshot of dataGroupSnapshots) {
+              const snapshotResult = await window.electronAPI.snapshotDataGroupToCampaign({
+                requestId: `${saveRequestId}:${savedCampaign.id}:snapshot:${snapshot.groupId}`,
+                campaignId: savedCampaign.id,
+                groupId: snapshot.groupId,
+                campaignSchedule,
+                campaignStatus: 'tạm dừng'
+              })
+              materializedInputCount += snapshotResult.insertedCount + snapshotResult.alreadySeenCount
+            }
+
+            if (campaignDetails.length > 0) {
+              const appendResult = await window.electronAPI.addCampaignInputDataRows({
+                campaignId: savedCampaign.id,
+                rows: campaignDetails,
+                campaignSchedule,
+                campaignStatus: 'tạm dừng',
+                skipExistingInCampaign: true
+              })
+              materializedInputCount += appendResult.insertedCount
+            }
+
+            if (materializedInputCount === 0) {
+              const emptySnapshotNote = 'Các Nhóm data đã chọn không có data phù hợp với hành động và tài khoản của chiến dịch.'
+              await updateCampaign(savedCampaign.id, {
+                status: 'tạm dừng',
+                note: emptySnapshotNote
+              })
+              emptySnapshotCampaigns.push({
+                campaignId: savedCampaign.id,
+                campaignName: savedCampaign.accountName
+                  ? `${savedCampaign.name} (${savedCampaign.accountName})`
+                  : savedCampaign.name
+              })
+              return savedCampaign
+            }
+          } else {
+            // Preserve the existing per-row creation behavior when this direct
+            // campaign has no Data Group snapshot to dedupe against.
+            for (const detail of campaignDetails) {
+              await createCampaignInputData({
+                ...detail,
+                id: undefined,
+                campaignId: savedCampaign.id
+              })
+            }
+          }
+
+          if (campaignPayload.dataTargetSourceMode === 'data_group' && campaignPayload.dataGroupId) {
+            await window.electronAPI.bindCampaignDataGroupSource({
+              requestId: `${saveRequestId}:${savedCampaign.id}`,
+              campaignId: savedCampaign.id,
+              groupId: campaignPayload.dataGroupId,
+              bundleId: creationBundle?.id ?? null
             })
           }
 
-          stagedCampaignFinalStatusById.set(savedCampaign.id, finalStatus)
+          if (!usesAtomicProvisioningBarrier) {
+            stagedCampaignFinalStatusById.set(savedCampaign.id, finalStatus)
+          }
           return savedCampaign
         } catch (err) {
           try {
@@ -5855,7 +6131,7 @@ export default function CampaignFormModal({
           const savedDraftCampaign = await createCampaignWithInputDataSafely({
             ...draftItem.campaignPayload,
             extraSettings: payloadExtraSettings
-          }, draftItem.details)
+          }, draftItem.details, draftItem.dataGroupSnapshots)
           createdIds.push(savedDraftCampaign.id)
         }
 
@@ -5909,13 +6185,56 @@ export default function CampaignFormModal({
       }
 
       for (let i = 0; i < saveBundleItems.length; i++) {
-        const { campaignPayload, details: currentDetails } = saveBundleItems[i]
+        const { campaignPayload, details: currentDetails, dataGroupSnapshots: currentDataGroupSnapshots } = saveBundleItems[i]
+        const effectiveCampaignPayload: Partial<Campaign> = creationBundle
+          ? {
+              ...campaignPayload,
+              creationBundleId: creationBundle.id,
+              creationBundleChildIndex: i
+            }
+          : campaignPayload
         const isFirst = (i === 0)
 
         let savedCampaign: Campaign
 
         if (campaign && campaign.id && isFirst) {
-          await updateCampaign(campaign.id, campaignPayload)
+          const changesDataGroup = effectiveCampaignPayload.dataTargetSourceMode === 'data_group' &&
+            Number(effectiveCampaignPayload.dataGroupId || 0) > 0 &&
+            effectiveCampaignPayload.dataGroupId !== campaign.dataGroupId
+          if (changesDataGroup && effectiveCampaignPayload.dataGroupId) {
+            const preflight = await window.electronAPI.preflightCampaignDataGroupChange(
+              campaign.id,
+              effectiveCampaignPayload.dataGroupId
+            )
+            if (!preflight.allowed) {
+              const reason = preflight.reason === 'canonical_inputs_exist'
+                ? `Chiến dịch đã có ${preflight.canonicalCount} canonical input nên không thể đổi Nhóm data.`
+                : preflight.reason === 'campaign_creation_bundle_immutable'
+                  ? 'Chiến dịch thuộc bundle đã tạo nên không thể đổi Nhóm data.'
+                  : preflight.reason === 'campaign_action_incompatible'
+                    ? 'Loại chiến dịch này không tương thích với Nhóm data.'
+                    : preflight.reason === 'campaign_not_bindable'
+                      ? 'Chỉ có thể đổi Nhóm data khi chiến dịch chưa chạy và chưa hết hạn.'
+                      : 'Không thể đổi sang Nhóm data đã chọn.'
+              throw new Error(reason)
+            }
+          }
+          const updatePayload = changesDataGroup
+            ? {
+                ...effectiveCampaignPayload,
+                dataTargetSourceMode: undefined,
+                dataGroupId: undefined
+              }
+            : effectiveCampaignPayload
+          await updateCampaign(campaign.id, updatePayload)
+          if (changesDataGroup && effectiveCampaignPayload.dataGroupId) {
+            await window.electronAPI.bindCampaignDataGroupSource({
+              requestId: `${saveRequestId}:${campaign.id}`,
+              campaignId: campaign.id,
+              groupId: effectiveCampaignPayload.dataGroupId,
+              bundleId: null
+            })
+          }
           savedCampaign = campaign
 
           if (!isEditingSavedCampaign) {
@@ -5938,11 +6257,15 @@ export default function CampaignFormModal({
             }
           }
         } else {
-          savedCampaign = await createCampaignWithInputDataSafely(campaignPayload, currentDetails)
+          savedCampaign = await createCampaignWithInputDataSafely(
+            effectiveCampaignPayload,
+            currentDetails,
+            currentDataGroupSnapshots
+          )
         }
 
         savedCampaignIds.push(savedCampaign.id)
-        savedCampaignPayloadById.set(savedCampaign.id, campaignPayload)
+        savedCampaignPayloadById.set(savedCampaign.id, effectiveCampaignPayload)
       }
 
       const persistAndPatchFindDataTargetDrafts = async (
@@ -5976,8 +6299,21 @@ export default function CampaignFormModal({
       }
 
       await resumeStagedCampaigns()
+      dataGroupBundleRequestIdRef.current = null
+      dataGroupBundleFingerprintRef.current = null
+      clearStoredDataGroupBundleRequestId(dataGroupBundleRetryStorageKey)
 
-      showAlert('Lưu chiến dịch thành công!', 'success')
+      const emptySnapshotCampaignNames = emptySnapshotCampaigns
+        .slice(0, 3)
+        .map(item => item.campaignName)
+        .join(', ')
+      const additionalEmptySnapshotCount = Math.max(0, emptySnapshotCampaigns.length - 3)
+      showAlert(
+        emptySnapshotCampaigns.length > 0
+          ? `Lưu chiến dịch thành công. Giữ tạm dừng ${emptySnapshotCampaigns.length} campaign con chưa có data phù hợp: ${emptySnapshotCampaignNames}${additionalEmptySnapshotCount > 0 ? ` và ${additionalEmptySnapshotCount} campaign khác` : ''}. Các campaign con còn lại vẫn được kích hoạt.`
+          : 'Lưu chiến dịch thành công!',
+        'success'
+      )
       // Delay closing to let user see the toast
       setTimeout(() => onClose(), 1200)
     } catch (err) {
@@ -6014,12 +6350,13 @@ export default function CampaignFormModal({
   }
 
   const removeAllDetailRows = () => {
-    const count = isFindDataSearchCampaign && !isEditingSavedCampaign ? findDataSearchKeywordRows.length : details.length
+    const count = directDataSourceSelectionCount
     if (count === 0) return
 
     showConfirm(
-      `Xoá hết ${count} dòng data trong danh sách?`,
+      `Xoá toàn bộ data và nhóm đang chờ thêm khỏi danh sách?`,
       () => {
+        setDirectDataGroupSnapshots([])
         if (isFindDataSearchCampaign && !isEditingSavedCampaign) {
           setFindDataSearchKeywordsText('')
           return
@@ -6152,6 +6489,32 @@ export default function CampaignFormModal({
     showAlert(
       addedCount > 0 ? `Đã thêm ${addedCount} data.` : 'Các data đã có trong danh sách.',
       addedCount > 0 ? 'success' : 'error'
+    )
+  }
+
+  const appendDataGroupSnapshot = (groupId: number, groupName: string) => {
+    const normalizedGroupId = Number(groupId)
+    if (!Number.isSafeInteger(normalizedGroupId) || normalizedGroupId <= 0) {
+      showAlert('Nhóm data không hợp lệ.', 'error')
+      return
+    }
+
+    const alreadySelected = directDataGroupSnapshots.some(item => item.groupId === normalizedGroupId)
+    if (!alreadySelected) {
+      setDirectDataGroupSnapshots(previous => [
+        ...previous,
+        { groupId: normalizedGroupId, groupName: String(groupName || '').trim() || `Nhóm ${normalizedGroupId}` }
+      ])
+      setFormData(previous => previous.splitDataAcrossAccounts
+        ? { ...previous, splitDataAcrossAccounts: false }
+        : previous)
+    }
+    setDataGroupPickerOpen(false)
+    showAlert(
+      alreadySelected
+        ? `Nhóm "${groupName}" đã có trong danh sách chờ thêm.`
+        : `Đã chọn nhóm "${groupName}". Data phù hợp sẽ được DB thêm khi lưu chiến dịch.`,
+      'info'
     )
   }
 
@@ -7104,7 +7467,7 @@ export default function CampaignFormModal({
           <input
             type="checkbox"
             checked={formData.useSuggestedFriends}
-            disabled={isEditingSavedCampaign}
+            disabled={isEditingSavedCampaign || isDataGroupSource}
             onChange={e => setFormData(p => ({ ...p, useSuggestedFriends: e.target.checked }))}
           />
           <span>Gửi tin/Kết bạn theo đề xuất của Facebook</span>
@@ -8354,6 +8717,7 @@ export default function CampaignFormModal({
                 type="radio"
                 name="zalo-friend-target-mode"
                 checked={formData.zaloFriendTargetMode === mode.value}
+                disabled={isDataGroupSource}
                 onChange={() => setFormData(p => ({
                   ...p,
                   zaloFriendTargetMode: mode.value,
@@ -9001,6 +9365,14 @@ export default function CampaignFormModal({
   const getDraftCampaignDetails = (draft: InternalCampaignDraft): Partial<CampaignInputData>[] =>
     draft.items.flatMap(item => item.details.map(detail => ({ ...detail })))
 
+  const getDraftCampaignDataGroupSnapshots = (draft: InternalCampaignDraft): DirectDataGroupSnapshotIntent[] => {
+    const snapshotsByGroupId = new Map<number, DirectDataGroupSnapshotIntent>()
+    for (const snapshot of draft.items.flatMap(item => item.dataGroupSnapshots || [])) {
+      if (!snapshotsByGroupId.has(snapshot.groupId)) snapshotsByGroupId.set(snapshot.groupId, { ...snapshot })
+    }
+    return Array.from(snapshotsByGroupId.values())
+  }
+
   const buildDraftCampaignPreview = (draft: InternalCampaignDraft, id = draft.tempId): Campaign => {
     const firstItem = draft.items[0]
     const payload = firstItem?.campaignPayload || {}
@@ -9183,6 +9555,7 @@ export default function CampaignFormModal({
       initialCampaign: draft ? buildDraftCampaignPreview(draft, 0) : null,
       initialAccountIds: draft ? getDraftCampaignAccountIds(draft) : undefined,
       initialDetails: draft ? getDraftCampaignDetails(draft) : undefined,
+      initialDataGroupSnapshots: draft ? getDraftCampaignDataGroupSnapshots(draft) : undefined,
       submitLabel: overrideSubmitLabel || (draft ? 'Sửa' : source.type === 'findDataSource' ? 'Thêm' : undefined),
       autoSelectOnSave
     })
@@ -10972,7 +11345,7 @@ export default function CampaignFormModal({
   }
 
   const renderMultiDailyTimeSlotsSection = () => {
-    if (!isMultiDailyTimeSlotsCampaign) return null
+    if (!isMultiDailyTimeSlotsCampaign || isDataGroupSource) return null
 
     return (
       <div className="schedule-multi-window-panel">
@@ -11823,10 +12196,37 @@ export default function CampaignFormModal({
     if (!contentTemplatePicker) return null
     const query = contentTemplatePicker.searchQuery.trim().toLowerCase()
     const targetChannel = getContentTemplateTargetChannel(contentTemplatePicker.target)
-    const filteredTemplates = contentTemplates.filter(template => (
+    const compatibleTemplates = contentTemplates.flatMap(template => {
+      const resolved = resolveContentTemplate(template, targetChannel)
+      return !template.isDelete && resolved.variants.length > 0
+        ? [{ template, resolved }]
+        : []
+    })
+    const filteredTemplates = compatibleTemplates.filter(({ template }) => (
       (contentTemplatePicker.groupId === null || template.groupId === contentTemplatePicker.groupId) &&
       (!query || getContentTemplateSearchText(template).includes(query))
     ))
+    const selectedEntry = filteredTemplates.find(({ template }) => (
+      template.id === contentTemplatePicker.selectedTemplateId
+    )) || filteredTemplates[0] || null
+    const selectedTemplate = selectedEntry?.template || null
+    const selectedResolved = selectedEntry?.resolved || null
+    const targetSupportsRich = contentTemplatePicker.target === 'content' && (
+      targetChannel === 'email' || supportsFormattedContent(formData.actionId)
+    )
+    const previewFormatted = !!selectedResolved?.rich && targetSupportsRich
+    const previewVariants = !selectedResolved
+      ? []
+      : selectedResolved.rich && !previewFormatted
+        ? selectedResolved.variants.map(variant => formattedContentToPlainText(variant)).filter(Boolean)
+        : selectedResolved.variants
+    const previewImageUrls = !selectedResolved || targetChannel === 'sms'
+      ? []
+      : contentTemplatePicker.target === 'postBumpContent'
+        ? []
+        : targetChannel === 'facebook_comment'
+          ? selectedResolved.imageUrls.slice(0, 1)
+          : selectedResolved.imageUrls
     return (
       <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: Math.max(3100, (modalZIndex || 3000) + 100) }}>
         <div className="content-template-picker-modal">
@@ -11848,7 +12248,11 @@ export default function CampaignFormModal({
                 <Search size={15} />
                 <input
                   value={contentTemplatePicker.searchQuery}
-                  onChange={event => setContentTemplatePicker(prev => prev ? { ...prev, searchQuery: event.target.value } : prev)}
+                  onChange={event => setContentTemplatePicker(prev => prev ? {
+                    ...prev,
+                    searchQuery: event.target.value,
+                    selectedTemplateId: null
+                  } : prev)}
                   placeholder="Tìm mẫu nội dung"
                   aria-label="Tìm mẫu nội dung"
                 />
@@ -11857,7 +12261,11 @@ export default function CampaignFormModal({
                 className="stepper-select content-template-picker-group-select"
                 value={contentTemplatePicker.groupId ?? ''}
                 onChange={event => setContentTemplatePicker(prev => prev
-                  ? { ...prev, groupId: event.target.value ? Number(event.target.value) : null }
+                  ? {
+                      ...prev,
+                      groupId: event.target.value ? Number(event.target.value) : null,
+                      selectedTemplateId: null
+                    }
                   : prev)}
                 aria-label="Lọc theo nhóm mẫu"
               >
@@ -11877,55 +12285,114 @@ export default function CampaignFormModal({
                 <RefreshCw size={15} className={contentTemplatesLoading ? 'spin' : ''} />
               </button>
             </div>
-            <div className="content-template-picker-list">
-              {contentTemplatesLoading ? (
-                <div className="content-template-picker-empty">Đang tải mẫu nội dung...</div>
-              ) : filteredTemplates.length === 0 ? (
-                <div className="content-template-picker-empty">Chưa có mẫu nội dung.</div>
-              ) : filteredTemplates.map(template => {
-                const resolved = resolveContentTemplate(template, targetChannel)
-                const excerpt = resolved.variants[0]
-                  ? (resolved.rich ? formattedContentToPlainText(resolved.variants[0]) : resolved.variants[0])
-                  : 'Mẫu chưa có nội dung đúng kênh cho chiến dịch này.'
-                return <button
-                  key={template.id}
-                  type="button"
-                  className="content-template-picker-item"
-                  onClick={() => applyContentTemplate(template)}
-                >
-                  <div className="content-template-picker-item-header">
-                    <span className="content-template-picker-item-title">{template.name}</span>
+            <div className="content-template-picker-layout">
+              <section className="content-template-picker-sidebar" aria-label="Danh sách mẫu phù hợp">
+                <div className="content-template-picker-pane-header">
+                  <strong>Danh sách mẫu</strong>
+                  <span>{filteredTemplates.length}</span>
+                </div>
+                <div className="content-template-picker-list">
+                  {contentTemplatesLoading ? (
+                    <div className="content-template-picker-empty">Đang tải mẫu nội dung...</div>
+                  ) : filteredTemplates.length === 0 ? (
+                    <div className="content-template-picker-empty">
+                      {contentTemplates.length === 0
+                        ? 'Chưa có mẫu nội dung.'
+                        : 'Không có mẫu nội dung phù hợp với chiến dịch và bộ lọc hiện tại.'}
+                    </div>
+                  ) : filteredTemplates.map(({ template, resolved }) => {
+                    const excerpt = resolved.rich
+                      ? formattedContentToPlainText(resolved.variants[0])
+                      : resolved.variants[0]
+                    const selected = selectedTemplate?.id === template.id
+                    const mediaCount = targetChannel === 'sms' || contentTemplatePicker.target === 'postBumpContent'
+                      ? 0
+                      : targetChannel === 'facebook_comment'
+                        ? Math.min(resolved.imageUrls.length, 1)
+                        : resolved.imageUrls.length
+                    return <button
+                      key={template.id}
+                      type="button"
+                      className={`content-template-picker-item${selected ? ' is-selected' : ''}`}
+                      onClick={() => setContentTemplatePicker(prev => prev ? {
+                        ...prev,
+                        selectedTemplateId: template.id
+                      } : prev)}
+                      aria-pressed={selected}
+                    >
+                      <div className="content-template-picker-item-header">
+                        <span className="content-template-picker-item-title">{template.name}</span>
+                      </div>
+                      <div className="content-template-picker-item-meta">
+                        <span className="content-template-picker-group-badge">{template.groupName || 'Chưa phân nhóm'}</span>
+                        {Object.entries(template.channels).map(([channelName, config]) => (
+                          config?.enabled
+                            ? (
+                                <span
+                                  className={`content-template-picker-channel-badge ${channelName}`}
+                                  key={channelName}
+                                >
+                                  {getContentTemplateChannelLabel(channelName as ContentTemplateChannelName)}
+                                </span>
+                              )
+                            : null
+                        ))}
+                      </div>
+                      <p className="content-template-picker-item-excerpt">{excerpt}</p>
+                      <div className="content-template-picker-item-footer">
+                        <span>{resolved.variants.length} biến thể phù hợp</span>
+                        <span>{mediaCount} media</span>
+                      </div>
+                    </button>
+                  })}
+                </div>
+              </section>
+              <section className="content-template-picker-preview" aria-label="Xem trước mẫu nội dung">
+                {selectedTemplate && selectedResolved ? (
+                  <>
+                    <div className="content-template-picker-preview-header">
+                      <div>
+                        <strong>{selectedTemplate.name}</strong>
+                        <span>Mẫu này có nội dung phù hợp với chiến dịch</span>
+                      </div>
+                    </div>
+                    <div className="content-template-picker-preview-meta">
+                      <strong>{getContentTemplateChannelLabel(targetChannel)}</strong>
+                      <span>
+                        Đang bật · {previewVariants.length} biến thể · {previewImageUrls.length} media
+                      </span>
+                    </div>
+                    <div className="content-template-picker-preview-scroll">
+                      <ContentTemplatePreview
+                        key={`${selectedTemplate.id}:${targetChannel}`}
+                        channel={targetChannel}
+                        variants={previewVariants}
+                        formatted={previewFormatted}
+                        subject={selectedResolved.subject}
+                        imageUrls={previewImageUrls}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="content-template-picker-preview-empty">
+                    <FileText size={32} />
+                    <strong>Chưa có mẫu để xem trước</strong>
+                    <span>Thay đổi bộ lọc hoặc tạo thêm mẫu phù hợp với chiến dịch.</span>
                   </div>
-                  <div className="content-template-picker-item-meta">
-                    <span className="content-template-picker-group-badge">{template.groupName || 'Chưa phân nhóm'}</span>
-                    {Object.entries(template.channels).map(([channelName, config]) => (
-                      config?.enabled
-                        ? (
-                            <span
-                              className={`content-template-picker-channel-badge ${channelName}`}
-                              key={channelName}
-                            >
-                              {getContentTemplateChannelLabel(channelName as ContentTemplateChannelName)}
-                            </span>
-                          )
-                        : null
-                    ))}
-                  </div>
-                  <p className="content-template-picker-item-excerpt">{excerpt}</p>
-                  <div className="content-template-picker-item-footer">
-                    <span>
-                      {resolved.variants.length > 0
-                        ? `${resolved.variants.length} biến thể ${getContentTemplateChannelLabel(targetChannel)}`
-                        : `Không có nội dung ${getContentTemplateChannelLabel(targetChannel)}`}
-                    </span>
-                    {resolved.imageUrls.length > 0 && <span>{resolved.imageUrls.length} media</span>}
-                  </div>
-                </button>
-              })}
+                )}
+              </section>
             </div>
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setContentTemplatePicker(null)}>Huỷ</button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => selectedTemplate && applyContentTemplate(selectedTemplate)}
+              disabled={!selectedTemplate || contentTemplatesLoading}
+            >
+              <Check size={14} /> Áp dụng mẫu
+            </button>
           </div>
         </div>
       </div>
@@ -12332,7 +12799,7 @@ export default function CampaignFormModal({
                       value={formData.actionId}
                       onChange={e => handleActionChange(e.target.value)}
                       className="stepper-input"
-                      disabled={draftMode && !!lockedActionId}
+                      disabled={(draftMode && !!lockedActionId) || isSavedDataGroupIdentityLocked}
                     >
                       <option value="">
                         {filteredCampaignActions.length === 0 ? 'Chưa có hành động cho nền tảng này' : '-- Chọn hành động --'}
@@ -12344,7 +12811,7 @@ export default function CampaignFormModal({
                   <div className="stepper-form-group" ref={accountDropdownRef}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <label style={{ margin: 0 }}>Tài khoản <span className="required">*</span></label>
-                      {selectableAccounts.length > 0 && !(campaign && campaign.id) && !requiresSingleAccount && (
+                      {selectableAccounts.length > 0 && !(campaign && campaign.id) && !requiresSingleAccount && !isSavedDataGroupIdentityLocked && (
                         <button
                           type="button"
                           className="btn btn-ghost"
@@ -12364,8 +12831,18 @@ export default function CampaignFormModal({
                     <div style={{ position: 'relative' }}>
                       <div
                         className="stepper-input"
-                        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isAccountDropdownOpen ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}
-                        onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
+                        style={{
+                          cursor: isSavedDataGroupIdentityLocked ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          opacity: isSavedDataGroupIdentityLocked ? 0.65 : 1,
+                          backgroundColor: isAccountDropdownOpen ? 'var(--bg-secondary)' : 'var(--bg-primary)'
+                        }}
+                        aria-disabled={isSavedDataGroupIdentityLocked}
+                        onClick={() => {
+                          if (!isSavedDataGroupIdentityLocked) setIsAccountDropdownOpen(!isAccountDropdownOpen)
+                        }}
                       >
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 8 }}>
                           {formData.accountIds.length === 0
@@ -12383,7 +12860,7 @@ export default function CampaignFormModal({
                         <ChevronDown size={16} style={{ flexShrink: 0, transform: isAccountDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                       </div>
 
-                      {isAccountDropdownOpen && (
+                      {isAccountDropdownOpen && !isSavedDataGroupIdentityLocked && (
                         <div className="account-select-menu">
                           <div className="account-checkbox-list account-select-tree">
                             {selectableAccountGroups.map(group => {
@@ -12778,7 +13255,7 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {(formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isMobileManagedSmsCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
+                  {!isDataGroupSource && (formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isMobileManagedSmsCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
                     <div className="stepper-form-group">
                       <label className="schedule-checkbox-label schedule-option-label">
                         <input
@@ -12814,7 +13291,7 @@ export default function CampaignFormModal({
                     />
                   </div>}
 
-                  {canUseRerunAfterCompletion && (
+                  {!isDataGroupSource && canUseRerunAfterCompletion && (
                     <div className="stepper-form-group" style={{ maxWidth: 360 }}>
                       <label className="schedule-checkbox-label">
                         <input
@@ -13295,8 +13772,150 @@ export default function CampaignFormModal({
               </div>
             )}
 
+            {canUseDataGroupSource && !isSimpleCampaign && (
+              <div
+                className="stepper-section campaign-data-source-section"
+                ref={el => { sectionRefs.current['dataTargetSource'] = el }}
+              >
+                <div
+                  className="stepper-section-header campaign-data-source-header"
+                  onClick={() => toggleSection('dataTargetSource')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('dataTargetSource')}</span>
+                    <span className="stepper-section-title">Cách thêm data vào chiến dịch</span>
+                    <span className="stepper-section-summary">
+                      · {isDataGroupSource ? 'Chọn nhóm data' : 'Thêm trực tiếp'}
+                    </span>
+                  </div>
+                  {collapsedSections['dataTargetSource'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+                {!collapsedSections['dataTargetSource'] && (
+                  <div className="stepper-section-body">
+                    <div className="campaign-data-source-modes" role="radiogroup" aria-label="Cách thêm data vào chiến dịch">
+                      <label className={`campaign-data-source-mode ${!isDataGroupSource ? 'selected' : ''}`}>
+                        <input
+                          type="radio"
+                          name="campaign-data-target-source"
+                          checked={!isDataGroupSource}
+                          disabled={Boolean(campaign?.id && campaign.dataTargetSourceMode === 'data_group')}
+                          onChange={() => setFormData(previous => ({
+                            ...previous,
+                            dataTargetSourceMode: 'direct',
+                            dataGroupId: null
+                          }))}
+                        />
+                        <span className="campaign-data-source-radio" aria-hidden="true" />
+                        <span>
+                          <strong>Thêm trực tiếp data vào chiến dịch</strong>
+                          <small>Nhập/import hoặc thêm từ nhóm vào danh sách data của chiến dịch.</small>
+                        </span>
+                      </label>
+                      <label className={`campaign-data-source-mode ${isDataGroupSource ? 'selected' : ''}`}>
+                        <input
+                          type="radio"
+                          name="campaign-data-target-source"
+                          checked={isDataGroupSource}
+                          disabled={Boolean(campaign?.id && campaign.dataTargetSourceMode !== 'data_group')}
+                          onChange={() => setFormData(previous => ({
+                            ...previous,
+                            dataTargetSourceMode: 'data_group',
+                            splitDataAcrossAccounts: false,
+                            refreshData: false,
+                            findDataRerunEnabled: false,
+                            multiDailyTimeSlotsEnabled: false,
+                            useSuggestedFriends: false,
+                            zaloFriendTargetMode: 'selected'
+                          }))}
+                        />
+                        <span className="campaign-data-source-radio" aria-hidden="true" />
+                        <span>
+                          <strong>Chọn nhóm data để chạy</strong>
+                          <small>Chạy trực tiếp theo nhóm data đã chọn, không cần copy vào danh sách.</small>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {canUseDataGroupSource && !isSimpleCampaign && isDataGroupSource && (
+              <div
+                className="stepper-section campaign-data-group-section"
+                ref={el => { sectionRefs.current['details'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('details')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('details')}</span>
+                    <span className="stepper-section-title">Chọn data bằng cách chọn nhóm</span>
+                    {selectedDataGroupName && (
+                      <span className="stepper-section-summary">· {selectedDataGroupName}</span>
+                    )}
+                  </div>
+                  {collapsedSections['details'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+                {!collapsedSections['details'] && (
+                  <div className="stepper-section-body campaign-data-group-section-body">
+                    <div className="campaign-data-group-label">Chọn nhóm data</div>
+                    <div className="campaign-data-group-picker-row">
+                      <button
+                        type="button"
+                        className="campaign-data-group-control"
+                        onClick={() => {
+                          setDataGroupPickerMode('source')
+                          setDataGroupPickerOpen(true)
+                        }}
+                      >
+                        {selectedDataGroup ? (
+                          <>
+                            <span className="campaign-data-group-dot" style={{ background: selectedDataGroup.color || 'var(--accent-primary)' }} />
+                            <span className="campaign-data-group-control-copy">
+                              <strong>{selectedDataGroup.name}</strong>
+                              <small>{selectedDataGroup.activeMembershipCount.toLocaleString('vi-VN')} data</small>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <FolderOpen size={16} />
+                            <span className="campaign-data-group-control-placeholder">{selectedDataGroupName || 'Chọn nhóm data...'}</span>
+                          </>
+                        )}
+                        <ChevronDown size={17} />
+                      </button>
+                      {formData.dataGroupId && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary campaign-data-group-view-button"
+                          onClick={() => {
+                            setDataGroupPickerMode('source')
+                            setDataGroupPickerOpen(true)
+                          }}
+                        >
+                          <Eye size={15} /> Xem
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-primary campaign-data-group-pick-button"
+                        onClick={() => {
+                          setDataGroupPickerMode('source')
+                          setDataGroupPickerOpen(true)
+                        }}
+                      >
+                        <Plus size={15} /> {formData.dataGroupId ? 'Đổi nhóm' : 'Chọn nhóm'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Section 6: Danh sách data (hidden for simple campaigns) */}
-            {!isSimpleCampaign && !hideDetailsSection && <div
+            {!isSimpleCampaign && !hideDetailsSection && !isDataGroupSource && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['details'] = el }}
             >
@@ -13346,6 +13965,9 @@ export default function CampaignFormModal({
                   {detailEntryCount > 0 && (
                     <span className="stepper-section-badge">{detailEntryCount}</span>
                   )}
+                  {directDataGroupSnapshots.length > 0 && (
+                    <span className="stepper-section-summary">· {directDataGroupSnapshots.length} nhóm chờ thêm</span>
+                  )}
                 </div>
                 {collapsedSections['details'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
               </div>
@@ -13357,7 +13979,7 @@ export default function CampaignFormModal({
                       Danh sách data đã lưu không chỉnh sửa trong form sửa chiến dịch.
                     </div>
                   )}
-                  {!isEditingSavedCampaign && formData.accountIds.length > 1 && (
+                  {!isEditingSavedCampaign && formData.accountIds.length > 1 && !hasPendingDirectDataGroupSnapshots && (
                     <div className="stepper-form-group" style={{ marginBottom: 12 }}>
                       <label className="schedule-checkbox-label" style={{ fontWeight: 500 }}>
                         <input
@@ -13369,6 +13991,11 @@ export default function CampaignFormModal({
                       </label>
                     </div>
                   )}
+                  {!isEditingSavedCampaign && formData.accountIds.length > 1 && hasPendingDirectDataGroupSnapshots && (
+                    <div className="text-muted" style={{ marginBottom: 12, fontSize: 12 }}>
+                      Khi thêm bằng nhóm, mỗi campaign con nhận toàn bộ data phù hợp với tài khoản của nó; không áp dụng Chia đều.
+                    </div>
+                  )}
                   {!isEditingSavedCampaign && (
                     <div className="stepper-grid-toolbar" style={{ display: 'flex', gap: 8 }}>
                       {canUploadData ? (
@@ -13378,6 +14005,20 @@ export default function CampaignFormModal({
                       ) : !isFindDataSearchCampaign && !isFacebookGroupInviteCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && (
                         <button className="btn btn-secondary" onClick={addDetailRow}>
                           <Plus size={14} /> {isCommentSeedingPostCampaign ? 'Thêm link' : 'Thêm data'}
+                        </button>
+                      )}
+                      {canUseDataGroupSource && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setDataGroupPickerMode('append')
+                            setDataGroupPickerOpen(true)
+                          }}
+                          title="Chọn Nhóm data; DB sẽ thêm snapshot phù hợp khi lưu chiến dịch"
+                        >
+                          <FolderOpen size={14} />
+                          Thêm bằng nhóm
                         </button>
                       )}
                       {canUseOtherDataSources && (
@@ -13600,11 +14241,45 @@ export default function CampaignFormModal({
                         type="button"
                         className="btn btn-danger"
                         onClick={removeAllDetailRows}
-                        disabled={loadingDetails || detailEntryCount === 0}
+                        disabled={loadingDetails || directDataSourceSelectionCount === 0}
                         title="Xoá hết data trong danh sách"
                       >
                         <Trash2 size={14} /> Xoá hết
                       </button>
+                    </div>
+                  )}
+
+                  {!isEditingSavedCampaign && directDataGroupSnapshots.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10, marginBottom: 10 }}>
+                      {directDataGroupSnapshots.map(snapshot => (
+                        <span
+                          key={snapshot.groupId}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 8px',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 6,
+                            color: 'var(--text-secondary)',
+                            background: 'var(--bg-secondary)'
+                          }}
+                        >
+                          <FolderOpen size={13} />
+                          <span>{snapshot.groupName}</span>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ padding: 0, width: 18, minWidth: 18, height: 18 }}
+                            aria-label={`Bỏ nhóm ${snapshot.groupName}`}
+                            onClick={() => setDirectDataGroupSnapshots(previous => (
+                              previous.filter(item => item.groupId !== snapshot.groupId)
+                            ))}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
 
@@ -13834,6 +14509,29 @@ export default function CampaignFormModal({
           onInsert={handleImportedDataRows}
         />
       )}
+
+      {dataGroupPickerOpen && (
+        <DataGroupPickerModal
+          selectedGroupId={dataGroupPickerMode === 'source' ? formData.dataGroupId : null}
+          onSelect={group => {
+            if (dataGroupPickerMode === 'append') {
+              appendDataGroupSnapshot(group.id, group.name)
+              return
+            }
+            setFormData(previous => ({
+              ...previous,
+              dataTargetSourceMode: 'data_group',
+              dataGroupId: group.id,
+              splitDataAcrossAccounts: false,
+              refreshData: false
+            }))
+            setSelectedDataGroupName(group.name)
+            setSelectedDataGroup(group)
+            setDataGroupPickerOpen(false)
+          }}
+          onClose={() => setDataGroupPickerOpen(false)}
+        />
+      )}
       {!draftFormConfig && renderCampaignPickerModal()}
       {renderSourceCampaignViewModal()}
       {renderContentTemplatePickerModal()}
@@ -13874,6 +14572,7 @@ export default function CampaignFormModal({
           lockedActionId={draftFormConfig.actionId}
           initialAccountIds={draftFormConfig.initialAccountIds}
           initialDetails={draftFormConfig.initialDetails}
+          initialDataGroupSnapshots={draftFormConfig.initialDataGroupSnapshots}
           draftPickerSourceType={draftFormConfig.sourceType}
           draftRequiredTargetField={draftFormConfig.requiredTargetField}
           onOpenGeneralSettings={onOpenGeneralSettings}

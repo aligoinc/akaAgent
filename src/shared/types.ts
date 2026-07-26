@@ -663,6 +663,13 @@ export interface Campaign {
   lastRunAt?: string | null
   inputDataCompletedCount?: number
   inputDataTotalCount?: number
+  /** Direct form data or a live, staff-shared data-group source. */
+  dataTargetSourceMode?: CampaignDataTargetSourceMode
+  /** Internal identity only; the UI displays the group name, never this id. */
+  dataGroupId?: number | null
+  provisioningState?: 'staged' | 'ready' | 'failed'
+  creationBundleId?: number | null
+  creationBundleChildIndex?: number | null
   // Joined fields
   actionName?: string
   accountName?: string
@@ -716,6 +723,97 @@ export interface CampaignInputData {
   dateAction?: string
   isDelete: boolean
   createdAt?: string
+  /** Per-campaign immutable delivery identity. Legacy rows intentionally keep NULL. */
+  canonicalTargetKey?: string | null
+  /** Audit routes that materialized or later converged on this canonical input. */
+  origins?: CampaignInputDataOrigin[]
+}
+
+export interface CampaignInputDataOrigin {
+  originId?: number | null
+  originKind?: string | null
+  groupId?: number | null
+  groupName?: string | null
+  groupColor?: string | null
+  membershipId?: number | null
+  membershipIsDelete?: boolean
+  contactId?: number | null
+  contactName?: string | null
+  sourceId?: number | null
+  sourceStatus?: CampaignDataGroupSourceStatus | null
+  batchId?: number | null
+  batchKind?: string | null
+  batchSourceName?: string | null
+  datasetIds?: number[]
+  datasetNames?: string[]
+  automationDetailId?: number | null
+  automationId?: number | null
+  automationName?: string | null
+  automationSourceCampaignId?: number | null
+  automationSourceCampaignName?: string | null
+  automationTargetCampaignId?: number | null
+  automationTargetCampaignName?: string | null
+  canonicalTargetKey?: string | null
+  createdAt?: string | null
+}
+
+export type CampaignInputOriginFilter = 'all' | 'data_group' | 'automation' | 'manual_or_api' | 'direct'
+
+export interface CampaignInputDataPageQuery {
+  campaignId: number
+  search?: string
+  status?: CampaignInputStatus | ''
+  originFilter?: CampaignInputOriginFilter
+  dateFrom?: string | null
+  dateTo?: string | null
+  offset?: number
+  limit?: number
+}
+
+export interface CampaignInputDataPageResult {
+  items: CampaignInputData[]
+  total: number
+}
+
+export type CampaignDataTargetSourceMode = 'direct' | 'data_group'
+
+export type DataGroupCampaignRouting = 'portable' | 'account_bound' | 'hybrid' | 'unsupported'
+
+export const DATA_GROUP_PORTABLE_ACTION_IDS = [
+  'facebook_group_post',
+  'facebook_join_group',
+  'facebook_message_uid',
+  'facebook_find_data_group',
+  'facebook_find_data_search',
+  'facebook_comment_seeding',
+  'facebook_comment_seeding_post',
+  'zalo_message_phone',
+  'zalo_join_group_link',
+  'email_send'
+] as const
+
+export const DATA_GROUP_ACCOUNT_BOUND_ACTION_IDS = [
+  'facebook_message_friend',
+  'facebook_group_invite',
+  'facebook_page_post',
+  'zalo_message_friend',
+  'zalo_message_group_member',
+  'zalo_message_remarketing_customer',
+  'zalo_message_group'
+] as const
+
+export const DATA_GROUP_HYBRID_ACTION_IDS = ['zalo_add_group_member'] as const
+
+export function getDataGroupCampaignRouting(actionId?: string | null): DataGroupCampaignRouting {
+  if (!actionId) return 'unsupported'
+  if ((DATA_GROUP_PORTABLE_ACTION_IDS as readonly string[]).includes(actionId)) return 'portable'
+  if ((DATA_GROUP_ACCOUNT_BOUND_ACTION_IDS as readonly string[]).includes(actionId)) return 'account_bound'
+  if ((DATA_GROUP_HYBRID_ACTION_IDS as readonly string[]).includes(actionId)) return 'hybrid'
+  return 'unsupported'
+}
+
+export function actionSupportsDataGroup(actionId?: string | null): boolean {
+  return getDataGroupCampaignRouting(actionId) !== 'unsupported'
 }
 
 export type CampaignInputDataRequirementField = 'name' | 'phone' | 'uid' | 'email' | 'phone_or_uid'
@@ -859,9 +957,32 @@ export interface CampaignDetail {
   log?: string
   data?: Record<string, unknown>
   countsTowardLimit?: boolean | null
+  /** Automation executions created by this exact source result row. */
+  triggeredAutomations?: CampaignDetailAutomationTrigger[]
   postUrl?: string               // URL of the post this action is related to (e.g. just-published post, commented post)
   isDelete: boolean
   createdAt?: string
+}
+
+export interface CampaignDetailAutomationTrigger {
+  automationDetailId: number
+  automationId: number
+  automationName: string
+}
+
+export interface CampaignDetailPageQuery {
+  campaignId: number
+  search?: string
+  status?: CampaignDetailStatus | ''
+  dateFrom?: string | null
+  dateTo?: string | null
+  offset?: number
+  limit?: number
+}
+
+export interface CampaignDetailPageResult {
+  items: CampaignDetail[]
+  total: number
 }
 
 export type CreateCampaignDetailInput = Partial<CampaignDetail> & {
@@ -1318,6 +1439,348 @@ export interface ContactGroupMutationResult {
 }
 
 // ============================================
+// Staff-shared Data Groups
+// ============================================
+
+export type DataProvenanceKind =
+  | 'manual'
+  | 'upload'
+  | 'scan'
+  | 'automation'
+  | 'api'
+  | 'legacy'
+  | 'legacy_unknown'
+
+export type DataGroupRelationshipKind =
+  | 'zalo_group_members'
+  | 'zalo_remarketing_customers'
+
+export interface DataGroup {
+  id: number
+  name: string
+  color: string
+  sortOrder: number
+  revision: number
+  activeMembershipCount: number
+  isDelete: boolean
+  staffId?: number
+  organizationId?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface DataProvenance {
+  id?: number
+  membershipId?: number
+  kind: DataProvenanceKind
+  datasetId?: number | null
+  batchId?: number | null
+  sourceAccountId?: number | null
+  sourceAccountName?: string | null
+  sourceAccountDeleted?: boolean
+  automationDetailId?: number | null
+  automationId?: number | null
+  automationName?: string | null
+  automationDetailStatus?: string | null
+  sourceCampaignId?: number | null
+  sourceCampaignName?: string | null
+  targetCampaignId?: number | null
+  targetCampaignName?: string | null
+  sourceNameSnapshot?: string | null
+  relationshipKind?: DataGroupRelationshipKind | null
+  isCurrent: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface DataGroupMember {
+  /** Selection and mutations are keyed by membership id, not contact id. */
+  id: number
+  groupId: number
+  contactId: number
+  name: string
+  uid?: string | null
+  url?: string | null
+  phone?: string | null
+  email?: string | null
+  info1?: string | null
+  info2?: string | null
+  info3?: string | null
+  info4?: string | null
+  info5?: string | null
+  contactType: ContactType
+  flatformType?: string | null
+  sourceAccountId?: number | null
+  sourceAccountName?: string | null
+  sourceAccountDeleted?: boolean
+  datasetIds?: number[]
+  datasetNames?: string[]
+  isFriend?: boolean | null
+  isJoined?: boolean | null
+  isDelete: boolean
+  changeRevision: number
+  /** One display source selected by the membership's primary provenance origin. */
+  primaryOriginId?: number | null
+  sourceCategoryItemId?: number | null
+  sourceCode?: 'upload' | 'scan' | 'automation' | null
+  sourceName?: string | null
+  sourceAutomationId?: number | null
+  sourceAutomationName?: string | null
+  provenance?: DataProvenance[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface DataGroupDataset {
+  id: number
+  groupId?: number | null
+  name: string
+  link?: string | null
+  description?: string | null
+  source: ContactDatasetSource
+  accountId?: number | null
+  sourceAccountName?: string | null
+  sourceAccountDeleted?: boolean
+  flatformType: string
+  contactType: ContactType
+  scanType: ContactDatasetScanType
+  sourceKey: string
+  importSource?: ContactDatasetImportSource | null
+  contactCount: number
+  isDelete: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface DataGroupListQuery {
+  search?: string
+  offset?: number
+  limit?: number
+}
+
+export interface DataGroupListResult {
+  groups: DataGroup[]
+  total: number
+}
+
+export type DataGroupMemberStatusFilter =
+  | 'all'
+  | 'friend'
+  | 'stranger'
+  | 'joined'
+  | 'not_joined'
+  /** Kept for older renderer builds; new UI uses the explicit states above. */
+  | 'active'
+  | 'inactive'
+
+export interface DataGroupMemberListQuery {
+  groupId: number
+  search?: string
+  accountIds?: number[]
+  includeAccountless?: boolean
+  contactTypes?: ContactType[]
+  flatformTypes?: string[]
+  status?: DataGroupMemberStatusFilter
+  datasetIds?: number[]
+  ids?: number[]
+  excludeIds?: number[]
+  offset?: number
+  limit?: number
+}
+
+export interface DataGroupMemberListResult {
+  members: DataGroupMember[]
+  total: number
+}
+
+export interface DataGroupMemberIdListResult {
+  ids: number[]
+  total: number
+}
+
+export interface CreateDataGroupRequest {
+  name: string
+  color?: string
+  requestId?: string
+}
+
+export interface UpdateDataGroupRequest {
+  groupId: number
+  name?: string
+  color?: string
+  sortOrder?: number
+}
+
+export interface DataGroupIngestRow {
+  contactId?: number
+  sourceAccountId?: number | null
+  relationshipKind?: DataGroupRelationshipKind | null
+  contactType?: ContactType
+  flatformType?: string | null
+  name?: string | null
+  uid?: string | null
+  url?: string | null
+  phone?: string | null
+  email?: string | null
+  info1?: string | null
+  info2?: string | null
+  info3?: string | null
+  info4?: string | null
+  info5?: string | null
+  extraData?: Record<string, unknown>
+}
+
+export interface DataGroupIngestRequest {
+  requestId: string
+  groupId: number
+  kind: Exclude<DataProvenanceKind, 'legacy' | 'legacy_unknown'>
+  rows: DataGroupIngestRow[]
+  datasetId?: number | null
+  datasetName?: string | null
+  importSource?: ContactDatasetImportSource | null
+  sourceAccountId?: number | null
+  sourceName?: string | null
+  payloadHash?: string | null
+}
+
+export interface DataGroupIngestConflict {
+  rowIndex?: number
+  code: string
+  message: string
+  aliases?: string[]
+}
+
+export interface DataGroupIngestResult {
+  requestId: string
+  batchId?: number | null
+  groupId: number
+  groupRevision: number
+  insertedMembershipCount: number
+  reactivatedMembershipCount: number
+  alreadyMemberCount: number
+  insertedInputCount: number
+  alreadySeenInputCount: number
+  incompatibleCount: number
+  conflictCount: number
+  invalidCount: number
+  conflicts: DataGroupIngestConflict[]
+}
+
+export interface DataGroupMemberMutationRequest {
+  groupId: number
+  membershipIds: number[]
+  requestId: string
+}
+
+export interface MoveDataGroupMembersRequest extends DataGroupMemberMutationRequest {
+  targetGroupId: number
+}
+
+export interface DataGroupMutationResult {
+  success: boolean
+  count: number
+  groupRevision?: number
+  detachedAutomationCount?: number
+  ingest?: DataGroupIngestResult
+}
+
+export type CampaignDataGroupSourceStatus = 'baselining' | 'active' | 'stopped'
+
+export interface CampaignDataGroupSource {
+  id: number
+  campaignId: number
+  groupId: number
+  baselineRevision: number
+  status: CampaignDataGroupSourceStatus
+  startedAt?: string | null
+  stoppedAt?: string | null
+  stopReason?: string | null
+  lastIngestAt?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface BindCampaignDataGroupSourceRequest {
+  requestId: string
+  campaignId: number
+  groupId: number
+  bundleId?: number | null
+}
+
+export interface SnapshotDataGroupToCampaignRequest {
+  requestId: string
+  campaignId: number
+  groupId: number
+  campaignSchedule: string
+  campaignStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>
+}
+
+export interface SnapshotDataGroupToCampaignResult {
+  requestId: string
+  campaignId: number
+  groupId: number
+  groupRevision: number
+  activeMembershipCount: number
+  insertedCount: number
+  alreadySeenCount: number
+  incompatibleCount: number
+  conflictCount: number
+}
+
+export interface CampaignDataGroupChangePreflight {
+  allowed: boolean
+  reason: string
+  canonicalCount: number
+}
+
+export interface DataGroupLatestIngestStats {
+  groupId: number
+  groupRevision: number
+  /** Raw active membership rows. The same target may appear more than once. */
+  activeMembershipCount: number
+  /** Distinct canonical targets with at least one currently-active membership. */
+  uniqueCompatibleTargetCount: number
+  /** Distinct campaign input rows ever materialized from this group. */
+  campaignInputCount: number
+  latestBatchId: number | null
+  latestRequestId: string | null
+  latestKind: DataProvenanceKind | null
+  latestSourceName: string | null
+  latestBatchStatus: string | null
+  latestResult: Record<string, unknown>
+  insertedMembershipCount: number
+  reactivatedMembershipCount: number
+  alreadyMemberCount: number
+  removedMembershipCount: number
+  insertedInputCount: number
+  alreadySeenInputCount: number
+  incompatibleCount: number
+  conflictCount: number
+  invalidCount: number
+  baseliningSourceCount: number
+  activeSourceCount: number
+  stoppedSourceCount: number
+  latestBatchCreatedAt: string | null
+  latestBatchUpdatedAt: string | null
+}
+
+export interface CampaignCreationBundle {
+  id: number
+  requestId: string
+  status: 'staged' | 'ready' | 'failed'
+  expectedCampaignCount: number
+  readyCampaignCount: number
+  error?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CreateCampaignBundleRequest {
+  requestId: string
+  expectedCampaignCount: number
+}
+
+// ============================================
 // Campaign result automations (campaign A -> campaign B)
 // ============================================
 
@@ -1353,9 +1816,13 @@ export interface Automation {
   actionType: AutomationActionType
   isActive: boolean
   sourceCampaignId: number
-  targetCampaignId: number
+  /** Optional campaign destination. At least this or targetDataGroupId is required. */
+  targetCampaignId: number | null
   dataType: AutomationDataType
   targetContactGroupId?: number | null
+  /** Optional staff-shared destination; independent from the A → B campaign route. */
+  targetDataGroupId?: number | null
+  targetDataGroupName?: string | null
   scheduleMode: AutomationScheduleMode
   delayValue: number | null
   delayUnit: AutomationDelayUnit | null
@@ -1389,9 +1856,11 @@ export interface AutomationInput {
   name: string
   actionType?: AutomationActionType
   sourceCampaignId: number
-  targetCampaignId: number
+  /** Optional campaign destination. At least this or targetDataGroupId is required. */
+  targetCampaignId: number | null
   dataType: AutomationDataType
   targetContactGroupId?: number | null
+  targetDataGroupId?: number | null
   scheduleMode: AutomationScheduleMode
   delayValue?: number | null
   delayUnit?: AutomationDelayUnit | null
@@ -1477,15 +1946,25 @@ export interface AutomationOptions {
   campaigns: AutomationCampaignOption[]
   triggerOptions: AutomationTriggerOption[]
   contactGroups: AutomationContactGroupOption[]
+  dataGroups: DataGroup[]
 }
 
 export interface AutomationExecution {
   id: number
   automationId: number
+  automationName?: string | null
+  campaignRole?: 'source' | 'target'
+  sourceCampaignName?: string | null
+  targetCampaignName?: string | null
+  targetCampaignId?: number | null
   sourceCampaignDetailId: number
   sourceInputDataId: number
   targetInputDataId?: number | null
   targetContactGroupMemberId?: number | null
+  targetDataGroupId?: number | null
+  targetDataGroupMemberId?: number | null
+  targetDataGroupSyncStatus?: 'pending' | 'completed' | 'skipped' | 'failed' | null
+  targetDataGroupSyncError?: string | null
   sourceStatus: string
   dataType: AutomationDataType
   dataValue: string
@@ -1499,6 +1978,7 @@ export interface AutomationExecution {
   targetResultStatus?: string | null
   targetResultCount?: number
   targetContactGroupName?: string | null
+  targetDataGroupName?: string | null
   createdAt?: string
   updatedAt?: string
 }
@@ -1514,6 +1994,26 @@ export interface AutomationExecutionListResult {
   total: number
   page: number
   pageSize: number
+}
+
+export type CampaignAutomationExecutionRole = 'all' | 'source' | 'target'
+
+export interface CampaignAutomationExecutionListQuery {
+  campaignId: number
+  role?: CampaignAutomationExecutionRole
+  status?: AutomationExecutionStatus | ''
+  search?: string
+  dateFrom?: string | null
+  dateTo?: string | null
+  offset?: number
+  limit?: number
+}
+
+export interface CampaignAutomationExecutionListResult {
+  items: AutomationExecution[]
+  total: number
+  offset: number
+  limit: number
 }
 
 export interface AutomationUpdatedEvent {
@@ -1973,6 +2473,7 @@ export const IPC_EVENTS = {
 
   // Database Campaign Input Data (việc-cần-làm thực thi)
   DB_LIST_CAMPAIGN_INPUT_DATA: 'db:list-campaign-input-data',
+  DB_LIST_CAMPAIGN_INPUT_DATA_PAGE: 'db:list-campaign-input-data-page',
   DB_CREATE_CAMPAIGN_INPUT_DATA: 'db:create-campaign-input-data',
   DB_UPDATE_CAMPAIGN_INPUT_DATA: 'db:update-campaign-input-data',
   DB_BULK_UPDATE_CAMPAIGN_INPUT_DATA_STATUS: 'db:bulk-update-campaign-input-data-status',
@@ -1984,6 +2485,7 @@ export const IPC_EVENTS = {
   // Database Campaign Details (per-milestone log)
   DB_LIST_CAMPAIGN_DETAILS_BY_INPUT_DATA: 'db:list-campaign-details',
   DB_LIST_CAMPAIGN_DETAILS_BY_CAMPAIGN: 'db:list-campaign-details-by-campaign',
+  DB_LIST_CAMPAIGN_DETAILS_PAGE: 'db:list-campaign-details-page',
   DB_LIST_EMAIL_CAMPAIGN_LINK_TRACKINGS: 'db:list-email-campaign-link-trackings',
   DB_CREATE_CAMPAIGN_DETAIL: 'db:create-campaign-detail',
   DB_DELETE_CAMPAIGN_DETAIL: 'db:delete-campaign-detail',
@@ -2037,6 +2539,7 @@ export const IPC_EVENTS = {
   AUTOMATION_SET_ACTIVE: 'automation:set-active',
   AUTOMATION_DELETE: 'automation:delete',
   AUTOMATION_DETAILS_LIST: 'automation:details-list',
+  AUTOMATION_CAMPAIGN_DETAILS_LIST: 'automation:campaign-details-list',
   AUTOMATION_UPDATED: 'automation:updated',
 
   // Webview registration (embedded browser tabs)
@@ -2105,6 +2608,26 @@ export const IPC_EVENTS = {
   CONTACT_GROUPS_LIST_CONTACTS: 'contacts:groups:list-contacts',
   CONTACT_GROUPS_ADD_CONTACTS: 'contacts:groups:add-contacts',
   CONTACT_GROUPS_REMOVE_CONTACTS: 'contacts:groups:remove-contacts',
+  DATA_GROUPS_LIST: 'data-groups:list',
+  DATA_GROUPS_CREATE: 'data-groups:create',
+  DATA_GROUPS_UPDATE: 'data-groups:update',
+  DATA_GROUPS_DELETE: 'data-groups:delete',
+  DATA_GROUPS_DUPLICATE: 'data-groups:duplicate',
+  DATA_GROUPS_LIST_MEMBERS: 'data-groups:list-members',
+  DATA_GROUPS_LIST_MEMBER_IDS: 'data-groups:list-member-ids',
+  DATA_GROUPS_LIST_DATASETS: 'data-groups:list-datasets',
+  DATA_GROUPS_GET_LATEST_INGEST_STATS: 'data-groups:get-latest-ingest-stats',
+  DATA_GROUPS_INGEST: 'data-groups:ingest',
+  DATA_GROUPS_REMOVE_MEMBERS: 'data-groups:remove-members',
+  DATA_GROUPS_MOVE_MEMBERS: 'data-groups:move-members',
+  DATA_GROUPS_EXPORT_MEMBERS: 'data-groups:export-members',
+  CAMPAIGN_DATA_GROUP_SOURCE_BIND: 'campaign:data-group-source:bind',
+  CAMPAIGN_DATA_GROUP_SOURCE_PREFLIGHT_CHANGE: 'campaign:data-group-source:preflight-change',
+  CAMPAIGN_DATA_GROUP_SOURCE_GET: 'campaign:data-group-source:get',
+  CAMPAIGN_DATA_GROUP_SOURCE_STOP: 'campaign:data-group-source:stop',
+  CAMPAIGN_DATA_GROUP_SOURCE_REACTIVATE: 'campaign:data-group-source:reactivate',
+  CAMPAIGN_DATA_GROUP_SNAPSHOT_ADD: 'campaign:data-group-snapshot:add',
+  CAMPAIGN_CREATION_BUNDLE_CREATE: 'campaign:creation-bundle:create',
   AKABIZ_CONTACT_TAGS_LIST: 'contacts:akabiz-tags:list',
   AKABIZ_CONTACT_TAGS_CREATE: 'contacts:akabiz-tags:create',
   AKABIZ_CONTACT_TAGS_UPDATE: 'contacts:akabiz-tags:update',

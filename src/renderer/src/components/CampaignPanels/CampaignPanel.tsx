@@ -1,26 +1,37 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import {
   CAMPAIGN_STATUSES,
+  actionSupportsDataGroup,
   getCampaignInputDataRequirement,
   type AddCampaignInputDataRowsResult,
   type AddCampaignInputDataToCampaignRequest,
   type AutoAccountContact,
   type AutoAccount,
+  type Automation,
+  type AutomationExecution,
+  type AutomationExecutionStatus,
+  type AutomationOptions,
   type Campaign,
   type CampaignAction,
+  type CampaignDataGroupSourceStatus,
+  type CampaignAutomationExecutionRole,
   type CampaignImportPlatform,
   type CampaignDetail,
   type CampaignInputData,
+  type CampaignInputOriginFilter,
   type CampaignInputStatus,
   type CampaignRelationSummary,
   type CampaignRunEvent,
   type ContentTemplateChannelName,
+  type DataGroup,
   type EmailCampaignLinkTrackingSummary,
+  type SnapshotDataGroupToCampaignRequest,
+  type SnapshotDataGroupToCampaignResult,
   type ZaloLoginQrEvent
 } from '../../../../shared/types'
 import { parseCampaignLogLine } from '../../../../shared/campaignLogFormat'
@@ -33,9 +44,13 @@ import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
 import CampaignInfoView from './CampaignInfoView'
 import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
+import AutomationFormModal from '../Automation/AutomationFormModal'
+import { formatAutomationTriggerLabel } from '../Automation/automationDisplay'
 import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
 import { canUsePlatform } from '../../utils/entitlements'
 import { isZaloWebAccount } from '../../utils/accountLabels'
+import { createDataGroupRequestId } from '../DataGroups/dataGroupApi'
+import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 
 interface CampaignPanelProps {
   isActive: boolean
@@ -47,7 +62,7 @@ interface CampaignPanelProps {
   onAskAssistant?: (campaignId: number) => void
 }
 
-type DetailTab = 'info' | 'data' | 'actions' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
+type DetailTab = 'info' | 'data' | 'actions' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
@@ -172,10 +187,24 @@ interface FindDataLogRow {
 }
 
 const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
-const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
-const SMS_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung SMS', 'Lịch gửi']
-const VOICE_CALL_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung cuộc gọi', 'Lịch gọi']
+const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nguồn thêm data']
+const SMS_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung SMS', 'Lịch gửi', 'Nguồn thêm data']
+const VOICE_CALL_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung cuộc gọi', 'Lịch gọi', 'Nguồn thêm data']
 const BLOCK_SCREENSHOT_EVENT_TYPE = 'browser_screenshot'
+const AUTOMATION_DETAIL_PAGE_SIZE = 100
+const AUTOMATION_EXECUTION_EXPORT_PAGE_SIZE = 500
+const AUTOMATION_DATA_TYPE_LABELS: Record<string, string> = {
+  phone: 'SĐT',
+  email: 'Email',
+  zalo_uid: 'UID Zalo',
+  facebook_uid: 'UID Facebook'
+}
+const AUTOMATION_EXECUTION_STATUS_OPTIONS: Array<{ value: AutomationExecutionStatus | ''; label: string }> = [
+  { value: '', label: 'Tất cả' },
+  { value: 'đã thêm', label: 'Thành công' },
+  { value: 'bỏ qua', label: 'Bỏ qua' },
+  { value: 'lỗi', label: 'Lỗi' }
+]
 const FIND_DATA_LOG_EXPORT_HEADERS = [
   'Thời gian',
   'Nguồn',
@@ -200,6 +229,29 @@ const FIND_DATA_LOG_EXPORT_HEADERS = [
 const formatInputDataPhoneCarrier = (row: Partial<Pick<CampaignInputData, 'phone' | 'phoneCarrier'>>): string => (
   getVietnamMobileCarrierLabel(row.phoneCarrier || getVietnamMobileCarrier(row.phone)) || '-'
 )
+
+async function listAllAutomationsForCampaign(campaignId: number): Promise<Automation[]> {
+  const result = new Map<number, Automation>()
+  const loadRole = async (role: 'sourceCampaignId' | 'targetCampaignId') => {
+    let page = 1
+    while (true) {
+      const response = await window.electronAPI.listAutomations({
+        [role]: campaignId,
+        page,
+        pageSize: AUTOMATION_DETAIL_PAGE_SIZE,
+        sortBy: 'updatedAt',
+        sortDirection: 'desc'
+      })
+      response.items.forEach(item => result.set(item.id, item))
+      if (page * response.pageSize >= response.total || response.items.length === 0) break
+      page += 1
+    }
+  }
+  await Promise.all([loadRole('sourceCampaignId'), loadRole('targetCampaignId')])
+  return Array.from(result.values()).sort((left, right) => (
+    new Date(right.updatedAt || right.createdAt || 0).getTime() - new Date(left.updatedAt || left.createdAt || 0).getTime()
+  ))
+}
 
 interface SmsCampaignDetailInfo {
   phone: string
@@ -498,6 +550,8 @@ const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
 const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
+const CAMPAIGN_INPUT_DATA_PAGE_SIZE = 100
+const CAMPAIGN_DETAIL_PAGE_SIZE = 100
 const ADD_DATA_UNSUPPORTED_ACTION_IDS = new Set([
   ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID,
   ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
@@ -522,6 +576,37 @@ const INPUT_DATA_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUS
   value: status,
   label: status
 }))
+
+const formatCampaignInputOrigin = (item: CampaignInputData): string => {
+  const labels = (item.origins || []).map(origin => {
+    if (origin.originKind === 'group') {
+      const dataset = origin.datasetNames?.filter(Boolean).join(', ')
+      if (dataset) return `${origin.groupName || 'Nhóm data'} · ${dataset}`
+      if (origin.batchSourceName) return `${origin.groupName || 'Nhóm data'} · ${origin.batchSourceName}`
+      return origin.groupName || 'Nhóm data'
+    }
+    if (origin.originKind === 'automation') return 'Từ tự động hóa'
+    if (origin.originKind === 'manual') return 'Nhập trực tiếp'
+    if (origin.originKind === 'api') return 'API'
+    if (origin.groupName) return origin.groupName
+    if (origin.automationName) return 'Từ tự động hóa'
+    return origin.originKind || ''
+  }).filter(Boolean)
+  return Array.from(new Set(labels)).join(' · ') || (item.canonicalTargetKey ? 'Nhóm data' : 'Nhập trực tiếp')
+}
+
+const getCampaignInputAutomationReferences = (item: CampaignInputData) => {
+  const references = new Map<string, { automationId: number | null; automationName: string }>()
+  for (const origin of item.origins || []) {
+    const automationName = String(origin.automationName || '').trim()
+    if (!automationName) continue
+    const automationId = Number(origin.automationId)
+    const normalizedId = Number.isSafeInteger(automationId) && automationId > 0 ? automationId : null
+    const key = normalizedId ? `automation:${normalizedId}` : `name:${automationName}`
+    if (!references.has(key)) references.set(key, { automationId: normalizedId, automationName })
+  }
+  return Array.from(references.values())
+}
 
 const CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = [
   { value: 'thành công', label: 'thành công' },
@@ -913,6 +998,99 @@ const getUniqueFoundDataItems = (items: FoundDataItem[]) => {
 const formatDisplayDateTime = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
 const formatCount = (value: number) => new Intl.NumberFormat('vi-VN').format(value)
 
+const getAutomationExecutionResult = (execution: AutomationExecution) => {
+  if (
+    execution.status === 'đã thêm'
+    && (execution.targetDataGroupId || execution.targetDataGroupSyncStatus)
+  ) {
+    if (execution.targetDataGroupSyncStatus === 'failed') {
+      return {
+        label: execution.targetCampaignId ? 'Một phần lỗi' : 'Lỗi Nhóm data',
+        tone: 'is-warning'
+      }
+    }
+    if (execution.targetDataGroupSyncStatus === 'skipped') {
+      return {
+        label: execution.targetCampaignId ? 'Một phần bỏ qua' : 'Bỏ qua',
+        tone: 'is-warning'
+      }
+    }
+    if (execution.targetDataGroupSyncStatus !== 'completed') {
+      return { label: 'Chờ Nhóm data', tone: 'is-neutral' }
+    }
+  }
+  if (execution.status === 'đã thêm') return { label: 'Thành công', tone: 'is-success' }
+  if (execution.status === 'bỏ qua') return { label: 'Bỏ qua', tone: 'is-warning' }
+  if (execution.status === 'lỗi') return { label: 'Lỗi', tone: 'is-error' }
+  return { label: execution.status, tone: 'is-neutral' }
+}
+
+const getAutomationExecutionDataDisplay = (execution: AutomationExecution) => {
+  const snapshot = execution.dataSnapshot || {}
+  const read = (key: string) => String(snapshot[key] || '').trim()
+  const name = read('name')
+  const identity = read('uid') || read('phone') || read('email') || execution.dataValue.trim()
+  const primary = name || identity || '—'
+  return {
+    primary,
+    secondary: identity && identity !== primary ? identity : ''
+  }
+}
+
+const getAutomationExecutionDestinations = (execution: AutomationExecution) => {
+  const destinations: Array<{ kind: 'campaign' | 'group'; label: string }> = []
+  const campaignName = String(
+    execution.targetCampaignName
+    || (execution.targetCampaignId ? `#${execution.targetCampaignId}` : '')
+  ).trim()
+  const groupName = String(
+    execution.targetDataGroupName
+    || (execution.targetDataGroupId ? `#${execution.targetDataGroupId}` : '')
+    || ''
+  ).trim()
+  const legacyGroupName = String(execution.targetContactGroupName || '').trim()
+
+  if (campaignName) destinations.push({ kind: 'campaign', label: `Thêm vào CĐ: ${campaignName}` })
+  if (groupName) destinations.push({ kind: 'group', label: `Thêm vào nhóm: ${groupName}` })
+  else if (legacyGroupName) destinations.push({ kind: 'group', label: `Thêm vào nhóm liên hệ: ${legacyGroupName}` })
+  return destinations
+}
+
+const getCampaignAutomationRoleLabel = (automation: Automation, campaignId: number | null) => {
+  const roles = [
+    automation.sourceCampaignId === campaignId ? 'A · Chiến dịch kích hoạt data' : '',
+    automation.targetCampaignId === campaignId ? 'B · Chiến dịch nhận data' : ''
+  ].filter(Boolean)
+  return roles.join(' / ') || '—'
+}
+
+const getCampaignAutomationLinkedCampaignLabel = (automation: Automation, campaignId: number | null) => {
+  const isSource = automation.sourceCampaignId === campaignId
+  const isTarget = automation.targetCampaignId === campaignId
+  const sourceName = automation.sourceCampaignName || `#${automation.sourceCampaignId}`
+  const targetName = automation.targetCampaignName
+    || (automation.targetCampaignId ? `#${automation.targetCampaignId}` : '')
+  const dataGroupName = automation.targetDataGroupName
+    || (automation.targetDataGroupId ? `#${automation.targetDataGroupId}` : '')
+  const destinationLabels = [
+    targetName ? `CD: ${targetName}` : '',
+    dataGroupName ? `Nhóm: ${dataGroupName}` : ''
+  ].filter(Boolean)
+  if (isSource && !targetName) return destinationLabels.join(' + ') || '—'
+  if (isSource && isTarget) return `${sourceName} → ${targetName}`
+  if (isSource) return `Đến ${destinationLabels.join(' + ')}`
+  if (isTarget) return [`Từ CD: ${sourceName}`, dataGroupName ? `Nhóm: ${dataGroupName}` : ''].filter(Boolean).join(' + ')
+  return `${sourceName} → ${destinationLabels.join(' + ') || '—'}`
+}
+
+const getCampaignAutomationAccountLabel = (automation: Automation, campaignId: number | null) => {
+  const names = [
+    automation.sourceCampaignId === campaignId ? automation.sourceAccountName : '',
+    automation.targetCampaignId === campaignId ? automation.targetAccountName : ''
+  ].filter((name): name is string => Boolean(name))
+  return Array.from(new Set(names)).join(' / ') || '—'
+}
+
 const formatCompactDateTime = (value?: string | null): string => {
   if (!value) return '-'
   const date = new Date(value)
@@ -1032,15 +1210,6 @@ const parseCampaignListDateToBoundary = (value: string) => {
   if (!date) return null
   date.setDate(date.getDate() + 1)
   return date
-}
-
-const isWithinDateFilter = (value: string | undefined | null, dateStart: Date | null, dateEnd: Date | null) => {
-  if (!value) return false
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return false
-  if (dateStart && date < dateStart) return false
-  if (dateEnd && date > dateEnd) return false
-  return true
 }
 
 const getCampaignInputDataFilterTime = (item: CampaignInputData, campaign: Campaign | null | undefined) => (
@@ -1387,6 +1556,7 @@ function AddInputDataToCampaignModal({
       .filter(campaign => {
         if (campaign.actionId !== actionId) return false
         if (campaign.status === 'đang chạy') return false
+        if (campaign.dataTargetSourceMode === 'data_group') return false
         if (!getCampaignInputDataRequirement(campaign.actionId)) return false
         if (hasDateFilter) {
           if (!campaign.schedule) return false
@@ -1626,6 +1796,10 @@ interface AddDataToCurrentCampaignModalProps {
     campaignStatus: InputDataBatchStatus
     skipExistingInCampaign: boolean
   }) => Promise<AddCampaignInputDataRowsResult>
+  onSnapshotDataGroup: (
+    request: SnapshotDataGroupToCampaignRequest
+  ) => Promise<SnapshotDataGroupToCampaignResult>
+  onRefresh: (campaignId: number) => Promise<void>
   onClose: () => void
 }
 
@@ -1798,12 +1972,16 @@ function AddDataToCurrentCampaignModal({
   campaignAction,
   account,
   onSubmit,
+  onSnapshotDataGroup,
+  onRefresh,
   onClose
 }: AddDataToCurrentCampaignModalProps) {
   const showAlert = useUiStore(state => state.showAlert)
   const [rows, setRows] = useState<Partial<CampaignInputData>[]>([])
   const [showDataUploadModal, setShowDataUploadModal] = useState(false)
   const [dataScanPicker, setDataScanPicker] = useState<AddCampaignDataScanSource | null>(null)
+  const [showDataGroupPicker, setShowDataGroupPicker] = useState(false)
+  const [selectedDataGroup, setSelectedDataGroup] = useState<DataGroup | null>(null)
   const [campaignSchedule, setCampaignSchedule] = useState(() => {
     const date = new Date(campaign.schedule || campaign.originalSchedule || Date.now())
     return formatDateTimeLocal(Number.isNaN(date.getTime()) ? new Date() : date)
@@ -1813,16 +1991,20 @@ function AddDataToCurrentCampaignModal({
   )
   const [skipExistingInCampaign, setSkipExistingInCampaign] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const snapshotRequestIdentitiesRef = useRef<Map<string, string>>(new Map())
 
   const importPlatform = useMemo(() => getAddDataImportPlatform(campaign, campaignAction), [campaign, campaignAction])
   const canImportData = useMemo(() => canImportDataForCampaign(campaign, campaignAction), [campaign, campaignAction])
   const scanSources = useMemo(() => getAddDataScanSources(campaign), [campaign])
+  const canSnapshotDataGroup = campaign.dataTargetSourceMode !== 'data_group'
+    && actionSupportsDataGroup(campaign.actionId)
 
   const appendRows = (nextRows: Partial<CampaignInputData>[]) => {
     if (nextRows.length === 0) {
       showAlert('Không có data hợp lệ để thêm.', 'error')
       return
     }
+    setSelectedDataGroup(null)
     setRows(prev => [
       ...prev,
       ...nextRows.map(row => ({
@@ -1835,13 +2017,20 @@ function AddDataToCurrentCampaignModal({
     showAlert(`Đã thêm ${nextRows.length} data vào danh sách chờ thêm.`, 'success')
   }
 
+  const selectDataGroup = (group: DataGroup) => {
+    setRows([])
+    setSelectedDataGroup(group)
+    setShowDataGroupPicker(false)
+  }
+
   const removeRow = (index: number) => {
     setRows(prev => prev.filter((_, rowIndex) => rowIndex !== index))
   }
 
   const clearRows = () => {
-    if (rows.length === 0) return
+    if (rows.length === 0 && !selectedDataGroup) return
     setRows([])
+    setSelectedDataGroup(null)
     showAlert('Đã xoá tất cả data chờ thêm.', 'success')
   }
 
@@ -1949,12 +2138,55 @@ function AddDataToCurrentCampaignModal({
       showAlert('Lịch chạy không hợp lệ.', 'error')
       return
     }
-    if (rows.length === 0) {
+    if (rows.length === 0 && !selectedDataGroup) {
       showAlert('Vui lòng thêm ít nhất một data.', 'error')
       return
     }
+    let attemptedGroupSnapshot = false
     setSubmitting(true)
     try {
+      if (selectedDataGroup) {
+        const fingerprint = [
+          campaign.id,
+          selectedDataGroup.id,
+          scheduleIso,
+          campaignStatus
+        ].join('|')
+        let requestId = snapshotRequestIdentitiesRef.current.get(fingerprint)
+        if (!requestId) {
+          requestId = `campaign-group-snapshot:${campaign.id}:${createDataGroupRequestId()}`
+          snapshotRequestIdentitiesRef.current.set(fingerprint, requestId)
+        }
+        attemptedGroupSnapshot = true
+        const result = await onSnapshotDataGroup({
+          requestId,
+          campaignId: campaign.id,
+          groupId: selectedDataGroup.id,
+          campaignSchedule: scheduleIso,
+          campaignStatus
+        })
+        await onRefresh(campaign.id)
+        snapshotRequestIdentitiesRef.current.delete(fingerprint)
+        const skippedParts = [
+          result.alreadySeenCount > 0 ? `${result.alreadySeenCount} đã có trong chiến dịch` : '',
+          result.incompatibleCount > 0 ? `${result.incompatibleCount} không tương thích hoặc không hợp lệ` : '',
+          result.conflictCount > 0 ? `${result.conflictCount} xung đột định danh` : ''
+        ].filter(Boolean)
+        const skippedText = skippedParts.length > 0 ? ` Bỏ qua ${skippedParts.join(', ')}.` : ''
+        if (result.insertedCount === 0 && result.alreadySeenCount === 0) {
+          showAlert(`Không có data nào được thêm.${skippedText}`, 'error')
+          return
+        }
+        showAlert(
+          result.insertedCount > 0
+            ? `Đã thêm ${result.insertedCount} data từ nhóm “${selectedDataGroup.name}” vào chiến dịch.${skippedText}`
+            : `Không có data mới để thêm. ${result.alreadySeenCount} data đã có trong chiến dịch.${skippedText}`,
+          'success'
+        )
+        onClose()
+        return
+      }
+
       const result = await onSubmit({
         campaignId: campaign.id,
         rows,
@@ -1975,18 +2207,32 @@ function AddDataToCurrentCampaignModal({
       showAlert(`Đã thêm ${result.insertedCount} data vào chiến dịch.${skippedText}`, 'success')
       onClose()
     } catch (err) {
-      showAlert(formatIpcErrorMessage(err, 'Không thể thêm data vào chiến dịch.'), 'error')
+      if (attemptedGroupSnapshot) {
+        try {
+          await onRefresh(campaign.id)
+        } catch (refreshError) {
+          console.error('Failed to refresh campaign input data after partial group snapshot:', refreshError)
+        }
+      }
+      const fallback = attemptedGroupSnapshot
+        ? 'Kết nối bị gián đoạn khi thêm data nhóm. Danh sách chiến dịch đã được tải lại; bạn có thể bấm Thêm lại an toàn.'
+        : 'Không thể thêm data vào chiến dịch.'
+      showAlert(formatIpcErrorMessage(err, fallback), 'error')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 2200 }} onMouseDown={onClose}>
+    <div
+      className="modal-overlay"
+      style={{ zIndex: 2200 }}
+      onMouseDown={submitting ? undefined : onClose}
+    >
       <div className="modal add-current-data-modal" onMouseDown={event => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">Thêm data</div>
-          <button className="btn-icon" onClick={onClose} title="Đóng">
+          <button className="btn-icon" onClick={onClose} title="Đóng" disabled={submitting}>
             <X size={18} />
           </button>
         </div>
@@ -2001,6 +2247,7 @@ function AddDataToCurrentCampaignModal({
               <button
                 className="btn btn-secondary"
                 type="button"
+                disabled={submitting}
                 onClick={() => {
                   if (!account?.id) {
                     showAlert('Chiến dịch chưa có tài khoản hợp lệ để import data.', 'error')
@@ -2012,11 +2259,22 @@ function AddDataToCurrentCampaignModal({
                 <Upload size={14} /> Nhập/import data
               </button>
             )}
+            {canSnapshotDataGroup && (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                disabled={submitting}
+                onClick={() => setShowDataGroupPicker(true)}
+              >
+                <Users size={14} /> Thêm bằng nhóm
+              </button>
+            )}
             {scanSources.map(source => (
               <button
                 key={source.key}
                 className="btn btn-secondary"
                 type="button"
+                disabled={submitting}
                 onClick={() => {
                   if (!account?.id && source.mode !== 'pageInboxPhones') {
                     showAlert('Chiến dịch chưa có tài khoản hợp lệ để chọn data.', 'error')
@@ -2037,15 +2295,32 @@ function AddDataToCurrentCampaignModal({
                 className="btn btn-ghost btn-sm"
                 type="button"
                 onClick={clearRows}
-                disabled={rows.length === 0}
+                disabled={submitting || (rows.length === 0 && !selectedDataGroup)}
                 title="Xoá tất cả data chờ thêm"
               >
                 <Trash2 size={13} /> Xoá tất cả
               </button>
             </div>
             <div className="add-current-data-preview">
-              {rows.length === 0 ? (
-                <div className="text-muted add-input-data-empty">Chưa có data nào. Hãy nhập/import hoặc chọn từ kho data đã quét.</div>
+              {selectedDataGroup ? (
+                <div className="add-current-data-group-snapshot">
+                  <div>
+                    <strong>{selectedDataGroup.name}</strong>
+                    <span>{selectedDataGroup.activeMembershipCount.toLocaleString('vi-VN')} thành viên hiện tại</span>
+                    <small>Chỉ thêm dữ liệu hiện tại một lần; chiến dịch không nhận data mới phát sinh trong nhóm.</small>
+                  </div>
+                  <button
+                    className="btn-icon text-error"
+                    type="button"
+                    onClick={() => setSelectedDataGroup(null)}
+                    title="Bỏ nhóm"
+                    disabled={submitting}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ) : rows.length === 0 ? (
+                <div className="text-muted add-input-data-empty">Chưa có data nào. Hãy nhập/import, chọn data hoặc thêm bằng nhóm.</div>
               ) : (
                 <table className="campaign-grid">
                   <thead>
@@ -2067,7 +2342,7 @@ function AddDataToCurrentCampaignModal({
                         <td title={row.uid || ''}>{row.uid || '-'}</td>
                         <td title={row.email || ''}>{row.email || '-'}</td>
                         <td>
-                          <button className="btn-icon text-error" onClick={() => removeRow(index)} title="Xoá data">
+                          <button className="btn-icon text-error" onClick={() => removeRow(index)} title="Xoá data" disabled={submitting}>
                             <Trash2 size={14} />
                           </button>
                         </td>
@@ -2082,34 +2357,35 @@ function AddDataToCurrentCampaignModal({
           <div className="add-input-data-grid">
             <label className="stepper-form-group">
               <span>Lịch chạy</span>
-              <input className="stepper-input" type="datetime-local" value={campaignSchedule} onChange={event => setCampaignSchedule(event.target.value)} />
+              <input className="stepper-input" type="datetime-local" value={campaignSchedule} onChange={event => setCampaignSchedule(event.target.value)} disabled={submitting} />
             </label>
 
             <label className="stepper-form-group">
               <span>Trạng thái chiến dịch</span>
-              <select className="stepper-input" value={campaignStatus} onChange={event => setCampaignStatus(event.target.value as InputDataBatchStatus)}>
+              <select className="stepper-input" value={campaignStatus} onChange={event => setCampaignStatus(event.target.value as InputDataBatchStatus)} disabled={submitting}>
                 <option value="chờ xử lý">chờ xử lý</option>
                 <option value="tạm dừng">tạm dừng</option>
               </select>
             </label>
           </div>
 
-          <label className="schedule-checkbox-label add-current-data-checkbox">
+          {!selectedDataGroup && rows.length > 0 && <label className="schedule-checkbox-label add-current-data-checkbox">
             <input
               type="checkbox"
               checked={skipExistingInCampaign}
               onChange={event => setSkipExistingInCampaign(event.target.checked)}
+              disabled={submitting}
             />
             <span>Bỏ qua data đã có trong chiến dịch</span>
-          </label>
-          <div className="text-muted add-current-data-checkbox-hint">
+          </label>}
+          {!selectedDataGroup && rows.length > 0 && <div className="text-muted add-current-data-checkbox-hint">
             Khi bật, hệ thống sẽ không thêm lại UID/SĐT/email/link đã tồn tại trong chiến dịch này. Khi tắt, chỉ lọc trùng trong danh sách data vừa chọn.
-          </div>
+          </div>}
         </div>
 
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Huỷ</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting || rows.length === 0}>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting || (rows.length === 0 && !selectedDataGroup)}>
             {submitting ? <RefreshCw size={14} className="spin" /> : <Plus size={14} />}
             Thêm
           </button>
@@ -2143,6 +2419,14 @@ function AddDataToCurrentCampaignModal({
           />
         </div>
       )}
+      {showDataGroupPicker && (
+        <div onMouseDown={event => event.stopPropagation()}>
+          <DataGroupPickerModal
+            onClose={() => setShowDataGroupPicker(false)}
+            onSelect={selectDataGroup}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -2150,8 +2434,9 @@ function AddDataToCurrentCampaignModal({
 export default function CampaignPanel({ isActive, filterAccountId, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
-    campaignInputData, loadingCampaignInputData,
+    campaignInputData, campaignInputDataTotal, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
+    campaignDetailPageItems, campaignDetailPageTotal, loadingCampaignDetailPage,
     emailCampaignLinkTrackings, emailCampaignLinkTrackingCampaignId, loadingEmailCampaignLinkTrackings,
     campaignRunEvents, loadingCampaignRunEvents,
     campaignRelationSummaries, loadingCampaignRelationSummaries,
@@ -2159,7 +2444,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     updateCampaign, deleteCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign, addCampaignInputDataRows,
-    loadCampaignInputData, loadCampaignDetails, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
+    loadCampaignInputData, refreshCampaignInputData, loadCampaignDetails, loadCampaignDetailPage, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
   const isZaloServer = useAuthStore(s => !!s.user?.isZaloServer)
@@ -2187,6 +2472,27 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const [inputDataActionLoading, setInputDataActionLoading] = useState(false)
   const [openInputDataActionMenu, setOpenInputDataActionMenu] = useState(false)
   const [openCampaignActionMenuId, setOpenCampaignActionMenuId] = useState<number | null>(null)
+  const [dataGroupSourceStatuses, setDataGroupSourceStatuses] = useState<Record<number, CampaignDataGroupSourceStatus | 'loading' | 'error'>>({})
+  const [relatedAutomations, setRelatedAutomations] = useState<Automation[]>([])
+  const [relatedAutomationsLoading, setRelatedAutomationsLoading] = useState(false)
+  const [relatedAutomationExecutions, setRelatedAutomationExecutions] = useState<AutomationExecution[]>([])
+  const [relatedAutomationExecutionTotal, setRelatedAutomationExecutionTotal] = useState(0)
+  const [relatedAutomationExecutionOverallTotal, setRelatedAutomationExecutionOverallTotal] = useState(0)
+  const [automationExecutionsLoading, setAutomationExecutionsLoading] = useState(false)
+  const [automationExecutionsExporting, setAutomationExecutionsExporting] = useState(false)
+  const [automationExecutionPage, setAutomationExecutionPage] = useState(1)
+  const [automationExecutionSearch, setAutomationExecutionSearch] = useState('')
+  const [debouncedAutomationExecutionSearch, setDebouncedAutomationExecutionSearch] = useState('')
+  const [automationExecutionStatus, setAutomationExecutionStatus] = useState<AutomationExecutionStatus | ''>('')
+  const [automationExecutionRole, setAutomationExecutionRole] = useState<CampaignAutomationExecutionRole>('all')
+  const [automationExecutionDateFrom, setAutomationExecutionDateFrom] = useState('')
+  const [automationExecutionDateTo, setAutomationExecutionDateTo] = useState('')
+  const [automationDetailRefreshRevision, setAutomationDetailRefreshRevision] = useState(0)
+  const [viewingRelatedAutomation, setViewingRelatedAutomation] = useState<Automation | null>(null)
+  const [automationViewLoadingId, setAutomationViewLoadingId] = useState<number | null>(null)
+  const [editingRelatedAutomation, setEditingRelatedAutomation] = useState<Automation | null>(null)
+  const [automationEditOptions, setAutomationEditOptions] = useState<AutomationOptions | null>(null)
+  const [automationEditLoadingId, setAutomationEditLoadingId] = useState<number | null>(null)
   const [campaignActionMenuPosition, setCampaignActionMenuPosition] = useState<CampaignActionMenuPosition | null>(null)
   const [zaloLoginAccount, setZaloLoginAccount] = useState<AutoAccount | null>(null)
   const [zaloLoginEvent, setZaloLoginEvent] = useState<ZaloLoginQrEvent | null>(null)
@@ -2205,7 +2511,15 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const [platformFilters, setPlatformFilters] = useState<string[]>([])
   const [actionFilters, setActionFilters] = useState<string[]>([])
   const [inputDataFilters, setInputDataFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
+  const [inputDataOriginFilter, setInputDataOriginFilter] = useState<CampaignInputOriginFilter>('all')
+  const [inputDataSearch, setInputDataSearch] = useState('')
+  const [debouncedInputDataSearch, setDebouncedInputDataSearch] = useState('')
+  const [inputDataPage, setInputDataPage] = useState(1)
   const [actionDetailFilters, setActionDetailFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
+  const [actionDetailSearch, setActionDetailSearch] = useState('')
+  const [debouncedActionDetailSearch, setDebouncedActionDetailSearch] = useState('')
+  const [actionDetailPage, setActionDetailPage] = useState(1)
+  const [exportingCampaignDetails, setExportingCampaignDetails] = useState(false)
   const [findDataLogScope, setFindDataLogScope] = useState<FindDataLogScope>('visible')
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
@@ -2330,10 +2644,41 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   useEffect(() => {
     if (!selectedCampaignId) return
     if (detailTab === 'data') {
-      loadCampaignInputData(selectedCampaignId)
+      const dateStart = inputDataFilters.timePreset === 'all'
+        ? null
+        : parseDateInputBoundary(inputDataFilters.dateFrom, 'start')
+      const dateEnd = inputDataFilters.timePreset === 'all'
+        ? null
+        : parseDateInputBoundary(inputDataFilters.dateTo, 'end')
+      loadCampaignInputData(selectedCampaignId, {
+        search: debouncedInputDataSearch.trim() || undefined,
+        status: inputDataFilters.status as CampaignInputStatus | '',
+        originFilter: inputDataOriginFilter,
+        dateFrom: dateStart?.toISOString() || null,
+        dateTo: dateEnd?.toISOString() || null,
+        offset: (inputDataPage - 1) * CAMPAIGN_INPUT_DATA_PAGE_SIZE,
+        limit: CAMPAIGN_INPUT_DATA_PAGE_SIZE
+      })
       return
     }
-    if (detailTab === 'actions' || detailTab === 'foundData') {
+    if (detailTab === 'actions') {
+      const dateStart = actionDetailFilters.timePreset === 'all'
+        ? null
+        : parseDateInputBoundary(actionDetailFilters.dateFrom, 'start')
+      const dateEnd = actionDetailFilters.timePreset === 'all'
+        ? null
+        : parseDateInputBoundary(actionDetailFilters.dateTo, 'end')
+      loadCampaignDetailPage(selectedCampaignId, {
+        search: debouncedActionDetailSearch.trim() || undefined,
+        status: actionDetailFilters.status,
+        dateFrom: dateStart?.toISOString() || null,
+        dateTo: dateEnd?.toISOString() || null,
+        offset: (actionDetailPage - 1) * CAMPAIGN_DETAIL_PAGE_SIZE,
+        limit: CAMPAIGN_DETAIL_PAGE_SIZE
+      })
+      return
+    }
+    if (detailTab === 'foundData') {
       loadCampaignDetails(selectedCampaignId)
       return
     }
@@ -2367,14 +2712,184 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     detailTab,
     loadCampaignInputData,
     loadCampaignDetails,
+    loadCampaignDetailPage,
     loadCampaignRunEvents,
     findDataLogScope,
-    canViewAllFindDataLogs
+    canViewAllFindDataLogs,
+    debouncedInputDataSearch,
+    inputDataFilters.dateFrom,
+    inputDataFilters.dateTo,
+    inputDataFilters.status,
+    inputDataFilters.timePreset,
+    inputDataOriginFilter,
+    inputDataPage,
+    debouncedActionDetailSearch,
+    actionDetailFilters.dateFrom,
+    actionDetailFilters.dateTo,
+    actionDetailFilters.status,
+    actionDetailFilters.timePreset,
+    actionDetailPage
   ])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedInputDataSearch(inputDataSearch), 250)
+    return () => window.clearTimeout(timer)
+  }, [inputDataSearch])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedActionDetailSearch(actionDetailSearch), 250)
+    return () => window.clearTimeout(timer)
+  }, [actionDetailSearch])
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedAutomationExecutionSearch(automationExecutionSearch),
+      250
+    )
+    return () => window.clearTimeout(timer)
+  }, [automationExecutionSearch])
+
+  useEffect(() => {
+    setInputDataPage(1)
+  }, [debouncedInputDataSearch, inputDataFilters.dateFrom, inputDataFilters.dateTo, inputDataFilters.status, inputDataFilters.timePreset, inputDataOriginFilter, selectedCampaignId])
+
+  useEffect(() => {
+    setActionDetailPage(1)
+  }, [debouncedActionDetailSearch, actionDetailFilters.dateFrom, actionDetailFilters.dateTo, actionDetailFilters.status, actionDetailFilters.timePreset, selectedCampaignId])
+
+  useEffect(() => {
+    const pageCount = Math.max(1, Math.ceil(campaignInputDataTotal / CAMPAIGN_INPUT_DATA_PAGE_SIZE))
+    if (inputDataPage > pageCount) setInputDataPage(pageCount)
+  }, [campaignInputDataTotal, inputDataPage])
+
+  useEffect(() => {
+    const pageCount = Math.max(1, Math.ceil(campaignDetailPageTotal / CAMPAIGN_DETAIL_PAGE_SIZE))
+    if (actionDetailPage > pageCount) setActionDetailPage(pageCount)
+  }, [actionDetailPage, campaignDetailPageTotal])
+
+  useEffect(() => {
+    let disposed = false
+    setRelatedAutomations([])
+    setRelatedAutomationExecutions([])
+    setRelatedAutomationExecutionTotal(0)
+    setRelatedAutomationExecutionOverallTotal(0)
+    if (!selectedCampaignId) return () => { disposed = true }
+
+    setRelatedAutomationsLoading(true)
+    void listAllAutomationsForCampaign(selectedCampaignId)
+      .then(items => {
+        if (!disposed) setRelatedAutomations(items)
+      })
+      .catch(error => {
+        console.error('Failed to load campaign automation relations:', error)
+        if (!disposed) setRelatedAutomations([])
+      })
+      .finally(() => {
+        if (!disposed) setRelatedAutomationsLoading(false)
+      })
+
+    void window.electronAPI.listCampaignAutomationDetails({
+      campaignId: selectedCampaignId,
+      role: 'all',
+      offset: 0,
+      limit: 1
+    })
+      .then(result => {
+        if (!disposed) setRelatedAutomationExecutionOverallTotal(result.total)
+      })
+      .catch(error => {
+        console.error('Failed to load campaign automation execution total:', error)
+        if (!disposed) setRelatedAutomationExecutionOverallTotal(0)
+      })
+
+    return () => { disposed = true }
+  }, [selectedCampaignId, automationDetailRefreshRevision])
+
+  useEffect(() => {
+    let disposed = false
+    if (!selectedCampaignId) {
+      return () => { disposed = true }
+    }
+
+    const dateStart = parseDateInputBoundary(automationExecutionDateFrom, 'start')
+    const dateEnd = parseDateInputBoundary(automationExecutionDateTo, 'end')
+    setAutomationExecutionsLoading(true)
+    void window.electronAPI.listCampaignAutomationDetails({
+      campaignId: selectedCampaignId,
+      role: automationExecutionRole,
+      status: automationExecutionStatus,
+      search: debouncedAutomationExecutionSearch.trim() || undefined,
+      dateFrom: dateStart?.toISOString() || null,
+      dateTo: dateEnd?.toISOString() || null,
+      offset: (automationExecutionPage - 1) * AUTOMATION_DETAIL_PAGE_SIZE,
+      limit: AUTOMATION_DETAIL_PAGE_SIZE
+    })
+      .then(result => {
+        if (disposed) return
+        setRelatedAutomationExecutions(result.items)
+        setRelatedAutomationExecutionTotal(result.total)
+      })
+      .catch(error => {
+        console.error('Failed to load campaign automation executions:', error)
+        if (!disposed) {
+          setRelatedAutomationExecutions([])
+          setRelatedAutomationExecutionTotal(0)
+        }
+      })
+      .finally(() => {
+        if (!disposed) setAutomationExecutionsLoading(false)
+      })
+
+    return () => { disposed = true }
+  }, [
+    selectedCampaignId,
+    automationExecutionRole,
+    automationExecutionStatus,
+    debouncedAutomationExecutionSearch,
+    automationExecutionDateFrom,
+    automationExecutionDateTo,
+    automationExecutionPage,
+    automationDetailRefreshRevision
+  ])
+
+  useEffect(() => {
+    setAutomationExecutionPage(1)
+  }, [
+    selectedCampaignId,
+    automationExecutionRole,
+    automationExecutionStatus,
+    debouncedAutomationExecutionSearch,
+    automationExecutionDateFrom,
+    automationExecutionDateTo
+  ])
+
+  useEffect(() => {
+    const pageCount = Math.max(1, Math.ceil(relatedAutomationExecutionTotal / AUTOMATION_DETAIL_PAGE_SIZE))
+    if (automationExecutionPage > pageCount) setAutomationExecutionPage(pageCount)
+  }, [automationExecutionPage, relatedAutomationExecutionTotal])
+
+  useEffect(() => {
     setInputDataFilters(createDefaultDetailFilters())
+    setInputDataOriginFilter('all')
+    setInputDataSearch('')
+    setDebouncedInputDataSearch('')
+    setInputDataPage(1)
     setActionDetailFilters(createDefaultDetailFilters())
+    setActionDetailSearch('')
+    setDebouncedActionDetailSearch('')
+    setActionDetailPage(1)
+    setAutomationExecutionSearch('')
+    setDebouncedAutomationExecutionSearch('')
+    setAutomationExecutionStatus('')
+    setAutomationExecutionRole('all')
+    setAutomationExecutionDateFrom('')
+    setAutomationExecutionDateTo('')
+    setAutomationExecutionPage(1)
+    setRelatedAutomationExecutionTotal(0)
+    setRelatedAutomationExecutionOverallTotal(0)
+    setViewingRelatedAutomation(null)
+    setEditingRelatedAutomation(null)
+    setAutomationEditOptions(null)
     setFindDataLogScope('visible')
     setScreenshotPreview(null)
     setOpenDetailDropdown(null)
@@ -2537,12 +3052,12 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     setOpenInputDataActionMenu(false)
   }, [
     selectedCampaignId,
-    detailTab,
+    debouncedInputDataSearch,
     inputDataFilters.timePreset,
     inputDataFilters.dateFrom,
     inputDataFilters.dateTo,
     inputDataFilters.status,
-    campaignInputData
+    inputDataOriginFilter
   ])
 
   const handleEdit = (campaign: Campaign) => {
@@ -2826,17 +3341,19 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
     }
-    if (selectedInputDataRows.length === 0) {
+    if (selectedInputDataIds.size === 0) {
       showAlert('Vui lòng chọn data', 'info')
       return
     }
 
-    const eligibleStatus: InputDataBatchStatus = status === 'tạm dừng' ? 'chờ xử lý' : 'tạm dừng'
-    const eligibleCount = selectedInputDataRows.filter(row => row.status === eligibleStatus).length
-    if (eligibleCount === 0) {
+    const eligibleCount = selectedInputDataRows.filter(row => status === 'tạm dừng'
+      ? row.status === 'chờ xử lý'
+      : row.status === 'tạm dừng' || row.status === 'hoàn thành').length
+    const hasSelectionOutsideCurrentPage = selectedInputDataIds.size > selectedInputDataRows.length
+    if (!hasSelectionOutsideCurrentPage && eligibleCount === 0) {
       showAlert(status === 'tạm dừng'
         ? 'Không có data nào có thể tạm dừng. Chỉ data "chờ xử lý" mới được tạm dừng.'
-        : 'Không có data nào có thể tiếp tục. Chỉ data "tạm dừng" mới được tiếp tục.', 'info')
+        : 'Không có data nào có thể tiếp tục/chạy lại. Chỉ data "tạm dừng" hoặc "hoàn thành" mới phù hợp.', 'info')
       return
     }
 
@@ -2879,28 +3396,119 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     campaignActionMenuAnchorRef.current = anchor
     setCampaignActionMenuPosition(getCampaignActionMenuPosition(anchor))
     setOpenCampaignActionMenuId(campaignId)
+
+    const campaign = campaigns.find(item => item.id === campaignId)
+    if (campaign?.dataTargetSourceMode === 'data_group') {
+      setDataGroupSourceStatuses(prev => ({ ...prev, [campaignId]: 'loading' }))
+      void window.electronAPI.getCampaignDataGroupSource(campaignId)
+        .then(source => {
+          setDataGroupSourceStatuses(prev => ({
+            ...prev,
+            [campaignId]: source?.status || 'error'
+          }))
+        })
+        .catch(() => {
+          setDataGroupSourceStatuses(prev => ({ ...prev, [campaignId]: 'error' }))
+        })
+    }
   }
 
-  const handleCreateCampaignFromInputData = () => {
+  const handleToggleCampaignDataGroupSource = async (campaign: Campaign) => {
+    closeCampaignActionMenu()
+    try {
+      const source = await window.electronAPI.getCampaignDataGroupSource(campaign.id)
+      if (!source) {
+        showAlert('Không tìm thấy liên kết Nhóm data của chiến dịch.', 'error')
+        return
+      }
+
+      if (source.status === 'stopped') {
+        const updated = await window.electronAPI.reactivateCampaignDataGroupSource(
+          campaign.id,
+          createDataGroupRequestId()
+        )
+        setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: updated.status }))
+        showAlert('Chiến dịch đã nhận data mới trở lại từ đúng Nhóm data cũ.', 'success')
+      } else {
+        const updated = await window.electronAPI.stopCampaignDataGroupSource(
+          campaign.id,
+          createDataGroupRequestId(),
+          'manual_stop'
+        )
+        setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: updated.status }))
+        showAlert('Đã dừng nhận data mới. Các input đã tạo vẫn tiếp tục được xử lý.', 'success')
+      }
+      await loadCampaigns()
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể thay đổi trạng thái nhận data của chiến dịch.'), 'error')
+    }
+  }
+
+  const resolveSelectedInputDataRows = async (): Promise<CampaignInputData[]> => {
+    if (!selectedCampaign || selectedInputDataIds.size === 0) return []
+    const selectedIds = new Set(selectedInputDataIds)
+    const rowById = new Map(selectedInputDataRows.map(row => [row.id, row]))
+    if (rowById.size < selectedIds.size) {
+      let offset = 0
+      const limit = 500
+      while (rowById.size < selectedIds.size) {
+        const page = await window.electronAPI.listCampaignInputDataPage({
+          campaignId: selectedCampaign.id,
+          search: debouncedInputDataSearch.trim() || undefined,
+          status: inputDataFilters.status as CampaignInputStatus | '',
+          originFilter: inputDataOriginFilter,
+          dateFrom: inputDataFilters.timePreset === 'all'
+            ? null
+            : parseDateInputBoundary(inputDataFilters.dateFrom, 'start')?.toISOString() || null,
+          dateTo: inputDataFilters.timePreset === 'all'
+            ? null
+            : parseDateInputBoundary(inputDataFilters.dateTo, 'end')?.toISOString() || null,
+          offset,
+          limit
+        })
+        for (const row of page.items) {
+          if (selectedIds.has(row.id)) rowById.set(row.id, row)
+        }
+        offset += page.items.length
+        if (page.items.length === 0 || offset >= page.total) break
+      }
+    }
+    return Array.from(selectedIds)
+      .map(id => rowById.get(id))
+      .filter((row): row is CampaignInputData => !!row)
+  }
+
+  const handleCreateCampaignFromInputData = async () => {
     if (!selectedCampaign) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
     }
-    if (selectedInputDataRows.length === 0) {
+    if (selectedInputDataIds.size === 0) {
       showAlert('Vui lòng chọn data', 'info')
       return
     }
 
-    setEditingCampaign(null)
-    setCloneFromId(undefined)
-    setCampaignFormInitialActionId(selectedCampaign.actionId)
-    setCampaignFormInitialDetails(selectedInputDataRows.map(cloneInputDataForNewCampaign))
-    setOpenInputDataActionMenu(false)
-    setShowForm(true)
+    setInputDataActionLoading(true)
+    try {
+      const rows = await resolveSelectedInputDataRows()
+      if (rows.length !== selectedInputDataIds.size) {
+        throw new Error('Một số data đã chọn không còn tồn tại trong bộ lọc hiện tại.')
+      }
+      setEditingCampaign(null)
+      setCloneFromId(undefined)
+      setCampaignFormInitialActionId(selectedCampaign.actionId)
+      setCampaignFormInitialDetails(rows.map(cloneInputDataForNewCampaign))
+      setOpenInputDataActionMenu(false)
+      setShowForm(true)
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, 'Không thể tải đầy đủ data đã chọn.'), 'error')
+    } finally {
+      setInputDataActionLoading(false)
+    }
   }
 
   const handleOpenAddInputDataModal = () => {
-    if (selectedInputDataRows.length === 0) {
+    if (selectedInputDataIds.size === 0) {
       showAlert('Vui lòng chọn data', 'info')
       return
     }
@@ -2911,6 +3519,12 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const handleOpenAddDataToCurrentCampaignModal = (campaign?: Campaign | null) => {
     if (!campaign) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    if (campaign.dataTargetSourceMode === 'data_group') {
+      setOpenInputDataActionMenu(false)
+      closeCampaignActionMenu()
+      showAlert('Chiến dịch này nhận data từ Nhóm data. Hãy thêm data trong Quản lý nhóm data.', 'info')
       return
     }
     if (campaign.status === 'đang chạy') {
@@ -3048,27 +3662,36 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const isSelectedMobileManagedSmsCampaign = isSelectedSmsCampaign || isSelectedVoiceCallCampaign
   const isSelectedEmailClickTrackingCampaign = isSelectedEmailCampaign && selectedCampaign?.extraSettings?.emailCheckLinkClicks === true
   const isSelectedCommentSeedingFeedCampaign = selectedCampaign?.actionId === COMMENT_SEEDING_FEED_ACTION_ID
+  const relatedAutomationById = useMemo(
+    () => new Map(relatedAutomations.map(automation => [automation.id, automation])),
+    [relatedAutomations]
+  )
+  const relatedAutomationSourceCount = selectedCampaignId
+    ? relatedAutomations.filter(automation => automation.sourceCampaignId === selectedCampaignId).length
+    : 0
+  const relatedAutomationTargetCount = selectedCampaignId
+    ? relatedAutomations.filter(automation => automation.targetCampaignId === selectedCampaignId).length
+    : 0
+  const automationExecutionPageCount = Math.max(
+    1,
+    Math.ceil(relatedAutomationExecutionTotal / AUTOMATION_DETAIL_PAGE_SIZE)
+  )
+  const automationExecutionRangeStart = relatedAutomationExecutionTotal === 0
+    ? 0
+    : (automationExecutionPage - 1) * AUTOMATION_DETAIL_PAGE_SIZE + 1
+  const automationExecutionRangeEnd = Math.min(
+    automationExecutionPage * AUTOMATION_DETAIL_PAGE_SIZE,
+    relatedAutomationExecutionTotal
+  )
   const filteredCampaignInputData = useMemo(() => {
-    const dateStart = parseDateInputBoundary(inputDataFilters.dateFrom, 'start')
-    const dateEnd = parseDateInputBoundary(inputDataFilters.dateTo, 'end')
-    const hasDateFilter = inputDataFilters.timePreset !== 'all' && (!!dateStart || !!dateEnd)
-
-    return campaignInputData.filter(item => {
-      if (inputDataFilters.status && item.status !== inputDataFilters.status) return false
-      if (hasDateFilter) {
-        const filterTime = getCampaignInputDataFilterTime(item, selectedCampaign)
-        if (!isWithinDateFilter(filterTime, dateStart, dateEnd)) return false
-      }
-      return true
-    })
-  }, [
-    campaignInputData,
-    inputDataFilters.dateFrom,
-    inputDataFilters.dateTo,
-    inputDataFilters.status,
-    inputDataFilters.timePreset,
-    selectedCampaign
-  ])
+    return campaignInputData
+  }, [campaignInputData])
+  const hasInputDataQueryFilters = (
+    debouncedInputDataSearch.trim().length > 0
+    || inputDataFilters.timePreset !== 'all'
+    || inputDataFilters.status !== ''
+    || inputDataOriginFilter !== 'all'
+  )
   const selectedInputDataRows = useMemo(
     () => campaignInputData.filter(item => selectedInputDataIds.has(item.id)),
     [campaignInputData, selectedInputDataIds]
@@ -3077,23 +3700,17 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     () => filteredCampaignInputData.reduce((count, item) => count + (selectedInputDataIds.has(item.id) ? 1 : 0), 0),
     [filteredCampaignInputData, selectedInputDataIds]
   )
-  const filteredCampaignDetails = useMemo(() => {
-    const dateStart = parseDateInputBoundary(actionDetailFilters.dateFrom, 'start')
-    const dateEnd = parseDateInputBoundary(actionDetailFilters.dateTo, 'end')
-    const hasDateFilter = actionDetailFilters.timePreset !== 'all' && (!!dateStart || !!dateEnd)
-
-    return campaignDetails.filter(detail => {
-      if (actionDetailFilters.status && detail.status !== actionDetailFilters.status) return false
-      if (hasDateFilter && !isWithinDateFilter(detail.createdAt, dateStart, dateEnd)) return false
-      return true
-    })
-  }, [
-    actionDetailFilters.dateFrom,
-    actionDetailFilters.dateTo,
-    actionDetailFilters.status,
-    actionDetailFilters.timePreset,
-    campaignDetails
-  ])
+  const inputDataPageCount = Math.max(1, Math.ceil(campaignInputDataTotal / CAMPAIGN_INPUT_DATA_PAGE_SIZE))
+  const inputDataRangeStart = campaignInputDataTotal === 0
+    ? 0
+    : (inputDataPage - 1) * CAMPAIGN_INPUT_DATA_PAGE_SIZE + 1
+  const inputDataRangeEnd = Math.min(inputDataPage * CAMPAIGN_INPUT_DATA_PAGE_SIZE, campaignInputDataTotal)
+  const filteredCampaignDetails = campaignDetailPageItems
+  const actionDetailPageCount = Math.max(1, Math.ceil(campaignDetailPageTotal / CAMPAIGN_DETAIL_PAGE_SIZE))
+  const actionDetailRangeStart = campaignDetailPageTotal === 0
+    ? 0
+    : (actionDetailPage - 1) * CAMPAIGN_DETAIL_PAGE_SIZE + 1
+  const actionDetailRangeEnd = Math.min(actionDetailPage * CAMPAIGN_DETAIL_PAGE_SIZE, campaignDetailPageTotal)
   const campaignDetailTargetColumns = useMemo(() => {
     return getCampaignDetailTargetColumns(selectedCampaign)
   }, [selectedCampaign?.actionId])
@@ -3105,14 +3722,18 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   )
   const actionDetailStatusOptions = useMemo<CampaignFilterOption[]>(() => {
     const optionMap = new Map(CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS.map(option => [option.value, option]))
-    campaignDetails.forEach(detail => {
+    campaignDetailPageItems.forEach(detail => {
       const status = String(detail.status || '').trim()
       if (status && !optionMap.has(status)) {
         optionMap.set(status, { value: status, label: status })
       }
     })
+    const selectedStatus = String(actionDetailFilters.status || '').trim()
+    if (selectedStatus && !optionMap.has(selectedStatus)) {
+      optionMap.set(selectedStatus, { value: selectedStatus, label: selectedStatus })
+    }
     return Array.from(optionMap.values())
-  }, [campaignDetails])
+  }, [actionDetailFilters.status, campaignDetailPageItems])
   const linkedFindDataSourceCampaignIds = useMemo(() => {
     if (!selectedCampaign) return []
     return uniqueNumbers(
@@ -3515,22 +4136,57 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     return [detail.log || '', postUrl].filter(Boolean).join('\n') || '-'
   }
 
-  const handleExportCampaignDetails = () => {
+  const getCampaignDetailPageQuery = (offset: number, limit: number) => {
+    const dateStart = actionDetailFilters.timePreset === 'all'
+      ? null
+      : parseDateInputBoundary(actionDetailFilters.dateFrom, 'start')
+    const dateEnd = actionDetailFilters.timePreset === 'all'
+      ? null
+      : parseDateInputBoundary(actionDetailFilters.dateTo, 'end')
+    return {
+      search: debouncedActionDetailSearch.trim() || undefined,
+      status: actionDetailFilters.status,
+      dateFrom: dateStart?.toISOString() || null,
+      dateTo: dateEnd?.toISOString() || null,
+      offset,
+      limit
+    }
+  }
+
+  const handleExportCampaignDetails = async () => {
     if (!selectedCampaign) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
     }
-    if (campaignDetails.length === 0) {
-      showAlert('Chưa có lịch sử hành động để xuất.', 'info')
-      return
-    }
-    if (filteredCampaignDetails.length === 0) {
-      showAlert('Không có lịch sử hành động phù hợp bộ lọc để xuất.', 'info')
-      return
-    }
+    if (!window.electronAPI) return
 
+    setExportingCampaignDetails(true)
     try {
-      const rows = filteredCampaignDetails.map((detail, index) => {
+      const details: CampaignDetail[] = []
+      let offset = 0
+      let total = Number.POSITIVE_INFINITY
+      const exportPageSize = 500
+      while (offset < total) {
+        const page = await window.electronAPI.listCampaignDetailsPage({
+          campaignId: selectedCampaign.id,
+          ...getCampaignDetailPageQuery(offset, exportPageSize)
+        })
+        total = page.total
+        details.push(...page.items)
+        if (page.items.length === 0 || details.length >= total) break
+        offset += page.items.length
+      }
+      if (details.length === 0) {
+        showAlert(
+          campaignDetailPageTotal === 0 && !actionDetailFilters.status && !debouncedActionDetailSearch.trim()
+            ? 'Chưa có lịch sử hành động để xuất.'
+            : 'Không có lịch sử hành động phù hợp bộ lọc để xuất.',
+          'info'
+        )
+        return
+      }
+
+      const rows = details.map((detail, index) => {
         const targetInfo = getCampaignDetailTargetInfo(detail)
         if (isSelectedVoiceCallCampaign) {
           const voice = getVoiceCallCampaignDetailInfo(detail)
@@ -3544,6 +4200,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
             'Trạng thái': detail.status,
             'Nội dung cuộc gọi': voice.content,
             'Xác minh bắt máy': voice.answerVerified ? 'Có' : 'Không',
+            'Kích hoạt tự động hóa': (detail.triggeredAutomations || []).map(item => item.automationName).join(', '),
             'Cách nhận biết': voice.detectionMode === '-' ? '' : voice.detectionMode,
             'Profile thiết bị': voice.profileCode === '-' ? '' : voice.profileCode,
             'Thời lượng phát (ms)': voice.audioDurationMs,
@@ -3565,6 +4222,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
             'Hành động': detail.actionName || '',
             'Trạng thái': detail.status,
             'Nội dung SMS': sms.content,
+            'Kích hoạt tự động hóa': (detail.triggeredAutomations || []).map(item => item.automationName).join(', '),
             'Chi tiết': detail.log || '',
             'Đã gửi lúc': sms.sentAt ? new Date(sms.sentAt).toLocaleString('vi-VN') : '',
             'Đã nhận lúc': sms.deliveredAt ? new Date(sms.deliveredAt).toLocaleString('vi-VN') : '',
@@ -3581,6 +4239,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           ...buildTargetExportFields(targetInfo, campaignDetailTargetColumns),
           'Hành động': detail.actionName || '',
           'Trạng thái': detail.status,
+          'Kích hoạt tự động hóa': (detail.triggeredAutomations || []).map(item => item.automationName).join(', '),
           'Chi tiết': detail.log || '',
           'Link bài viết': detail.postUrl || ''
         }
@@ -3622,6 +4281,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     } catch (err) {
       console.error('Failed to export campaign details:', err)
       showAlert('Không thể xuất file Excel lịch sử hành động.', 'error')
+    } finally {
+      setExportingCampaignDetails(false)
     }
   }
 
@@ -3816,7 +4477,10 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
     }
-    loadCampaignDetails(selectedCampaignId)
+    loadCampaignDetailPage(
+      selectedCampaignId,
+      getCampaignDetailPageQuery((actionDetailPage - 1) * CAMPAIGN_DETAIL_PAGE_SIZE, CAMPAIGN_DETAIL_PAGE_SIZE)
+    )
   }
 
   const handleLoadEmailCampaignLinks = () => {
@@ -3878,17 +4542,20 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     }
   }
 
-  const handleExportCampaignInputData = () => {
+  const handleExportCampaignInputData = async () => {
     if (!selectedCampaign) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
     }
-    if (selectedInputDataRows.length === 0) {
+    if (selectedInputDataIds.size === 0) {
       showAlert('Vui lòng chọn data', 'info')
       return
     }
 
+    setInputDataActionLoading(true)
     try {
+      const exportInputRows = await resolveSelectedInputDataRows()
+      if (exportInputRows.length === 0) throw new Error('Không tìm thấy data đã chọn để xuất.')
       const headers = isSelectedVoiceCallCampaign
         ? VOICE_CALL_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS
         : isSelectedSmsCampaign
@@ -3897,7 +4564,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       const rows = isSelectedMobileManagedSmsCampaign
         ? [
           headers,
-          ...selectedInputDataRows.map(item => [
+          ...exportInputRows.map(item => [
             item.name || '',
             item.phone || '',
             formatInputDataPhoneCarrier(item),
@@ -3907,12 +4574,13 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
             item.info4 || '',
             item.info5 || '',
             item.content || '',
-            formatCompactDateTime(item.schedule)
+            formatCompactDateTime(item.schedule),
+            formatCampaignInputOrigin(item)
           ])
         ]
         : [
           headers,
-          ...selectedInputDataRows.map(item => [
+          ...exportInputRows.map(item => [
             item.name || '',
             item.uid || '',
             item.phone || '',
@@ -3921,7 +4589,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
             item.info2 || '',
             item.info3 || '',
             item.info4 || '',
-            item.info5 || ''
+            item.info5 || '',
+            formatCampaignInputOrigin(item)
           ])
         ]
       const sheet = utils.aoa_to_sheet(rows)
@@ -3936,7 +4605,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           { wch: 18 },
           { wch: 18 },
           { wch: 48 },
-          { wch: 18 }
+          { wch: 18 },
+          { wch: 42 }
         ]
         : [
           { wch: 24 },
@@ -3947,7 +4617,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           { wch: 18 },
           { wch: 18 },
           { wch: 18 },
-          { wch: 18 }
+          { wch: 18 },
+          { wch: 42 }
         ]
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Sheet1')
@@ -3957,6 +4628,142 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     } catch (err) {
       console.error('Failed to export campaign input data:', err)
       showAlert('Không thể xuất file Excel dữ liệu.', 'error')
+    } finally {
+      setInputDataActionLoading(false)
+    }
+  }
+
+  const handleExportRelatedAutomations = () => {
+    if (!selectedCampaign || relatedAutomations.length === 0) {
+      showAlert('Chưa có tự động hóa liên quan để xuất.', 'info')
+      return
+    }
+    const rows = relatedAutomations.map(automation => ({
+      'Vai trò': [
+        automation.sourceCampaignId === selectedCampaign.id ? 'A · Kích hoạt data' : '',
+        automation.targetCampaignId === selectedCampaign.id ? 'B · Nhận data' : ''
+      ].filter(Boolean).join(' / '),
+      'Tự động hóa': automation.name,
+      'Trạng thái': automation.isActive ? 'Đang bật' : 'Đang tắt',
+      'Loại data': AUTOMATION_DATA_TYPE_LABELS[automation.dataType] || automation.dataType,
+      'Chiến dịch A': automation.sourceCampaignName || '',
+      'Chiến dịch B': automation.targetCampaignName || '',
+      'Nhóm data': automation.targetDataGroupName
+        || (automation.targetDataGroupId ? `#${automation.targetDataGroupId}` : ''),
+      'Đích nhận': [
+        automation.targetCampaignName
+          || (automation.targetCampaignId ? `#${automation.targetCampaignId}` : ''),
+        automation.targetDataGroupName
+          || (automation.targetDataGroupId ? `#${automation.targetDataGroupId}` : '')
+      ].filter(Boolean).join(' + '),
+      'Cập nhật': automation.updatedAt || ''
+    }))
+    const workbook = utils.book_new()
+    utils.book_append_sheet(workbook, utils.json_to_sheet(rows), 'Tự động hóa')
+    const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
+    writeFile(workbook, `campaign-automation-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+    showAlert('Đã xuất danh sách tự động hóa.', 'success')
+  }
+
+  const handleViewAutomationById = async (automationId: number) => {
+    const cached = relatedAutomationById.get(automationId)
+    if (cached) {
+      setViewingRelatedAutomation(cached)
+      return
+    }
+
+    setAutomationViewLoadingId(automationId)
+    try {
+      setViewingRelatedAutomation(await window.electronAPI.getAutomation(automationId))
+    } catch (error) {
+      console.error('Failed to open campaign automation info:', error)
+      showAlert('Không thể mở thông tin tự động hóa.', 'error')
+    } finally {
+      setAutomationViewLoadingId(null)
+    }
+  }
+
+  const handleEditRelatedAutomation = async (automation: Automation) => {
+    setAutomationEditLoadingId(automation.id)
+    try {
+      const [freshAutomation, options] = await Promise.all([
+        window.electronAPI.getAutomation(automation.id),
+        window.electronAPI.getAutomationOptions()
+      ])
+      setAutomationEditOptions(options)
+      setEditingRelatedAutomation(freshAutomation)
+    } catch (error) {
+      console.error('Failed to open campaign automation editor:', error)
+      showAlert('Không thể mở tự động hóa để sửa.', 'error')
+    } finally {
+      setAutomationEditLoadingId(null)
+    }
+  }
+
+  const handleExportAutomationExecutions = async () => {
+    if (!selectedCampaign || relatedAutomationExecutionTotal === 0) {
+      showAlert('Chưa có lịch sử kích hoạt tự động hóa để xuất.', 'info')
+      return
+    }
+
+    const dateStart = parseDateInputBoundary(automationExecutionDateFrom, 'start')
+    const dateEnd = parseDateInputBoundary(automationExecutionDateTo, 'end')
+    setAutomationExecutionsExporting(true)
+    try {
+      const executions: AutomationExecution[] = []
+      let offset = 0
+      let total = Number.POSITIVE_INFINITY
+      while (offset < total) {
+        const result = await window.electronAPI.listCampaignAutomationDetails({
+          campaignId: selectedCampaign.id,
+          role: automationExecutionRole,
+          status: automationExecutionStatus,
+          search: debouncedAutomationExecutionSearch.trim() || undefined,
+          dateFrom: dateStart?.toISOString() || null,
+          dateTo: dateEnd?.toISOString() || null,
+          offset,
+          limit: AUTOMATION_EXECUTION_EXPORT_PAGE_SIZE
+        })
+        total = result.total
+        executions.push(...result.items)
+        if (result.items.length === 0 || executions.length >= total) break
+        offset += result.items.length
+      }
+
+      if (executions.length === 0) {
+        showAlert('Không có lịch sử kích hoạt phù hợp bộ lọc để xuất.', 'info')
+        return
+      }
+      const rows = executions.map(execution => ({
+        'Thời gian': execution.triggeredAt,
+        'Vai trò': execution.campaignRole === 'source' ? 'A · Kích hoạt data' : 'B · Nhận data',
+        'Data': execution.dataValue,
+        'Tự động hóa': execution.automationName || relatedAutomationById.get(execution.automationId)?.name || '',
+        'Loại': AUTOMATION_DATA_TYPE_LABELS[execution.dataType] || execution.dataType,
+        'Chiến dịch A': execution.sourceCampaignName || '',
+        'Chiến dịch B': execution.targetCampaignName || '',
+        'Đích đến': getAutomationExecutionDestinations(execution)
+          .map(destination => destination.label).join('; '),
+        'Kết quả': execution.status,
+        'Chi tiết': execution.errorMessage
+          || execution.targetDataGroupSyncError
+          || execution.targetResultStatus
+          || '',
+        'Nhóm data đích': execution.targetDataGroupName
+          || (execution.targetDataGroupId ? `#${execution.targetDataGroupId}` : '')
+          || execution.targetContactGroupName
+          || ''
+      }))
+      const workbook = utils.book_new()
+      utils.book_append_sheet(workbook, utils.json_to_sheet(rows), 'Kích hoạt TĐH')
+      const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
+      writeFile(workbook, `campaign-automation-history-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      showAlert(`Đã xuất ${executions.length.toLocaleString('vi-VN')} lần kích hoạt tự động hóa.`, 'success')
+    } catch (error) {
+      console.error('Failed to export campaign automation executions:', error)
+      showAlert('Không thể xuất lịch sử kích hoạt tự động hóa.', 'error')
+    } finally {
+      setAutomationExecutionsExporting(false)
     }
   }
 
@@ -3969,7 +4776,9 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     setSelectedCampaignId(campaign.id)
     setDetailTab(tab)
     setDetailDockOpen(true)
-    if (tab === 'actions') loadCampaignDetails(campaign.id)
+    if (tab === 'actions') {
+      loadCampaignDetailPage(campaign.id, getCampaignDetailPageQuery(0, CAMPAIGN_DETAIL_PAGE_SIZE))
+    }
     if (
       tab === 'emailLinks' &&
       campaign.actionId === EMAIL_SEND_ACTION_ID &&
@@ -4348,6 +5157,85 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
   return (
     <div className="campaign-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+      {viewingRelatedAutomation && createPortal(
+        <div
+          className="automation-modal-backdrop"
+          onMouseDown={() => setViewingRelatedAutomation(null)}
+        >
+          <section
+            className="campaign-automation-info-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Chi tiết ${viewingRelatedAutomation.name}`}
+            onMouseDown={event => event.stopPropagation()}
+          >
+            <header>
+              <span className="campaign-automation-info-icon"><Zap size={18} /></span>
+              <div className="campaign-automation-info-heading">
+                <h2>Thông tin tự động hóa</h2>
+                <span>{viewingRelatedAutomation.name}</span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon"
+                onClick={() => setViewingRelatedAutomation(null)}
+                aria-label="Đóng chi tiết tự động hóa"
+              >
+                <X size={17} />
+              </button>
+            </header>
+            <div className="campaign-automation-info-list">
+              <span>Tên tự động hóa</span><strong>{viewingRelatedAutomation.name}</strong>
+              <span>Vai trò chiến dịch</span>
+              <strong className={viewingRelatedAutomation.sourceCampaignId === selectedCampaignId ? 'is-a' : 'is-b'}>
+                {getCampaignAutomationRoleLabel(viewingRelatedAutomation, selectedCampaignId)}
+              </strong>
+              <span>Trạng thái</span>
+              <strong className={viewingRelatedAutomation.isActive ? 'is-active' : 'is-paused'}>
+                {viewingRelatedAutomation.isActive ? 'Đang chạy' : 'Tạm dừng'}
+              </strong>
+              <span>Chiến dịch liên kết</span>
+              <strong className="is-linked">{getCampaignAutomationLinkedCampaignLabel(viewingRelatedAutomation, selectedCampaignId)}</strong>
+              <span>Sự kiện kích hoạt</span>
+              <strong>{viewingRelatedAutomation.triggerConditions.map(formatAutomationTriggerLabel).join('; ') || 'Mọi kết quả'}</strong>
+              <span>Tài khoản</span><strong>{getCampaignAutomationAccountLabel(viewingRelatedAutomation, selectedCampaignId)}</strong>
+            </div>
+            <footer>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  const automation = viewingRelatedAutomation
+                  setViewingRelatedAutomation(null)
+                  void handleEditRelatedAutomation(automation)
+                }}
+              >
+                <Edit3 size={14} /> Sửa tự động hóa
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => setViewingRelatedAutomation(null)}>Đóng</button>
+            </footer>
+          </section>
+        </div>,
+        document.body
+      )}
+      {editingRelatedAutomation && automationEditOptions && (
+        <AutomationFormModal
+          mode="edit"
+          automation={editingRelatedAutomation}
+          options={automationEditOptions}
+          onClose={() => {
+            setEditingRelatedAutomation(null)
+            setAutomationEditOptions(null)
+          }}
+          onSaved={saved => {
+            setRelatedAutomations(current => current.map(item => item.id === saved.id ? saved : item))
+            setEditingRelatedAutomation(null)
+            setAutomationEditOptions(null)
+            setAutomationDetailRefreshRevision(value => value + 1)
+            showAlert('Đã cập nhật tự động hóa.', 'success')
+          }}
+        />
+      )}
       {screenshotPreview && (
         <div
           className="modal-overlay"
@@ -4658,7 +5546,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           <AddInputDataToCampaignModal
             campaigns={campaigns}
             campaignActions={campaignActions}
-            selectedCount={selectedInputDataRows.length}
+            selectedCount={selectedInputDataIds.size}
             onLoadCampaigns={loadCampaigns}
             onSubmit={handleAddInputDataToCampaignSubmit}
             onClose={() => setShowAddInputDataModal(false)}
@@ -4671,6 +5559,15 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
             campaignAction={addDataCampaignAction}
             account={addDataCampaignAccount}
             onSubmit={handleAddDataToCurrentCampaignSubmit}
+            onSnapshotDataGroup={async request => {
+              return await window.electronAPI.snapshotDataGroupToCampaign(request)
+            }}
+            onRefresh={async campaignId => {
+              await loadCampaigns()
+              if (selectedCampaignId === campaignId) {
+                await refreshCampaignInputData(campaignId)
+              }
+            }}
             onClose={() => setAddDataCampaign(null)}
           />
         )}
@@ -4881,15 +5778,37 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                               <FileText size={14} />
                               <span>Cập nhật nội dung + media</span>
                             </button>
-                            <button
-                              type="button"
-                              className="campaign-action-menu-item"
-                              onClick={() => handleOpenAddDataToCurrentCampaignModal(campaign)}
-                              role="menuitem"
-                            >
-                              <Plus size={14} />
-                              <span>Thêm data</span>
-                            </button>
+                            {campaign.dataTargetSourceMode !== 'data_group' ? (
+                              <button
+                                type="button"
+                                className="campaign-action-menu-item"
+                                onClick={() => handleOpenAddDataToCurrentCampaignModal(campaign)}
+                                role="menuitem"
+                              >
+                                <Plus size={14} />
+                                <span>Thêm data</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="campaign-action-menu-item"
+                                onClick={() => void handleToggleCampaignDataGroupSource(campaign)}
+                                disabled={dataGroupSourceStatuses[campaign.id] === 'loading' || dataGroupSourceStatuses[campaign.id] === 'error'}
+                                title={dataGroupSourceStatuses[campaign.id] === 'error'
+                                  ? 'Không tải được trạng thái nguồn Nhóm data'
+                                  : undefined}
+                                role="menuitem"
+                              >
+                                {dataGroupSourceStatuses[campaign.id] === 'stopped' ? <Play size={14} /> : <Pause size={14} />}
+                                <span>
+                                  {dataGroupSourceStatuses[campaign.id] === 'loading'
+                                    ? 'Đang tải nguồn data...'
+                                    : dataGroupSourceStatuses[campaign.id] === 'stopped'
+                                      ? 'Nhận data mới trở lại'
+                                      : 'Dừng nhận data mới'}
+                                </span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="campaign-action-menu-item"
@@ -5028,16 +5947,34 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                   className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
                   onClick={() => setDetailTab('data')}
                 >
-                  Data ban đầu ({filteredCampaignInputData.length})
+                  Data ban đầu ({campaignInputDataTotal})
                 </button>
                 <button
                   className={`detail-dock-tab ${detailTab === 'actions' ? 'active' : ''}`}
                   onClick={() => {
                     setDetailTab('actions')
-                    if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
+                    if (selectedCampaignId) handleLoadCampaignDetails()
                   }}
                 >
-                  Kết quả chạy ({filteredCampaignDetails.length})
+                  Kết quả chạy ({campaignDetailPageTotal})
+                </button>
+                <button
+                  className={`detail-dock-tab ${detailTab === 'automation' ? 'active' : ''}`}
+                  onClick={() => {
+                    setDetailTab('automation')
+                    setAutomationDetailRefreshRevision(value => value + 1)
+                  }}
+                >
+                  Tự động hóa ({relatedAutomations.length})
+                </button>
+                <button
+                  className={`detail-dock-tab ${detailTab === 'automationActivation' ? 'active' : ''}`}
+                  onClick={() => {
+                    setDetailTab('automationActivation')
+                    setAutomationDetailRefreshRevision(value => value + 1)
+                  }}
+                >
+                  Lịch sử kích hoạt TĐH ({relatedAutomationExecutionOverallTotal})
                 </button>
                 {isSelectedEmailClickTrackingCampaign && (
                   <button
@@ -5133,13 +6070,35 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                       INPUT_DATA_STATUS_FILTER_OPTIONS,
                       value => setInputDataFilters(prev => ({ ...prev, status: value }))
 	                    )}
+	                    <label className="detail-filter-field input-data-origin-filter">
+	                      <span>Nguồn thêm data</span>
+	                      <select
+	                        className="form-control detail-filter-control"
+	                        value={inputDataOriginFilter}
+	                        onChange={event => setInputDataOriginFilter(event.target.value as CampaignInputOriginFilter)}
+	                      >
+	                        <option value="all">Tất cả nguồn</option>
+	                        <option value="data_group">Nhóm data</option>
+	                        <option value="automation">Automation</option>
+	                        <option value="manual_or_api">Thủ công / API</option>
+	                        <option value="direct">Data trực tiếp</option>
+	                      </select>
+	                    </label>
+	                    <label className="campaign-input-data-search">
+	                      <Search size={14} />
+	                      <input
+	                        value={inputDataSearch}
+	                        onChange={event => setInputDataSearch(event.target.value)}
+	                        placeholder="Tìm tên, UID, SĐT, email, key..."
+	                      />
+	                    </label>
 	                    <div className="detail-filter-actions input-data-filter-actions">
 	                      <button
 	                        className="btn btn-secondary btn-sm"
 	                        onClick={() => handleInputDataBatchStatus('chờ xử lý')}
-	                        title="Tiếp tục data đã chọn"
+	                        title="Tiếp tục hoặc chạy lại đúng input đã chọn"
 	                      >
-	                        <Play size={12} /> Tiếp tục
+	                        <Play size={12} /> Tiếp tục / chạy lại
 	                      </button>
 	                      <button
 	                        className="btn btn-secondary btn-sm"
@@ -5164,9 +6123,11 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                             <button type="button" onClick={handleOpenAddInputDataModal}>
                               <Plus size={14} /> Thêm vào chiến dịch
                             </button>
-                            <button type="button" onClick={() => handleOpenAddDataToCurrentCampaignModal(selectedCampaign)}>
-                              <Plus size={14} /> Thêm data
-                            </button>
+                            {selectedCampaign?.dataTargetSourceMode !== 'data_group' && (
+                              <button type="button" onClick={() => handleOpenAddDataToCurrentCampaignModal(selectedCampaign)}>
+                                <Plus size={14} /> Thêm data
+                              </button>
+                            )}
                             <button type="button" onClick={() => { setOpenInputDataActionMenu(false); handleExportCampaignInputData() }}>
                               <Download size={14} /> Xuất Excel
                             </button>
@@ -5181,9 +6142,9 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                   {loadingCampaignInputData ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
                   ) : campaignInputData.length === 0 ? (
-                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có dữ liệu nào</div>
-                  ) : filteredCampaignInputData.length === 0 ? (
-                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Không có dữ liệu phù hợp bộ lọc</div>
+                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>
+                      {hasInputDataQueryFilters ? 'Không có dữ liệu phù hợp bộ lọc' : 'Chưa có dữ liệu nào'}
+                    </div>
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
@@ -5218,8 +6179,10 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 	                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Email</th>
 	                            </>
 	                          )}
-	                          <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Trạng thái</th>
-	                          <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Ghi chú</th>
+		                          <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Trạng thái</th>
+		                          <th style={{ minWidth: 180, whiteSpace: 'nowrap' }}>Nguồn thêm data</th>
+		                          <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Được thêm từ tự động hóa</th>
+		                          <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Ghi chú</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5255,12 +6218,42 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 	                            <td title={d.status} style={{ minWidth: 96, whiteSpace: 'nowrap' }}>
 	                              <span style={{ color: getStatusColor(d.status) }}>{d.status}</span>
 	                            </td>
-	                            <td title={d.note || '-'} style={{ minWidth: 120, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '-'}</td>
+		                            <td title={formatCampaignInputOrigin(d)} style={{ minWidth: 180, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatCampaignInputOrigin(d)}</td>
+		                            <td style={{ minWidth: 190 }}>
+		                              {getCampaignInputAutomationReferences(d).length === 0 ? '—' : (
+		                                <div className="campaign-automation-inline-links">
+		                                  {getCampaignInputAutomationReferences(d).map(reference => reference.automationId ? (
+		                                    <button
+		                                      key={reference.automationId}
+		                                      type="button"
+		                                      className="campaign-automation-link"
+		                                      onClick={() => void handleViewAutomationById(reference.automationId!)}
+		                                      disabled={automationViewLoadingId === reference.automationId}
+		                                      title="Xem thông tin tự động hóa"
+		                                    >
+		                                      <Zap size={12} />
+		                                      {automationViewLoadingId === reference.automationId ? 'Đang tải...' : reference.automationName}
+		                                    </button>
+		                                  ) : (
+		                                    <span key={reference.automationName}>{reference.automationName}</span>
+		                                  ))}
+		                                </div>
+		                              )}
+		                            </td>
+		                            <td title={d.note || '-'} style={{ minWidth: 120, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   )}
+                  <div className="campaign-input-data-pager">
+                    <span>Hiển thị {inputDataRangeStart}–{inputDataRangeEnd} / {campaignInputDataTotal} input</span>
+                    <div>
+                      <button type="button" className="btn-icon" onClick={() => setInputDataPage(page => Math.max(1, page - 1))} disabled={inputDataPage <= 1 || loadingCampaignInputData}><ChevronDown size={14} style={{ transform: 'rotate(90deg)' }} /></button>
+                      <span>Trang {inputDataPage}/{inputDataPageCount}</span>
+                      <button type="button" className="btn-icon" onClick={() => setInputDataPage(page => Math.min(inputDataPageCount, page + 1))} disabled={inputDataPage >= inputDataPageCount || loadingCampaignInputData}><ChevronDown size={14} style={{ transform: 'rotate(-90deg)' }} /></button>
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -5278,31 +6271,44 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                       actionDetailStatusOptions,
                       value => setActionDetailFilters(prev => ({ ...prev, status: value }))
                     )}
+                    <label className="campaign-input-data-search">
+                      <Search size={14} />
+                      <input
+                        value={actionDetailSearch}
+                        onChange={event => setActionDetailSearch(event.target.value)}
+                        placeholder="Tìm hành động, trạng thái, nội dung, link..."
+                      />
+                    </label>
                     <div className="detail-filter-actions">
                       <button
                         className="btn btn-secondary"
                         onClick={handleLoadCampaignDetails}
-                        disabled={loadingCampaignDetails}
+                        disabled={loadingCampaignDetailPage}
                         title="Tải lại kết quả chạy"
                       >
-                        <RefreshCw size={14} className={loadingCampaignDetails ? 'spin' : ''} /> Tải lại
+                        <RefreshCw size={14} className={loadingCampaignDetailPage ? 'spin' : ''} /> Tải lại
                       </button>
                       <button
                         className="btn btn-secondary"
                         onClick={handleExportCampaignDetails}
-                        disabled={loadingCampaignDetails || filteredCampaignDetails.length === 0}
+                        disabled={loadingCampaignDetailPage || exportingCampaignDetails || campaignDetailPageTotal === 0}
                         title="Xuất lịch sử hành động ra Excel"
                       >
-                        <Download size={14} /> Xuất Excel
+                        {exportingCampaignDetails
+                          ? <RefreshCw size={14} className="spin" />
+                          : <Download size={14} />}
+                        {exportingCampaignDetails ? ' Đang xuất...' : ' Xuất Excel'}
                       </button>
                     </div>
                   </div>
-                  {loadingCampaignDetails ? (
+                  {loadingCampaignDetailPage ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
-                  ) : campaignDetails.length === 0 ? (
-                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có hành động nào được ghi nhận</div>
-                  ) : filteredCampaignDetails.length === 0 ? (
-                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Không có kết quả chạy phù hợp bộ lọc</div>
+                  ) : campaignDetailPageTotal === 0 ? (
+                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>
+                      {actionDetailFilters.status || actionDetailFilters.timePreset !== 'all' || debouncedActionDetailSearch.trim()
+                        ? 'Không có kết quả chạy phù hợp bộ lọc'
+                        : 'Chưa có hành động nào được ghi nhận'}
+                    </div>
                   ) : (
                     <table className="campaign-grid" style={{ fontSize: 12 }}>
                       <thead>
@@ -5314,6 +6320,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                             <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
                             <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung cuộc gọi</th>
                             <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Xác minh bắt máy</th>
+                            <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
                             <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
                           </tr>
                         ) : isSelectedSmsCampaign ? (
@@ -5324,6 +6331,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                             <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>SIM</th>
                             <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
                             <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung SMS</th>
+                            <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
                             <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
                           </tr>
                         ) : (
@@ -5336,6 +6344,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                             ))}
                             <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Hành động</th>
                             <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                            <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
                             <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
                           </tr>
                         )}
@@ -5413,6 +6422,25 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                                   {smsDetail?.content || '-'}
                                 </td>
                               )}
+                              <td style={{ minWidth: 190 }}>
+                                {(a.triggeredAutomations || []).length === 0 ? '—' : (
+                                  <div className="campaign-automation-inline-links">
+                                    {(a.triggeredAutomations || []).map(trigger => (
+                                      <button
+                                        key={trigger.automationDetailId}
+                                        type="button"
+                                        className="campaign-automation-link"
+                                        onClick={() => void handleViewAutomationById(trigger.automationId)}
+                                        disabled={automationViewLoadingId === trigger.automationId}
+                                        title="Xem tự động hóa được kích hoạt bởi kết quả này"
+                                      >
+                                        <Zap size={12} />
+                                        {automationViewLoadingId === trigger.automationId ? 'Đang tải...' : trigger.automationName}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
                               <td className="campaign-detail-log-cell" title={detailLogTitle}>
                                 {renderCampaignDetailLog(a)}
                               </td>
@@ -5422,7 +6450,211 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                       </tbody>
                     </table>
                   )}
+                  <div className="campaign-input-data-pager">
+                    <span>Hiển thị {actionDetailRangeStart}–{actionDetailRangeEnd} / {campaignDetailPageTotal} kết quả</span>
+                    <div>
+                      <button type="button" className="btn-icon" onClick={() => setActionDetailPage(page => Math.max(1, page - 1))} disabled={actionDetailPage <= 1 || loadingCampaignDetailPage}><ChevronDown size={14} style={{ transform: 'rotate(90deg)' }} /></button>
+                      <span>Trang {actionDetailPage}/{actionDetailPageCount}</span>
+                      <button type="button" className="btn-icon" onClick={() => setActionDetailPage(page => Math.min(actionDetailPageCount, page + 1))} disabled={actionDetailPage >= actionDetailPageCount || loadingCampaignDetailPage}><ChevronDown size={14} style={{ transform: 'rotate(-90deg)' }} /></button>
+                    </div>
+                  </div>
                 </>
+              )}
+
+              {detailTab === 'automation' && (
+                <div className="campaign-automation-detail-panel">
+                  <div className="campaign-automation-toolbar">
+                    <p>Danh sách tự động hóa liên quan đến chiến dịch này, kèm vai trò A/B của chiến dịch trong mỗi tự động hóa.</p>
+                    <div className="campaign-automation-role-summary">
+                      <span className="campaign-automation-summary-badge is-a"><i>A</i>Kích hoạt data · {relatedAutomationSourceCount}</span>
+                      <span className="campaign-automation-summary-badge is-b"><i>B</i>Nhận data · {relatedAutomationTargetCount}</span>
+                    </div>
+                  </div>
+                  <div className="campaign-automation-table-scroll">
+                    {relatedAutomationsLoading ? (
+                      <div className="campaign-automation-empty">Đang tải...</div>
+                    ) : relatedAutomations.length === 0 ? (
+                      <div className="campaign-automation-empty">Chưa có tự động hóa liên quan đến chiến dịch này.</div>
+                    ) : (
+                      <table className="campaign-grid campaign-automation-table">
+                        <thead>
+                          <tr>
+                            <th style={{ minWidth: 190 }}>Loại</th>
+                            <th style={{ minWidth: 150 }}>Trạng thái tự động hóa</th>
+                            <th>Tên tự động hóa</th>
+                            <th style={{ minWidth: 150, textAlign: 'right' }}>Hành động</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {relatedAutomations.map(automation => {
+                            const roles = [
+                              automation.sourceCampaignId === selectedCampaignId ? 'A' : '',
+                              automation.targetCampaignId === selectedCampaignId ? 'B' : ''
+                            ].filter(Boolean)
+                            const pairLabel = getCampaignAutomationLinkedCampaignLabel(automation, selectedCampaignId)
+                            const eventLabel = automation.triggerConditions.map(formatAutomationTriggerLabel).join('; ') || 'Mọi kết quả'
+                            return (
+                              <tr key={automation.id}>
+                                <td>
+                                  <div className="campaign-automation-role-list">
+                                    {roles.map(role => (
+                                      <span key={role} className={`campaign-automation-row-type is-${role.toLowerCase()}`}>
+                                        <i>{role}</i>{role === 'A' ? 'Kích hoạt data' : 'Nhận data'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`campaign-automation-state ${automation.isActive ? 'is-active' : 'is-inactive'}`}>
+                                    <i />{automation.isActive ? 'Đang chạy' : 'Tạm dừng'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="campaign-automation-name-cell">
+                                    <button type="button" onClick={() => setViewingRelatedAutomation(automation)}>{automation.name}</button>
+                                    <small>{pairLabel} · Sự kiện: {eventLabel}</small>
+                                  </div>
+                                </td>
+                                <td>
+                                  <div className="campaign-automation-row-actions">
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      onClick={() => void handleEditRelatedAutomation(automation)}
+                                      disabled={automationEditLoadingId === automation.id}
+                                    >
+                                      {automationEditLoadingId === automation.id
+                                        ? <RefreshCw size={13} className="spin" />
+                                        : <Edit3 size={13} />}
+                                      Sửa
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      onClick={() => setViewingRelatedAutomation(automation)}
+                                    >
+                                      <Eye size={13} /> Chi tiết
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {detailTab === 'automationActivation' && (
+                <div className="campaign-automation-detail-panel">
+                  <div className="campaign-automation-history-toolbar">
+                    <p>Các tự động hóa được kích hoạt theo từng data, kèm kết quả chạy</p>
+                    <label>
+                      <span>Kết quả</span>
+                      <select
+                        value={automationExecutionStatus}
+                        onChange={event => setAutomationExecutionStatus(event.target.value as AutomationExecutionStatus | '')}
+                      >
+                        {AUTOMATION_EXECUTION_STATUS_OPTIONS.map(option => (
+                          <option key={option.value || 'all'} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="campaign-automation-table-scroll">
+                    {automationExecutionsLoading ? (
+                      <div className="campaign-automation-empty">Đang tải...</div>
+                    ) : relatedAutomationExecutionTotal === 0 ? (
+                      <div className="campaign-automation-empty">
+                        {automationExecutionStatus
+                          ? 'Không có lần kích hoạt phù hợp bộ lọc.'
+                          : 'Chưa có lần kích hoạt tự động hóa nào.'}
+                      </div>
+                    ) : (
+                      <table className="campaign-grid campaign-automation-table is-history">
+                        <thead>
+                          <tr>
+                            <th style={{ minWidth: 150 }}>Thời gian</th>
+                            <th style={{ minWidth: 170 }}>Data</th>
+                            <th style={{ minWidth: 230 }}>Tự động hóa</th>
+                            <th style={{ minWidth: 80 }}>Loại</th>
+                            <th style={{ minWidth: 260 }}>Đích đến</th>
+                            <th style={{ minWidth: 120 }}>Kết quả chạy</th>
+                            <th style={{ minWidth: 220 }}>Chi tiết</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {relatedAutomationExecutions.map(execution => {
+                            const automation = relatedAutomationById.get(execution.automationId)
+                            const automationName = execution.automationName || automation?.name || 'Tự động hóa'
+                            const dataDisplay = getAutomationExecutionDataDisplay(execution)
+                            const destinations = getAutomationExecutionDestinations(execution)
+                            const result = getAutomationExecutionResult(execution)
+                            return (
+                              <tr key={execution.id}>
+                                <td style={{ whiteSpace: 'nowrap' }}>{formatDisplayDateTime(execution.triggeredAt)}</td>
+                                <td>
+                                  <div className="campaign-automation-history-data">
+                                    <strong>{dataDisplay.primary}</strong>
+                                    {dataDisplay.secondary && <small>{dataDisplay.secondary}</small>}
+                                  </div>
+                                </td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="campaign-automation-link"
+                                    onClick={() => automation && setViewingRelatedAutomation(automation)}
+                                    disabled={!automation}
+                                    title="Xem tự động hóa"
+                                  >
+                                    <Zap size={12} />{automationName}
+                                  </button>
+                                </td>
+                                <td>
+                                  <span className={`campaign-automation-history-type is-${execution.campaignRole === 'source' ? 'a' : 'b'}`}>
+                                    {execution.campaignRole === 'source' ? 'A' : 'B'}
+                                  </span>
+                                </td>
+                                <td>
+                                  {destinations.length > 0 ? (
+                                    <div className="campaign-automation-destination-list">
+                                      {destinations.map(destination => (
+                                        <span
+                                          key={`${destination.kind}:${destination.label}`}
+                                          className={`campaign-automation-destination is-${destination.kind}`}
+                                          title={destination.label}
+                                        >
+                                          {destination.kind === 'campaign' ? <Layers size={13} /> : <FolderOpen size={13} />}
+                                          <span>{destination.label}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : '—'}
+                                </td>
+                                <td><span className={`campaign-automation-result ${result.tone}`}>{result.label}</span></td>
+                                <td className="campaign-automation-history-detail" title={execution.errorMessage || execution.targetDataGroupSyncError || execution.targetResultStatus || ''}>
+                                  {execution.errorMessage || execution.targetDataGroupSyncError || execution.targetResultStatus || '—'}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                  {relatedAutomationExecutionTotal > 0 && (
+                    <div className="campaign-input-data-pager">
+                      <span>Hiển thị {automationExecutionRangeStart}–{automationExecutionRangeEnd} / {relatedAutomationExecutionTotal} lần kích hoạt</span>
+                      <div>
+                        <button type="button" className="btn-icon" onClick={() => setAutomationExecutionPage(page => Math.max(1, page - 1))} disabled={automationExecutionPage <= 1 || automationExecutionsLoading}><ChevronDown size={14} style={{ transform: 'rotate(90deg)' }} /></button>
+                        <span>Trang {automationExecutionPage}/{automationExecutionPageCount}</span>
+                        <button type="button" className="btn-icon" onClick={() => setAutomationExecutionPage(page => Math.min(automationExecutionPageCount, page + 1))} disabled={automationExecutionPage >= automationExecutionPageCount || automationExecutionsLoading}><ChevronDown size={14} style={{ transform: 'rotate(-90deg)' }} /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Tab: Email link tracking */}

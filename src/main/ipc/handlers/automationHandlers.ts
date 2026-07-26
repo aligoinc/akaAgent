@@ -3,7 +3,8 @@ import type {
   AutomationExecutionListQuery,
   AutomationInput,
   AutomationListQuery,
-  AutomationUpdatedEvent
+  AutomationUpdatedEvent,
+  CampaignAutomationExecutionListQuery
 } from '../../../shared/types'
 import { IPC_EVENTS } from '../../../shared/types'
 import * as automationRepo from '../../data/repositories/automationRepository'
@@ -59,6 +60,13 @@ export function registerAutomationHandlers(mainWindow: BrowserWindow): void {
     IPC_EVENTS.AUTOMATION_DETAILS_LIST,
     async (_, automationId: number, query?: AutomationExecutionListQuery) => {
       return automationRepo.listAutomationDetails(automationId, query)
+    }
+  )
+
+  ipcMain.handle(
+    IPC_EVENTS.AUTOMATION_CAMPAIGN_DETAILS_LIST,
+    async (_, query: CampaignAutomationExecutionListQuery) => {
+      return automationRepo.listCampaignAutomationDetails(query)
     }
   )
 }

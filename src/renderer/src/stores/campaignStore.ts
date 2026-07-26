@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputStatus, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
+import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -57,8 +57,10 @@ interface CampaignStore {
 
   // Campaign Input Data (việc-cần-làm thực thi)
   campaignInputData: CampaignInputData[]
+  campaignInputDataTotal: number
   loadingCampaignInputData: boolean
-  loadCampaignInputData: (campaignId: number) => Promise<void>
+  loadCampaignInputData: (campaignId: number, query?: Omit<CampaignInputDataPageQuery, 'campaignId'>) => Promise<void>
+  refreshCampaignInputData: (campaignId: number) => Promise<void>
   createCampaignInputData: (data: Partial<CampaignInputData>) => Promise<CampaignInputData>
   updateCampaignInputData: (id: number, updates: Partial<CampaignInputData>) => Promise<void>
   bulkUpdateCampaignInputDataStatus: (campaignId: number, ids: number[], status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>) => Promise<BulkUpdateCampaignInputDataStatusResult>
@@ -70,6 +72,10 @@ interface CampaignStore {
   campaignDetails: CampaignDetail[]
   loadingCampaignDetails: boolean
   loadCampaignDetails: (campaignId: number) => Promise<void>
+  campaignDetailPageItems: CampaignDetail[]
+  campaignDetailPageTotal: number
+  loadingCampaignDetailPage: boolean
+  loadCampaignDetailPage: (campaignId: number, query?: Omit<CampaignDetailPageQuery, 'campaignId'>) => Promise<void>
 
   // Email campaign link tracking
   emailCampaignLinkTrackings: EmailCampaignLinkTrackingSummary[]
@@ -140,6 +146,9 @@ let accountsLoadInFlight: Promise<void> | null = null
 let accountsLoadTrailingRequested = false
 let campaignsLoadInFlight: Promise<void> | null = null
 let campaignsLoadTrailingRequested = false
+let campaignDetailPageRequestVersion = 0
+let campaignInputDataRequestVersion = 0
+let activeCampaignInputDataQuery: CampaignInputDataPageQuery | null = null
 
 export const useCampaignStore = create<CampaignStore>((set, get) => ({
   // =========== ACCOUNTS ===========
@@ -482,26 +491,56 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
 
   // =========== CAMPAIGN INPUT DATA ===========
   campaignInputData: [],
+  campaignInputDataTotal: 0,
   loadingCampaignInputData: false,
 
-  loadCampaignInputData: async (campaignId) => {
+  loadCampaignInputData: async (campaignId, query = {}) => {
     if (!window.electronAPI) return
+    const requestVersion = ++campaignInputDataRequestVersion
+    const resolvedQuery: CampaignInputDataPageQuery = {
+      campaignId,
+      offset: 0,
+      limit: 100,
+      ...query
+    }
+    activeCampaignInputDataQuery = resolvedQuery
     set({ loadingCampaignInputData: true })
     try {
-      const actions = await window.electronAPI.listCampaignInputData(campaignId)
-      set({ campaignInputData: actions })
+      const page = await window.electronAPI.listCampaignInputDataPage(resolvedQuery)
+      if (requestVersion === campaignInputDataRequestVersion) {
+        set({ campaignInputData: page.items, campaignInputDataTotal: page.total })
+      }
     } catch (err) {
       console.error('Failed to load campaign input data:', err)
+      if (requestVersion === campaignInputDataRequestVersion) {
+        set({ campaignInputData: [], campaignInputDataTotal: 0 })
+      }
     } finally {
-      set({ loadingCampaignInputData: false })
+      if (requestVersion === campaignInputDataRequestVersion) {
+        set({ loadingCampaignInputData: false })
+      }
     }
+  },
+
+  refreshCampaignInputData: async (campaignId) => {
+    const activeQuery = activeCampaignInputDataQuery
+    const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === campaignId
+      ? activeQuery
+      : { campaignId }
+    await get().loadCampaignInputData(campaignId, query)
   },
 
   createCampaignInputData: async (data) => {
     if (!window.electronAPI) throw new Error('API not available')
     const action = await window.electronAPI.createCampaignInputData(data)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
+    if (selectedCampaignId) {
+      const activeQuery = activeCampaignInputDataQuery
+      const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === selectedCampaignId
+        ? activeQuery
+        : { campaignId: selectedCampaignId }
+      await get().loadCampaignInputData(selectedCampaignId, query)
+    }
     return action
   },
 
@@ -509,13 +548,23 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     if (!window.electronAPI) return
     await window.electronAPI.updateCampaignInputData(id, updates)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
+    if (selectedCampaignId) {
+      const activeQuery = activeCampaignInputDataQuery
+      const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === selectedCampaignId
+        ? activeQuery
+        : { campaignId: selectedCampaignId }
+      await get().loadCampaignInputData(selectedCampaignId, query)
+    }
   },
 
   bulkUpdateCampaignInputDataStatus: async (campaignId, ids, status) => {
     if (!window.electronAPI) throw new Error('API not available')
     const result = await window.electronAPI.bulkUpdateCampaignInputDataStatus(campaignId, ids, status)
-    await get().loadCampaignInputData(campaignId)
+    const activeQuery = activeCampaignInputDataQuery
+    const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === campaignId
+      ? activeQuery
+      : { campaignId }
+    await get().loadCampaignInputData(campaignId, query)
     return result
   },
 
@@ -524,7 +573,13 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const result = await window.electronAPI.addCampaignInputDataToCampaign(request)
     await get().loadCampaigns()
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
+    if (selectedCampaignId) {
+      const activeQuery = activeCampaignInputDataQuery
+      const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === selectedCampaignId
+        ? activeQuery
+        : { campaignId: selectedCampaignId }
+      await get().loadCampaignInputData(selectedCampaignId, query)
+    }
     return result
   },
 
@@ -533,7 +588,13 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const result = await window.electronAPI.addCampaignInputDataRows(request)
     await get().loadCampaigns()
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
+    if (selectedCampaignId) {
+      const activeQuery = activeCampaignInputDataQuery
+      const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === selectedCampaignId
+        ? activeQuery
+        : { campaignId: selectedCampaignId }
+      await get().loadCampaignInputData(selectedCampaignId, query)
+    }
     return result
   },
 
@@ -541,12 +602,21 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     if (!window.electronAPI) return
     await window.electronAPI.deleteCampaignInputData(id)
     const { selectedCampaignId } = get()
-    if (selectedCampaignId) await get().loadCampaignInputData(selectedCampaignId)
+    if (selectedCampaignId) {
+      const activeQuery = activeCampaignInputDataQuery
+      const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === selectedCampaignId
+        ? activeQuery
+        : { campaignId: selectedCampaignId }
+      await get().loadCampaignInputData(selectedCampaignId, query)
+    }
   },
 
   // =========== CAMPAIGN DETAILS ===========
   campaignDetails: [],
   loadingCampaignDetails: false,
+  campaignDetailPageItems: [],
+  campaignDetailPageTotal: 0,
+  loadingCampaignDetailPage: false,
 
   loadCampaignDetails: async (campaignId) => {
     if (!window.electronAPI) return
@@ -558,6 +628,32 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       console.error('Failed to load campaign details:', err)
     } finally {
       set({ loadingCampaignDetails: false })
+    }
+  },
+
+  loadCampaignDetailPage: async (campaignId, query = {}) => {
+    if (!window.electronAPI) return
+    const requestVersion = ++campaignDetailPageRequestVersion
+    set({ loadingCampaignDetailPage: true })
+    try {
+      const page = await window.electronAPI.listCampaignDetailsPage({
+        campaignId,
+        offset: 0,
+        limit: 100,
+        ...query
+      })
+      if (requestVersion === campaignDetailPageRequestVersion) {
+        set({ campaignDetailPageItems: page.items, campaignDetailPageTotal: page.total })
+      }
+    } catch (err) {
+      console.error('Failed to load campaign detail page:', err)
+      if (requestVersion === campaignDetailPageRequestVersion) {
+        set({ campaignDetailPageItems: [], campaignDetailPageTotal: 0 })
+      }
+    } finally {
+      if (requestVersion === campaignDetailPageRequestVersion) {
+        set({ loadingCampaignDetailPage: false })
+      }
     }
   },
 

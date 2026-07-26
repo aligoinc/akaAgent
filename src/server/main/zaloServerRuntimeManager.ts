@@ -785,7 +785,13 @@ export class ZaloServerRuntimeManager {
           proxyRuntime,
           zaloRuntime,
           undefined,
-          { runtimeTarget: 'server', maintenanceCoordinator: maintenance }
+          {
+            runtimeTarget: 'server',
+            // The mutable runtime user is refreshed by discovery and again
+            // after warmup, so every DB ownership check sees the live revision.
+            runtimeModeRevision: () => user.zaloRuntimeModeRevision,
+            maintenanceCoordinator: maintenance
+          }
         )
         const contactLoader = new ContactLoader(
           supabase,
