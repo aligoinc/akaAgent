@@ -15,7 +15,10 @@ import type {
   AutomationOptions,
   AutomationScheduleMode,
   AutomationTriggerCondition,
-  AutomationTriggerOption
+  AutomationTriggerOption,
+  CampaignAutomationExecutionListQuery,
+  CampaignAutomationExecutionListResult,
+  CampaignAutomationExecutionRole
 } from '../../../shared/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
@@ -24,6 +27,7 @@ import {
   type ProcessAuthCredentials
 } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
+import * as dataGroupRepo from './dataGroupRepository'
 
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 200
@@ -53,6 +57,11 @@ const AUTOMATION_EXECUTION_STATUSES = new Set<AutomationExecutionStatus>([
   'bỏ qua',
   'lỗi'
 ])
+const CAMPAIGN_AUTOMATION_EXECUTION_ROLES = new Set<CampaignAutomationExecutionRole>([
+  'all',
+  'source',
+  'target'
+])
 const RPC_LIST = 'aka_agent_list_automations'
 const RPC_GET = 'aka_agent_get_automation'
 const RPC_OPTIONS = 'aka_agent_get_automation_options'
@@ -60,6 +69,7 @@ const RPC_SAVE = 'aka_agent_save_automation'
 const RPC_SET_ACTIVE = 'aka_agent_set_automation_active'
 const RPC_DELETE = 'aka_agent_delete_automation'
 const RPC_LIST_DETAILS = 'aka_agent_list_automation_details'
+const RPC_LIST_CAMPAIGN_DETAILS = 'aka_agent_list_campaign_automation_details'
 const RPC_CLAIM_DETAILS = 'claim_auto_automation_details'
 const RPC_MATERIALIZE_DETAIL = 'materialize_auto_automation_detail'
 const RPC_RETRY_DETAIL = 'retry_auto_automation_detail'
@@ -86,12 +96,20 @@ const AUTOMATION_ERROR_MESSAGES: Record<string, string> = {
   invalid_fixed_schedule: 'Ngày giờ kích hoạt phải lớn hơn thời điểm hiện tại.',
   automation_cycle_detected: 'Không thể bật tự động hóa vì tạo thành vòng lặp chiến dịch.',
   invalid_automation_name: 'Tên tự động hóa không hợp lệ.',
+  invalid_automation_note: 'Ghi chú tự động hóa không được quá 2.000 ký tự.',
+  invalid_automation_target_input: 'Dữ liệu chuyển đến đích không hợp lệ.',
   invalid_automation_trigger_statuses: 'Danh sách trạng thái kích hoạt không hợp lệ.',
   invalid_automation_trigger_status: 'Trạng thái kích hoạt không hợp lệ.',
   invalid_automation_trigger_status_value: 'Giá trị trạng thái kích hoạt không hợp lệ.',
   invalid_automation_trigger_action_code: 'Hành động kích hoạt không hợp lệ.',
   automation_trigger_status_required: 'Vui lòng chọn ít nhất một trạng thái kích hoạt.',
-  automation_not_found: 'Không tìm thấy tự động hóa.'
+  automation_destination_required: 'Vui lòng chọn ít nhất một đích: Chiến dịch đích hoặc Nhóm data.',
+  target_contact_group_requires_campaign: 'Nhóm dữ liệu cũ chỉ dùng được khi có chiến dịch đích.',
+  invalid_target_data_group: 'Nhóm data đích không tồn tại hoặc không còn hợp lệ.',
+  automation_not_found: 'Không tìm thấy tự động hóa.',
+  campaign_not_found: 'Không tìm thấy chiến dịch.',
+  invalid_campaign_automation_role: 'Vai trò tự động hóa trong chiến dịch không hợp lệ.',
+  invalid_campaign_automation_date_range: 'Khoảng ngày lịch sử tự động hóa không hợp lệ.'
 }
 
 type JsonRecord = Record<string, unknown>
@@ -127,16 +145,17 @@ export interface ClaimedAutomationDetail {
   sourceActionId: string
   sourceActionCode: string | null
   sourceStatus: string
-  targetCampaignId: number
-  targetAccountId: number
-  targetActionId: string
+  targetCampaignId: number | null
+  targetAccountId: number | null
+  targetActionId: string | null
   dataType: AutomationDataType
   dataValue: string
   sourceInputSnapshot: JsonRecord
   configSnapshot: JsonRecord
   targetContactGroupId: number | null
+  targetDataGroupId: number | null
   scheduledAt: string
-  targetRowIndex: number
+  targetRowIndex: number | null
   attemptCount: number
 }
 
@@ -146,7 +165,16 @@ export interface AutomationMaterializeResult {
   targetInputDataId?: number | null
   targetContactId?: number | null
   targetContactGroupMemberId?: number | null
+  targetDataGroupMemberId?: number | null
   targetRowIndex?: number | null
+  error?: string | null
+}
+
+export interface AutomationDataGroupIngestResult {
+  code: 'completed' | 'pending' | 'failed' | 'skipped' | string
+  targetDataGroupMemberId?: number | null
+  insertedInputCount: number
+  alreadySeenInputCount: number
   error?: string | null
 }
 
@@ -308,6 +336,14 @@ function normalizeUpdatedFrom(value: unknown): string | null {
   return date.toISOString()
 }
 
+function normalizeAutomationHistoryDate(value: unknown, label: string): string | null {
+  const raw = toStringValue(value).trim()
+  if (!raw) return null
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) throw new Error(`${label} không hợp lệ.`)
+  return date.toISOString()
+}
+
 function automationRpcError(
   error: { message?: string; details?: string; hint?: string; code?: string } | null | undefined,
   fallback: string
@@ -400,9 +436,11 @@ export function mapAutomationFromRpc(value: unknown): Automation {
     actionType: 'campaign_detail_route',
     isActive: toBooleanValue(firstDefined(row, 'isActive', 'is_active')),
     sourceCampaignId: toNumberValue(firstDefined(row, 'sourceCampaignId', 'source_campaign_id')),
-    targetCampaignId: toNumberValue(firstDefined(row, 'targetCampaignId', 'target_campaign_id')),
+    targetCampaignId: toNullableNumber(firstDefined(row, 'targetCampaignId', 'target_campaign_id')),
     dataType: toStringValue(firstDefined(row, 'dataType', 'dataTypeCode', 'data_type_code')) as AutomationDataType,
     targetContactGroupId: toNullableNumber(firstDefined(row, 'targetContactGroupId', 'target_contact_group_id')),
+    targetDataGroupId: toNullableNumber(firstDefined(row, 'targetDataGroupId', 'target_data_group_id')),
+    targetDataGroupName: toNullableString(firstDefined(row, 'targetDataGroupName', 'target_data_group_name')),
     scheduleMode,
     delayValue: canonicalDelay.delayValue,
     delayUnit: canonicalDelay.delayUnit,
@@ -436,9 +474,15 @@ export function mapAutomationFromRpc(value: unknown): Automation {
 function mapAutomationExecutionFromRpc(value: unknown): AutomationExecution {
   const row = asRecord(value)
   const status = toStringValue(row.status) as AutomationExecutionStatus
+  const campaignRole = toStringValue(firstDefined(row, 'campaignRole', 'campaign_role'))
   return {
     id: toNumberValue(firstDefined(row, 'id', 'automationDetailId', 'automation_detail_id')),
     automationId: toNumberValue(firstDefined(row, 'automationId', 'automation_id')),
+    automationName: toNullableString(firstDefined(row, 'automationName', 'automation_name')),
+    campaignRole: campaignRole === 'source' || campaignRole === 'target' ? campaignRole : undefined,
+    sourceCampaignName: toNullableString(firstDefined(row, 'sourceCampaignName', 'source_campaign_name')),
+    targetCampaignName: toNullableString(firstDefined(row, 'targetCampaignName', 'target_campaign_name')),
+    targetCampaignId: toNullableNumber(firstDefined(row, 'targetCampaignId', 'target_campaign_id')),
     sourceCampaignDetailId: toNumberValue(firstDefined(row, 'sourceCampaignDetailId', 'source_campaign_detail_id')),
     sourceInputDataId: toNumberValue(firstDefined(
       row,
@@ -451,6 +495,26 @@ function mapAutomationExecutionFromRpc(value: unknown): AutomationExecution {
       row,
       'targetContactGroupMemberId',
       'target_contact_group_member_id'
+    )),
+    targetDataGroupId: toNullableNumber(firstDefined(
+      row,
+      'targetDataGroupId',
+      'target_data_group_id'
+    )),
+    targetDataGroupMemberId: toNullableNumber(firstDefined(
+      row,
+      'targetDataGroupMemberId',
+      'target_data_group_member_id'
+    )),
+    targetDataGroupSyncStatus: toNullableString(firstDefined(
+      row,
+      'targetDataGroupSyncStatus',
+      'target_data_group_sync_status'
+    )) as AutomationExecution['targetDataGroupSyncStatus'],
+    targetDataGroupSyncError: toNullableString(firstDefined(
+      row,
+      'targetDataGroupSyncError',
+      'target_data_group_sync_error'
     )),
     sourceStatus: toStringValue(firstDefined(row, 'sourceStatus', 'source_status')),
     dataType: toStringValue(firstDefined(row, 'dataType', 'dataTypeCode', 'data_type_code')) as AutomationDataType,
@@ -465,6 +529,7 @@ function mapAutomationExecutionFromRpc(value: unknown): AutomationExecution {
     targetResultStatus: toNullableString(firstDefined(row, 'targetResultStatus', 'target_result_status')),
     targetResultCount: Math.max(0, Math.floor(toNumberValue(firstDefined(row, 'targetResultCount', 'target_result_count')))),
     targetContactGroupName: toNullableString(firstDefined(row, 'targetContactGroupName', 'target_contact_group_name')),
+    targetDataGroupName: toNullableString(firstDefined(row, 'targetDataGroupName', 'target_data_group_name')),
     createdAt: toNullableString(firstDefined(row, 'createdAt', 'created_at')) ?? undefined,
     updatedAt: toNullableString(firstDefined(row, 'updatedAt', 'updated_at')) ?? undefined
   }
@@ -524,8 +589,16 @@ function normalizeAutomationInput(input: AutomationInput): Required<Pick<Automat
   if (!name) throw new Error('Vui lòng nhập tên tự động hóa.')
   if (name.length > 200) throw new Error('Tên tự động hóa không được quá 200 ký tự.')
   const sourceCampaignId = normalizePositiveId(input?.sourceCampaignId, 'Chiến dịch A')
-  const targetCampaignId = normalizePositiveId(input?.targetCampaignId, 'Chiến dịch B')
-  if (sourceCampaignId === targetCampaignId) {
+  const targetCampaignId = input?.targetCampaignId === null || input?.targetCampaignId === undefined
+    ? null
+    : normalizePositiveId(input.targetCampaignId, 'Chiến dịch đích')
+  const targetDataGroupId = input.targetDataGroupId === null || input.targetDataGroupId === undefined
+    ? null
+    : normalizePositiveId(input.targetDataGroupId, 'Nhóm data dùng chung')
+  if (targetCampaignId === null && targetDataGroupId === null) {
+    throw new Error('Vui lòng chọn ít nhất một đích: Chiến dịch đích hoặc Nhóm data.')
+  }
+  if (targetCampaignId !== null && sourceCampaignId === targetCampaignId) {
     throw new Error('Chiến dịch A và chiến dịch B phải khác nhau.')
   }
   if (!AUTOMATION_DATA_TYPES.has(input?.dataType)) throw new Error('Loại dữ liệu không hợp lệ.')
@@ -614,6 +687,9 @@ function normalizeAutomationInput(input: AutomationInput): Required<Pick<Automat
   const targetContactGroupId = input.targetContactGroupId === null || input.targetContactGroupId === undefined
     ? null
     : normalizePositiveId(input.targetContactGroupId, 'Nhóm dữ liệu')
+  if (targetCampaignId === null && targetContactGroupId !== null) {
+    throw new Error('Nhóm dữ liệu cũ chỉ dùng được khi có chiến dịch đích.')
+  }
   const note = toStringValue(input.note).trim() || null
   if (note && note.length > 2000) throw new Error('Ghi chú không được quá 2000 ký tự.')
 
@@ -623,6 +699,7 @@ function normalizeAutomationInput(input: AutomationInput): Required<Pick<Automat
     targetCampaignId,
     dataType: input.dataType,
     targetContactGroupId,
+    targetDataGroupId,
     scheduleMode: input.scheduleMode,
     delayValue,
     delayUnit,
@@ -802,12 +879,45 @@ export async function getAutomation(id: number): Promise<Automation> {
   return mapAutomationFromRpc(row)
 }
 
+async function listAllAutomationDataGroups(): Promise<AutomationOptions['dataGroups']> {
+  const pageSize = MAX_PAGE_SIZE
+  const firstPage = await dataGroupRepo.listDataGroups({ offset: 0, limit: pageSize })
+  const expectedPageCount = Math.max(1, Math.ceil(firstPage.total / pageSize))
+  const groups = [...firstPage.groups]
+  const seenGroupIds = new Set(groups.map(group => group.id))
+
+  // Use the total captured by the first page as a bounded snapshot. This keeps
+  // pagination finite even if groups are added continuously while options load.
+  for (let pageIndex = 1; pageIndex < expectedPageCount; pageIndex += 1) {
+    const page = await dataGroupRepo.listDataGroups({
+      offset: pageIndex * pageSize,
+      limit: pageSize
+    })
+    for (const group of page.groups) {
+      if (seenGroupIds.has(group.id)) continue
+      seenGroupIds.add(group.id)
+      groups.push(group)
+    }
+    if (page.groups.length < pageSize) break
+  }
+
+  return groups
+}
+
 export async function getAutomationOptions(): Promise<AutomationOptions> {
   const user = requireCurrentUser()
-  const payload = await invokeRpc<unknown>(RPC_OPTIONS, {
-    p_staff_id: user.staffId,
-    p_organization_id: user.organizationId
-  }, 'Không thể tải dữ liệu tạo tự động hóa.')
+  const [payload, dataGroups] = await Promise.all([
+    invokeRpc<unknown>(RPC_OPTIONS, {
+      p_staff_id: user.staffId,
+      p_organization_id: user.organizationId
+    }, 'Không thể tải dữ liệu tạo tự động hóa.'),
+    listAllAutomationDataGroups().catch(error => {
+      // Campaign-only rules must remain usable if the optional Data Group
+      // catalog is temporarily unavailable.
+      console.warn('[Automation] Không thể tải Nhóm data:', error)
+      return []
+    })
+  ])
   const result = asRecord(Array.isArray(payload) ? payload[0] : payload)
   const actionDataTypes = new Map<string, {
     dataTypes: AutomationDataType[]
@@ -857,7 +967,8 @@ export async function getAutomationOptions(): Promise<AutomationOptions> {
     }),
     contactGroups: asRecordArray(firstDefined(result, 'contactGroups', 'contact_groups'))
       .map(mapContactGroupOption)
-      .filter((item): item is AutomationContactGroupOption => !!item)
+      .filter((item): item is AutomationContactGroupOption => !!item),
+    dataGroups
   }
 }
 
@@ -873,6 +984,7 @@ async function saveAutomation(id: number | null, input: AutomationInput): Promis
     p_target_campaign_id: normalized.targetCampaignId,
     p_data_type_code: normalized.dataType,
     p_target_contact_group_id: normalized.targetContactGroupId ?? null,
+    p_target_data_group_id: normalized.targetDataGroupId ?? null,
     p_schedule_mode: normalized.scheduleMode,
     p_delay_days: normalized.delayDays ?? 0,
     p_delay_hours: normalized.delayHours ?? 0,
@@ -946,6 +1058,51 @@ export async function listAutomationDetails(
   }
 }
 
+export async function listCampaignAutomationDetails(
+  query: CampaignAutomationExecutionListQuery
+): Promise<CampaignAutomationExecutionListResult> {
+  const user = requireCurrentUser()
+  const campaignId = normalizePositiveId(query.campaignId, 'Chiến dịch')
+  const role = CAMPAIGN_AUTOMATION_EXECUTION_ROLES.has(query.role || 'all')
+    ? query.role || 'all'
+    : 'all'
+  const status = query.status && AUTOMATION_EXECUTION_STATUSES.has(query.status)
+    ? query.status
+    : null
+  const search = toStringValue(query.search).trim() || null
+  const dateFrom = normalizeAutomationHistoryDate(query.dateFrom, 'Ngày bắt đầu')
+  const dateTo = normalizeAutomationHistoryDate(query.dateTo, 'Ngày kết thúc')
+  if (dateFrom && dateTo && new Date(dateFrom).getTime() > new Date(dateTo).getTime()) {
+    throw new Error('Khoảng ngày lịch sử tự động hóa không hợp lệ.')
+  }
+  const offsetValue = Math.floor(Number(query.offset))
+  const limitValue = Math.floor(Number(query.limit))
+  const offset = Number.isSafeInteger(offsetValue) && offsetValue >= 0 ? offsetValue : 0
+  const limit = Number.isSafeInteger(limitValue) && limitValue > 0
+    ? Math.min(limitValue, 500)
+    : 100
+
+  const payload = await invokeRpc<unknown>(RPC_LIST_CAMPAIGN_DETAILS, {
+    p_staff_id: user.staffId,
+    p_organization_id: user.organizationId,
+    p_campaign_id: campaignId,
+    p_role: role,
+    p_status: status,
+    p_search: search,
+    p_date_from: dateFrom,
+    p_date_to: dateTo,
+    p_limit: limit,
+    p_offset: offset
+  }, 'Không thể tải lịch sử tự động hóa của chiến dịch.')
+  const result = asRecord(Array.isArray(payload) ? payload[0] : payload)
+  return {
+    items: asRecordArray(firstDefined(result, 'items', 'data')).map(mapAutomationExecutionFromRpc),
+    total: Math.max(0, Math.floor(toNumberValue(firstDefined(result, 'total', 'totalCount', 'total_count')))),
+    offset: Math.max(0, Math.floor(toNumberValue(firstDefined(result, 'offset'), offset))),
+    limit: Math.max(1, Math.floor(toNumberValue(firstDefined(result, 'limit'), limit)))
+  }
+}
+
 function mapClaimedAutomationDetail(value: unknown): ClaimedAutomationDetail | null {
   const row = asRecord(value)
   const automationDetailId = toNumberValue(firstDefined(row, 'automationDetailId', 'automation_detail_id'))
@@ -962,16 +1119,17 @@ function mapClaimedAutomationDetail(value: unknown): ClaimedAutomationDetail | n
     sourceActionId: toStringValue(firstDefined(row, 'sourceActionId', 'source_action_id')),
     sourceActionCode: toNullableString(firstDefined(row, 'sourceActionCode', 'source_action_code')),
     sourceStatus: toStringValue(firstDefined(row, 'sourceStatus', 'source_status')),
-    targetCampaignId: toNumberValue(firstDefined(row, 'targetCampaignId', 'target_campaign_id')),
-    targetAccountId: toNumberValue(firstDefined(row, 'targetAccountId', 'target_account_id')),
-    targetActionId: toStringValue(firstDefined(row, 'targetActionId', 'target_action_id')),
+    targetCampaignId: toNullableNumber(firstDefined(row, 'targetCampaignId', 'target_campaign_id')),
+    targetAccountId: toNullableNumber(firstDefined(row, 'targetAccountId', 'target_account_id')),
+    targetActionId: toNullableString(firstDefined(row, 'targetActionId', 'target_action_id')),
     dataType,
     dataValue: toStringValue(firstDefined(row, 'dataValue', 'data_value')),
     sourceInputSnapshot: asRecord(firstDefined(row, 'sourceInputSnapshot', 'source_input_snapshot')),
     configSnapshot: asRecord(firstDefined(row, 'configSnapshot', 'config_snapshot')),
     targetContactGroupId: toNullableNumber(firstDefined(row, 'targetContactGroupId', 'target_contact_group_id')),
+    targetDataGroupId: toNullableNumber(firstDefined(row, 'targetDataGroupId', 'target_data_group_id')),
     scheduledAt: toStringValue(firstDefined(row, 'scheduledAt', 'scheduled_at')),
-    targetRowIndex: Math.max(0, Math.floor(toNumberValue(firstDefined(row, 'targetRowIndex', 'target_row_index')))),
+    targetRowIndex: toNullableNumber(firstDefined(row, 'targetRowIndex', 'target_row_index')),
     attemptCount: Math.max(0, Math.floor(toNumberValue(firstDefined(row, 'attemptCount', 'attempt_count'))))
   }
 }
@@ -1009,7 +1167,7 @@ export async function materializeAutomationDetail(
     p_automation_detail_id: normalizePositiveId(automationDetailId, 'Lần kích hoạt'),
     p_worker_id: toStringValue(workerId).trim(),
     p_target_input: targetInput
-  }, 'Không thể thêm dữ liệu vào chiến dịch B.', context)
+  }, 'Không thể chuyển dữ liệu đến đích đã chọn.', context)
   const row = asRecord(Array.isArray(payload) ? payload[0] : payload)
   return {
     code: toStringValue(firstDefined(row, 'code', 'result', 'resultCode', 'result_code'), 'failed'),
@@ -1017,7 +1175,34 @@ export async function materializeAutomationDetail(
     targetInputDataId: toNullableNumber(firstDefined(row, 'targetInputDataId', 'target_input_data_id')),
     targetContactId: toNullableNumber(firstDefined(row, 'targetContactId', 'target_contact_id')),
     targetContactGroupMemberId: toNullableNumber(firstDefined(row, 'targetContactGroupMemberId', 'target_contact_group_member_id')),
+    targetDataGroupMemberId: toNullableNumber(firstDefined(row, 'targetDataGroupMemberId', 'target_data_group_member_id')),
     targetRowIndex: toNullableNumber(firstDefined(row, 'targetRowIndex', 'target_row_index')),
+    error: toNullableString(firstDefined(row, 'error', 'errorMessage', 'error_message'))
+  }
+}
+
+export async function ingestAutomationDataGroupResult(
+  automationDetailId: number,
+  context?: AutomationRepositoryContext
+): Promise<AutomationDataGroupIngestResult> {
+  const user = requireCurrentUser()
+  const payload = await invokeRpc<unknown>('aka_agent_ingest_automation_data_group_result', {
+    p_staff_id: user.staffId,
+    p_organization_id: user.organizationId,
+    p_automation_detail_id: normalizePositiveId(automationDetailId, 'Lần kích hoạt')
+  }, 'Không thể thêm kết quả tự động hóa vào Nhóm data.', context)
+  const row = asRecord(Array.isArray(payload) ? payload[0] : payload)
+  return {
+    code: toStringValue(firstDefined(row, 'code', 'result_code'), 'skipped'),
+    targetDataGroupMemberId: toNullableNumber(firstDefined(
+      row,
+      'targetDataGroupMemberId',
+      'target_data_group_member_id',
+      'membershipId',
+      'membership_id'
+    )),
+    insertedInputCount: Math.max(0, Math.floor(toNumberValue(firstDefined(row, 'insertedInputCount', 'inserted_input_count')))),
+    alreadySeenInputCount: Math.max(0, Math.floor(toNumberValue(firstDefined(row, 'alreadySeenInputCount', 'already_seen_input_count')))),
     error: toNullableString(firstDefined(row, 'error', 'errorMessage', 'error_message'))
   }
 }

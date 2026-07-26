@@ -196,6 +196,11 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     updatedAt: row.updated_at as string,
     completedAt: (row.completed_at as string | null) ?? null,
     lastRunAt: (row.last_run_at as string | null) ?? null,
+    dataTargetSourceMode: (row.data_target_source_mode as Campaign['dataTargetSourceMode']) || 'direct',
+    dataGroupId: (row.data_group_id as number | null | undefined) ?? null,
+    provisioningState: (row.provisioning_state as Campaign['provisioningState']) || 'ready',
+    creationBundleId: (row.creation_bundle_id as number | null | undefined) ?? null,
+    creationBundleChildIndex: (row.creation_bundle_child_index as number | null | undefined) ?? null,
     actionName: (row as any).auto_campaign_actions?.name as string | undefined,
     accountName: (row as any).auto_accounts?.name as string | undefined
   }
@@ -241,7 +246,8 @@ export function mapCampaignInputDataFromDB(row: Record<string, unknown>): Campai
     schedule: row.schedule as string | undefined,
     dateAction: row.date_action as string | undefined,
     isDelete: row.is_delete as boolean,
-    createdAt: row.created_at as string
+    createdAt: row.created_at as string,
+    canonicalTargetKey: (row.canonical_target_key as string | null | undefined) ?? null
   }
 }
 

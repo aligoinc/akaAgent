@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
+import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
 interface CampaignStatusController {
@@ -149,6 +149,10 @@ export function registerCampaignHandlers(
     return supabase.listCampaignInputData(campaignId)
   })
 
+  ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_INPUT_DATA_PAGE, async (_, query: CampaignInputDataPageQuery) => {
+    return supabase.listCampaignInputDataPage(query)
+  })
+
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_RELATION_SUMMARIES, async (_, campaignIds: number[]) => {
     return supabase.listCampaignRelationSummaries(campaignIds)
   })
@@ -195,6 +199,10 @@ export function registerCampaignHandlers(
 
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_DETAILS_BY_CAMPAIGN, async (_, campaignId: number) => {
     return supabase.listCampaignDetailsByCampaign(campaignId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_DETAILS_PAGE, async (_, query: CampaignDetailPageQuery) => {
+    return supabase.listCampaignDetailsPage(query)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_LIST_EMAIL_CAMPAIGN_LINK_TRACKINGS, async (_, campaignId: number) => {

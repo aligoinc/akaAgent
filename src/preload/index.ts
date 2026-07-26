@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetListQuery, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, ZaloRuntimeRestartRequiredPayload, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AiGenerateCampaignNameRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizSmsShopListItem, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContentTemplateContentType, ContentTemplateGroup, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, ContactListResult, PageInboxContactListQuery, SaveUploadDatasetRequest, SaveUploadDatasetResult, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, EmailCampaignLinkTrackingSummary, MediaClipboardImageInput, MediaFile, MediaGroup, MediaStorageSettings, MediaUploadResult, CustomerFeedbackSubmitRequest, CustomerFeedbackSubmitResult, Automation, AutomationExecutionListQuery, AutomationExecutionListResult, AutomationInput, AutomationListQuery, AutomationListResult, AutomationOptions, AutomationUpdatedEvent } from '../shared/types'
+import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputDataPageResult, CampaignDetail, CampaignDetailPageQuery, CampaignDetailPageResult, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetListQuery, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, ZaloRuntimeRestartRequiredPayload, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AiGenerateCampaignNameRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizSmsShopListItem, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContentTemplateContentType, ContentTemplateGroup, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, ContactListResult, PageInboxContactListQuery, SaveUploadDatasetRequest, SaveUploadDatasetResult, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, EmailCampaignLinkTrackingSummary, MediaClipboardImageInput, MediaFile, MediaGroup, MediaStorageSettings, MediaUploadResult, CustomerFeedbackSubmitRequest, CustomerFeedbackSubmitResult, Automation, AutomationExecutionListQuery, AutomationExecutionListResult, AutomationInput, AutomationListQuery, AutomationListResult, AutomationOptions, AutomationUpdatedEvent, CampaignAutomationExecutionListQuery, CampaignAutomationExecutionListResult, BindCampaignDataGroupSourceRequest, CampaignCreationBundle, CampaignDataGroupChangePreflight, CampaignDataGroupSource, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroup, DataGroupDataset, DataGroupIngestRequest, DataGroupIngestResult, DataGroupLatestIngestStats, DataGroupListQuery, DataGroupListResult, DataGroupMember, DataGroupMemberIdListResult, DataGroupMemberListQuery, DataGroupMemberListResult, DataGroupMemberMutationRequest, DataGroupMutationResult, MoveDataGroupMembersRequest, SnapshotDataGroupToCampaignRequest, SnapshotDataGroupToCampaignResult, UpdateDataGroupRequest } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
@@ -222,6 +222,9 @@ const electronAPI = {
   listCampaignInputData: (campaignId: number): Promise<CampaignInputData[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CAMPAIGN_INPUT_DATA, campaignId),
 
+  listCampaignInputDataPage: (query: CampaignInputDataPageQuery): Promise<CampaignInputDataPageResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CAMPAIGN_INPUT_DATA_PAGE, query),
+
   listCampaignRelationSummaries: (campaignIds: number[]): Promise<CampaignRelationSummary[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CAMPAIGN_RELATION_SUMMARIES, campaignIds),
 
@@ -257,6 +260,9 @@ const electronAPI = {
 
   listCampaignDetailsByCampaign: (campaignId: number): Promise<CampaignDetail[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CAMPAIGN_DETAILS_BY_CAMPAIGN, campaignId),
+
+  listCampaignDetailsPage: (query: CampaignDetailPageQuery): Promise<CampaignDetailPageResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CAMPAIGN_DETAILS_PAGE, query),
 
   listEmailCampaignLinkTrackings: (campaignId: number): Promise<EmailCampaignLinkTrackingSummary[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_EMAIL_CAMPAIGN_LINK_TRACKINGS, campaignId),
@@ -390,6 +396,11 @@ const electronAPI = {
     query?: AutomationExecutionListQuery
   ): Promise<AutomationExecutionListResult> =>
     ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_DETAILS_LIST, automationId, query),
+
+  listCampaignAutomationDetails: (
+    query: CampaignAutomationExecutionListQuery
+  ): Promise<CampaignAutomationExecutionListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_CAMPAIGN_DETAILS_LIST, query),
 
   onAutomationUpdated: (callback: (event: AutomationUpdatedEvent) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: AutomationUpdatedEvent) => callback(payload)
@@ -603,8 +614,8 @@ const electronAPI = {
   deleteContactGroup: (groupId: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_DELETE, groupId),
 
-  listContactGroupContacts: (groupId: number): Promise<AutoAccountContact[]> =>
-    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_LIST_CONTACTS, groupId),
+  listContactGroupContacts: (groupId: number, accountId: number, contactType?: ContactType): Promise<AutoAccountContact[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_LIST_CONTACTS, groupId, accountId, contactType),
 
   listAkaBizContactTags: (): Promise<AkaBizContactTag[]> =>
     ipcRenderer.invoke(IPC_EVENTS.AKABIZ_CONTACT_TAGS_LIST),
@@ -623,6 +634,82 @@ const electronAPI = {
 
   removeContactsFromGroup: (groupId: number, contactIds: number[]): Promise<ContactGroupMutationResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACT_GROUPS_REMOVE_CONTACTS, groupId, contactIds),
+
+  listDataGroups: (query?: DataGroupListQuery): Promise<DataGroupListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_LIST, query),
+
+  createDataGroup: (request: CreateDataGroupRequest): Promise<DataGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_CREATE, request),
+
+  updateDataGroup: (request: UpdateDataGroupRequest): Promise<DataGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_UPDATE, request),
+
+  deleteDataGroup: (
+    groupId: number,
+    requestId: string,
+    detachAutomations?: boolean
+  ): Promise<DataGroupMutationResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_DELETE, groupId, requestId, detachAutomations),
+
+  duplicateDataGroup: (groupId: number, name: string | null, requestId: string): Promise<DataGroup> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_DUPLICATE, groupId, name, requestId),
+
+  listDataGroupMembers: (query: DataGroupMemberListQuery): Promise<DataGroupMemberListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_LIST_MEMBERS, query),
+
+  listDataGroupMemberIds: (query: DataGroupMemberListQuery): Promise<DataGroupMemberIdListResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_LIST_MEMBER_IDS, query),
+
+  listDataGroupDatasets: (groupId: number): Promise<DataGroupDataset[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_LIST_DATASETS, groupId),
+
+  getDataGroupLatestIngestStats: (groupId: number): Promise<DataGroupLatestIngestStats> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_GET_LATEST_INGEST_STATS, groupId),
+
+  exportDataGroupMembers: (query: DataGroupMemberListQuery): Promise<DataGroupMember[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_EXPORT_MEMBERS, query),
+
+  ingestDataGroup: (request: DataGroupIngestRequest): Promise<DataGroupIngestResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_INGEST, request),
+
+  removeDataGroupMembers: (request: DataGroupMemberMutationRequest): Promise<DataGroupMutationResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_REMOVE_MEMBERS, request),
+
+  moveDataGroupMembers: (request: MoveDataGroupMembersRequest): Promise<DataGroupMutationResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_GROUPS_MOVE_MEMBERS, request),
+
+  bindCampaignDataGroupSource: (request: BindCampaignDataGroupSourceRequest): Promise<CampaignDataGroupSource> =>
+    ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_BIND, request),
+
+  snapshotDataGroupToCampaign: (
+    request: SnapshotDataGroupToCampaignRequest
+  ): Promise<SnapshotDataGroupToCampaignResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_DATA_GROUP_SNAPSHOT_ADD, request),
+
+  preflightCampaignDataGroupChange: (
+    campaignId: number,
+    groupId: number
+  ): Promise<CampaignDataGroupChangePreflight> =>
+    ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_PREFLIGHT_CHANGE, campaignId, groupId),
+
+  createCampaignCreationBundle: (request: CreateCampaignBundleRequest): Promise<CampaignCreationBundle> =>
+    ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_CREATION_BUNDLE_CREATE, request),
+
+  getCampaignDataGroupSource: (campaignId: number): Promise<CampaignDataGroupSource | null> =>
+    ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_GET, campaignId),
+
+  stopCampaignDataGroupSource: (
+    campaignId: number,
+    requestId: string,
+    reason?: string
+  ): Promise<CampaignDataGroupSource> =>
+    ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_STOP, campaignId, requestId, reason),
+
+  reactivateCampaignDataGroupSource: (
+    campaignId: number,
+    requestId: string
+  ): Promise<CampaignDataGroupSource> =>
+    ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_REACTIVATE, campaignId, requestId),
 
   listZaloFriendBlocklists: (accountId: number): Promise<AutoAccountContactGroup[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_LIST, accountId),

@@ -114,6 +114,7 @@ export type CampaignSchedulerLogSink = (entry: CampaignSchedulerLogEntry) => voi
 
 export interface CampaignSchedulerOptions {
   runtimeTarget?: CampaignSchedulerRuntimeTarget
+  runtimeModeRevision?: string | null | (() => string | null)
   maintenanceCoordinator?: DailyMaintenanceBarrier
   logSink?: CampaignSchedulerLogSink
 }
@@ -470,6 +471,7 @@ const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_d
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
+const DATA_GROUP_HARD_END_NOTE = 'Chiến dịch đã hết thời hạn nhận và chạy data mới'
 const SCHEDULER_CONNECTIVITY_RETRY_LOG = '⚠️ Không kết nối được Internet hoặc máy chủ dữ liệu. Scheduler sẽ tự thử lại sau 30 giây.'
 const SCHEDULER_CONNECTIVITY_RECOVERED_LOG = '✅ Đã kết nối lại máy chủ dữ liệu. Scheduler tiếp tục kiểm tra chiến dịch.'
 const SCHEDULER_CONNECTIVITY_ERROR_PATTERNS = [
@@ -589,6 +591,7 @@ export class CampaignScheduler {
   private zaloRuntimeLifecycleGeneration = 0
   private zaloRuntimeClaimsAbandoned = false
   private runtimeTarget: CampaignSchedulerRuntimeTarget
+  private runtimeModeRevision: string | null | (() => string | null)
   private maintenanceCoordinator?: DailyMaintenanceBarrier
   private logSink?: CampaignSchedulerLogSink
 
@@ -608,6 +611,7 @@ export class CampaignScheduler {
     this.zaloRuntime = zaloRuntime
     this.emailRuntime = emailRuntime
     this.runtimeTarget = options.runtimeTarget || 'desktop'
+    this.runtimeModeRevision = options.runtimeModeRevision || null
     this.maintenanceCoordinator = options.maintenanceCoordinator
     this.logSink = options.logSink
   }
@@ -925,6 +929,12 @@ export class CampaignScheduler {
       await this.maintenanceCoordinator?.ensureReady()
       if (!this.running) return
 
+      // Hard end belongs to the DB subscription lifecycle, so sweep it before
+      // looking at eligible/logged-in accounts. This also covers paused campaigns
+      // and accounts that are hidden, deleted or temporarily unlicensed.
+      await this.sweepExpiredDataGroupCampaigns()
+      if (!this.running) return
+
       await this.supabase.enableDueAccountActions().catch(err => {
         console.error('Failed to enable due account actions:', err)
       })
@@ -935,12 +945,29 @@ export class CampaignScheduler {
 
       for (const account of accounts) {
         if (!this.running) break
+
+        // The server owns only eligible QR Zalo accounts. Hard-ended campaigns
+        // outside that runtime are already covered by the tenant-scoped sweep
+        // above, so never route an ineligible account through the narrow server
+        // per-campaign finalizer.
         if (!this.shouldProcessAccountForRuntime(account)) continue
 
         if (this.isSmsAccount(account)) {
           await this.refreshDueMobileManagedCampaignLimitNotes(account)
           continue
         }
+
+        // Finalize an expired Data Group subscription before runtime eligibility
+        // checks. Hard end is a database lifecycle boundary and must not depend on
+        // the account being logged in or having a mounted browser tab.
+        const pendingCampaigns = await this.supabase.getPendingCampaigns(account.id)
+        const campaigns: Campaign[] = []
+        for (const campaign of pendingCampaigns) {
+          if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) continue
+          if (this.isRealtimeCampaignDisabledForRuntime(account, campaign)) continue
+          campaigns.push(campaign)
+        }
+        if (!this.running) break
 
         if (this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)) {
           continue
@@ -950,10 +977,6 @@ export class CampaignScheduler {
           continue
         }
 
-        // 2. Get pending campaigns for this account
-        const campaigns = (await this.supabase.getPendingCampaigns(account.id))
-          .filter(campaign => !this.isRealtimeCampaignDisabledForRuntime(account, campaign))
-        if (!this.running) break
         if (campaigns.length === 0) continue
 
         // Browserless campaigns such as Zalo API flows do not mount a webview tab.
@@ -1111,6 +1134,18 @@ export class CampaignScheduler {
     campaign: Campaign,
     note?: string | null
   ): Promise<boolean> {
+    if (campaign.dataTargetSourceMode === 'data_group') {
+      const finalized = await this.supabase.finalizeDataGroupCampaign(
+        campaign.id,
+        note,
+        this.dataGroupRuntimeContext()
+      )
+      const updated = await this.supabase.getCampaign(campaign.id)
+      if (!updated) throw new Error('Không tìm thấy chiến dịch Nhóm data sau khi finalize atomic.')
+      this.broadcastCampaignUpdate(updated)
+      return finalized.completed && updated.status === 'hoàn thành'
+    }
+
     if (this.claimedServerZaloCampaignIds.has(campaign.id)) {
       const { finalized, campaign: updated } = await this.finalizeClaimedServerZaloCampaign(
         campaign.id,
@@ -1128,7 +1163,73 @@ export class CampaignScheduler {
     return updated.status === 'hoàn thành'
   }
 
+  private isDataGroupCampaignHardEnded(campaign: Campaign, now = Date.now()): boolean {
+    if (campaign.dataTargetSourceMode !== 'data_group' || !campaign.scheduleEndDate) return false
+    const hardEndAt = new Date(campaign.scheduleEndDate).getTime()
+    return !Number.isNaN(hardEndAt) && now >= hardEndAt
+  }
+
+  private async sweepExpiredDataGroupCampaigns(): Promise<void> {
+    const batchSize = 200
+    // A bounded loop drains ordinary backlogs in one tick without letting a very
+    // large tenant monopolize the scheduler forever.
+    for (let batch = 0; batch < 5; batch += 1) {
+      const finalized = await this.supabase.finalizeExpiredDataGroupCampaigns(
+        batchSize,
+        this.dataGroupRuntimeContext()
+      )
+      for (const item of finalized) {
+        const campaign = await this.supabase.getCampaign(item.campaignId)
+        if (campaign) this.broadcastCampaignUpdate(campaign)
+        if (item.result.completed === true) {
+          await this.logCampaignProgress(item.campaignId, `⏹ ${DATA_GROUP_HARD_END_NOTE}`)
+        }
+      }
+      if (finalized.length < batchSize) break
+    }
+  }
+
+  private dataGroupRuntimeContext(): {
+    runtimeTarget: CampaignSchedulerRuntimeTarget
+    runtimeModeRevision: string | null
+  } {
+    const runtimeModeRevision = typeof this.runtimeModeRevision === 'function'
+      ? this.runtimeModeRevision()
+      : this.runtimeModeRevision
+    return {
+      runtimeTarget: this.runtimeTarget,
+      runtimeModeRevision: String(runtimeModeRevision || '').trim() || null
+    }
+  }
+
+  /**
+   * Close and settle an expired Data Group campaign through its atomic DB
+   * finalizer. Returning true means callers must not start another target,
+   * even when the finalizer observed an already-running target and therefore
+   * could not complete the campaign in this pass.
+   */
+  private async finalizeDataGroupCampaignAtHardEnd(campaign: Campaign): Promise<boolean> {
+    if (!this.isDataGroupCampaignHardEnded(campaign)) return false
+    const completed = await this.transitionCampaignToCompleted(campaign, DATA_GROUP_HARD_END_NOTE)
+    if (completed) {
+      await this.logCampaignProgress(campaign.id, `⏹ ${DATA_GROUP_HARD_END_NOTE}`)
+    }
+    return true
+  }
+
   private async handleCampaignCompletion(campaign: Campaign): Promise<void> {
+    // A live data-group source is an intake subscription, not a finite snapshot.
+    // The DB finalizer atomically rechecks raced input, source stop/delete and hard end.
+    if (campaign.dataTargetSourceMode === 'data_group') {
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+      } else {
+        await this.logCampaignProgress(campaign.id, `⏳ Chiến dịch "${campaign.name}" đang chờ data mới từ Nhóm data`)
+      }
+      return
+    }
+
     // Check end date
     const now = new Date()
     if (await this.handleZaloRealtimeGroupCompletion(campaign, now)) {
@@ -1940,6 +2041,15 @@ export class CampaignScheduler {
       return
     }
 
+    if (
+      campaign.dataTargetSourceMode === 'data_group' &&
+      !details.some(detail => !detail.isDelete && detail.status === 'chờ xử lý')
+    ) {
+      await this.handleCampaignCompletion(campaign)
+      await this.releaseRunningAccount(account.id)
+      return
+    }
+
     if (this.shouldMaterializeZaloFriendInputData(campaign, details)) {
       details = await this.materializeZaloFriendInputData(account, campaign)
       if (this.isCampaignPauseRequested(campaign.id)) {
@@ -2164,6 +2274,11 @@ export class CampaignScheduler {
         (cur && cur.status === 'tạm dừng')
       ) {
         await this.completePauseAtBoundary(account, campaign)
+        return
+      }
+
+      if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+        await this.releaseRunningAccount(account.id)
         return
       }
 
@@ -2796,6 +2911,13 @@ export class CampaignScheduler {
     let batchIndex = 0
 
     while (true) {
+      // A group-invite workflow owns one batch as its current unit. Let that
+      // unit finish, but never open the next Facebook form after hard end.
+      if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+        await this.releaseRunningAccount(account.id)
+        return
+      }
+
       const cur = await this.supabase.getCampaign(campaign.id)
       if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
         await this.releaseRunningAccount(account.id)
@@ -2845,6 +2967,13 @@ export class CampaignScheduler {
           reason: `Hành động "${actionDescriptor.name}" đang đạt giới hạn`
         })
         break
+      }
+
+      // Limit/quota reads can outlive the schedule boundary. Recheck before
+      // handing any target to the batch workflow.
+      if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+        await this.releaseRunningAccount(account.id)
+        return
       }
 
       const batch = pendingTargets.slice(0, FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE)
@@ -3422,6 +3551,13 @@ export class CampaignScheduler {
       let batchIndex = 0
 
       while (index < details.length) {
+        // Zalo forwarding is atomic per batch. A batch that already entered the
+        // API may finish, but no new batch may be assembled after hard end.
+        if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+          await this.releaseRunningAccount(account.id)
+          return
+        }
+
         const loopRuntimeStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (loopRuntimeStopReason) {
           if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
@@ -3475,6 +3611,12 @@ export class CampaignScheduler {
         let stopAfterInvalidTarget = false
 
         while (index < details.length && batch.length < capacity.capacity) {
+          // Target resolution can take long enough to cross the boundary. Stop
+          // building the batch before resolving or reserving another target.
+          if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+            await this.releaseRunningAccount(account.id)
+            return
+          }
           if (this.getZaloRuntimeStopReason(campaign.id)) {
             stoppedBeforeCompletion = true
             break
@@ -3564,6 +3706,13 @@ export class CampaignScheduler {
             note: this.getZaloRuntimeCampaignStopNote(contentStopReason)
           })
           break
+        }
+
+        // Media resolution/AI rewrite may cross hard end. No target in this
+        // batch has reached a Zalo send API yet, so finalize before reserving it.
+        if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+          await this.releaseRunningAccount(account.id)
+          return
         }
 
         if (this.isServerZaloCampaign(account, campaign)) {
@@ -3661,6 +3810,13 @@ export class CampaignScheduler {
             })
           }
           break
+        }
+
+        // The current batch has been fully recorded. Check hard end before a
+        // delay or the next batch so no later target starts past the boundary.
+        if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+          await this.releaseRunningAccount(account.id)
+          return
         }
 
         if (index < details.length) {
@@ -10345,7 +10501,9 @@ export class CampaignScheduler {
       await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
       this.throwIfZaloRuntimeStopping(campaign.id)
       const inputDataId = Number((options.inputData as Record<string, unknown> | undefined)?.id)
-      if (Number.isFinite(inputDataId) && inputDataId > 0) {
+      // Data Group inputs are an immutable delivery snapshot. The resolved Zalo UID/name
+      // belongs to the execution result/contact catalog, not back in the canonical ledger.
+      if (campaign.dataTargetSourceMode !== 'data_group' && Number.isFinite(inputDataId) && inputDataId > 0) {
         const nextName = target.displayName || target.originalName || ''
         await this.supabase.updateCampaignInputData(inputDataId, {
           name: nextName || undefined,

@@ -18,9 +18,11 @@ import {
   ZaloLabelOption
 } from '../../../shared/types'
 import { normalizeVietnamMobilePhone } from '../../../shared/phone'
+import { randomUUID } from 'crypto'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountContactDatasetFromDB, mapAccountContactFromDB, mapAccountContactGroupFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
+import * as dataGroupRepo from './dataGroupRepository'
 
 interface UpsertContactsOptions {
   markMissingDeleted?: boolean
@@ -1012,31 +1014,30 @@ async function resolveContactDatasetContactIds(
 }
 
 async function resolveDataGroupContactIds(
-  accountId: number,
+  _accountId: number,
   staffId: number,
-  contactType: ContactType | undefined,
+  _contactType: ContactType | undefined,
   value: unknown
 ): Promise<Set<number> | null> {
   const groupId = normalizeContactGroupId(value)
   if (groupId === null) return null
-  if (!contactType) {
-    throw new Error('Không thể lọc nhóm data khi chưa xác định loại data.')
-  }
+  const user = requireCurrentUser()
 
   const { data: group, error: groupError } = await client()
     .from('auto_account_contact_groups')
     .select('id')
     .eq('id', groupId)
     .eq('staff_id', staffId)
-    .eq('account_id', accountId)
-    .eq('contact_type', contactType)
+    .eq('organization_id', user.organizationId)
+    .is('account_id', null)
+    .is('contact_type', null)
     .eq('purpose', CONTACT_GROUP_PURPOSE_DATA)
     .eq('is_delete', false)
     .maybeSingle()
 
   if (groupError) throw new Error(`Failed to validate contact group: ${groupError.message}`)
   if (!group) {
-    throw new Error('Nhóm data không tồn tại hoặc không thuộc tài khoản và loại data hiện tại.')
+    throw new Error('Nhóm data không tồn tại hoặc không thuộc phạm vi quản lý hiện tại.')
   }
 
   const contactIds = new Set<number>()
@@ -1046,6 +1047,7 @@ async function resolveDataGroupContactIds(
       .from('auto_account_contact_group_members')
       .select('id, contact_id')
       .eq('group_id', groupId)
+      .eq('is_delete', false)
       .order('id', { ascending: true })
       .range(from, from + CONTACT_LIST_FETCH_CHUNK - 1)
 
@@ -3084,6 +3086,7 @@ async function getContactGroup(
     .select('*')
     .eq('id', groupId)
     .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
     .eq('purpose', purpose)
     .eq('is_delete', false)
     .single()
@@ -3092,18 +3095,30 @@ async function getContactGroup(
   return mapAccountContactGroupFromDB(data)
 }
 
-async function getActiveContactIds(contactIds: number[], staffId: number): Promise<Set<number>> {
+async function getActiveContactIds(
+  contactIds: number[],
+  staffId: number,
+  organizationId: number,
+  accountId?: number,
+  contactType?: ContactType
+): Promise<Set<number>> {
   const ids = uniqueIds(contactIds)
   if (ids.length === 0) return new Set()
 
   const activeIds = new Set<number>()
   for (const chunk of chunkArray(ids, CONTACT_LIST_FETCH_CHUNK)) {
-    const { data, error } = await client()
+    let query = client()
       .from('auto_account_contacts')
       .select('id')
       .in('id', chunk)
       .eq('staff_id', staffId)
+      .eq('organization_id', organizationId)
       .eq('is_delete', false)
+
+    if (accountId !== undefined) query = query.eq('account_id', accountId)
+    if (contactType) query = query.eq('contact_type', contactType)
+
+    const { data, error } = await query
 
     if (error) throw new Error(`Failed to list active contacts: ${error.message}`)
     for (const row of data || []) activeIds.add(row.id as number)
@@ -3120,19 +3135,29 @@ export async function listContactGroups(
   let query = client()
     .from('auto_account_contact_groups')
     .select('*')
-    .eq('account_id', accountId)
     .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
     .eq('purpose', purpose)
     .eq('is_delete', false)
 
-  if (contactType) query = query.eq('contact_type', contactType)
+  if (purpose === CONTACT_GROUP_PURPOSE_DATA) {
+    query = query.is('account_id', null).is('contact_type', null)
+  } else {
+    query = query.eq('account_id', accountId)
+    if (contactType) query = query.eq('contact_type', contactType)
+  }
 
   const { data, error } = await query
     .order('name', { ascending: true })
 
   if (error) throw new Error(`Failed to list contact groups: ${error.message}`)
 
-  const groups = (data || []).map(row => mapAccountContactGroupFromDB(row))
+  const groups = (data || []).map(row => {
+    const mapped = mapAccountContactGroupFromDB(row)
+    return purpose === CONTACT_GROUP_PURPOSE_DATA
+      ? { ...mapped, accountId, contactType: contactType || 'campaign_input' as ContactType }
+      : mapped
+  })
   if (groups.length === 0) return groups
 
   const groupIds = groups.map(group => group.id)
@@ -3140,12 +3165,16 @@ export async function listContactGroups(
     .from('auto_account_contact_group_members')
     .select('group_id, contact_id')
     .in('group_id', groupIds)
+    .eq('is_delete', false)
 
   if (memberError) throw new Error(`Failed to list contact group members: ${memberError.message}`)
 
   const activeContactIds = await getActiveContactIds(
     (members || []).map(row => row.contact_id as number),
-    u.staffId
+    u.staffId,
+    u.organizationId,
+    purpose === CONTACT_GROUP_PURPOSE_DATA ? accountId : undefined,
+    purpose === CONTACT_GROUP_PURPOSE_DATA ? contactType : undefined
   )
   const counts = new Map<number, number>()
   for (const member of members || []) {
@@ -3170,6 +3199,26 @@ export async function createContactGroup(
   const u = requireCurrentUser()
   const normalizedName = normalizeGroupName(name)
   if (!normalizedName) throw new Error('Vui lòng nhập tên nhóm.')
+
+  if (purpose === CONTACT_GROUP_PURPOSE_DATA) {
+    const group = await dataGroupRepo.createDataGroup({
+      name: normalizedName,
+      requestId: randomUUID()
+    })
+    return {
+      id: group.id,
+      accountId,
+      contactType,
+      purpose,
+      name: group.name,
+      contactCount: group.activeMembershipCount,
+      isDelete: group.isDelete,
+      staffId: group.staffId,
+      organizationId: group.organizationId,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt
+    }
+  }
 
   const { data, error } = await client()
     .from('auto_account_contact_groups')
@@ -3203,6 +3252,23 @@ export async function updateContactGroup(
   const normalizedName = normalizeGroupName(name)
   if (!normalizedName) throw new Error('Vui lòng nhập tên nhóm.')
 
+  if (purpose === CONTACT_GROUP_PURPOSE_DATA) {
+    const group = await dataGroupRepo.updateDataGroup({ groupId, name: normalizedName })
+    return {
+      id: group.id,
+      accountId: 0,
+      contactType: 'campaign_input',
+      purpose,
+      name: group.name,
+      contactCount: group.activeMembershipCount,
+      isDelete: group.isDelete,
+      staffId: group.staffId,
+      organizationId: group.organizationId,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt
+    }
+  }
+
   const { data, error } = await client()
     .from('auto_account_contact_groups')
     .update({
@@ -3227,6 +3293,10 @@ export async function deleteContactGroup(
   groupId: number,
   purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
 ): Promise<void> {
+  if (purpose === CONTACT_GROUP_PURPOSE_DATA) {
+    await dataGroupRepo.deleteDataGroup(groupId, randomUUID())
+    return
+  }
   const u = requireCurrentUser()
   await getContactGroup(groupId, purpose)
   const { error } = await client()
@@ -3240,11 +3310,19 @@ export async function deleteContactGroup(
     .eq('purpose', purpose)
 
   if (error) throw new Error(`Failed to delete contact group: ${error.message}`)
+
+  const { error: memberError } = await client()
+    .from('auto_account_contact_group_members')
+    .update({ is_delete: true, updated_at: new Date().toISOString() })
+    .eq('group_id', groupId)
+    .eq('is_delete', false)
+  if (memberError) throw new Error(`Failed to delete contact group members: ${memberError.message}`)
 }
 
 export async function listContactGroupContacts(
   groupId: number,
-  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA
+  purpose: ContactGroupPurpose = CONTACT_GROUP_PURPOSE_DATA,
+  context?: { accountId: number; contactType?: ContactType }
 ): Promise<AutoAccountContact[]> {
   const u = requireCurrentUser()
   const group = await getContactGroup(groupId, purpose)
@@ -3256,6 +3334,7 @@ export async function listContactGroupContacts(
       .from('auto_account_contact_group_members')
       .select('contact_id')
       .eq('group_id', groupId)
+      .eq('is_delete', false)
       .range(memberFrom, memberFrom + CONTACT_LIST_FETCH_CHUNK - 1)
 
     if (memberError) throw new Error(`Failed to list contact group members: ${memberError.message}`)
@@ -3271,15 +3350,28 @@ export async function listContactGroupContacts(
   const contactChunkSize = 1000
   for (let i = 0; i < contactIds.length; i += contactChunkSize) {
     const chunk = contactIds.slice(i, i + contactChunkSize)
-    const { data, error } = await client()
+    let contactQuery = client()
       .from('auto_account_contacts')
       .select('*')
       .in('id', chunk)
-      .eq('account_id', group.accountId)
-      .eq('contact_type', group.contactType)
       .eq('staff_id', u.staffId)
+      .eq('organization_id', u.organizationId)
       .eq('is_delete', false)
       .order('name', { ascending: true })
+
+    if (purpose === CONTACT_GROUP_PURPOSE_DATA) {
+      if (!context || !Number.isSafeInteger(context.accountId) || context.accountId <= 0) {
+        throw new Error('Thiếu phạm vi tài khoản khi đọc nhóm data từ API danh bạ cũ.')
+      }
+      contactQuery = contactQuery.eq('account_id', context.accountId)
+      if (context.contactType) contactQuery = contactQuery.eq('contact_type', context.contactType)
+    } else {
+      contactQuery = contactQuery
+        .eq('account_id', group.accountId)
+        .eq('contact_type', group.contactType)
+    }
+
+    const { data, error } = await contactQuery
 
     if (error) throw new Error(`Failed to list contacts in group: ${error.message}`)
     rows.push(...(data || []))
@@ -3299,6 +3391,21 @@ export async function addContactsToGroup(
   const group = await getContactGroup(groupId, purpose)
   const ids = uniqueIds(contactIds)
   if (ids.length === 0) return { success: true, count: 0 }
+
+  if (purpose === CONTACT_GROUP_PURPOSE_DATA) {
+    const result = await dataGroupRepo.ingestDataGroup({
+      requestId: randomUUID(),
+      groupId,
+      kind: 'scan',
+      rows: ids.map(contactId => ({ contactId })),
+      sourceAccountId: group.accountId || null,
+      sourceName: 'Quét danh bạ'
+    })
+    return {
+      success: true,
+      count: result.insertedMembershipCount + result.reactivatedMembershipCount
+    }
+  }
 
   const validIdSet = new Set<number>()
   for (const chunk of chunkArray(ids, CONTACT_LIST_FETCH_CHUNK)) {
@@ -3355,10 +3462,32 @@ export async function removeContactsFromGroup(
   const ids = uniqueIds(contactIds)
   if (ids.length === 0) return { success: true, count: 0 }
 
+  if (purpose === CONTACT_GROUP_PURPOSE_DATA) {
+    const { data: memberships, error: membershipError } = await client()
+      .from('auto_account_contact_group_members')
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('is_delete', false)
+      .in('contact_id', ids)
+    if (membershipError) throw new Error(`Failed to resolve data group memberships: ${membershipError.message}`)
+    const membershipIds = uniqueIds((memberships || []).map(row => row.id as number))
+    if (membershipIds.length === 0) return { success: true, count: 0 }
+    const result = await dataGroupRepo.removeDataGroupMembers({
+      groupId,
+      membershipIds,
+      requestId: randomUUID()
+    })
+    return { success: result.success, count: result.count }
+  }
+
   const { data, error } = await client()
     .from('auto_account_contact_group_members')
-    .delete()
+    .update({
+      is_delete: true,
+      updated_at: new Date().toISOString()
+    })
     .eq('group_id', groupId)
+    .eq('is_delete', false)
     .in('contact_id', ids)
     .select('id')
 
@@ -3425,25 +3554,29 @@ export async function addFriendsToZaloFriendBlocklist(
 
   const { data: existing, error: existingError } = await client()
     .from('auto_account_contact_group_members')
-    .select('contact_id')
+    .select('contact_id, is_delete')
     .eq('group_id', groupId)
     .in('contact_id', validIds)
 
   if (existingError) throw new Error(`Failed to list existing Zalo friend blocklist members: ${existingError.message}`)
 
-  const existingIds = new Set((existing || []).map(row => row.contact_id as number))
-  const idsToInsert = validIds.filter(id => !existingIds.has(id))
-  if (idsToInsert.length === 0) return { success: true, count: 0 }
+  const activeIds = new Set((existing || [])
+    .filter(row => row.is_delete !== true)
+    .map(row => row.contact_id as number))
+  const idsToActivate = validIds.filter(id => !activeIds.has(id))
+  if (idsToActivate.length === 0) return { success: true, count: 0 }
 
   const { error } = await client()
     .from('auto_account_contact_group_members')
-    .upsert(idsToInsert.map(contactId => ({
+    .upsert(idsToActivate.map(contactId => ({
       group_id: groupId,
-      contact_id: contactId
-    })), { onConflict: 'group_id,contact_id', ignoreDuplicates: true })
+      contact_id: contactId,
+      is_delete: false,
+      updated_at: new Date().toISOString()
+    })), { onConflict: 'group_id,contact_id' })
 
   if (error) throw new Error(`Failed to add friends to Zalo friend blocklist: ${error.message}`)
-  return { success: true, count: idsToInsert.length }
+  return { success: true, count: idsToActivate.length }
 }
 
 export async function removeFriendsFromZaloFriendBlocklist(
@@ -3467,6 +3600,7 @@ export async function getZaloFriendBlocklistUidSnapshot(
     .from('auto_account_contact_group_members')
     .select('contact_id')
     .eq('group_id', groupId)
+    .eq('is_delete', false)
 
   if (memberError) throw new Error(`Failed to list Zalo friend blocklist members: ${memberError.message}`)
 

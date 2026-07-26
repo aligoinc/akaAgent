@@ -15,6 +15,7 @@ import { renderSmsInputContent, renderVoiceCallInputContent } from '../../shared
 import { normalizeAccountContactUid } from '../data/repositories/accountContactRepository'
 import {
   claimAutomationDetails,
+  ingestAutomationDataGroupResult,
   materializeAutomationDetail,
   recoverStaleAutomationDetails,
   reconcileAutomationEnqueueFailures,
@@ -88,7 +89,10 @@ function getTargetCampaignSnapshot(claim: ClaimedAutomationDetail): JsonRecord {
 
 function getTargetContactType(claim: ClaimedAutomationDetail): ContactType {
   const value = text(firstDefined(claim.configSnapshot, 'targetContactType', 'target_contact_type')) as ContactType
-  return CONTACT_TYPES.has(value) ? value : 'person'
+  if (CONTACT_TYPES.has(value)) return value
+  if (claim.dataType === 'phone') return 'phone'
+  if (claim.dataType === 'email') return 'email'
+  return 'person'
 }
 
 function normalizeAutomationValue(dataType: AutomationDataType, rawValue: unknown): string {
@@ -152,7 +156,13 @@ function buildTargetInput(claim: ClaimedAutomationDetail): JsonRecord {
   }
   if (!target.name) target.name = dataValue
 
-  if (claim.targetActionId === 'sms_send' || claim.targetActionId === 'voice_call') {
+  if (
+    claim.targetCampaignId !== null
+    && (claim.targetActionId === 'sms_send' || claim.targetActionId === 'voice_call')
+  ) {
+    if (claim.targetRowIndex === null) {
+      throw new Error('Không thể xác định thứ tự dữ liệu trong chiến dịch đích.')
+    }
     const campaign = getTargetCampaignSnapshot(claim)
     const inputRow = target as Partial<CampaignInputData>
     const renderInputContent = claim.targetActionId === 'voice_call'
@@ -310,11 +320,33 @@ export class AutomationProcessor {
         return
       }
       if (result.code === 'materialized' || result.code === 'already_materialized') {
+        if (claim.targetCampaignId !== null && claim.targetDataGroupId) {
+          try {
+            await ingestAutomationDataGroupResult(
+              claim.automationDetailId,
+              this.options.repositoryContext
+            )
+          } catch (groupError) {
+            // The A → B materialization already committed. Reconciliation
+            // retries this optional group destination idempotently next cycle.
+            console.warn(
+              `[AutomationProcessor:${this.options.runtimeTarget}] Cannot ingest optional Data Group destination for execution ${claim.automationDetailId}:`,
+              groupError
+            )
+          }
+        }
+        this.emitUpdated(claim)
+        return
+      }
+      if (result.code === 'skipped') {
+        // The DB already settled this execution as a terminal skip (for
+        // example, its Data Group source was stopped or hard-ended). Retrying
+        // here would overwrite that terminal state and could recreate intake.
         this.emitUpdated(claim)
         return
       }
       if (result.code === 'not_claimed') return
-      throw new Error(result.error || 'Không thể thêm dữ liệu vào chiến dịch B.')
+      throw new Error(result.error || 'Không thể chuyển dữ liệu đến đích đã chọn.')
     } catch (error) {
       const skipped = error instanceof AutomationSkippedError
       const terminal = !skipped && claim.attemptCount >= MAX_TRANSIENT_ATTEMPTS

@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { AccountContactListQuery, ContactDatasetListQuery, IPC_EVENTS, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
+import { AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import { ZaloServerClient } from '../../services/zaloServerClient'
@@ -209,8 +209,9 @@ export function registerAccountContactHandlers(
     return supabase.deleteContactGroup(groupId)
   })
 
-  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_LIST_CONTACTS, async (_, groupId: number) => {
-    return supabase.listContactGroupContacts(groupId)
+  ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_LIST_CONTACTS, async (_, groupId: number, accountId: number, contactType?: ContactType) => {
+    await ensureContactAccess(supabase, accountId, contactType)
+    return supabase.listContactGroupContacts(groupId, accountId, contactType)
   })
 
   ipcMain.handle(IPC_EVENTS.AKABIZ_CONTACT_TAGS_LIST, async () => {
@@ -236,6 +237,108 @@ export function registerAccountContactHandlers(
   ipcMain.handle(IPC_EVENTS.CONTACT_GROUPS_REMOVE_CONTACTS, async (_, groupId: number, contactIds: number[]) => {
     return supabase.removeContactsFromGroup(groupId, contactIds)
   })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_LIST, async (_, query: DataGroupListQuery = {}) => {
+    return supabase.listDataGroups(query)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_CREATE, async (_, request: CreateDataGroupRequest) => {
+    return supabase.createDataGroup(request)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_UPDATE, async (_, request: UpdateDataGroupRequest) => {
+    return supabase.updateDataGroup(request)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_DELETE, async (
+    _,
+    groupId: number,
+    requestId: string,
+    detachAutomations?: boolean
+  ) => {
+    return supabase.deleteDataGroup(groupId, requestId, detachAutomations !== false)
+  })
+
+  ipcMain.handle(
+    IPC_EVENTS.DATA_GROUPS_DUPLICATE,
+    async (_, groupId: number, name: string | null, requestId: string) => {
+      return supabase.duplicateDataGroup(groupId, name, requestId)
+    }
+  )
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_LIST_MEMBERS, async (_, query: DataGroupMemberListQuery) => {
+    return supabase.listDataGroupMembers(query)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_LIST_MEMBER_IDS, async (_, query: DataGroupMemberListQuery) => {
+    return supabase.listDataGroupMemberIds(query)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_LIST_DATASETS, async (_, groupId: number) => {
+    return supabase.listDataGroupDatasets(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_GET_LATEST_INGEST_STATS, async (_, groupId: number) => {
+    return supabase.getDataGroupLatestIngestStats(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_EXPORT_MEMBERS, async (_, query: DataGroupMemberListQuery) => {
+    return supabase.exportDataGroupMembers(query)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_INGEST, async (_, request: DataGroupIngestRequest) => {
+    return supabase.ingestDataGroup(request)
+  })
+
+  ipcMain.handle(
+    IPC_EVENTS.DATA_GROUPS_REMOVE_MEMBERS,
+    async (_, request: DataGroupMemberMutationRequest) => supabase.removeDataGroupMembers(request)
+  )
+
+  ipcMain.handle(
+    IPC_EVENTS.DATA_GROUPS_MOVE_MEMBERS,
+    async (_, request: MoveDataGroupMembersRequest) => supabase.moveDataGroupMembers(request)
+  )
+
+  ipcMain.handle(
+    IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_BIND,
+    async (_, request: BindCampaignDataGroupSourceRequest) => supabase.bindCampaignDataGroupSource(request)
+  )
+
+  ipcMain.handle(
+    IPC_EVENTS.CAMPAIGN_DATA_GROUP_SNAPSHOT_ADD,
+    async (_, request: SnapshotDataGroupToCampaignRequest) => supabase.snapshotDataGroupToCampaign(request)
+  )
+
+  ipcMain.handle(
+    IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_PREFLIGHT_CHANGE,
+    async (_, campaignId: number, groupId: number) => (
+      supabase.preflightCampaignDataGroupChange(campaignId, groupId)
+    )
+  )
+
+  ipcMain.handle(
+    IPC_EVENTS.CAMPAIGN_CREATION_BUNDLE_CREATE,
+    async (_, request: CreateCampaignBundleRequest) => supabase.createCampaignCreationBundle(request)
+  )
+
+  ipcMain.handle(IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_GET, async (_, campaignId: number) => {
+    return supabase.getCampaignDataGroupSource(campaignId)
+  })
+
+  ipcMain.handle(
+    IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_STOP,
+    async (_, campaignId: number, requestId: string, reason?: string) => (
+      supabase.stopCampaignDataGroupSource(campaignId, requestId, reason)
+    )
+  )
+
+  ipcMain.handle(
+    IPC_EVENTS.CAMPAIGN_DATA_GROUP_SOURCE_REACTIVATE,
+    async (_, campaignId: number, requestId: string) => (
+      supabase.reactivateCampaignDataGroupSource(campaignId, requestId)
+    )
+  )
 
   ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_LIST, async (_, accountId: number) => {
     await ensureContactAccess(supabase, accountId, 'person')

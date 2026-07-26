@@ -2,15 +2,19 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Database,
+  FolderOpen,
   GitBranch,
   Loader2,
+  Plus,
   Route,
   X
 } from 'lucide-react'
+import type { DataGroup } from '../../../../shared/types'
 import type {
   Automation,
   AutomationCampaignOption,
@@ -24,6 +28,7 @@ import type {
 } from './automationTypes'
 import { getAutomationApi } from './automationTypes'
 import AutomationCampaignCombobox from './AutomationCampaignCombobox'
+import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 import {
   formatAutomationScheduleLabel,
   formatAutomationTriggerLabel,
@@ -48,6 +53,7 @@ interface AutomationFormState {
   dataType: AutomationDataType | ''
   targetCampaignId: string
   targetContactGroupId: string
+  targetDataGroupId: string
   scheduleMode: AutomationScheduleMode
   delayValue: string
   delayUnit: AutomationDelayUnit
@@ -91,7 +97,7 @@ const SCHEDULE_OPTIONS: Array<{
   {
     mode: 'immediate',
     label: 'Chạy ngay',
-    description: 'Dữ liệu đủ điều kiện chạy ngay khi được thêm vào chiến dịch B.'
+    description: 'Dữ liệu đủ điều kiện được chuyển ngay đến các đích đã chọn.'
   },
   {
     mode: 'after_delay',
@@ -107,7 +113,7 @@ const SCHEDULE_OPTIONS: Array<{
 
 const STEPS = [
   { id: 1, label: 'Điều kiện chiến dịch A', icon: GitBranch },
-  { id: 2, label: 'Dữ liệu & chiến dịch B', icon: Database },
+  { id: 2, label: 'Dữ liệu & đích nhận', icon: Database },
   { id: 3, label: 'Thông tin & hoàn tất', icon: Check }
 ] as const
 
@@ -184,6 +190,7 @@ const getInitialState = (automation?: Automation | null): AutomationFormState =>
     dataType: automation?.dataType || '',
     targetCampaignId: automation?.targetCampaignId ? String(automation.targetCampaignId) : '',
     targetContactGroupId: automation?.targetContactGroupId ? String(automation.targetContactGroupId) : '',
+    targetDataGroupId: automation?.targetDataGroupId ? String(automation.targetDataGroupId) : '',
     scheduleMode: automation?.scheduleMode || 'immediate',
     delayValue: legacyDelay.delayValue,
     delayUnit: legacyDelay.delayUnit,
@@ -212,6 +219,12 @@ const isCompletedCampaign = (campaign?: AutomationCampaignOption): boolean => (
   campaign?.status.trim().toLocaleLowerCase('vi-VN') === 'hoàn thành'
 )
 
+const dataGroupCountLabel = (group: DataGroup): string => (
+  group.activeMembershipCount >= 0
+    ? `${group.activeMembershipCount.toLocaleString('vi-VN')} data`
+    : 'Số data chưa tải'
+)
+
 export default function AutomationFormModal({
   mode,
   automation,
@@ -223,18 +236,41 @@ export default function AutomationFormModal({
   const [form, setForm] = useState<AutomationFormState>(() => getInitialState(automation))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [dataGroupMenuOpen, setDataGroupMenuOpen] = useState(false)
+  const [dataGroupActiveIndex, setDataGroupActiveIndex] = useState(0)
+  const [dataGroupPickerOpen, setDataGroupPickerOpen] = useState(false)
+  const [pickedDataGroup, setPickedDataGroup] = useState<DataGroup | null>(() => (
+    automation?.targetDataGroupId && automation.targetDataGroupName
+      ? {
+          id: automation.targetDataGroupId,
+          name: automation.targetDataGroupName,
+          color: '#6366f1',
+          sortOrder: Number.MAX_SAFE_INTEGER,
+          revision: 0,
+          activeMembershipCount: -1,
+          isDelete: false
+        }
+      : null
+  ))
   const dialogRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const errorRef = useRef<HTMLDivElement>(null)
+  const dataGroupComboboxRef = useRef<HTMLDivElement>(null)
   const delayExactTimeFieldId = useId()
   const delayExactTimeHelpId = useId()
+  const destinationHelpId = useId()
+  const dataGroupListboxId = useId()
   const previouslyFocusedRef = useRef<HTMLElement | null>(
     document.activeElement instanceof HTMLElement ? document.activeElement : null
   )
   const onCloseRef = useRef(onClose)
   const savingRef = useRef(saving)
+  const dataGroupMenuOpenRef = useRef(dataGroupMenuOpen)
+  const dataGroupPickerOpenRef = useRef(dataGroupPickerOpen)
   onCloseRef.current = onClose
   savingRef.current = saving
+  dataGroupMenuOpenRef.current = dataGroupMenuOpen
+  dataGroupPickerOpenRef.current = dataGroupPickerOpen
   const showLegacyFixedAt = mode === 'edit' && automation?.scheduleMode === 'fixed_at'
 
   useEffect(() => {
@@ -280,21 +316,42 @@ export default function AutomationFormModal({
     return true
   }), [form.dataType, options.campaigns, sourceCampaign])
 
-  const contactGroups = useMemo(() => {
-    if (!targetCampaign || !form.dataType) return []
-    const expectedContactType = targetCampaign.contactTypeByDataType?.[form.dataType]
-      || (form.dataType === 'phone' ? 'phone' : form.dataType === 'email' ? 'email' : 'person')
-    return options.contactGroups.filter(group => (
-      group.accountId === targetCampaign.accountId && group.contactType === expectedContactType
+  const dataGroupOptions = useMemo(() => {
+    const groups = [...options.dataGroups]
+    if (pickedDataGroup && !groups.some(group => group.id === pickedDataGroup.id)) {
+      groups.push(pickedDataGroup)
+    }
+    return groups.sort((left, right) => (
+      left.sortOrder - right.sortOrder
+      || left.name.localeCompare(right.name, 'vi')
+      || left.id - right.id
     ))
-  }, [form.dataType, options.contactGroups, targetCampaign])
+  }, [options.dataGroups, pickedDataGroup])
+
+  const selectedDataGroup = useMemo(() => {
+    const selectedId = Number(form.targetDataGroupId)
+    if (!Number.isFinite(selectedId) || selectedId <= 0) return null
+    return dataGroupOptions.find(group => group.id === selectedId)
+      || (pickedDataGroup?.id === selectedId ? pickedDataGroup : null)
+  }, [dataGroupOptions, form.targetDataGroupId, pickedDataGroup])
+  const selectedDestinationNames = useMemo(() => [
+    targetCampaign?.name,
+    selectedDataGroup?.name
+  ].filter((name): name is string => Boolean(name)), [selectedDataGroup, targetCampaign])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (dataGroupPickerOpenRef.current) return
+        if (dataGroupMenuOpenRef.current) {
+          event.preventDefault()
+          setDataGroupMenuOpen(false)
+          return
+        }
         if (!savingRef.current) onCloseRef.current()
         return
       }
+      if (dataGroupPickerOpenRef.current) return
       if (event.key !== 'Tab' || !dialogRef.current) return
       const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
         'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -326,15 +383,76 @@ export default function AutomationFormModal({
 
   useEffect(() => {
     setError('')
+    setDataGroupMenuOpen(false)
     const focusTimer = window.setTimeout(() => {
       contentRef.current?.querySelector<HTMLElement>('.automation-form-section')?.focus()
     }, 0)
     return () => window.clearTimeout(focusTimer)
   }, [step])
 
+  useEffect(() => {
+    if (!dataGroupMenuOpen) return
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!dataGroupComboboxRef.current?.contains(event.target as Node)) {
+        setDataGroupMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [dataGroupMenuOpen])
+
   const setField = <K extends keyof AutomationFormState>(key: K, value: AutomationFormState[K]) => {
     setForm(previous => ({ ...previous, [key]: value }))
     if (error) setError('')
+  }
+
+  const selectDataGroup = (group: DataGroup | null) => {
+    setForm(previous => ({ ...previous, targetDataGroupId: group ? String(group.id) : '' }))
+    if (group) setPickedDataGroup(group)
+    setDataGroupMenuOpen(false)
+    setError('')
+  }
+
+  const openDataGroupMenu = () => {
+    const selectedIndex = selectedDataGroup
+      ? dataGroupOptions.findIndex(group => group.id === selectedDataGroup.id) + 1
+      : 0
+    setDataGroupActiveIndex(Math.max(0, selectedIndex))
+    setDataGroupMenuOpen(previous => !previous)
+  }
+
+  const handleDataGroupKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const optionCount = dataGroupOptions.length + 1
+    if (event.key === 'Escape' && dataGroupMenuOpen) {
+      event.preventDefault()
+      event.stopPropagation()
+      setDataGroupMenuOpen(false)
+      return
+    }
+    if (event.key === 'Tab') {
+      setDataGroupMenuOpen(false)
+      return
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!dataGroupMenuOpen) {
+        openDataGroupMenu()
+        return
+      }
+      const direction = event.key === 'ArrowDown' ? 1 : -1
+      setDataGroupActiveIndex(previous => (previous + direction + optionCount) % optionCount)
+      return
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault()
+      setDataGroupMenuOpen(true)
+      setDataGroupActiveIndex(event.key === 'Home' ? 0 : optionCount - 1)
+      return
+    }
+    if ((event.key === 'Enter' || event.key === ' ') && dataGroupMenuOpen) {
+      event.preventDefault()
+      selectDataGroup(dataGroupActiveIndex === 0 ? null : dataGroupOptions[dataGroupActiveIndex - 1])
+    }
   }
 
   const handleSourceChange = (value: string) => {
@@ -352,7 +470,8 @@ export default function AutomationFormModal({
         triggerKeys: [],
         dataType: nextDataType,
         targetCampaignId: keepTarget ? previous.targetCampaignId : '',
-        targetContactGroupId: keepTarget ? previous.targetContactGroupId : ''
+        targetContactGroupId: keepTarget ? previous.targetContactGroupId : '',
+        targetDataGroupId: previous.targetDataGroupId
       }
     })
     setError('')
@@ -368,7 +487,8 @@ export default function AutomationFormModal({
         ...previous,
         dataType: value,
         targetCampaignId: keepTarget ? previous.targetCampaignId : '',
-        targetContactGroupId: keepTarget ? previous.targetContactGroupId : ''
+        targetContactGroupId: keepTarget ? previous.targetContactGroupId : '',
+        targetDataGroupId: previous.targetDataGroupId
       }
     })
     setError('')
@@ -412,13 +532,17 @@ export default function AutomationFormModal({
       if (!sourceCampaign.dataTypes.includes(form.dataType)) return 'Chiến dịch A không hỗ trợ loại dữ liệu đã chọn.'
     }
     if (targetStep === 2) {
-      if (!targetCampaign) return 'Vui lòng chọn chiến dịch B.'
-      if (targetCampaign.id === sourceCampaign?.id) return 'Chiến dịch A và B phải là hai chiến dịch khác nhau.'
-      if (!form.dataType || !targetCampaign.dataTypes.includes(form.dataType)) {
-        return 'Chiến dịch A và B phải dùng cùng một loại dữ liệu.'
+      if (!targetCampaign && !selectedDataGroup) {
+        return 'Vui lòng chọn ít nhất một đích: Chiến dịch đích hoặc Nhóm data.'
       }
-      if (form.dataType === 'zalo_uid' && sourceCampaign?.accountId !== targetCampaign.accountId) {
-        return 'Dữ liệu UID Zalo chỉ được chuyển giữa hai chiến dịch cùng tài khoản Zalo.'
+      if (targetCampaign) {
+        if (targetCampaign.id === sourceCampaign?.id) return 'Chiến dịch A và B phải là hai chiến dịch khác nhau.'
+        if (!form.dataType || !targetCampaign.dataTypes.includes(form.dataType)) {
+          return 'Chiến dịch A và B phải dùng cùng một loại dữ liệu.'
+        }
+        if (form.dataType === 'zalo_uid' && sourceCampaign?.accountId !== targetCampaign.accountId) {
+          return 'Dữ liệu UID Zalo chỉ được chuyển giữa hai chiến dịch cùng tài khoản Zalo.'
+        }
       }
       if (form.scheduleMode === 'after_delay') {
         const delayValue = Number(form.delayValue)
@@ -495,8 +619,9 @@ export default function AutomationFormModal({
         sourceCampaignId: Number(form.sourceCampaignId),
         triggerConditions: selectedTriggers,
         dataType: form.dataType as AutomationDataType,
-        targetCampaignId: Number(form.targetCampaignId),
+        targetCampaignId: targetCampaign?.id ?? null,
         targetContactGroupId: form.targetContactGroupId ? Number(form.targetContactGroupId) : null,
+        targetDataGroupId: selectedDataGroup?.id ?? null,
         scheduleMode: form.scheduleMode,
         delayValue: form.scheduleMode === 'after_delay' ? Number(form.delayValue) : null,
         delayUnit: form.scheduleMode === 'after_delay' ? form.delayUnit : null,
@@ -586,7 +711,7 @@ export default function AutomationFormModal({
                   <span className="automation-section-icon"><GitBranch size={18} /></span>
                   <div>
                     <h3 id="automation-step-one-title">Khi chiến dịch A có kết quả</h3>
-                    <p>Chọn chiến dịch nguồn và các trạng thái detail sẽ kích hoạt tự động hóa.</p>
+                    <p>Chọn chiến dịch nguồn và các trạng thái kết quả sẽ kích hoạt tự động hóa.</p>
                   </div>
                 </div>
 
@@ -658,12 +783,17 @@ export default function AutomationFormModal({
             )}
 
             {step === 2 && (
-              <section className="automation-form-section" aria-labelledby="automation-step-two-title" tabIndex={-1}>
+              <section
+                className="automation-form-section"
+                aria-labelledby="automation-step-two-title"
+                aria-describedby={destinationHelpId}
+                tabIndex={-1}
+              >
                 <div className="automation-section-heading">
                   <span className="automation-section-icon"><Route size={18} /></span>
                   <div>
-                    <h3 id="automation-step-two-title">Thì thêm dữ liệu vào chiến dịch B</h3>
-                    <p>Danh sách chỉ hiển thị chiến dịch tương thích với {form.dataType ? DATA_TYPE_LABELS[form.dataType] : 'loại dữ liệu đã chọn'}.</p>
+                    <h3 id="automation-step-two-title">Thì chuyển dữ liệu đến đích</h3>
+                    <p>Chọn chiến dịch đích, Nhóm data, hoặc chọn cả hai.</p>
                   </div>
                 </div>
 
@@ -677,14 +807,18 @@ export default function AutomationFormModal({
                   <span className="automation-route-data">{form.dataType ? DATA_TYPE_LABELS[form.dataType] : 'Dữ liệu'}</span>
                   <ChevronRight size={19} />
                   <div>
-                    <small>Chiến dịch B</small>
-                    <strong>{targetCampaign?.name || 'Chưa chọn'}</strong>
-                    <span>{targetCampaign ? campaignMeta(targetCampaign) : ''}</span>
+                    <small>Đích nhận</small>
+                    <strong>{selectedDestinationNames.join(' + ') || 'Chưa chọn'}</strong>
+                    <span>
+                      {targetCampaign ? campaignMeta(targetCampaign) : ''}
+                      {targetCampaign && selectedDataGroup ? ' · ' : ''}
+                      {selectedDataGroup ? dataGroupCountLabel(selectedDataGroup) : ''}
+                    </span>
                   </div>
                 </div>
 
                 <div className="automation-field">
-                  <span>Chiến dịch B <b>*</b></span>
+                  <span>Chiến dịch đích <small>(không bắt buộc)</small></span>
                   <AutomationCampaignCombobox
                     campaigns={targetCampaigns}
                     value={form.targetCampaignId}
@@ -693,43 +827,149 @@ export default function AutomationFormModal({
                       setForm(previous => ({ ...previous, targetCampaignId: campaignId, targetContactGroupId: '' }))
                       setError('')
                     }}
-                    ariaLabel="Tìm và chọn chiến dịch B"
+                    ariaLabel="Tìm và chọn chiến dịch đích"
                     placeholder="Chọn hoặc tìm chiến dịch nhận dữ liệu"
-                    emptyText="Không có chiến dịch B tương thích."
-                    noResultsText="Không tìm thấy chiến dịch B phù hợp."
-                    required
+                    emptyText="Không có chiến dịch đích tương thích."
+                    noResultsText="Không tìm thấy chiến dịch đích phù hợp."
                   />
                   {targetCampaigns.length === 0 && (
-                    <small className="automation-field-note">Không có chiến dịch B tương thích. Hãy tạo một chiến dịch dùng cùng nhóm dữ liệu.</small>
+                    <small className="automation-field-note">Không có chiến dịch đích tương thích; bạn vẫn có thể chỉ chọn Nhóm data.</small>
                   )}
                 </div>
 
-                <label className="automation-field">
-                  <span>Thêm vào nhóm dữ liệu <small>(không bắt buộc)</small></span>
-                  <select
-                    value={form.targetContactGroupId}
-                    onChange={event => setField('targetContactGroupId', event.target.value)}
-                    disabled={!targetCampaign}
-                  >
-                    <option value="">Không thêm vào nhóm</option>
-                    {contactGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
-                  </select>
-                  {targetCampaign && contactGroups.length === 0 && (
-                    <small className="automation-field-note">Tài khoản chiến dịch B chưa có nhóm dữ liệu phù hợp.</small>
+                <div className="automation-field automation-data-group-field">
+                  <div className="automation-data-group-field-heading">
+                    <span>Nhóm data đích <small>(không bắt buộc)</small></span>
+                    <button
+                      type="button"
+                      className="automation-data-group-manage-button"
+                      onClick={() => {
+                        setDataGroupMenuOpen(false)
+                        setDataGroupPickerOpen(true)
+                      }}
+                    >
+                      <Plus size={14} /> Thêm nhóm
+                    </button>
+                  </div>
+
+                  <div ref={dataGroupComboboxRef} className="automation-data-group-combobox">
+                    <div className={`automation-data-group-control ${dataGroupMenuOpen ? 'is-open' : ''}`}>
+                      <button
+                        type="button"
+                        className={`automation-data-group-trigger ${selectedDataGroup ? 'has-value' : ''}`}
+                        role="combobox"
+                        aria-label="Chọn Nhóm data nhận thêm dữ liệu"
+                        aria-haspopup="listbox"
+                        aria-expanded={dataGroupMenuOpen}
+                        aria-controls={dataGroupMenuOpen ? dataGroupListboxId : undefined}
+                        aria-activedescendant={dataGroupMenuOpen ? `${dataGroupListboxId}-option-${dataGroupActiveIndex}` : undefined}
+                        onClick={openDataGroupMenu}
+                        onKeyDown={handleDataGroupKeyDown}
+                      >
+                        {selectedDataGroup ? (
+                          <>
+                            <span
+                              className="automation-data-group-color"
+                              style={{ backgroundColor: selectedDataGroup.color || 'var(--accent-primary)' }}
+                              aria-hidden="true"
+                            />
+                            <span className="automation-data-group-value-copy">
+                              <strong>{selectedDataGroup.name}</strong>
+                              <small>{dataGroupCountLabel(selectedDataGroup)}</small>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <FolderOpen size={17} className="automation-data-group-empty-icon" aria-hidden="true" />
+                            <span className="automation-data-group-placeholder">Không thêm vào nhóm</span>
+                          </>
+                        )}
+                        <ChevronDown size={18} className="automation-data-group-chevron" aria-hidden="true" />
+                      </button>
+                      {selectedDataGroup && (
+                        <button
+                          type="button"
+                          className="automation-data-group-clear"
+                          title="Bỏ chọn nhóm"
+                          aria-label={`Bỏ chọn nhóm ${selectedDataGroup.name}`}
+                          onClick={event => {
+                            event.stopPropagation()
+                            selectDataGroup(null)
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {dataGroupMenuOpen && (
+                      <div id={dataGroupListboxId} className="automation-data-group-menu" role="listbox" aria-label="Nhóm data">
+                        <button
+                          id={`${dataGroupListboxId}-option-0`}
+                          type="button"
+                          role="option"
+                          aria-selected={!selectedDataGroup}
+                          className={`automation-data-group-option is-none ${dataGroupActiveIndex === 0 ? 'is-active' : ''} ${!selectedDataGroup ? 'is-selected' : ''}`}
+                          onMouseEnter={() => setDataGroupActiveIndex(0)}
+                          onClick={() => selectDataGroup(null)}
+                        >
+                          <X size={15} aria-hidden="true" />
+                          <span>Không thêm vào nhóm</span>
+                          {!selectedDataGroup && <Check size={16} className="automation-data-group-option-check" aria-hidden="true" />}
+                        </button>
+                        <div className="automation-data-group-menu-divider" />
+                        <div className="automation-data-group-menu-label">Chọn nhóm data</div>
+                        {dataGroupOptions.length > 0 ? dataGroupOptions.map((group, index) => {
+                          const optionIndex = index + 1
+                          const isSelected = selectedDataGroup?.id === group.id
+                          return (
+                            <button
+                              id={`${dataGroupListboxId}-option-${optionIndex}`}
+                              key={group.id}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              className={`automation-data-group-option ${dataGroupActiveIndex === optionIndex ? 'is-active' : ''} ${isSelected ? 'is-selected' : ''}`}
+                              onMouseEnter={() => setDataGroupActiveIndex(optionIndex)}
+                              onClick={() => selectDataGroup(group)}
+                            >
+                              <span
+                                className="automation-data-group-color"
+                                style={{ backgroundColor: group.color || 'var(--accent-primary)' }}
+                                aria-hidden="true"
+                              />
+                              <span className="automation-data-group-option-copy">
+                                <strong>{group.name}</strong>
+                                <small>{dataGroupCountLabel(group)}</small>
+                              </span>
+                              {isSelected && <Check size={16} className="automation-data-group-option-check" aria-hidden="true" />}
+                            </button>
+                          )
+                        }) : (
+                          <div className="automation-data-group-empty">Chưa có Nhóm data.</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {options.dataGroups.length === 0 && (
+                    <small className="automation-field-note">Chưa có Nhóm data. Bạn có thể tạo nhóm trong Quản lý nhóm data.</small>
                   )}
-                </label>
+                </div>
+                <small id={destinationHelpId} className="automation-field-note">
+                  Chọn ít nhất một đích. Có thể chọn đồng thời chiến dịch đích và Nhóm data.
+                </small>
 
                 <div className="automation-schedule-block" aria-labelledby="automation-schedule-title">
                   <div className="automation-schedule-heading">
                     <span className="automation-schedule-heading-icon"><Clock3 size={16} /></span>
                     <div>
-                      <h4 id="automation-schedule-title">Thời gian chạy dữ liệu trong chiến dịch B</h4>
-                      <p>Mỗi dữ liệu chỉ được thêm một lần; lịch này quyết định thời điểm dữ liệu đủ điều kiện được chiến dịch B xử lý.</p>
+                      <h4 id="automation-schedule-title">Thời gian chuyển dữ liệu</h4>
+                      <p>Chiến dịch đích xử lý data theo lịch; quy tắc chỉ có Nhóm data sẽ thêm vào nhóm theo lịch.</p>
                     </div>
                   </div>
 
                   <fieldset className="automation-schedule-fieldset">
-                    <legend className="automation-visually-hidden">Chọn lịch chạy dữ liệu trong chiến dịch B</legend>
+                    <legend className="automation-visually-hidden">Chọn lịch chuyển dữ liệu</legend>
                     <div className="automation-schedule-options">
                       {SCHEDULE_OPTIONS.map(option => (
                         <label
@@ -822,7 +1062,7 @@ export default function AutomationFormModal({
 
                         {form.delayExactTimeEnabled && (
                           <label id={delayExactTimeFieldId} className="automation-delay-exact-time-field">
-                            <span>Giờ chạy dữ liệu B <b>*</b></span>
+                            <span>Giờ chuyển dữ liệu <b>*</b></span>
                             <input
                               type="time"
                               step="60"
@@ -872,7 +1112,7 @@ export default function AutomationFormModal({
 
                 {form.dataType === 'zalo_uid' && (
                   <div className="automation-rule-note">
-                    UID Zalo là dữ liệu theo tài khoản. Hệ thống chỉ cho chọn chiến dịch B cùng tài khoản với chiến dịch A.
+                    UID Zalo là dữ liệu theo tài khoản. Nếu chọn chiến dịch đích, hệ thống chỉ cho chọn chiến dịch cùng tài khoản với chiến dịch A.
                   </div>
                 )}
               </section>
@@ -927,9 +1167,11 @@ export default function AutomationFormModal({
                     <strong>{sourceCampaign?.name || '—'} · {selectedTriggers.map(formatAutomationTriggerLabel).join(', ') || '—'}</strong>
                     <span>Dữ liệu</span>
                     <strong>{form.dataType ? DATA_TYPE_LABELS[form.dataType] : '—'}</strong>
-                    <span>Thực hiện</span>
-                    <strong>Thêm vào {targetCampaign?.name || '—'}</strong>
-                    <span>Lịch chạy dữ liệu B</span>
+                    <span>Chiến dịch đích</span>
+                    <strong>{targetCampaign?.name || 'Không chọn'}</strong>
+                    <span>Nhóm data</span>
+                    <strong>{selectedDataGroup ? `${selectedDataGroup.name} (${dataGroupCountLabel(selectedDataGroup)})` : 'Không thêm vào nhóm'}</strong>
+                    <span>Lịch chuyển dữ liệu</span>
                     <strong className="automation-schedule-summary-value" title={scheduleSummary}>{scheduleSummary}</strong>
                   </div>
                 </div>
@@ -959,6 +1201,16 @@ export default function AutomationFormModal({
           </div>
         </footer>
       </div>
+      {dataGroupPickerOpen && (
+        <DataGroupPickerModal
+          selectedGroupId={form.targetDataGroupId ? Number(form.targetDataGroupId) : null}
+          onSelect={group => {
+            selectDataGroup(group)
+            setDataGroupPickerOpen(false)
+          }}
+          onClose={() => setDataGroupPickerOpen(false)}
+        />
+      )}
     </div>,
     document.body
   )

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import type { AutoAccount, Campaign, CampaignAction, CampaignExtraSettings, CampaignMediaInput } from '../../../../shared/types'
+import { useEffect, useState, type ReactNode } from 'react'
+import type { AutoAccount, Campaign, CampaignAction, CampaignExtraSettings, CampaignMediaInput, DataGroupLatestIngestStats } from '../../../../shared/types'
 import {
   formattedContentToPlainText,
   splitFormattedContentVariants,
@@ -328,6 +328,49 @@ const renderSection = (title: string, rows: InfoRow[]) => {
 }
 
 export default function CampaignInfoView({ campaign, account, action, campaigns, accounts }: CampaignInfoViewProps) {
+  const [dataGroupDisplay, setDataGroupDisplay] = useState<{ name: string; sourceStatus: string } | null>(null)
+  const [dataGroupStats, setDataGroupStats] = useState<DataGroupLatestIngestStats | null>(null)
+
+  useEffect(() => {
+    let disposed = false
+    setDataGroupDisplay(null)
+    setDataGroupStats(null)
+    if (campaign.dataTargetSourceMode !== 'data_group' || !campaign.dataGroupId) {
+      return () => { disposed = true }
+    }
+
+    void Promise.all([
+      window.electronAPI.getCampaignDataGroupSource(campaign.id),
+      (async () => {
+        let offset = 0
+        while (true) {
+          const page = await window.electronAPI.listDataGroups({ offset, limit: 200 })
+          const found = page.groups.find(group => group.id === campaign.dataGroupId)
+          if (found) return found.name
+          offset += page.groups.length
+          if (page.groups.length === 0 || offset >= page.total) return null
+        }
+      })(),
+      window.electronAPI.getDataGroupLatestIngestStats(campaign.dataGroupId).catch(() => null)
+    ]).then(([source, groupName, stats]) => {
+      if (disposed) return
+      setDataGroupStats(stats)
+      setDataGroupDisplay({
+        name: groupName || (source?.stopReason === 'group_deleted' ? 'Nhóm đã xoá' : 'Nhóm data'),
+        sourceStatus: source?.status === 'active'
+          ? 'Đang nhận data mới'
+          : source?.status === 'baselining'
+            ? 'Đang nạp dữ liệu ban đầu'
+            : source?.status === 'stopped'
+              ? 'Đã dừng nhận data mới'
+              : 'Không xác định'
+      })
+    }).catch(() => {
+      if (!disposed) setDataGroupDisplay({ name: 'Nhóm data', sourceStatus: 'Không tải được trạng thái' })
+    })
+
+    return () => { disposed = true }
+  }, [campaign.dataGroupId, campaign.dataTargetSourceMode, campaign.id, campaign.updatedAt])
   const extra = campaign.extraSettings || {}
   const actionId = campaign.actionId
   const isFormattedContent = supportsFormattedContent(actionId) && extra.formattedContentEnabled === true
@@ -580,6 +623,51 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           { label: 'Loại chiến dịch', value: textOrDash(action?.name || campaign.actionName || campaign.actionId) },
           { label: 'Tài khoản', value: textOrDash(account?.name || campaign.accountName) },
           { label: 'Trạng thái', value: campaign.status },
+          {
+            label: 'Nguồn data mục tiêu',
+            value: campaign.dataTargetSourceMode === 'data_group'
+              ? `${dataGroupDisplay?.name || 'Nhóm data'} · đồng bộ tăng dần`
+              : 'Nhập trực tiếp'
+          },
+          {
+            label: 'Nhận data mới',
+            value: dataGroupDisplay?.sourceStatus || 'Đang tải...',
+            hidden: campaign.dataTargetSourceMode !== 'data_group'
+          },
+          {
+            label: 'Trạng thái nguồn',
+            value: campaign.provisioningState === 'staged'
+              ? 'Đang nạp dữ liệu ban đầu'
+              : campaign.provisioningState === 'failed'
+                ? 'Khởi tạo lỗi'
+                : 'Sẵn sàng',
+            hidden: campaign.dataTargetSourceMode !== 'data_group'
+          },
+          {
+            label: 'Membership thô hiện hành',
+            value: dataGroupStats?.activeMembershipCount ?? '-',
+            hidden: campaign.dataTargetSourceMode !== 'data_group'
+          },
+          {
+            label: 'Target phù hợp duy nhất',
+            value: dataGroupStats?.uniqueCompatibleTargetCount ?? '-',
+            hidden: campaign.dataTargetSourceMode !== 'data_group'
+          },
+          {
+            label: 'Campaign input đã tạo (toàn kỳ)',
+            value: dataGroupStats?.campaignInputCount ?? '-',
+            hidden: campaign.dataTargetSourceMode !== 'data_group'
+          },
+          {
+            label: 'Input mới (lần ingest gần nhất)',
+            value: dataGroupStats?.insertedInputCount ?? '-',
+            hidden: campaign.dataTargetSourceMode !== 'data_group'
+          },
+          {
+            label: 'Đã thấy / không tương thích',
+            value: dataGroupStats ? `${dataGroupStats.alreadySeenInputCount} / ${dataGroupStats.incompatibleCount}` : '-',
+            hidden: campaign.dataTargetSourceMode !== 'data_group'
+          },
           { label: 'Ghi chú', value: textOrDash(campaign.note), fullWidth: true },
           { label: 'Ngày tạo', value: formatDateTime(campaign.createdAt) },
           { label: 'Cập nhật', value: formatDateTime(campaign.updatedAt) },

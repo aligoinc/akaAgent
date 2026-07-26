@@ -6,8 +6,13 @@ import {
   CampaignActionLimitSettings,
   CampaignInput,
   CampaignInputData,
+  CampaignInputDataOrigin,
+  CampaignInputDataPageQuery,
+  CampaignInputDataPageResult,
   CampaignInputStatus,
   CampaignDetail,
+  CampaignDetailPageQuery,
+  CampaignDetailPageResult,
   CampaignDetailStatus,
   CreateCampaignDetailInput,
   CampaignRelationSummary,
@@ -19,6 +24,7 @@ import {
   AutoAccountActionStatus,
   BulkUpdateCampaignInputDataStatusResult,
   ContactListResult,
+  actionSupportsDataGroup,
   getCampaignInputDataRequirement,
   isCampaignInputDataValidForAction,
   ZaloRemarketingCustomerListQuery
@@ -28,7 +34,7 @@ import { MAX_SMS_ADVANCED_CONTENT_ITEMS, renderSmsInputContent, renderVoiceCallI
 import { getAdvancedContentItems } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
-import { requireCurrentUser } from '../currentUser'
+import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { formatStoredCampaignLogLine } from '../../../shared/campaignLogFormat'
 import * as accountActionRepo from './accountActionRepository'
 import * as accountRepo from './accountRepository'
@@ -41,6 +47,7 @@ import {
   loadCurrentUserZaloAccountCapabilities,
   loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
+import { randomUUID } from 'node:crypto'
 
 const client = () => getSupabaseClient()
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
@@ -575,16 +582,21 @@ const normalizeDetailInputText = (value: unknown): string | undefined => {
   return text || undefined
 }
 
-async function enrichCampaignDetailsWithInputData(details: CampaignDetail[]): Promise<CampaignDetail[]> {
+async function enrichCampaignDetailsWithInputData(
+  details: CampaignDetail[],
+  expectedCampaignId?: number
+): Promise<CampaignDetail[]> {
   const inputDataIds = uniquePositiveIds(details.map(detail => Number(detail.inputDataId || 0)))
   if (inputDataIds.length === 0) return details
 
   const inputDataById = new Map<number, NonNullable<CampaignDetail['inputData']>>()
   for (const chunk of chunkArray(inputDataIds, 1000)) {
-    const { data, error } = await client()
+    let inputQuery = client()
       .from('auto_campaign_input_data')
       .select('id, name, phone, uid, email')
       .in('id', chunk)
+    if (expectedCampaignId) inputQuery = inputQuery.eq('campaign_id', expectedCampaignId)
+    const { data, error } = await inputQuery
 
     if (error) throw new Error(`Failed to enrich campaign details with input data: ${error.message}`)
     for (const row of data || []) {
@@ -1201,6 +1213,32 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const isSmsCampaign = isMobileManagedSmsCampaignAction(campaign.actionId)
   const extraSettings = clampCampaignExtraSettingsDailyLimits(campaign.extraSettings, campaign.actionId, entitlements)
   assertAdvancedContentPersistenceContract(campaign.actionId, extraSettings)
+  const sourceMode = campaign.dataTargetSourceMode || 'direct'
+  if (sourceMode === 'data_group') {
+    if (!actionSupportsDataGroup(campaign.actionId)) {
+      throw new Error('Hành động này không hỗ trợ nguồn Nhóm data.')
+    }
+    if (!Number.isSafeInteger(campaign.dataGroupId) || Number(campaign.dataGroupId) <= 0) {
+      throw new Error('Vui lòng chọn Nhóm data cho chiến dịch.')
+    }
+  }
+  const creationBundleId = campaign.creationBundleId == null ? null : Math.floor(Number(campaign.creationBundleId))
+  const creationBundleChildIndex = campaign.creationBundleChildIndex == null
+    ? null
+    : Math.floor(Number(campaign.creationBundleChildIndex))
+  if (creationBundleId !== null && creationBundleChildIndex !== null) {
+    const { data: existing, error: existingError } = await client()
+      .from('auto_campaigns')
+      .select('*, auto_campaign_actions(name), auto_accounts(name)')
+      .eq('staff_id', u.staffId)
+      .eq('organization_id', u.organizationId)
+      .eq('creation_bundle_id', creationBundleId)
+      .eq('creation_bundle_child_index', creationBundleChildIndex)
+      .eq('is_delete', false)
+      .maybeSingle()
+    if (existingError) throw new Error(`Failed to resume campaign bundle child: ${existingError.message}`)
+    if (existing) return mapCampaignFromDB(existing)
+  }
   const payload = {
     name: campaign.name,
     action_id: campaign.actionId,
@@ -1220,6 +1258,11 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     images: campaign.images || [],
     log: '',
     note: campaign.note ?? null,
+    data_target_source_mode: sourceMode,
+    data_group_id: sourceMode === 'data_group' ? campaign.dataGroupId : null,
+    provisioning_state: sourceMode === 'data_group' ? 'staged' : 'ready',
+    creation_bundle_id: creationBundleId,
+    creation_bundle_child_index: creationBundleChildIndex,
     staff_id: u.staffId,
     organization_id: u.organizationId
   }
@@ -1384,6 +1427,20 @@ function getMobileContentUpdateFailureMessage(actionId: string, paused: boolean)
 
 export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
+  if (updates.dataTargetSourceMode !== undefined || updates.dataGroupId !== undefined) {
+    const currentCampaign = await getCampaign(id)
+    if (!currentCampaign) throw new Error('Không tìm thấy chiến dịch cần cập nhật.')
+    const nextSourceMode = updates.dataTargetSourceMode ?? currentCampaign.dataTargetSourceMode ?? 'direct'
+    const nextGroupId = updates.dataGroupId !== undefined
+      ? (updates.dataGroupId ?? null)
+      : (currentCampaign.dataGroupId ?? null)
+    if (
+      nextSourceMode !== (currentCampaign.dataTargetSourceMode ?? 'direct') ||
+      nextGroupId !== (currentCampaign.dataGroupId ?? null)
+    ) {
+      throw new Error('Đổi nguồn hoặc Nhóm data phải đi qua thao tác bind nguyên tử của Nhóm data.')
+    }
+  }
   if (updates.accountId !== undefined) {
     const accountId = Math.floor(Number(updates.accountId))
     if (!Number.isSafeInteger(accountId) || accountId <= 0 || !await accountRepo.getAccount(accountId)) {
@@ -1428,6 +1485,8 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   if (updates.images !== undefined) payload.images = updates.images
   if (updates.log !== undefined) payload.log = updates.log
   if (updates.note !== undefined) payload.note = updates.note
+  if (updates.dataTargetSourceMode !== undefined) payload.data_target_source_mode = updates.dataTargetSourceMode
+  if (updates.dataGroupId !== undefined) payload.data_group_id = updates.dataGroupId
   if (isSmsCampaign) {
     payload.schedule_type = 'daily'
     payload.schedule_end_date = null
@@ -1567,7 +1626,11 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
 
   if (errC || !origCamp) throw new Error(`Campaign not found: ${errC?.message}`)
   await ensureCurrentUserCanUseCampaignAction(origCamp.action_id)
-  const skipCloningInputData = shouldSkipCloneCampaignInputData(origCamp.action_id, origCamp.extra_settings)
+  const isDataGroupClone = origCamp.data_target_source_mode === 'data_group'
+    && Number.isSafeInteger(Number(origCamp.data_group_id))
+    && Number(origCamp.data_group_id) > 0
+  const skipCloningInputData = isDataGroupClone
+    || shouldSkipCloneCampaignInputData(origCamp.action_id, origCamp.extra_settings)
 
   const { data: newCamp, error: errInsert } = await client()
     .from('auto_campaigns')
@@ -1590,6 +1653,11 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       images: origCamp.images,
       log: '',
       note: null,
+      data_target_source_mode: isDataGroupClone ? 'data_group' : 'direct',
+      data_group_id: isDataGroupClone ? origCamp.data_group_id : null,
+      provisioning_state: isDataGroupClone ? 'staged' : 'ready',
+      creation_bundle_id: null,
+      creation_bundle_child_index: null,
       staff_id: u.staffId,
       organization_id: u.organizationId
     })
@@ -1682,6 +1750,43 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
     if (errInsertActions) {
       console.warn('Failed to clone campaign input data:', errInsertActions)
     }
+  }
+
+  if (isDataGroupClone) {
+    const auth = requireCurrentUserCredentials()
+    const { error: bindError } = await client().rpc('aka_agent_bind_campaign_data_group_source', {
+      p_staff_id: u.staffId,
+      p_organization_id: u.organizationId,
+      p_request_id: `clone:${id}:${randomUUID()}`,
+      p_campaign_id: newCamp.id,
+      p_group_id: origCamp.data_group_id,
+      p_bundle_id: null,
+      p_auth_username: auth.username,
+      p_auth_password: auth.password
+    })
+    if (bindError) {
+      await client()
+        .from('auto_campaigns')
+        .update({
+          provisioning_state: 'failed',
+          status: 'tạm dừng',
+          note: `Không thể baseline Nhóm data khi nhân bản: ${bindError.message}`
+        })
+        .eq('id', newCamp.id)
+        .eq('staff_id', u.staffId)
+      throw new Error(`Failed to baseline cloned Data Group campaign: ${bindError.message}`)
+    }
+
+    const { data: readyClone, error: readyCloneError } = await client()
+      .from('auto_campaigns')
+      .select('*, auto_campaign_actions(name), auto_accounts(name)')
+      .eq('id', newCamp.id)
+      .eq('staff_id', u.staffId)
+      .single()
+    if (readyCloneError || !readyClone) {
+      throw new Error(`Cloned Data Group campaign was provisioned but could not be reloaded: ${readyCloneError?.message}`)
+    }
+    return mapCampaignFromDB(readyClone)
   }
 
   return mapCampaignFromDB(newCamp)
@@ -1778,6 +1883,7 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
     .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
     .eq('is_delete', false)
+    .eq('provisioning_state', 'ready')
     .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
     .lte('schedule', now.toISOString())
     .or(`daily_stop_time.is.null,daily_stop_time.gte.${currentVietnamTime}`)
@@ -2163,6 +2269,195 @@ export async function listCampaignInputData(campaignId: number): Promise<Campaig
   }
 
   return rows
+}
+
+const nullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const nullableString = (value: unknown): string | null => {
+  const text = typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim()
+  return text || null
+}
+
+function mapCampaignInputDataOrigin(value: unknown): CampaignInputDataOrigin {
+  const row = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+  const numberArray = (candidate: unknown) => Array.isArray(candidate)
+    ? candidate.map(Number).filter(item => Number.isFinite(item) && item > 0)
+    : []
+  const stringArray = (candidate: unknown) => Array.isArray(candidate)
+    ? candidate.map(item => String(item || '').trim()).filter(Boolean)
+    : []
+  return {
+    originId: nullableNumber(row.origin_id),
+    originKind: nullableString(row.origin_kind),
+    groupId: nullableNumber(row.group_id),
+    groupName: nullableString(row.group_name),
+    groupColor: nullableString(row.group_color),
+    membershipId: nullableNumber(row.membership_id),
+    membershipIsDelete: row.membership_is_delete === true,
+    contactId: nullableNumber(row.contact_id),
+    contactName: nullableString(row.contact_name),
+    sourceId: nullableNumber(row.source_id),
+    sourceStatus: nullableString(row.source_status) as CampaignInputDataOrigin['sourceStatus'],
+    batchId: nullableNumber(row.batch_id),
+    batchKind: nullableString(row.batch_kind),
+    batchSourceName: nullableString(row.batch_source_name),
+    datasetIds: numberArray(row.dataset_ids),
+    datasetNames: stringArray(row.dataset_names),
+    automationDetailId: nullableNumber(row.automation_detail_id),
+    automationId: nullableNumber(row.automation_id),
+    automationName: nullableString(row.automation_name),
+    automationSourceCampaignId: nullableNumber(row.automation_source_campaign_id),
+    automationSourceCampaignName: nullableString(row.automation_source_campaign_name),
+    automationTargetCampaignId: nullableNumber(row.automation_target_campaign_id),
+    automationTargetCampaignName: nullableString(row.automation_target_campaign_name),
+    canonicalTargetKey: nullableString(row.canonical_target_key),
+    createdAt: nullableString(row.created_at)
+  }
+}
+
+async function enrichCampaignDetailsWithTriggeredAutomations(
+  details: CampaignDetail[],
+  staffId: number,
+  organizationId: number,
+  campaignId: number
+): Promise<CampaignDetail[]> {
+  const detailIds = uniquePositiveIds(details.map(detail => detail.id))
+  if (detailIds.length === 0) return details
+  const auth = requireCurrentUserCredentials()
+  const { data, error } = await client().rpc('aka_agent_list_campaign_detail_automation_triggers', {
+    p_staff_id: staffId,
+    p_organization_id: organizationId,
+    p_campaign_id: campaignId,
+    p_campaign_detail_ids: detailIds,
+    p_auth_username: auth.username,
+    p_auth_password: auth.password
+  })
+  if (error) throw new Error(`Failed to enrich campaign details with triggered automations: ${error.message}`)
+  const executionRows = Array.isArray(data) ? data as Array<Record<string, unknown>> : []
+
+  const triggersByDetailId = new Map<number, NonNullable<CampaignDetail['triggeredAutomations']>>()
+  for (const row of executionRows) {
+    const sourceDetailId = Number(row.source_campaign_detail_id)
+    const automationDetailId = Number(row.automation_detail_id)
+    const automationId = Number(row.automation_id)
+    if (!Number.isFinite(sourceDetailId) || sourceDetailId <= 0
+      || !Number.isFinite(automationDetailId) || automationDetailId <= 0
+      || !Number.isFinite(automationId) || automationId <= 0) continue
+    const automationName = String(row.automation_name || `Tự động hóa #${automationId}`)
+    const triggers = triggersByDetailId.get(sourceDetailId) || []
+    triggers.push({ automationDetailId, automationId, automationName })
+    triggersByDetailId.set(sourceDetailId, triggers)
+  }
+
+  return details.map(detail => ({
+    ...detail,
+    triggeredAutomations: triggersByDetailId.get(detail.id) || []
+  }))
+}
+
+interface AutomationDetailReference {
+  automationId: number
+  automationName: string
+  sourceCampaignId: number | null
+  targetCampaignId: number | null
+}
+
+async function loadAutomationReferencesByDetailIds(
+  detailIds: number[],
+  staffId: number,
+  organizationId: number,
+  auth: { username: string; password: string }
+): Promise<Map<number, AutomationDetailReference>> {
+  const references = new Map<number, AutomationDetailReference>()
+  for (const chunk of chunkArray(uniquePositiveIds(detailIds), 500)) {
+    const { data, error } = await client().rpc('aka_agent_list_automation_refs_by_detail_ids', {
+      p_staff_id: staffId,
+      p_organization_id: organizationId,
+      p_detail_ids: chunk,
+      p_auth_username: auth.username,
+      p_auth_password: auth.password
+    })
+    if (error) throw new Error(`Failed to resolve campaign input automation provenance: ${error.message}`)
+    for (const row of Array.isArray(data) ? data as Array<Record<string, unknown>> : []) {
+      const automationDetailId = Number(row.automation_detail_id)
+      const automationId = Number(row.automation_id)
+      if (!Number.isFinite(automationDetailId) || automationDetailId <= 0
+        || !Number.isFinite(automationId) || automationId <= 0) continue
+      references.set(automationDetailId, {
+        automationId,
+        automationName: String(row.automation_name || `Tự động hóa #${automationId}`),
+        sourceCampaignId: nullableNumber(row.source_campaign_id),
+        targetCampaignId: nullableNumber(row.target_campaign_id)
+      })
+    }
+  }
+  return references
+}
+
+export async function listCampaignInputDataPage(
+  query: CampaignInputDataPageQuery
+): Promise<CampaignInputDataPageResult> {
+  const u = requireCurrentUser()
+  const auth = requireCurrentUserCredentials()
+  const campaignId = Number(query.campaignId)
+  if (!Number.isFinite(campaignId) || campaignId <= 0) throw new Error('Chiến dịch không hợp lệ.')
+  const limit = Math.min(500, Math.max(1, Math.trunc(query.limit || 100)))
+  const offset = Math.max(0, Math.trunc(query.offset || 0))
+  const { data, error } = await client().rpc('aka_agent_list_campaign_input_data_page', {
+    p_staff_id: u.staffId,
+    p_organization_id: u.organizationId,
+    p_campaign_id: campaignId,
+    p_search: nullableString(query.search),
+    p_status: nullableString(query.status),
+    p_origin_filter: query.originFilter || 'all',
+    p_date_from: nullableString(query.dateFrom),
+    p_date_to: nullableString(query.dateTo),
+    p_offset: offset,
+    p_limit: limit,
+    p_auth_username: auth.username,
+    p_auth_password: auth.password
+  })
+  if (error) throw new Error(`Failed to list campaign input data page: ${error.message}`)
+  const rows = Array.isArray(data) ? data as Array<Record<string, unknown>> : []
+  const items = rows.map(row => {
+    const inputData = row.input_data && typeof row.input_data === 'object' && !Array.isArray(row.input_data)
+      ? row.input_data as Record<string, unknown>
+      : {}
+    const mapped = mapCampaignInputDataFromDB(inputData)
+    mapped.origins = (Array.isArray(row.origins) ? row.origins : []).map(mapCampaignInputDataOrigin)
+    return mapped
+  })
+  const automationDetailIds = items.flatMap(item => (
+    item.origins || []
+  ).map(origin => Number(origin.automationDetailId || 0)))
+  const automationReferences = await loadAutomationReferencesByDetailIds(
+    automationDetailIds,
+    u.staffId,
+    u.organizationId,
+    auth
+  )
+  for (const item of items) {
+    for (const origin of item.origins || []) {
+      const reference = origin.automationDetailId
+        ? automationReferences.get(origin.automationDetailId)
+        : undefined
+      if (!reference) continue
+      origin.automationId = reference.automationId
+      origin.automationName = reference.automationName
+      origin.automationSourceCampaignId = reference.sourceCampaignId
+      origin.automationTargetCampaignId = reference.targetCampaignId
+    }
+  }
+  return {
+    items,
+    total: rows.length > 0 ? Math.max(0, Number(rows[0].total_count) || 0) : 0
+  }
 }
 
 export async function listCampaignInputDataPreview(campaignId: number, limit: number): Promise<CampaignInputData[]> {
@@ -3021,6 +3316,12 @@ export async function listCampaignRelationSummaries(campaignIds: number[]): Prom
 export async function createCampaignInputData(action: Partial<CampaignInputData>): Promise<CampaignInputData> {
   const u = requireCurrentUser()
   const campaignId = Number(action.campaignId)
+  const targetCampaign = Number.isFinite(campaignId) && campaignId > 0
+    ? await getCampaign(campaignId)
+    : null
+  if (targetCampaign?.dataTargetSourceMode === 'data_group') {
+    throw new Error('Input của chiến dịch Nhóm data chỉ được tạo qua RPC reserve canonical của Nhóm data.')
+  }
   const actionId = Number.isFinite(campaignId) && campaignId > 0
     ? await getCampaignActionIdForCurrentUser(campaignId, u.staffId)
     : null
@@ -3072,6 +3373,12 @@ export async function createCampaignInputData(action: Partial<CampaignInputData>
 export async function createSmsCampaignInputDataSnapshot(action: Partial<CampaignInputData>): Promise<CampaignInputData> {
   const u = requireCurrentUser()
   const campaignId = Number(action.campaignId)
+  const targetCampaign = Number.isFinite(campaignId) && campaignId > 0
+    ? await getCampaign(campaignId)
+    : null
+  if (targetCampaign?.dataTargetSourceMode === 'data_group') {
+    throw new Error('SMS/voice không hỗ trợ nguồn Nhóm data.')
+  }
   const actionId = Number.isFinite(campaignId) && campaignId > 0
     ? await getCampaignActionIdForCurrentUser(campaignId, u.staffId)
     : null
@@ -3112,6 +3419,27 @@ export async function createSmsCampaignInputDataSnapshot(action: Partial<Campaig
 }
 
 export async function updateCampaignInputData(id: number, updates: Partial<CampaignInputData>): Promise<CampaignInputData> {
+  const immutablePayloadFields: Array<keyof CampaignInputData> = [
+    'inputId', 'name', 'phone', 'phoneCarrier', 'uid', 'email',
+    'info1', 'info2', 'info3', 'info4', 'info5', 'content', 'schedule',
+    'isDelete', 'canonicalTargetKey'
+  ]
+  if (immutablePayloadFields.some(field => updates[field] !== undefined)) {
+    const u = requireCurrentUser()
+    const { data: inputRow, error: inputError } = await client()
+      .from('auto_campaign_input_data')
+      .select('campaign_id, canonical_target_key')
+      .eq('id', id)
+      .eq('is_delete', false)
+      .maybeSingle()
+    if (inputError) throw new Error(`Failed to validate campaign input mutation: ${inputError.message}`)
+    if (!inputRow) throw new Error('Không tìm thấy input cần cập nhật.')
+    const campaign = await getCampaign(Number(inputRow.campaign_id))
+    if (!campaign || campaign.staffId !== u.staffId) throw new Error('Không tìm thấy chiến dịch của input.')
+    if (campaign.dataTargetSourceMode === 'data_group' || inputRow.canonical_target_key) {
+      throw new Error('Payload canonical là snapshot bất biến; chỉ được cập nhật trạng thái, ghi chú và kết quả chạy.')
+    }
+  }
   const payload: any = {}
   const shouldUpdateCarrier = updates.phone !== undefined || updates.phoneCarrier !== undefined
   const actionId = shouldUpdateCarrier ? await getCampaignActionIdForInputData(id) : null
@@ -3165,24 +3493,30 @@ export async function bulkUpdateCampaignInputDataStatus(
     .select('id', { count: 'exact', head: true })
     .eq('id', campaignId)
     .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
     .eq('is_delete', false)
 
   if (campaignError) throw new Error(`Failed to verify campaign ownership: ${campaignError.message}`)
   if ((count ?? 0) === 0) throw new Error('Không tìm thấy chiến dịch.')
 
-  const fromStatus: InputDataBatchStatus = status === 'tạm dừng' ? 'chờ xử lý' : 'tạm dừng'
-  const { data, error } = await client()
-    .from('auto_campaign_input_data')
-    .update({ status })
-    .eq('campaign_id', campaignId)
-    .eq('is_delete', false)
-    .eq('status', fromStatus)
-    .in('id', inputDataIds)
-    .select('id')
+  const sourceStatuses: CampaignInputStatus[] = status === 'tạm dừng'
+    ? ['chờ xử lý']
+    : ['tạm dừng', 'hoàn thành']
+  let updatedCount = 0
+  for (const idChunk of chunkArray(inputDataIds, 500)) {
+    const { data, error } = await client()
+      .from('auto_campaign_input_data')
+      .update({ status })
+      .eq('campaign_id', campaignId)
+      .eq('is_delete', false)
+      .in('status', sourceStatuses)
+      .in('id', idChunk)
+      .select('id')
 
-  if (error) throw new Error(`Failed to bulk update campaign input data status: ${error.message}`)
+    if (error) throw new Error(`Failed to bulk update campaign input data status: ${error.message}`)
+    updatedCount += data?.length ?? 0
+  }
 
-  const updatedCount = data?.length ?? 0
   return {
     updatedCount,
     skippedCount: Math.max(0, inputDataIds.length - updatedCount)
@@ -3291,6 +3625,9 @@ export async function addCampaignInputDataRows(
   if (!campaignRow) throw new Error('Không tìm thấy chiến dịch.')
 
   const campaign = mapCampaignFromDB(campaignRow)
+  if (campaign.dataTargetSourceMode === 'data_group') {
+    throw new Error('Chiến dịch Nhóm data chỉ nhận input mới qua RPC ingest/reserve canonical.')
+  }
   const actionRow = Array.isArray((campaignRow as any).auto_campaign_actions)
     ? (campaignRow as any).auto_campaign_actions[0]
     : (campaignRow as any).auto_campaign_actions
@@ -3412,29 +3749,46 @@ export async function addCampaignInputDataToCampaign(
   if (sourceCampaignError) throw new Error(`Failed to verify source campaign: ${sourceCampaignError.message}`)
   if (!sourceCampaign) throw new Error('Không tìm thấy chiến dịch nguồn.')
 
-  const { data: sourceRows, error: sourceRowsError } = await client()
-    .from('auto_campaign_input_data')
-    .select('*')
-    .eq('campaign_id', sourceCampaignId)
-    .eq('is_delete', false)
-    .in('id', sourceInputDataIds)
-    .order('created_at', { ascending: true })
+  const sourceRowsById = new Map<number, Record<string, unknown>>()
+  for (const idChunk of chunkArray(sourceInputDataIds, 500)) {
+    const { data: sourceRows, error: sourceRowsError } = await client()
+      .from('auto_campaign_input_data')
+      .select('*')
+      .eq('campaign_id', sourceCampaignId)
+      .eq('is_delete', false)
+      .in('id', idChunk)
 
-  if (sourceRowsError) throw new Error(`Failed to load selected campaign input data: ${sourceRowsError.message}`)
+    if (sourceRowsError) {
+      throw new Error(`Failed to load selected campaign input data: ${sourceRowsError.message}`)
+    }
+    for (const row of sourceRows || []) {
+      const rowId = Number(row.id)
+      if (Number.isFinite(rowId) && rowId > 0) sourceRowsById.set(rowId, row)
+    }
+  }
 
-  const selectedRows = (sourceRows || []).map(row => mapCampaignInputDataFromDB(row))
+  const selectedRows = [...sourceRowsById.values()]
+    .sort((left, right) => {
+      const byCreatedAt = String(left.created_at || '').localeCompare(String(right.created_at || ''))
+      return byCreatedAt || Number(left.id || 0) - Number(right.id || 0)
+    })
+    .map(row => mapCampaignInputDataFromDB(row))
   if (selectedRows.length === 0) throw new Error('Không tìm thấy data đã chọn.')
 
-  const { data: targetRows, error: targetError } = await client()
-    .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
-    .eq('staff_id', u.staffId)
-    .eq('is_delete', false)
-    .in('id', targetCampaignIds)
+  const targetRows: Record<string, unknown>[] = []
+  for (const idChunk of chunkArray(targetCampaignIds, 500)) {
+    const { data, error: targetError } = await client()
+      .from('auto_campaigns')
+      .select('*, auto_campaign_actions(name), auto_accounts(name)')
+      .eq('staff_id', u.staffId)
+      .eq('is_delete', false)
+      .in('id', idChunk)
 
-  if (targetError) throw new Error(`Failed to load target campaigns: ${targetError.message}`)
+    if (targetError) throw new Error(`Failed to load target campaigns: ${targetError.message}`)
+    targetRows.push(...(data || []))
+  }
 
-  const targetById = new Map((targetRows || []).map(row => {
+  const targetById = new Map(targetRows.map(row => {
     const campaign = mapCampaignFromDB(row)
     return [campaign.id, campaign] as const
   }))
@@ -3467,6 +3821,19 @@ export async function addCampaignInputDataToCampaign(
         skippedInvalidCount: selectedRows.length,
         skippedRunning: false,
         error: err instanceof Error ? err.message : String(err)
+      })
+      continue
+    }
+
+    if (target.dataTargetSourceMode === 'data_group') {
+      results.push({
+        campaignId: target.id,
+        campaignName: target.name,
+        actionId: target.actionId,
+        insertedCount: 0,
+        skippedInvalidCount: selectedRows.length,
+        skippedRunning: false,
+        error: 'Chiến dịch Nhóm data chỉ nhận input mới qua RPC ingest/reserve canonical.'
       })
       continue
     }
@@ -3572,6 +3939,10 @@ export async function addCampaignInputDataToCampaign(
 }
 
 export async function resetCampaignInputDataForRerun(campaignId: number): Promise<void> {
+  const campaign = await getCampaign(campaignId)
+  if (campaign?.dataTargetSourceMode === 'data_group') {
+    throw new Error('Chiến dịch Nhóm data không hỗ trợ chạy lại toàn bộ canonical input.')
+  }
   const { error } = await client()
     .from('auto_campaign_input_data')
     .update({
@@ -3587,6 +3958,10 @@ export async function resetCampaignInputDataForRerun(campaignId: number): Promis
 }
 
 export async function clearCampaignInputData(campaignId: number): Promise<void> {
+  const campaign = await getCampaign(campaignId)
+  if (campaign?.dataTargetSourceMode === 'data_group') {
+    throw new Error('Không thể xoá ledger canonical của chiến dịch Nhóm data.')
+  }
   const { error } = await client()
     .from('auto_campaign_input_data')
     .update({ is_delete: true })
@@ -3597,6 +3972,18 @@ export async function clearCampaignInputData(campaignId: number): Promise<void> 
 }
 
 export async function deleteCampaignInputData(id: number): Promise<void> {
+  const { data: inputRow, error: inputError } = await client()
+    .from('auto_campaign_input_data')
+    .select('campaign_id, canonical_target_key')
+    .eq('id', id)
+    .eq('is_delete', false)
+    .maybeSingle()
+  if (inputError) throw new Error(`Failed to validate campaign input delete: ${inputError.message}`)
+  if (!inputRow) return
+  const campaign = await getCampaign(Number(inputRow.campaign_id))
+  if (campaign?.dataTargetSourceMode === 'data_group' || inputRow.canonical_target_key) {
+    throw new Error('Canonical input được giữ làm ledger; manual retry phải dùng lại đúng input cũ.')
+  }
   const { error } = await client()
     .from('auto_campaign_input_data')
     .update({ is_delete: true })
@@ -3697,6 +4084,95 @@ export async function listCampaignDetailsByCampaign(campaignId: number): Promise
 
   if (error) throw new Error(`Failed to list campaign details by campaign: ${error.message}`)
   return enrichCampaignDetailsWithInputData((data || []).map(row => mapCampaignDetailFromDB(row)))
+}
+
+const normalizeCampaignDetailPageDate = (value: string | null | undefined, label: string): string | null => {
+  const text = String(value || '').trim()
+  if (!text) return null
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) throw new Error(`${label} không hợp lệ.`)
+  return date.toISOString()
+}
+
+const normalizeCampaignDetailSearch = (value: string | null | undefined): string | null => {
+  const text = String(value || '').trim().slice(0, 200)
+  if (!text) return null
+  // Build a PostgREST OR expression only from ordinary searchable characters;
+  // punctuation that can alter filter grammar is deliberately discarded.
+  return text
+    .replace(/[^\p{L}\p{N}\s@:/._+#=\-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || null
+}
+
+export async function listCampaignDetailsPage(
+  query: CampaignDetailPageQuery
+): Promise<CampaignDetailPageResult> {
+  const u = requireCurrentUser()
+  const campaignId = Math.trunc(Number(query.campaignId))
+  const staffId = Math.trunc(Number(u.staffId))
+  const organizationId = Math.trunc(Number(u.organizationId))
+  if (!Number.isSafeInteger(campaignId) || campaignId <= 0) throw new Error('Chiến dịch không hợp lệ.')
+  if (!Number.isSafeInteger(staffId) || staffId <= 0 || !Number.isSafeInteger(organizationId) || organizationId <= 0) {
+    throw new Error('Phiên làm việc không có staff/tenant hợp lệ.')
+  }
+
+  const { data: ownedCampaign, error: campaignError } = await client()
+    .from('auto_campaigns')
+    .select('id')
+    .eq('id', campaignId)
+    .eq('staff_id', staffId)
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+  if (campaignError) throw new Error(`Failed to validate campaign detail access: ${campaignError.message}`)
+  if (!ownedCampaign) throw new Error('Không tìm thấy chiến dịch hoặc bạn không có quyền xem kết quả.')
+
+  const limit = Math.min(500, Math.max(1, Math.trunc(Number(query.limit) || 100)))
+  const offset = Math.max(0, Math.trunc(Number(query.offset) || 0))
+  const status = String(query.status || '').trim().slice(0, 120)
+  const search = normalizeCampaignDetailSearch(query.search)
+  const dateFrom = normalizeCampaignDetailPageDate(query.dateFrom, 'Ngày bắt đầu')
+  const dateTo = normalizeCampaignDetailPageDate(query.dateTo, 'Ngày kết thúc')
+  if (dateFrom && dateTo && dateFrom > dateTo) throw new Error('Khoảng thời gian lọc không hợp lệ.')
+
+  let pageQuery = client()
+    .from('auto_campaign_details')
+    .select('*', { count: 'exact' })
+    .eq('campaign_id', campaignId)
+    .eq('is_delete', false)
+
+  if (status) pageQuery = pageQuery.eq('status', status)
+  if (dateFrom) pageQuery = pageQuery.gte('created_at', dateFrom)
+  if (dateTo) pageQuery = pageQuery.lte('created_at', dateTo)
+  if (search) {
+    const pattern = `*${search}*`
+    pageQuery = pageQuery.or([
+      `action_name.ilike.${pattern}`,
+      `action_code.ilike.${pattern}`,
+      `status.ilike.${pattern}`,
+      `error_code.ilike.${pattern}`,
+      `log.ilike.${pattern}`,
+      `post_url.ilike.${pattern}`
+    ].join(','))
+  }
+
+  const { data, error, count } = await pageQuery
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (error) throw new Error(`Failed to list campaign detail page: ${error.message}`)
+  const itemsWithInputData = await enrichCampaignDetailsWithInputData(
+    (data || []).map(row => mapCampaignDetailFromDB(row)),
+    campaignId
+  )
+  const items = await enrichCampaignDetailsWithTriggeredAutomations(
+    itemsWithInputData,
+    staffId,
+    organizationId,
+    campaignId
+  )
+  return { items, total: Math.max(0, Number(count) || 0) }
 }
 
 export async function listAllCampaignDetailsByCampaign(campaignId: number): Promise<CampaignDetail[]> {
