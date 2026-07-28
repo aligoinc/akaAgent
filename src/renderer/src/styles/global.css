@@ -11702,6 +11702,20 @@ button.content-template-picker-refresh.btn-icon:not(.btn) {
   color: var(--text-primary);
 }
 
+.campaign-content-mode-segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.campaign-content-mode-segmented button.active:disabled {
+  opacity: 1;
+}
+
+.campaign-content-mode-segmented button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 .campaign-content-mode-note {
   color: var(--text-tertiary);
   font-size: 12px;
@@ -12045,6 +12059,114 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   gap: 12px;
 }
 
+.campaign-manual-content-launcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.campaign-manual-content-launcher-copy,
+.campaign-manual-content-launcher-actions,
+.campaign-manual-content-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.campaign-manual-content-launcher-copy > div,
+.campaign-manual-content-modal-title > div {
+  min-width: 0;
+}
+
+.campaign-manual-content-launcher-copy strong,
+.campaign-manual-content-launcher-copy > div > span,
+.campaign-manual-content-modal-title .modal-title,
+.campaign-manual-content-modal-title > div > span:last-child {
+  display: block;
+}
+
+.campaign-manual-content-launcher-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.campaign-manual-content-launcher-copy > div > span,
+.campaign-manual-content-modal-title > div > span:last-child {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.campaign-manual-content-launcher-icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-tertiary));
+  color: var(--accent-primary);
+}
+
+.campaign-manual-content-launcher-actions {
+  flex: 0 0 auto;
+}
+
+.campaign-manual-content-modal {
+  width: min(1060px, calc(100vw - 48px));
+  height: min(800px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+}
+
+.campaign-manual-content-modal > .modal-header,
+.campaign-manual-content-modal > .modal-footer {
+  flex: 0 0 auto;
+  background: var(--bg-secondary);
+}
+
+.campaign-manual-content-modal-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.campaign-manual-content-modal-settings {
+  flex: 0 0 auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.campaign-manual-content-modal-settings .stepper-form-group {
+  margin: 0;
+}
+
+.campaign-manual-content-modal-footer-note {
+  flex: 1 1 auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
 .campaign-advanced-content-header,
 .campaign-advanced-content-card-header,
 .campaign-advanced-media-options,
@@ -12183,6 +12305,43 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
 }
 
 @media (max-width: 640px) {
+  .campaign-content-mode-segmented {
+    width: 100%;
+  }
+
+  .campaign-content-mode-segmented button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 8px;
+  }
+
+  .campaign-manual-content-launcher {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .campaign-manual-content-launcher-actions {
+    justify-content: space-between;
+  }
+
+  .campaign-manual-content-modal-overlay {
+    padding: 12px;
+  }
+
+  .campaign-manual-content-modal {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 24px);
+  }
+
+  .campaign-manual-content-modal-body {
+    padding: 12px;
+  }
+
+  .campaign-manual-content-modal > .modal-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .campaign-advanced-content-header > .content-template-inline-toolbar {
     flex-basis: 100%;
     justify-content: flex-start;
