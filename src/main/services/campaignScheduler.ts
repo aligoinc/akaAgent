@@ -479,6 +479,7 @@ const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_d
 const DEFAULT_RATE_LIMIT_MINUTES = 65
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
+const DATA_GROUP_WAITING_NOTES = new Set(['Chờ data phù hợp', 'Chờ data mới'])
 const DATA_GROUP_HARD_END_NOTE = 'Chiến dịch đã hết thời hạn nhận và chạy data mới'
 const SCHEDULER_CONNECTIVITY_RETRY_LOG = '⚠️ Không kết nối được Internet hoặc máy chủ dữ liệu. Scheduler sẽ tự thử lại sau 30 giây.'
 const SCHEDULER_CONNECTIVITY_RECOVERED_LOG = '✅ Đã kết nối lại máy chủ dữ liệu. Scheduler tiếp tục kiểm tra chiến dịch.'
@@ -863,7 +864,11 @@ export class CampaignScheduler {
 
     if (campaign.status === 'chờ xử lý') {
       this.pauseRequests.delete(campaignId)
-      return await this.updateCampaignAndBroadcast(campaignId, { status: 'tạm dừng', note: null })
+      const note = campaign.dataTargetSourceMode === 'data_group'
+        && DATA_GROUP_WAITING_NOTES.has(String(campaign.note || '').trim())
+        ? campaign.note
+        : null
+      return await this.updateCampaignAndBroadcast(campaignId, { status: 'tạm dừng', note })
     }
 
     if (campaign.status === 'đang chạy') {
@@ -12425,7 +12430,7 @@ export class CampaignScheduler {
     if (!usesMainContent && !usesStandaloneCommentContent) return null
     const items = getAdvancedContentItems(campaign.extraSettings)
     if (items.length === 0) {
-      return 'Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.'
+      return 'Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Cơ bản.'
     }
     if (campaign.actionId === SMS_SEND_ACTION_ID && items.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
       return `Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`

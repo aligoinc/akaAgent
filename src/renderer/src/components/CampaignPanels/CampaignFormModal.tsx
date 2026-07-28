@@ -1536,7 +1536,7 @@ export default function CampaignFormModal({
     createCampaignInputData
   } = useCampaignStore()
   const authUser = useAuthStore(state => state.user)
-  const { showAlert, showConfirm } = useUiStore()
+  const { showAlert, showConfirm, alert: uiAlert, confirm: uiConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
   const canUseZaloQrAccount = authUser?.zaloAccountCapabilities?.qr === true
   const canUseEmailFeature = !!entitlements?.email
@@ -1649,6 +1649,15 @@ export default function CampaignFormModal({
         rewriteContentEachRun: campaign?.extraSettings?.rewriteContentEachRun === true
       }
   const initialAdvancedContentItems = initialManualDraft.advancedContentItems
+  const hasPriorManualAdvancedContent = campaign?.extraSettings?.advancedContentEnabled === true ||
+    initialAdvancedContentItems.length > 0
+  const initialAdvancedContentSourceMode: AdvancedContentSourceMode = campaign
+    ? (hasSavedAdvancedGroupSnapshot
+        ? 'group'
+        : hasPriorManualAdvancedContent
+          ? 'manual'
+          : 'group')
+    : 'group'
   const [formData, setFormData] = useState({
     name: campaign?.name || '',
     actionId: initialActionId,
@@ -1860,10 +1869,13 @@ export default function CampaignFormModal({
       ...(campaign?.extraSettings?.findDataTargetDataGroups || {})
     } as FindDataTargetDataGroups
   })
-  // Advanced content is group-only. Keep the union-shaped state locally so the
-  // legacy save helpers can continue preserving dormant manual drafts while
-  // every interactive Advanced flow is forced through a template snapshot.
-  const [advancedContentSourceMode] = useState<AdvancedContentSourceMode>('group')
+  const [advancedContentSourceMode, setAdvancedContentSourceMode] = useState<AdvancedContentSourceMode>(
+    initialAdvancedContentSourceMode
+  )
+  const [manualAdvancedContentModalOpen, setManualAdvancedContentModalOpen] = useState(false)
+  const manualAdvancedContentTriggerRef = useRef<HTMLButtonElement>(null)
+  const manualAdvancedContentCloseRef = useRef<HTMLButtonElement>(null)
+  const manualAdvancedContentModalRef = useRef<HTMLDivElement>(null)
   const [candidateContentTemplateGroupId, setCandidateContentTemplateGroupId] = useState<number | null>(
     savedAdvancedGroupSnapshot?.groupId ?? null
   )
@@ -1876,6 +1888,57 @@ export default function CampaignFormModal({
       ? initialActiveAdvancedContentItems
       : []
   )
+  useEffect(() => {
+    if (advancedContentSourceMode === 'manual') {
+      manualAdvancedContentItemsRef.current = normalizeAdvancedContentItems(formData.advancedContentItems)
+    }
+  }, [advancedContentSourceMode, formData.advancedContentItems])
+  useEffect(() => {
+    if (!manualAdvancedContentModalOpen || uiAlert.isOpen || uiConfirm.isOpen) return
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      manualAdvancedContentCloseRef.current?.focus()
+    })
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const hasNestedOverlay = document.querySelector('.media-library-overlay, .content-preview-overlay') !== null
+      if (hasNestedOverlay) return
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setManualAdvancedContentModalOpen(false)
+        if (activeRichContentEditorRef.current?.itemId) activeRichContentEditorRef.current = null
+        window.requestAnimationFrame(() => manualAdvancedContentTriggerRef.current?.focus())
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const modal = manualAdvancedContentModalRef.current
+      if (!modal) return
+      const focusable = Array.from(modal.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
+      )).filter(element => element.getAttribute('aria-hidden') !== 'true')
+      if (focusable.length === 0) {
+        event.preventDefault()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const activeElement = document.activeElement
+      if (event.shiftKey && (activeElement === first || !modal.contains(activeElement))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (activeElement === last || !modal.contains(activeElement))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [manualAdvancedContentModalOpen, uiAlert.isOpen, uiConfirm.isOpen])
   const campaignNameValueRef = useRef(formData.name)
   const campaignNameUserEditedRef = useRef(Boolean((campaign?.name || '').trim()))
   const lastAiCampaignNameRef = useRef('')
@@ -2213,6 +2276,7 @@ export default function CampaignFormModal({
   const canUseAdvancedContentMode = canShowContentSection && !isVoiceCallCampaign && advancedContentTargetChannel !== null
   const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
   const isAdvancedGroupSource = isAdvancedContentMode && advancedContentSourceMode === 'group'
+  const isManualAdvancedSource = isAdvancedContentMode && advancedContentSourceMode === 'manual'
   const candidateContentTemplateGroup = useMemo(
     () => contentTemplateGroups.find(group => group.id === candidateContentTemplateGroupId) || null,
     [candidateContentTemplateGroupId, contentTemplateGroups]
@@ -2237,7 +2301,10 @@ export default function CampaignFormModal({
     pendingContentTemplateGroupId === null &&
     savedAdvancedContentSource === 'group_snapshot' &&
     !!savedAdvancedGroupSnapshot &&
-    savedGroupSnapshotMatchesTargetChannel
+    savedGroupSnapshotMatchesTargetChannel &&
+    savedAdvancedGroupSnapshot.groupId === candidateContentTemplateGroupId
+  const selectedContentTemplateGroupId = pendingContentTemplateGroupId
+    ?? candidateContentTemplateGroupId
   const groupSnapshotDisplaySourceIsRich = showSavedGroupSnapshotItems
     ? savedGroupSnapshotIsRich
     : (contentTemplateGroupCandidate?.rich ?? savedGroupSnapshotIsRich)
@@ -2270,21 +2337,20 @@ export default function CampaignFormModal({
         content: formattedContentToPlainText(item.content)
       }))
     : rawAdvancedContentDisplayItems
-  // A group selected in the dropdown is only a preview until the user presses
-  // "Dùng nhóm này"/"Cập nhật từ nhóm". Save-time validation must therefore
-  // inspect the pending candidate, or the existing saved snapshot when there
-  // is no pending choice, instead of whichever group happens to be previewed.
+  // Selecting a group in the dropdown is the user's choice. Preview remains
+  // optional; save validates the latest group state before creating a snapshot.
   const advancedContentSaveValidationItems = (() => {
     if (!isAdvancedGroupSource) return normalizedAdvancedContentItems
 
-    const usesPendingCandidate = pendingContentTemplateGroupId !== null &&
-      contentTemplateGroupCandidate?.groupId === pendingContentTemplateGroupId
-    const rawItems = usesPendingCandidate
+    const usesSelectedCandidate = !preserveSavedGroupSnapshotOnSave &&
+      selectedContentTemplateGroupId !== null &&
+      contentTemplateGroupCandidate?.groupId === selectedContentTemplateGroupId
+    const rawItems = usesSelectedCandidate
       ? (contentTemplateGroupCandidate?.items || [])
       : preserveSavedGroupSnapshotOnSave
         ? savedGroupAdvancedContentItemsRef.current
         : []
-    const sourceIsRich = usesPendingCandidate
+    const sourceIsRich = usesSelectedCandidate
       ? contentTemplateGroupCandidate?.rich === true
       : preserveSavedGroupSnapshotOnSave && savedGroupSnapshotIsRich
 
@@ -2453,7 +2519,6 @@ export default function CampaignFormModal({
 
     setSelectedActionPlatformFilter(normalizedPlatform)
     setIsAccountDropdownOpen(false)
-    if (!keepCurrentAction) setPendingContentTemplateGroupId(null)
     if (!keepCurrentAction && (formData.formattedContentEnabled || formData.emailBodyIsHtml)) {
       normalizeManualAdvancedContentItemsToPlain()
     }
@@ -2498,7 +2563,6 @@ export default function CampaignFormModal({
       invalidateCampaignNameAiRequest()
     }
     if (actionChanged) {
-      setPendingContentTemplateGroupId(null)
       const compatibleSnapshots = directDataGroupSnapshots.filter(snapshot => (
         isSemanticDataTypeCompatibleWithCampaignAction(
           snapshot.dataTypeCategoryItemId,
@@ -2772,7 +2836,6 @@ export default function CampaignFormModal({
   useEffect(() => {
     if (!formData.actionId || canUseCampaignAction({ id: formData.actionId, flatformType: selectedActionPlatform }, entitlements)) return
     invalidateCampaignNameAiRequest()
-    setPendingContentTemplateGroupId(null)
     if (formData.formattedContentEnabled || formData.emailBodyIsHtml) {
       normalizeManualAdvancedContentItemsToPlain()
     }
@@ -4978,10 +5041,12 @@ export default function CampaignFormModal({
     if (!isAdvancedContentMode) return true
     if (advancedContentSourceMode === 'group') return true
     if (normalizedAdvancedContentItems.length === 0) {
-      showAlert('Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.', 'error')
+      setManualAdvancedContentModalOpen(true)
+      showAlert('Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Cơ bản.', 'error')
       return false
     }
     if (isSmsCampaign && normalizedAdvancedContentItems.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+      setManualAdvancedContentModalOpen(true)
       showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return false
     }
@@ -4996,6 +5061,7 @@ export default function CampaignFormModal({
           !resolveLegacyManualEmailSubject(item).trim()
         ))
         if (missingSubjectIndex >= 0) {
+          setManualAdvancedContentModalOpen(true)
           showAlert(`Vui lòng nhập tiêu đề email cho nội dung nâng cao số ${missingSubjectIndex + 1}.`, 'error')
           return false
         }
@@ -5003,6 +5069,7 @@ export default function CampaignFormModal({
       return true
     }
 
+    setManualAdvancedContentModalOpen(true)
     showAlert(
       isMobileManagedSmsCampaign
         ? `Nội dung nâng cao số ${invalidIndex + 1} chưa có nội dung SMS.`
@@ -5018,6 +5085,7 @@ export default function CampaignFormModal({
     for (let index = 0; index < normalizedAdvancedContentItems.length; index += 1) {
       const item = normalizedAdvancedContentItems[index]
       if (!validateSelectedImages(`Media nội dung nâng cao ${index + 1}`, item.mediaOption || 'none', item.mediaItems || [])) {
+        setManualAdvancedContentModalOpen(true)
         return false
       }
     }
@@ -5039,29 +5107,16 @@ export default function CampaignFormModal({
     )
     const savedGroupEffectiveRich = savedGroupSnapshotIsRich && !groupSnapshotMustUsePlain
 
-    if (hasSavedGroupSnapshot && pendingContentTemplateGroupId === null && !savedGroupSnapshotMatchesTargetChannel) {
-      if (!advancedContentTargetChannel) {
-        // Actions such as Voice Call do not support Advanced content. Saving
-        // the action change explicitly clears the dormant group snapshot so
-        // it can never be executed under an incompatible contract.
-        return {
-          items: [],
-          formattedContentEnabled: false,
-          emailBodyIsHtml: false,
-          emailSubject: formData.emailSubject.trim()
-        }
+    if (hasSavedGroupSnapshot && !advancedContentTargetChannel) {
+      // Actions such as Voice Call do not support Advanced content. Saving
+      // the action change explicitly clears the dormant group snapshot so
+      // it can never be executed under an incompatible contract.
+      return {
+        items: [],
+        formattedContentEnabled: false,
+        emailBodyIsHtml: false,
+        emailSubject: formData.emailSubject.trim()
       }
-      const previousChannelLabel = savedAdvancedContentTargetChannel
-        ? getContentTemplateChannelLabel(savedAdvancedContentTargetChannel)
-        : 'không xác định'
-      const nextChannelLabel = advancedContentTargetChannel
-        ? getContentTemplateChannelLabel(advancedContentTargetChannel)
-        : 'không được hỗ trợ'
-      showAlert(
-        `Hành động đã đổi kênh mẫu từ ${previousChannelLabel} sang ${nextChannelLabel}. Hãy bật Nội dung nâng cao và bấm “Dùng nhóm này” hoặc “Cập nhật từ nhóm” trước khi lưu.`,
-        'error'
-      )
-      return null
     }
 
     if (!isAdvancedContentMode && pendingContentTemplateGroupId === null) {
@@ -5109,7 +5164,7 @@ export default function CampaignFormModal({
       }
     }
 
-    if (pendingContentTemplateGroupId === null && savedAdvancedContentSource === 'group_snapshot' && savedAdvancedGroupSnapshot) {
+    if (preserveSavedGroupSnapshotOnSave && savedAdvancedGroupSnapshot) {
       return {
         source: 'group_snapshot',
         items: getSavedGroupItemsForCurrentMode(),
@@ -5122,9 +5177,9 @@ export default function CampaignFormModal({
       }
     }
 
-    const groupId = pendingContentTemplateGroupId ?? undefined
+    const groupId = selectedContentTemplateGroupId ?? undefined
     if (!groupId) {
-      showAlert('Vui lòng chọn nhóm mẫu và bấm “Dùng nhóm này” trước khi lưu chiến dịch.', 'error')
+      showAlert('Vui lòng chọn Nhóm mẫu nội dung trước khi lưu chiến dịch.', 'error')
       return null
     }
     if (!advancedContentTargetChannel) {
@@ -5438,9 +5493,7 @@ export default function CampaignFormModal({
         ? (advancedContentOverride?.emailBodyIsHtml ?? manualDraftEmailBodyIsHtml)
         : false
       const preserveExistingGroupSnapshotItems = advancedContentOverride?.source === 'group_snapshot' &&
-        pendingContentTemplateGroupId === null &&
-        savedAdvancedContentSource === 'group_snapshot' &&
-        !!savedAdvancedGroupSnapshot
+        preserveSavedGroupSnapshotOnSave
       const advancedContentItemsForSave = canSaveAdvancedContent
         ? preserveExistingGroupSnapshotItems
           ? (advancedContentOverride?.items ?? [])
@@ -5975,6 +6028,9 @@ export default function CampaignFormModal({
     }
     const postBackgroundError = getPostBackgroundValidationError()
     if (postBackgroundError) {
+      if (isAdvancedContentMode && advancedContentSourceMode === 'manual') {
+        setManualAdvancedContentModalOpen(true)
+      }
       showAlert(postBackgroundError, 'error')
       return
     }
@@ -11751,6 +11807,35 @@ export default function CampaignFormModal({
     )
   }
 
+  const renderEmailBodyHtmlOption = () => {
+    if (!isEmailCampaign) return null
+    return (
+      <div className="stepper-form-group">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={isAdvancedGroupSource
+              ? groupSnapshotEffectiveRich
+              : formData.emailBodyIsHtml}
+            disabled={isAdvancedGroupSource}
+            onChange={e => {
+              const checked = e.target.checked
+              if (!checked) normalizeManualAdvancedContentItemsToPlain()
+              setFormData(current => checked
+                ? {
+                    ...current,
+                    emailBodyIsHtml: true,
+                    rewriteContentEachRun: false
+                  }
+                : convertFormattedStateToPlain(current))
+            }}
+          />
+          <span>Nội dung dạng HTML</span>
+        </label>
+      </div>
+    )
+  }
+
   const setPostBackgroundEnabled = (checked: boolean) => {
     const apply = () => {
       if (checked && formData.formattedContentEnabled) {
@@ -11970,26 +12055,51 @@ export default function CampaignFormModal({
     })
   }
 
-  const switchToSimpleContentMode = () => {
-    if (advancedContentSourceMode !== 'group') {
-      setFormData(prev => ({ ...prev, advancedContentEnabled: false }))
-      return
-    }
+  const closeManualAdvancedContentModal = () => {
+    setManualAdvancedContentModalOpen(false)
+    if (activeRichContentEditorRef.current?.itemId) activeRichContentEditorRef.current = null
+    window.requestAnimationFrame(() => manualAdvancedContentTriggerRef.current?.focus())
+  }
 
+  const switchToSimpleContentMode = () => {
+    setManualAdvancedContentModalOpen(false)
+    setAdvancedContentSourceMode('manual')
     setPendingContentTemplateGroupId(null)
     setFormData(current => ({
       ...current,
       advancedContentEnabled: false,
-      // Leave the immutable group snapshot behind; never clone it into Manual.
-      // Keep the user's separate Simple/manual content and format selection intact.
+      // Never copy immutable group snapshot items into the separate
+      // Basic/manual draft when changing modes.
       advancedContentItems: manualAdvancedContentItemsRef.current
     }))
   }
 
-  const switchToAdvancedContentMode = () => {
-    if (formData.advancedContentEnabled) return
+  const switchToManualAdvancedContentMode = () => {
+    setPendingContentTemplateGroupId(null)
+    setAdvancedContentSourceMode('manual')
+    setFormData(prev => ({
+      ...prev,
+      advancedContentEnabled: true,
+      // The immutable group snapshot is deliberately not copied into Manual.
+      advancedContentItems: manualAdvancedContentItemsRef.current
+    }))
+  }
+
+  const switchToDataGroupContentMode = () => {
     manualAdvancedContentItemsRef.current = normalizeAdvancedContentItems(formData.advancedContentItems)
-    setCandidateContentTemplateGroupId(current => current ?? savedAdvancedGroupSnapshot?.groupId ?? null)
+    setManualAdvancedContentModalOpen(false)
+    setAdvancedContentSourceMode('group')
+    const nextGroupId = candidateContentTemplateGroupId ?? savedAdvancedGroupSnapshot?.groupId ?? null
+    setCandidateContentTemplateGroupId(nextGroupId)
+    setPendingContentTemplateGroupId(
+      nextGroupId !== null && (
+        !savedAdvancedGroupSnapshot ||
+        savedAdvancedGroupSnapshot.groupId !== nextGroupId ||
+        !savedGroupSnapshotMatchesTargetChannel
+      )
+        ? nextGroupId
+        : null
+    )
     setFormData(prev => ({ ...prev, advancedContentEnabled: true }))
   }
 
@@ -12022,9 +12132,16 @@ export default function CampaignFormModal({
     const hasZeroCompatibleItems = !!candidate && candidate.variantCount === 0
     const exceedsSmsSnapshotLimit = isSmsCampaign && !!candidate && candidate.variantCount > MAX_SMS_ADVANCED_CONTENT_ITEMS
     const candidateCanBeUsed = !!candidate && !isInactiveCandidate && !hasZeroCompatibleItems && !exceedsSmsSnapshotLimit
-    const isPendingCandidate = candidateCanBeUsed && pendingContentTemplateGroupId === candidate.groupId
-    const pendingCandidateNeedsAttention = !!candidate && !candidateCanBeUsed && pendingContentTemplateGroupId === candidate.groupId
-    const isSavedCandidate = !!candidate && savedAdvancedContentSource === 'group_snapshot' && savedAdvancedGroupSnapshot?.groupId === candidate.groupId
+    const isPendingCandidate = candidateCanBeUsed &&
+      selectedContentTemplateGroupId === candidate.groupId &&
+      !preserveSavedGroupSnapshotOnSave
+    const pendingCandidateNeedsAttention = !!candidate &&
+      !candidateCanBeUsed &&
+      selectedContentTemplateGroupId === candidate.groupId &&
+      !preserveSavedGroupSnapshotOnSave
+    const isSavedCandidate = !!candidate &&
+      preserveSavedGroupSnapshotOnSave &&
+      savedAdvancedGroupSnapshot?.groupId === candidate.groupId
 
     const warning = isInactiveCandidate
       ? 'Nhóm này đã ngừng hoạt động nên không thể tạo hoặc cập nhật snapshot mới. Snapshot đã lưu trước đó (nếu có) vẫn dùng được.'
@@ -12042,7 +12159,7 @@ export default function CampaignFormModal({
           <div className="campaign-advanced-source-card-header">
             <span className="campaign-advanced-source-card-icon"><FolderOpen size={17} /></span>
             <div className="campaign-advanced-source-card-copy">
-              <strong>Nguồn nội dung nâng cao</strong>
+              <strong>Nhóm mẫu nội dung</strong>
               <span>Chọn nhóm mẫu có sẵn để tạo snapshot nội dung cho chiến dịch.</span>
             </div>
           </div>
@@ -12058,8 +12175,9 @@ export default function CampaignFormModal({
                       aria-label={`Chọn nhóm mẫu cho ${channel ? getContentTemplateChannelLabel(channel) : 'hành động đã chọn'}`}
                       value={candidateContentTemplateGroupId ?? ''}
                       onChange={event => {
-                        setCandidateContentTemplateGroupId(event.target.value ? Number(event.target.value) : null)
-                        setPendingContentTemplateGroupId(null)
+                        const groupId = event.target.value ? Number(event.target.value) : null
+                        setCandidateContentTemplateGroupId(groupId)
+                        setPendingContentTemplateGroupId(groupId)
                       }}
                       disabled={contentTemplatesLoading}
                     >
@@ -12105,7 +12223,7 @@ export default function CampaignFormModal({
                   </button>
                 </div>
 
-                {savedAdvancedContentSource === 'group_snapshot' && savedAdvancedGroupSnapshot && pendingContentTemplateGroupId === null && (
+                {preserveSavedGroupSnapshotOnSave && savedAdvancedGroupSnapshot && (
                   <div className="campaign-advanced-saved-snapshot">
                     <Check size={14} />
                     <span>Snapshot đang dùng: <strong>{savedAdvancedGroupSnapshot.groupName}</strong> · {savedAdvancedGroupSnapshot.templateCount} mẫu · {savedAdvancedGroupSnapshot.itemCount} nội dung · {new Date(savedAdvancedGroupSnapshot.capturedAt).toLocaleString('vi-VN')}</span>
@@ -12138,7 +12256,7 @@ export default function CampaignFormModal({
                       <span>{candidate.compatibleTemplateCount}/{candidate.totalTemplateCount} {candidateCanBeUsed ? 'mẫu sẽ dùng' : 'mẫu phù hợp'}</span>
                       <span>{candidate.variantCount} biến thể</span>
                       {candidate.skippedTemplateCount > 0 && <span>Bỏ qua {candidate.skippedTemplateCount} mẫu</span>}
-                      {isPendingCandidate && <span className="active">Đã chọn · chờ lưu</span>}
+                      {isPendingCandidate && <span className="active">Đã chọn</span>}
                       {pendingCandidateNeedsAttention && <span className="error">Cần xử lý trước khi lưu</span>}
                       {!isPendingCandidate && isSavedCandidate && <span className="active">Snapshot hiện tại</span>}
                     </div>
@@ -12163,7 +12281,7 @@ export default function CampaignFormModal({
                   </div>
                 ) : (
                   <div className="campaign-advanced-group-empty">
-                    Chọn một nhóm mẫu, sau đó bấm <strong>Xem</strong> để kiểm tra nội dung trước khi dùng.
+                    Chọn một nhóm mẫu để dùng. Nút <strong>Xem</strong> chỉ dùng khi bạn muốn kiểm tra nội dung.
                   </div>
                 )}
               </div>
@@ -12181,28 +12299,43 @@ export default function CampaignFormModal({
   const renderContentModeSegmented = () => {
     if (!canUseAdvancedContentMode) return null
 
-    const note = formData.advancedContentEnabled
-      ? 'Tạo nhiều nội dung riêng, mỗi nội dung là một biến thể hoàn chỉnh với media riêng. Mỗi lượt chạy sẽ xoay vòng qua các nội dung trong danh sách.'
-      : isRichContentEditorEnabled
-        ? 'Dùng dấu | để phân tách các nội dung có định dạng gửi luân phiên. Nhập \\| nếu muốn hiển thị dấu |.'
-        : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
+    const isBasicMode = !formData.advancedContentEnabled
+    const isManualAdvancedMode = formData.advancedContentEnabled && advancedContentSourceMode === 'manual'
+    const isDataGroupMode = formData.advancedContentEnabled && advancedContentSourceMode === 'group'
+    const note = isManualAdvancedMode
+      ? 'Tạo nhiều nội dung thủ công, mỗi nội dung là một biến thể hoàn chỉnh với media riêng.'
+      : isDataGroupMode
+        ? 'Dùng snapshot từ một nhóm mẫu có sẵn. Mỗi lượt chạy sẽ xoay vòng qua các nội dung phù hợp trong nhóm.'
+        : isRichContentEditorEnabled
+          ? 'Dùng dấu | để phân tách các nội dung có định dạng gửi luân phiên. Nhập \\| nếu muốn hiển thị dấu |.'
+          : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
 
     return (
       <div className="campaign-content-mode-row">
         <div className="campaign-content-mode-segmented" role="group" aria-label="Chế độ nội dung">
           <button
             type="button"
-            className={!formData.advancedContentEnabled ? 'active' : ''}
+            aria-pressed={isBasicMode}
+            className={isBasicMode ? 'active' : ''}
             onClick={switchToSimpleContentMode}
           >
-            Đơn giản
+            Cơ bản
           </button>
           <button
             type="button"
-            className={formData.advancedContentEnabled ? 'active' : ''}
-            onClick={switchToAdvancedContentMode}
+            aria-pressed={isManualAdvancedMode}
+            className={isManualAdvancedMode ? 'active' : ''}
+            onClick={switchToManualAdvancedContentMode}
           >
             Nâng cao
+          </button>
+          <button
+            type="button"
+            aria-pressed={isDataGroupMode}
+            className={isDataGroupMode ? 'active' : ''}
+            onClick={switchToDataGroupContentMode}
+          >
+            Nhóm mẫu nội dung
           </button>
         </div>
         <div className="campaign-content-mode-note">{note}</div>
@@ -12352,24 +12485,51 @@ export default function CampaignFormModal({
 
     return (
       <div className="campaign-advanced-content-editor">
-        {renderAdvancedContentSourceSelector()}
-        <div className="campaign-advanced-content-header">
-          <div className="campaign-advanced-content-heading">
-            <strong>Nội dung nâng cao</strong>
-            <span className="campaign-advanced-content-count">{items.length} nội dung</span>
+        <div className="campaign-manual-content-launcher">
+          <div className="campaign-manual-content-launcher-copy">
+            <span className="campaign-manual-content-launcher-icon"><Edit3 size={18} /></span>
+            <div>
+              <strong>Nội dung nâng cao</strong>
+              <span>
+                {items.length > 0
+                  ? `Đã thêm ${items.length} nội dung. Mở modal để thêm hoặc chỉnh sửa biến thể.`
+                  : 'Thêm các biến thể nội dung và media riêng trong modal.'}
+              </span>
+            </div>
           </div>
-          {renderContentTemplateToolbar('content')}
+          <div className="campaign-manual-content-launcher-actions">
+            {items.length > 0 && (
+              <span className="campaign-advanced-content-count">{items.length} nội dung</span>
+            )}
+            <button
+              ref={manualAdvancedContentTriggerRef}
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setManualAdvancedContentModalOpen(true)}
+            >
+              <Plus size={14} />
+              <span>Thêm nội dung</span>
+            </button>
+          </div>
         </div>
+      </div>
+    )
+  }
 
+  const renderManualAdvancedContentItems = () => {
+    const items = formData.advancedContentItems
+
+    return (
+      <>
         {items.length === 0 ? (
           <div className="campaign-advanced-content-entry">
             <div className="campaign-advanced-content-empty">
-              Chưa có nội dung nâng cao.
+              Chưa có biến thể nội dung nào.
             </div>
             <div className="campaign-advanced-content-add-row">
               <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
                 <Plus size={14} />
-                <span>Thêm nội dung</span>
+                <span>Thêm biến thể</span>
               </button>
             </div>
           </div>
@@ -12452,12 +12612,75 @@ export default function CampaignFormModal({
               <div className="campaign-advanced-content-add-row">
                 <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
                   <Plus size={14} />
-                  <span>Thêm nội dung</span>
+                  <span>Thêm biến thể</span>
                 </button>
               </div>
             )}
           </div>
         ))}
+      </>
+    )
+  }
+
+  const renderManualAdvancedContentModal = () => {
+    if (!manualAdvancedContentModalOpen) return null
+
+    const itemCount = formData.advancedContentItems.length
+    const titleId = `campaign-manual-content-title-${modalZIndex || 3000}`
+
+    return (
+      <div
+        className="modal-overlay campaign-picker-modal-overlay campaign-manual-content-modal-overlay"
+        style={{ zIndex: Math.max(3050, (modalZIndex || 3000) + 50) }}
+        onMouseDown={event => {
+          if (event.target === event.currentTarget) closeManualAdvancedContentModal()
+        }}
+      >
+        <div
+          ref={manualAdvancedContentModalRef}
+          className="campaign-manual-content-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+        >
+          <div className="modal-header">
+            <div className="campaign-manual-content-modal-title">
+              <span className="campaign-manual-content-launcher-icon"><Edit3 size={17} /></span>
+              <div>
+                <span className="modal-title" id={titleId}>Nội dung nâng cao</span>
+                <span>{itemCount} biến thể · mỗi biến thể có thể dùng nội dung và media riêng</span>
+              </div>
+            </div>
+            <button
+              ref={manualAdvancedContentCloseRef}
+              type="button"
+              className="btn-icon"
+              onClick={closeManualAdvancedContentModal}
+              title="Đóng"
+              aria-label="Đóng modal nội dung nâng cao"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="campaign-manual-content-modal-body">
+            {(isEmailCampaign || canUseFormattedContent) && (
+              <div className="campaign-manual-content-modal-settings">
+                {isEmailCampaign ? renderEmailBodyHtmlOption() : renderFormattedContentOption()}
+              </div>
+            )}
+            {renderManualAdvancedContentItems()}
+          </div>
+
+          <div className="modal-footer">
+            <span className="campaign-manual-content-modal-footer-note">
+              Các thay đổi sẽ được lưu khi bạn lưu chiến dịch.
+            </span>
+            <button type="button" className="btn btn-primary btn-sm" onClick={closeManualAdvancedContentModal}>
+              Xong
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -12868,7 +13091,8 @@ export default function CampaignFormModal({
     const groupHasNoCompatibleItems = !!groupCandidate && groupCandidate.variantCount === 0
     const groupExceedsSmsSnapshotLimit = isSmsCampaign && !!groupCandidate && groupCandidate.variantCount > MAX_SMS_ADVANCED_CONTENT_ITEMS
     const groupCanBeUsed = !!groupCandidate && !groupIsInactive && !groupHasNoCompatibleItems && !groupExceedsSmsSnapshotLimit
-    const groupIsPending = pendingContentTemplateGroupId === previewContentTemplateGroupId
+    const groupIsSelectedForSave = selectedContentTemplateGroupId === previewContentTemplateGroupId &&
+      !preserveSavedGroupSnapshotOnSave
     const groupIsSaved = savedAdvancedContentSource === 'group_snapshot' && savedAdvancedGroupSnapshot?.groupId === previewContentTemplateGroupId
     const selectedTemplate = templates.find(template => template.id === previewContentTemplateId) || templates[0] || null
     const selectedChannel = previewContentTemplateChannel || getInitialContentTemplatePreviewChannel(selectedTemplate, advancedContentTargetChannel)
@@ -13096,12 +13320,12 @@ export default function CampaignFormModal({
                   <button type="button" className="btn btn-ghost btn-sm" onClick={clearCandidateContentTemplateGroup}>Chọn nhóm khác</button>
                 </>
               ) : (
-                <button type="button" className="btn btn-primary btn-sm" onClick={usePreviewGroup} disabled={groupIsPending}>
-                  <Check size={14} /> {groupIsPending
-                    ? 'Đang chờ lưu nhóm này'
+                <button type="button" className="btn btn-primary btn-sm" onClick={usePreviewGroup} disabled={groupIsSelectedForSave}>
+                  <Check size={14} /> {groupIsSelectedForSave
+                    ? 'Đã chọn'
                     : groupIsSaved
-                      ? 'Cập nhật từ nhóm'
-                      : 'Dùng nhóm này'}
+                      ? 'Cập nhật nội dung'
+                      : 'Chọn nhóm'}
                 </button>
               )}
             </div>
@@ -13971,29 +14195,7 @@ export default function CampaignFormModal({
                           />
                         </div>
                       )}
-                      <div className="stepper-form-group">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={isAdvancedGroupSource
-                              ? groupSnapshotEffectiveRich
-                              : formData.emailBodyIsHtml}
-                            disabled={isAdvancedGroupSource}
-                            onChange={e => {
-                              const checked = e.target.checked
-                              if (!checked) normalizeManualAdvancedContentItemsToPlain()
-                              setFormData(current => checked
-                                ? {
-                                    ...current,
-                                    emailBodyIsHtml: true,
-                                    rewriteContentEachRun: false
-                                  }
-                                : convertFormattedStateToPlain(current))
-                            }}
-                          />
-                          <span>Nội dung dạng HTML</span>
-                        </label>
-                      </div>
+                      {!isManualAdvancedSource && renderEmailBodyHtmlOption()}
                       <div className="stepper-form-group">
                         <label className="schedule-checkbox-label">
                           <input
@@ -14013,7 +14215,7 @@ export default function CampaignFormModal({
                       : renderCommentSeedingSettings()
                   ) : (
                     <>
-                      {renderFormattedContentOption()}
+                      {!isManualAdvancedSource && renderFormattedContentOption()}
                       {isAdvancedContentMode ? (
                         <>
                           {renderAdvancedContentEditor()}
@@ -15016,6 +15218,7 @@ export default function CampaignFormModal({
       )}
       {!draftFormConfig && renderCampaignPickerModal()}
       {renderSourceCampaignViewModal()}
+      {renderManualAdvancedContentModal()}
       {renderContentTemplatePickerModal()}
       {renderContentTemplateGroupPreviewModal()}
       {renderContentTemplateSaveModal()}

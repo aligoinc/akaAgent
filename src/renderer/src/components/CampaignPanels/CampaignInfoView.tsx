@@ -388,8 +388,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
         .join('\n\n———\n\n')
       : campaign.content
   const advancedContentSourceLabel = extra.advancedContentSource === 'group_snapshot'
-    ? 'Snapshot nhóm mẫu (chỉ đọc)'
-    : 'Thủ công'
+    ? 'Nhóm mẫu nội dung (snapshot chỉ đọc)'
+    : 'Nâng cao'
   const advancedItemSourceSummary = advancedContentItems
     .map((item, index) => item.sourceTemplateName
       ? `${index + 1}. ${item.sourceTemplateName}${item.sourceVariantIndex !== undefined ? ` — biến thể ${item.sourceVariantIndex + 1}` : ''}`

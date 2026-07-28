@@ -889,7 +889,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   const validateAdvancedContentItems = (): boolean => {
     if (!isAdvancedContentMode) return true
     if (normalizedAdvancedContentItems.length === 0) {
-      showAlert('Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Đơn giản.', 'error')
+      showAlert('Vui lòng thêm ít nhất 1 nội dung nâng cao hoặc chuyển về chế độ Cơ bản.', 'error')
       return false
     }
     if (isSmsCampaign && normalizedAdvancedContentItems.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
@@ -1220,6 +1220,9 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   const renderContentModeSegmented = () => {
     if (!canUseAdvancedContentMode) return null
 
+    const isBasicContentMode = !formData.advancedContentEnabled
+    const isManualAdvancedContentMode = formData.advancedContentEnabled && !isGroupSnapshotSource
+    const isDataGroupContentMode = formData.advancedContentEnabled && isGroupSnapshotSource
     const note = formData.advancedContentEnabled
       ? 'Tạo nhiều nội dung riêng, mỗi nội dung là một biến thể hoàn chỉnh với media riêng. Mỗi lượt chạy sẽ xoay vòng qua các nội dung trong danh sách.'
       : isRichContentEditorEnabled
@@ -1231,27 +1234,38 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         <div className="campaign-content-mode-segmented" role="group" aria-label="Chế độ nội dung">
           <button
             type="button"
-            className={!formData.advancedContentEnabled ? 'active' : ''}
+            aria-pressed={isBasicContentMode}
+            className={isBasicContentMode ? 'active' : ''}
             onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: false }))}
             disabled={isAdvancedContentReadOnly}
           >
-            Đơn giản
+            Cơ bản
           </button>
           <button
             type="button"
-            className={formData.advancedContentEnabled ? 'active' : ''}
+            aria-pressed={isManualAdvancedContentMode}
+            className={isManualAdvancedContentMode ? 'active' : ''}
             onClick={() => setFormData(prev => ({ ...prev, advancedContentEnabled: true }))}
             disabled={isAdvancedContentReadOnly}
           >
             Nâng cao
           </button>
+          <button
+            type="button"
+            aria-pressed={isDataGroupContentMode}
+            className={isDataGroupContentMode ? 'active' : ''}
+            disabled
+            title="Mở form sửa đầy đủ để chọn hoặc cập nhật Nhóm mẫu nội dung"
+          >
+            Nhóm mẫu nội dung
+          </button>
         </div>
         <div className="campaign-content-mode-note">
           {isGroupSnapshotSource
-            ? `Snapshot chỉ đọc từ nhóm “${extra.advancedContentGroupSnapshot?.groupName || '-'}”. Hãy mở form sửa đầy đủ để đổi hoặc cập nhật Nhóm mẫu.`
+            ? `Nhóm mẫu nội dung “${extra.advancedContentGroupSnapshot?.groupName || '-'}” là snapshot chỉ đọc. Hãy mở form sửa đầy đủ để đổi hoặc cập nhật nhóm.`
             : isLegacyManualAdvancedSource
-              ? 'Nội dung nâng cao thủ công cũ chỉ đọc. Hãy mở form sửa đầy đủ và chọn Nhóm mẫu để thay đổi nguồn nội dung.'
-            : note}
+              ? 'Nội dung nâng cao chỉ đọc trong sửa nhanh. Hãy mở form sửa đầy đủ để thay đổi nội dung.'
+              : note}
         </div>
       </div>
     )
@@ -1431,7 +1445,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
     <div className="campaign-advanced-content-editor">
       <div className="campaign-advanced-content-header">
         <div>
-          <strong>{isGroupSnapshotSource ? 'Snapshot nội dung từ nhóm mẫu' : isLegacyManualAdvancedSource ? 'Nội dung nâng cao cũ (chỉ đọc)' : 'Nội dung nâng cao'}</strong>
+          <strong>{isGroupSnapshotSource ? 'Snapshot nội dung từ nhóm mẫu' : isLegacyManualAdvancedSource ? 'Nội dung nâng cao (chỉ đọc)' : 'Nội dung nâng cao'}</strong>
           <span className="campaign-advanced-content-count">{normalizedAdvancedContentItems.length} nội dung</span>
         </div>
       </div>
@@ -1456,7 +1470,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
 
       {isLegacyManualAdvancedSource && (
         <div className="schedule-hint" style={{ marginBottom: 10 }}>
-          Chiến dịch vẫn tiếp tục chạy bằng nội dung nâng cao thủ công đã lưu. Muốn thay đổi nội dung, hãy mở form sửa đầy đủ và chọn Nhóm mẫu.
+          Chiến dịch vẫn tiếp tục chạy bằng nội dung nâng cao đã lưu. Muốn thay đổi nội dung, hãy mở form sửa đầy đủ.
         </div>
       )}
 
