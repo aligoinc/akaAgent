@@ -78,6 +78,9 @@ const isFacebookCommentSeedingPostAction = (actionId?: string | null): boolean =
 type ImportTargetField = 'phone' | 'uid' | 'email' | 'phone_or_uid'
 
 const getImportTargetField = (platform: CampaignImportPlatform, actionId: string): ImportTargetField => {
+  // Direct upload for add-group-member is intentionally phone-only. The
+  // account-bound Zalo UID branch remains available through scans/Data Groups.
+  if (isZaloAddGroupMemberAction(actionId)) return 'phone'
   const requiredField = getCampaignInputDataRequirement(actionId)?.field
   if (requiredField === 'phone' || requiredField === 'uid' || requiredField === 'email' || requiredField === 'phone_or_uid') {
     return requiredField
@@ -233,8 +236,7 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
   if (isZaloAddGroupMemberAction(actionId)) {
     return [
       { key: 'name', label: 'Tên' },
-      { key: 'phone', label: 'Số điện thoại' },
-      { key: 'uid', label: 'UID Zalo' },
+      { key: 'phone', label: 'Số điện thoại', required: true },
       ...INFO_FIELDS
     ]
   }
@@ -385,16 +387,14 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
     }
     if (isZaloAddGroupMemberAction(actionId)) {
       const phone = normalizeVietnamMobilePhone(row.phone)
-      const uid = phone ? '' : normalizeUid(row.uid)
-      const key = phone ? `phone:${phone}` : uid ? `uid:${uid.toLowerCase()}` : ''
-      if (!key || seen.has(key)) continue
-      seen.add(key)
+      if (!phone || seen.has(phone)) continue
+      seen.add(phone)
       output.push({
         ...row,
         name: getCellText(row.name),
         phone,
         phoneCarrier: getVietnamMobileCarrier(phone) || null,
-        uid,
+        uid: '',
         email: ''
       })
       continue
@@ -562,18 +562,16 @@ const buildAkabizTemplateRows = (
 
     if (isZaloAddGroupMemberAction(actionId)) {
       const phone = normalizeVietnamMobilePhone(rawPhone) ||
-        normalizeVietnamMobilePhone(rawUid) ||
         normalizeVietnamMobilePhone(rawName)
-      const uid = phone ? '' : normalizeUid(rawUid)
-      if (!phone && !uid) continue
+      if (!phone) continue
       pushUnique({
         ...baseRow,
         name: phone && normalizeVietnamMobilePhone(rawName) === phone ? '' : rawName,
         phone,
         phoneCarrier: getVietnamMobileCarrier(phone) || null,
-        uid,
+        uid: '',
         email: ''
-      }, phone ? `phone:${phone}` : `uid:${uid}`)
+      }, phone)
       continue
     }
 
@@ -741,8 +739,7 @@ const detectRequiredColumnMap = (rows: unknown[][], platform: CampaignImportPlat
   }
   if (isZaloAddGroupMemberAction(actionId)) {
     return {
-      phone: detectPhoneColumn(rows),
-      uid: detectColumnFromHeader(rows, ['uid', 'zalo uid', 'zalo_uid'])
+      phone: detectPhoneColumn(rows)
     }
   }
   const targetField = getImportTargetField(platform, actionId)
@@ -1058,7 +1055,7 @@ export default function CampaignDataUploadModal({
       if (isZaloJoinGroupLinkAction(actionId)) return { uid: value }
       if (isZaloAddGroupMemberAction(actionId)) {
         const phone = normalizeVietnamMobilePhone(value)
-        return phone ? { phone, uid: '' } : { phone: '', uid: value }
+        return { phone, uid: '' }
       }
       const targetField = getImportTargetField(platform, actionId)
       if (targetField === 'phone') return { phone: value }

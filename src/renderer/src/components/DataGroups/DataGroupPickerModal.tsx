@@ -3,6 +3,9 @@ import DataGroupManagerModal from '../DataScan/DataGroupManagerModal'
 
 export interface DataGroupPickerModalProps {
   selectedGroupId?: number | null
+  actionId?: string | null
+  compatibleDataTypeCategoryItemId?: number | null
+  unrestrictedOnly?: boolean
   onSelect: (group: DataGroup) => void
   onClose: () => void
 }
@@ -16,12 +19,18 @@ export interface DataGroupPickerModalProps {
  */
 export default function DataGroupPickerModal({
   selectedGroupId,
+  actionId,
+  compatibleDataTypeCategoryItemId,
+  unrestrictedOnly,
   onSelect,
   onClose
 }: DataGroupPickerModalProps) {
   return (
     <DataGroupManagerModal
       initialGroupId={selectedGroupId}
+      compatibleActionId={actionId}
+      compatibleDataTypeCategoryItemId={compatibleDataTypeCategoryItemId}
+      unrestrictedOnly={unrestrictedOnly}
       selectionMode
       onSelectGroup={onSelect}
       onClose={onClose}

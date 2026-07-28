@@ -19,6 +19,7 @@ import {
   DataGroupMemberMutationRequest,
   DataGroupMutationResult,
   DataProvenance,
+  DataTypeCategoryItem,
   MoveDataGroupMembersRequest,
   SnapshotDataGroupToCampaignRequest,
   SnapshotDataGroupToCampaignResult,
@@ -68,6 +69,10 @@ function mapDataGroup(row: DbRow): DataGroup {
     color: asString(row.color, '#6366f1'),
     sortOrder: asNumber(row.sort_order),
     revision: asNumber(row.revision),
+    dataTypeCategoryItemId: asNullableNumber(row.data_type_category_item_id),
+    dataTypeCode: asNullableString(row.data_type_code) as DataGroup['dataTypeCode'],
+    dataTypeName: asNullableString(row.data_type_name),
+    datasetSyncMode: asString(row.dataset_sync_mode, 'manual') as DataGroup['datasetSyncMode'],
     activeMembershipCount: asNumber(row.active_membership_count ?? row.contact_count),
     isDelete: Boolean(row.is_delete),
     staffId: asNullableNumber(row.staff_id) ?? undefined,
@@ -97,6 +102,9 @@ function mapProvenance(row: DbRow): DataProvenance {
     targetCampaignName: asNullableString(row.target_campaign_name),
     sourceNameSnapshot: asNullableString(row.source_name_snapshot),
     relationshipKind: asNullableString(row.relationship_kind) as DataProvenance['relationshipKind'],
+    dataTypeCategoryItemId: asNullableNumber(row.data_type_category_item_id),
+    dataTypeCode: asNullableString(row.data_type_code) as DataProvenance['dataTypeCode'],
+    dataTypeName: asNullableString(row.data_type_name),
     isCurrent: row.is_current !== false,
     createdAt: asNullableString(row.created_at) ?? undefined,
     updatedAt: asNullableString(row.updated_at) ?? undefined
@@ -142,6 +150,12 @@ function mapDataGroupMember(row: DbRow): DataGroupMember {
     sourceName: asNullableString(row.source_name),
     sourceAutomationId: asNullableNumber(row.source_automation_id),
     sourceAutomationName: asNullableString(row.source_automation_name),
+    dataTypeCategoryItemId: asNullableNumber(row.data_type_category_item_id),
+    dataTypeCode: asNullableString(row.data_type_code) as DataGroupMember['dataTypeCode'],
+    dataTypeName: asNullableString(row.data_type_name),
+    groupDataTypeCategoryItemId: asNullableNumber(row.group_data_type_category_item_id),
+    groupDataTypeCode: asNullableString(row.group_data_type_code) as DataGroupMember['groupDataTypeCode'],
+    groupDataTypeName: asNullableString(row.group_data_type_name),
     provenance: provenanceRows.map(mapProvenance),
     createdAt: asNullableString(row.created_at) ?? undefined,
     updatedAt: asNullableString(row.updated_at) ?? undefined
@@ -165,6 +179,9 @@ function mapDataGroupDataset(row: DbRow): DataGroupDataset {
     sourceKey: asString(row.source_key),
     importSource: asNullableString(row.import_source) as DataGroupDataset['importSource'],
     contactCount: asNumber(row.contact_count),
+    dataTypeCategoryItemId: asNullableNumber(row.data_type_category_item_id),
+    dataTypeCode: asNullableString(row.data_type_code) as DataGroupDataset['dataTypeCode'],
+    dataTypeName: asNullableString(row.data_type_name),
     isDelete: Boolean(row.is_delete),
     createdAt: asNullableString(row.created_at) ?? undefined,
     updatedAt: asNullableString(row.updated_at) ?? undefined
@@ -226,13 +243,34 @@ function serverRuntimeParams(context: DataGroupRuntimeContext): {
 }
 
 function throwRpcError(prefix: string, error: { message?: string } | null): never {
-  throw new Error(`${prefix}: ${error?.message || 'unknown_error'}`)
+  const rawMessage = error?.message || 'unknown_error'
+  const semanticMessages: Record<string, string> = {
+    invalid_data_type_category_item: 'Loại data không hợp lệ hoặc đã ngừng sử dụng.',
+    invalid_data_type_category_context: 'Loại data không thuộc danh mục Loại dữ liệu.',
+    data_group_ingest_semantic_type_mismatch: 'Data thêm vào không đúng loại của nhóm.',
+    data_group_origin_semantic_type_mismatch: 'Nguồn data không đúng loại của nhóm.',
+    data_group_dataset_semantic_type_mismatch: 'Danh sách data không đúng loại của nhóm.',
+    data_group_members_semantic_type_mismatch: 'Nhóm đang có data không phù hợp với loại muốn đổi.',
+    dataset_auto_data_group_type_read_only: 'Loại của nhóm tự sinh được quản lý theo danh sách data và không thể sửa thủ công.',
+    data_group_campaign_semantic_type_incompatible: 'Nhóm data không tương thích với loại dữ liệu của chiến dịch.',
+    automation_data_group_semantic_type_mismatch: 'Nhóm data không đúng loại dữ liệu của tự động hóa.',
+    zalo_add_group_member_upload_requires_phone: 'Upload trực tiếp cho chiến dịch thêm thành viên Zalo chỉ nhận số điện thoại.',
+    facebook_comment_seeding_upload_must_be_unrestricted: 'Upload cho comment seeding phải dùng nhóm Mọi loại dữ liệu.'
+  }
+  const matchedCode = Object.keys(semanticMessages).find(code => rawMessage.includes(code))
+  throw new Error(matchedCode ? semanticMessages[matchedCode] : `${prefix}: ${rawMessage}`)
 }
 
 export async function listDataGroups(query: DataGroupListQuery = {}): Promise<DataGroupListResult> {
   const { data, error } = await client().rpc('aka_agent_list_data_groups', {
     ...identityParams(),
     p_search: asNullableString(query.search),
+    p_compatible_action_id: asNullableString(query.compatibleActionId),
+    p_compatible_data_type_category_item_id: asNullableNumber(query.compatibleDataTypeCategoryItemId),
+    p_unrestricted_only: query.unrestrictedOnly === true,
+    p_data_type_category_item_ids: query.dataTypeCategoryItemIds?.length
+      ? query.dataTypeCategoryItemIds
+      : null,
     p_offset: Math.max(0, Math.trunc(query.offset || 0)),
     p_limit: Math.min(200, Math.max(1, Math.trunc(query.limit || 50)))
   })
@@ -244,12 +282,35 @@ export async function listDataGroups(query: DataGroupListQuery = {}): Promise<Da
   }
 }
 
+export async function listDataTypeCategoryItems(): Promise<DataTypeCategoryItem[]> {
+  const { data, error } = await client()
+    .from('category_item')
+    .select('id, code, name, sort_order, is_active, category_type!inner(namespace, code, managed_by, is_active)')
+    .eq('category_type.namespace', 'common')
+    .eq('category_type.code', 'data_type')
+    .eq('category_type.managed_by', 'system')
+    .eq('category_type.is_active', true)
+    .eq('managed_by', 'system')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true })
+  if (error) throwRpcError('Failed to list data type categories', error)
+  return (data || []).map((row: DbRow) => ({
+    id: asNumber(row.id),
+    code: asString(row.code) as DataTypeCategoryItem['code'],
+    name: asString(row.name),
+    sortOrder: asNumber(row.sort_order),
+    isActive: row.is_active !== false
+  }))
+}
+
 export async function createDataGroup(request: CreateDataGroupRequest): Promise<DataGroup> {
   const { data, error } = await client().rpc('aka_agent_create_data_group', {
     ...identityParams(),
     p_name: request.name,
     p_color: request.color || null,
-    p_request_id: request.requestId || null
+    p_request_id: request.requestId || null,
+    p_data_type_category_item_id: request.dataTypeCategoryItemId ?? null
   })
   if (error) throwRpcError('Failed to create data group', error)
   return mapDataGroup(unwrapRpcRow(data))
@@ -261,7 +322,9 @@ export async function updateDataGroup(request: UpdateDataGroupRequest): Promise<
     p_group_id: request.groupId,
     p_name: request.name ?? null,
     p_color: request.color ?? null,
-    p_sort_order: request.sortOrder ?? null
+    p_sort_order: request.sortOrder ?? null,
+    p_data_type_category_item_id: request.dataTypeCategoryItemId ?? null,
+    p_update_data_type: Object.prototype.hasOwnProperty.call(request, 'dataTypeCategoryItemId')
   })
   if (error) throwRpcError('Failed to update data group', error)
   return mapDataGroup(unwrapRpcRow(data))
@@ -316,6 +379,9 @@ export async function listDataGroupMembers(
     p_flatform_types: query.flatformTypes?.length ? query.flatformTypes : null,
     p_status: query.status || 'all',
     p_dataset_ids: query.datasetIds?.length ? query.datasetIds : null,
+    p_data_type_category_item_ids: query.dataTypeCategoryItemIds?.length
+      ? query.dataTypeCategoryItemIds
+      : null,
     p_ids: query.ids?.length ? query.ids : null,
     p_exclude_ids: query.excludeIds?.length ? query.excludeIds : null,
     p_offset: Math.max(0, Math.trunc(query.offset || 0)),
@@ -404,7 +470,8 @@ export async function ingestDataGroup(request: DataGroupIngestRequest): Promise<
     p_import_source: request.importSource ?? null,
     p_source_account_id: request.sourceAccountId ?? null,
     p_source_name: request.sourceName ?? null,
-    p_payload_hash: request.payloadHash ?? null
+    p_payload_hash: request.payloadHash ?? null,
+    p_data_type_category_item_id: request.dataTypeCategoryItemId ?? null
   })
   if (error) throwRpcError('Failed to ingest data group', error)
   const row = unwrapRpcRow(data)

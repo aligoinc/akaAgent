@@ -136,18 +136,6 @@ export default function TopBar({
         onClick: onOpenDataScan
       },
       {
-        key: 'media',
-        label: 'Media',
-        icon: <Images size={18} />,
-        onClick: onOpenMediaLibrary
-      },
-      {
-        key: 'proxy',
-        label: 'Proxy',
-        icon: <ServerCog size={18} />,
-        onClick: onOpenProxyManager
-      },
-      {
         key: 'data-groups',
         label: 'Nhóm data',
         icon: <FolderOpen size={18} />,
@@ -159,6 +147,18 @@ export default function TopBar({
         icon: <FileText size={18} />,
         active: activePage === 'content-templates',
         onClick: () => onPageChange('content-templates')
+      },
+      {
+        key: 'media',
+        label: 'Media',
+        icon: <Images size={18} />,
+        onClick: onOpenMediaLibrary
+      },
+      {
+        key: 'proxy',
+        label: 'Proxy',
+        icon: <ServerCog size={18} />,
+        onClick: onOpenProxyManager
       },
       {
         key: 'reports',

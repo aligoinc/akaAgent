@@ -347,8 +347,41 @@ export interface CampaignAction {
   allowMultipleAccounts: boolean
   // Candidate action codes for daily/window quota checks, not for action-disable enforcement.
   limitCheckActionCodes: string[]
+  /** Semantic target/source types accepted by this action. */
+  dataTypes?: CampaignActionDataType[]
   isDelete: boolean
   createdAt?: string
+}
+
+export type DataTypeCategoryCode =
+  | 'phone'
+  | 'email'
+  | 'facebook_search_keyword'
+  | 'facebook_post_url'
+  | 'facebook_person'
+  | 'facebook_group'
+  | 'facebook_page'
+  | 'facebook_page_inbox_customer'
+  | 'zalo_person'
+  | 'zalo_group'
+
+export interface DataTypeCategoryItem {
+  id: number
+  code: DataTypeCategoryCode
+  name: string
+  sortOrder: number
+  isActive: boolean
+}
+
+export interface CampaignActionDataType {
+  dataTypeCategoryItemId: number
+  dataTypeCode: DataTypeCategoryCode
+  dataTypeName: string
+  /** Legacy extraction/transport key used by automation materialization. */
+  automationDataType: AutomationDataType
+  targetContactType: ContactType
+  canSource: boolean
+  canTarget: boolean
 }
 
 export interface AutoAccountAction {
@@ -725,6 +758,10 @@ export interface CampaignInputData {
   createdAt?: string
   /** Per-campaign immutable delivery identity. Legacy rows intentionally keep NULL. */
   canonicalTargetKey?: string | null
+  /** Immutable semantic type snapshot. Legacy rows may intentionally remain NULL. */
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: DataTypeCategoryCode | null
+  dataTypeName?: string | null
   /** Audit routes that materialized or later converged on this canonical input. */
   origins?: CampaignInputDataOrigin[]
 }
@@ -1233,7 +1270,7 @@ export interface AutoAccountContactDataset {
   link?: string | null
   description?: string | null
   source: ContactDatasetSource
-  accountId: number
+  accountId: number | null
   flatformType: string
   contactType: ContactType
   scanType: ContactDatasetScanType
@@ -1247,6 +1284,9 @@ export interface AutoAccountContactDataset {
   organizationId?: number | null
   createdAt?: string
   updatedAt?: string
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: DataTypeCategoryCode | null
+  dataTypeName?: string | null
 }
 
 export interface ContactDatasetListQuery {
@@ -1268,6 +1308,7 @@ export interface ContactDatasetFinalizeInput {
   status: ContactDatasetScanStatus
   contactUids: string[]
   extraData?: Record<string, unknown>
+  dataTypeCategoryItemId?: number | null
 }
 
 export interface SaveUploadDatasetRequest {
@@ -1279,6 +1320,7 @@ export interface SaveUploadDatasetRequest {
   importSource: ContactDatasetImportSource
   sourceLink?: string | null
   rows: CampaignImportDataRow[]
+  dataTypeCategoryItemId?: number | null
 }
 
 export interface SaveUploadDatasetResult {
@@ -1461,6 +1503,10 @@ export interface DataGroup {
   color: string
   sortOrder: number
   revision: number
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: DataTypeCategoryCode | null
+  dataTypeName?: string | null
+  datasetSyncMode?: 'manual' | 'dataset_auto'
   activeMembershipCount: number
   isDelete: boolean
   staffId?: number
@@ -1488,6 +1534,9 @@ export interface DataProvenance {
   targetCampaignName?: string | null
   sourceNameSnapshot?: string | null
   relationshipKind?: DataGroupRelationshipKind | null
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: DataTypeCategoryCode | null
+  dataTypeName?: string | null
   isCurrent: boolean
   createdAt?: string
   updatedAt?: string
@@ -1526,6 +1575,14 @@ export interface DataGroupMember {
   sourceName?: string | null
   sourceAutomationId?: number | null
   sourceAutomationName?: string | null
+  /** Semantic type of the stable primary origin used for this row. */
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: DataTypeCategoryCode | null
+  dataTypeName?: string | null
+  /** Semantic constraint inherited from the owning group. */
+  groupDataTypeCategoryItemId?: number | null
+  groupDataTypeCode?: DataTypeCategoryCode | null
+  groupDataTypeName?: string | null
   provenance?: DataProvenance[]
   createdAt?: string
   updatedAt?: string
@@ -1547,6 +1604,9 @@ export interface DataGroupDataset {
   sourceKey: string
   importSource?: ContactDatasetImportSource | null
   contactCount: number
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: DataTypeCategoryCode | null
+  dataTypeName?: string | null
   isDelete: boolean
   createdAt?: string
   updatedAt?: string
@@ -1554,6 +1614,10 @@ export interface DataGroupDataset {
 
 export interface DataGroupListQuery {
   search?: string
+  compatibleActionId?: string | null
+  compatibleDataTypeCategoryItemId?: number | null
+  unrestrictedOnly?: boolean
+  dataTypeCategoryItemIds?: number[]
   offset?: number
   limit?: number
 }
@@ -1582,6 +1646,7 @@ export interface DataGroupMemberListQuery {
   flatformTypes?: string[]
   status?: DataGroupMemberStatusFilter
   datasetIds?: number[]
+  dataTypeCategoryItemIds?: number[]
   ids?: number[]
   excludeIds?: number[]
   offset?: number
@@ -1602,6 +1667,7 @@ export interface CreateDataGroupRequest {
   name: string
   color?: string
   requestId?: string
+  dataTypeCategoryItemId?: number | null
 }
 
 export interface UpdateDataGroupRequest {
@@ -1609,6 +1675,8 @@ export interface UpdateDataGroupRequest {
   name?: string
   color?: string
   sortOrder?: number
+  /** Omitted means unchanged; NULL explicitly changes the group to unrestricted. */
+  dataTypeCategoryItemId?: number | null
 }
 
 export interface DataGroupIngestRow {
@@ -1641,6 +1709,8 @@ export interface DataGroupIngestRequest {
   sourceAccountId?: number | null
   sourceName?: string | null
   payloadHash?: string | null
+  /** Required for typed groups; NULL is only valid for unrestricted groups. */
+  dataTypeCategoryItemId?: number | null
 }
 
 export interface DataGroupIngestConflict {
@@ -1819,6 +1889,9 @@ export interface Automation {
   /** Optional campaign destination. At least this or targetDataGroupId is required. */
   targetCampaignId: number | null
   dataType: AutomationDataType
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: DataTypeCategoryCode | null
+  dataTypeName?: string | null
   targetContactGroupId?: number | null
   /** Optional staff-shared destination; independent from the A → B campaign route. */
   targetDataGroupId?: number | null
@@ -1859,6 +1932,7 @@ export interface AutomationInput {
   /** Optional campaign destination. At least this or targetDataGroupId is required. */
   targetCampaignId: number | null
   dataType: AutomationDataType
+  dataTypeCategoryItemId?: number | null
   targetContactGroupId?: number | null
   targetDataGroupId?: number | null
   scheduleMode: AutomationScheduleMode
@@ -1911,6 +1985,7 @@ export interface AutomationCampaignOption {
   platformType: string
   status: string
   dataTypes: AutomationDataType[]
+  semanticDataTypes?: CampaignActionDataType[]
   contactTypeByDataType?: Partial<Record<AutomationDataType, ContactType>>
 }
 
@@ -1947,6 +2022,7 @@ export interface AutomationOptions {
   triggerOptions: AutomationTriggerOption[]
   contactGroups: AutomationContactGroupOption[]
   dataGroups: DataGroup[]
+  dataTypeCategories?: DataTypeCategoryItem[]
 }
 
 export interface AutomationExecution {
@@ -1967,6 +2043,9 @@ export interface AutomationExecution {
   targetDataGroupSyncError?: string | null
   sourceStatus: string
   dataType: AutomationDataType
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: DataTypeCategoryCode | null
+  dataTypeName?: string | null
   dataValue: string
   triggeredAt: string
   scheduledAt: string
@@ -2621,6 +2700,7 @@ export const IPC_EVENTS = {
   DATA_GROUPS_REMOVE_MEMBERS: 'data-groups:remove-members',
   DATA_GROUPS_MOVE_MEMBERS: 'data-groups:move-members',
   DATA_GROUPS_EXPORT_MEMBERS: 'data-groups:export-members',
+  DATA_TYPE_CATEGORIES_LIST: 'data-types:list',
   CAMPAIGN_DATA_GROUP_SOURCE_BIND: 'campaign:data-group-source:bind',
   CAMPAIGN_DATA_GROUP_SOURCE_PREFLIGHT_CHANGE: 'campaign:data-group-source:preflight-change',
   CAMPAIGN_DATA_GROUP_SOURCE_GET: 'campaign:data-group-source:get',

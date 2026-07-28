@@ -247,7 +247,14 @@ export function mapCampaignInputDataFromDB(row: Record<string, unknown>): Campai
     dateAction: row.date_action as string | undefined,
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string,
-    canonicalTargetKey: (row.canonical_target_key as string | null | undefined) ?? null
+    canonicalTargetKey: (row.canonical_target_key as string | null | undefined) ?? null,
+    dataTypeCategoryItemId: (row.data_type_category_item_id as number | null | undefined) ?? null,
+    dataTypeCode: (
+      row.data_type_category_code
+      ?? row.data_type_code
+      ?? null
+    ) as CampaignInputData['dataTypeCode'],
+    dataTypeName: (row.data_type_category_name as string | null | undefined) ?? null
   }
 }
 
@@ -283,7 +290,7 @@ export function mapAccountContactDatasetFromDB(row: Record<string, unknown>): Au
     link: (row.link as string | null | undefined) ?? null,
     description: (row.description as string | null | undefined) ?? null,
     source: row.source as AutoAccountContactDataset['source'],
-    accountId: row.account_id as number,
+    accountId: (row.account_id as number | null | undefined) ?? null,
     flatformType: row.flatform_type as string,
     contactType: row.contact_type as ContactType,
     scanType: row.scan_type as AutoAccountContactDataset['scanType'],
@@ -294,6 +301,17 @@ export function mapAccountContactDatasetFromDB(row: Record<string, unknown>): Au
     contactCount: row.contact_count === null || row.contact_count === undefined
       ? undefined
       : Number(row.contact_count),
+    dataTypeCategoryItemId: (row.data_type_category_item_id as number | null | undefined) ?? null,
+    dataTypeCode: (
+      row.data_type_category_code
+      ?? row.data_type_code
+      ?? null
+    ) as AutoAccountContactDataset['dataTypeCode'],
+    dataTypeName: (
+      row.data_type_category_name
+      ?? row.data_type_name
+      ?? null
+    ) as string | null,
     isDelete: row.is_delete as boolean,
     staffId: row.staff_id as number | undefined,
     organizationId: (row.organization_id as number | null | undefined) ?? null,

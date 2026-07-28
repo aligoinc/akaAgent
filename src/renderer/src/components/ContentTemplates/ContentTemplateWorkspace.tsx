@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Braces,
+  Calendar,
   Check,
   Edit3,
   FileText,
@@ -16,6 +18,7 @@ import {
   Save,
   Search,
   Trash2,
+  Users,
   X
 } from 'lucide-react'
 import type {
@@ -38,7 +41,10 @@ import {
 } from '../../../../shared/formattedContent'
 import { useUiStore } from '../../stores/uiStore'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
-import { FormattedContentEditor } from '../CampaignPanels/EmailHtmlEditor'
+import {
+  FormattedContentEditor,
+  type FormattedContentEditorHandle
+} from '../CampaignPanels/EmailHtmlEditor'
 import ContentTemplatePreview from './ContentTemplatePreview'
 import './contentTemplateWorkspace.css'
 
@@ -88,6 +94,79 @@ const CHANNEL_META: Record<ContentTemplateChannelName, {
 type WorkspaceView = 'list' | 'editor'
 type TemplateFilter = 'all' | ContentTemplateChannelName
 type ChannelRecord = Record<ContentTemplateChannelName, ContentTemplateChannelConfig>
+type PersonalizationDateOption = 'TODAY' | 'TOMORROW' | 'YESTERDAY'
+type PersonalizationDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
+
+interface PersonalizationToken {
+  label: string
+  token: string
+}
+
+const PERSONALIZATION_DATE_OPTIONS: Array<{
+  value: PersonalizationDateOption
+  label: string
+}> = [
+  { value: 'TODAY', label: 'Hôm nay' },
+  { value: 'TOMORROW', label: 'Ngày mai' },
+  { value: 'YESTERDAY', label: 'Hôm qua' }
+]
+
+const PERSONALIZATION_DATE_FORMATS: PersonalizationDateFormat[] = [
+  'DD/MM/YYYY',
+  'MM/DD/YYYY'
+]
+
+const getCustomerPersonalizationTokens = (
+  channelName: ContentTemplateChannelName
+): PersonalizationToken[] => {
+  if (channelName === 'email') return []
+
+  const tokens: PersonalizationToken[] = [
+    { label: 'Tên khách', token: '#{FULL_NAME}' }
+  ]
+  if (channelName === 'zalo_message') {
+    tokens.push({ label: 'Tên gốc Zalo', token: '#{ORIGINAL_NAME}' })
+    tokens.push({ label: 'Xưng hô', token: '#{SEX{anh-chị-anh/chị}}' })
+  }
+  return tokens
+}
+
+const getExcelPersonalizationTokens = (
+  channelName: ContentTemplateChannelName
+): PersonalizationToken[] => {
+  if (
+    channelName === 'facebook_post' ||
+    channelName === 'facebook_message' ||
+    channelName === 'facebook_comment'
+  ) {
+    return []
+  }
+
+  const tokens: PersonalizationToken[] = [
+    { label: 'Họ tên (Excel)', token: '#{INPUT_FULLNAME}' },
+    { label: 'Số điện thoại', token: '#{PHONE}' }
+  ]
+  if (channelName !== 'sms') {
+    tokens.push({ label: 'Email', token: '#{EMAIL}' })
+  }
+  return [
+    ...tokens,
+    { label: 'Thông tin 1', token: '#{INFO1}' },
+    { label: 'Thông tin 2', token: '#{INFO2}' },
+    { label: 'Thông tin 3', token: '#{INFO3}' },
+    { label: 'Thông tin 4', token: '#{INFO4}' },
+    { label: 'Thông tin 5', token: '#{INFO5}' }
+  ]
+}
+
+const createVariantIndexRecord = (): Record<ContentTemplateChannelName, number> => ({
+  sms: 0,
+  zalo_message: 0,
+  facebook_post: 0,
+  facebook_message: 0,
+  facebook_comment: 0,
+  email: 0
+})
 
 interface ContentTemplateWorkspaceProps {
   isActive?: boolean
@@ -411,21 +490,148 @@ function ChannelImagesEditor({
   )
 }
 
+function PersonalizationPanel({
+  channelName,
+  onInsert,
+  disabled
+}: {
+  channelName: ContentTemplateChannelName
+  onInsert: (token: string) => void
+  disabled?: boolean
+}) {
+  const [dateOption, setDateOption] = useState<PersonalizationDateOption>('TODAY')
+  const [dateFormat, setDateFormat] = useState<PersonalizationDateFormat>('DD/MM/YYYY')
+  const customerTokens = getCustomerPersonalizationTokens(channelName)
+  const excelTokens = getExcelPersonalizationTokens(channelName)
+  const dateToken = `#{${dateOption}(${dateFormat})}`
+
+  const renderTokens = (tokens: PersonalizationToken[]) => (
+    <div className="ctw-personalization-tokens">
+      {tokens.map(item => (
+        <button
+          type="button"
+          className="ctw-personalization-token"
+          title={`Chèn ${item.token}`}
+          onClick={() => onInsert(item.token)}
+          disabled={disabled}
+          key={item.token}
+        >
+          <span>{item.label}</span>
+          <code>{item.token}</code>
+        </button>
+      ))}
+    </div>
+  )
+
+  return (
+    <section className="ctw-personalization-panel">
+      <div className="ctw-personalization-header">
+        <span className="ctw-personalization-icon"><Braces size={16} /></span>
+        <div>
+          <strong>Cá nhân hoá nội dung</strong>
+          <span>Bấm để chèn thông tin vào biến thể đang chọn; hệ thống tự thay dữ liệu thật khi gửi.</span>
+        </div>
+      </div>
+      <div className="ctw-personalization-body">
+        {customerTokens.length > 0 && (
+          <div className="ctw-personalization-section">
+            <div className="ctw-personalization-section-title"><Users size={14} /> Khách hàng</div>
+            {renderTokens(customerTokens)}
+          </div>
+        )}
+        {excelTokens.length > 0 && (
+          <div className="ctw-personalization-section">
+            <div className="ctw-personalization-section-title"><FileText size={14} /> Thông tin từ Excel</div>
+            {renderTokens(excelTokens)}
+          </div>
+        )}
+        <div className="ctw-personalization-section">
+          <div className="ctw-personalization-section-title"><Calendar size={14} /> Ngày tháng</div>
+          <div className="ctw-personalization-date-row">
+            <select
+              className="stepper-select"
+              value={dateOption}
+              onChange={event => setDateOption(event.target.value as PersonalizationDateOption)}
+              aria-label="Chọn ngày cá nhân hoá"
+              disabled={disabled}
+            >
+              {PERSONALIZATION_DATE_OPTIONS.map(option => (
+                <option value={option.value} key={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <select
+              className="stepper-select"
+              value={dateFormat}
+              onChange={event => setDateFormat(event.target.value as PersonalizationDateFormat)}
+              aria-label="Chọn định dạng ngày"
+              disabled={disabled}
+            >
+              {PERSONALIZATION_DATE_FORMATS.map(format => (
+                <option value={format} key={format}>{format}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="ctw-personalization-token date"
+              title={`Chèn ${dateToken}`}
+              onClick={() => onInsert(dateToken)}
+              disabled={disabled}
+            >
+              <span>＋ Chèn ngày</span>
+              <code>{dateToken}</code>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function VariantEditor({
   channelName,
   channel,
+  activeVariantIndex,
+  onActiveVariantChange,
   onChange,
   onToggleRich,
   disabled
 }: {
   channelName: ContentTemplateChannelName
   channel: ContentTemplateChannelConfig
+  activeVariantIndex: number
+  onActiveVariantChange: (index: number) => void
   onChange: (channel: ContentTemplateChannelConfig) => void
   onToggleRich: (enabled: boolean) => void
   disabled?: boolean
 }) {
+  const showAlert = useUiStore(state => state.showAlert)
   const rich = isRichChannel(channelName, channel)
   const meta = CHANNEL_META[channelName]
+  const activeVariantIndexRef = useRef(0)
+  const plainEditorRefs = useRef<Record<number, HTMLTextAreaElement | null>>({})
+  const richEditorRefs = useRef<Record<number, FormattedContentEditorHandle | null>>({})
+  const activeCaretValidRef = useRef(false)
+
+  useEffect(() => {
+    activeVariantIndexRef.current = activeVariantIndex
+    activeCaretValidRef.current = false
+  }, [channelName])
+
+  useEffect(() => {
+    activeCaretValidRef.current = false
+  }, [rich])
+
+  useEffect(() => {
+    const nextIndex = Math.max(
+      0,
+      Math.min(activeVariantIndex, channel.variants.length - 1)
+    )
+    if (activeVariantIndexRef.current !== nextIndex) {
+      activeVariantIndexRef.current = nextIndex
+      activeCaretValidRef.current = false
+    }
+  }, [activeVariantIndex, channel.variants.length])
+
   const updateVariant = (index: number, text: string) => onChange({
     ...channel,
     variants: channel.variants.map((variant, variantIndex) => variantIndex === index ? { text } : variant)
@@ -433,6 +639,12 @@ function VariantEditor({
   const addVariant = () => onChange({ ...channel, variants: [...channel.variants, { text: '' }] })
   const removeVariant = (index: number) => {
     if (channel.variants.length <= 1) return
+    if (activeVariantIndexRef.current > index) activeVariantIndexRef.current -= 1
+    else if (activeVariantIndexRef.current === index) {
+      activeVariantIndexRef.current = Math.min(index, channel.variants.length - 2)
+    }
+    activeCaretValidRef.current = false
+    onActiveVariantChange(activeVariantIndexRef.current)
     onChange({ ...channel, variants: channel.variants.filter((_, variantIndex) => variantIndex !== index) })
   }
   const moveVariant = (index: number, direction: -1 | 1) => {
@@ -441,7 +653,51 @@ function VariantEditor({
     const variants = [...channel.variants]
     const [variant] = variants.splice(index, 1)
     variants.splice(target, 0, variant)
+    if (activeVariantIndexRef.current === index) activeVariantIndexRef.current = target
+    else if (activeVariantIndexRef.current === target) activeVariantIndexRef.current = index
+    activeCaretValidRef.current = false
+    onActiveVariantChange(activeVariantIndexRef.current)
     onChange({ ...channel, variants })
+  }
+  const insertToken = (token: string) => {
+    if (disabled) return
+    const index = Math.max(
+      0,
+      Math.min(activeVariantIndexRef.current, channel.variants.length - 1)
+    )
+
+    if (rich) {
+      const editor = richEditorRefs.current[index]
+      if (!editor || editor.isDestroyed) {
+        showAlert('Vui lòng chọn biến thể cần chèn thông tin.', 'info')
+        return
+      }
+      const focusPosition = activeCaretValidRef.current ? undefined : 'end'
+      editor.chain().focus(focusPosition).insertContent(token).run()
+      activeCaretValidRef.current = true
+      return
+    }
+
+    const textarea = plainEditorRefs.current[index]
+    const currentValue = channel.variants[index]?.text || ''
+    const selectionStart = activeCaretValidRef.current
+      ? textarea?.selectionStart ?? currentValue.length
+      : currentValue.length
+    const selectionEnd = activeCaretValidRef.current
+      ? textarea?.selectionEnd ?? selectionStart
+      : selectionStart
+    const safeStart = Math.max(0, Math.min(selectionStart, currentValue.length))
+    const safeEnd = Math.max(safeStart, Math.min(selectionEnd, currentValue.length))
+    const nextValue = currentValue.slice(0, safeStart) + token + currentValue.slice(safeEnd)
+    const nextCursor = safeStart + token.length
+
+    updateVariant(index, nextValue)
+    window.requestAnimationFrame(() => {
+      const activeTextarea = plainEditorRefs.current[index]
+      activeTextarea?.focus()
+      activeTextarea?.setSelectionRange(nextCursor, nextCursor)
+      activeCaretValidRef.current = true
+    })
   }
 
   return (
@@ -453,17 +709,55 @@ function VariantEditor({
         </div>
       )}
       {channelName === 'email' && (
-        <div className="ctw-form-field"><label>Tiêu đề Email <span>*</span></label><input className="stepper-input" value={channel.subject || ''} onChange={event => onChange({ ...channel, subject: event.target.value })} placeholder="Ví dụ: Ưu đãi dành riêng cho #{FULL_NAME}" disabled={disabled} /><small>Một tiêu đề dùng chung cho mọi biến thể.</small></div>
+        <div className="ctw-form-field"><label>Tiêu đề Email <span>*</span></label><input className="stepper-input" value={channel.subject || ''} onChange={event => onChange({ ...channel, subject: event.target.value })} placeholder="Ví dụ: Ưu đãi dành riêng cho #{INPUT_FULLNAME}" disabled={disabled} /><small>Một tiêu đề dùng chung cho mọi biến thể.</small></div>
       )}
+      <PersonalizationPanel channelName={channelName} onInsert={insertToken} disabled={disabled} />
       <div className="ctw-variants-heading"><strong>Nội dung {meta.label}</strong><span>{channel.variants.length} biến thể · luân phiên khi gửi</span></div>
       <div className="ctw-variants">
         {channel.variants.map((variant, index) => (
-          <article className="ctw-variant-card" key={index}>
+          <article className={`ctw-variant-card${activeVariantIndex === index ? ' active' : ''}`} key={index}>
             <div className="ctw-variant-head"><strong>Biến thể {index + 1}</strong><div className="ctw-row-actions"><button type="button" className="btn-icon" title="Chuyển lên" onClick={() => moveVariant(index, -1)} disabled={disabled || index === 0}><ArrowUp size={14} /></button><button type="button" className="btn-icon" title="Chuyển xuống" onClick={() => moveVariant(index, 1)} disabled={disabled || index === channel.variants.length - 1}><ArrowDown size={14} /></button><button type="button" className="btn-icon danger" title="Xoá biến thể" onClick={() => removeVariant(index)} disabled={disabled || channel.variants.length === 1}><Trash2 size={14} /></button></div></div>
             {rich ? (
-              <div className="ctw-rich-editor"><FormattedContentEditor value={variant.text} onChange={value => updateVariant(index, value)} /></div>
+              <div className="ctw-rich-editor">
+                <FormattedContentEditor
+                  value={variant.text}
+                  onChange={value => updateVariant(index, value)}
+                  onEditorReady={editor => {
+                    richEditorRefs.current[index] = editor
+                  }}
+                  onFocus={editor => {
+                    activeVariantIndexRef.current = index
+                    activeCaretValidRef.current = true
+                    onActiveVariantChange(index)
+                    richEditorRefs.current[index] = editor
+                  }}
+                />
+              </div>
             ) : (
-              <><textarea className="stepper-textarea ctw-variant-textarea" value={variant.text} onChange={event => updateVariant(index, event.target.value)} placeholder={`Nhập nội dung ${meta.label.toLocaleLowerCase('vi')}...`} rows={channelName === 'sms' ? 5 : 7} disabled={disabled} />{channelName === 'sms' && <div className="ctw-sms-count">{variant.text.length} ký tự · {Math.max(1, Math.ceil(variant.text.length / 160))} SMS dự kiến</div>}</>
+              <>
+                <textarea
+                  ref={element => {
+                    plainEditorRefs.current[index] = element
+                  }}
+                  className="stepper-textarea ctw-variant-textarea"
+                  value={variant.text}
+                  onChange={event => updateVariant(index, event.target.value)}
+                  onFocus={() => {
+                    activeVariantIndexRef.current = index
+                    activeCaretValidRef.current = true
+                    onActiveVariantChange(index)
+                  }}
+                  onSelect={() => {
+                    activeVariantIndexRef.current = index
+                    activeCaretValidRef.current = true
+                    onActiveVariantChange(index)
+                  }}
+                  placeholder={`Nhập nội dung ${meta.label.toLocaleLowerCase('vi')}, dùng phần Cá nhân hoá ở trên để chèn thông tin...`}
+                  rows={channelName === 'sms' ? 5 : 7}
+                  disabled={disabled}
+                />
+                {channelName === 'sms' && <div className="ctw-sms-count">{variant.text.length} ký tự · {Math.max(1, Math.ceil(variant.text.length / 160))} SMS dự kiến</div>}
+              </>
             )}
           </article>
         ))}
@@ -496,6 +790,10 @@ export default function ContentTemplateWorkspace({
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [editor, setEditor] = useState<TemplateEditorState>(() => makeEditorState())
   const [editorChannel, setEditorChannel] = useState<ContentTemplateChannelName>(preferredChannel)
+  const [showPreviewSampleData, setShowPreviewSampleData] = useState(true)
+  const [activeVariantIndexes, setActiveVariantIndexes] = useState<
+    Record<ContentTemplateChannelName, number>
+  >(() => createVariantIndexRecord())
 
   const loadData = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -568,6 +866,7 @@ export default function ContentTemplateWorkspace({
     next.channels[preferredChannel].enabled = true
     setEditor(next)
     setEditorChannel(preferredChannel)
+    setActiveVariantIndexes(createVariantIndexRecord())
     setView('editor')
   }
 
@@ -577,12 +876,14 @@ export default function ContentTemplateWorkspace({
       : enabledChannels(template)[0] || preferredChannel
     setEditor(makeEditorState(template))
     setEditorChannel(nextChannel)
+    setActiveVariantIndexes(createVariantIndexRecord())
     setView('editor')
   }
 
   const closeEditor = () => {
     setView('list')
     setEditor(makeEditorState())
+    setActiveVariantIndexes(createVariantIndexRecord())
   }
 
   const updateChannel = (name: ContentTemplateChannelName, channel: ContentTemplateChannelConfig) => {
@@ -697,6 +998,18 @@ export default function ContentTemplateWorkspace({
   }
 
   const activeChannel = editor.channels[editorChannel]
+  const activeVariantIndex = Math.max(
+    0,
+    Math.min(activeVariantIndexes[editorChannel], activeChannel.variants.length - 1)
+  )
+  const setActiveVariantIndex = (index: number) => {
+    const nextIndex = Math.max(0, Math.min(index, activeChannel.variants.length - 1))
+    setActiveVariantIndexes(previous => (
+      previous[editorChannel] === nextIndex
+        ? previous
+        : { ...previous, [editorChannel]: nextIndex }
+    ))
+  }
 
   const renderList = () => (
     <>
@@ -770,15 +1083,46 @@ export default function ContentTemplateWorkspace({
         <main className="ctw-composer-main">
           <div className="ctw-channel-editor-heading"><span className={`ctw-channel-hero-icon ${editorChannel}`}>{CHANNEL_META[editorChannel].mono}</span><div><div><h2>{CHANNEL_META[editorChannel].label}</h2>{activeChannel.enabled && <span className="ctw-status-badge active"><Check size={12} /> Đang bật</span>}</div><p>{CHANNEL_META[editorChannel].description}</p></div><Toggle checked={activeChannel.enabled} onChange={enabled => updateChannel(editorChannel, { ...activeChannel, enabled })} label={activeChannel.enabled ? 'Đang sử dụng' : 'Chưa sử dụng'} disabled={busy} /></div>
           {activeChannel.enabled ? (
-            <VariantEditor channelName={editorChannel} channel={activeChannel} onChange={channel => updateChannel(editorChannel, channel)} onToggleRich={enabled => toggleChannelFormat(editorChannel, enabled)} disabled={busy} />
+            <VariantEditor
+              channelName={editorChannel}
+              channel={activeChannel}
+              activeVariantIndex={activeVariantIndex}
+              onActiveVariantChange={setActiveVariantIndex}
+              onChange={channel => updateChannel(editorChannel, channel)}
+              onToggleRich={enabled => toggleChannelFormat(editorChannel, enabled)}
+              disabled={busy}
+            />
           ) : (
             <div className="ctw-channel-disabled"><MessageSquareText size={35} /><strong>{CHANNEL_META[editorChannel].label} đang tắt</strong><span>Bật loại nội dung này để soạn biến thể và chọn ảnh riêng.</span><button type="button" className="btn btn-primary" onClick={() => updateChannel(editorChannel, { ...activeChannel, enabled: true })}>Bật {CHANNEL_META[editorChannel].label}</button></div>
           )}
         </main>
         <aside className="ctw-live-preview">
-          <div className="ctw-live-preview-heading"><strong>Xem trước</strong><span>Biến thể và ảnh của {CHANNEL_META[editorChannel].label}</span></div>
+          <div className="ctw-live-preview-heading">
+            <div className="ctw-live-preview-copy">
+              <strong>Xem trước</strong>
+              <span>
+                {showPreviewSampleData
+                  ? 'Đang thay mã cá nhân hoá bằng dữ liệu khách hàng mẫu.'
+                  : 'Đang hiển thị nguyên mã cá nhân hoá #{...}.'}
+              </span>
+            </div>
+            <Toggle
+              checked={showPreviewSampleData}
+              onChange={setShowPreviewSampleData}
+              label="Hiển thị dữ liệu mẫu"
+            />
+          </div>
           {activeChannel.enabled ? (
-            <ContentTemplatePreview channel={editorChannel} variants={activeChannel.variants.map(variant => variant.text)} formatted={isRichChannel(editorChannel, activeChannel)} subject={activeChannel.subject} imageUrls={activeChannel.imageUrls} />
+            <ContentTemplatePreview
+              channel={editorChannel}
+              variants={activeChannel.variants.map(variant => variant.text)}
+              formatted={isRichChannel(editorChannel, activeChannel)}
+              subject={activeChannel.subject}
+              imageUrls={activeChannel.imageUrls}
+              showSampleData={showPreviewSampleData}
+              activeVariantIndex={activeVariantIndex}
+              onActiveVariantChange={setActiveVariantIndex}
+            />
           ) : (
             <div className="ctw-preview-disabled"><MessageSquareText size={35} /><strong>Chưa có nội dung xem trước</strong><span>Bật loại nội dung để bắt đầu soạn.</span></div>
           )}

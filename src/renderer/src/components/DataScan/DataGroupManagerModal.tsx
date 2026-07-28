@@ -38,6 +38,7 @@ import type {
   ContactType,
   DataGroup,
   DataGroupIngestRow,
+  DataGroupListQuery,
   DataGroupMember,
   DataGroupMemberListQuery,
   DataGroupMemberStatusFilter,
@@ -54,7 +55,7 @@ import {
 import CampaignDataUploadModal, {
   type CampaignDataUploadSubmission
 } from '../CampaignPanels/CampaignDataUploadModal'
-import type { DataScanSelectionContext } from './DataScanModal'
+import type { DataScanAction, DataScanSelectionContext } from './DataScanModal'
 
 const LazyDataScanModal = lazy(() => import('./DataScanModal'))
 
@@ -66,6 +67,7 @@ const DATA_GROUP_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e'
 interface ImportTarget {
   value: string
   label: string
+  dataTypeCode: string
   flatformType: string | null
   contactType: ContactType
   importPlatform: CampaignImportPlatform
@@ -73,28 +75,45 @@ interface ImportTarget {
 }
 
 const IMPORT_TARGETS: ImportTarget[] = [
-  { value: 'phone', label: 'Số điện thoại', flatformType: null, contactType: 'phone', importPlatform: 'zalo', actionId: 'zalo_message_phone' },
-  { value: 'email', label: 'Email', flatformType: 'email', contactType: 'email', importPlatform: 'email', actionId: 'email_send' },
-  { value: 'facebook_search_keyword', label: 'Facebook · Từ khóa tìm kiếm', flatformType: 'facebook', contactType: 'campaign_input', importPlatform: 'facebook', actionId: 'facebook_find_data_search' },
-  { value: 'facebook_post_url', label: 'Facebook · Link bài viết', flatformType: 'facebook', contactType: 'campaign_input', importPlatform: 'facebook', actionId: 'facebook_comment_seeding_post' },
-  { value: 'facebook_person', label: 'Facebook · User', flatformType: 'facebook', contactType: 'person', importPlatform: 'facebook', actionId: 'facebook_message_uid' },
-  { value: 'facebook_group', label: 'Facebook · Group', flatformType: 'facebook', contactType: 'group', importPlatform: 'facebook', actionId: 'facebook_join_group' },
-  { value: 'facebook_page', label: 'Facebook · Page', flatformType: 'facebook', contactType: 'page', importPlatform: 'facebook', actionId: 'facebook_message_uid' },
-  { value: 'zalo_person_phone', label: 'Zalo · User theo SĐT', flatformType: 'zalo', contactType: 'phone', importPlatform: 'zalo', actionId: 'zalo_message_phone' },
-  { value: 'zalo_person_uid', label: 'Zalo · User theo UID', flatformType: 'zalo', contactType: 'person', importPlatform: 'facebook', actionId: 'facebook_message_uid' },
-  { value: 'zalo_group', label: 'Zalo · Group/link', flatformType: 'zalo', contactType: 'group', importPlatform: 'zalo', actionId: 'zalo_join_group_link' }
+  { value: 'phone', label: 'Số điện thoại', dataTypeCode: 'phone', flatformType: null, contactType: 'phone', importPlatform: 'zalo', actionId: 'zalo_message_phone' },
+  { value: 'email', label: 'Email', dataTypeCode: 'email', flatformType: 'email', contactType: 'email', importPlatform: 'email', actionId: 'email_send' },
+  { value: 'facebook_search_keyword', label: 'Facebook · Từ khóa tìm kiếm', dataTypeCode: 'facebook_search_keyword', flatformType: 'facebook', contactType: 'campaign_input', importPlatform: 'facebook', actionId: 'facebook_find_data_search' },
+  { value: 'facebook_post_url', label: 'Facebook · Link bài viết', dataTypeCode: 'facebook_post_url', flatformType: 'facebook', contactType: 'campaign_input', importPlatform: 'facebook', actionId: 'facebook_comment_seeding_post' },
+  { value: 'facebook_person', label: 'Facebook · User', dataTypeCode: 'facebook_person', flatformType: 'facebook', contactType: 'person', importPlatform: 'facebook', actionId: 'facebook_message_uid' },
+  { value: 'facebook_group', label: 'Facebook · Group', dataTypeCode: 'facebook_group', flatformType: 'facebook', contactType: 'group', importPlatform: 'facebook', actionId: 'facebook_join_group' },
+  { value: 'facebook_page', label: 'Facebook · Page', dataTypeCode: 'facebook_page', flatformType: 'facebook', contactType: 'page', importPlatform: 'facebook', actionId: 'facebook_message_uid' },
+  { value: 'zalo_person_phone', label: 'Zalo · User theo SĐT', dataTypeCode: 'phone', flatformType: 'zalo', contactType: 'phone', importPlatform: 'zalo', actionId: 'zalo_message_phone' },
+  { value: 'zalo_person_uid', label: 'Zalo · User theo UID', dataTypeCode: 'zalo_person', flatformType: 'zalo', contactType: 'person', importPlatform: 'facebook', actionId: 'facebook_message_uid' },
+  { value: 'zalo_group', label: 'Zalo · Group/link', dataTypeCode: 'zalo_group', flatformType: 'zalo', contactType: 'group', importPlatform: 'zalo', actionId: 'zalo_join_group_link' }
 ]
 
-const CONTACT_TYPE_FILTER_OPTIONS: Array<{ value: ContactType | ''; label: string }> = [
-  { value: '', label: 'Tất cả loại data' },
-  { value: 'person', label: 'User' },
-  { value: 'group', label: 'Group' },
-  { value: 'page', label: 'Page' },
-  { value: 'page_inbox_customer', label: 'Khách inbox Page' },
-  { value: 'phone', label: 'Số điện thoại' },
-  { value: 'email', label: 'Email' },
-  { value: 'campaign_input', label: 'Data chiến dịch' }
+const DATA_GROUP_SCAN_ACTIONS: DataScanAction[] = [
+  'facebook_friends',
+  'facebook_groups',
+  'facebook_pages',
+  'facebook_post_commenters',
+  'facebook_post_likes',
+  'facebook_profile_friends',
+  'facebook_group_members',
+  'zalo_friends',
+  'zalo_groups',
+  'zalo_group_members',
+  'zalo_remarketing_customers'
 ]
+
+const SCAN_DATA_TYPE_CODE_BY_ACTION: Partial<Record<DataScanAction, string>> = {
+  facebook_friends: 'facebook_person',
+  facebook_groups: 'facebook_group',
+  facebook_pages: 'facebook_page',
+  facebook_post_commenters: 'facebook_person',
+  facebook_post_likes: 'facebook_person',
+  facebook_profile_friends: 'facebook_person',
+  facebook_group_members: 'facebook_person',
+  zalo_friends: 'zalo_person',
+  zalo_groups: 'zalo_group',
+  zalo_group_members: 'zalo_person',
+  zalo_remarketing_customers: 'zalo_person'
+}
 
 const STATUS_FILTER_OPTIONS: Array<{ value: DataGroupMemberStatusFilter; label: string }> = [
   { value: 'all', label: 'Tất cả' },
@@ -116,6 +135,9 @@ export interface DataGroupManagerModalProps {
   onClose: () => void
   selectionMode?: boolean
   onSelectGroup?: (group: DataGroup) => void
+  compatibleActionId?: string | null
+  compatibleDataTypeCategoryItemId?: number | null
+  unrestrictedOnly?: boolean
 }
 
 interface AccountFilterOption {
@@ -127,6 +149,48 @@ interface AccountFilterOption {
 interface DatasetFilterOption {
   id: number
   name: string
+  dataTypeName?: string | null
+}
+
+interface BackgroundRefreshOptions {
+  silent?: boolean
+}
+
+interface DataTypeCatalogItem {
+  id: number
+  code: string
+  name: string
+  sortOrder: number
+  isActive: boolean
+}
+
+interface SemanticDataGroupFields {
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: string | null
+  dataTypeName?: string | null
+  datasetSyncMode?: 'manual' | 'dataset_auto'
+}
+
+interface SemanticDataGroupMemberFields {
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: string | null
+  dataTypeName?: string | null
+  primaryDataTypeCategoryItemId?: number | null
+  primaryDataTypeCode?: string | null
+  primaryDataTypeName?: string | null
+}
+
+interface SemanticDataProvenanceFields {
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: string | null
+  dataTypeName?: string | null
+}
+
+type DataGroupCompatibilityQuery = Pick<DataGroupListQuery, 'search'> & {
+  compatibleActionId?: string | null
+  compatibleDataTypeCategoryItemId?: number | null
+  unrestrictedOnly?: boolean
+  dataTypeCategoryItemIds?: number[]
 }
 
 const formatCount = (value: number) => new Intl.NumberFormat('vi-VN').format(value)
@@ -167,17 +231,59 @@ const useDebouncedValue = <T,>(value: T, delay = 300) => {
   return debouncedValue
 }
 
-const listAllDataGroups = async (api: DataGroupElectronAPI) => {
+const listAllDataGroups = async (
+  api: DataGroupElectronAPI,
+  query: DataGroupCompatibilityQuery = {}
+) => {
   const allGroups: DataGroup[] = []
   const pageSize = 200
   let offset = 0
   while (true) {
-    const result = await api.listDataGroups({ offset, limit: pageSize })
+    const result = await api.listDataGroups({
+      ...query,
+      offset,
+      limit: pageSize
+    } as DataGroupListQuery)
     allGroups.push(...result.groups)
     offset += result.groups.length
     if (result.groups.length === 0 || offset >= result.total) return allGroups
   }
 }
+
+const getDataTypeCatalogApi = () => (
+  window.electronAPI as unknown as {
+    listDataTypeCategoryItems?: () => Promise<DataTypeCatalogItem[]>
+  }
+)
+
+const getGroupSemanticFields = (group?: DataGroup | null): SemanticDataGroupFields => (
+  (group || {}) as DataGroup & SemanticDataGroupFields
+)
+
+const getGroupDataTypeId = (group?: DataGroup | null) => (
+  getGroupSemanticFields(group).dataTypeCategoryItemId ?? null
+)
+
+const getGroupDataTypeCode = (group?: DataGroup | null) => (
+  getGroupSemanticFields(group).dataTypeCode?.trim() || null
+)
+
+const getGroupDataTypeName = (group?: DataGroup | null) => {
+  const fields = getGroupSemanticFields(group)
+  return fields.dataTypeName?.trim() || fields.dataTypeCode?.trim() || 'Mọi loại dữ liệu'
+}
+
+const isDatasetAutoGroup = (group?: DataGroup | null) => (
+  getGroupSemanticFields(group).datasetSyncMode === 'dataset_auto'
+)
+
+const getMemberSemanticFields = (member: DataGroupMember): SemanticDataGroupMemberFields => (
+  member as DataGroupMember & SemanticDataGroupMemberFields
+)
+
+const getProvenanceSemanticFields = (source: DataProvenance): SemanticDataProvenanceFields => (
+  source as DataProvenance & SemanticDataProvenanceFields
+)
 
 const getContactTypeLabel = (contactType: ContactType, flatformType?: string | null) => {
   if (contactType === 'person') return flatformType === 'zalo' ? 'User Zalo' : 'User Facebook'
@@ -188,6 +294,16 @@ const getContactTypeLabel = (contactType: ContactType, flatformType?: string | n
   if (contactType === 'email') return 'Email'
   if (contactType === 'campaign_input') return 'Data chiến dịch'
   return 'Data'
+}
+
+const getMemberDataTypeLabel = (member: DataGroupMember, group?: DataGroup | null) => {
+  if (getGroupDataTypeId(group) != null) return getGroupDataTypeName(group)
+  const fields = getMemberSemanticFields(member)
+  return fields.dataTypeName?.trim()
+    || fields.primaryDataTypeName?.trim()
+    || fields.dataTypeCode?.trim()
+    || fields.primaryDataTypeCode?.trim()
+    || 'Chưa xác định'
 }
 
 const getMemberStatus = (member: DataGroupMember) => {
@@ -251,7 +367,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     onGroupsChanged,
     onClose,
     selectionMode = false,
-    onSelectGroup
+    onSelectGroup,
+    compatibleActionId,
+    compatibleDataTypeCategoryItemId,
+    unrestrictedOnly = false
   } = props
   const { accounts, loadAccounts } = useCampaignStore()
   const showAlert = useUiStore(state => state.showAlert)
@@ -266,20 +385,44 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const pageSelectionRef = useRef<HTMLInputElement | null>(null)
 
   const [apiUnavailable, setApiUnavailable] = useState(false)
+  const [dataTypeItems, setDataTypeItems] = useState<DataTypeCatalogItem[]>([])
+  const [dataTypesLoading, setDataTypesLoading] = useState(false)
   const [groupSearch, setGroupSearch] = useState('')
   const debouncedGroupSearch = useDebouncedValue(groupSearch)
+  const [groupDataTypeFilterId, setGroupDataTypeFilterId] = useState<number | ''>('')
   const [groupPage, setGroupPage] = useState(1)
   const [groups, setGroups] = useState<DataGroup[]>([])
   const [groupTotal, setGroupTotal] = useState(0)
   const [groupsLoading, setGroupsLoading] = useState(false)
   const [activeGroupId, setActiveGroupId] = useState<number | null>(initialGroupId || null)
   const [activeGroupSnapshot, setActiveGroupSnapshot] = useState<DataGroup | null>(null)
+  const accountDirectorySignature = useMemo(
+    () => JSON.stringify(
+      [...accounts]
+        .sort((left, right) => left.id - right.id)
+        .map(account => [
+          account.id,
+          account.name,
+          account.isDelete
+        ])
+    ),
+    [accounts]
+  )
+  const activeGroupIdRef = useRef(activeGroupId)
+  const activeGroupSnapshotRef = useRef(activeGroupSnapshot)
+  const accountsRef = useRef(accounts)
+  const accountDirectorySignatureRef = useRef(accountDirectorySignature)
+  activeGroupIdRef.current = activeGroupId
+  activeGroupSnapshotRef.current = activeGroupSnapshot
+  accountsRef.current = accounts
 
   const [creatingGroup, setCreatingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupColor, setNewGroupColor] = useState(DEFAULT_GROUP_COLOR)
+  const [newGroupDataTypeCategoryItemId, setNewGroupDataTypeCategoryItemId] = useState<number | ''>('')
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null)
   const [editingGroupName, setEditingGroupName] = useState('')
+  const [editingGroupDataTypeCategoryItemId, setEditingGroupDataTypeCategoryItemId] = useState<number | ''>('')
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [draggedGroupId, setDraggedGroupId] = useState<number | null>(null)
 
@@ -289,6 +432,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const lockedContactTypeFilter = lockContext && initialContactType ? initialContactType : ''
   const [accountFilterId, setAccountFilterId] = useState<number | ''>(lockedAccountFilterId)
   const [contactTypeFilter, setContactTypeFilter] = useState<ContactType | ''>(lockedContactTypeFilter)
+  const [dataTypeFilterId, setDataTypeFilterId] = useState<number | ''>('')
   const [statusFilter, setStatusFilter] = useState<DataGroupMemberStatusFilter>('all')
   const [datasetFilterId, setDatasetFilterId] = useState<number | ''>('')
   const [memberPage, setMemberPage] = useState(1)
@@ -312,12 +456,38 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const [moveTargets, setMoveTargets] = useState<DataGroup[]>([])
   const [moveTargetId, setMoveTargetId] = useState<number | null>(null)
   const [moveTargetsLoading, setMoveTargetsLoading] = useState(false)
+  const [moveOnlyUnrestrictedTargets, setMoveOnlyUnrestrictedTargets] = useState(false)
   const [deleteGroupCandidate, setDeleteGroupCandidate] = useState<DataGroup | null>(null)
   const [detachAutomationsOnDelete, setDetachAutomationsOnDelete] = useState(true)
 
   useEffect(() => {
     void loadAccounts()
   }, [loadAccounts])
+
+  useEffect(() => {
+    const catalogApi = getDataTypeCatalogApi()
+    if (typeof catalogApi.listDataTypeCategoryItems !== 'function') return
+    let cancelled = false
+    setDataTypesLoading(true)
+    void catalogApi.listDataTypeCategoryItems()
+      .then(items => {
+        if (cancelled) return
+        setDataTypeItems(items
+          .filter(item => item.isActive !== false)
+          .sort((left, right) => left.sortOrder - right.sortOrder || left.id - right.id))
+      })
+      .catch(err => {
+        if (cancelled) return
+        console.error('Failed to load semantic data types:', err)
+        showAlert(err?.message || 'Không thể tải danh mục loại data.', 'error')
+      })
+      .finally(() => {
+        if (!cancelled) setDataTypesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showAlert])
 
   useEffect(() => {
     if (!addMenuOpen) return
@@ -336,11 +506,45 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     () => groups.find(group => group.id === activeGroupId) || (activeGroupSnapshot?.id === activeGroupId ? activeGroupSnapshot : null),
     [activeGroupId, activeGroupSnapshot, groups]
   )
+  const canReorderGroups = (
+    !selectionMode
+    && !debouncedGroupSearch.trim()
+    && groupDataTypeFilterId === ''
+    && !compatibleActionId
+    && compatibleDataTypeCategoryItemId == null
+    && !unrestrictedOnly
+  )
+  const activeGroupDataTypeCode = getGroupDataTypeCode(activeGroup)
+    || dataTypeItems.find(item => item.id === getGroupDataTypeId(activeGroup))?.code
+    || null
+  const availableImportTargets = useMemo(
+    () => activeGroupDataTypeCode
+      ? IMPORT_TARGETS.filter(target => target.dataTypeCode === activeGroupDataTypeCode)
+      : IMPORT_TARGETS,
+    [activeGroupDataTypeCode]
+  )
+  const availableScanActions = useMemo(
+    () => activeGroupDataTypeCode
+      ? DATA_GROUP_SCAN_ACTIONS.filter(action => (
+        SCAN_DATA_TYPE_CODE_BY_ACTION[action] === activeGroupDataTypeCode
+      ))
+      : DATA_GROUP_SCAN_ACTIONS,
+    [activeGroupDataTypeCode]
+  )
+
+  useEffect(() => {
+    if (
+      availableImportTargets.length > 0
+      && !availableImportTargets.some(target => target.value === importTargetValue)
+    ) {
+      setImportTargetValue(availableImportTargets[0].value)
+    }
+  }, [availableImportTargets, importTargetValue])
 
   const groupPageCount = Math.max(1, Math.ceil(groupTotal / GROUP_PAGE_SIZE))
   const memberPageCount = Math.max(1, Math.ceil(memberTotal / MEMBER_PAGE_SIZE))
 
-  const loadGroups = useCallback(async () => {
+  const loadGroups = useCallback(async (options: BackgroundRefreshOptions = {}) => {
     const api = getDataGroupApi()
     if (!api) {
       setApiUnavailable(true)
@@ -349,31 +553,55 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       return
     }
     const loadSeq = ++groupLoadSeqRef.current
-    setGroupsLoading(true)
+    if (!options.silent) setGroupsLoading(true)
     setApiUnavailable(false)
     try {
       const result = await api.listDataGroups({
         search: debouncedGroupSearch.trim() || undefined,
+        compatibleActionId: compatibleActionId || undefined,
+        compatibleDataTypeCategoryItemId: compatibleDataTypeCategoryItemId ?? undefined,
+        unrestrictedOnly,
+        dataTypeCategoryItemIds: groupDataTypeFilterId === '' ? undefined : [groupDataTypeFilterId],
         offset: (groupPage - 1) * GROUP_PAGE_SIZE,
         limit: GROUP_PAGE_SIZE
-      })
+      } as DataGroupListQuery)
       if (loadSeq !== groupLoadSeqRef.current) return
       setGroups(result.groups)
       setGroupTotal(result.total)
 
+      const currentActiveGroupId = activeGroupIdRef.current
+      const currentActiveGroupSnapshot = activeGroupSnapshotRef.current
       const initialGroup = initialGroupId
         ? result.groups.find(group => group.id === initialGroupId)
         : null
-      const currentGroup = activeGroupId
-        ? result.groups.find(group => group.id === activeGroupId)
+      const currentGroup = currentActiveGroupId
+        ? result.groups.find(group => group.id === currentActiveGroupId)
         : null
-      const hasActiveSnapshot = activeGroupSnapshot?.id === activeGroupId
+      const hasCompatibilityFilter = Boolean(compatibleActionId)
+        || compatibleDataTypeCategoryItemId != null
+        || unrestrictedOnly
+        || groupDataTypeFilterId !== ''
+      const hasActiveSnapshot = (
+        !hasCompatibilityFilter
+        && currentActiveGroupSnapshot?.id === currentActiveGroupId
+      )
       if (
-        initialGroupId && activeGroupId === initialGroupId && !initialGroup && !hasActiveSnapshot &&
-        !debouncedGroupSearch.trim()
+        initialGroupId
+        && currentActiveGroupId === initialGroupId
+        && !initialGroup
+        && !hasActiveSnapshot
+        && !debouncedGroupSearch.trim()
       ) {
-        const allGroups = await listAllDataGroups(api)
-        if (loadSeq !== groupLoadSeqRef.current) return
+        const allGroups = await listAllDataGroups(api, {
+          compatibleActionId: compatibleActionId || undefined,
+          compatibleDataTypeCategoryItemId: compatibleDataTypeCategoryItemId ?? undefined,
+          unrestrictedOnly,
+          dataTypeCategoryItemIds: groupDataTypeFilterId === '' ? undefined : [groupDataTypeFilterId]
+        })
+        if (
+          loadSeq !== groupLoadSeqRef.current
+          || activeGroupIdRef.current !== currentActiveGroupId
+        ) return
         const selectedIndex = allGroups.findIndex(group => group.id === initialGroupId)
         if (selectedIndex >= 0) {
           const selectedGroup = allGroups[selectedIndex]
@@ -384,11 +612,17 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
           return
         }
       }
-      const nextGroup = currentGroup || initialGroup || (!activeGroupId || !hasActiveSnapshot ? result.groups[0] : null)
+      const nextGroup = currentGroup
+        || initialGroup
+        || (!currentActiveGroupId || !hasActiveSnapshot ? result.groups[0] : null)
       if (nextGroup) {
         setActiveGroupId(nextGroup.id)
         setActiveGroupSnapshot(nextGroup)
-      } else if (!activeGroupId && result.groups.length === 0) {
+      } else if (
+        result.groups.length === 0
+        && (!currentActiveGroupId || hasCompatibilityFilter)
+      ) {
+        setActiveGroupId(null)
         setActiveGroupSnapshot(null)
       }
 
@@ -396,19 +630,28 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       if (groupPage > lastPage) setGroupPage(lastPage)
     } catch (err: any) {
       console.error('Failed to load shared data groups:', err)
-      if (loadSeq === groupLoadSeqRef.current) {
+      if (loadSeq === groupLoadSeqRef.current && !options.silent) {
         showAlert(err?.message || 'Không thể tải danh sách nhóm data.', 'error')
       }
     } finally {
       if (loadSeq === groupLoadSeqRef.current) setGroupsLoading(false)
     }
-  }, [activeGroupId, activeGroupSnapshot?.id, debouncedGroupSearch, groupPage, initialGroupId, showAlert])
+  }, [
+    compatibleActionId,
+    compatibleDataTypeCategoryItemId,
+    debouncedGroupSearch,
+    groupDataTypeFilterId,
+    groupPage,
+    initialGroupId,
+    showAlert,
+    unrestrictedOnly
+  ])
 
   useEffect(() => {
     void loadGroups()
   }, [loadGroups])
 
-  const loadDatasets = useCallback(async () => {
+  const loadDatasets = useCallback(async (options: BackgroundRefreshOptions = {}) => {
     if (!activeGroupId) {
       datasetLoadSeqRef.current += 1
       setDatasetOptions([])
@@ -421,13 +664,17 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       const datasets = await api.listDataGroupDatasets(activeGroupId)
       if (loadSeq !== datasetLoadSeqRef.current) return
       setDatasetOptions(datasets
-        .map(dataset => ({ id: dataset.id, name: dataset.name }))
+        .map(dataset => ({
+          id: dataset.id,
+          name: dataset.name,
+          dataTypeName: dataset.dataTypeName
+        }))
         .sort((left, right) => left.name.localeCompare(right.name, 'vi')))
       setSeenAccounts(previous => {
         const next = new Map(previous.map(option => [option.id, option]))
         for (const dataset of datasets) {
           if (!dataset.accountId) continue
-          const account = accounts.find(item => item.id === dataset.accountId)
+          const account = accountsRef.current.find(item => item.id === dataset.accountId)
           next.set(dataset.accountId, {
             id: dataset.accountId,
             name: dataset.sourceAccountName?.trim() || account?.name || 'Tài khoản',
@@ -438,11 +685,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       })
     } catch (err: any) {
       console.error('Failed to load data-group datasets:', err)
-      if (loadSeq === datasetLoadSeqRef.current) {
+      if (loadSeq === datasetLoadSeqRef.current && !options.silent) {
         showAlert(err?.message || 'Không thể tải danh sách nguồn data.', 'error')
       }
     }
-  }, [accounts, activeGroupId, showAlert])
+  }, [activeGroupId, showAlert])
 
   useEffect(() => {
     setSeenAccounts([])
@@ -458,12 +705,22 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       accountIds: accountFilterId === '' ? undefined : [accountFilterId],
       includeAccountless: accountFilterId === '',
       contactTypes: contactTypeFilter === '' ? undefined : [contactTypeFilter],
+      dataTypeCategoryItemIds: dataTypeFilterId === '' ? undefined : [dataTypeFilterId],
       status: statusFilter,
       datasetIds: datasetFilterId === '' ? undefined : [datasetFilterId],
       offset: (memberPage - 1) * MEMBER_PAGE_SIZE,
       limit: MEMBER_PAGE_SIZE
-    }
-  }, [accountFilterId, activeGroupId, contactTypeFilter, datasetFilterId, debouncedMemberSearch, memberPage, statusFilter])
+    } as DataGroupMemberListQuery
+  }, [
+    accountFilterId,
+    activeGroupId,
+    contactTypeFilter,
+    dataTypeFilterId,
+    datasetFilterId,
+    debouncedMemberSearch,
+    memberPage,
+    statusFilter
+  ])
 
   const memberSelectionScopeKey = useMemo(() => JSON.stringify([
     activeGroupId,
@@ -471,23 +728,34 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     debouncedMemberSearch,
     accountFilterId,
     contactTypeFilter,
+    dataTypeFilterId,
     statusFilter,
     datasetFilterId
-  ]), [accountFilterId, activeGroupId, contactTypeFilter, datasetFilterId, debouncedMemberSearch, memberSearch, statusFilter])
+  ]), [
+    accountFilterId,
+    activeGroupId,
+    contactTypeFilter,
+    dataTypeFilterId,
+    datasetFilterId,
+    debouncedMemberSearch,
+    memberSearch,
+    statusFilter
+  ])
   memberSelectionScopeRef.current = memberSelectionScopeKey
   const memberSearchPending = memberSearch !== debouncedMemberSearch
 
-  const loadMembers = useCallback(async () => {
+  const loadMembers = useCallback(async (options: BackgroundRefreshOptions = {}) => {
     if (!memberQuery) {
       memberLoadSeqRef.current += 1
       setMembers([])
       setMemberTotal(0)
+      setMembersLoading(false)
       return
     }
     const api = getDataGroupApi()
     if (!api) return
     const loadSeq = ++memberLoadSeqRef.current
-    setMembersLoading(true)
+    if (!options.silent) setMembersLoading(true)
     try {
       const result = await api.listDataGroupMembers(memberQuery)
       if (loadSeq !== memberLoadSeqRef.current) return
@@ -498,7 +766,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         const next = new Map(previous.map(option => [option.id, option]))
         for (const member of result.members) {
           if (!member.sourceAccountId) continue
-          const account = accounts.find(item => item.id === member.sourceAccountId)
+          const account = accountsRef.current.find(item => item.id === member.sourceAccountId)
           next.set(member.sourceAccountId, {
             id: member.sourceAccountId,
             name: member.sourceAccountName?.trim() || account?.name || 'Tài khoản',
@@ -512,17 +780,30 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       if (memberPage > lastPage) setMemberPage(lastPage)
     } catch (err: any) {
       console.error('Failed to load data-group members:', err)
-      if (loadSeq === memberLoadSeqRef.current) {
+      if (loadSeq === memberLoadSeqRef.current && !options.silent) {
         showAlert(err?.message || 'Không thể tải data trong nhóm.', 'error')
       }
     } finally {
       if (loadSeq === memberLoadSeqRef.current) setMembersLoading(false)
     }
-  }, [accounts, memberPage, memberQuery, showAlert])
+  }, [memberPage, memberQuery, showAlert])
 
   useEffect(() => {
     void loadMembers()
   }, [loadMembers])
+
+  useEffect(() => {
+    if (accountDirectorySignatureRef.current === accountDirectorySignature) return
+    accountDirectorySignatureRef.current = accountDirectorySignature
+    void Promise.all([
+      loadDatasets({ silent: true }),
+      loadMembers({ silent: true })
+    ])
+  }, [
+    accountDirectorySignature,
+    loadDatasets,
+    loadMembers
+  ])
 
   useEffect(() => {
     memberSelectionLoadSeqRef.current += 1
@@ -533,7 +814,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const accountOptions = useMemo(() => {
     const merged = new Map<number, AccountFilterOption>()
     for (const account of accounts) {
-      merged.set(account.id, { id: account.id, name: account.name, deleted: false })
+      merged.set(account.id, {
+        id: account.id,
+        name: account.name,
+        deleted: account.isDelete
+      })
     }
     for (const option of seenAccounts) merged.set(option.id, option)
     return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, 'vi'))
@@ -545,6 +830,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     setMemberSearch('')
     setAccountFilterId(lockedAccountFilterId)
     setContactTypeFilter(lockedContactTypeFilter)
+    setDataTypeFilterId('')
     setStatusFilter('all')
     setDatasetFilterId('')
     setMemberPage(1)
@@ -575,16 +861,31 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       const created = await api.createDataGroup({
         name,
         color: newGroupColor,
+        dataTypeCategoryItemId: newGroupDataTypeCategoryItemId === ''
+          ? null
+          : newGroupDataTypeCategoryItemId,
         requestId: createDataGroupRequestId()
-      })
+      } as Parameters<DataGroupElectronAPI['createDataGroup']>[0])
       setGroupSearch('')
       setGroupPage(1)
-      setGroups(previous => [created, ...previous.filter(group => group.id !== created.id)])
-      setGroupTotal(previous => previous + 1)
-      selectGroup(created)
       setCreatingGroup(false)
       setNewGroupName('')
+      setNewGroupDataTypeCategoryItemId('')
       setNewGroupColor(DATA_GROUP_COLORS[(groupTotal + 1) % DATA_GROUP_COLORS.length])
+      const createdMatchesCurrentList = (
+        (!compatibleActionId && compatibleDataTypeCategoryItemId == null && !unrestrictedOnly)
+        && (
+          groupDataTypeFilterId === ''
+          || getGroupDataTypeId(created) === groupDataTypeFilterId
+        )
+      )
+      if (createdMatchesCurrentList) {
+        setGroupTotal(previous => previous + 1)
+        setGroups(previous => [created, ...previous.filter(group => group.id !== created.id)])
+        selectGroup(created)
+      } else {
+        await loadGroups({ silent: true })
+      }
       showAlert('Đã tạo nhóm data.', 'success')
       await notifyGroupsChanged()
     } catch (err: any) {
@@ -598,26 +899,51 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const startRenameGroup = (group: DataGroup) => {
     setEditingGroupId(group.id)
     setEditingGroupName(group.name)
+    setEditingGroupDataTypeCategoryItemId(getGroupDataTypeId(group) ?? '')
   }
 
   const submitRenameGroup = async (group: DataGroup) => {
     const name = editingGroupName.trim()
     const api = getDataGroupApi()
     if (!api || !name) return
-    if (name === group.name) {
+    const nextDataTypeCategoryItemId = editingGroupDataTypeCategoryItemId === ''
+      ? null
+      : editingGroupDataTypeCategoryItemId
+    const nameChanged = name !== group.name
+    const dataTypeChanged = !isDatasetAutoGroup(group)
+      && nextDataTypeCategoryItemId !== getGroupDataTypeId(group)
+    if (!nameChanged && !dataTypeChanged) {
       setEditingGroupId(null)
       return
     }
     setBusyAction(`rename:${group.id}`)
     try {
-      const updated = await api.updateDataGroup({ groupId: group.id, name })
+      const request: Parameters<DataGroupElectronAPI['updateDataGroup']>[0] = {
+        groupId: group.id
+      }
+      if (nameChanged) request.name = name
+      if (dataTypeChanged) {
+        request.dataTypeCategoryItemId = nextDataTypeCategoryItemId
+      }
+      const updated = await api.updateDataGroup(request)
       updateGroupInState(updated)
       setEditingGroupId(null)
-      showAlert('Đã đổi tên nhóm data.', 'success')
-      await notifyGroupsChanged()
+      showAlert(
+        nameChanged && dataTypeChanged
+          ? 'Đã cập nhật tên và loại data của nhóm.'
+          : nameChanged
+            ? 'Đã đổi tên nhóm data.'
+            : 'Đã cập nhật loại data của nhóm.',
+        'success'
+      )
+      await Promise.all([
+        loadGroups({ silent: true }),
+        dataTypeChanged ? loadMembers({ silent: true }) : Promise.resolve(),
+        notifyGroupsChanged()
+      ])
     } catch (err: any) {
-      console.error('Failed to rename data group:', err)
-      showAlert(err?.message || 'Không thể đổi tên nhóm data.', 'error')
+      console.error('Failed to update data group:', err)
+      showAlert(err?.message || 'Không thể cập nhật nhóm data.', 'error')
     } finally {
       setBusyAction(null)
     }
@@ -713,7 +1039,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     const sourceIndex = groups.findIndex(group => group.id === draggedGroupId)
     const targetIndex = groups.findIndex(group => group.id === targetGroupId)
     setDraggedGroupId(null)
-    if (!api || sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex || debouncedGroupSearch.trim()) return
+    if (!api || !canReorderGroups || sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return
 
     const previous = groups
     const reordered = [...groups]
@@ -735,7 +1061,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       setGroups(previous)
       console.error('Failed to reorder data groups:', err)
       showAlert(err?.message || 'Không thể sắp xếp lại nhóm data.', 'error')
-      await loadGroups()
+      await loadGroups({ silent: true })
     } finally {
       setBusyAction(null)
     }
@@ -817,7 +1143,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
           setSelectedMembershipIds(previous => new Set(Array.from(previous).filter(id => !removedIds.has(id))))
           adjustActiveGroupCount(-result.count)
           showAlert(`Đã xoá ${formatCount(result.count)} data khỏi nhóm.`, 'success')
-          await Promise.all([loadMembers(), loadGroups(), notifyGroupsChanged()])
+          await Promise.all([
+            loadMembers({ silent: true }),
+            loadGroups({ silent: true }),
+            notifyGroupsChanged()
+          ])
         } catch (err: any) {
           console.error('Failed to remove data-group members:', err)
           showAlert(err?.message || 'Không thể xoá data khỏi nhóm.', 'error')
@@ -834,10 +1164,53 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     if (!api || !activeGroupId || selectedMembershipIds.size === 0) return
     setMoveModalOpen(true)
     setMoveTargetId(null)
+    setMoveOnlyUnrestrictedTargets(false)
     setMoveTargetsLoading(true)
     try {
-      const allGroups = await listAllDataGroups(api)
-      setMoveTargets(allGroups.filter(group => group.id !== activeGroupId))
+      const selectedIds = Array.from(selectedMembershipIds)
+      const visibleSelectedMembers = members.filter(member => selectedMembershipIds.has(member.id))
+      const selectedMembers = visibleSelectedMembers.length === selectedIds.length
+        ? visibleSelectedMembers
+        : await api.exportDataGroupMembers({ groupId: activeGroupId, ids: selectedIds })
+      const selectedDataTypeIds = new Set<number>()
+      let hasUnknownOrMixedOrigin = selectedMembers.length !== selectedIds.length
+
+      for (const member of selectedMembers) {
+        const currentOrigins = (member.provenance || []).filter(source => source.isCurrent)
+        if (currentOrigins.length === 0) {
+          hasUnknownOrMixedOrigin = true
+          continue
+        }
+        for (const origin of currentOrigins) {
+          const originDataTypeId = getProvenanceSemanticFields(origin).dataTypeCategoryItemId ?? null
+          if (originDataTypeId == null) {
+            hasUnknownOrMixedOrigin = true
+          } else {
+            selectedDataTypeIds.add(originDataTypeId)
+          }
+        }
+      }
+      if (selectedDataTypeIds.size > 1) hasUnknownOrMixedOrigin = true
+
+      const compatibleDataTypeId = !hasUnknownOrMixedOrigin && selectedDataTypeIds.size === 1
+        ? Array.from(selectedDataTypeIds)[0]
+        : null
+      const onlyUnrestrictedTargets = compatibleDataTypeId == null
+      setMoveOnlyUnrestrictedTargets(onlyUnrestrictedTargets)
+
+      const allGroups = await listAllDataGroups(
+        api,
+        compatibleDataTypeId == null
+          ? {}
+          : { compatibleDataTypeCategoryItemId: compatibleDataTypeId }
+      )
+      setMoveTargets(allGroups.filter(group => (
+        group.id !== activeGroupId
+        && (
+          getGroupDataTypeId(group) == null
+          || (!onlyUnrestrictedTargets && getGroupDataTypeId(group) === compatibleDataTypeId)
+        )
+      )))
     } catch (err: any) {
       console.error('Failed to load move targets:', err)
       showAlert(err?.message || 'Không thể tải nhóm đích.', 'error')
@@ -862,7 +1235,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       setSelectedMembershipIds(new Set())
       setMoveModalOpen(false)
       showAlert(`Đã chuyển ${formatCount(result.count)} data sang nhóm khác.`, 'success')
-      await Promise.all([loadMembers(), loadGroups(), notifyGroupsChanged()])
+      await Promise.all([
+        loadMembers({ silent: true }),
+        loadGroups({ silent: true }),
+        notifyGroupsChanged()
+      ])
     } catch (err: any) {
       console.error('Failed to move data-group members:', err)
       showAlert(err?.message || 'Không thể chuyển data sang nhóm khác.', 'error')
@@ -876,7 +1253,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     const account = accounts.find(item => item.id === member.sourceAccountId)
     return {
       name: member.sourceAccountName?.trim() || account?.name || 'Tài khoản',
-      deleted: member.sourceAccountDeleted === true
+      deleted: member.sourceAccountDeleted === true || account?.isDelete === true
     }
   }
 
@@ -903,7 +1280,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
           'Link': member.url || '',
           'Tài khoản': account?.name || '—',
           'Tài khoản đã xoá': account?.deleted ? 'Có' : '',
-          'Loại data': getContactTypeLabel(member.contactType, member.flatformType),
+          'Loại data': getMemberDataTypeLabel(member, activeGroup),
           'Trạng thái': getMemberStatus(member).label,
           'Danh sách': getMemberDatasetText(member) === '—' ? '' : getMemberDatasetText(member),
           'Nguồn data': getMemberSourceText(member) === '—' ? '' : getMemberSourceText(member),
@@ -936,7 +1313,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     identity?: { requestId: string; payloadHash: string },
     datasetName?: string | null,
     datasetId?: number | null,
-    targetGroupId?: number
+    targetGroupId?: number,
+    dataTypeCategoryItemId?: number | null
   ) => {
     const api = getDataGroupApi()
     const destinationGroupId = targetGroupId || activeGroupId
@@ -948,18 +1326,23 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         groupId: destinationGroupId,
         kind,
         rows,
+        dataTypeCategoryItemId: dataTypeCategoryItemId ?? null,
         datasetId: datasetId ?? null,
         datasetName: datasetName?.trim() || sourceName || null,
         importSource: importSource || null,
         sourceName: sourceName || datasetName?.trim() || null,
         payloadHash: identity?.payloadHash || null
-      })
+      } as Parameters<DataGroupElectronAPI['ingestDataGroup']>[0])
       const added = result.insertedMembershipCount + result.reactivatedMembershipCount
       if (destinationGroupId === activeGroupId) adjustActiveGroupCount(added)
       const skipped = result.alreadyMemberCount + result.invalidCount + result.incompatibleCount + result.conflictCount
       const suffix = skipped > 0 ? ` · ${formatCount(skipped)} dòng không thêm mới` : ''
       showAlert(`Đã thêm ${formatCount(added)} data vào nhóm${suffix}.`, 'success')
-      await Promise.all([loadMembers(), loadGroups(), notifyGroupsChanged()])
+      await Promise.all([
+        loadMembers({ silent: true }),
+        loadGroups({ silent: true }),
+        notifyGroupsChanged()
+      ])
       return result
     } catch (err: any) {
       console.error('Failed to ingest data-group rows:', err)
@@ -971,7 +1354,15 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const handleAdvancedImport = async (submission: CampaignDataUploadSubmission) => {
-    const target = IMPORT_TARGETS.find(item => item.value === importTargetValue) || IMPORT_TARGETS[0]
+    const target = availableImportTargets.find(item => item.value === importTargetValue)
+      || availableImportTargets[0]
+    if (!target) throw new Error('Loại nhóm này chưa hỗ trợ thêm data từ file.')
+    const groupDataTypeId = getGroupDataTypeId(activeGroup)
+    const targetDataType = dataTypeItems.find(item => item.code === target.dataTypeCode)
+    const dataTypeCategoryItemId = groupDataTypeId ?? targetDataType?.id ?? null
+    if (dataTypeCategoryItemId == null) {
+      throw new Error(`Không tìm thấy loại data “${target.label}” trong danh mục.`)
+    }
     const rows: DataGroupIngestRow[] = submission.rows.map(rawRow => {
       const uid = String(rawRow.uid || '').trim()
       const looksLikeUrl = /^https?:\/\//i.test(uid) || /(?:facebook\.com|zalo\.me|zaloapp\.com)\//i.test(uid)
@@ -1015,7 +1406,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       submission.importSource,
       submission.datasetName,
       identity,
-      submission.datasetName
+      submission.datasetName,
+      undefined,
+      undefined,
+      dataTypeCategoryItemId
     )
   }
 
@@ -1047,6 +1441,16 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         extraData: contact.extraData
       }
     })
+    const destinationGroup = scanTargetGroup?.id === targetGroupId ? scanTargetGroup : activeGroup
+    const scanDataTypeCode = context?.action
+      ? SCAN_DATA_TYPE_CODE_BY_ACTION[context.action]
+      : undefined
+    const dataTypeCategoryItemId = getGroupDataTypeId(destinationGroup)
+      ?? dataTypeItems.find(item => item.code === scanDataTypeCode)?.id
+      ?? null
+    if (dataTypeCategoryItemId == null) {
+      throw new Error('Không xác định được loại data của dữ liệu quét.')
+    }
     try {
       await ingestRows(
         rows,
@@ -1056,7 +1460,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         undefined,
         context?.datasetName || null,
         context?.datasetId ?? null,
-        targetGroupId
+        targetGroupId,
+        dataTypeCategoryItemId
       )
     } catch (error) {
       // ingestRows already reports the specific error. Re-throw so the scan
@@ -1067,12 +1472,23 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
 
   const openImportModal = () => {
     if (!activeGroupId) return
+    if (availableImportTargets.length === 0) {
+      showAlert(`Loại “${getGroupDataTypeName(activeGroup)}” chưa hỗ trợ thêm từ file.`, 'error')
+      return
+    }
+    if (!availableImportTargets.some(target => target.value === importTargetValue)) {
+      setImportTargetValue(availableImportTargets[0].value)
+    }
     setAddMenuOpen(false)
     setImportModalOpen(true)
   }
 
   const openScanPicker = () => {
     if (!activeGroup) return
+    if (availableScanActions.length === 0) {
+      showAlert(`Loại “${getGroupDataTypeName(activeGroup)}” chưa hỗ trợ thêm từ dữ liệu quét.`, 'error')
+      return
+    }
     setAddMenuOpen(false)
     setScanTargetGroup(activeGroup)
     setShowScanPicker(true)
@@ -1082,7 +1498,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const memberRangeEnd = Math.min(memberPage * MEMBER_PAGE_SIZE, memberTotal)
   const groupRangeStart = groupTotal === 0 ? 0 : (groupPage - 1) * GROUP_PAGE_SIZE + 1
   const groupRangeEnd = Math.min(groupPage * GROUP_PAGE_SIZE, groupTotal)
-  const importTarget = IMPORT_TARGETS.find(item => item.value === importTargetValue) || IMPORT_TARGETS[0]
+  const importTarget = availableImportTargets.find(item => item.value === importTargetValue)
+    || availableImportTargets[0]
+    || IMPORT_TARGETS[0]
 
   const modal = (
     <div className="data-group-manager-backdrop" onMouseDown={event => {
@@ -1116,9 +1534,25 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                   placeholder="Tìm nhóm..."
                 />
               </label>
+              <select
+                className="stepper-input data-group-manager-sidebar-type-filter"
+                value={groupDataTypeFilterId}
+                onChange={event => {
+                  setGroupDataTypeFilterId(event.target.value ? Number(event.target.value) : '')
+                  setGroupPage(1)
+                }}
+                disabled={groupsLoading || dataTypesLoading}
+                aria-label="Lọc nhóm theo loại data"
+              >
+                <option value="">Tất cả loại nhóm</option>
+                {dataTypeItems.map(item => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
               {!creatingGroup ? (
                 <button type="button" className="btn btn-primary data-group-manager-create-button" onClick={() => {
                   setNewGroupName(createDefaultDataGroupName())
+                  setNewGroupDataTypeCategoryItemId('')
                   setCreatingGroup(true)
                 }}>
                   <Plus size={15} /> Thêm nhóm
@@ -1147,10 +1581,28 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       />
                     </div>
                   </div>
+                  <div className="data-group-manager-create-name-field">
+                    <label htmlFor="data-group-manager-new-type">Loại data</label>
+                    <select
+                      id="data-group-manager-new-type"
+                      className="stepper-input"
+                      value={newGroupDataTypeCategoryItemId}
+                      onChange={event => {
+                        setNewGroupDataTypeCategoryItemId(event.target.value ? Number(event.target.value) : '')
+                      }}
+                      disabled={busyAction === 'create' || dataTypesLoading || unrestrictedOnly}
+                    >
+                      <option value="">Mọi loại dữ liệu</option>
+                      {dataTypeItems.map(item => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="data-group-manager-create-actions">
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
                       setCreatingGroup(false)
                       setNewGroupName('')
+                      setNewGroupDataTypeCategoryItemId('')
                     }}>Huỷ</button>
                     <button type="submit" className="btn btn-primary btn-sm" disabled={!newGroupName.trim() || busyAction === 'create'}>
                       {busyAction === 'create' ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} Tạo
@@ -1176,15 +1628,19 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     key={group.id}
                     className={`data-group-manager-group-row${isActive ? ' is-active' : ''}${draggedGroupId === group.id ? ' is-dragging' : ''}`}
                     onClick={() => selectGroup(group)}
-                    draggable={!debouncedGroupSearch.trim() && !rowBusy && busyAction !== 'reorder'}
+                    draggable={canReorderGroups && !rowBusy && busyAction !== 'reorder'}
                     onDragStart={event => {
+                      if (!canReorderGroups) {
+                        event.preventDefault()
+                        return
+                      }
                       setDraggedGroupId(group.id)
                       event.dataTransfer.effectAllowed = 'move'
                       event.dataTransfer.setData('text/plain', String(group.id))
                     }}
                     onDragEnd={() => setDraggedGroupId(null)}
                     onDragOver={event => {
-                      if (draggedGroupId && draggedGroupId !== group.id) {
+                      if (canReorderGroups && draggedGroupId && draggedGroupId !== group.id) {
                         event.preventDefault()
                         event.dataTransfer.dropEffect = 'move'
                       }
@@ -1195,7 +1651,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       void handleDropGroup(group.id)
                     }}
                   >
-                    <GripVertical className="data-group-manager-drag-handle" size={14} aria-label="Kéo để sắp xếp" />
+                    <GripVertical
+                      className={`data-group-manager-drag-handle${canReorderGroups ? '' : ' is-disabled'}`}
+                      size={14}
+                      aria-label={canReorderGroups ? 'Kéo để sắp xếp' : 'Không thể sắp xếp khi danh sách đang được lọc'}
+                    />
                     <label className="data-group-color-input is-compact" title="Đổi màu nhóm" onClick={event => event.stopPropagation()}>
                       <span style={{ background: group.color || DEFAULT_GROUP_COLOR }} />
                       <input
@@ -1207,22 +1667,59 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     </label>
                     <div className="data-group-manager-group-main">
                       {isEditing ? (
-                        <input
-                          className="stepper-input data-group-manager-rename-input"
-                          value={editingGroupName}
-                          onChange={event => setEditingGroupName(event.target.value)}
-                          onClick={event => event.stopPropagation()}
-                          onKeyDown={event => {
-                            if (event.key === 'Enter') void submitRenameGroup(group)
-                            if (event.key === 'Escape') setEditingGroupId(null)
-                          }}
-                          disabled={rowBusy}
-                          autoFocus
-                        />
+                        <div className="data-group-manager-edit-fields" onClick={event => event.stopPropagation()}>
+                          <input
+                            className="stepper-input data-group-manager-rename-input"
+                            value={editingGroupName}
+                            onChange={event => setEditingGroupName(event.target.value)}
+                            onKeyDown={event => {
+                              if (event.key === 'Enter') void submitRenameGroup(group)
+                              if (event.key === 'Escape') setEditingGroupId(null)
+                            }}
+                            disabled={rowBusy}
+                            autoFocus
+                            aria-label="Tên nhóm dữ liệu"
+                          />
+                          <select
+                            className="data-group-manager-edit-type-select"
+                            value={editingGroupDataTypeCategoryItemId}
+                            onChange={event => {
+                              setEditingGroupDataTypeCategoryItemId(
+                                event.target.value ? Number(event.target.value) : ''
+                              )
+                            }}
+                            disabled={
+                              rowBusy
+                              || dataTypesLoading
+                              || unrestrictedOnly
+                              || isDatasetAutoGroup(group)
+                            }
+                            aria-label="Loại data của nhóm"
+                            title={
+                              isDatasetAutoGroup(group)
+                                ? 'Loại của nhóm tự sinh được đồng bộ từ dataset'
+                                : 'Loại data của nhóm'
+                            }
+                          >
+                            <option value="">Mọi loại dữ liệu</option>
+                            {getGroupDataTypeId(group) != null
+                              && !dataTypeItems.some(item => item.id === getGroupDataTypeId(group)) && (
+                              <option value={getGroupDataTypeId(group) || ''}>
+                                {getGroupDataTypeName(group)} (ngừng sử dụng)
+                              </option>
+                            )}
+                            {dataTypeItems.map(item => (
+                              <option key={item.id} value={item.id}>{item.name}</option>
+                            ))}
+                          </select>
+                        </div>
                       ) : (
                         <>
                           <div className="data-group-manager-group-name">{group.name}</div>
-                          <div className="data-group-manager-group-meta">{formatCount(group.activeMembershipCount)} data</div>
+                          <div className="data-group-manager-group-meta">
+                            <span>{formatCount(group.activeMembershipCount)} data</span>
+                            <span className="data-group-manager-type-badge">{getGroupDataTypeName(group)}</span>
+                          </div>
                         </>
                       )}
                     </div>
@@ -1278,7 +1775,21 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 <span className="data-group-manager-active-color" style={{ background: activeGroup?.color || 'var(--text-tertiary)' }} />
                 <div>
                   <h3>{activeGroup?.name || 'Chưa chọn nhóm'}</h3>
-                  <p>{activeGroup ? `${formatCount(activeGroup.activeMembershipCount)} data trong nhóm` : 'Chọn một nhóm để xem data'}</p>
+                  <div className="data-group-manager-active-meta">
+                    <span>{activeGroup ? `${formatCount(activeGroup.activeMembershipCount)} data trong nhóm` : 'Chọn một nhóm để xem data'}</span>
+                    {activeGroup && (
+                      <span
+                        className="data-group-manager-type-badge"
+                        title={
+                          isDatasetAutoGroup(activeGroup)
+                            ? 'Loại của nhóm tự sinh được đồng bộ từ dataset'
+                            : 'Loại data của nhóm; bấm biểu tượng sửa ở danh sách nhóm để thay đổi'
+                        }
+                      >
+                        {getGroupDataTypeName(activeGroup)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="data-group-manager-context-filters">
@@ -1296,11 +1807,18 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 </label>
                 <label>
                   <span>Loại data</span>
-                  <select value={contactTypeFilter} onChange={event => {
-                    setContactTypeFilter(event.target.value as ContactType | '')
+                  <select value={dataTypeFilterId} onChange={event => {
+                    setDataTypeFilterId(event.target.value ? Number(event.target.value) : '')
                     setMemberPage(1)
-                  }} disabled={!activeGroupId || lockContext}>
-                    {CONTACT_TYPE_FILTER_OPTIONS.map(option => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
+                  }} disabled={!activeGroupId || lockContext || dataTypesLoading}>
+                    <option value="">
+                      {lockContext && initialContactType
+                        ? getContactTypeLabel(initialContactType, initialPlatform)
+                        : 'Tất cả loại data'}
+                    </option>
+                    {dataTypeItems.map(item => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
                   </select>
                 </label>
               </div>
@@ -1335,7 +1853,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                   setMemberPage(1)
                 }} disabled={!activeGroupId}>
                   <option value="">Tất cả danh sách</option>
-                  {datasetOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                  {datasetOptions.map(option => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}{option.dataTypeName ? ` · ${option.dataTypeName}` : ''}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -1365,11 +1887,21 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                   </button>
                   {addMenuOpen && (
                     <div className="data-group-manager-add-menu">
-                      <button type="button" onClick={openImportModal}>
+                      <button
+                        type="button"
+                        onClick={openImportModal}
+                        disabled={availableImportTargets.length === 0}
+                        title={availableImportTargets.length === 0 ? 'Loại nhóm này chưa hỗ trợ thêm từ file' : undefined}
+                      >
                         <span className="is-file"><FileSpreadsheet size={17} /></span>
                         <span><strong>Thêm từ file data</strong><small>Form txt, Excel/CSV hoặc file khách hàng</small></span>
                       </button>
-                      <button type="button" onClick={openScanPicker}>
+                      <button
+                        type="button"
+                        onClick={openScanPicker}
+                        disabled={availableScanActions.length === 0}
+                        title={availableScanActions.length === 0 ? 'Loại nhóm này chưa hỗ trợ thêm từ dữ liệu quét' : undefined}
+                      >
                         <span className="is-scan"><Database size={17} /></span>
                         <span><strong>Thêm từ dữ liệu quét</strong><small>Bạn bè, group, like, comment và danh sách đã quét</small></span>
                       </button>
@@ -1399,7 +1931,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     <th>Số điện thoại</th>
                     <th>Link</th>
                     <th>Tài khoản</th>
-                    <th>Loại</th>
+                    <th>Loại data</th>
                     <th>Trạng thái</th>
                     <th className="is-source">Nguồn data</th>
                     <th className="is-automation">Tự động hóa</th>
@@ -1438,7 +1970,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                             </span>
                           ) : <span className="data-group-manager-accountless">—</span>}
                         </td>
-                        <td><span className="data-group-manager-type-badge">{getContactTypeLabel(member.contactType, member.flatformType)}</span></td>
+                        <td><span className="data-group-manager-type-badge">{getMemberDataTypeLabel(member, activeGroup)}</span></td>
                         <td><span className={`data-group-manager-status ${status.tone}`}>{status.label}</span></td>
                         <td className="is-source" title={getMemberSourceText(member) === '—' ? undefined : getMemberSourceText(member)}>
                           {getMemberSourceText(member) === '—' ? '—' : (
@@ -1481,6 +2013,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               <span>Đang chọn</span>
               <strong>{activeGroup?.name || 'Chưa chọn nhóm'}</strong>
               <small>· {formatCount(activeGroup?.activeMembershipCount || 0)} data</small>
+              {activeGroup && (
+                <span className="data-group-manager-type-badge">{getGroupDataTypeName(activeGroup)}</span>
+              )}
             </div>
             <span className="data-group-manager-picker-actions">
               <button type="button" className="btn btn-secondary" onClick={onClose}>Huỷ</button>
@@ -1526,8 +2061,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                   onChange={event => setImportTargetValue(event.target.value)}
                   disabled={busyAction === 'ingest'}
                 >
-                  {IMPORT_TARGETS.map(target => <option key={target.value} value={target.value}>{target.label}</option>)}
+                  {availableImportTargets.map(target => <option key={target.value} value={target.value}>{target.label}</option>)}
                 </select>
+                {activeGroupDataTypeCode && (
+                  <small>Nhóm này chỉ nhận data loại {getGroupDataTypeName(activeGroup)}.</small>
+                )}
               </label>
             </div>
           )}
@@ -1547,12 +2085,21 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               {moveTargetsLoading ? (
                 <div className="data-group-manager-empty"><LoaderCircle size={22} className="spin" /><span>Đang tải nhóm...</span></div>
               ) : moveTargets.length === 0 ? (
-                <div className="data-group-manager-empty"><Folder size={28} /><span>Không có nhóm nào khác.</span></div>
+                <div className="data-group-manager-empty">
+                  <Folder size={28} />
+                  <span>
+                    {moveOnlyUnrestrictedTargets
+                      ? 'Data đã chọn có loại mixed/chưa xác định và chỉ có thể chuyển sang nhóm Mọi loại dữ liệu.'
+                      : 'Không có nhóm tương thích nào khác.'}
+                  </span>
+                </div>
               ) : moveTargets.map(group => (
                 <button type="button" key={group.id} className={moveTargetId === group.id ? 'is-selected' : ''} onClick={() => setMoveTargetId(group.id)}>
                   <span className="data-group-manager-active-color" style={{ background: group.color }} />
                   <strong>{group.name}</strong>
-                  <small>{formatCount(group.activeMembershipCount)} data</small>
+                  <small>
+                    {formatCount(group.activeMembershipCount)} data · {getGroupDataTypeName(group)}
+                  </small>
                   {moveTargetId === group.id && <Check size={15} />}
                 </button>
               ))}
@@ -1661,6 +2208,13 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       </small>
                     ) : source.kind !== 'automation' && <small>Tài khoản: —</small>}
                     {source.automationDetailStatus && <small>Kết quả tự động hoá: {source.automationDetailStatus}</small>}
+                    {(getProvenanceSemanticFields(source).dataTypeName
+                      || getProvenanceSemanticFields(source).dataTypeCode) && (
+                      <small>
+                        Loại data: {getProvenanceSemanticFields(source).dataTypeName
+                          || getProvenanceSemanticFields(source).dataTypeCode}
+                      </small>
+                    )}
                     {source.createdAt && <small>{new Date(source.createdAt).toLocaleString('vi-VN')}</small>}
                   </div>
                 </article>
@@ -1684,19 +2238,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
             <LazyDataScanModal
               initialAction={getInitialScanAction(initialPlatform, initialContactType)}
               initialAccountId={initialAccountId || undefined}
-              allowedActions={[
-                'facebook_friends',
-                'facebook_groups',
-                'facebook_pages',
-                'facebook_post_commenters',
-                'facebook_post_likes',
-                'facebook_profile_friends',
-                'facebook_group_members',
-                'zalo_friends',
-                'zalo_groups',
-                'zalo_group_members',
-                'zalo_remarketing_customers'
-              ]}
+              allowedActions={availableScanActions}
               targetDataGroup={scanTargetGroup}
               onClose={() => {
                 setShowScanPicker(false)

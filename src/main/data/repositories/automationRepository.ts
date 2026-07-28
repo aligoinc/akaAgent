@@ -16,9 +16,11 @@ import type {
   AutomationScheduleMode,
   AutomationTriggerCondition,
   AutomationTriggerOption,
+  CampaignActionDataType,
   CampaignAutomationExecutionListQuery,
   CampaignAutomationExecutionListResult,
-  CampaignAutomationExecutionRole
+  CampaignAutomationExecutionRole,
+  DataTypeCategoryCode
 } from '../../../shared/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
@@ -84,8 +86,11 @@ const AUTOMATION_ERROR_MESSAGES: Record<string, string> = {
   invalid_source_campaign: 'Chiến dịch A không tồn tại hoặc không còn hợp lệ.',
   invalid_target_campaign: 'Chiến dịch B không tồn tại hoặc không còn hợp lệ.',
   invalid_automation_data_type: 'Loại dữ liệu tự động hóa không hợp lệ.',
+  invalid_data_type_category_item: 'Loại dữ liệu semantic không hợp lệ hoặc đã ngừng sử dụng.',
   source_campaign_data_type_not_supported: 'Chiến dịch A không tạo ra loại dữ liệu đã chọn.',
+  source_campaign_semantic_type_not_supported: 'Chiến dịch A không tạo ra loại dữ liệu semantic đã chọn.',
   target_campaign_data_type_not_supported: 'Chiến dịch B không nhận loại dữ liệu đã chọn.',
+  target_campaign_semantic_type_not_supported: 'Chiến dịch B không nhận loại dữ liệu semantic đã chọn.',
   account_scoped_data_requires_same_account: 'Dữ liệu UID Zalo yêu cầu hai chiến dịch dùng cùng một tài khoản Zalo.',
   invalid_target_contact_group: 'Nhóm dữ liệu không thuộc tài khoản hoặc không đúng loại dữ liệu của chiến dịch B.',
   invalid_automation_schedule: 'Cấu hình thời gian chạy không hợp lệ.',
@@ -106,6 +111,8 @@ const AUTOMATION_ERROR_MESSAGES: Record<string, string> = {
   automation_destination_required: 'Vui lòng chọn ít nhất một đích: Chiến dịch đích hoặc Nhóm data.',
   target_contact_group_requires_campaign: 'Nhóm dữ liệu cũ chỉ dùng được khi có chiến dịch đích.',
   invalid_target_data_group: 'Nhóm data đích không tồn tại hoặc không còn hợp lệ.',
+  automation_data_group_semantic_type_mismatch: 'Nhóm data đích không đúng loại dữ liệu semantic đã chọn.',
+  automation_source_input_semantic_type_mismatch: 'Data nguồn không đúng loại dữ liệu semantic của tự động hóa.',
   automation_not_found: 'Không tìm thấy tự động hóa.',
   campaign_not_found: 'Không tìm thấy chiến dịch.',
   invalid_campaign_automation_role: 'Vai trò tự động hóa trong chiến dịch không hợp lệ.',
@@ -149,6 +156,8 @@ export interface ClaimedAutomationDetail {
   targetAccountId: number | null
   targetActionId: string | null
   dataType: AutomationDataType
+  dataTypeCategoryItemId: number | null
+  dataTypeCode: DataTypeCategoryCode | null
   dataValue: string
   sourceInputSnapshot: JsonRecord
   configSnapshot: JsonRecord
@@ -438,6 +447,21 @@ export function mapAutomationFromRpc(value: unknown): Automation {
     sourceCampaignId: toNumberValue(firstDefined(row, 'sourceCampaignId', 'source_campaign_id')),
     targetCampaignId: toNullableNumber(firstDefined(row, 'targetCampaignId', 'target_campaign_id')),
     dataType: toStringValue(firstDefined(row, 'dataType', 'dataTypeCode', 'data_type_code')) as AutomationDataType,
+    dataTypeCategoryItemId: toNullableNumber(firstDefined(
+      row,
+      'dataTypeCategoryItemId',
+      'data_type_category_item_id'
+    )),
+    dataTypeCode: toNullableString(firstDefined(
+      row,
+      'dataTypeCategoryCode',
+      'data_type_category_code'
+    )) as Automation['dataTypeCode'],
+    dataTypeName: toNullableString(firstDefined(
+      row,
+      'dataTypeCategoryName',
+      'data_type_category_name'
+    )),
     targetContactGroupId: toNullableNumber(firstDefined(row, 'targetContactGroupId', 'target_contact_group_id')),
     targetDataGroupId: toNullableNumber(firstDefined(row, 'targetDataGroupId', 'target_data_group_id')),
     targetDataGroupName: toNullableString(firstDefined(row, 'targetDataGroupName', 'target_data_group_name')),
@@ -518,6 +542,21 @@ function mapAutomationExecutionFromRpc(value: unknown): AutomationExecution {
     )),
     sourceStatus: toStringValue(firstDefined(row, 'sourceStatus', 'source_status')),
     dataType: toStringValue(firstDefined(row, 'dataType', 'dataTypeCode', 'data_type_code')) as AutomationDataType,
+    dataTypeCategoryItemId: toNullableNumber(firstDefined(
+      row,
+      'dataTypeCategoryItemId',
+      'data_type_category_item_id'
+    )),
+    dataTypeCode: toNullableString(firstDefined(
+      row,
+      'dataTypeCategoryCode',
+      'data_type_category_code'
+    )) as AutomationExecution['dataTypeCode'],
+    dataTypeName: toNullableString(firstDefined(
+      row,
+      'dataTypeCategoryName',
+      'data_type_category_name'
+    )),
     dataValue: toStringValue(firstDefined(row, 'dataValue', 'data_value')),
     triggeredAt: toStringValue(firstDefined(row, 'triggeredAt', 'triggered_at', 'createdAt', 'created_at')),
     scheduledAt: toStringValue(firstDefined(row, 'scheduledAt', 'scheduled_at')),
@@ -595,6 +634,10 @@ function normalizeAutomationInput(input: AutomationInput): Required<Pick<Automat
   const targetDataGroupId = input.targetDataGroupId === null || input.targetDataGroupId === undefined
     ? null
     : normalizePositiveId(input.targetDataGroupId, 'Nhóm data dùng chung')
+  const dataTypeCategoryItemId = input.dataTypeCategoryItemId === null
+    || input.dataTypeCategoryItemId === undefined
+    ? null
+    : normalizePositiveId(input.dataTypeCategoryItemId, 'Loại dữ liệu')
   if (targetCampaignId === null && targetDataGroupId === null) {
     throw new Error('Vui lòng chọn ít nhất một đích: Chiến dịch đích hoặc Nhóm data.')
   }
@@ -698,6 +741,7 @@ function normalizeAutomationInput(input: AutomationInput): Required<Pick<Automat
     sourceCampaignId,
     targetCampaignId,
     dataType: input.dataType,
+    dataTypeCategoryItemId,
     targetContactGroupId,
     targetDataGroupId,
     scheduleMode: input.scheduleMode,
@@ -734,6 +778,7 @@ function mapCampaignOption(
   actionDataTypes: Map<string, {
     dataTypes: AutomationDataType[]
     contactTypeByDataType: Partial<Record<AutomationDataType, AutomationContactGroupOption['contactType']>>
+    semanticDataTypes: CampaignActionDataType[]
   }>
 ): AutomationCampaignOption | null {
   const row = asRecord(value)
@@ -766,6 +811,7 @@ function mapCampaignOption(
     platformType: toStringValue(firstDefined(row, 'platformType', 'platform_type', 'flatformType', 'flatform_type')),
     status: toStringValue(row.status),
     dataTypes,
+    semanticDataTypes: actionDataTypes.get(actionId)?.semanticDataTypes || [],
     contactTypeByDataType: {
       ...(actionDataTypes.get(actionId)?.contactTypeByDataType || {}),
       ...inlineContactTypes
@@ -906,7 +952,7 @@ async function listAllAutomationDataGroups(): Promise<AutomationOptions['dataGro
 
 export async function getAutomationOptions(): Promise<AutomationOptions> {
   const user = requireCurrentUser()
-  const [payload, dataGroups] = await Promise.all([
+  const [payload, dataGroups, dataTypeCategories] = await Promise.all([
     invokeRpc<unknown>(RPC_OPTIONS, {
       p_staff_id: user.staffId,
       p_organization_id: user.organizationId
@@ -916,25 +962,68 @@ export async function getAutomationOptions(): Promise<AutomationOptions> {
       // catalog is temporarily unavailable.
       console.warn('[Automation] Không thể tải Nhóm data:', error)
       return []
+    }),
+    dataGroupRepo.listDataTypeCategoryItems().catch(error => {
+      console.warn('[Automation] Không thể tải danh mục Loại dữ liệu:', error)
+      return []
     })
   ])
   const result = asRecord(Array.isArray(payload) ? payload[0] : payload)
   const actionDataTypes = new Map<string, {
     dataTypes: AutomationDataType[]
     contactTypeByDataType: Partial<Record<AutomationDataType, AutomationContactGroupOption['contactType']>>
+    semanticDataTypes: CampaignActionDataType[]
   }>()
   for (const item of asRecordArray(firstDefined(result, 'actionDataTypes', 'action_data_types'))) {
     const actionId = toStringValue(firstDefined(item, 'campaignActionId', 'campaign_action_id', 'actionId', 'action_id'))
     const dataType = toStringValue(firstDefined(item, 'dataType', 'dataTypeCode', 'data_type_code')) as AutomationDataType
     if (!actionId || !AUTOMATION_DATA_TYPES.has(dataType)) continue
-    const current = actionDataTypes.get(actionId) || { dataTypes: [], contactTypeByDataType: {} }
+    const current = actionDataTypes.get(actionId) || {
+      dataTypes: [],
+      contactTypeByDataType: {},
+      semanticDataTypes: []
+    }
     const contactType = toNullableString(firstDefined(item, 'targetContactType', 'target_contact_type'))
+    const semanticId = toNullableNumber(firstDefined(
+      item,
+      'dataTypeCategoryItemId',
+      'data_type_category_item_id'
+    ))
+    const semanticCode = toNullableString(firstDefined(
+      item,
+      'dataTypeCategoryCode',
+      'data_type_category_code'
+    ))
+    const semanticName = toNullableString(firstDefined(
+      item,
+      'dataTypeCategoryName',
+      'data_type_category_name'
+    ))
+    const semanticDataTypes = [...current.semanticDataTypes]
+    if (
+      semanticId
+      && semanticCode
+      && semanticName
+      && contactType
+      && !semanticDataTypes.some(entry => entry.dataTypeCategoryItemId === semanticId)
+    ) {
+      semanticDataTypes.push({
+        dataTypeCategoryItemId: semanticId,
+        dataTypeCode: semanticCode as DataTypeCategoryCode,
+        dataTypeName: semanticName,
+        automationDataType: dataType,
+        targetContactType: contactType as AutomationContactGroupOption['contactType'],
+        canSource: toBooleanValue(firstDefined(item, 'canSource', 'can_source')),
+        canTarget: toBooleanValue(firstDefined(item, 'canTarget', 'can_target'))
+      })
+    }
     actionDataTypes.set(actionId, {
-      dataTypes: [...current.dataTypes, dataType],
+      dataTypes: Array.from(new Set([...current.dataTypes, dataType])),
       contactTypeByDataType: {
         ...current.contactTypeByDataType,
         ...(contactType ? { [dataType]: contactType as AutomationContactGroupOption['contactType'] } : {})
-      }
+      },
+      semanticDataTypes
     })
   }
   const triggerOptions = [
@@ -968,7 +1057,8 @@ export async function getAutomationOptions(): Promise<AutomationOptions> {
     contactGroups: asRecordArray(firstDefined(result, 'contactGroups', 'contact_groups'))
       .map(mapContactGroupOption)
       .filter((item): item is AutomationContactGroupOption => !!item),
-    dataGroups
+    dataGroups,
+    dataTypeCategories
   }
 }
 
@@ -983,6 +1073,7 @@ async function saveAutomation(id: number | null, input: AutomationInput): Promis
     p_source_campaign_id: normalized.sourceCampaignId,
     p_target_campaign_id: normalized.targetCampaignId,
     p_data_type_code: normalized.dataType,
+    p_data_type_category_item_id: normalized.dataTypeCategoryItemId ?? null,
     p_target_contact_group_id: normalized.targetContactGroupId ?? null,
     p_target_data_group_id: normalized.targetDataGroupId ?? null,
     p_schedule_mode: normalized.scheduleMode,
@@ -1123,6 +1214,16 @@ function mapClaimedAutomationDetail(value: unknown): ClaimedAutomationDetail | n
     targetAccountId: toNullableNumber(firstDefined(row, 'targetAccountId', 'target_account_id')),
     targetActionId: toNullableString(firstDefined(row, 'targetActionId', 'target_action_id')),
     dataType,
+    dataTypeCategoryItemId: toNullableNumber(firstDefined(
+      row,
+      'dataTypeCategoryItemId',
+      'data_type_category_item_id'
+    )),
+    dataTypeCode: toNullableString(firstDefined(
+      row,
+      'dataTypeCategoryCode',
+      'data_type_category_code'
+    )) as DataTypeCategoryCode | null,
     dataValue: toStringValue(firstDefined(row, 'dataValue', 'data_value')),
     sourceInputSnapshot: asRecord(firstDefined(row, 'sourceInputSnapshot', 'source_input_snapshot')),
     configSnapshot: asRecord(firstDefined(row, 'configSnapshot', 'config_snapshot')),

@@ -193,7 +193,74 @@ interface CampaignSaveBundleItem {
 interface DirectDataGroupSnapshotIntent {
   groupId: number
   groupName: string
+  dataTypeCategoryItemId?: number | null
 }
+
+const getPositiveInteger = (value: unknown): number | null => {
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+const getDataGroupSemanticTypeId = (group?: DataGroup | null): number | null => {
+  if (!group) return null
+  const record = group as unknown as Record<string, unknown>
+  const directId = getPositiveInteger(record.dataTypeCategoryItemId)
+  if (directId) return directId
+  const nested = record.dataType
+  return nested && typeof nested === 'object'
+    ? getPositiveInteger((nested as Record<string, unknown>).id)
+    : null
+}
+
+const getDataGroupSemanticTypeName = (group?: DataGroup | null): string => {
+  if (!group) return 'Mọi loại dữ liệu'
+  const record = group as unknown as Record<string, unknown>
+  const directName = String(record.dataTypeName || '').trim()
+  if (directName) return directName
+  const nested = record.dataType
+  return nested && typeof nested === 'object'
+    ? String((nested as Record<string, unknown>).name || '').trim() || 'Mọi loại dữ liệu'
+    : 'Mọi loại dữ liệu'
+}
+
+const getCampaignActionSemanticTypeIds = (action?: CampaignAction | null): number[] => {
+  if (!action) return []
+  const rawDataTypes = (action as unknown as Record<string, unknown>).dataTypes
+  if (!Array.isArray(rawDataTypes)) return []
+  return Array.from(new Set(rawDataTypes
+    .map(item => {
+      if (!item || typeof item !== 'object') return null
+      const record = item as Record<string, unknown>
+      if (record.canTarget === false) return null
+      return getPositiveInteger(record.dataTypeCategoryItemId)
+    })
+    .filter((id): id is number => id !== null)))
+}
+
+const isSemanticDataTypeCompatibleWithCampaignAction = (
+  dataTypeCategoryItemId: number | null | undefined,
+  action?: CampaignAction | null
+): boolean => {
+  const groupTypeId = getPositiveInteger(dataTypeCategoryItemId)
+  // NULL groups are deliberately wildcard groups. When an older main process
+  // does not return semantic action metadata, keep the former permissive UI.
+  if (!groupTypeId) return true
+  const hasSemanticMetadata = !!action && Array.isArray(
+    (action as unknown as Record<string, unknown>).dataTypes
+  )
+  const actionTypeIds = getCampaignActionSemanticTypeIds(action)
+  return !hasSemanticMetadata || actionTypeIds.includes(groupTypeId)
+}
+
+const isDataGroupCompatibleWithCampaignAction = (
+  group: DataGroup,
+  action?: CampaignAction | null
+): boolean => (
+  isSemanticDataTypeCompatibleWithCampaignAction(
+    getDataGroupSemanticTypeId(group),
+    action
+  )
+)
 
 interface InternalCampaignDraft {
   tempId: number
@@ -1400,6 +1467,7 @@ export default function CampaignFormModal({
     createCampaignInputData
   } = useCampaignStore()
   const authUser = useAuthStore(state => state.user)
+  const { showAlert, showConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
   const canUseZaloQrAccount = authUser?.zaloAccountCapabilities?.qr === true
   const canUseEmailFeature = !!entitlements?.email
@@ -1798,7 +1866,8 @@ export default function CampaignFormModal({
       if (!Number.isSafeInteger(groupId) || groupId <= 0 || snapshotsByGroupId.has(groupId)) continue
       snapshotsByGroupId.set(groupId, {
         groupId,
-        groupName: String(snapshot.groupName || '').trim() || `Nhóm ${groupId}`
+        groupName: String(snapshot.groupName || '').trim() || `Nhóm ${groupId}`,
+        dataTypeCategoryItemId: getPositiveInteger(snapshot.dataTypeCategoryItemId)
       })
     }
     return Array.from(snapshotsByGroupId.values())
@@ -2330,6 +2399,7 @@ export default function CampaignFormModal({
   }
   const handleActionChange = (actionId: string) => {
     if (isSavedDataGroupIdentityLocked) return
+    const actionChanged = actionId !== formData.actionId
     const nextAction = availableCampaignActions.find(action => action.id === actionId)
     const nextPlatform = normalizeCampaignActionPlatform(nextAction?.flatformType)
     const nextAccountIds = getAccountIdsForPlatform(formData.accountIds, nextPlatform || selectedActionPlatformFilter, actionId)
@@ -2340,7 +2410,23 @@ export default function CampaignFormModal({
     ) {
       invalidateCampaignNameAiRequest()
     }
-    if (actionId !== formData.actionId) setPendingContentTemplateGroupId(null)
+    if (actionChanged) {
+      setPendingContentTemplateGroupId(null)
+      const compatibleSnapshots = directDataGroupSnapshots.filter(snapshot => (
+        isSemanticDataTypeCompatibleWithCampaignAction(
+          snapshot.dataTypeCategoryItemId,
+          nextAction
+        )
+      ))
+      const removedSnapshotCount = directDataGroupSnapshots.length - compatibleSnapshots.length
+      if (removedSnapshotCount > 0) {
+        setDirectDataGroupSnapshots(compatibleSnapshots)
+        showAlert(
+          `${removedSnapshotCount} nhóm data chờ thêm không còn tương thích và đã được bỏ chọn.`,
+          'info'
+        )
+      }
+    }
     if (
       (formData.formattedContentEnabled && !supportsFormattedContent(actionId)) ||
       (actionId !== EMAIL_SEND_ACTION_ID && formData.emailBodyIsHtml)
@@ -2492,6 +2578,30 @@ export default function CampaignFormModal({
     void hydrateSelectedGroupName()
     return () => { disposed = true }
   }, [formData.dataGroupId])
+
+  useEffect(() => {
+    if (
+      !formData.actionId ||
+      !formData.dataGroupId ||
+      !selectedDataGroup ||
+      isDataGroupCompatibleWithCampaignAction(selectedDataGroup, selectedCampaignAction)
+    ) {
+      return
+    }
+
+    setFormData(previous => previous.dataGroupId === selectedDataGroup.id
+      ? {
+          ...previous,
+          dataGroupId: null
+        }
+      : previous)
+    setSelectedDataGroupName('')
+    setSelectedDataGroup(null)
+    showAlert(
+      `Nhóm “${selectedDataGroup.name}” không hỗ trợ loại dữ liệu của hành động mới và đã được bỏ chọn.`,
+      'info'
+    )
+  }, [formData.actionId, formData.dataGroupId, selectedCampaignAction, selectedDataGroup, showAlert])
 
   useEffect(() => {
     if (selectedActionPlatform) {
@@ -3440,7 +3550,6 @@ export default function CampaignFormModal({
     })
   }, [formData.actionId, selectedCampaignAction?.id, selectedActionPlatform, limitActionCodesKey, checkedLimitActionCodesKey, visibleLimitActionCodesKey, entitlements])
 
-  const { showAlert, showConfirm } = useUiStore()
   const hasSmsIntegration = !!akabizIntegrations?.sms?.staffId
   const hasZaloWebIntegration = !!akabizIntegrations?.zaloWeb?.staffId
   const hasAkaBizDesktopIntegration = !!akabizIntegrations?.akaBizDesktop?.staffId && !!akabizIntegrations?.akaBizDesktop?.dbPath && !desktopIntegrationInvalid
@@ -6492,7 +6601,11 @@ export default function CampaignFormModal({
     )
   }
 
-  const appendDataGroupSnapshot = (groupId: number, groupName: string) => {
+  const appendDataGroupSnapshot = (
+    groupId: number,
+    groupName: string,
+    dataTypeCategoryItemId?: number | null
+  ) => {
     const normalizedGroupId = Number(groupId)
     if (!Number.isSafeInteger(normalizedGroupId) || normalizedGroupId <= 0) {
       showAlert('Nhóm data không hợp lệ.', 'error')
@@ -6503,7 +6616,11 @@ export default function CampaignFormModal({
     if (!alreadySelected) {
       setDirectDataGroupSnapshots(previous => [
         ...previous,
-        { groupId: normalizedGroupId, groupName: String(groupName || '').trim() || `Nhóm ${normalizedGroupId}` }
+        {
+          groupId: normalizedGroupId,
+          groupName: String(groupName || '').trim() || `Nhóm ${normalizedGroupId}`,
+          dataTypeCategoryItemId: getPositiveInteger(dataTypeCategoryItemId)
+        }
       ])
       setFormData(previous => previous.splitDataAcrossAccounts
         ? { ...previous, splitDataAcrossAccounts: false }
@@ -13875,7 +13992,11 @@ export default function CampaignFormModal({
                             <span className="campaign-data-group-dot" style={{ background: selectedDataGroup.color || 'var(--accent-primary)' }} />
                             <span className="campaign-data-group-control-copy">
                               <strong>{selectedDataGroup.name}</strong>
-                              <small>{selectedDataGroup.activeMembershipCount.toLocaleString('vi-VN')} data</small>
+                              <small>
+                                {selectedDataGroup.activeMembershipCount.toLocaleString('vi-VN')} data
+                                {' · '}
+                                {getDataGroupSemanticTypeName(selectedDataGroup)}
+                              </small>
                             </span>
                           </>
                         ) : (
@@ -14513,9 +14634,18 @@ export default function CampaignFormModal({
       {dataGroupPickerOpen && (
         <DataGroupPickerModal
           selectedGroupId={dataGroupPickerMode === 'source' ? formData.dataGroupId : null}
+          actionId={formData.actionId || undefined}
           onSelect={group => {
+            if (!isDataGroupCompatibleWithCampaignAction(group, selectedCampaignAction)) {
+              showAlert('Nhóm data này không tương thích với loại dữ liệu của hành động đã chọn.', 'error')
+              return
+            }
             if (dataGroupPickerMode === 'append') {
-              appendDataGroupSnapshot(group.id, group.name)
+              appendDataGroupSnapshot(
+                group.id,
+                group.name,
+                getDataGroupSemanticTypeId(group)
+              )
               return
             }
             setFormData(previous => ({
