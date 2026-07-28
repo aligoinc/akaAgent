@@ -713,6 +713,16 @@ export interface Campaign {
   dataTargetSourceMode?: CampaignDataTargetSourceMode
   /** Internal identity only; the UI displays the group name, never this id. */
   dataGroupId?: number | null
+  /** Data Group name resolved from the durable campaign source. */
+  dataGroupName?: string | null
+  /** Keeps the original group name visible after the group is soft-deleted. */
+  dataGroupIsDelete?: boolean
+  /** Current live-intake state of the durable Data Group source. */
+  dataGroupSourceStatus?: CampaignDataGroupSourceStatus | null
+  /** Durable source identity, kept separate so mismatches with dataGroupId remain detectable. */
+  dataGroupSourceGroupId?: number | null
+  dataGroupSourceStopReason?: string | null
+  dataGroupSourceUpdatedAt?: string | null
   provisioningState?: 'staged' | 'ready' | 'failed'
   creationBundleId?: number | null
   creationBundleChildIndex?: number | null
