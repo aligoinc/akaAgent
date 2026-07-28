@@ -1,4 +1,10 @@
-import { CampaignAction } from '../../../shared/types'
+import {
+  AutomationDataType,
+  CampaignAction,
+  CampaignActionDataType,
+  ContactType,
+  DataTypeCategoryCode
+} from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignActionFromDB } from '../mappers'
 import {
@@ -7,6 +13,61 @@ import {
 } from './entitlementRepository'
 
 const client = () => getSupabaseClient()
+
+async function loadActionDataTypes(actionIds: string[]): Promise<Map<string, CampaignActionDataType[]>> {
+  const uniqueActionIds = Array.from(new Set(actionIds.filter(Boolean)))
+  const result = new Map<string, CampaignActionDataType[]>()
+  if (uniqueActionIds.length === 0) return result
+
+  const { data: mappings, error: mappingError } = await client()
+    .from('auto_campaign_action_data_types')
+    .select('campaign_action_id, data_type_category_item_id, data_type_code, can_source, can_target, target_contact_type')
+    .in('campaign_action_id', uniqueActionIds)
+    .eq('is_active', true)
+    .eq('is_delete', false)
+  if (mappingError) throw new Error(`Failed to list campaign action data types: ${mappingError.message}`)
+
+  const categoryIds = Array.from(new Set((mappings || [])
+    .map(row => Number(row.data_type_category_item_id))
+    .filter(id => Number.isSafeInteger(id) && id > 0)))
+  if (categoryIds.length === 0) return result
+
+  const { data: categories, error: categoryError } = await client()
+    .from('category_item')
+    .select('id, code, name, is_active')
+    .in('id', categoryIds)
+  if (categoryError) throw new Error(`Failed to list campaign action data type categories: ${categoryError.message}`)
+  const categoriesById = new Map((categories || []).map(row => [Number(row.id), row]))
+
+  for (const row of mappings || []) {
+    const categoryItemId = Number(row.data_type_category_item_id)
+    const category = categoriesById.get(categoryItemId)
+    if (!category || category.is_active === false) continue
+    const actionId = String(row.campaign_action_id || '')
+    if (!actionId) continue
+    const entries = result.get(actionId) || []
+    if (entries.some(entry => entry.dataTypeCategoryItemId === categoryItemId)) continue
+    entries.push({
+      dataTypeCategoryItemId: categoryItemId,
+      dataTypeCode: String(category.code) as DataTypeCategoryCode,
+      dataTypeName: String(category.name || category.code || ''),
+      automationDataType: String(row.data_type_code) as AutomationDataType,
+      targetContactType: String(row.target_contact_type) as ContactType,
+      canSource: row.can_source === true,
+      canTarget: row.can_target === true
+    })
+    result.set(actionId, entries)
+  }
+  return result
+}
+
+async function attachActionDataTypes(actions: CampaignAction[]): Promise<CampaignAction[]> {
+  const mappings = await loadActionDataTypes(actions.map(action => action.id))
+  return actions.map(action => ({
+    ...action,
+    dataTypes: mappings.get(action.id) || []
+  }))
+}
 
 export async function listCampaignActions(): Promise<CampaignAction[]> {
   const entitlements = await loadCurrentUserEffectiveEntitlements()
@@ -18,9 +79,10 @@ export async function listCampaignActions(): Promise<CampaignAction[]> {
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(`Failed to list campaign actions: ${error.message}`)
-  return (data || [])
+  const actions = (data || [])
     .map(row => mapCampaignActionFromDB(row))
     .filter(action => canUseCampaignActionWithEntitlements(action.id, action.flatformType, entitlements))
+  return attachActionDataTypes(actions)
 }
 
 export async function getAllCampaignActions(): Promise<CampaignAction[]> {
@@ -31,7 +93,7 @@ export async function getAllCampaignActions(): Promise<CampaignAction[]> {
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(`Failed to get all campaign actions: ${error.message}`)
-  return (data || []).map(row => mapCampaignActionFromDB(row))
+  return attachActionDataTypes((data || []).map(row => mapCampaignActionFromDB(row)))
 }
 
 export async function getCampaignAction(actionId: string): Promise<CampaignAction | null> {
@@ -44,7 +106,8 @@ export async function getCampaignAction(actionId: string): Promise<CampaignActio
   if (error) return null
   const action = mapCampaignActionFromDB(data)
   const entitlements = await loadCurrentUserEffectiveEntitlements()
-  return canUseCampaignActionWithEntitlements(action.id, action.flatformType, entitlements) ? action : null
+  if (!canUseCampaignActionWithEntitlements(action.id, action.flatformType, entitlements)) return null
+  return (await attachActionDataTypes([action]))[0] || null
 }
 
 export async function createCampaignAction(action: Partial<CampaignAction>): Promise<CampaignAction> {
@@ -66,7 +129,7 @@ export async function createCampaignAction(action: Partial<CampaignAction>): Pro
     .single()
 
   if (error) throw new Error(`Failed to create campaign action: ${error.message}`)
-  return mapCampaignActionFromDB(data)
+  return (await attachActionDataTypes([mapCampaignActionFromDB(data)]))[0]
 }
 
 export async function updateCampaignAction(id: string, updates: Partial<CampaignAction>): Promise<CampaignAction> {
@@ -87,7 +150,7 @@ export async function updateCampaignAction(id: string, updates: Partial<Campaign
     .single()
 
   if (error) throw new Error(`Failed to update campaign action: ${error.message}`)
-  return mapCampaignActionFromDB(data)
+  return (await attachActionDataTypes([mapCampaignActionFromDB(data)]))[0]
 }
 
 export async function deleteCampaignAction(id: string): Promise<void> {

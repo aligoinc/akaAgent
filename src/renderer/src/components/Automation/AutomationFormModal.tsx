@@ -50,7 +50,12 @@ interface AutomationFormState {
   note: string
   sourceCampaignId: string
   triggerKeys: string[]
+  /** Legacy transport/extraction type consumed by the existing runtime. */
   dataType: AutomationDataType | ''
+  /** Semantic category snapshot; empty means a legacy unclassified rule. */
+  dataTypeCategoryItemId: string
+  dataTypeCode: string
+  dataTypeName: string
   targetCampaignId: string
   targetContactGroupId: string
   targetDataGroupId: string
@@ -69,6 +74,203 @@ const DATA_TYPE_LABELS: Record<AutomationDataType, string> = {
   email: 'Email',
   zalo_uid: 'UID Zalo',
   facebook_uid: 'UID Facebook'
+}
+
+interface SemanticAutomationDataTypeOption {
+  categoryItemId: number | null
+  categoryCode: string | null
+  name: string
+  transportType: AutomationDataType
+  sortOrder: number
+  isLegacy: boolean
+}
+
+interface SemanticAutomationMutationFields {
+  dataTypeCategoryItemId?: number | null
+  dataTypeCode?: string | null
+  dataTypeName?: string | null
+}
+
+const AUTOMATION_DATA_TYPES = new Set<AutomationDataType>([
+  'phone',
+  'email',
+  'zalo_uid',
+  'facebook_uid'
+])
+
+const toAutomationDataType = (value: unknown): AutomationDataType | null => {
+  const normalized = String(value || '').trim() as AutomationDataType
+  return AUTOMATION_DATA_TYPES.has(normalized) ? normalized : null
+}
+
+const toPositiveInteger = (value: unknown): number | null => {
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+const getRecord = (value: unknown): Record<string, unknown> | null => (
+  value && typeof value === 'object' ? value as Record<string, unknown> : null
+)
+
+const getSemanticContractAvailable = (options: AutomationOptions): boolean => {
+  const optionsRecord = options as unknown as Record<string, unknown>
+  if (Object.prototype.hasOwnProperty.call(optionsRecord, 'dataTypeCategories')) return true
+  return options.campaigns.some(campaign => (
+    Object.prototype.hasOwnProperty.call(
+      campaign as unknown as Record<string, unknown>,
+      'semanticDataTypes'
+    )
+  ))
+}
+
+const getCategoryCatalog = (options: AutomationOptions): Map<number, {
+  code: string | null
+  name: string | null
+  sortOrder: number
+}> => {
+  const rawCategories = (options as unknown as Record<string, unknown>).dataTypeCategories
+  const result = new Map<number, { code: string | null; name: string | null; sortOrder: number }>()
+  if (!Array.isArray(rawCategories)) return result
+  rawCategories.forEach((item, index) => {
+    const record = getRecord(item)
+    const id = toPositiveInteger(record?.id)
+    if (!record || !id) return
+    result.set(id, {
+      code: String(record.code || '').trim() || null,
+      name: String(record.name || '').trim() || null,
+      sortOrder: Number.isFinite(Number(record.sortOrder)) ? Number(record.sortOrder) : index
+    })
+  })
+  return result
+}
+
+const getCampaignSemanticDataTypes = (
+  campaign: AutomationCampaignOption | undefined,
+  direction: 'source' | 'target',
+  categoryCatalog: Map<number, { code: string | null; name: string | null; sortOrder: number }>
+): SemanticAutomationDataTypeOption[] => {
+  if (!campaign) return []
+  // Direct comment-seeding input intentionally accepts User/Group/Page in the
+  // same upload and therefore carries no trustworthy per-row semantic type.
+  // Expose the transport-compatible wildcard instead of typed choices that
+  // could never match those NULL input snapshots.
+  if (direction === 'source' && campaign.actionId === 'facebook_comment_seeding') {
+    return [{
+      categoryItemId: null,
+      categoryCode: null,
+      name: 'Mọi loại dữ liệu',
+      transportType: 'facebook_uid',
+      sortOrder: 0,
+      isLegacy: true
+    }]
+  }
+  const campaignRecord = campaign as unknown as Record<string, unknown>
+  const rawSemanticTypes = campaignRecord.semanticDataTypes
+  const semanticOptions: SemanticAutomationDataTypeOption[] = []
+
+  if (Array.isArray(rawSemanticTypes)) {
+    rawSemanticTypes.forEach((item, index) => {
+      const record = getRecord(item)
+      if (!record) return
+      if (direction === 'source' && record.canSource === false) return
+      if (direction === 'target' && record.canTarget === false) return
+      const categoryItemId = toPositiveInteger(record.dataTypeCategoryItemId)
+      const transportType = toAutomationDataType(record.automationDataType)
+      if (!categoryItemId || !transportType) return
+      const catalogItem = categoryCatalog.get(categoryItemId)
+      semanticOptions.push({
+        categoryItemId,
+        categoryCode: String(record.dataTypeCode || catalogItem?.code || '').trim() || null,
+        name: String(record.dataTypeName || catalogItem?.name || '').trim() || DATA_TYPE_LABELS[transportType],
+        transportType,
+        sortOrder: catalogItem?.sortOrder ?? index,
+        isLegacy: false
+      })
+    })
+  }
+
+  if (semanticOptions.length > 0) {
+    const unique = new Map<number, SemanticAutomationDataTypeOption>()
+    semanticOptions.forEach(option => {
+      if (!unique.has(option.categoryItemId as number)) {
+        unique.set(option.categoryItemId as number, option)
+      }
+    })
+    return Array.from(unique.values()).sort((left, right) => (
+      left.sortOrder - right.sortOrder
+      || left.name.localeCompare(right.name, 'vi')
+      || (left.categoryItemId || 0) - (right.categoryItemId || 0)
+    ))
+  }
+  if (Array.isArray(rawSemanticTypes) && rawSemanticTypes.length > 0) return []
+
+  // Older main-process builds only expose transport codes. Keep that contract
+  // usable, but do not pretend those values are semantic categories.
+  const legacyTypes = Array.isArray(campaign.dataTypes) ? campaign.dataTypes : []
+  return Array.from(new Set(legacyTypes
+    .map(toAutomationDataType)
+    .filter((item): item is AutomationDataType => item !== null)))
+    .map((transportType, index) => ({
+      categoryItemId: null,
+      categoryCode: null,
+      name: DATA_TYPE_LABELS[transportType],
+      transportType,
+      sortOrder: index,
+      isLegacy: true
+    }))
+}
+
+const semanticDataTypeKey = (option: SemanticAutomationDataTypeOption): string => (
+  option.categoryItemId
+    ? `category:${option.categoryItemId}`
+    : `legacy:${option.transportType}`
+)
+
+const isSameSemanticDataType = (
+  left: SemanticAutomationDataTypeOption,
+  right: SemanticAutomationDataTypeOption
+): boolean => (
+  left.categoryItemId && right.categoryItemId
+    ? left.categoryItemId === right.categoryItemId
+    : !left.categoryItemId
+      && !right.categoryItemId
+      && left.transportType === right.transportType
+)
+
+const campaignSupportsSemanticDataType = (
+  campaign: AutomationCampaignOption | undefined,
+  selectedType: SemanticAutomationDataTypeOption | null,
+  direction: 'source' | 'target',
+  categoryCatalog: Map<number, { code: string | null; name: string | null; sortOrder: number }>
+): boolean => {
+  if (!campaign || !selectedType) return false
+  const options = getCampaignSemanticDataTypes(campaign, direction, categoryCatalog)
+  if (selectedType.categoryItemId) {
+    const semanticOptions = options.filter(option => option.categoryItemId)
+    return semanticOptions.length > 0
+      ? semanticOptions.some(option => option.categoryItemId === selectedType.categoryItemId)
+      : options.some(option => option.transportType === selectedType.transportType)
+  }
+  return options.some(option => option.transportType === selectedType.transportType)
+}
+
+const getDataGroupSemanticTypeId = (group?: DataGroup | null): number | null => {
+  const record = getRecord(group)
+  const directId = toPositiveInteger(record?.dataTypeCategoryItemId)
+  if (directId) return directId
+  const nested = getRecord(record?.dataType)
+  return toPositiveInteger(nested?.id)
+}
+
+const isDataGroupCompatibleWithSemanticType = (
+  group: DataGroup,
+  categoryItemId: number | null,
+  semanticContractAvailable: boolean
+): boolean => {
+  if (!semanticContractAvailable) return true
+  const groupCategoryItemId = getDataGroupSemanticTypeId(group)
+  if (!groupCategoryItemId) return true
+  return !!categoryItemId && groupCategoryItemId === categoryItemId
 }
 
 const DELAY_UNIT_LABELS: Record<AutomationDelayUnit, string> = {
@@ -182,12 +384,17 @@ const getLegacyDelay = (automation?: Automation | null): {
 const getInitialState = (automation?: Automation | null): AutomationFormState => {
   const legacyDelay = getLegacyDelay(automation)
   const delayExactTime = toTimeInput(automation?.delayExactTime)
+  const automationRecord = getRecord(automation)
+  const dataTypeCategoryItemId = toPositiveInteger(automationRecord?.dataTypeCategoryItemId)
   return {
     name: automation?.name || '',
     note: automation?.note || '',
     sourceCampaignId: automation?.sourceCampaignId ? String(automation.sourceCampaignId) : '',
     triggerKeys: canonicalizeInitialTriggerKeys(automation?.triggerConditions || []),
     dataType: automation?.dataType || '',
+    dataTypeCategoryItemId: dataTypeCategoryItemId ? String(dataTypeCategoryItemId) : '',
+    dataTypeCode: dataTypeCategoryItemId ? String(automationRecord?.dataTypeCode || '').trim() : '',
+    dataTypeName: dataTypeCategoryItemId ? String(automationRecord?.dataTypeName || '').trim() : '',
     targetCampaignId: automation?.targetCampaignId ? String(automation.targetCampaignId) : '',
     targetContactGroupId: automation?.targetContactGroupId ? String(automation.targetContactGroupId) : '',
     targetDataGroupId: automation?.targetDataGroupId ? String(automation.targetDataGroupId) : '',
@@ -223,6 +430,10 @@ const dataGroupCountLabel = (group: DataGroup): string => (
   group.activeMembershipCount >= 0
     ? `${group.activeMembershipCount.toLocaleString('vi-VN')} data`
     : 'Số data chưa tải'
+)
+
+const dataGroupMetaLabel = (group: DataGroup): string => (
+  `${dataGroupCountLabel(group)} · ${group.dataTypeName?.trim() || 'Mọi loại dữ liệu'}`
 )
 
 export default function AutomationFormModal({
@@ -292,6 +503,14 @@ export default function AutomationFormModal({
     () => options.campaigns.filter(item => !isCompletedCampaign(item)),
     [options.campaigns]
   )
+  const semanticContractAvailable = useMemo(
+    () => getSemanticContractAvailable(options),
+    [options]
+  )
+  const categoryCatalog = useMemo(
+    () => getCategoryCatalog(options),
+    [options]
+  )
 
   const triggerOptions = useMemo(() => {
     if (!sourceCampaign) return []
@@ -308,25 +527,102 @@ export default function AutomationFormModal({
     triggerOptions.map(item => [triggerKey(item), item])
   ), [triggerOptions])
 
+  const sourceDataTypeOptions = useMemo(
+    () => getCampaignSemanticDataTypes(sourceCampaign, 'source', categoryCatalog),
+    [categoryCatalog, sourceCampaign]
+  )
+  const currentFormDataType = useMemo<SemanticAutomationDataTypeOption | null>(() => {
+    const transportType = toAutomationDataType(form.dataType)
+    if (!transportType) return null
+    const categoryItemId = toPositiveInteger(form.dataTypeCategoryItemId)
+    const catalogItem = categoryItemId ? categoryCatalog.get(categoryItemId) : undefined
+    return {
+      categoryItemId,
+      categoryCode: form.dataTypeCode || catalogItem?.code || null,
+      name: form.dataTypeName || catalogItem?.name || DATA_TYPE_LABELS[transportType],
+      transportType,
+      sortOrder: catalogItem?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+      isLegacy: !categoryItemId
+    }
+  }, [
+    categoryCatalog,
+    form.dataType,
+    form.dataTypeCategoryItemId,
+    form.dataTypeCode,
+    form.dataTypeName
+  ])
+  const dataTypeChoices = useMemo(() => {
+    const choices = [...sourceDataTypeOptions]
+    const isOriginalSource = mode === 'edit'
+      && !!automation
+      && sourceCampaign?.id === automation.sourceCampaignId
+    if (
+      currentFormDataType &&
+      isOriginalSource &&
+      !choices.some(option => isSameSemanticDataType(option, currentFormDataType)) &&
+      (!currentFormDataType.categoryItemId || !semanticContractAvailable)
+    ) {
+      choices.push({
+        ...currentFormDataType,
+        name: currentFormDataType.categoryItemId
+          ? currentFormDataType.name
+          : `${currentFormDataType.name} (quy tắc cũ)`
+      })
+    }
+    return choices
+  }, [
+    automation,
+    currentFormDataType,
+    mode,
+    semanticContractAvailable,
+    sourceCampaign,
+    sourceDataTypeOptions
+  ])
+  const selectedDataTypeOption = useMemo(() => (
+    currentFormDataType
+      ? dataTypeChoices.find(option => isSameSemanticDataType(option, currentFormDataType)) || null
+      : null
+  ), [currentFormDataType, dataTypeChoices])
+  const selectedDataTypeCategoryItemId = selectedDataTypeOption?.categoryItemId || null
+
   const targetCampaigns = useMemo(() => options.campaigns.filter(item => {
-    if (!form.dataType) return false
+    if (!selectedDataTypeOption) return false
     if (item.id === sourceCampaign?.id) return false
-    if (!item.dataTypes.includes(form.dataType)) return false
-    if (form.dataType === 'zalo_uid' && sourceCampaign && item.accountId !== sourceCampaign.accountId) return false
+    if (!campaignSupportsSemanticDataType(item, selectedDataTypeOption, 'target', categoryCatalog)) return false
+    if (selectedDataTypeOption.transportType === 'zalo_uid' && sourceCampaign && item.accountId !== sourceCampaign.accountId) return false
     return true
-  }), [form.dataType, options.campaigns, sourceCampaign])
+  }), [categoryCatalog, options.campaigns, selectedDataTypeOption, sourceCampaign])
 
   const dataGroupOptions = useMemo(() => {
-    const groups = [...options.dataGroups]
-    if (pickedDataGroup && !groups.some(group => group.id === pickedDataGroup.id)) {
+    const groups = options.dataGroups.filter(group => (
+      isDataGroupCompatibleWithSemanticType(
+        group,
+        selectedDataTypeCategoryItemId,
+        semanticContractAvailable
+      )
+    ))
+    if (
+      pickedDataGroup &&
+      isDataGroupCompatibleWithSemanticType(
+        pickedDataGroup,
+        selectedDataTypeCategoryItemId,
+        semanticContractAvailable
+      ) &&
+      !groups.some(group => group.id === pickedDataGroup.id)
+    ) {
       groups.push(pickedDataGroup)
     }
-    return groups.sort((left, right) => (
+    return [...groups].sort((left, right) => (
       left.sortOrder - right.sortOrder
       || left.name.localeCompare(right.name, 'vi')
       || left.id - right.id
     ))
-  }, [options.dataGroups, pickedDataGroup])
+  }, [
+    options.dataGroups,
+    pickedDataGroup,
+    selectedDataTypeCategoryItemId,
+    semanticContractAvailable
+  ])
 
   const selectedDataGroup = useMemo(() => {
     const selectedId = Number(form.targetDataGroupId)
@@ -338,6 +634,35 @@ export default function AutomationFormModal({
     targetCampaign?.name,
     selectedDataGroup?.name
   ].filter((name): name is string => Boolean(name)), [selectedDataGroup, targetCampaign])
+
+  useEffect(() => {
+    const selectedId = Number(form.targetDataGroupId)
+    if (!Number.isSafeInteger(selectedId) || selectedId <= 0) return
+    const candidate = options.dataGroups.find(group => group.id === selectedId)
+      || (pickedDataGroup?.id === selectedId ? pickedDataGroup : null)
+    if (
+      !candidate ||
+      isDataGroupCompatibleWithSemanticType(
+        candidate,
+        selectedDataTypeCategoryItemId,
+        semanticContractAvailable
+      )
+    ) {
+      return
+    }
+    setForm(previous => previous.targetDataGroupId === String(selectedId)
+      ? { ...previous, targetDataGroupId: '' }
+      : previous)
+    setPickedDataGroup(previous => previous?.id === selectedId ? null : previous)
+    setDataGroupMenuOpen(false)
+    setError(`Nhóm “${candidate.name}” không đúng loại dữ liệu đã chọn và đã được bỏ khỏi đích nhận.`)
+  }, [
+    form.targetDataGroupId,
+    options.dataGroups,
+    pickedDataGroup,
+    selectedDataTypeCategoryItemId,
+    semanticContractAvailable
+  ])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -407,6 +732,18 @@ export default function AutomationFormModal({
   }
 
   const selectDataGroup = (group: DataGroup | null) => {
+    if (
+      group &&
+      !isDataGroupCompatibleWithSemanticType(
+        group,
+        selectedDataTypeCategoryItemId,
+        semanticContractAvailable
+      )
+    ) {
+      setDataGroupMenuOpen(false)
+      setError('Nhóm data này không đúng loại dữ liệu semantic đã chọn.')
+      return
+    }
     setForm(previous => ({ ...previous, targetDataGroupId: group ? String(group.id) : '' }))
     if (group) setPickedDataGroup(group)
     setDataGroupMenuOpen(false)
@@ -457,40 +794,83 @@ export default function AutomationFormModal({
 
   const handleSourceChange = (value: string) => {
     const nextSource = options.campaigns.find(item => item.id === Number(value))
+    const nextSourceTypes = getCampaignSemanticDataTypes(nextSource, 'source', categoryCatalog)
+    const nextDataType = selectedDataTypeOption
+      && (
+        !!selectedDataTypeOption.categoryItemId
+        || nextSourceTypes.every(option => !option.categoryItemId)
+      )
+      && campaignSupportsSemanticDataType(nextSource, selectedDataTypeOption, 'source', categoryCatalog)
+      ? selectedDataTypeOption
+      : nextSourceTypes[0] || null
+    const currentTarget = options.campaigns.find(item => item.id === Number(form.targetCampaignId))
+    const keepTarget = !!currentTarget
+      && !!nextDataType
+      && currentTarget.id !== nextSource?.id
+      && campaignSupportsSemanticDataType(currentTarget, nextDataType, 'target', categoryCatalog)
+      && (
+        nextDataType.transportType !== 'zalo_uid'
+        || currentTarget.accountId === nextSource?.accountId
+      )
+    const currentGroup = options.dataGroups.find(item => item.id === Number(form.targetDataGroupId))
+      || (pickedDataGroup?.id === Number(form.targetDataGroupId) ? pickedDataGroup : null)
+    const keepDataGroup = !!currentGroup
+      && !!nextDataType
+      && isDataGroupCompatibleWithSemanticType(
+        currentGroup,
+        nextDataType.categoryItemId,
+        semanticContractAvailable
+      )
+
     setForm(previous => {
-      const nextDataType = previous.dataType && nextSource?.dataTypes.includes(previous.dataType)
-        ? previous.dataType
-        : nextSource?.dataTypes[0] || ''
-      const currentTarget = options.campaigns.find(item => item.id === Number(previous.targetCampaignId))
-      const keepTarget = !!currentTarget && !!nextDataType && currentTarget.id !== nextSource?.id && currentTarget.dataTypes.includes(nextDataType)
-        && (nextDataType !== 'zalo_uid' || currentTarget.accountId === nextSource?.accountId)
       return {
         ...previous,
         sourceCampaignId: value,
         triggerKeys: [],
-        dataType: nextDataType,
+        dataType: nextDataType?.transportType || '',
+        dataTypeCategoryItemId: nextDataType?.categoryItemId ? String(nextDataType.categoryItemId) : '',
+        dataTypeCode: nextDataType?.categoryCode || '',
+        dataTypeName: nextDataType?.name || '',
         targetCampaignId: keepTarget ? previous.targetCampaignId : '',
         targetContactGroupId: keepTarget ? previous.targetContactGroupId : '',
-        targetDataGroupId: previous.targetDataGroupId
+        targetDataGroupId: keepDataGroup ? previous.targetDataGroupId : ''
       }
     })
+    if (!keepDataGroup) setPickedDataGroup(null)
     setError('')
   }
 
-  const handleDataTypeChange = (value: AutomationDataType) => {
+  const handleDataTypeChange = (value: SemanticAutomationDataTypeOption) => {
+    const currentTarget = options.campaigns.find(item => item.id === Number(form.targetCampaignId))
+    const keepTarget = !!currentTarget
+      && currentTarget.id !== sourceCampaign?.id
+      && campaignSupportsSemanticDataType(currentTarget, value, 'target', categoryCatalog)
+      && (
+        value.transportType !== 'zalo_uid'
+        || currentTarget.accountId === sourceCampaign?.accountId
+      )
+    const currentGroup = options.dataGroups.find(item => item.id === Number(form.targetDataGroupId))
+      || (pickedDataGroup?.id === Number(form.targetDataGroupId) ? pickedDataGroup : null)
+    const keepDataGroup = !!currentGroup
+      && isDataGroupCompatibleWithSemanticType(
+        currentGroup,
+        value.categoryItemId,
+        semanticContractAvailable
+      )
+
     setForm(previous => {
-      const currentTarget = options.campaigns.find(item => item.id === Number(previous.targetCampaignId))
-      const keepTarget = !!currentTarget && currentTarget.dataTypes.includes(value)
-        && currentTarget.id !== sourceCampaign?.id
-        && (value !== 'zalo_uid' || currentTarget.accountId === sourceCampaign?.accountId)
       return {
         ...previous,
-        dataType: value,
+        dataType: value.transportType,
+        dataTypeCategoryItemId: value.categoryItemId ? String(value.categoryItemId) : '',
+        dataTypeCode: value.categoryCode || '',
+        dataTypeName: value.name,
         targetCampaignId: keepTarget ? previous.targetCampaignId : '',
         targetContactGroupId: keepTarget ? previous.targetContactGroupId : '',
-        targetDataGroupId: previous.targetDataGroupId
+        targetDataGroupId: keepDataGroup ? previous.targetDataGroupId : ''
       }
     })
+    if (!keepDataGroup) setPickedDataGroup(null)
     setError('')
   }
 
@@ -528,16 +908,43 @@ export default function AutomationFormModal({
       if (!form.triggerKeys.some(key => triggerOptionByKey.has(key))) {
         return 'Chọn ít nhất một trạng thái kết quả còn khả dụng của chiến dịch A.'
       }
-      if (!form.dataType) return 'Vui lòng chọn loại dữ liệu dùng để chuyển.'
-      if (!sourceCampaign.dataTypes.includes(form.dataType)) return 'Chiến dịch A không hỗ trợ loại dữ liệu đã chọn.'
+      if (!selectedDataTypeOption) return 'Vui lòng chọn loại dữ liệu dùng để chuyển.'
+      if (
+        sourceDataTypeOptions.some(option => option.categoryItemId) &&
+        !selectedDataTypeOption.categoryItemId &&
+        !(mode === 'edit' && selectedDataTypeOption.isLegacy)
+      ) {
+        return 'Vui lòng chọn loại dữ liệu semantic thay cho loại vận chuyển legacy.'
+      }
+      if (
+        !campaignSupportsSemanticDataType(
+          sourceCampaign,
+          selectedDataTypeOption,
+          'source',
+          categoryCatalog
+        ) &&
+        !(mode === 'edit' && selectedDataTypeOption.isLegacy)
+      ) {
+        return 'Chiến dịch A không hỗ trợ loại dữ liệu đã chọn.'
+      }
     }
     if (targetStep === 2) {
+      if (form.targetDataGroupId && !selectedDataGroup) {
+        return 'Nhóm data đã chọn không còn tồn tại hoặc không đúng loại dữ liệu.'
+      }
       if (!targetCampaign && !selectedDataGroup) {
         return 'Vui lòng chọn ít nhất một đích: Chiến dịch đích hoặc Nhóm data.'
       }
       if (targetCampaign) {
         if (targetCampaign.id === sourceCampaign?.id) return 'Chiến dịch A và B phải là hai chiến dịch khác nhau.'
-        if (!form.dataType || !targetCampaign.dataTypes.includes(form.dataType)) {
+        if (
+          !campaignSupportsSemanticDataType(
+            targetCampaign,
+            selectedDataTypeOption,
+            'target',
+            categoryCatalog
+          )
+        ) {
           return 'Chiến dịch A và B phải dùng cùng một loại dữ liệu.'
         }
         if (form.dataType === 'zalo_uid' && sourceCampaign?.accountId !== targetCampaign.accountId) {
@@ -612,13 +1019,16 @@ export default function AutomationFormModal({
     setSaving(true)
     setError('')
     try {
-      const payload: AutomationMutation = {
+      const payload: AutomationMutation & SemanticAutomationMutationFields = {
         name: form.name.trim(),
         actionType: 'campaign_detail_route',
         isActive: form.isActive,
         sourceCampaignId: Number(form.sourceCampaignId),
         triggerConditions: selectedTriggers,
         dataType: form.dataType as AutomationDataType,
+        dataTypeCategoryItemId: selectedDataTypeOption?.categoryItemId ?? null,
+        dataTypeCode: selectedDataTypeOption?.categoryCode ?? null,
+        dataTypeName: selectedDataTypeOption?.name ?? null,
         targetCampaignId: targetCampaign?.id ?? null,
         targetContactGroupId: form.targetContactGroupId ? Number(form.targetContactGroupId) : null,
         targetDataGroupId: selectedDataGroup?.id ?? null,
@@ -765,19 +1175,28 @@ export default function AutomationFormModal({
                 <div className="automation-field">
                   <span>Loại dữ liệu đồng nhất <b>*</b></span>
                   <div className="automation-choice-grid">
-                    {(sourceCampaign?.dataTypes || []).map(dataType => (
-                      <label key={dataType} className={`automation-choice-card ${form.dataType === dataType ? 'selected' : ''}`}>
-                        <input
-                          type="radio"
-                          name="automation-data-type"
-                          checked={form.dataType === dataType}
-                          onChange={() => handleDataTypeChange(dataType)}
-                        />
-                        <Database size={17} />
-                        <span>{DATA_TYPE_LABELS[dataType]}</span>
-                      </label>
-                    ))}
+                    {dataTypeChoices.map(dataType => {
+                      const selected = !!selectedDataTypeOption
+                        && isSameSemanticDataType(dataType, selectedDataTypeOption)
+                      return (
+                        <label key={semanticDataTypeKey(dataType)} className={`automation-choice-card ${selected ? 'selected' : ''}`}>
+                          <input
+                            type="radio"
+                            name="automation-data-type"
+                            checked={selected}
+                            onChange={() => handleDataTypeChange(dataType)}
+                          />
+                          <Database size={17} />
+                          <span>{dataType.name}</span>
+                        </label>
+                      )
+                    })}
                   </div>
+                  {sourceCampaign && dataTypeChoices.length === 0 && (
+                    <div className="automation-inline-empty is-warning">
+                      Loại chiến dịch này chưa có loại dữ liệu semantic khả dụng.
+                    </div>
+                  )}
                 </div>
               </section>
             )}
@@ -804,7 +1223,7 @@ export default function AutomationFormModal({
                     <span>{sourceCampaign ? campaignMeta(sourceCampaign) : ''}</span>
                   </div>
                   <ChevronRight size={19} />
-                  <span className="automation-route-data">{form.dataType ? DATA_TYPE_LABELS[form.dataType] : 'Dữ liệu'}</span>
+                  <span className="automation-route-data">{selectedDataTypeOption?.name || 'Dữ liệu'}</span>
                   <ChevronRight size={19} />
                   <div>
                     <small>Đích nhận</small>
@@ -875,7 +1294,7 @@ export default function AutomationFormModal({
                             />
                             <span className="automation-data-group-value-copy">
                               <strong>{selectedDataGroup.name}</strong>
-                              <small>{dataGroupCountLabel(selectedDataGroup)}</small>
+                              <small>{dataGroupMetaLabel(selectedDataGroup)}</small>
                             </span>
                           </>
                         ) : (
@@ -940,7 +1359,7 @@ export default function AutomationFormModal({
                               />
                               <span className="automation-data-group-option-copy">
                                 <strong>{group.name}</strong>
-                                <small>{dataGroupCountLabel(group)}</small>
+                                <small>{dataGroupMetaLabel(group)}</small>
                               </span>
                               {isSelected && <Check size={16} className="automation-data-group-option-check" aria-hidden="true" />}
                             </button>
@@ -951,8 +1370,10 @@ export default function AutomationFormModal({
                       </div>
                     )}
                   </div>
-                  {options.dataGroups.length === 0 && (
-                    <small className="automation-field-note">Chưa có Nhóm data. Bạn có thể tạo nhóm trong Quản lý nhóm data.</small>
+                  {dataGroupOptions.length === 0 && (
+                    <small className="automation-field-note">
+                      Chưa có nhóm Mọi loại dữ liệu hoặc nhóm đúng loại dữ liệu đã chọn.
+                    </small>
                   )}
                 </div>
                 <small id={destinationHelpId} className="automation-field-note">
@@ -1166,7 +1587,7 @@ export default function AutomationFormModal({
                     <span>Điều kiện</span>
                     <strong>{sourceCampaign?.name || '—'} · {selectedTriggers.map(formatAutomationTriggerLabel).join(', ') || '—'}</strong>
                     <span>Dữ liệu</span>
-                    <strong>{form.dataType ? DATA_TYPE_LABELS[form.dataType] : '—'}</strong>
+                    <strong>{selectedDataTypeOption?.name || '—'}</strong>
                     <span>Chiến dịch đích</span>
                     <strong>{targetCampaign?.name || 'Không chọn'}</strong>
                     <span>Nhóm data</span>
@@ -1204,6 +1625,12 @@ export default function AutomationFormModal({
       {dataGroupPickerOpen && (
         <DataGroupPickerModal
           selectedGroupId={form.targetDataGroupId ? Number(form.targetDataGroupId) : null}
+          compatibleDataTypeCategoryItemId={selectedDataTypeCategoryItemId}
+          unrestrictedOnly={
+            semanticContractAvailable
+            && selectedDataTypeOption !== null
+            && selectedDataTypeCategoryItemId === null
+          }
           onSelect={group => {
             selectDataGroup(group)
             setDataGroupPickerOpen(false)

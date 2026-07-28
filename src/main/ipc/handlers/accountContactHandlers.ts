@@ -242,6 +242,10 @@ export function registerAccountContactHandlers(
     return supabase.listDataGroups(query)
   })
 
+  ipcMain.handle(IPC_EVENTS.DATA_TYPE_CATEGORIES_LIST, async () => {
+    return supabase.listDataTypeCategoryItems()
+  })
+
   ipcMain.handle(IPC_EVENTS.DATA_GROUPS_CREATE, async (_, request: CreateDataGroupRequest) => {
     return supabase.createDataGroup(request)
   })

@@ -2422,6 +2422,7 @@ function AddDataToCurrentCampaignModal({
       {showDataGroupPicker && (
         <div onMouseDown={event => event.stopPropagation()}>
           <DataGroupPickerModal
+            actionId={campaign.actionId}
             onClose={() => setShowDataGroupPicker(false)}
             onSelect={selectDataGroup}
           />

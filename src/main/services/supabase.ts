@@ -414,6 +414,9 @@ export class SupabaseService {
   listDataGroups(query?: DataGroupListQuery) {
     return dataGroupRepo.listDataGroups(query)
   }
+  listDataTypeCategoryItems() {
+    return dataGroupRepo.listDataTypeCategoryItems()
+  }
   createDataGroup(request: CreateDataGroupRequest) {
     return dataGroupRepo.createDataGroup(request)
   }

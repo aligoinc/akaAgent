@@ -21,7 +21,7 @@ import { normalizeVietnamMobilePhone } from '../../../shared/phone'
 import { randomUUID } from 'crypto'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountContactDatasetFromDB, mapAccountContactFromDB, mapAccountContactGroupFromDB } from '../mappers'
-import { requireCurrentUser } from '../currentUser'
+import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import * as dataGroupRepo from './dataGroupRepository'
 
 interface UpsertContactsOptions {
@@ -651,6 +651,9 @@ function getUploadTargetValue(row: CampaignImportDataRow, actionId: string, cont
     return isValidEmailInputDataValue(email) ? email : ''
   }
   if (contactType === 'phone') {
+    if (actionId === 'zalo_add_group_member') {
+      return normalizeVietnamMobilePhone(row.phone)
+    }
     return normalizeVietnamMobilePhone(row.phone || row.uid)
   }
   if (contactType === 'campaign_input') {
@@ -804,6 +807,7 @@ export async function finalizeContactDataset(
   input: ContactDatasetFinalizeInput
 ): Promise<AutoAccountContactDataset | null> {
   const u = requireCurrentUser()
+  const credentials = requireCurrentUserCredentials()
   const accountId = Number(input.accountId)
   const sourceKey = String(input.sourceKey || '').trim()
   const name = normalizeDatasetName(input.name)
@@ -828,7 +832,10 @@ export async function finalizeContactDataset(
     p_description: optionalText(input.description) || null,
     p_status: input.status,
     p_contact_uids: contactUids,
-    p_extra_data: toRecord(input.extraData)
+    p_extra_data: toRecord(input.extraData),
+    p_data_type_category_item_id: input.dataTypeCategoryItemId ?? null,
+    p_auth_username: credentials.username,
+    p_auth_password: credentials.password
   })
 
   if (error) throw new Error(`Failed to finalize contact dataset: ${error.message}`)
@@ -840,6 +847,7 @@ export async function saveUploadDataset(
   request: SaveUploadDatasetRequest
 ): Promise<SaveUploadDatasetResult> {
   const u = requireCurrentUser()
+  const credentials = requireCurrentUserCredentials()
   const accountIds = normalizeContactIdList(request.accountIds)
   const name = normalizeDatasetName(request.name)
   const actionId = String(request.actionId || '').trim().toLocaleLowerCase('en-US')
@@ -862,7 +870,11 @@ export async function saveUploadDataset(
     request.importSource
   )
   const contacts = normalizedItems.map(item => item.contact)
-  const normalizedRows = normalizedItems.map(item => item.row)
+  const normalizedRows = normalizedItems.map(item => (
+    actionId === 'zalo_add_group_member'
+      ? { ...item.row, phone: item.contact.uid, uid: '' }
+      : item.row
+  ))
   if (contacts.length === 0) {
     throw new Error('Không có dữ liệu hợp lệ để lưu vào danh sách data.')
   }
@@ -888,6 +900,9 @@ export async function saveUploadDataset(
     p_description: description,
     p_source_key_prefix: sourceKeyPrefix,
     p_contacts: contacts,
+    p_data_type_category_item_id: request.dataTypeCategoryItemId ?? null,
+    p_auth_username: credentials.username,
+    p_auth_password: credentials.password,
     p_extra_data: {
       actionId,
       actionName,
@@ -898,7 +913,15 @@ export async function saveUploadDataset(
     }
   })
 
-  if (error) throw new Error(`Failed to save uploaded contact dataset: ${error.message}`)
+  if (error) {
+    if (error.message.includes('zalo_add_group_member_upload_requires_phone')) {
+      throw new Error('Upload trực tiếp cho chiến dịch thêm thành viên Zalo chỉ nhận số điện thoại.')
+    }
+    if (error.message.includes('facebook_comment_seeding_upload_must_be_unrestricted')) {
+      throw new Error('Upload comment seeding phải dùng loại Mọi loại dữ liệu.')
+    }
+    throw new Error(`Failed to save uploaded contact dataset: ${error.message}`)
+  }
   const datasets = (data || []).map((row: Record<string, unknown>) => mapAccountContactDatasetFromDB(row))
   if (datasets.length !== accountIds.length) {
     throw new Error('Không thể lưu đầy đủ danh sách data cho các tài khoản đã chọn.')

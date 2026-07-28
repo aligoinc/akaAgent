@@ -18,17 +18,26 @@ interface ContentTemplatePreviewProps {
   formatted?: boolean
   subject?: string
   imageUrls?: string[]
+  showSampleData?: boolean
+  activeVariantIndex?: number
+  onActiveVariantChange?: (index: number) => void
 }
 
-const renderPlainSample = (value: string): string =>
-  renderPreviewSampleTokens(renderContentSpin(String(value || '')))
-
-const renderRichSample = (value: string, channel: TemplatePreviewChannel): string => {
-  const transformed = transformFormattedContentTextNodes(
+const renderSpunRichContent = (value: string): string =>
+  transformFormattedContentTextNodes(
     sanitizeFormattedContent(value),
-    text => renderPreviewSampleTokens(renderContentSpin(text))
+    text => renderContentSpin(text)
   )
-  return channel === 'zalo_message' ? formattedContentToZaloPreviewHtml(transformed) : transformed
+
+const renderRichPreview = (
+  spunContent: string,
+  channel: TemplatePreviewChannel,
+  showSampleData: boolean
+): string => {
+  const rendered = showSampleData
+    ? transformFormattedContentTextNodes(spunContent, renderPreviewSampleTokens)
+    : spunContent
+  return channel === 'zalo_message' ? formattedContentToZaloPreviewHtml(rendered) : rendered
 }
 
 function ChannelImagePreview({ imageUrls }: { imageUrls: string[] }) {
@@ -52,22 +61,47 @@ export default function ContentTemplatePreview({
   variants,
   formatted = false,
   subject = '',
-  imageUrls = []
+  imageUrls = [],
+  showSampleData = true,
+  activeVariantIndex,
+  onActiveVariantChange
 }: ContentTemplatePreviewProps) {
   const normalizedVariants = variants.length > 0 ? variants : ['']
-  const [variantIndex, setVariantIndex] = useState(0)
+  const [internalVariantIndex, setInternalVariantIndex] = useState(0)
+  const resolvedVariantIndex = Math.max(
+    0,
+    Math.min(activeVariantIndex ?? internalVariantIndex, normalizedVariants.length - 1)
+  )
 
   useEffect(() => {
-    setVariantIndex(0)
+    if (activeVariantIndex === undefined) setInternalVariantIndex(0)
   }, [channel, variants.length])
 
-  const selectedVariant = normalizedVariants[Math.min(variantIndex, normalizedVariants.length - 1)] || ''
-  const renderedPlain = useMemo(() => renderPlainSample(selectedVariant), [selectedVariant])
-  const renderedRich = useMemo(
-    () => formatted ? renderRichSample(selectedVariant, channel) : '',
-    [channel, formatted, selectedVariant]
+  const selectedVariant = normalizedVariants[resolvedVariantIndex] || ''
+  const spunPlain = useMemo(
+    () => renderContentSpin(String(selectedVariant || '')),
+    [selectedVariant]
   )
-  const renderedSubject = useMemo(() => renderPlainSample(subject), [subject])
+  const spunRich = useMemo(
+    () => formatted ? renderSpunRichContent(selectedVariant) : '',
+    [formatted, selectedVariant]
+  )
+  const spunSubject = useMemo(
+    () => renderContentSpin(String(subject || '')),
+    [subject]
+  )
+  const renderedPlain = useMemo(
+    () => showSampleData ? renderPreviewSampleTokens(spunPlain) : spunPlain,
+    [showSampleData, spunPlain]
+  )
+  const renderedRich = useMemo(
+    () => formatted ? renderRichPreview(spunRich, channel, showSampleData) : '',
+    [channel, formatted, showSampleData, spunRich]
+  )
+  const renderedSubject = useMemo(
+    () => showSampleData ? renderPreviewSampleTokens(spunSubject) : spunSubject,
+    [showSampleData, spunSubject]
+  )
   const richIsEmpty = formatted && isFormattedContentEmpty(renderedRich)
   const contentNode = formatted && !richIsEmpty
     ? <div className="ctw-preview-rich" dangerouslySetInnerHTML={{ __html: renderedRich }} />
@@ -83,8 +117,11 @@ export default function ContentTemplatePreview({
             <button
               type="button"
               key={index}
-              className={variantIndex === index ? 'active' : ''}
-              onClick={() => setVariantIndex(index)}
+              className={resolvedVariantIndex === index ? 'active' : ''}
+              onClick={() => {
+                if (activeVariantIndex === undefined) setInternalVariantIndex(index)
+                onActiveVariantChange?.(index)
+              }}
             >
               Nội dung {index + 1}
             </button>

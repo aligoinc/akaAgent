@@ -96,6 +96,11 @@ const DATA_TYPE_LABELS: Record<AutomationDataType, string> = {
   facebook_uid: 'UID Facebook'
 }
 
+const getSemanticDataTypeLabel = (value: {
+  dataType: AutomationDataType
+  dataTypeName?: string | null
+}): string => value.dataTypeName?.trim() || DATA_TYPE_LABELS[value.dataType]
+
 const ACTION_FALLBACKS: AutomationOptions['actions'] = [
   {
     id: 'campaign_detail_route',
@@ -814,7 +819,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                         </td>
                         <td>
                           <strong className="automation-name-cell">{automation.name}</strong>
-                          <small>{DATA_TYPE_LABELS[automation.dataType]}</small>
+                          <small>{getSemanticDataTypeLabel(automation)}</small>
                         </td>
                         <td>
                           <span className="automation-action-cell"><ListRestart size={15} /> Theo trạng thái chiến dịch</span>
@@ -944,7 +949,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                     {selectedTriggerLabel}
                   </strong>
                 </div>
-                <div><span>Dữ liệu đồng nhất</span><strong>{DATA_TYPE_LABELS[selected.dataType]}</strong></div>
+                <div><span>Dữ liệu đồng nhất</span><strong>{getSemanticDataTypeLabel(selected)}</strong></div>
                 <div>
                   <span>Chiến dịch đích</span>
                   <strong>{selected.targetCampaignName || selectedTarget?.name || (selected.targetCampaignId ? `#${selected.targetCampaignId}` : 'Không chọn')}</strong>
@@ -1007,7 +1012,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                         : detail.status
                       return (
                         <tr key={detail.id}>
-                          <td><strong>{detail.dataValue || '—'}</strong><small>{DATA_TYPE_LABELS[detail.dataType]}</small></td>
+                          <td><strong>{detail.dataValue || '—'}</strong><small>{getSemanticDataTypeLabel(detail)}</small></td>
                           <td><strong>{detail.sourceStatus || '—'}</strong><small>Detail #{detail.sourceCampaignDetailId}</small></td>
                           <td><strong>{formatDateTime(detail.scheduledAt)}</strong><small>Kích hoạt: {formatDateTime(detail.triggeredAt)}</small></td>
                           <td>
