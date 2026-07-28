@@ -6829,7 +6829,7 @@ td.report-account-col span {
 /* =========== CAMPAIGN TABLE (multi-column) =========== */
 .campaign-table {
   width: 100%;
-  min-width: 1280px;
+  min-width: 1510px;
   font-size: 12px;
 }
 
@@ -6843,6 +6843,7 @@ td.report-account-col span {
     112px
     126px
     minmax(170px, 1.2fr)
+    minmax(200px, 1.35fr)
     minmax(160px, 1fr)
     minmax(132px, 0.9fr);
   column-gap: 8px;
@@ -7069,6 +7070,113 @@ td.report-account-col span {
 
 .campaign-account-login-badge.is-muted {
   color: var(--text-tertiary);
+}
+
+.campaign-data-group-list-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.campaign-data-group-list-cell .campaign-strong-line.is-deleted {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.campaign-data-group-intake-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: visible;
+}
+
+.campaign-data-group-intake-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.campaign-data-group-intake-badge.is-active {
+  border-color: color-mix(in srgb, var(--accent-success) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-success) 12%, transparent);
+  color: var(--accent-success);
+}
+
+.campaign-data-group-intake-badge.is-stopped {
+  border-color: var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
+.campaign-data-group-intake-badge.is-loading {
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--accent-primary);
+}
+
+.campaign-data-group-intake-badge.is-error {
+  border-color: color-mix(in srgb, var(--accent-warning) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+  color: var(--accent-warning);
+}
+
+button.campaign-data-group-intake-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 43px;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+button.campaign-data-group-intake-toggle:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+button.campaign-data-group-intake-toggle.is-enable {
+  color: var(--accent-success);
+}
+
+button.campaign-data-group-intake-toggle.is-disable {
+  color: var(--text-secondary);
+}
+
+button.campaign-data-group-intake-toggle.is-retry {
+  color: var(--accent-warning);
+}
+
+button.campaign-data-group-intake-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .campaign-send-time-line {

@@ -10,6 +10,7 @@ import {
   CampaignInputDataPageQuery,
   CampaignInputDataPageResult,
   CampaignInputStatus,
+  CampaignDataGroupSourceStatus,
   CampaignDetail,
   CampaignDetailPageQuery,
   CampaignDetailPageResult,
@@ -34,10 +35,15 @@ import { MAX_SMS_ADVANCED_CONTENT_ITEMS, renderSmsInputContent, renderVoiceCallI
 import { getAdvancedContentItems } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
-import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
+import {
+  getCurrentUserCredentials,
+  requireCurrentUser,
+  requireCurrentUserCredentials
+} from '../currentUser'
 import { formatStoredCampaignLogLine } from '../../../shared/campaignLogFormat'
 import * as accountActionRepo from './accountActionRepository'
 import * as accountRepo from './accountRepository'
+import { listDataGroups } from './dataGroupRepository'
 import * as errorPolicyRepo from './errorPolicyRepository'
 import {
   canUseCampaignActionWithEntitlements,
@@ -79,6 +85,11 @@ const ZALO_REMARKETING_PAGE_MAX_LIMIT = 20000
 const CAMPAIGN_INPUT_DATA_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_ID_CHUNK = 100
+const CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_PAGE_LIMIT = 200
+const CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_PAGE_COUNT = 5
+const CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_CACHE_MS = 60_000
+let hasWarnedCampaignDataGroupSummaryRpcUnavailable = false
+let hasWarnedCampaignDataGroupSummaryFallbackFailure = false
 const CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']
 const CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên']
 const FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = [
@@ -1131,6 +1142,198 @@ async function attachCampaignInputDataProgress(campaigns: Campaign[]): Promise<C
   })
 }
 
+const CAMPAIGN_DATA_GROUP_SOURCE_STATUS_VALUES = new Set<CampaignDataGroupSourceStatus>([
+  'baselining',
+  'active',
+  'stopped'
+])
+
+type CampaignDataGroupSourceSummary = {
+  campaignId: number
+  groupId: number
+  groupName: string | null
+  groupIsDelete: boolean
+  sourceStatus: CampaignDataGroupSourceStatus | null
+  stopReason: string | null
+  updatedAt: string | null
+}
+
+type CampaignDataGroupSummaryRpcError = {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+}
+
+type CampaignDataGroupFallbackNameCache = {
+  tenantKey: string
+  expiresAt: number
+  groupNameById: Map<number, string>
+}
+
+let campaignDataGroupFallbackNameCache: CampaignDataGroupFallbackNameCache | null = null
+
+function isCampaignDataGroupSummaryRpcUnavailable(error: CampaignDataGroupSummaryRpcError): boolean {
+  if (error.code === 'PGRST202') return true
+  const message = [error.message, error.details, error.hint]
+    .filter(Boolean)
+    .join(' ')
+  return message.includes('aka_agent_list_campaign_data_group_source_summaries')
+    && /schema cache|could not find the function|does not exist/i.test(message)
+}
+
+function asCampaignDataGroupSourceStatus(value: unknown): CampaignDataGroupSourceStatus | null {
+  const status = typeof value === 'string' ? value : ''
+  return CAMPAIGN_DATA_GROUP_SOURCE_STATUS_VALUES.has(status as CampaignDataGroupSourceStatus)
+    ? status as CampaignDataGroupSourceStatus
+    : null
+}
+
+function asCampaignDataGroupSummary(row: Record<string, unknown>): CampaignDataGroupSourceSummary | null {
+  const campaignId = Number(row.campaign_id)
+  const groupId = Number(row.group_id)
+  if (!Number.isSafeInteger(campaignId) || campaignId <= 0
+    || !Number.isSafeInteger(groupId) || groupId <= 0) return null
+  const groupName = typeof row.group_name === 'string' && row.group_name.trim()
+    ? row.group_name.trim()
+    : null
+  const stopReason = typeof row.stop_reason === 'string' && row.stop_reason.trim()
+    ? row.stop_reason.trim()
+    : null
+  const updatedAt = typeof row.updated_at === 'string' && row.updated_at.trim()
+    ? row.updated_at
+    : null
+  return {
+    campaignId,
+    groupId,
+    groupName,
+    groupIsDelete: row.group_is_delete === true,
+    sourceStatus: asCampaignDataGroupSourceStatus(row.source_status),
+    stopReason,
+    updatedAt
+  }
+}
+
+async function loadLegacyCampaignDataGroupSourceSummaries(
+  campaigns: Campaign[]
+): Promise<Map<number, CampaignDataGroupSourceSummary>> {
+  const summaries = new Map<number, CampaignDataGroupSourceSummary>()
+  const user = requireCurrentUser()
+  const tenantKey = `${user.staffId}:${user.organizationId}`
+  let groupNameById = campaignDataGroupFallbackNameCache?.tenantKey === tenantKey
+    && campaignDataGroupFallbackNameCache.expiresAt > Date.now()
+    ? campaignDataGroupFallbackNameCache.groupNameById
+    : null
+
+  if (!groupNameById) {
+    groupNameById = new Map<number, string>()
+    let offset = 0
+    try {
+      for (let pageIndex = 0; pageIndex < CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_PAGE_COUNT; pageIndex += 1) {
+        const page = await listDataGroups({
+          offset,
+          limit: CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_PAGE_LIMIT
+        })
+        page.groups.forEach(group => groupNameById!.set(group.id, group.name))
+        offset += page.groups.length
+        if (page.groups.length < CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_PAGE_LIMIT || offset >= page.total) break
+      }
+      campaignDataGroupFallbackNameCache = {
+        tenantKey,
+        expiresAt: Date.now() + CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_CACHE_MS,
+        groupNameById
+      }
+    } catch (error) {
+      campaignDataGroupFallbackNameCache = {
+        tenantKey,
+        expiresAt: Date.now() + CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_CACHE_MS,
+        groupNameById
+      }
+      if (!hasWarnedCampaignDataGroupSummaryFallbackFailure) {
+        hasWarnedCampaignDataGroupSummaryFallbackFailure = true
+        console.warn('Cannot load fallback Data Group names for the campaign list:', error)
+      }
+    }
+  }
+
+  for (const campaign of campaigns) {
+    if (!campaign.dataGroupId) continue
+    summaries.set(campaign.id, {
+      campaignId: campaign.id,
+      groupId: campaign.dataGroupId,
+      groupName: groupNameById.get(campaign.dataGroupId) || null,
+      groupIsDelete: false,
+      sourceStatus: null,
+      stopReason: null,
+      updatedAt: null
+    })
+  }
+  return summaries
+}
+
+async function loadCampaignDataGroupSourceSummaries(
+  campaigns: Campaign[]
+): Promise<Map<number, CampaignDataGroupSourceSummary>> {
+  const dataGroupCampaigns = campaigns.filter(campaign =>
+    campaign.dataTargetSourceMode === 'data_group'
+    && Number.isSafeInteger(Number(campaign.id))
+    && Number(campaign.id) > 0
+  )
+  if (dataGroupCampaigns.length === 0) return new Map()
+
+  const user = requireCurrentUser()
+  const auth = getCurrentUserCredentials()
+  // App Server/runtime contexts use runWithCurrentUser without retaining the
+  // desktop user's process-only password. This list-only enrichment must not
+  // make those existing campaign paths depend on desktop credentials.
+  if (!auth) return new Map()
+  const { data, error } = await client().rpc('aka_agent_list_campaign_data_group_source_summaries', {
+    p_staff_id: user.staffId,
+    p_organization_id: user.organizationId,
+    p_campaign_ids: dataGroupCampaigns.map(campaign => campaign.id),
+    p_auth_username: auth.username,
+    p_auth_password: auth.password
+  })
+
+  if (error) {
+    if (isCampaignDataGroupSummaryRpcUnavailable(error)) {
+      if (!hasWarnedCampaignDataGroupSummaryRpcUnavailable) {
+        hasWarnedCampaignDataGroupSummaryRpcUnavailable = true
+        console.warn(
+          'Campaign Data Group source summary RPC is unavailable; using cached group names until migration v209 is applied.'
+        )
+      }
+      return loadLegacyCampaignDataGroupSourceSummaries(dataGroupCampaigns)
+    }
+    throw new Error(`Failed to list campaign Data Group source summaries: ${error.message}`)
+  }
+
+  const summaries = new Map<number, CampaignDataGroupSourceSummary>()
+  for (const candidate of Array.isArray(data) ? data : []) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
+    const summary = asCampaignDataGroupSummary(candidate as Record<string, unknown>)
+    if (summary) summaries.set(summary.campaignId, summary)
+  }
+  return summaries
+}
+
+async function attachCampaignDataGroupSourceSummaries(campaigns: Campaign[]): Promise<Campaign[]> {
+  const summaries = await loadCampaignDataGroupSourceSummaries(campaigns)
+  return campaigns.map(campaign => {
+    const summary = summaries.get(campaign.id)
+    if (!summary) return campaign
+    return {
+      ...campaign,
+      dataGroupName: summary.groupName,
+      dataGroupIsDelete: summary.groupIsDelete,
+      dataGroupSourceStatus: summary.sourceStatus,
+      dataGroupSourceGroupId: summary.groupId,
+      dataGroupSourceStopReason: summary.stopReason,
+      dataGroupSourceUpdatedAt: summary.updatedAt
+    }
+  })
+}
+
 export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
@@ -1143,7 +1346,8 @@ export async function listCampaigns(): Promise<Campaign[]> {
   if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   const campaigns = filterCampaignsByEntitlements((data || []).map(row => mapCampaignFromDB(row)), entitlements)
-  return attachCampaignInputDataProgress(campaigns)
+  const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(campaigns)
+  return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
 }
 
 export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloRealtimeGroupCampaignSnapshot[]> {

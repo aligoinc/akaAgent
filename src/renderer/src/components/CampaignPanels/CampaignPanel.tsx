@@ -1401,6 +1401,27 @@ const getCampaignListScheduleTypeLabel = (type: Campaign['scheduleType'] | undef
   return '1 lần'
 }
 
+const getCampaignDataGroupReactivateBlockReason = (campaign: Campaign): string | null => {
+  if (campaign.dataGroupIsDelete) {
+    return 'Nhóm data đã bị xoá nên không thể bật nhận data trở lại.'
+  }
+  if (campaign.dataGroupId
+    && campaign.dataGroupSourceGroupId
+    && campaign.dataGroupId !== campaign.dataGroupSourceGroupId) {
+    return 'Liên kết Nhóm data của chiến dịch không khớp nên không thể bật nhận data trở lại.'
+  }
+  if (campaign.provisioningState !== 'ready') {
+    return 'Chiến dịch chưa sẵn sàng nên không thể bật nhận data trở lại.'
+  }
+  if (campaign.scheduleType !== 'daily' && campaign.scheduleEndDate) {
+    const hardEndTime = new Date(campaign.scheduleEndDate).getTime()
+    if (Number.isFinite(hardEndTime) && hardEndTime <= Date.now()) {
+      return 'Chiến dịch đã qua ngày kết thúc nên không thể bật nhận data trở lại.'
+    }
+  }
+  return null
+}
+
 const getCampaignInputProgress = (campaign: Campaign) => {
   const total = Math.max(0, Number(campaign.inputDataTotalCount ?? 0))
   const completed = Math.min(Math.max(0, Number(campaign.inputDataCompletedCount ?? 0)), total)
@@ -2474,6 +2495,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const [openInputDataActionMenu, setOpenInputDataActionMenu] = useState(false)
   const [openCampaignActionMenuId, setOpenCampaignActionMenuId] = useState<number | null>(null)
   const [dataGroupSourceStatuses, setDataGroupSourceStatuses] = useState<Record<number, CampaignDataGroupSourceStatus | 'loading' | 'error'>>({})
+  const dataGroupSourceTogglePendingRef = useRef<Set<number>>(new Set())
   const [relatedAutomations, setRelatedAutomations] = useState<Automation[]>([])
   const [relatedAutomationsLoading, setRelatedAutomationsLoading] = useState(false)
   const [relatedAutomationExecutions, setRelatedAutomationExecutions] = useState<AutomationExecution[]>([])
@@ -2620,6 +2642,26 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       if (isZaloServer) window.removeEventListener('focus', refreshCampaignsIfVisible)
     }
   }, [isActive, isZaloServer, loadCampaigns])
+
+  useEffect(() => {
+    setDataGroupSourceStatuses(prev => {
+      const entries = Object.entries(prev)
+      if (entries.length === 0) return prev
+
+      const campaignById = new Map(campaigns.map(campaign => [campaign.id, campaign]))
+      let changed = false
+      const next = { ...prev }
+      entries.forEach(([campaignId]) => {
+        const numericCampaignId = Number(campaignId)
+        if (dataGroupSourceTogglePendingRef.current.has(numericCampaignId)) return
+        const campaign = campaignById.get(numericCampaignId)
+        if (campaign && !campaign.dataGroupSourceStatus) return
+        delete next[numericCampaignId]
+        changed = true
+      })
+      return changed ? next : prev
+    })
+  }, [campaigns])
 
   useEffect(() => {
     if (!window.electronAPI?.onZaloLoginQrEvent) return
@@ -3387,6 +3429,14 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     campaignActionMenuAnchorRef.current = null
   }
 
+  const getCampaignDataGroupSourceStatus = (
+    campaign: Campaign
+  ): CampaignDataGroupSourceStatus | 'loading' | 'error' => (
+    dataGroupSourceStatuses[campaign.id]
+    || campaign.dataGroupSourceStatus
+    || 'error'
+  )
+
   const handleCampaignActionMenuToggle = (campaignId: number, event: ReactMouseEvent<HTMLButtonElement>) => {
     if (openCampaignActionMenuId === campaignId) {
       closeCampaignActionMenu()
@@ -3397,51 +3447,87 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     campaignActionMenuAnchorRef.current = anchor
     setCampaignActionMenuPosition(getCampaignActionMenuPosition(anchor))
     setOpenCampaignActionMenuId(campaignId)
-
-    const campaign = campaigns.find(item => item.id === campaignId)
-    if (campaign?.dataTargetSourceMode === 'data_group') {
-      setDataGroupSourceStatuses(prev => ({ ...prev, [campaignId]: 'loading' }))
-      void window.electronAPI.getCampaignDataGroupSource(campaignId)
-        .then(source => {
-          setDataGroupSourceStatuses(prev => ({
-            ...prev,
-            [campaignId]: source?.status || 'error'
-          }))
-        })
-        .catch(() => {
-          setDataGroupSourceStatuses(prev => ({ ...prev, [campaignId]: 'error' }))
-        })
-    }
   }
 
-  const handleToggleCampaignDataGroupSource = async (campaign: Campaign) => {
+  const handleToggleCampaignDataGroupSource = async (
+    campaign: Campaign,
+    event?: ReactMouseEvent<HTMLButtonElement>
+  ) => {
+    event?.stopPropagation()
+    if (dataGroupSourceTogglePendingRef.current.has(campaign.id)) return
+
+    const displayedStatus = getCampaignDataGroupSourceStatus(campaign)
+    if (displayedStatus === 'loading') return
+    if (displayedStatus === 'baselining') return
+
     closeCampaignActionMenu()
+    dataGroupSourceTogglePendingRef.current.add(campaign.id)
+    setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: 'loading' }))
+
     try {
       const source = await window.electronAPI.getCampaignDataGroupSource(campaign.id)
       if (!source) {
+        setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: 'error' }))
         showAlert('Không tìm thấy liên kết Nhóm data của chiến dịch.', 'error')
         return
       }
 
-      if (source.status === 'stopped') {
+      if (source.status === 'baselining') {
+        setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: source.status }))
+        try {
+          await loadCampaigns()
+        } catch (refreshError) {
+          console.warn('Không thể làm mới danh sách chiến dịch sau khi đọc nguồn Nhóm data:', refreshError)
+        }
+        return
+      }
+
+      if (displayedStatus === 'error') {
+        setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: source.status }))
+        return
+      }
+
+      if (displayedStatus === 'stopped') {
+        if (source.status === 'active') {
+          setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: source.status }))
+          return
+        }
+        const reactivateBlockReason = getCampaignDataGroupReactivateBlockReason(campaign)
+        if (reactivateBlockReason) {
+          setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: source.status }))
+          return
+        }
         const updated = await window.electronAPI.reactivateCampaignDataGroupSource(
           campaign.id,
           createDataGroupRequestId()
         )
         setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: updated.status }))
-        showAlert('Chiến dịch đã nhận data mới trở lại từ đúng Nhóm data cũ.', 'success')
       } else {
+        if (source.status === 'stopped') {
+          setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: source.status }))
+          return
+        }
         const updated = await window.electronAPI.stopCampaignDataGroupSource(
           campaign.id,
           createDataGroupRequestId(),
           'manual_stop'
         )
         setDataGroupSourceStatuses(prev => ({ ...prev, [campaign.id]: updated.status }))
-        showAlert('Đã dừng nhận data mới. Các input đã tạo vẫn tiếp tục được xử lý.', 'success')
       }
-      await loadCampaigns()
+      try {
+        await loadCampaigns()
+      } catch (refreshError) {
+        console.warn('Không thể làm mới danh sách chiến dịch sau khi đổi trạng thái nguồn Nhóm data:', refreshError)
+      }
     } catch (err) {
+      setDataGroupSourceStatuses(prev => {
+        const next = { ...prev }
+        delete next[campaign.id]
+        return next
+      })
       showAlert(formatIpcErrorMessage(err, 'Không thể thay đổi trạng thái nhận data của chiến dịch.'), 'error')
+    } finally {
+      dataGroupSourceTogglePendingRef.current.delete(campaign.id)
     }
   }
 
@@ -5607,6 +5693,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                 <div className="campaign-col col-assistant">Trợ lý aka</div>
                 <div className="campaign-col col-actions">Hành động</div>
                 <div className="campaign-col col-account">Tài khoản</div>
+                <div className="campaign-col col-data-group">Nhóm data</div>
                 <div className="campaign-col col-send-date">Ngày gửi</div>
                 <div className="campaign-col col-update-date">Ngày update</div>
               </div>
@@ -5629,6 +5716,40 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                 const scheduleTimeLabel = formatCompactDateTime(campaign.schedule)
                 const updatedLabel = formatCompactDateTime(campaign.updatedAt)
                 const progress = getCampaignInputProgress(campaign)
+                const usesDataGroup = campaign.dataTargetSourceMode === 'data_group'
+                const dataGroupSourceStatus = usesDataGroup
+                  ? getCampaignDataGroupSourceStatus(campaign)
+                  : undefined
+                const isDataGroupSourceStopped = dataGroupSourceStatus === 'stopped'
+                const isDataGroupSourceLoading = dataGroupSourceStatus === 'loading'
+                const isDataGroupSourceBaselining = dataGroupSourceStatus === 'baselining'
+                const hasDataGroupSourceError = dataGroupSourceStatus === 'error'
+                const dataGroupSourceBadgeLabel = isDataGroupSourceStopped
+                  ? 'Dừng nhận'
+                  : dataGroupSourceStatus === 'active' || isDataGroupSourceBaselining
+                    ? 'Đang nhận'
+                    : isDataGroupSourceLoading
+                      ? 'Đang xử lý'
+                      : 'Không xác định'
+                const dataGroupSourceBadgeClass = isDataGroupSourceStopped
+                  ? 'is-stopped'
+                  : dataGroupSourceStatus === 'active' || isDataGroupSourceBaselining
+                    ? 'is-active'
+                    : isDataGroupSourceLoading
+                      ? 'is-loading'
+                      : 'is-error'
+                const dataGroupSourceReactivateBlockReason = isDataGroupSourceStopped
+                  ? getCampaignDataGroupReactivateBlockReason(campaign)
+                  : null
+                const dataGroupSourceToggleDisabled = (
+                  isDataGroupSourceLoading
+                  || isDataGroupSourceBaselining
+                  || !!dataGroupSourceReactivateBlockReason
+                )
+                const dataGroupName = campaign.dataGroupName?.trim() || 'Nhóm data'
+                const dataGroupTitle = campaign.dataGroupIsDelete
+                  ? `${dataGroupName}\nNhóm đã xoá`
+                  : dataGroupName
 
                 return (
                   <div
@@ -5793,20 +5914,29 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                               <button
                                 type="button"
                                 className="campaign-action-menu-item"
-                                onClick={() => void handleToggleCampaignDataGroupSource(campaign)}
-                                disabled={dataGroupSourceStatuses[campaign.id] === 'loading' || dataGroupSourceStatuses[campaign.id] === 'error'}
-                                title={dataGroupSourceStatuses[campaign.id] === 'error'
-                                  ? 'Không tải được trạng thái nguồn Nhóm data'
-                                  : undefined}
+                                onClick={event => void handleToggleCampaignDataGroupSource(campaign, event)}
+                                disabled={dataGroupSourceToggleDisabled}
+                                title={dataGroupSourceReactivateBlockReason
+                                  || (hasDataGroupSourceError
+                                    ? 'Thử tải lại trạng thái nhận data từ nhóm'
+                                    : isDataGroupSourceBaselining
+                                      ? 'Nhóm data đang nạp dữ liệu ban đầu'
+                                      : undefined)}
                                 role="menuitem"
                               >
-                                {dataGroupSourceStatuses[campaign.id] === 'stopped' ? <Play size={14} /> : <Pause size={14} />}
+                                {hasDataGroupSourceError
+                                  ? <RefreshCw size={14} />
+                                  : isDataGroupSourceStopped
+                                    ? <Play size={14} />
+                                    : <Pause size={14} />}
                                 <span>
-                                  {dataGroupSourceStatuses[campaign.id] === 'loading'
+                                  {isDataGroupSourceLoading
                                     ? 'Đang tải nguồn data...'
-                                    : dataGroupSourceStatuses[campaign.id] === 'stopped'
-                                      ? 'Nhận data mới trở lại'
-                                      : 'Dừng nhận data mới'}
+                                    : hasDataGroupSourceError
+                                      ? 'Thử tải lại trạng thái nguồn data'
+                                      : isDataGroupSourceStopped
+                                        ? 'Nhận data mới trở lại'
+                                        : 'Dừng nhận data mới'}
                                 </span>
                               </button>
                             )}
@@ -5888,6 +6018,65 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 	                        )}
 	                      </div>
 	                    </div>
+                    <div
+                      className="campaign-col col-data-group"
+                      title={usesDataGroup
+                        ? `${dataGroupTitle}\n${dataGroupSourceBadgeLabel}`
+                        : 'Chiến dịch không nhận data từ Nhóm data'}
+                    >
+                      {usesDataGroup ? (
+                        <div className="campaign-data-group-list-cell">
+                          <div className={`campaign-strong-line ${campaign.dataGroupIsDelete ? 'is-deleted' : ''}`}>
+                            {dataGroupName}
+                          </div>
+                          <div className="campaign-data-group-intake-row" onClick={event => event.stopPropagation()}>
+                            <span className={`campaign-data-group-intake-badge ${dataGroupSourceBadgeClass}`}>
+                              {dataGroupSourceBadgeLabel}
+                            </span>
+                            <button
+                              type="button"
+                              className={`campaign-data-group-intake-toggle ${
+                                hasDataGroupSourceError
+                                  ? 'is-retry'
+                                  : isDataGroupSourceStopped
+                                    ? 'is-enable'
+                                    : 'is-disable'
+                              }`}
+                              onClick={event => void handleToggleCampaignDataGroupSource(campaign, event)}
+                              disabled={dataGroupSourceToggleDisabled}
+                              aria-label={`${hasDataGroupSourceError ? 'Thử lại trạng thái' : isDataGroupSourceStopped ? 'Bật' : 'Tắt'} nhận data từ nhóm ${dataGroupName}`}
+                              title={dataGroupSourceReactivateBlockReason
+                                || (hasDataGroupSourceError
+                                  ? 'Thử tải lại trạng thái nhận data từ nhóm'
+                                  : isDataGroupSourceBaselining
+                                    ? 'Nhóm data đang nạp dữ liệu ban đầu'
+                                    : isDataGroupSourceStopped
+                                      ? 'Bật nhận data mới từ nhóm'
+                                      : 'Dừng nhận data mới từ nhóm')}
+                            >
+                              {isDataGroupSourceLoading
+                                ? <RefreshCw size={11} className="spin" />
+                                : hasDataGroupSourceError
+                                  ? <RefreshCw size={11} />
+                                  : isDataGroupSourceStopped
+                                    ? <Play size={11} />
+                                    : <Pause size={11} />}
+                              <span>
+                                {isDataGroupSourceLoading
+                                  ? '...'
+                                  : hasDataGroupSourceError
+                                    ? 'Thử lại'
+                                    : isDataGroupSourceStopped
+                                      ? 'Bật'
+                                      : 'Tắt'}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="campaign-cell-muted">—</span>
+                      )}
+                    </div>
                     <div className="campaign-col col-send-date" title={`${scheduleTypeLabel}\n${scheduleTimeLabel}`}>
                       <div className="campaign-two-line-cell">
                         <div className="campaign-send-time-line">{scheduleTimeLabel}</div>
