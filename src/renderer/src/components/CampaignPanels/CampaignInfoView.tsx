@@ -602,6 +602,11 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Đẩy group sang campaign đăng bài', value: formatCampaignRefs(extra.findFacebookGroupPostTargetCampaignIds, campaigns), hidden: !extra.findFacebookGroupPostTargetCampaignIds?.length },
     { label: 'Đẩy group sang campaign comment seeding', value: formatCampaignRefs(extra.findFacebookGroupCommentTargetCampaignIds, campaigns), hidden: !extra.findFacebookGroupCommentTargetCampaignIds?.length },
     { label: 'Đẩy group sang campaign tham gia group', value: formatCampaignRefs(extra.findFacebookGroupJoinTargetCampaignIds, campaigns), hidden: !extra.findFacebookGroupJoinTargetCampaignIds?.length },
+    { label: 'Đẩy SĐT sang Nhóm data', value: textOrDash(extra.findDataTargetDataGroups?.phone?.groupName), hidden: !extra.findDataTargetDataGroups?.phone },
+    { label: 'Đẩy link group Zalo sang Nhóm data', value: textOrDash(extra.findDataTargetDataGroups?.zalo_group_link?.groupName), hidden: !extra.findDataTargetDataGroups?.zalo_group_link },
+    { label: 'Đẩy UID Facebook sang Nhóm data', value: textOrDash(extra.findDataTargetDataGroups?.facebook_uid?.groupName), hidden: !extra.findDataTargetDataGroups?.facebook_uid },
+    { label: 'Đẩy link bài post sang Nhóm data', value: textOrDash(extra.findDataTargetDataGroups?.post_link?.groupName), hidden: !extra.findDataTargetDataGroups?.post_link },
+    { label: 'Đẩy group Facebook sang Nhóm data', value: textOrDash(extra.findDataTargetDataGroups?.facebook_group?.groupName), hidden: !extra.findDataTargetDataGroups?.facebook_group },
     { label: 'Nguồn tìm data liên kết', value: formatLinkedCampaigns(linkedSourceCampaigns), hidden: linkedSourceCampaigns.length === 0 }
   ]
 

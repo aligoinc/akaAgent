@@ -18285,7 +18285,6 @@ body.theme-light .detail-dock-resize-handle {
   text-align: left;
 }
 
-.campaign-data-group-view-button,
 .campaign-data-group-pick-button {
   height: 44px;
   flex: none;
@@ -18305,7 +18304,6 @@ body.theme-light .detail-dock-resize-handle {
   }
 
   .campaign-data-group-control,
-  .campaign-data-group-view-button,
   .campaign-data-group-pick-button {
     width: 100%;
     min-width: 0;

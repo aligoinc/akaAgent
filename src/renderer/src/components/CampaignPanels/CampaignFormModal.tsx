@@ -21,6 +21,8 @@ import {
   CampaignMediaSnapshot,
   CampaignExtraSettings,
   DataGroup,
+  FindDataOutputKind,
+  FindDataTargetDataGroup,
   ContentTemplate,
   ContentTemplateChannelName,
   ContentTemplateChannels,
@@ -621,6 +623,73 @@ const VOICE_CALL_AI_DISCLOSURE = 'Đây là cuộc gọi tự động sử dụn
 const VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES = 60
 const VOICE_CALL_MAX_TTS_INPUT_CHARS = 4096
 const DATA_GROUP_BUNDLE_RETRY_STORAGE_PREFIX = 'aka-agent:data-group-bundle-retry:'
+
+const FIND_DATA_GROUP_DESTINATION_CONFIG: Record<
+  FindDataOutputKind,
+  { actionId: string; label: string }
+> = {
+  phone: {
+    actionId: ZALO_MESSAGE_PHONE_ACTION_ID,
+    label: 'Đẩy SĐT sang Nhóm data'
+  },
+  zalo_group_link: {
+    actionId: ZALO_JOIN_GROUP_LINK_ACTION_ID,
+    label: 'Đẩy link group Zalo sang Nhóm data'
+  },
+  facebook_uid: {
+    actionId: MESSAGE_UID_ACTION_ID,
+    label: 'Đẩy UID Facebook sang Nhóm data'
+  },
+  post_link: {
+    actionId: COMMENT_SEEDING_POST_ACTION_ID,
+    label: 'Đẩy link bài post sang Nhóm data'
+  },
+  facebook_group: {
+    actionId: FACEBOOK_JOIN_GROUP_ACTION_ID,
+    label: 'Đẩy group Facebook sang Nhóm data'
+  }
+}
+
+type FindDataTargetDataGroups = Partial<Record<FindDataOutputKind, FindDataTargetDataGroup>>
+type FindDataTargetDataGroupEnabledState = Record<FindDataOutputKind, boolean>
+type FindDataTargetDataGroupDetails = Partial<Record<FindDataOutputKind, DataGroup>>
+
+const removeFindDataTargetDataGroup = (
+  destinations: FindDataTargetDataGroups,
+  kind: FindDataOutputKind
+): FindDataTargetDataGroups => {
+  const next = { ...destinations }
+  delete next[kind]
+  return next
+}
+
+const getFindDataTargetDataGroupsForSave = (
+  destinations: FindDataTargetDataGroups,
+  flags: FindDataGoalFlagState,
+  isSearchCampaign: boolean
+): FindDataTargetDataGroups | undefined => {
+  const enabledByKind: Record<FindDataOutputKind, boolean> = {
+    phone: flags.isFindPhone,
+    zalo_group_link: flags.isFindLinkGroupZalo,
+    facebook_uid: flags.isFindUid,
+    post_link: flags.isFindPostLink,
+    facebook_group: isSearchCampaign && flags.isFindFacebookGroup
+  }
+  const normalized: FindDataTargetDataGroups = {}
+
+  for (const kind of Object.keys(enabledByKind) as FindDataOutputKind[]) {
+    if (!enabledByKind[kind]) continue
+    const destination = destinations[kind]
+    const groupId = Number(destination?.groupId)
+    if (!Number.isSafeInteger(groupId) || groupId <= 0) continue
+    normalized[kind] = {
+      groupId,
+      groupName: String(destination?.groupName || '').trim() || `Nhóm ${groupId}`
+    }
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
 
 const stableSerializeForDataGroupBundle = (value: unknown): string => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
@@ -1786,7 +1855,10 @@ export default function CampaignFormModal({
     findZaloGroupLinkAkaBizDesktopTargetCampaignIds: campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || [] as number[],
     findFacebookGroupPostTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupPostTargetCampaignIds || [] as number[],
     findFacebookGroupCommentTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || [] as number[],
-    findFacebookGroupJoinTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || [] as number[]
+    findFacebookGroupJoinTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || [] as number[],
+    findDataTargetDataGroups: {
+      ...(campaign?.extraSettings?.findDataTargetDataGroups || {})
+    } as FindDataTargetDataGroups
   })
   // Advanced content is group-only. Keep the union-shaped state locally so the
   // legacy save helpers can continue preserving dormant manual drafts while
@@ -1859,6 +1931,18 @@ export default function CampaignFormModal({
   const [campaignPickerModal, setCampaignPickerModal] = useState<CampaignPickerModalState | null>(null)
   const [dataGroupPickerOpen, setDataGroupPickerOpen] = useState(false)
   const [dataGroupPickerMode, setDataGroupPickerMode] = useState<'source' | 'append'>('source')
+  const [findDataGroupPickerKind, setFindDataGroupPickerKind] = useState<FindDataOutputKind | null>(null)
+  const [findDataTargetDataGroupEnabled, setFindDataTargetDataGroupEnabled] = useState<FindDataTargetDataGroupEnabledState>(() => ({
+    phone: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.phone),
+    zalo_group_link: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.zalo_group_link),
+    facebook_uid: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.facebook_uid),
+    post_link: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.post_link),
+    facebook_group: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.facebook_group)
+  }))
+  const [findDataTargetDataGroupDetails, setFindDataTargetDataGroupDetails] = useState<FindDataTargetDataGroupDetails>({})
+  const [resolvedFindDataTargetDataGroupIdsKey, setResolvedFindDataTargetDataGroupIdsKey] = useState('')
+  const [failedFindDataTargetDataGroupIdsKey, setFailedFindDataTargetDataGroupIdsKey] = useState('')
+  const [findDataTargetDataGroupHydrationRetry, setFindDataTargetDataGroupHydrationRetry] = useState(0)
   const [directDataGroupSnapshots, setDirectDataGroupSnapshots] = useState<DirectDataGroupSnapshotIntent[]>(() => {
     const snapshotsByGroupId = new Map<number, DirectDataGroupSnapshotIntent>()
     for (const snapshot of initialDataGroupSnapshots || []) {
@@ -2061,8 +2145,11 @@ export default function CampaignFormModal({
   const effectiveFindDataCommentSort = formData.isFindNewInteractors ? 'newest' : formData.sortTypeComment
   const showFindDataConditionsSection = isFindDataCampaign && (usesFindDataFeed || formData.isFindInGroupMembers || usesFindDataSearchGroup)
   const showExtraSection = isFacebookGroupPostCampaign || isCommentSeedingCampaign
-  const showFindDataSourceSection = !!targetFindDataField && !hideDetailsSection
-  const hasSelectedFindDataSourceCampaign = showFindDataSourceSection && (selectedFindDataSourceCampaignIds.length > 0 || isDraftTargetFromFindData)
+  const supportsFindDataSourceLink = !!targetFindDataField && !hideDetailsSection
+  // Source links are configured from the find-data campaign. Keep relation
+  // support for target drafts created there, but hide the reverse picker here.
+  const showFindDataSourceSection = false
+  const hasSelectedFindDataSourceCampaign = supportsFindDataSourceLink && isDraftTargetFromFindData
   const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
   const supportsSourceSharePost = isTimelinePostCampaign && !isPagePostCampaign
   const supportsSourceReels = isTimelinePostCampaign && !isPagePostCampaign
@@ -2537,6 +2624,66 @@ export default function CampaignFormModal({
   }
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
+  const findDataTargetDataGroupIdsKey = (Object.keys(FIND_DATA_GROUP_DESTINATION_CONFIG) as FindDataOutputKind[])
+    .map(kind => {
+      const groupId = Number(formData.findDataTargetDataGroups[kind]?.groupId)
+      return Number.isSafeInteger(groupId) && groupId > 0 ? `${kind}:${groupId}` : ''
+    })
+    .filter(Boolean)
+    .join('|')
+
+  useEffect(() => {
+    const selectedEntries = (Object.keys(FIND_DATA_GROUP_DESTINATION_CONFIG) as FindDataOutputKind[])
+      .map(kind => ({
+        kind,
+        groupId: Number(formData.findDataTargetDataGroups[kind]?.groupId)
+      }))
+      .filter((entry): entry is { kind: FindDataOutputKind; groupId: number } => (
+        Number.isSafeInteger(entry.groupId) && entry.groupId > 0
+      ))
+
+    if (selectedEntries.length === 0) {
+      setFindDataTargetDataGroupDetails({})
+      setResolvedFindDataTargetDataGroupIdsKey(findDataTargetDataGroupIdsKey)
+      setFailedFindDataTargetDataGroupIdsKey('')
+      return
+    }
+
+    let disposed = false
+    setResolvedFindDataTargetDataGroupIdsKey('')
+    setFailedFindDataTargetDataGroupIdsKey('')
+    const hydrateFindDataTargetGroups = async () => {
+      const wantedIds = new Set(selectedEntries.map(entry => entry.groupId))
+      const foundById = new Map<number, DataGroup>()
+      const pageSize = 200
+      let offset = 0
+      try {
+        while (!disposed && foundById.size < wantedIds.size) {
+          const page = await window.electronAPI.listDataGroups({ offset, limit: pageSize })
+          for (const group of page.groups) {
+            if (wantedIds.has(group.id)) foundById.set(group.id, group)
+          }
+          offset += page.groups.length
+          if (page.groups.length === 0 || offset >= page.total) break
+        }
+        if (disposed) return
+        const details: FindDataTargetDataGroupDetails = {}
+        for (const entry of selectedEntries) {
+          const group = foundById.get(entry.groupId)
+          if (group) details[entry.kind] = group
+        }
+        setFindDataTargetDataGroupDetails(details)
+        setResolvedFindDataTargetDataGroupIdsKey(findDataTargetDataGroupIdsKey)
+        setFailedFindDataTargetDataGroupIdsKey('')
+      } catch (error) {
+        console.error('Failed to resolve find-data target groups:', error)
+        if (!disposed) setFailedFindDataTargetDataGroupIdsKey(findDataTargetDataGroupIdsKey)
+      }
+    }
+
+    void hydrateFindDataTargetGroups()
+    return () => { disposed = true }
+  }, [findDataTargetDataGroupIdsKey, findDataTargetDataGroupHydrationRetry])
 
   useEffect(() => {
     const groupId = Number(formData.dataGroupId)
@@ -5190,6 +5337,13 @@ export default function CampaignFormModal({
       const saveFindDataGoalPriority = formData.findDataGoalModeEnabled
         ? normalizeFindDataGoalPriority(normalizedFindData, formData.findDataGoalPriority) || undefined
         : undefined
+      const saveFindDataTargetDataGroups = isFindDataCampaign
+        ? getFindDataTargetDataGroupsForSave(
+          formData.findDataTargetDataGroups,
+          normalizedFindData,
+          isFindDataSearchCampaign
+        )
+        : undefined
       const useZaloFriendSourceTags = isZaloMessageFriendCampaign && formData.zaloFriendTargetMode === 'tagged_friends'
       const selectedZaloFriendSourceTagIds = useZaloFriendSourceTags
         ? normalizeZaloTagIdList(formData.zaloFriendSourceTagIds)
@@ -5570,7 +5724,8 @@ export default function CampaignFormModal({
               : [],
             findFacebookGroupJoinTargetCampaignIds: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup && handleFoundFacebookGroupJoinData
               ? getCampaignIdList(formData.findFacebookGroupJoinTargetCampaignIds)
-              : []
+              : [],
+            findDataTargetDataGroups: saveFindDataTargetDataGroups
           } as CampaignExtraSettings,
           images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images
         },
@@ -5857,6 +6012,55 @@ export default function CampaignFormModal({
           'error'
         )
         return
+      }
+      const requiredDataGroupDestinations: Array<{
+        kind: FindDataOutputKind
+        label: string
+        enabled: boolean
+      }> = [
+        { kind: 'phone', label: 'SĐT', enabled: normalizedFindData.isFindPhone && findDataTargetDataGroupEnabled.phone },
+        { kind: 'zalo_group_link', label: 'link group Zalo', enabled: normalizedFindData.isFindLinkGroupZalo && findDataTargetDataGroupEnabled.zalo_group_link },
+        { kind: 'facebook_uid', label: 'UID Facebook', enabled: normalizedFindData.isFindUid && findDataTargetDataGroupEnabled.facebook_uid },
+        { kind: 'post_link', label: 'link bài post', enabled: normalizedFindData.isFindPostLink && findDataTargetDataGroupEnabled.post_link },
+        {
+          kind: 'facebook_group',
+          label: 'group Facebook',
+          enabled: isFindDataSearchCampaign
+            && normalizedFindData.isFindFacebookGroup
+            && findDataTargetDataGroupEnabled.facebook_group
+        }
+      ]
+      for (const item of requiredDataGroupDestinations) {
+        if (!item.enabled) continue
+        const groupId = Number(formData.findDataTargetDataGroups[item.kind]?.groupId)
+        if (!Number.isSafeInteger(groupId) || groupId <= 0) {
+          showAlert(`Vui lòng chọn Nhóm data nhận ${item.label}.`, 'error')
+          return
+        }
+
+        const resolvedGroup = findDataTargetDataGroupDetails[item.kind]
+        if (!resolvedGroup || resolvedGroup.id !== groupId) {
+          if (resolvedFindDataTargetDataGroupIdsKey !== findDataTargetDataGroupIdsKey) {
+            if (failedFindDataTargetDataGroupIdsKey === findDataTargetDataGroupIdsKey) {
+              setFindDataTargetDataGroupHydrationRetry(previous => previous + 1)
+              showAlert(`Không thể kiểm tra Nhóm data nhận ${item.label}. Hệ thống đang tải lại, vui lòng thử lưu lại.`, 'info')
+            } else {
+              showAlert(`Đang kiểm tra Nhóm data nhận ${item.label}. Vui lòng thử lưu lại.`, 'info')
+            }
+            return
+          }
+          setFindDataTargetDataGroup(item.kind, null)
+          showAlert(`Nhóm data nhận ${item.label} không còn hoạt động. Vui lòng chọn nhóm khác.`, 'error')
+          return
+        }
+
+        const targetActionId = FIND_DATA_GROUP_DESTINATION_CONFIG[item.kind].actionId
+        const targetAction = campaignActions.find(action => action.id === targetActionId)
+        if (!isDataGroupCompatibleWithCampaignAction(resolvedGroup, targetAction)) {
+          setFindDataTargetDataGroup(item.kind, null)
+          showAlert(`Nhóm data nhận ${item.label} không còn tương thích với loại dữ liệu. Vui lòng chọn nhóm khác.`, 'error')
+          return
+        }
       }
       if (formData.isFindUid && handleFoundUidData && formData.findUidTargetCampaignIds.length === 0 && !isDraftAutoLinkedFindUid) {
         showAlert('Vui lòng chọn ít nhất một chiến dịch nhận UID.', 'error')
@@ -9083,13 +9287,17 @@ export default function CampaignFormModal({
       findPhoneSmsTargetCampaignIds: checked ? p.findPhoneSmsTargetCampaignIds : [],
       findPhoneZaloWebTargetCampaignIds: checked ? p.findPhoneZaloWebTargetCampaignIds : [],
       findPhoneZaloMessagePhoneTargetCampaignIds: checked ? p.findPhoneZaloMessagePhoneTargetCampaignIds : [],
-      findPhoneAkaBizDesktopTargetCampaignIds: checked ? p.findPhoneAkaBizDesktopTargetCampaignIds : []
+      findPhoneAkaBizDesktopTargetCampaignIds: checked ? p.findPhoneAkaBizDesktopTargetCampaignIds : [],
+      findDataTargetDataGroups: checked
+        ? p.findDataTargetDataGroups
+        : removeFindDataTargetDataGroup(p.findDataTargetDataGroups, 'phone')
     }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) {
       setHandleFoundPhoneSmsData(false)
       setHandleFoundPhoneZaloWebData(false)
       setHandleFoundPhoneZaloMessagePhoneData(false)
       setHandleFoundPhoneAkaBizDesktopData(false)
+      setFindDataTargetDataGroupEnabled(previous => ({ ...previous, phone: false }))
     }
   }
 
@@ -9099,12 +9307,16 @@ export default function CampaignFormModal({
       isFindLinkGroupZalo: checked,
       findZaloGroupLinkWebTargetCampaignIds: checked ? p.findZaloGroupLinkWebTargetCampaignIds : [],
       findZaloGroupLinkJoinTargetCampaignIds: checked ? p.findZaloGroupLinkJoinTargetCampaignIds : [],
-      findZaloGroupLinkAkaBizDesktopTargetCampaignIds: checked ? p.findZaloGroupLinkAkaBizDesktopTargetCampaignIds : []
+      findZaloGroupLinkAkaBizDesktopTargetCampaignIds: checked ? p.findZaloGroupLinkAkaBizDesktopTargetCampaignIds : [],
+      findDataTargetDataGroups: checked
+        ? p.findDataTargetDataGroups
+        : removeFindDataTargetDataGroup(p.findDataTargetDataGroups, 'zalo_group_link')
     }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) {
       setHandleFoundZaloGroupLinkWebData(false)
       setHandleFoundZaloGroupLinkJoinData(false)
       setHandleFoundZaloGroupLinkAkaBizDesktopData(false)
+      setFindDataTargetDataGroupEnabled(previous => ({ ...previous, zalo_group_link: false }))
     }
   }
 
@@ -9112,9 +9324,15 @@ export default function CampaignFormModal({
     setFormData(p => sanitizeFindDataSourceSelection({
       ...p,
       isFindUid: checked,
-      findUidTargetCampaignIds: checked ? p.findUidTargetCampaignIds : []
+      findUidTargetCampaignIds: checked ? p.findUidTargetCampaignIds : [],
+      findDataTargetDataGroups: checked
+        ? p.findDataTargetDataGroups
+        : removeFindDataTargetDataGroup(p.findDataTargetDataGroups, 'facebook_uid')
     }, { isSearchCampaign: isFindDataSearchCampaign }))
-    if (!checked) setHandleFoundUidData(false)
+    if (!checked) {
+      setHandleFoundUidData(false)
+      setFindDataTargetDataGroupEnabled(previous => ({ ...previous, facebook_uid: false }))
+    }
   }
 
   const handleFindPostLinkTargetChange = (checked: boolean) => {
@@ -9122,9 +9340,15 @@ export default function CampaignFormModal({
       ...p,
       isFindPostLink: checked,
       isFindInPost: checked ? true : p.isFindInPost,
-      findPostLinkTargetCampaignIds: checked ? p.findPostLinkTargetCampaignIds : []
+      findPostLinkTargetCampaignIds: checked ? p.findPostLinkTargetCampaignIds : [],
+      findDataTargetDataGroups: checked
+        ? p.findDataTargetDataGroups
+        : removeFindDataTargetDataGroup(p.findDataTargetDataGroups, 'post_link')
     }, { isSearchCampaign: isFindDataSearchCampaign }))
-    if (!checked) setHandleFoundPostLinkData(false)
+    if (!checked) {
+      setHandleFoundPostLinkData(false)
+      setFindDataTargetDataGroupEnabled(previous => ({ ...previous, post_link: false }))
+    }
   }
 
   const handleFindFacebookGroupTargetChange = (checked: boolean) => {
@@ -9133,12 +9357,16 @@ export default function CampaignFormModal({
       isFindFacebookGroup: checked,
       findFacebookGroupPostTargetCampaignIds: checked ? p.findFacebookGroupPostTargetCampaignIds : [],
       findFacebookGroupCommentTargetCampaignIds: checked ? p.findFacebookGroupCommentTargetCampaignIds : [],
-      findFacebookGroupJoinTargetCampaignIds: checked ? p.findFacebookGroupJoinTargetCampaignIds : []
+      findFacebookGroupJoinTargetCampaignIds: checked ? p.findFacebookGroupJoinTargetCampaignIds : [],
+      findDataTargetDataGroups: checked
+        ? p.findDataTargetDataGroups
+        : removeFindDataTargetDataGroup(p.findDataTargetDataGroups, 'facebook_group')
     }, { isSearchCampaign: isFindDataSearchCampaign }))
     if (!checked) {
       setHandleFoundFacebookGroupPostData(false)
       setHandleFoundFacebookGroupCommentData(false)
       setHandleFoundFacebookGroupJoinData(false)
+      setFindDataTargetDataGroupEnabled(previous => ({ ...previous, facebook_group: false }))
     }
   }
 
@@ -10254,6 +10482,109 @@ export default function CampaignFormModal({
     )
   }
 
+  const setFindDataTargetDataGroup = (
+    kind: FindDataOutputKind,
+    destination: FindDataTargetDataGroup | null
+  ) => {
+    if (!destination) {
+      setFindDataTargetDataGroupDetails(previous => {
+        const next = { ...previous }
+        delete next[kind]
+        return next
+      })
+    }
+    setFormData(previous => ({
+      ...previous,
+      findDataTargetDataGroups: destination
+        ? {
+          ...previous.findDataTargetDataGroups,
+          [kind]: destination
+        }
+        : removeFindDataTargetDataGroup(previous.findDataTargetDataGroups, kind)
+    }))
+  }
+
+  const renderFindDataGroupDestinationOption = (kind: FindDataOutputKind) => {
+    const config = FIND_DATA_GROUP_DESTINATION_CONFIG[kind]
+    const destination = formData.findDataTargetDataGroups[kind]
+    const selectedGroup = findDataTargetDataGroupDetails[kind]
+    const enabled = findDataTargetDataGroupEnabled[kind]
+    const hasSelection = Number.isSafeInteger(Number(destination?.groupId)) && Number(destination?.groupId) > 0
+    const openPicker = () => setFindDataGroupPickerKind(kind)
+
+    return (
+      <div key={`data-group-${kind}`} className="extra-comment-options">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={event => {
+              const checked = event.target.checked
+              setFindDataTargetDataGroupEnabled(previous => ({
+                ...previous,
+                [kind]: checked
+              }))
+              if (!checked) {
+                setFindDataTargetDataGroup(kind, null)
+              }
+            }}
+          />
+          <span>{config.label}</span>
+        </label>
+        {enabled && (
+          <div style={{ marginTop: 12 }}>
+            <div className="campaign-data-group-label">Chọn nhóm data</div>
+            <div className="campaign-data-group-picker-row">
+              <button
+                type="button"
+                className="campaign-data-group-control"
+                onClick={openPicker}
+              >
+                {selectedGroup ? (
+                  <>
+                    <span
+                      className="campaign-data-group-dot"
+                      style={{ background: selectedGroup.color || 'var(--accent-primary)' }}
+                    />
+                    <span className="campaign-data-group-control-copy">
+                      <strong>{selectedGroup.name}</strong>
+                      <small>
+                        {selectedGroup.activeMembershipCount.toLocaleString('vi-VN')} data
+                        {' · '}
+                        {getDataGroupSemanticTypeName(selectedGroup)}
+                      </small>
+                    </span>
+                  </>
+                ) : hasSelection ? (
+                  <>
+                    <span className="campaign-data-group-dot" style={{ background: 'var(--accent-primary)' }} />
+                    <span className="campaign-data-group-control-copy">
+                      <strong>{destination?.groupName || `Nhóm ${destination?.groupId}`}</strong>
+                      <small>Nhóm data đã chọn</small>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <FolderOpen size={16} />
+                    <span className="campaign-data-group-control-placeholder">Chọn nhóm data...</span>
+                  </>
+                )}
+                <ChevronDown size={17} />
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary campaign-data-group-pick-button"
+                onClick={openPicker}
+              >
+                <Plus size={15} /> {hasSelection ? 'Đổi nhóm' : 'Chọn nhóm'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const renderFoundDataHandling = () => {
     const externalOptions: ReactNode[] = [
       formData.isFindPhone && (
@@ -10604,11 +10935,21 @@ export default function CampaignFormModal({
       )
     ]
 
+    const dataGroupOptions: ReactNode[] = [
+      formData.isFindPhone && renderFindDataGroupDestinationOption('phone'),
+      formData.isFindLinkGroupZalo && renderFindDataGroupDestinationOption('zalo_group_link'),
+      formData.isFindUid && renderFindDataGroupDestinationOption('facebook_uid'),
+      formData.isFindPostLink && renderFindDataGroupDestinationOption('post_link'),
+      isFindDataSearchCampaign && formData.isFindFacebookGroup &&
+        renderFindDataGroupDestinationOption('facebook_group')
+    ]
+
     return (
       <div className="found-data-handling-groups">
         {renderFoundDataHandlingGroup('Hệ thống ngoài (akaBiz)', externalOptions)}
         {renderFoundDataHandlingGroup('Chiến dịch Facebook', facebookOptions)}
         {renderFoundDataHandlingGroup('Chiến dịch Zalo', zaloOptions)}
+        {renderFoundDataHandlingGroup('Nhóm data', dataGroupOptions)}
       </div>
     )
   }
@@ -14007,18 +14348,6 @@ export default function CampaignFormModal({
                         )}
                         <ChevronDown size={17} />
                       </button>
-                      {formData.dataGroupId && (
-                        <button
-                          type="button"
-                          className="btn btn-secondary campaign-data-group-view-button"
-                          onClick={() => {
-                            setDataGroupPickerMode('source')
-                            setDataGroupPickerOpen(true)
-                          }}
-                        >
-                          <Eye size={15} /> Xem
-                        </button>
-                      )}
                       <button
                         type="button"
                         className="btn btn-primary campaign-data-group-pick-button"
@@ -14660,6 +14989,29 @@ export default function CampaignFormModal({
             setDataGroupPickerOpen(false)
           }}
           onClose={() => setDataGroupPickerOpen(false)}
+        />
+      )}
+      {findDataGroupPickerKind && (
+        <DataGroupPickerModal
+          selectedGroupId={formData.findDataTargetDataGroups[findDataGroupPickerKind]?.groupId ?? null}
+          actionId={FIND_DATA_GROUP_DESTINATION_CONFIG[findDataGroupPickerKind].actionId}
+          onSelect={group => {
+            const kind = findDataGroupPickerKind
+            const targetActionId = FIND_DATA_GROUP_DESTINATION_CONFIG[kind].actionId
+            const targetAction = campaignActions.find(action => action.id === targetActionId)
+            if (!isDataGroupCompatibleWithCampaignAction(group, targetAction)) {
+              showAlert('Nhóm data này không tương thích với loại dữ liệu đang tìm.', 'error')
+              return
+            }
+            setFindDataTargetDataGroup(findDataGroupPickerKind, {
+              groupId: group.id,
+              groupName: group.name
+            })
+            setFindDataTargetDataGroupEnabled(previous => ({ ...previous, [kind]: true }))
+            setFindDataTargetDataGroupDetails(previous => ({ ...previous, [kind]: group }))
+            setFindDataGroupPickerKind(null)
+          }}
+          onClose={() => setFindDataGroupPickerKind(null)}
         />
       )}
       {!draftFormConfig && renderCampaignPickerModal()}
