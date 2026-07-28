@@ -1,10 +1,11 @@
 import { BrowserWindow } from 'electron'
+import { createHash } from 'crypto'
 import { existsSync, unlinkSync, writeFileSync } from 'fs'
 import { extname, join } from 'path'
 import { tmpdir } from 'os'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import { renderContentSpin, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
@@ -389,6 +390,13 @@ interface FindDataPreviousValues {
   facebookGroups: Set<string>
   detailCount: number
 }
+
+type FindDataGroupOutputKind =
+  | 'phone'
+  | 'zalo_group_link'
+  | 'facebook_uid'
+  | 'post_link'
+  | 'facebook_group'
 
 type FindDataTargetCampaignField =
   | 'findUidTargetCampaignIds'
@@ -7377,6 +7385,7 @@ export class CampaignScheduler {
             findZaloGroupLinkJoinTargetCampaignIds,
             findPhoneAkaBizDesktopTargetCampaignIds,
             findZaloGroupLinkAkaBizDesktopTargetCampaignIds,
+            findDataTargetDataGroups: campaign.extraSettings?.findDataTargetDataGroups || {},
             error: isSuccess ? undefined : errMsg,
             errorBlock: errorStep?.blockName
           }
@@ -7439,6 +7448,16 @@ export class CampaignScheduler {
             ...this.getFindDataConfiguredTargetCampaignIds(findZaloGroupLinkJoinTargetCampaignIds, campaign.id),
             ...this.getFindDataConfiguredTargetCampaignIds(findZaloGroupLinkAkaBizDesktopTargetCampaignIds, campaign.id)
           ].length > 0
+        })
+        await this.pushFoundDataToDataGroups(campaign, accountId, detail, summaryStep, targetName, {
+          phones: scanPhones,
+          linkGroupZalos: scanLinkGroupZalos,
+          uids: scanUids,
+          postLinks: scanPostLinks,
+          groupMembers: scanGroupMembers,
+          facebookGroups: scanFacebookGroups,
+          uidProfiles: rawUidProfiles,
+          phoneProfiles: rawPhoneProfiles
         })
         await this.pushFoundUidsToTargetCampaigns(campaign, newUidsForInternal, groupMemberNameByUid)
         await this.pushFoundPostLinksToTargetCampaigns(campaign, newPostLinksForInternal)
@@ -8258,6 +8277,243 @@ export class CampaignScheduler {
       sourceCampaign.id,
       `ℹ️ ${options.label}: tìm được ${foundCount}, bỏ qua ${foundCount - pushedCount} ${options.label} đã từng tìm được trong chiến dịch này, sẽ đẩy ${pushedCount} ${options.label} mới.`
     )
+  }
+
+  private async pushFoundDataToDataGroups(
+    sourceCampaign: Campaign,
+    accountId: number,
+    inputData: CampaignInputData | null,
+    summaryStep: RunStepV2 | undefined,
+    sourceTargetName: string,
+    found: {
+      phones: string[]
+      linkGroupZalos: string[]
+      uids: string[]
+      postLinks: string[]
+      groupMembers: FindDataGroupMember[]
+      facebookGroups: FindDataFacebookGroup[]
+      uidProfiles: FindDataUidProfile[]
+      phoneProfiles: FindDataPhoneProfile[]
+    }
+  ): Promise<void> {
+    const destinations = sourceCampaign.extraSettings?.findDataTargetDataGroups
+    if (!destinations || typeof destinations !== 'object') return
+
+    const configuredKinds = ([
+      'phone',
+      'zalo_group_link',
+      'facebook_uid',
+      'post_link',
+      'facebook_group'
+    ] as FindDataGroupOutputKind[]).filter(kind => {
+      const groupId = Number(destinations[kind]?.groupId)
+      return Number.isSafeInteger(groupId) && groupId > 0
+    })
+    if (configuredKinds.length === 0) return
+
+    let dataTypeIdByCode: Map<DataTypeCategoryCode, number>
+    try {
+      const dataTypes = await this.supabase.listDataTypeCategoryItems()
+      dataTypeIdByCode = new Map(
+        dataTypes
+          .filter(item => Number.isSafeInteger(Number(item.id)) && Number(item.id) > 0)
+          .map(item => [item.code, Number(item.id)])
+      )
+    } catch (err) {
+      console.error('Failed to load data types before pushing find-data results to Data Groups:', err)
+      await this.logCampaignProgress(
+        sourceCampaign.id,
+        `⚠️ Không thể tải danh mục loại dữ liệu để đẩy kết quả sang Nhóm data: ${err instanceof Error ? err.message : String(err)}`
+      )
+      return
+    }
+
+    const uidProfileByKey = new Map<string, FindDataUidProfile>()
+    for (const member of found.groupMembers) {
+      const key = this.normalizeUidForCompare(member.uid)
+      if (!key) continue
+      uidProfileByKey.set(key, {
+        uid: member.uid,
+        name: member.name,
+        url: member.url,
+        source: 'group_member'
+      })
+    }
+    for (const profile of found.uidProfiles) {
+      const key = this.normalizeUidForCompare(profile.uid)
+      if (!key) continue
+      const current = uidProfileByKey.get(key)
+      uidProfileByKey.set(key, current ? this.mergeFindDataUidProfile(current, profile) : profile)
+    }
+
+    const phoneProfileByKey = new Map<string, FindDataPhoneProfile>()
+    for (const profile of found.phoneProfiles) {
+      const key = this.normalizeExternalValueForCompare(profile.phone)
+      if (!key) continue
+      const current = phoneProfileByKey.get(key)
+      phoneProfileByKey.set(key, current ? this.mergeFindDataPhoneProfile(current, profile) : profile)
+    }
+
+    const uidValues = new Map<string, string>()
+    for (const rawUid of [
+      ...found.groupMembers.map(member => member.uid),
+      ...found.uids
+    ]) {
+      const uid = String(rawUid || '').trim()
+      const key = this.normalizeUidForCompare(uid)
+      if (uid && key && !uidValues.has(key)) uidValues.set(key, uid)
+    }
+
+    const sourceMetadata = {
+      sourceCampaignId: sourceCampaign.id,
+      sourceCampaignActionId: sourceCampaign.actionId,
+      sourceInputDataId: inputData?.id ?? null,
+      sourceRunId: summaryStep?.runId ?? null,
+      sourceTargetName
+    }
+    const phoneRows: DataGroupIngestRow[] = this.uniqueExternalValues(found.phones).map(phone => {
+      const profile = phoneProfileByKey.get(this.normalizeExternalValueForCompare(phone))
+      return {
+        contactType: 'phone',
+        flatformType: null,
+        name: profile?.name || phone,
+        phone,
+        extraData: {
+          ...sourceMetadata,
+          sourceProfileUid: profile?.uid || null,
+          sourceProfileUrl: profile?.url || null,
+          sourceProfileKind: profile?.source || null
+        }
+      }
+    })
+    const zaloGroupRows: DataGroupIngestRow[] = this.uniqueExternalValues(found.linkGroupZalos).map(link => ({
+      contactType: 'group',
+      flatformType: 'zalo',
+      name: link,
+      uid: link,
+      url: link,
+      extraData: sourceMetadata
+    }))
+    const facebookUidRows: DataGroupIngestRow[] = Array.from(uidValues.entries()).map(([key, uid]) => {
+      const profile = uidProfileByKey.get(key)
+      return {
+        contactType: 'person',
+        flatformType: 'facebook',
+        name: profile?.name || uid,
+        uid,
+        url: profile?.url || (/^https?:\/\//i.test(uid) ? uid : null),
+        extraData: {
+          ...sourceMetadata,
+          sourceProfileKind: profile?.source || null
+        }
+      }
+    })
+    const postLinkRows: DataGroupIngestRow[] = found.postLinks.map(link => ({
+      contactType: 'campaign_input',
+      flatformType: 'facebook',
+      name: link,
+      uid: link,
+      url: link,
+      extraData: sourceMetadata
+    }))
+    const facebookGroupRows: DataGroupIngestRow[] = found.facebookGroups.map(group => ({
+      contactType: 'group',
+      flatformType: 'facebook',
+      name: group.name || group.url,
+      uid: group.url,
+      url: group.url,
+      extraData: {
+        ...sourceMetadata,
+        privacy: group.privacy || null,
+        memberCount: group.memberCount ?? null,
+        postsPerDay: group.postsPerDay ?? null,
+        keyword: group.keyword || null
+      }
+    }))
+
+    const specs: Record<FindDataGroupOutputKind, {
+      code: DataTypeCategoryCode
+      label: string
+      rows: DataGroupIngestRow[]
+    }> = {
+      phone: { code: 'phone', label: 'SĐT', rows: phoneRows },
+      zalo_group_link: { code: 'zalo_group', label: 'link group Zalo', rows: zaloGroupRows },
+      facebook_uid: { code: 'facebook_person', label: 'UID Facebook', rows: facebookUidRows },
+      post_link: { code: 'facebook_post_url', label: 'link bài post', rows: postLinkRows },
+      facebook_group: { code: 'facebook_group', label: 'group Facebook', rows: facebookGroupRows }
+    }
+
+    const sourceName = `Chiến dịch tìm data: ${sourceCampaign.name}`.slice(0, 255)
+    const runIdentity = String(summaryStep?.runId ?? summaryStep?.id ?? 'unknown')
+    const inputIdentity = Number(inputData?.id) > 0 ? String(inputData?.id) : 'none'
+    const maxRowsPerRequest = 10000
+
+    for (const kind of configuredKinds) {
+      const destination = destinations[kind]
+      const groupId = Number(destination?.groupId)
+      const spec = specs[kind]
+      if (!Number.isSafeInteger(groupId) || groupId <= 0 || spec.rows.length === 0) continue
+      const dataTypeCategoryItemId = dataTypeIdByCode.get(spec.code)
+      if (!dataTypeCategoryItemId) {
+        await this.logCampaignProgress(
+          sourceCampaign.id,
+          `⚠️ Không tìm thấy loại dữ liệu "${spec.code}" nên chưa thể đẩy ${spec.label} sang Nhóm data.`
+        )
+        continue
+      }
+
+      let addedCount = 0
+      let alreadyMemberCount = 0
+      let skippedCount = 0
+      try {
+        for (let offset = 0; offset < spec.rows.length; offset += maxRowsPerRequest) {
+          const chunkIndex = Math.floor(offset / maxRowsPerRequest)
+          const rows = spec.rows.slice(offset, offset + maxRowsPerRequest)
+          const payloadHash = createHash('sha256').update(JSON.stringify(rows)).digest('hex')
+          const result = await this.supabase.ingestDataGroup({
+            requestId: [
+              'find-data',
+              sourceCampaign.id,
+              inputIdentity,
+              runIdentity,
+              groupId,
+              spec.code,
+              chunkIndex,
+              payloadHash.slice(0, 24),
+              'v1'
+            ].join(':'),
+            groupId,
+            kind: 'scan',
+            rows,
+            sourceAccountId: accountId,
+            sourceName,
+            payloadHash,
+            dataTypeCategoryItemId
+          })
+          addedCount += result.insertedMembershipCount + result.reactivatedMembershipCount
+          alreadyMemberCount += result.alreadyMemberCount
+          skippedCount += result.invalidCount + result.incompatibleCount + result.conflictCount
+        }
+
+        const groupName = String(destination?.groupName || '').trim() || `Nhóm #${groupId}`
+        const detailText = [
+          `${addedCount} mới`,
+          alreadyMemberCount > 0 ? `${alreadyMemberCount} đã có` : '',
+          skippedCount > 0 ? `${skippedCount} không hợp lệ/không tương thích` : ''
+        ].filter(Boolean).join(' · ')
+        await this.logCampaignProgress(
+          sourceCampaign.id,
+          `✅ Đã đẩy ${spec.rows.length} ${spec.label} sang Nhóm data "${groupName}" (${detailText}).`
+        )
+      } catch (err) {
+        console.error(`Failed to push find-data ${kind} to Data Group ${groupId}:`, err)
+        const groupName = String(destination?.groupName || '').trim() || `Nhóm #${groupId}`
+        await this.logCampaignProgress(
+          sourceCampaign.id,
+          `⚠️ Không thể đẩy ${spec.label} sang Nhóm data "${groupName}": ${err instanceof Error ? err.message : String(err)}`
+        )
+      }
+    }
   }
 
   private uniqueExternalValues(rawValues: string[]): string[] {

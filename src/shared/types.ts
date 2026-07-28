@@ -484,6 +484,18 @@ export interface CampaignAdvancedContentManualDraft {
   rewriteContentEachRun: boolean
 }
 
+export type FindDataOutputKind =
+  | 'phone'
+  | 'zalo_group_link'
+  | 'facebook_uid'
+  | 'post_link'
+  | 'facebook_group'
+
+export interface FindDataTargetDataGroup {
+  groupId: number
+  groupName: string
+}
+
 export interface CampaignExtraSettings {
   sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
   postWithBackground?: boolean   // Đăng bài profile/page UI/group với phông nền Facebook
@@ -648,6 +660,7 @@ export interface CampaignExtraSettings {
   findZaloGroupLinkJoinTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign Zalo tham gia group nội bộ đã chọn
   findPhoneAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm SĐT, đẩy sang campaign akaBiz Desktop đã chọn
   findZaloGroupLinkAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Desktop đã chọn
+  findDataTargetDataGroups?: Partial<Record<FindDataOutputKind, FindDataTargetDataGroup>> // Nhóm data nhận từng loại kết quả tìm kiếm
   // Tìm kiếm data bằng Facebook Search — UI/config phase
   countSearchPostFindData?: number
   countSearchGroupFindData?: number
