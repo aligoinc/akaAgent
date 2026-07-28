@@ -136,7 +136,7 @@ while (rows.length < limit && stableCount < 5) {
 
   if (rows.length >= limit) break;
   stableCount = added > 0 ? 0 : stableCount + 1;
-  await helpers.sleep(2000, signal);
+  await helpers.sleep(5000, signal);
 }
 
 const memberRows = rows.slice(0, limit);

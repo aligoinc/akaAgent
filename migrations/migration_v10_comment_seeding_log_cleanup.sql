@@ -69,8 +69,8 @@ SET code = $block$
 if (input.enabled === false) return { liked: false }
 const item = (vars && vars.loopItem) ? vars.loopItem : {}
 const pos = Number(input.position || item.position || 1)
-const postLabel = pos === 1 ? 'bài đầu tiên' : 'bài thứ ' + pos
 
+// Scroll bài thứ N vào tầm nhìn (để click không bị occluded)
 try {
   const scrollCode = 'var n = document.evaluate(' + JSON.stringify('(//*[@role="article"])[' + pos + ']') + ', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; if (n) n.scrollIntoView({block: "center"});'
   await page.evaluate(scrollCode)
@@ -81,12 +81,12 @@ try {
   const xp = await helpers.elementWith('fb_like_button_at_n', { n: pos })
   const found = await page.waitForSelector(xp, { timeout: 5000 }).catch(() => false)
   if (!found) {
-    helpers.log('ℹ️ Không tìm thấy nút Thích ở ' + postLabel + ' (có thể đã thích trước đó)')
+    helpers.log('ℹ️ Không tìm thấy nút Thích tại bài #' + pos + ' (có thể đã thích trước đó)')
     return { liked: false, position: pos }
   }
   await page.click(xp)
   await helpers.sleep(1500, signal)
-  helpers.log('👍 Đã thích ' + postLabel)
+  helpers.log('👍 Đã thích bài #' + pos)
   return { liked: true, position: pos }
 } catch (e) {
   return { liked: false, position: pos, error: String(e && e.message || e) }
