@@ -2265,6 +2265,13 @@ export class CampaignScheduler {
     const loggedSkippedLimitActionCodes = new Set<string>()
 
     for (let i = 0; i < targets.length; i++) {
+      const detail = targets[i]
+      // Completed/paused/error rows are only historical context. Skip them
+      // before any per-target DB guards so large campaigns resume immediately
+      // instead of issuing multiple queries for every previously handled row.
+      if (detail && consumedGroupPostInputDataIds.has(detail.id)) continue
+      if (detail && detail.status !== 'chờ xử lý') continue
+
       const loopRuntimeStopReason = account.flatformType === 'zalo'
         ? this.getZaloRuntimeStopReason(campaign.id)
         : null
@@ -2305,9 +2312,6 @@ export class CampaignScheduler {
         return
       }
 
-      const detail = targets[i]
-      if (detail && consumedGroupPostInputDataIds.has(detail.id)) continue
-      if (detail && detail.status !== 'chờ xử lý') continue
       if (detail) {
         const futureSchedule = this.getFutureInputSchedule(detail, new Date())
         if (futureSchedule) {
