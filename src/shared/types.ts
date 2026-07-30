@@ -2241,6 +2241,20 @@ export interface EmailNotificationSettings {
   updatedAt?: string
 }
 
+export type AppNotificationLevel = 'info' | 'success' | 'warning' | 'error'
+
+export interface AppNotification {
+  id: number
+  title: string | null
+  message: string
+  level: AppNotificationLevel
+  linkLabel: string | null
+  linkUrl: string | null
+  startsAt: string | null
+  endsAt: string | null
+  updatedAt?: string
+}
+
 // ============================================
 // Auth Types
 // ============================================
@@ -2644,6 +2658,9 @@ export const IPC_EVENTS = {
   // Email Notifications
   EMAIL_NOTIFICATION_SETTINGS_GET: 'email-notification-settings:get',
   EMAIL_NOTIFICATION_SETTINGS_SAVE: 'email-notification-settings:save',
+
+  // App Notifications
+  APP_NOTIFICATION_GET_ACTIVE: 'app-notification:get-active',
 
   // Reports
   REPORT_ACCOUNT_ACTION_SUMMARY: 'report:account-action-summary',

@@ -29,6 +29,7 @@ import { registerContentTemplateHandlers } from './handlers/contentTemplateHandl
 import { registerMediaHandlers } from './handlers/mediaHandlers'
 import { registerCustomerFeedbackHandlers } from './handlers/customerFeedbackHandlers'
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
+import { registerAppNotificationHandlers } from './handlers/appNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
@@ -1275,6 +1276,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerMediaHandlers(supabase)
   registerCustomerFeedbackHandlers()
   registerEmailNotificationHandlers(supabase)
+  registerAppNotificationHandlers(supabase)
   registerReportHandlers(supabase)
   registerAutomationHandlers(mainWindow)
   registerBrowserHandlers(webviewRegistry, pageRegistry, {

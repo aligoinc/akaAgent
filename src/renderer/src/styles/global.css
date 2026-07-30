@@ -355,6 +355,76 @@ body {
   overflow: hidden;
 }
 
+.app-notification-bar {
+  position: relative;
+  z-index: 125;
+  min-height: 38px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 16px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  background: color-mix(in srgb, currentColor 10%, var(--bg-secondary));
+  color: var(--accent-info);
+  -webkit-app-region: no-drag;
+}
+
+.app-notification-bar-success {
+  color: var(--accent-success);
+}
+
+.app-notification-bar-warning {
+  color: var(--accent-warning);
+}
+
+.app-notification-bar-error {
+  color: var(--accent-error);
+}
+
+.app-notification-icon {
+  flex: 0 0 auto;
+}
+
+.app-notification-content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.app-notification-content strong {
+  flex: 0 0 auto;
+  color: currentColor;
+  font-weight: 750;
+}
+
+.app-notification-content span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-notification-link {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: currentColor;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-notification-link:hover {
+  text-decoration: underline;
+}
+
 .app-main {
   position: relative;
   display: flex;
