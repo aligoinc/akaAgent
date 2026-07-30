@@ -773,7 +773,9 @@ export class ZaloServerRuntimeManager {
           }
         )
         const maintenance = new DailyMaintenanceCoordinator(async () => {
-          const updatedCampaigns = await supabase.maintainZaloCampaignSchedules()
+          const updatedCampaigns = await supabase.maintainZaloServerCampaignSchedules(
+            user.zaloRuntimeModeRevision
+          )
           for (const campaign of updatedCampaigns) {
             eventWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
           }

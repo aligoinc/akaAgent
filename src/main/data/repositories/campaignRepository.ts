@@ -45,7 +45,11 @@ import {
 import { formatStoredCampaignLogLine } from '../../../shared/campaignLogFormat'
 import * as accountActionRepo from './accountActionRepository'
 import * as accountRepo from './accountRepository'
-import { finalizeDataGroupCampaign, listDataGroups } from './dataGroupRepository'
+import {
+  finalizeDataGroupCampaign,
+  listDataGroups,
+  type DataGroupRuntimeContext
+} from './dataGroupRepository'
 import * as errorPolicyRepo from './errorPolicyRepository'
 import {
   canUseCampaignActionWithEntitlements,
@@ -1137,6 +1141,53 @@ export async function finalizeCampaign(
   return {
     completed: row.completed === true,
     reason: String(row.reason || 'not_found'),
+    campaignId: Number(row.campaign_id || normalizedCampaignId),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    pendingInputCount: Number.isFinite(pendingInputCount) ? Math.max(0, pendingInputCount) : 0
+  }
+}
+
+async function finalizeZaloServerMaintenanceCampaign(
+  campaignId: number,
+  note: string | null,
+  runtimeModeRevision: string | null | undefined
+): Promise<CampaignFinalizationResult> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for Zalo Server maintenance finalization')
+  }
+
+  const normalizedModeRevision = String(runtimeModeRevision || '').trim()
+  if (!normalizedModeRevision) {
+    throw new Error('Thiếu revision xác thực của Zalo Server runtime.')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_finalize_zalo_server_maintenance_campaign', {
+    p_staff_id: u.staffId,
+    p_organization_id: u.organizationId,
+    p_expected_mode_revision: normalizedModeRevision,
+    p_campaign_id: normalizedCampaignId,
+    p_note: note,
+    p_update_note: true
+  })
+  if (error) {
+    throw new Error(
+      `Failed to finalize Zalo Server campaign during schedule maintenance: ${error.message}. ` +
+      'Ensure migration v216 is applied; no desktop-credential fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Zalo Server maintenance finalization returned no result')
+  const reason = String(row.reason || 'not_found')
+  if (!['completed', 'pending_input_remaining', 'campaign_control_won'].includes(reason)) {
+    throw new Error(`Zalo Server maintenance finalization rejected campaign ${normalizedCampaignId}: ${reason}`)
+  }
+  const pendingInputCount = Number(row.pending_input_count || 0)
+  return {
+    completed: row.completed === true,
+    reason,
     campaignId: Number(row.campaign_id || normalizedCampaignId),
     campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
     pendingInputCount: Number.isFinite(pendingInputCount) ? Math.max(0, pendingInputCount) : 0
@@ -2377,13 +2428,18 @@ export async function getDueMobileManagedCampaignsForLimitCheck(accountId: numbe
 type CampaignSchedulePlatformScope = 'all' | 'zalo' | 'non-zalo'
 
 export async function maintainCampaignSchedules(
-  platformScope: CampaignSchedulePlatformScope = 'all'
+  platformScope: CampaignSchedulePlatformScope = 'all',
+  runtimeContext: DataGroupRuntimeContext = { runtimeTarget: 'desktop' }
 ): Promise<Campaign[]> {
+  if (runtimeContext.runtimeTarget === 'server' && platformScope !== 'zalo') {
+    throw new Error('Zalo Server schedule maintenance only supports the Zalo platform scope.')
+  }
+
   const u = requireCurrentUser()
   const todayStart = startOfVietnamDay()
   const accountRelation = platformScope === 'all'
     ? CAMPAIGN_PRIMARY_ACCOUNT_RELATION
-    : 'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type)'
+    : 'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type, is_zalo_show_web, staff_id)'
   let query = client()
     .from('auto_campaigns')
     .select(`*, auto_campaign_actions(name), ${accountRelation}`)
@@ -2396,6 +2452,15 @@ export async function maintainCampaignSchedules(
 
   if (platformScope === 'zalo') {
     query = query.eq('primary_account.flatform_type', 'zalo')
+    if (runtimeContext.runtimeTarget === 'server') {
+      query = query
+        .eq('primary_account.is_zalo_show_web', false)
+        .eq('primary_account.staff_id', u.staffId)
+        .or(
+          `organization_id.is.null,organization_id.eq.${u.organizationId}`,
+          { referencedTable: 'primary_account' }
+        )
+    }
   } else if (platformScope === 'non-zalo') {
     query = query.neq('primary_account.flatform_type', 'zalo')
   }
@@ -2407,26 +2472,41 @@ export async function maintainCampaignSchedules(
   const updatedCampaigns: Campaign[] = []
   const maintenanceErrors: Array<{ campaignId: number; message: string }> = []
   const campaigns = (data || []).map(row => mapCampaignFromDB(row))
+  const finalizeForMaintenance = async (campaign: Campaign, note: string): Promise<void> => {
+    if (campaign.dataTargetSourceMode === 'data_group') {
+      await finalizeDataGroupCampaign(campaign.id, note, runtimeContext)
+      return
+    }
+    if (runtimeContext.runtimeTarget === 'server') {
+      await finalizeZaloServerMaintenanceCampaign(
+        campaign.id,
+        note,
+        runtimeContext.runtimeModeRevision
+      )
+      return
+    }
+    await finalizeCampaign(campaign.id, note, 'chờ xử lý')
+  }
 
   for (const campaign of campaigns) {
     try {
       const scheduleType = campaign.scheduleType || 'daily'
+      const isCompletedNonCatchUpDailyCampaign = scheduleType === 'daily'
+        && campaign.status === 'hoàn thành'
+        && (
+          campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID
+          || campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+        )
+      if (isCompletedNonCatchUpDailyCampaign) continue
+
       const nextSchedule = resolveNextSchedule(campaign, todayStart)
       if (!nextSchedule) continue
 
       if (isPastScheduleEnd(campaign, nextSchedule)) {
+        await finalizeForMaintenance(campaign, 'Chiến dịch đã hết ngày kết thúc')
         await updateCampaign(campaign.id, {
           schedule: nextSchedule.toISOString()
         })
-        if (campaign.dataTargetSourceMode === 'data_group') {
-          await finalizeDataGroupCampaign(campaign.id, 'Chiến dịch đã hết ngày kết thúc')
-        } else {
-          await finalizeCampaign(
-            campaign.id,
-            'Chiến dịch đã hết ngày kết thúc',
-            'chờ xử lý'
-          )
-        }
         const updated = await getCampaign(campaign.id)
         if (!updated) throw new Error('Không tìm thấy chiến dịch sau khi kiểm tra data trước khi hoàn thành.')
         updatedCampaigns.push(updated)
@@ -2435,18 +2515,10 @@ export async function maintainCampaignSchedules(
 
       if (scheduleType === 'daily') {
         if (campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) {
-          if (campaign.dataTargetSourceMode === 'data_group') {
-            await finalizeDataGroupCampaign(
-              campaign.id,
-              'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày'
-            )
-          } else {
-            await finalizeCampaign(
-              campaign.id,
-              'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày',
-              'chờ xử lý'
-            )
-          }
+          await finalizeForMaintenance(
+            campaign,
+            'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày'
+          )
           const updated = await getCampaign(campaign.id)
           if (!updated) throw new Error('Không tìm thấy chiến dịch sinh nhật sau khi kiểm tra data.')
           if (updated.status !== campaign.status || updated.note !== campaign.note) {
@@ -2456,18 +2528,10 @@ export async function maintainCampaignSchedules(
         }
 
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
-          if (campaign.dataTargetSourceMode === 'data_group') {
-            await finalizeDataGroupCampaign(
-              campaign.id,
-              'Chiến dịch lướt newsfeed không chạy tiếp qua ngày'
-            )
-          } else {
-            await finalizeCampaign(
-              campaign.id,
-              'Chiến dịch lướt newsfeed không chạy tiếp qua ngày',
-              'chờ xử lý'
-            )
-          }
+          await finalizeForMaintenance(
+            campaign,
+            'Chiến dịch lướt newsfeed không chạy tiếp qua ngày'
+          )
           const updated = await getCampaign(campaign.id)
           if (!updated) throw new Error('Không tìm thấy chiến dịch newsfeed sau khi kiểm tra data.')
           if (updated.status !== campaign.status || updated.note !== campaign.note) {
@@ -2596,6 +2660,15 @@ export async function maintainCampaignSchedules(
 
 export function maintainZaloCampaignSchedules(): Promise<Campaign[]> {
   return maintainCampaignSchedules('zalo')
+}
+
+export function maintainZaloServerCampaignSchedules(
+  runtimeModeRevision: string
+): Promise<Campaign[]> {
+  return maintainCampaignSchedules('zalo', {
+    runtimeTarget: 'server',
+    runtimeModeRevision
+  })
 }
 
 export function maintainNonZaloCampaignSchedules(): Promise<Campaign[]> {

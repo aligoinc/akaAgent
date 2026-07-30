@@ -182,6 +182,9 @@ export class SupabaseService {
   getDueMobileManagedCampaignsForLimitCheck(accountId: number) { return campaignRepo.getDueMobileManagedCampaignsForLimitCheck(accountId) }
   maintainCampaignSchedules() { return campaignRepo.maintainCampaignSchedules() }
   maintainZaloCampaignSchedules() { return campaignRepo.maintainZaloCampaignSchedules() }
+  maintainZaloServerCampaignSchedules(runtimeModeRevision: string) {
+    return campaignRepo.maintainZaloServerCampaignSchedules(runtimeModeRevision)
+  }
   maintainNonZaloCampaignSchedules() { return campaignRepo.maintainNonZaloCampaignSchedules() }
   listZaloRealtimeGroupCampaignSnapshots() { return campaignRepo.listZaloRealtimeGroupCampaignSnapshots() }
   enqueueZaloRealtimeGroupEvent(request: campaignRepo.EnqueueZaloRealtimeGroupEventRequest) {
