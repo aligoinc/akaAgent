@@ -105,6 +105,7 @@ export function mapCampaignActionFromDB(row: Record<string, unknown>): CampaignA
     workflowId: row.workflow_id as number | undefined,
     testWorkflowId: row.test_workflow_id as number | undefined,
     allowMultipleAccounts: typeof row.allow_multiple_accounts === 'boolean' ? row.allow_multiple_accounts : false,
+    allowSecondaryAccount: typeof row.allow_secondary_account === 'boolean' ? row.allow_secondary_account : false,
     limitCheckActionCodes: Array.isArray(row.limit_check_action_codes) ? row.limit_check_action_codes as string[] : [],
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string
@@ -169,11 +170,13 @@ export function mapAutoErrorPolicyFromDB(row: Record<string, unknown>): AutoErro
 }
 
 export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
+  const primaryAccount = (row as any).primary_account || (row as any).auto_accounts
   const campaign: Campaign = {
     id: row.id as number,
     name: row.name as string,
     actionId: row.action_id as string,
     accountId: row.account_id as number,
+    secondaryAccountId: (row.secondary_account_id as number | null | undefined) ?? null,
     status: row.status as string,
     schedule: row.schedule as string | undefined,
     originalSchedule: (row.original_schedule as string | null) ?? null,
@@ -202,7 +205,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     creationBundleId: (row.creation_bundle_id as number | null | undefined) ?? null,
     creationBundleChildIndex: (row.creation_bundle_child_index as number | null | undefined) ?? null,
     actionName: (row as any).auto_campaign_actions?.name as string | undefined,
-    accountName: (row as any).auto_accounts?.name as string | undefined
+    accountName: primaryAccount?.name as string | undefined
   }
 
   return campaign

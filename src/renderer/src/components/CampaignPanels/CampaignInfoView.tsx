@@ -330,6 +330,9 @@ const renderSection = (title: string, rows: InfoRow[]) => {
 export default function CampaignInfoView({ campaign, account, action, campaigns, accounts }: CampaignInfoViewProps) {
   const [dataGroupDisplay, setDataGroupDisplay] = useState<{ name: string; sourceStatus: string } | null>(null)
   const [dataGroupStats, setDataGroupStats] = useState<DataGroupLatestIngestStats | null>(null)
+  const secondaryAccountName = campaign.secondaryAccountName
+    || accounts.find(item => item.id === campaign.secondaryAccountId)?.name
+    || (campaign.secondaryAccountId ? `#${campaign.secondaryAccountId}` : '')
 
   useEffect(() => {
     let disposed = false
@@ -626,7 +629,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
         {renderSection('Tổng quan', [
           { label: 'Tên chiến dịch', value: textOrDash(campaign.name), fullWidth: true },
           { label: 'Loại chiến dịch', value: textOrDash(action?.name || campaign.actionName || campaign.actionId) },
-          { label: 'Tài khoản', value: textOrDash(account?.name || campaign.accountName) },
+          { label: 'Tài khoản chính', value: textOrDash(account?.name || campaign.accountName) },
+          { label: 'Tài khoản phụ', value: textOrDash(secondaryAccountName) },
           { label: 'Trạng thái', value: campaign.status },
           {
             label: 'Nguồn data mục tiêu',

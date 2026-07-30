@@ -21,6 +21,7 @@ import {
   AddCampaignInputDataRowsResult,
   AddCampaignInputDataToCampaignRequest,
   AddCampaignInputDataToCampaignResult,
+  AutoAccount,
   AutoAccountContact,
   AutoAccountActionStatus,
   BulkDeleteCampaignInputDataResult,
@@ -57,6 +58,15 @@ import {
 import { randomUUID } from 'node:crypto'
 
 const client = () => getSupabaseClient()
+const CAMPAIGN_PRIMARY_ACCOUNT_RELATION =
+  'primary_account:auto_accounts!auto_campaigns_account_id_fkey(name)'
+const CAMPAIGN_RELATIONS =
+  `auto_campaign_actions(name), ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`
+const CAMPAIGN_SELECT = `*, ${CAMPAIGN_RELATIONS}`
+const CAMPAIGN_ACTION_STATUS_SELECT =
+  `*, auto_campaign_actions(name, is_active, is_delete), ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`
+const CAMPAIGN_ZALO_REALTIME_SELECT =
+  '*, auto_campaign_actions(name), primary_account:auto_accounts!auto_campaigns_account_id_fkey(name, login_status, status, is_active, is_zalo_show_web)'
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
@@ -124,6 +134,7 @@ const VIETNAM_MOBILE_CARRIER_CODES = new Set<VietnamMobileCarrier>([
 const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
   'name',
   'accountId',
+  'secondaryAccountId',
   'scheduleType',
   'scheduleEndDate',
   'dailyStopTime',
@@ -876,17 +887,58 @@ function isPastScheduleEnd(campaign: Campaign, schedule: Date): boolean {
 
 // =========== CAMPAIGNS ===========
 
+async function attachCampaignSecondaryAccountNames(
+  campaigns: Campaign[],
+  staffId: number,
+  organizationId: number
+): Promise<Campaign[]> {
+  const secondaryAccountIds = Array.from(new Set(
+    campaigns
+      .map(campaign => campaign.secondaryAccountId)
+      .filter((accountId): accountId is number => Number.isSafeInteger(accountId) && Number(accountId) > 0)
+  ))
+  if (secondaryAccountIds.length === 0) return campaigns
+
+  const { data, error } = await client()
+    .from('auto_accounts')
+    .select('id, name')
+    .eq('staff_id', staffId)
+    .eq('organization_id', organizationId)
+    .in('id', secondaryAccountIds)
+
+  if (error) {
+    console.warn('Cannot load secondary account names for campaigns:', error)
+    return campaigns
+  }
+
+  const accountNames = new Map(
+    (data || []).map(account => [Number(account.id), String(account.name || '')])
+  )
+  return campaigns.map(campaign => {
+    if (!campaign.secondaryAccountId) return campaign
+    const secondaryAccountName = accountNames.get(campaign.secondaryAccountId)
+    return secondaryAccountName
+      ? { ...campaign, secondaryAccountName }
+      : campaign
+  })
+}
+
 export async function getCampaign(id: number): Promise<Campaign | null> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .single()
 
   if (error) return null
-  return mapCampaignFromDB(data)
+  const [campaign] = await attachCampaignSecondaryAccountNames(
+    [mapCampaignFromDB(data)],
+    u.staffId,
+    u.organizationId
+  )
+  return campaign
 }
 
 export async function setZaloServerCampaignStatus(
@@ -1388,7 +1440,7 @@ export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
@@ -1396,7 +1448,12 @@ export async function listCampaigns(): Promise<Campaign[]> {
   if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   const campaigns = filterCampaignsByEntitlements((data || []).map(row => mapCampaignFromDB(row)), entitlements)
-  const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(campaigns)
+  const campaignsWithSecondaryAccountNames = await attachCampaignSecondaryAccountNames(
+    campaigns,
+    u.staffId,
+    u.organizationId
+  )
+  const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(campaignsWithSecondaryAccountNames)
   return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
 }
 
@@ -1407,7 +1464,7 @@ export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloReal
 
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name, login_status, status, is_active, is_zalo_show_web)')
+    .select(CAMPAIGN_ZALO_REALTIME_SELECT)
     .eq('staff_id', u.staffId)
     .eq('action_id', ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
     .eq('is_delete', false)
@@ -1416,7 +1473,7 @@ export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloReal
   if (error) throw new Error(`Không thể tải danh sách chiến dịch Zalo theo thời gian thực: ${error.message}`)
 
   return (data || []).flatMap(row => {
-    const account = (row as Record<string, any>).auto_accounts || {}
+    const account = (row as Record<string, any>).primary_account || {}
     if (account.is_zalo_show_web === true) return []
     return [{
       campaign: mapCampaignFromDB(row),
@@ -1456,13 +1513,91 @@ export async function enqueueZaloRealtimeGroupEvent(
   }
 }
 
+function normalizeSecondaryAccountId(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const accountId = Math.floor(Number(value))
+  if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+    throw new Error('Tài khoản phụ phải là một tài khoản hợp lệ.')
+  }
+  return accountId
+}
+
+async function validateSecondaryCampaignAccount(
+  actionId: string,
+  primaryAccount: AutoAccount,
+  secondaryAccountIdValue: unknown,
+  staffId: number,
+  organizationId: number
+): Promise<number | null> {
+  const secondaryAccountId = normalizeSecondaryAccountId(secondaryAccountIdValue)
+  if (secondaryAccountId === null) return null
+
+  if (secondaryAccountId === primaryAccount.id) {
+    throw new Error('Tài khoản phụ phải khác tài khoản chính.')
+  }
+
+  const { data: action, error: actionError } = await client()
+    .from('auto_campaign_actions')
+    .select('id, flatform_type, allow_secondary_account')
+    .eq('id', actionId)
+    .eq('is_delete', false)
+    .maybeSingle()
+  if (actionError) {
+    throw new Error(`Không thể kiểm tra cấu hình tài khoản phụ: ${actionError.message}`)
+  }
+  if (!action || action.allow_secondary_account !== true) {
+    throw new Error('Loại chiến dịch này không hỗ trợ tài khoản phụ.')
+  }
+
+  const secondaryAccount = await accountRepo.getAccount(secondaryAccountId)
+  if (!secondaryAccount) {
+    throw new Error('Tài khoản phụ không tồn tại hoặc không phù hợp với gói hiện tại.')
+  }
+
+  const isSameTenant =
+    primaryAccount.staffId === staffId &&
+    secondaryAccount.staffId === staffId &&
+    primaryAccount.organizationId === organizationId &&
+    secondaryAccount.organizationId === organizationId
+  if (!isSameTenant) {
+    throw new Error('Tài khoản chính và tài khoản phụ phải thuộc cùng nhân viên và tổ chức hiện tại.')
+  }
+
+  const primaryPlatform = String(primaryAccount.flatformType || '').trim().toLowerCase()
+  const secondaryPlatform = String(secondaryAccount.flatformType || '').trim().toLowerCase()
+  const actionPlatform = String(action.flatform_type || '').trim().toLowerCase()
+  if (
+    !primaryPlatform ||
+    primaryPlatform !== secondaryPlatform ||
+    (actionPlatform !== 'all' && actionPlatform !== primaryPlatform)
+  ) {
+    throw new Error('Tài khoản phụ phải cùng nền tảng với tài khoản chính và loại chiến dịch.')
+  }
+
+  if (primaryPlatform === 'zalo' && primaryAccount.isZaloShowWeb !== secondaryAccount.isZaloShowWeb) {
+    throw new Error('Tài khoản phụ Zalo phải cùng loại QR hoặc Trình duyệt với tài khoản chính.')
+  }
+
+  return secondaryAccountId
+}
+
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
   await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
   const accountId = Math.floor(Number(campaign.accountId))
-  if (!Number.isSafeInteger(accountId) || accountId <= 0 || !await accountRepo.getAccount(accountId)) {
+  const primaryAccount = Number.isSafeInteger(accountId) && accountId > 0
+    ? await accountRepo.getAccount(accountId)
+    : null
+  if (!primaryAccount) {
     throw new Error('Tài khoản chiến dịch không tồn tại hoặc không phù hợp với gói hiện tại.')
   }
+  const secondaryAccountId = await validateSecondaryCampaignAccount(
+    String(campaign.actionId || ''),
+    primaryAccount,
+    campaign.secondaryAccountId,
+    u.staffId,
+    u.organizationId
+  )
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   const isSmsCampaign = isMobileManagedSmsCampaignAction(campaign.actionId)
   const extraSettings = clampCampaignExtraSettingsDailyLimits(campaign.extraSettings, campaign.actionId, entitlements)
@@ -1483,7 +1618,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   if (creationBundleId !== null && creationBundleChildIndex !== null) {
     const { data: existing, error: existingError } = await client()
       .from('auto_campaigns')
-      .select('*, auto_campaign_actions(name), auto_accounts(name)')
+      .select(CAMPAIGN_SELECT)
       .eq('staff_id', u.staffId)
       .eq('organization_id', u.organizationId)
       .eq('creation_bundle_id', creationBundleId)
@@ -1497,6 +1632,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     name: campaign.name,
     action_id: campaign.actionId,
     account_id: accountId,
+    secondary_account_id: secondaryAccountId,
     status: campaign.status || 'chờ xử lý',
     schedule: campaign.schedule || null,
     original_schedule: campaign.originalSchedule ?? campaign.schedule ?? null,
@@ -1524,7 +1660,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const { data, error } = await client()
     .from('auto_campaigns')
     .insert(payload)
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .single()
 
   if (error) throw new Error(`Failed to create campaign: ${error.message}`)
@@ -1706,9 +1842,16 @@ function getMobileContentUpdateFailureMessage(actionId: string, paused: boolean)
 
 export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
   const u = requireCurrentUser()
+  let currentCampaignForUpdate: Campaign | null | undefined
+  const loadCurrentCampaignForUpdate = async (): Promise<Campaign> => {
+    if (currentCampaignForUpdate === undefined) {
+      currentCampaignForUpdate = await getCampaign(id)
+    }
+    if (!currentCampaignForUpdate) throw new Error('Không tìm thấy chiến dịch cần cập nhật.')
+    return currentCampaignForUpdate
+  }
   if (updates.dataTargetSourceMode !== undefined || updates.dataGroupId !== undefined) {
-    const currentCampaign = await getCampaign(id)
-    if (!currentCampaign) throw new Error('Không tìm thấy chiến dịch cần cập nhật.')
+    const currentCampaign = await loadCurrentCampaignForUpdate()
     const nextSourceMode = updates.dataTargetSourceMode ?? currentCampaign.dataTargetSourceMode ?? 'direct'
     const nextGroupId = updates.dataGroupId !== undefined
       ? (updates.dataGroupId ?? null)
@@ -1720,11 +1863,31 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
       throw new Error('Đổi nguồn hoặc Nhóm data phải đi qua thao tác bind nguyên tử của Nhóm data.')
     }
   }
-  if (updates.accountId !== undefined) {
-    const accountId = Math.floor(Number(updates.accountId))
-    if (!Number.isSafeInteger(accountId) || accountId <= 0 || !await accountRepo.getAccount(accountId)) {
+  let normalizedSecondaryAccountId: number | null | undefined
+  if (
+    updates.actionId !== undefined ||
+    updates.accountId !== undefined ||
+    updates.secondaryAccountId !== undefined
+  ) {
+    const currentCampaign = await loadCurrentCampaignForUpdate()
+    const nextAccountId = updates.accountId === undefined
+      ? currentCampaign.accountId
+      : Math.floor(Number(updates.accountId))
+    const primaryAccount = Number.isSafeInteger(nextAccountId) && nextAccountId > 0
+      ? await accountRepo.getAccount(nextAccountId)
+      : null
+    if (!primaryAccount) {
       throw new Error('Tài khoản chiến dịch không tồn tại hoặc không phù hợp với gói hiện tại.')
     }
+    normalizedSecondaryAccountId = await validateSecondaryCampaignAccount(
+      updates.actionId ?? currentCampaign.actionId,
+      primaryAccount,
+      updates.secondaryAccountId === undefined
+        ? currentCampaign.secondaryAccountId
+        : updates.secondaryAccountId,
+      u.staffId,
+      u.organizationId
+    )
   }
   let targetActionId: string | null | undefined = updates.actionId
   if (updates.actionId !== undefined) {
@@ -1744,6 +1907,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.actionId !== undefined) payload.action_id = updates.actionId
   if (updates.accountId !== undefined) payload.account_id = Math.floor(Number(updates.accountId))
+  if (updates.secondaryAccountId !== undefined) payload.secondary_account_id = normalizedSecondaryAccountId ?? null
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.schedule !== undefined) payload.schedule = updates.schedule
   if (updates.originalSchedule !== undefined) payload.original_schedule = updates.originalSchedule
@@ -1781,7 +1945,7 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .single()
 
   if (error) throw new Error(`Failed to update campaign: ${error.message}`)
@@ -1829,7 +1993,7 @@ export async function updateClaimedZaloServerCampaign(
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('status', 'đang chạy')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .maybeSingle()
 
   if (error) throw new Error(`Failed to update claimed Zalo Server campaign: ${error.message}`)
@@ -1863,7 +2027,7 @@ export async function reopenCompletedCampaignAfterInputInsert(
     .eq('action_id', expectedActionId)
     .eq('is_delete', false)
     .eq('status', 'hoàn thành')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .maybeSingle()
 
   if (error) throw new Error(`Failed to reopen campaign after input insert: ${error.message}`)
@@ -1906,6 +2070,20 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
 
   if (errC || !origCamp) throw new Error(`Campaign not found: ${errC?.message}`)
   await ensureCurrentUserCanUseCampaignAction(origCamp.action_id)
+  let clonedSecondaryAccountId: number | null = null
+  if (origCamp.secondary_account_id !== null && origCamp.secondary_account_id !== undefined) {
+    const primaryAccount = await accountRepo.getAccount(Number(origCamp.account_id))
+    if (!primaryAccount) {
+      throw new Error('Tài khoản chính của chiến dịch gốc không còn khả dụng để nhân bản.')
+    }
+    clonedSecondaryAccountId = await validateSecondaryCampaignAccount(
+      String(origCamp.action_id || ''),
+      primaryAccount,
+      origCamp.secondary_account_id,
+      u.staffId,
+      u.organizationId
+    )
+  }
   const isDataGroupClone = origCamp.data_target_source_mode === 'data_group'
     && Number.isSafeInteger(Number(origCamp.data_group_id))
     && Number(origCamp.data_group_id) > 0
@@ -1918,6 +2096,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       name: origCamp.name + ' (Copy)',
       action_id: origCamp.action_id,
       account_id: origCamp.account_id,
+      secondary_account_id: clonedSecondaryAccountId,
       status: 'tạm dừng',
       schedule: origCamp.schedule,
       original_schedule: origCamp.schedule,
@@ -1941,7 +2120,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       staff_id: u.staffId,
       organization_id: u.organizationId
     })
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .single()
 
   if (errInsert || !newCamp) throw new Error(`Failed to insert cloned campaign: ${errInsert?.message}`)
@@ -2062,7 +2241,7 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
 
     const { data: readyClone, error: readyCloneError } = await client()
       .from('auto_campaigns')
-      .select('*, auto_campaign_actions(name), auto_accounts(name)')
+      .select(CAMPAIGN_SELECT)
       .eq('id', newCamp.id)
       .eq('staff_id', u.staffId)
       .single()
@@ -2079,7 +2258,7 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
   const u = requireCurrentUser()
   const { data: current, error: currentError } = await client()
     .from('auto_campaigns')
-    .select('name, auto_accounts(name)')
+    .select(`name, ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`)
     .eq('id', campaignId)
     .eq('staff_id', u.staffId)
     .single()
@@ -2089,7 +2268,7 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
 
   const newLog = formatStoredCampaignLogLine(logText, {
     campaignName: (current as any)?.name,
-    accountName: (current as any)?.auto_accounts?.name
+    accountName: (current as any)?.primary_account?.name
   })
 
   const { error: appendError } = await client().rpc('append_auto_campaign_log', {
@@ -2107,7 +2286,7 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
 
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .eq('id', campaignId)
     .eq('staff_id', u.staffId)
     .single()
@@ -2161,7 +2340,7 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
   const currentVietnamTime = formatVietnamTimeForQuery(now)
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .eq('account_id', accountId)
     .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
@@ -2183,7 +2362,7 @@ export async function getDueMobileManagedCampaignsForLimitCheck(accountId: numbe
   const now = new Date()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .eq('account_id', accountId)
     .eq('staff_id', u.staffId)
     .eq('status', 'chờ xử lý')
@@ -2203,8 +2382,8 @@ export async function maintainCampaignSchedules(
   const u = requireCurrentUser()
   const todayStart = startOfVietnamDay()
   const accountRelation = platformScope === 'all'
-    ? 'auto_accounts(name)'
-    : 'auto_accounts!inner(name, flatform_type)'
+    ? CAMPAIGN_PRIMARY_ACCOUNT_RELATION
+    : 'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type)'
   let query = client()
     .from('auto_campaigns')
     .select(`*, auto_campaign_actions(name), ${accountRelation}`)
@@ -2216,9 +2395,9 @@ export async function maintainCampaignSchedules(
     .in('status', ['chờ xử lý', 'hoàn thành'])
 
   if (platformScope === 'zalo') {
-    query = query.eq('auto_accounts.flatform_type', 'zalo')
+    query = query.eq('primary_account.flatform_type', 'zalo')
   } else if (platformScope === 'non-zalo') {
-    query = query.neq('auto_accounts.flatform_type', 'zalo')
+    query = query.neq('primary_account.flatform_type', 'zalo')
   }
 
   const { data, error } = await query
@@ -3558,7 +3737,7 @@ export async function listCampaignRelationSummaries(campaignIds: number[]): Prom
 
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name), auto_accounts(name)')
+    .select(CAMPAIGN_SELECT)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .in('id', ids)
@@ -3767,7 +3946,7 @@ async function createCampaignInputDataBatchInternal(
   for (const [campaignId, campaignActions] of actionsByCampaignId) {
     const { data: campaignRow, error: campaignError } = await client()
       .from('auto_campaigns')
-      .select('*, auto_campaign_actions(name), auto_accounts(name)')
+      .select(CAMPAIGN_SELECT)
       .eq('id', campaignId)
       .eq('staff_id', u.staffId)
       .eq('organization_id', u.organizationId)
@@ -4123,7 +4302,7 @@ export async function addCampaignInputDataRows(
 
   const { data: campaignRow, error: campaignError } = await client()
     .from('auto_campaigns')
-    .select('*, auto_campaign_actions(name, is_active, is_delete), auto_accounts(name)')
+    .select(CAMPAIGN_ACTION_STATUS_SELECT)
     .eq('id', campaignId)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
@@ -4287,7 +4466,7 @@ export async function addCampaignInputDataToCampaign(
   for (const idChunk of chunkArray(targetCampaignIds, 500)) {
     const { data, error: targetError } = await client()
       .from('auto_campaigns')
-      .select('*, auto_campaign_actions(name), auto_accounts(name)')
+      .select(CAMPAIGN_SELECT)
       .eq('staff_id', u.staffId)
       .eq('is_delete', false)
       .in('id', idChunk)

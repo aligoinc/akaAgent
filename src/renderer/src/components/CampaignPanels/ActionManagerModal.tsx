@@ -18,6 +18,7 @@ interface ActionFormData {
   testWorkflowId: number | ''
   limitCheckActionCodes: string[]
   allowMultipleAccounts: boolean
+  allowSecondaryAccount: boolean
   isActive: boolean
 }
 
@@ -29,6 +30,7 @@ const emptyForm: ActionFormData = {
   testWorkflowId: '',
   limitCheckActionCodes: [],
   allowMultipleAccounts: false,
+  allowSecondaryAccount: false,
   isActive: true
 }
 
@@ -98,6 +100,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       testWorkflowId: action.testWorkflowId ?? '',
       limitCheckActionCodes: action.limitCheckActionCodes || [],
       allowMultipleAccounts: action.allowMultipleAccounts ?? false,
+      allowSecondaryAccount: action.allowSecondaryAccount ?? false,
       isActive: action.isActive
     })
     setIsEditing(true)
@@ -181,6 +184,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       workflowId: formData.workflowId === '' ? undefined : Number(formData.workflowId),
       testWorkflowId: formData.testWorkflowId === '' ? undefined : Number(formData.testWorkflowId),
       allowMultipleAccounts: formData.allowMultipleAccounts,
+      allowSecondaryAccount: formData.allowSecondaryAccount,
       limitCheckActionCodes: formData.limitCheckActionCodes
     }
 
@@ -258,6 +262,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                         {action.isActive ? 'Bật' : 'Tắt'}
                       </span>
                       <span>{action.allowMultipleAccounts === false ? '1 tài khoản' : 'Nhiều tài khoản'}</span>
+                      <span>{action.allowSecondaryAccount ? 'Hỗ trợ TK phụ' : 'Không TK phụ'}</span>
                     </div>
                     <div className="action-manager-code-line">
                       {formatActionCodes(action.limitCheckActionCodes)}
@@ -372,6 +377,15 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                         onChange={e => setFormData(prev => ({ ...prev, allowMultipleAccounts: e.target.checked }))}
                       />
                       <span>Cho phép chọn nhiều tài khoản</span>
+                    </label>
+
+                    <label className="action-manager-toggle">
+                      <input
+                        type="checkbox"
+                        checked={formData.allowSecondaryAccount}
+                        onChange={e => setFormData(prev => ({ ...prev, allowSecondaryAccount: e.target.checked }))}
+                      />
+                      <span>Cho phép chọn tài khoản phụ</span>
                     </label>
                   </div>
 
