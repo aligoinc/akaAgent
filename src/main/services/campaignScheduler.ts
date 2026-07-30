@@ -1170,10 +1170,17 @@ export class CampaignScheduler {
       return false
     }
 
-    const updates: Partial<Campaign> = { status: 'hoàn thành' }
-    if (note !== undefined) updates.note = note
-    const updated = await this.updateCampaignAndBroadcast(campaign.id, updates)
-    return updated.status === 'hoàn thành'
+    const finalized = await this.supabase.finalizeCampaign(campaign.id, note)
+    const updated = await this.supabase.getCampaign(campaign.id)
+    if (!updated) throw new Error('Không tìm thấy chiến dịch sau khi finalize pending-input guard.')
+    this.broadcastCampaignUpdate(updated)
+    if (finalized.reason === 'pending_input_remaining') {
+      await this.logCampaignProgress(
+        campaign.id,
+        `⏳ Phát hiện ${finalized.pendingInputCount} data mới đang chờ xử lý; chiến dịch chưa hoàn thành.`
+      )
+    }
+    return finalized.completed && updated.status === 'hoàn thành'
   }
 
   private isDataGroupCampaignHardEnded(campaign: Campaign, now = Date.now()): boolean {
@@ -8141,9 +8148,11 @@ export class CampaignScheduler {
 
         await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${uids.length} UID sang chiến dịch "${targetCampaign.name}"`)
         await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${uids.length} UID từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
-        if (targetCampaign.status === 'hoàn thành') {
-          await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
-        }
+        const reopenedTarget = await this.supabase.reopenCompletedCampaignAfterInputInsert(
+          targetCampaign.id,
+          MESSAGE_UID_ACTION_ID
+        )
+        if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
       } catch (err) {
         console.error('Failed to push found UIDs to target campaign:', err)
       }
@@ -8186,9 +8195,11 @@ export class CampaignScheduler {
 
         await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${postLinks.length} link bài post sang chiến dịch "${targetCampaign.name}"`)
         await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${postLinks.length} link bài post từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
-        if (targetCampaign.status === 'hoàn thành') {
-          await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
-        }
+        const reopenedTarget = await this.supabase.reopenCompletedCampaignAfterInputInsert(
+          targetCampaign.id,
+          COMMENT_SEEDING_POST_ACTION_ID
+        )
+        if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
       } catch (err) {
         console.error('Failed to push found post links to target campaign:', err)
       }
@@ -8256,9 +8267,11 @@ export class CampaignScheduler {
 
           await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${groups.length} link group Facebook sang ${config.label} "${targetCampaign.name}"`)
           await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${groups.length} link group Facebook từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
-          if (targetCampaign.status === 'hoàn thành') {
-            await this.updateCampaignAndBroadcast(targetCampaign.id, { status: 'chờ xử lý' })
-          }
+          const reopenedTarget = await this.supabase.reopenCompletedCampaignAfterInputInsert(
+            targetCampaign.id,
+            config.actionId
+          )
+          if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
         } catch (err) {
           console.error('Failed to push found Facebook groups to target campaign:', err)
         }
@@ -9391,6 +9404,11 @@ export class CampaignScheduler {
           schedule: nowIso,
           content
         })
+        const reopenedChildCampaign = await this.supabase.reopenCompletedCampaignAfterInputInsert(
+          childCampaign.id,
+          SMS_SEND_ACTION_ID
+        )
+        if (reopenedChildCampaign) this.broadcastCampaignUpdate(reopenedChildCampaign)
         successCount += 1
       } catch (err) {
         console.error('Failed to push Zalo detail to internal SMS campaign:', err)
@@ -9534,7 +9552,7 @@ export class CampaignScheduler {
           }))
         )
 
-        const reopenedTarget = await this.supabase.reopenCompletedZaloServerCampaignAfterInputInsert(
+        const reopenedTarget = await this.supabase.reopenCompletedCampaignAfterInputInsert(
           targetCampaign.id,
           ZALO_MESSAGE_PHONE_ACTION_ID
         )
@@ -9611,7 +9629,7 @@ export class CampaignScheduler {
           }))
         )
 
-        const reopenedTarget = await this.supabase.reopenCompletedZaloServerCampaignAfterInputInsert(
+        const reopenedTarget = await this.supabase.reopenCompletedCampaignAfterInputInsert(
           targetCampaign.id,
           ZALO_JOIN_GROUP_LINK_ACTION_ID
         )
@@ -12594,6 +12612,27 @@ export class CampaignScheduler {
     if (updates.status === 'hoàn thành' && this.claimedServerZaloCampaignIds.has(id)) {
       const result = await this.finalizeClaimedServerZaloCampaign(id, updates.note)
       updated = result.campaign
+    } else if (updates.status === 'hoàn thành') {
+      const campaign = await this.supabase.getCampaign(id)
+      if (!campaign) throw new Error('Không tìm thấy chiến dịch trước khi kiểm tra data để hoàn thành.')
+      const nonFinalizationUpdates = { ...updates }
+      delete nonFinalizationUpdates.status
+      delete nonFinalizationUpdates.note
+      if (Object.keys(nonFinalizationUpdates).length > 0) {
+        await this.supabase.updateCampaign(id, nonFinalizationUpdates)
+      }
+      if (campaign.dataTargetSourceMode === 'data_group') {
+        await this.supabase.finalizeDataGroupCampaign(
+          id,
+          updates.note,
+          this.dataGroupRuntimeContext()
+        )
+      } else {
+        await this.supabase.finalizeCampaign(id, updates.note)
+      }
+      const finalizedCampaign = await this.supabase.getCampaign(id)
+      if (!finalizedCampaign) throw new Error('Không tìm thấy chiến dịch sau khi kiểm tra data để hoàn thành.')
+      updated = finalizedCampaign
     } else if (updates.status !== undefined && this.claimedServerZaloCampaignIds.has(id)) {
       updated = await this.supabase.updateClaimedZaloServerCampaign(id, updates)
     } else {
