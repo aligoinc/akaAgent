@@ -2419,8 +2419,10 @@ function AddDataToCurrentCampaignModal({
             actionId={campaign.actionId}
             actionName={campaignAction?.name}
             accountIds={[account.id]}
+            showDatasetName={false}
             onClose={() => setShowDataUploadModal(false)}
             onInsert={appendRows}
+            onSubmitRows={({ rows: importedRows }) => appendRows(importedRows)}
           />
         </div>
       )}

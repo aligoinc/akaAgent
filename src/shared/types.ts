@@ -741,6 +741,8 @@ export type CampaignStatus = typeof CAMPAIGN_STATUSES[number]
 //     (lỗi action-level đã track ở campaign_details; khi run fail set 'hoàn thành' + note=errMsg)
 export type CampaignInputStatus = 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'
 
+export const CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS = 10_000
+
 // Pool nguyên liệu thô (e.g. danh sách group để scrape members → campaign_input_data)
 export interface CampaignInput {
   id: number
@@ -787,6 +789,12 @@ export interface CampaignInputData {
   dataTypeName?: string | null
   /** Audit routes that materialized or later converged on this canonical input. */
   origins?: CampaignInputDataOrigin[]
+}
+
+export interface CampaignInputDataWriteProgress {
+  requestId: string
+  processedCount: number
+  totalCount: number
 }
 
 export interface CampaignInputDataOrigin {
@@ -951,6 +959,11 @@ export const isCampaignInputDataValidForAction = (
 
 export interface BulkUpdateCampaignInputDataStatusResult {
   updatedCount: number
+  skippedCount: number
+}
+
+export interface BulkDeleteCampaignInputDataResult {
+  deletedCount: number
   skippedCount: number
 }
 
@@ -2576,12 +2589,16 @@ export const IPC_EVENTS = {
   // Database Campaign Input Data (việc-cần-làm thực thi)
   DB_LIST_CAMPAIGN_INPUT_DATA: 'db:list-campaign-input-data',
   DB_LIST_CAMPAIGN_INPUT_DATA_PAGE: 'db:list-campaign-input-data-page',
+  DB_GET_CAMPAIGN_INPUT_DATA_LIMIT: 'db:get-campaign-input-data-limit',
   DB_CREATE_CAMPAIGN_INPUT_DATA: 'db:create-campaign-input-data',
+  DB_CREATE_CAMPAIGN_INPUT_DATA_BATCH: 'db:create-campaign-input-data-batch',
+  DB_CAMPAIGN_INPUT_DATA_WRITE_PROGRESS: 'db:campaign-input-data-write-progress',
   DB_UPDATE_CAMPAIGN_INPUT_DATA: 'db:update-campaign-input-data',
   DB_BULK_UPDATE_CAMPAIGN_INPUT_DATA_STATUS: 'db:bulk-update-campaign-input-data-status',
   DB_ADD_CAMPAIGN_INPUT_DATA_TO_CAMPAIGNS: 'db:add-campaign-input-data-to-campaigns',
   DB_ADD_CAMPAIGN_INPUT_DATA_ROWS: 'db:add-campaign-input-data-rows',
   DB_DELETE_CAMPAIGN_INPUT_DATA: 'db:delete-campaign-input-data',
+  DB_DELETE_CAMPAIGN_INPUT_DATA_BATCH: 'db:delete-campaign-input-data-batch',
   DB_LIST_CAMPAIGN_RELATION_SUMMARIES: 'db:list-campaign-relation-summaries',
 
   // Database Campaign Details (per-milestone log)

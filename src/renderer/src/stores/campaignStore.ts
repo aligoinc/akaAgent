@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
+import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
 
 interface CampaignStore {
   // Accounts
@@ -62,11 +62,16 @@ interface CampaignStore {
   loadCampaignInputData: (campaignId: number, query?: Omit<CampaignInputDataPageQuery, 'campaignId'>) => Promise<void>
   refreshCampaignInputData: (campaignId: number) => Promise<void>
   createCampaignInputData: (data: Partial<CampaignInputData>) => Promise<CampaignInputData>
+  createCampaignInputDataBatch: (
+    actions: Partial<CampaignInputData>[],
+    progressRequestId?: string
+  ) => Promise<number>
   updateCampaignInputData: (id: number, updates: Partial<CampaignInputData>) => Promise<void>
   bulkUpdateCampaignInputDataStatus: (campaignId: number, ids: number[], status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>) => Promise<BulkUpdateCampaignInputDataStatusResult>
   addCampaignInputDataToCampaign: (request: AddCampaignInputDataToCampaignRequest) => Promise<AddCampaignInputDataToCampaignResult>
   addCampaignInputDataRows: (request: AddCampaignInputDataRowsRequest) => Promise<AddCampaignInputDataRowsResult>
   deleteCampaignInputData: (id: number) => Promise<void>
+  deleteCampaignInputDataBatch: (ids: number[]) => Promise<BulkDeleteCampaignInputDataResult>
 
   // Campaign Details (per-milestone log) — status: 'thành công' | 'thất bại' | 'lỗi'
   campaignDetails: CampaignDetail[]
@@ -544,6 +549,20 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     return action
   },
 
+  createCampaignInputDataBatch: async (actions, progressRequestId) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    const insertedCount = await window.electronAPI.createCampaignInputDataBatch(actions, progressRequestId)
+    const { selectedCampaignId } = get()
+    if (selectedCampaignId) {
+      const activeQuery = activeCampaignInputDataQuery
+      const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === selectedCampaignId
+        ? activeQuery
+        : { campaignId: selectedCampaignId }
+      await get().loadCampaignInputData(selectedCampaignId, query)
+    }
+    return insertedCount
+  },
+
   updateCampaignInputData: async (id, updates) => {
     if (!window.electronAPI) return
     await window.electronAPI.updateCampaignInputData(id, updates)
@@ -609,6 +628,20 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
         : { campaignId: selectedCampaignId }
       await get().loadCampaignInputData(selectedCampaignId, query)
     }
+  },
+
+  deleteCampaignInputDataBatch: async (ids) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    const result = await window.electronAPI.deleteCampaignInputDataBatch(ids)
+    const { selectedCampaignId } = get()
+    if (selectedCampaignId) {
+      const activeQuery = activeCampaignInputDataQuery
+      const { campaignId: _campaignId, ...query } = activeQuery?.campaignId === selectedCampaignId
+        ? activeQuery
+        : { campaignId: selectedCampaignId }
+      await get().loadCampaignInputData(selectedCampaignId, query)
+    }
+    return result
   },
 
   // =========== CAMPAIGN DETAILS ===========

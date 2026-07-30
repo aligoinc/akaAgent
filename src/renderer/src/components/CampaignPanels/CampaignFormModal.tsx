@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -12,10 +12,12 @@ import {
   AutoAccountContact,
   AutoAccountContactGroup,
   Campaign,
+  CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS,
   CampaignDataTargetSourceMode,
   CampaignAction,
   CampaignImportPlatform,
   CampaignInputData,
+  CampaignInputDataWriteProgress,
   CampaignAdvancedContentItem,
   CampaignMediaInput,
   CampaignMediaSnapshot,
@@ -123,6 +125,8 @@ const CAMPAIGN_ACTION_PLATFORM_LABELS: Record<string, string> = {
   sms: 'SMS'
 }
 
+const CAMPAIGN_DETAILS_PAGE_SIZE = 100
+
 const normalizeCampaignActionPlatform = (platform?: string | null): string =>
   String(platform || '').trim().toLowerCase()
 
@@ -190,6 +194,142 @@ interface CampaignSaveBundleItem {
   campaignPayload: Partial<Campaign>
   details: Partial<CampaignInputData>[]
   dataGroupSnapshots: DirectDataGroupSnapshotIntent[]
+}
+
+interface CampaignSaveProgressState {
+  percent: number
+  label: string
+  processedRows?: number
+  totalRows?: number
+}
+
+interface CampaignSaveProgressRange {
+  itemIndex: number
+  itemCount: number
+}
+
+const waitForNextBrowserPaint = (): Promise<void> => (
+  new Promise(resolve => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 0)
+    })
+  })
+)
+
+interface CampaignSaveControlsProps {
+  starting: boolean
+  saving: boolean
+  progress: CampaignSaveProgressState | null
+  idleLabel: string
+  onSave: () => Promise<void>
+  onCancel: () => void
+  onStartingChange: (starting: boolean) => void
+}
+
+function CampaignSaveControls({
+  starting,
+  saving,
+  progress,
+  idleLabel,
+  onSave,
+  onCancel,
+  onStartingChange
+}: CampaignSaveControlsProps) {
+  const saveInFlightRef = useRef(false)
+  const busy = starting || saving
+  const visibleProgress = saving
+    ? (progress || { percent: 1, label: 'Đang chuẩn bị dữ liệu chiến dịch...' })
+    : starting
+      ? { percent: 1, label: 'Đang chuẩn bị dữ liệu chiến dịch...' }
+      : null
+
+  const startSave = async (): Promise<void> => {
+    if (saveInFlightRef.current || saving) return
+
+    saveInFlightRef.current = true
+    onStartingChange(true)
+    try {
+      // Paint the lightweight button state before campaign validation normalizes
+      // thousands of rows on the renderer thread.
+      await waitForNextBrowserPaint()
+      await onSave()
+    } finally {
+      saveInFlightRef.current = false
+      onStartingChange(false)
+    }
+  }
+
+  return (
+    <>
+      {visibleProgress && (
+        <div
+          className="campaign-save-progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={visibleProgress.percent}
+          aria-label="Tiến trình lưu chiến dịch"
+          aria-valuetext={`${visibleProgress.percent}%. ${visibleProgress.label}`}
+        >
+          <div className="campaign-save-progress-header">
+            <span className="campaign-save-progress-label" aria-live="polite">
+              {visibleProgress.label}
+            </span>
+            <strong className="campaign-save-progress-percent">{visibleProgress.percent}%</strong>
+          </div>
+          <div className="campaign-progress-track">
+            <span
+              className="campaign-progress-fill campaign-save-progress-fill"
+              style={{ width: `${visibleProgress.percent}%` }}
+            />
+          </div>
+          {visibleProgress.processedRows !== undefined && visibleProgress.totalRows !== undefined && (
+            <span className="campaign-save-progress-count">
+              {visibleProgress.processedRows.toLocaleString('vi-VN')}
+              {' / '}
+              {visibleProgress.totalRows.toLocaleString('vi-VN')} data của bước hiện tại
+            </span>
+          )}
+        </div>
+      )}
+      <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>Huỷ</button>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={() => { void startSave() }}
+        disabled={busy}
+        aria-busy={busy}
+      >
+        {busy ? (
+          <>
+            <Loader2 size={14} className="animate-spin" />
+            {saving ? `Đang lưu ${visibleProgress?.percent ?? 0}%` : 'Đang chuẩn bị...'}
+          </>
+        ) : idleLabel}
+      </button>
+    </>
+  )
+}
+
+const createCampaignSaveProgressRequestId = (): string => (
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `campaign-save-progress-${Date.now()}-${Math.random().toString(36).slice(2)}`
+)
+
+async function runCampaignInputDataWriteWithProgress<T>(
+  execute: (requestId: string) => Promise<T>,
+  onProgress: (progress: CampaignInputDataWriteProgress) => void
+): Promise<T> {
+  const requestId = createCampaignSaveProgressRequestId()
+  const unsubscribe = window.electronAPI.onCampaignInputDataWriteProgress(progress => {
+    if (progress.requestId === requestId) onProgress(progress)
+  })
+  try {
+    return await execute(requestId)
+  } finally {
+    unsubscribe()
+  }
 }
 
 interface DirectDataGroupSnapshotIntent {
@@ -512,6 +652,29 @@ const formatIpcErrorMessage = (err: unknown, fallback: string): string => {
     .replace(/^Error invoking remote method '[^']+':\s*/i, '')
     .replace(/^Error:\s*/i, '')
     .trim() || fallback
+}
+
+const assertCampaignSaveItemsWithinInputLimit = async (
+  items: CampaignSaveBundleItem[]
+): Promise<void> => {
+  if (items.length === 0) return
+
+  let campaignInputDataLimit = CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS
+  try {
+    campaignInputDataLimit = await window.electronAPI.getCampaignInputDataLimit()
+  } catch (err) {
+    throw new Error(formatIpcErrorMessage(err, 'Không thể tải giới hạn data chiến dịch.'))
+  }
+
+  const oversizedSaveItem = items.find(
+    item => item.details.length > campaignInputDataLimit
+  )
+  if (!oversizedSaveItem) return
+
+  throw new Error(
+    `Mỗi chiến dịch chỉ được lưu tối đa ${campaignInputDataLimit.toLocaleString('vi-VN')} data. ` +
+    `Chiến dịch đang có ${oversizedSaveItem.details.length.toLocaleString('vi-VN')} data.`
+  )
 }
 
 const formatCampaignDataCreationErrorNote = (err: unknown): string => {
@@ -1555,7 +1718,24 @@ export default function CampaignFormModal({
   const advancedContentEditorRefs = useRef<Record<string, EmailHtmlEditorHandle>>({})
   const activeRichContentEditorRef = useRef<{ itemId: string | null; editor: EmailHtmlEditorHandle } | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [saveStarting, setSaveStarting] = useState(false)
   const [savingCampaign, setSavingCampaign] = useState(false)
+  const saveBusy = saveStarting || savingCampaign
+  const [saveProgress, setSaveProgress] = useState<CampaignSaveProgressState | null>(null)
+  const updateSaveProgress = (
+    percent: number,
+    label: string,
+    processedRows?: number,
+    totalRows?: number
+  ): void => {
+    const normalizedPercent = Math.max(0, Math.min(100, Math.round(percent)))
+    setSaveProgress(current => ({
+      percent: Math.max(current?.percent ?? 0, normalizedPercent),
+      label,
+      processedRows,
+      totalRows
+    }))
+  }
 
   const initSchedule = () => {
     if (cloneFromId) return formatDateTimeLocal(new Date())
@@ -3293,6 +3473,15 @@ export default function CampaignFormModal({
     status: 'chờ xử lý'
   }))
   const [details, setDetails] = useState<Partial<CampaignInputData>[]>(() => normalizeInitialDetails(initialDetails))
+  const [detailsPage, setDetailsPage] = useState(1)
+  const detailsPageCount = Math.max(1, Math.ceil(details.length / CAMPAIGN_DETAILS_PAGE_SIZE))
+  const visibleDetailsPage = Math.min(detailsPage, detailsPageCount)
+  const detailsPageStartIndex = (visibleDetailsPage - 1) * CAMPAIGN_DETAILS_PAGE_SIZE
+  const detailsPageEndIndex = Math.min(details.length, detailsPageStartIndex + CAMPAIGN_DETAILS_PAGE_SIZE)
+  const visibleDetails = useMemo(
+    () => details.slice(detailsPageStartIndex, detailsPageEndIndex),
+    [details, detailsPageEndIndex, detailsPageStartIndex]
+  )
   const [findDataSearchKeywordsText, setFindDataSearchKeywordsText] = useState(() =>
     initialIsFindDataSearchCampaign ? formatFindDataSearchKeywordsText(normalizeInitialDetails(initialDetails)) : ''
   )
@@ -3306,6 +3495,11 @@ export default function CampaignFormModal({
   const directDataSourceSelectionCount = detailEntryCount + directDataGroupSnapshots.length
   const [deletedIds, setDeletedIds] = useState<number[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
+
+  useEffect(() => {
+    setDetailsPage(current => Math.min(current, detailsPageCount))
+  }, [detailsPageCount])
+
   const [akabizIntegrations, setAkaBizIntegrations] = useState<AkaBizIntegrations | null>(null)
   const [akabizIntegrationsLoading, setAkaBizIntegrationsLoading] = useState(false)
   const [externalSmsShops, setExternalSmsShops] = useState<AkaBizSmsShopListItem[]>([])
@@ -6292,9 +6486,15 @@ export default function CampaignFormModal({
     }
 
     setSavingCampaign(true)
+    setSaveProgress({
+      percent: 1,
+      label: 'Đang chuẩn bị nội dung chiến dịch...'
+    })
+    await waitForNextBrowserPaint()
     const advancedContentForSave = await prepareAdvancedContentForSave()
     if (!advancedContentForSave) {
       setSavingCampaign(false)
+      setSaveProgress(null)
       return
     }
 
@@ -6302,6 +6502,18 @@ export default function CampaignFormModal({
       if (!onSaveDraft || !draftPickerSourceType) {
         showAlert('Không thể tạo chiến dịch tạm trong ngữ cảnh hiện tại.', 'error')
         setSavingCampaign(false)
+        setSaveProgress(null)
+        return
+      }
+      const draftItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
+      try {
+        updateSaveProgress(3, 'Đang kiểm tra giới hạn data...')
+        await assertCampaignSaveItemsWithinInputLimit(draftItems)
+      } catch (err) {
+        console.error('Failed to validate campaign draft input limit:', err)
+        showAlert(formatIpcErrorMessage(err, 'Không thể kiểm tra giới hạn data chiến dịch.'), 'error')
+        setSavingCampaign(false)
+        setSaveProgress(null)
         return
       }
       onSaveDraft({
@@ -6309,14 +6521,82 @@ export default function CampaignFormModal({
         sourceType: draftPickerSourceType,
         actionId: formData.actionId,
         requiredTargetField: draftRequiredTargetField,
-        items: buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
+        items: draftItems
       })
       setSavingCampaign(false)
+      setSaveProgress(null)
       return
     }
 
     try {
-      const { deleteCampaignInputData, updateCampaignInputData, createCampaignInputData, createCampaign, updateCampaign } = useCampaignStore.getState()
+      updateSaveProgress(3, 'Đang kiểm tra và chuẩn hóa dữ liệu...')
+      const {
+        createCampaign,
+        createCampaignInputDataBatch,
+        deleteCampaignInputDataBatch,
+        updateCampaign,
+        updateCampaignInputData
+      } = useCampaignStore.getState()
+      const saveBundleItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
+      const linkedDraftTempIds: number[] = []
+      const linkedDraftTempIdSet = new Set<number>()
+      const collectLinkedDraftTempIds = (ids: number[], enabled: boolean): void => {
+        if (!enabled) return
+        for (const id of ids) {
+          if (id >= 0 || linkedDraftTempIdSet.has(id)) continue
+          linkedDraftTempIdSet.add(id)
+          linkedDraftTempIds.push(id)
+        }
+      }
+      if (isFindDataCampaign) {
+        collectLinkedDraftTempIds(
+          formData.findUidTargetCampaignIds,
+          formData.isFindUid && handleFoundUidData
+        )
+        collectLinkedDraftTempIds(
+          formData.findPostLinkTargetCampaignIds,
+          formData.isFindPostLink && handleFoundPostLinkData
+        )
+        collectLinkedDraftTempIds(
+          formData.findPhoneZaloMessagePhoneTargetCampaignIds,
+          formData.isFindPhone && canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData
+        )
+        collectLinkedDraftTempIds(
+          formData.findZaloGroupLinkJoinTargetCampaignIds,
+          formData.isFindLinkGroupZalo && canUseZaloFeature && handleFoundZaloGroupLinkJoinData
+        )
+        collectLinkedDraftTempIds(
+          formData.findFacebookGroupPostTargetCampaignIds,
+          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupPostData
+        )
+        collectLinkedDraftTempIds(
+          formData.findFacebookGroupCommentTargetCampaignIds,
+          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupCommentData
+        )
+        collectLinkedDraftTempIds(
+          formData.findFacebookGroupJoinTargetCampaignIds,
+          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupJoinData
+        )
+      }
+      collectLinkedDraftTempIds(
+        selectedFindDataSourceCampaignIds,
+        !!targetFindDataField
+      )
+
+      const linkedDraftProgressStartIndexByTempId = new Map<number, number>()
+      let campaignWorkItemCount = saveBundleItems.length
+      const newCampaignItemsToValidate = campaign?.id
+        ? []
+        : [...saveBundleItems]
+      for (const tempId of linkedDraftTempIds) {
+        const draft = internalCampaignDrafts.find(item => item.tempId === tempId)
+        if (!draft || draft.items.length === 0) continue
+        linkedDraftProgressStartIndexByTempId.set(tempId, campaignWorkItemCount)
+        campaignWorkItemCount += draft.items.length
+        newCampaignItemsToValidate.push(...draft.items)
+      }
+      await assertCampaignSaveItemsWithinInputLimit(newCampaignItemsToValidate)
+      updateSaveProgress(5, 'Đã kiểm tra giới hạn data.')
       const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
       const detailIdsToDelete = shouldDiscardDetailsForSave
         ? Array.from(new Set([
@@ -6327,13 +6607,11 @@ export default function CampaignFormModal({
         ]))
         : deletedIds
 
-      if (!isEditingSavedCampaign || shouldDiscardDetailsForSave) {
-        for (const id of detailIdsToDelete) {
-          await deleteCampaignInputData(id)
-        }
+      if ((!isEditingSavedCampaign || shouldDiscardDetailsForSave) && detailIdsToDelete.length > 0) {
+        updateSaveProgress(6, 'Đang cập nhật danh sách data...')
+        await deleteCampaignInputDataBatch(detailIdsToDelete)
       }
 
-      const saveBundleItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
       const generatedSaveRequestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID()
         : `campaign-data-group-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -6363,27 +6641,98 @@ export default function CampaignFormModal({
         }
       }
       const creationBundle = isDataGroupSource && !campaign?.id
-        ? await window.electronAPI.createCampaignCreationBundle({
-            requestId: saveRequestId,
-            expectedCampaignCount: saveBundleItems.length
-          })
+        ? await (async () => {
+            updateSaveProgress(7, 'Đang chuẩn bị liên kết Nhóm data...')
+            return window.electronAPI.createCampaignCreationBundle({
+              requestId: saveRequestId,
+              expectedCampaignCount: saveBundleItems.length
+            })
+          })()
         : null
+      updateSaveProgress(8, 'Đang bắt đầu lưu chiến dịch...')
       const savedCampaignIds: number[] = []
       const savedCampaignPayloadById = new Map<number, Partial<Campaign>>()
       const stagedCampaignFinalStatusById = new Map<number, string>()
       const emptySnapshotCampaigns: Array<{ campaignId: number; campaignName: string }> = []
+      const campaignWorkProgressByIndex = new Map<number, number>()
+      const campaignLinkSyncWeight = 0.1
+      let campaignLinkSyncProgress = 0
+      const campaignWorkTotalWeight = campaignWorkItemCount + campaignLinkSyncWeight
+      const getCampaignWorkPercent = (): number => {
+        let completedWeight = campaignLinkSyncProgress * campaignLinkSyncWeight
+        campaignWorkProgressByIndex.forEach(ratio => {
+          completedWeight += ratio
+        })
+        return 8 + (87 * (completedWeight / Math.max(campaignLinkSyncWeight, campaignWorkTotalWeight)))
+      }
+      const updateCampaignWorkProgress = (
+        itemIndex: number,
+        ratio: number,
+        label: string,
+        processedRows?: number,
+        totalRows?: number
+      ): void => {
+        const normalizedRatio = Math.max(0, Math.min(1, ratio))
+        const currentRatio = campaignWorkProgressByIndex.get(itemIndex) ?? 0
+        campaignWorkProgressByIndex.set(itemIndex, Math.max(currentRatio, normalizedRatio))
+        updateSaveProgress(
+          getCampaignWorkPercent(),
+          label,
+          processedRows,
+          totalRows
+        )
+      }
+      const updateCampaignWorkPhase = (label: string): void => {
+        updateSaveProgress(getCampaignWorkPercent(), label)
+      }
+      const completeCampaignLinkSyncProgress = (label: string): void => {
+        campaignLinkSyncProgress = 1
+        updateSaveProgress(getCampaignWorkPercent(), label)
+      }
 
       const createCampaignWithInputDataSafely = async (
         campaignPayload: Partial<Campaign>,
         campaignDetails: Partial<CampaignInputData>[],
-        dataGroupSnapshots: DirectDataGroupSnapshotIntent[] = []
+        dataGroupSnapshots: DirectDataGroupSnapshotIntent[] = [],
+        progressRange?: CampaignSaveProgressRange
       ): Promise<Campaign> => {
+        const setItemProgress = (
+          ratio: number,
+          label: string,
+          processedRows?: number,
+          totalRows?: number
+        ): void => {
+          if (!progressRange) return
+          updateCampaignWorkProgress(
+            progressRange.itemIndex,
+            ratio,
+            label,
+            processedRows,
+            totalRows
+          )
+        }
+        const campaignNumberLabel = progressRange
+          ? `${progressRange.itemIndex + 1}/${progressRange.itemCount}`
+          : ''
+
         const finalStatus = campaignPayload.status ?? 'chờ xử lý'
         const usesAtomicProvisioningBarrier = campaignPayload.dataTargetSourceMode === 'data_group' && !!creationBundle
+        setItemProgress(
+          0.02,
+          campaignNumberLabel
+            ? `Đang tạo chiến dịch ${campaignNumberLabel}...`
+            : 'Đang tạo chiến dịch liên kết...'
+        )
         const savedCampaign = await createCampaign({
           ...campaignPayload,
           status: usesAtomicProvisioningBarrier ? finalStatus : 'tạm dừng'
         })
+        setItemProgress(
+          0.12,
+          campaignNumberLabel
+            ? `Đã tạo chiến dịch ${campaignNumberLabel}.`
+            : 'Đã tạo chiến dịch liên kết.'
+        )
 
         try {
           if (campaignPayload.dataTargetSourceMode === 'direct' && dataGroupSnapshots.length > 0) {
@@ -6392,7 +6741,16 @@ export default function CampaignFormModal({
               throw new Error('Không thể xác định lịch chạy để thêm snapshot Nhóm data.')
             }
             let materializedInputCount = 0
-            for (const snapshot of dataGroupSnapshots) {
+            const writeOperationCount = dataGroupSnapshots.length + (campaignDetails.length > 0 ? 1 : 0)
+            let writeOperationIndex = 0
+            for (let snapshotIndex = 0; snapshotIndex < dataGroupSnapshots.length; snapshotIndex += 1) {
+              const snapshot = dataGroupSnapshots[snapshotIndex]
+              const operationStart = 0.16 + (0.68 * (writeOperationIndex / writeOperationCount))
+              const operationEnd = 0.16 + (0.68 * ((writeOperationIndex + 1) / writeOperationCount))
+              setItemProgress(
+                operationStart,
+                `Đang lấy data từ Nhóm data ${snapshotIndex + 1}/${dataGroupSnapshots.length}...`
+              )
               const snapshotResult = await window.electronAPI.snapshotDataGroupToCampaign({
                 requestId: `${saveRequestId}:${savedCampaign.id}:snapshot:${snapshot.groupId}`,
                 campaignId: savedCampaign.id,
@@ -6401,17 +6759,45 @@ export default function CampaignFormModal({
                 campaignStatus: 'tạm dừng'
               })
               materializedInputCount += snapshotResult.insertedCount + snapshotResult.alreadySeenCount
+              writeOperationIndex += 1
+              setItemProgress(
+                operationEnd,
+                `Đã lấy ${(
+                  snapshotResult.insertedCount + snapshotResult.alreadySeenCount
+                ).toLocaleString('vi-VN')} data từ Nhóm data.`
+              )
             }
 
             if (campaignDetails.length > 0) {
-              const appendResult = await window.electronAPI.addCampaignInputDataRows({
-                campaignId: savedCampaign.id,
-                rows: campaignDetails,
-                campaignSchedule,
-                campaignStatus: 'tạm dừng',
-                skipExistingInCampaign: true
-              })
+              const operationStart = 0.16 + (0.68 * (writeOperationIndex / writeOperationCount))
+              const operationEnd = 0.16 + (0.68 * ((writeOperationIndex + 1) / writeOperationCount))
+              const appendResult = await runCampaignInputDataWriteWithProgress(
+                progressRequestId => window.electronAPI.addCampaignInputDataRows({
+                  campaignId: savedCampaign.id,
+                  rows: campaignDetails,
+                  campaignSchedule,
+                  campaignStatus: 'tạm dừng',
+                  skipExistingInCampaign: true
+                }, progressRequestId),
+                progress => {
+                  const ratio = progress.totalCount > 0
+                    ? progress.processedCount / progress.totalCount
+                    : 1
+                  setItemProgress(
+                    operationStart + ((operationEnd - operationStart) * ratio),
+                    'Đang lưu data bổ sung...',
+                    progress.processedCount,
+                    progress.totalCount
+                  )
+                }
+              )
               materializedInputCount += appendResult.insertedCount
+              setItemProgress(
+                operationEnd,
+                'Đã lưu data bổ sung.',
+                appendResult.insertedCount,
+                appendResult.insertedCount
+              )
             }
 
             if (materializedInputCount === 0) {
@@ -6426,32 +6812,57 @@ export default function CampaignFormModal({
                   ? `${savedCampaign.name} (${savedCampaign.accountName})`
                   : savedCampaign.name
               })
+              setItemProgress(1, 'Chiến dịch được giữ tạm dừng vì chưa có data phù hợp.')
               return savedCampaign
             }
-          } else {
-            // Preserve the existing per-row creation behavior when this direct
-            // campaign has no Data Group snapshot to dedupe against.
-            for (const detail of campaignDetails) {
-              await createCampaignInputData({
-                ...detail,
-                id: undefined,
-                campaignId: savedCampaign.id
-              })
-            }
+          } else if (campaignDetails.length > 0) {
+            const rowsToCreate = campaignDetails.map(detail => ({
+              ...detail,
+              id: undefined,
+              campaignId: savedCampaign.id
+            }))
+            await runCampaignInputDataWriteWithProgress(
+              progressRequestId => createCampaignInputDataBatch(rowsToCreate, progressRequestId),
+              progress => {
+                const ratio = progress.totalCount > 0
+                  ? progress.processedCount / progress.totalCount
+                  : 1
+                setItemProgress(
+                  0.16 + (0.68 * ratio),
+                  'Đang lưu data chiến dịch...',
+                  progress.processedCount,
+                  progress.totalCount
+                )
+              }
+            )
+            setItemProgress(
+              0.86,
+              'Đã lưu xong data chiến dịch.',
+              rowsToCreate.length,
+              rowsToCreate.length
+            )
           }
 
           if (campaignPayload.dataTargetSourceMode === 'data_group' && campaignPayload.dataGroupId) {
+            setItemProgress(0.52, 'Đang liên kết chiến dịch với Nhóm data...')
             await window.electronAPI.bindCampaignDataGroupSource({
               requestId: `${saveRequestId}:${savedCampaign.id}`,
               campaignId: savedCampaign.id,
               groupId: campaignPayload.dataGroupId,
               bundleId: creationBundle?.id ?? null
             })
+            setItemProgress(0.9, 'Đã liên kết chiến dịch với Nhóm data.')
           }
 
           if (!usesAtomicProvisioningBarrier) {
             stagedCampaignFinalStatusById.set(savedCampaign.id, finalStatus)
           }
+          setItemProgress(
+            1,
+            campaignNumberLabel
+              ? `Đã lưu chiến dịch ${campaignNumberLabel}.`
+              : 'Đã lưu chiến dịch liên kết.'
+          )
           return savedCampaign
         } catch (err) {
           try {
@@ -6472,11 +6883,17 @@ export default function CampaignFormModal({
           stagedCampaigns.push({ campaignId, finalStatus })
         })
 
-        for (const stagedCampaign of stagedCampaigns) {
+        for (let index = 0; index < stagedCampaigns.length; index += 1) {
+          const stagedCampaign = stagedCampaigns[index]
+          updateSaveProgress(
+            96 + (3 * (index / Math.max(1, stagedCampaigns.length))),
+            `Đang kích hoạt chiến dịch ${index + 1}/${stagedCampaigns.length}...`
+          )
           if (stagedCampaign.finalStatus !== 'tạm dừng') {
             await updateCampaign(stagedCampaign.campaignId, { status: stagedCampaign.finalStatus })
           }
         }
+        updateSaveProgress(99, 'Đã kích hoạt các chiến dịch.')
       }
 
       const persistDraftCampaign = async (
@@ -6485,8 +6902,10 @@ export default function CampaignFormModal({
         linkTargetField?: FindDataTargetCampaignField | null
       ): Promise<number[]> => {
         const createdIds: number[] = []
+        const progressStartIndex = linkedDraftProgressStartIndexByTempId.get(draft.tempId)
 
-        for (const draftItem of draft.items) {
+        for (let draftItemIndex = 0; draftItemIndex < draft.items.length; draftItemIndex += 1) {
+          const draftItem = draft.items[draftItemIndex]
           const payloadExtraSettings = {
             ...(draftItem.campaignPayload.extraSettings || {})
           } as CampaignExtraSettings
@@ -6500,7 +6919,12 @@ export default function CampaignFormModal({
           const savedDraftCampaign = await createCampaignWithInputDataSafely({
             ...draftItem.campaignPayload,
             extraSettings: payloadExtraSettings
-          }, draftItem.details, draftItem.dataGroupSnapshots)
+          }, draftItem.details, draftItem.dataGroupSnapshots, progressStartIndex === undefined
+            ? undefined
+            : {
+                itemIndex: progressStartIndex + draftItemIndex,
+                itemCount: Math.max(1, campaignWorkItemCount)
+              })
           createdIds.push(savedDraftCampaign.id)
         }
 
@@ -6553,8 +6977,27 @@ export default function CampaignFormModal({
         }
       }
 
+      const mainCampaignCount = Math.max(1, saveBundleItems.length)
       for (let i = 0; i < saveBundleItems.length; i++) {
         const { campaignPayload, details: currentDetails, dataGroupSnapshots: currentDataGroupSnapshots } = saveBundleItems[i]
+        const progressRange: CampaignSaveProgressRange = {
+          itemIndex: i,
+          itemCount: Math.max(1, campaignWorkItemCount)
+        }
+        const setMainItemProgress = (
+          ratio: number,
+          label: string,
+          processedRows?: number,
+          totalRows?: number
+        ): void => {
+          updateCampaignWorkProgress(
+            progressRange.itemIndex,
+            ratio,
+            label,
+            processedRows,
+            totalRows
+          )
+        }
         const effectiveCampaignPayload: Partial<Campaign> = creationBundle
           ? {
               ...campaignPayload,
@@ -6567,6 +7010,7 @@ export default function CampaignFormModal({
         let savedCampaign: Campaign
 
         if (campaign && campaign.id && isFirst) {
+          setMainItemProgress(0.04, `Đang cập nhật chiến dịch ${i + 1}/${mainCampaignCount}...`)
           const changesDataGroup = effectiveCampaignPayload.dataTargetSourceMode === 'data_group' &&
             Number(effectiveCampaignPayload.dataGroupId || 0) > 0 &&
             effectiveCampaignPayload.dataGroupId !== campaign.dataGroupId
@@ -6596,18 +7040,23 @@ export default function CampaignFormModal({
               }
             : effectiveCampaignPayload
           await updateCampaign(campaign.id, updatePayload)
+          setMainItemProgress(0.35, `Đã cập nhật chiến dịch ${i + 1}/${mainCampaignCount}.`)
           if (changesDataGroup && effectiveCampaignPayload.dataGroupId) {
+            setMainItemProgress(0.45, 'Đang liên kết chiến dịch với Nhóm data...')
             await window.electronAPI.bindCampaignDataGroupSource({
               requestId: `${saveRequestId}:${campaign.id}`,
               campaignId: campaign.id,
               groupId: effectiveCampaignPayload.dataGroupId,
               bundleId: null
             })
+            setMainItemProgress(0.8, 'Đã liên kết chiến dịch với Nhóm data.')
           }
           savedCampaign = campaign
 
           if (!isEditingSavedCampaign) {
-            for (const d of currentDetails) {
+            const newDetails: Partial<CampaignInputData>[] = []
+            for (let detailIndex = 0; detailIndex < currentDetails.length; detailIndex += 1) {
+              const d = currentDetails[detailIndex]
               if (d.id) {
 	                await updateCampaignInputData(d.id, {
 	                  name: d.name,
@@ -6618,18 +7067,44 @@ export default function CampaignFormModal({
 	                  note: d.note,
                 })
               } else {
-                await createCampaignInputData({
+                newDetails.push({
                   ...d,
                   campaignId: savedCampaign.id
                 })
               }
+              if ((detailIndex + 1) % 100 === 0 || detailIndex === currentDetails.length - 1) {
+                setMainItemProgress(
+                  0.4 + (0.25 * ((detailIndex + 1) / Math.max(1, currentDetails.length))),
+                  'Đang cập nhật data chiến dịch...',
+                  detailIndex + 1,
+                  currentDetails.length
+                )
+              }
+            }
+            if (newDetails.length > 0) {
+              await runCampaignInputDataWriteWithProgress(
+                progressRequestId => createCampaignInputDataBatch(newDetails, progressRequestId),
+                progress => {
+                  const ratio = progress.totalCount > 0
+                    ? progress.processedCount / progress.totalCount
+                    : 1
+                  setMainItemProgress(
+                    0.65 + (0.25 * ratio),
+                    'Đang lưu data mới...',
+                    progress.processedCount,
+                    progress.totalCount
+                  )
+                }
+              )
             }
           }
+          setMainItemProgress(1, `Đã lưu chiến dịch ${i + 1}/${mainCampaignCount}.`)
         } else {
           savedCampaign = await createCampaignWithInputDataSafely(
             effectiveCampaignPayload,
             currentDetails,
-            currentDataGroupSnapshots
+            currentDataGroupSnapshots,
+            progressRange
           )
         }
 
@@ -6637,13 +7112,14 @@ export default function CampaignFormModal({
         savedCampaignPayloadById.set(savedCampaign.id, effectiveCampaignPayload)
       }
 
+      updateCampaignWorkPhase('Đang lưu các chiến dịch liên kết...')
       const persistAndPatchFindDataTargetDrafts = async (
         field: FindDataTargetCampaignField,
         rawIds: number[],
         enabled: boolean
       ) => {
         if (!isFindDataCampaign || !enabled) return
-        const tempIds = rawIds.filter(id => id < 0)
+        const tempIds = Array.from(new Set(rawIds.filter(id => id < 0)))
         const createdIds = (await Promise.all(tempIds.map(tempId => persistDraftByTempId(tempId)))).flat()
         await patchSavedSourceCampaignTargets(field, createdIds)
       }
@@ -6658,9 +7134,12 @@ export default function CampaignFormModal({
         await persistAndPatchFindDataTargetDrafts('findFacebookGroupJoinTargetCampaignIds', formData.findFacebookGroupJoinTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupJoinData)
       }
 
+      updateCampaignWorkPhase('Đang đồng bộ liên kết chiến dịch...')
       await syncFindDataSourceCampaignLinks(savedCampaignIds)
+      completeCampaignLinkSyncProgress('Đã đồng bộ liên kết chiến dịch.')
 
       if (targetFindDataField) {
+        updateCampaignWorkPhase('Đang tạo chiến dịch nguồn liên kết...')
         const tempSourceDraftIds = selectedFindDataSourceCampaignIds.filter(id => id < 0)
         for (const tempId of tempSourceDraftIds) {
           await persistDraftByTempId(tempId, savedCampaignIds, targetFindDataField)
@@ -6671,6 +7150,7 @@ export default function CampaignFormModal({
       dataGroupBundleRequestIdRef.current = null
       dataGroupBundleFingerprintRef.current = null
       clearStoredDataGroupBundleRequestId(dataGroupBundleRetryStorageKey)
+      updateSaveProgress(100, 'Lưu chiến dịch hoàn tất.')
 
       const emptySnapshotCampaignNames = emptySnapshotCampaigns
         .slice(0, 3)
@@ -6688,11 +7168,13 @@ export default function CampaignFormModal({
     } catch (err) {
       console.error('Failed to save campaign:', err)
       setSavingCampaign(false)
+      setSaveProgress(null)
       showAlert(formatIpcErrorMessage(err, 'Có lỗi xảy ra khi lưu chiến dịch.'), 'error')
     }
   }
 
   const addDetailRow = () => {
+    setDetailsPage(Math.max(1, Math.ceil((details.length + 1) / CAMPAIGN_DETAILS_PAGE_SIZE)))
     setDetails(prev => [...prev, { name: '', phone: '', uid: '', email: '', note: '' }])
   }
 
@@ -6735,6 +7217,7 @@ export default function CampaignFormModal({
           .map(item => item.id)
           .filter((id): id is number => typeof id === 'number')
         setDeletedIds(prev => Array.from(new Set([...prev, ...ids])))
+        setDetailsPage(1)
         setDetails([])
       },
       { title: 'Xoá hết data', confirmText: 'Xoá hết', variant: 'danger' }
@@ -6807,6 +7290,7 @@ export default function CampaignFormModal({
       })
     }
     if (uniqueRows.length > 0) {
+      setDetailsPage(Math.max(1, Math.ceil((details.length + uniqueRows.length) / CAMPAIGN_DETAILS_PAGE_SIZE)))
       setDetails(prev => [...prev, ...uniqueRows])
     }
     return uniqueRows.length
@@ -13415,11 +13899,19 @@ export default function CampaignFormModal({
           <span className="modal-title">
             {draftMode ? 'Thêm chiến dịch' : campaign && campaign.id ? 'Sửa chiến dịch' : campaign ? 'Nhân bản chiến dịch' : 'Thêm chiến dịch'}
           </span>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
+          <button className="btn-icon" onClick={onClose} disabled={saveBusy} aria-label="Đóng">
+            <X size={18} />
+          </button>
         </div>
 
         {/* Stepper Layout */}
-        <div className="stepper-layout">
+        {saveBusy ? (
+          <div className="campaign-save-loading-body" aria-hidden="true">
+            <Loader2 size={28} className="animate-spin" />
+            <span>{saveProgress?.label || 'Đang chuẩn bị dữ liệu chiến dịch...'}</span>
+          </div>
+        ) : (
+          <div className="stepper-layout">
           {/* Left Sidebar - Stepper Navigation */}
           <div className="stepper-sidebar">
             {STEPS.map((step, stepIndex) => {
@@ -14947,9 +15439,10 @@ export default function CampaignFormModal({
                       />
                     </div>
                   ) : (
-                    <div className="stepper-grid-container">
-                      <table className="campaign-grid">
-                        <thead>
+                    <div className="campaign-details-grid">
+                      <div className="stepper-grid-container">
+                        <table className="campaign-grid">
+                          <thead>
                           {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
                             <tr>
                               <th className="campaign-grid-index-col">STT</th>
@@ -14987,15 +15480,17 @@ export default function CampaignFormModal({
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           )}
-                        </thead>
-                        <tbody>
+                          </thead>
+                          <tbody>
                           {loadingDetails ? (
                             <tr><td colSpan={detailsColumnCount} className="text-center">Đang tải data...</td></tr>
                           ) : details.length === 0 ? (
                             <tr><td colSpan={detailsColumnCount} className="text-center text-muted">Chưa có data nào.</td></tr>
                           ) : (
-                            details.map((d, i) => (
-                              <tr key={d.id || `new-${i}`}>
+                            visibleDetails.map((d, pageIndex) => {
+                              const i = detailsPageStartIndex + pageIndex
+                              return (
+                                <tr key={d.id || `new-${i}`}>
                                 <td className="campaign-grid-index-col">{i + 1}</td>
                                 {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
                                   <td>
@@ -15065,11 +15560,41 @@ export default function CampaignFormModal({
                                     <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
                                   </td>
                                 )}
-                              </tr>
-                            ))
+                                </tr>
+                              )
+                            })
                           )}
-                        </tbody>
-                      </table>
+                          </tbody>
+                        </table>
+                      </div>
+                      {details.length > 0 && (
+                        <div className="campaign-local-data-pager">
+                          <span>
+                            Hiển thị {detailsPageStartIndex + 1}–{detailsPageEndIndex} / {details.length.toLocaleString('vi-VN')} data
+                          </span>
+                          <div>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={() => setDetailsPage(page => Math.max(1, page - 1))}
+                              disabled={visibleDetailsPage <= 1 || loadingDetails}
+                              title="Trang trước"
+                            >
+                              <ChevronLeft size={14} />
+                            </button>
+                            <span>Trang {visibleDetailsPage}/{detailsPageCount}</span>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={() => setDetailsPage(page => Math.min(detailsPageCount, page + 1))}
+                              disabled={visibleDetailsPage >= detailsPageCount || loadingDetails}
+                              title="Trang sau"
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -15102,19 +15627,20 @@ export default function CampaignFormModal({
               </>
             )}
           </div>
-        </div>
+          </div>
+        )}
 
         {/* Footer */}
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Huỷ</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={!draftMode && savingCampaign}>
-            {!draftMode && savingCampaign ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                Đang lưu...
-              </>
-            ) : submitLabel || (draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch')}
-          </button>
+        <div className="modal-footer campaign-form-save-footer">
+          <CampaignSaveControls
+            starting={saveStarting}
+            saving={savingCampaign}
+            progress={saveProgress}
+            idleLabel={submitLabel || (draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch')}
+            onSave={handleSave}
+            onCancel={onClose}
+            onStartingChange={setSaveStarting}
+          />
         </div>
       </div>
       {dataScanPicker && (formData.accountIds.length > 0 || dataScanPicker.mode === 'pageInboxPhones') && (
@@ -15157,8 +15683,10 @@ export default function CampaignFormModal({
           actionId={formData.actionId}
           actionName={selectedCampaignAction?.name}
           accountIds={formData.accountIds}
+          showDatasetName={false}
           onClose={() => setIsDataUploadModalOpen(false)}
           onInsert={handleImportedDataRows}
+          onSubmitRows={({ rows }) => handleImportedDataRows(rows)}
         />
       )}
 

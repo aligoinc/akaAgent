@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, X } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, X } from 'lucide-react'
 import jsQR from 'jsqr'
 import { read, utils } from 'xlsx'
 import {
@@ -68,12 +68,21 @@ const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const FACEBOOK_FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FACEBOOK_COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
 const MAX_IMPORT_ROW_COUNT = 10_000
+const IMPORT_PREVIEW_PAGE_SIZE = 100
 const IMPORT_ROW_LIMIT_MESSAGE = 'Mỗi lần chỉ được nhập tối đa 10.000 dòng dữ liệu. Vui lòng chia nhỏ dữ liệu rồi thử lại.'
 const isZaloJoinGroupLinkAction = (actionId?: string | null): boolean => actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID
 const isZaloAddGroupMemberAction = (actionId?: string | null): boolean => actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID
 const isFacebookJoinGroupAction = (actionId?: string | null): boolean => actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
 const isFacebookFindDataSearchAction = (actionId?: string | null): boolean => actionId === FACEBOOK_FIND_DATA_SEARCH_ACTION_ID
 const isFacebookCommentSeedingPostAction = (actionId?: string | null): boolean => actionId === FACEBOOK_COMMENT_SEEDING_POST_ACTION_ID
+
+const waitForNextBrowserPaint = (): Promise<void> => (
+  new Promise(resolve => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 0)
+    })
+  })
+)
 
 type ImportTargetField = 'phone' | 'uid' | 'email' | 'phone_or_uid'
 
@@ -789,12 +798,14 @@ export default function CampaignDataUploadModal({
   const [columnMap, setColumnMap] = useState<ColumnMap>(() => createEmptyColumnMap())
   const [skipExcelHeader, setSkipExcelHeader] = useState(true)
   const [previewRows, setPreviewRows] = useState<CampaignImportDataRow[]>([])
+  const [previewPage, setPreviewPage] = useState(1)
   const [formattedImportSource, setFormattedImportSource] = useState<ImportTab | null>(null)
   const [formattedSourceLink, setFormattedSourceLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const sourceRevisionRef = useRef(0)
   const asyncOperationRef = useRef(0)
+  const insertInFlightRef = useRef(false)
   const templateFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -817,10 +828,12 @@ export default function CampaignDataUploadModal({
     setColumnMap(createEmptyColumnMap())
     setSkipExcelHeader(true)
     setPreviewRows([])
+    setPreviewPage(1)
     setFormattedImportSource(null)
     setFormattedSourceLink(null)
     setLoading(false)
     setSaving(false)
+    insertInFlightRef.current = false
     if (templateFileInputRef.current) templateFileInputRef.current.value = ''
   }, [platform, actionId])
 
@@ -840,10 +853,23 @@ export default function CampaignDataUploadModal({
     ]
   }, [excelHeaders, excelRows, skipExcelHeader])
   const textInputCount = useMemo(() => splitTextItems(textContent).length, [textContent])
+  const previewPageCount = Math.max(1, Math.ceil(previewRows.length / IMPORT_PREVIEW_PAGE_SIZE))
+  const visiblePreviewPage = Math.min(previewPage, previewPageCount)
+  const previewStartIndex = (visiblePreviewPage - 1) * IMPORT_PREVIEW_PAGE_SIZE
+  const previewEndIndex = Math.min(previewRows.length, previewStartIndex + IMPORT_PREVIEW_PAGE_SIZE)
+  const visiblePreviewRows = useMemo(
+    () => previewRows.slice(previewStartIndex, previewEndIndex),
+    [previewEndIndex, previewRows, previewStartIndex]
+  )
+
+  useEffect(() => {
+    setPreviewPage(current => Math.min(current, previewPageCount))
+  }, [previewPageCount])
 
   const invalidateFormattedPreview = (): void => {
     sourceRevisionRef.current += 1
     setPreviewRows([])
+    setPreviewPage(1)
     setFormattedImportSource(null)
     setFormattedSourceLink(null)
   }
@@ -1199,15 +1225,15 @@ export default function CampaignDataUploadModal({
       showAlert('Vui lòng nhập tên nhóm dữ liệu.', 'error')
       return
     }
-    const normalizedRows = rows.map(row => ({
-      ...row,
-      note: '',
-      status: 'chờ xử lý' as const
-    }))
-
     if (onSubmitRows) {
       setSaving(true)
       try {
+        await waitForNextBrowserPaint()
+        const normalizedRows = rows.map(row => ({
+          ...row,
+          note: '',
+          status: 'chờ xử lý' as const
+        }))
         await onSubmitRows({
           datasetName: normalizedName,
           importSource: importSource === 'akabizTemplate' ? 'excel' : importSource,
@@ -1263,7 +1289,7 @@ export default function CampaignDataUploadModal({
   }
 
   const handleInsert = async (): Promise<void> => {
-    if (loading || saving) return
+    if (insertInFlightRef.current || loading || saving) return
     if (previewRows.length === 0) {
       showAlert('Vui lòng format dữ liệu trước khi chèn.', 'error')
       return
@@ -1272,7 +1298,12 @@ export default function CampaignDataUploadModal({
       showAlert('Vui lòng format lại dữ liệu trước khi chèn.', 'error')
       return
     }
-    await insertFormattedRows(previewRows, formattedImportSource, formattedSourceLink)
+    insertInFlightRef.current = true
+    try {
+      await insertFormattedRows(previewRows, formattedImportSource, formattedSourceLink)
+    } finally {
+      insertInFlightRef.current = false
+    }
   }
 
   const updateColumn = (field: ImportField, value: string): void => {
@@ -1627,6 +1658,11 @@ export default function CampaignDataUploadModal({
             </div>
           )}
 
+          {previewRows.length > 0 && (
+            <div className="campaign-import-preview-summary">
+              Hiển thị {previewStartIndex + 1}–{previewEndIndex} / {previewRows.length.toLocaleString('vi-VN')} data
+            </div>
+          )}
           <div className="campaign-import-preview-table">
             <table className="campaign-grid">
               <thead>
@@ -1641,16 +1677,45 @@ export default function CampaignDataUploadModal({
                     <td colSpan={fields.length + 1} className="text-center text-muted">Chưa có dữ liệu</td>
                   </tr>
                 ) : (
-                  previewRows.map((row, index) => (
-                    <tr key={`${index}-${row.phone || row.uid || row.email || row.name || 'row'}`}>
-                      <td className="text-center">{index + 1}</td>
-                      {fields.map(field => <td key={field.key}>{getCellText(row[field.key])}</td>)}
-                    </tr>
-                  ))
+                  visiblePreviewRows.map((row, index) => {
+                    const absoluteIndex = previewStartIndex + index
+                    return (
+                      <tr key={`${absoluteIndex}-${row.phone || row.uid || row.email || row.name || 'row'}`}>
+                        <td className="text-center">{absoluteIndex + 1}</td>
+                        {fields.map(field => <td key={field.key}>{getCellText(row[field.key])}</td>)}
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
           </div>
+          {previewRows.length > IMPORT_PREVIEW_PAGE_SIZE && (
+            <div className="campaign-local-data-pager">
+              <span>Chỉ phân trang phần hiển thị; toàn bộ data vẫn được chèn.</span>
+              <div>
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => setPreviewPage(page => Math.max(1, page - 1))}
+                  disabled={visiblePreviewPage <= 1 || loading || saving}
+                  title="Trang trước"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span>Trang {visiblePreviewPage}/{previewPageCount}</span>
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => setPreviewPage(page => Math.min(previewPageCount, page + 1))}
+                  disabled={visiblePreviewPage >= previewPageCount || loading || saving}
+                  title="Trang sau"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="modal-footer">
