@@ -12,6 +12,7 @@ import * as contentTemplateRepo from '../data/repositories/contentTemplateReposi
 import * as mediaFileRepo from '../data/repositories/mediaFileRepository'
 import * as contactTagRepo from '../data/repositories/contactTagRepository'
 import * as emailNotificationRepo from '../data/repositories/emailNotificationRepository'
+import * as appNotificationRepo from '../data/repositories/appNotificationRepository'
 import * as reportRepo from '../data/repositories/reportRepository'
 import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogRepository'
 import * as systemSettingsRepo from '../data/repositories/systemSettingsRepository'
@@ -295,6 +296,9 @@ export class SupabaseService {
   saveEmailNotificationSettings(settings: Partial<EmailNotificationSettings>) {
     return emailNotificationRepo.saveEmailNotificationSettings(settings)
   }
+
+  // =========== APP NOTIFICATIONS ===========
+  getActiveAppNotification() { return appNotificationRepo.getActiveAppNotification() }
 
   // =========== REPORTS ===========
   getAccountActionReport(query: AccountActionReportQuery) { return reportRepo.getAccountActionReport(query) }

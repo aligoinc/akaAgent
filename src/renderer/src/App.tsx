@@ -25,6 +25,7 @@ import MediaLibraryModal from './components/Media/MediaLibraryModal'
 import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
 import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeedbackLauncher'
 import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
+import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
 import type { ContentTemplateChannelName } from '../../shared/types'
 
 type UpdatePromptSource = 'startup' | 'manual'
@@ -331,6 +332,7 @@ export default function App() {
         checkingUpdate={checkingUpdate}
         onCheckUpdate={() => { void handleCheckForUpdate(true) }}
       />
+      <AppNotificationBar />
       <div className="app-content-shell">
         <TopBar
           activePage={activePage}
