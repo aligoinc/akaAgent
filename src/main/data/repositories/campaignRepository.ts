@@ -23,6 +23,7 @@ import {
   AddCampaignInputDataToCampaignResult,
   AutoAccountContact,
   AutoAccountActionStatus,
+  BulkDeleteCampaignInputDataResult,
   BulkUpdateCampaignInputDataStatusResult,
   ContactListResult,
   actionSupportsDataGroup,
@@ -1573,26 +1574,51 @@ async function rematerializeSmsInputData(campaign: Campaign, updateSchedule: boo
   if (!isMobileManagedSmsCampaignAction(campaign.actionId)) return
   const rows = await listCampaignInputData(campaign.id)
   const schedule = campaign.schedule || campaign.originalSchedule || null
-
-  for (let index = 0; index < rows.length; index += 1) {
-    const row = rows[index]
-    if (row.status !== 'chờ xử lý' && row.status !== 'tạm dừng') continue
+  const writes = rows.flatMap((row, index) => {
+    if (row.status !== 'chờ xử lý' && row.status !== 'tạm dừng') return []
     const payload: Record<string, unknown> = {
       content: renderMobileManagedInputContent(campaign, row, index, updateSchedule ? schedule : undefined),
       phone_carrier: normalizeCampaignInputPhoneCarrier(row.phone, row.phoneCarrier)
     }
     if (updateSchedule) payload.schedule = schedule
+    return [{ rowId: row.id, payload }]
+  })
+  if (writes.length === 0) return
 
-    const { error } = await client()
-      .from('auto_campaign_input_data')
-      .update(payload)
-      .eq('id', row.id)
-      .eq('campaign_id', campaign.id)
-      .eq('is_delete', false)
-      .in('status', ['chờ xử lý', 'tạm dừng'])
-
-    if (error) throw new Error(`Failed to update SMS input content: ${error.message}`)
+  const state: {
+    nextIndex: number
+    firstFailure: Error | null
+  } = {
+    nextIndex: 0,
+    firstFailure: null
   }
+  const runWorker = async (): Promise<void> => {
+    while (!state.firstFailure) {
+      const writeIndex = state.nextIndex
+      if (writeIndex >= writes.length) return
+      state.nextIndex += 1
+      const write = writes[writeIndex]
+
+      try {
+        const { error } = await client()
+          .from('auto_campaign_input_data')
+          .update(write.payload)
+          .eq('id', write.rowId)
+          .eq('campaign_id', campaign.id)
+          .eq('is_delete', false)
+          .in('status', ['chờ xử lý', 'tạm dừng'])
+
+        if (error) throw new Error(error.message)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        state.firstFailure ||= new Error(`Failed to update SMS input content: ${message}`)
+      }
+    }
+  }
+
+  const concurrency = Math.min(5, writes.length)
+  await Promise.all(Array.from({ length: concurrency }, () => runWorker()))
+  if (state.firstFailure) throw state.firstFailure
 }
 
 async function pauseCampaignAfterMobileContentUpdateFailure(
@@ -1947,11 +1973,14 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       schedule: d.schedule
     }))
 
-    const { error: errInsertActions } = await client()
-      .from('auto_campaign_input_data')
-      .insert(actionsToInsert)
-
-    if (errInsertActions) {
+    try {
+      await insertCampaignInputDataPayload(
+        actionsToInsert as CampaignInputDataInsertPayload[],
+        false,
+        undefined,
+        true
+      )
+    } catch (errInsertActions) {
       console.warn('Failed to clone campaign input data:', errInsertActions)
     }
   }
@@ -3518,60 +3547,259 @@ export async function listCampaignRelationSummaries(campaignIds: number[]): Prom
 }
 
 export async function createCampaignInputData(action: Partial<CampaignInputData>): Promise<CampaignInputData> {
-  const u = requireCurrentUser()
-  const campaignId = Number(action.campaignId)
-  const targetCampaign = Number.isFinite(campaignId) && campaignId > 0
-    ? await getCampaign(campaignId)
-    : null
-  if (targetCampaign?.dataTargetSourceMode === 'data_group') {
-    throw new Error('Input của chiến dịch Nhóm data chỉ được tạo qua RPC reserve canonical của Nhóm data.')
+  const result = await createCampaignInputDataBatchInternal([action], true)
+  const created = result.rows[0]
+  if (!created) throw new Error('Failed to create campaign input data.')
+  return created
+}
+
+type CampaignInputDataInsertPayload = {
+  campaign_id: number
+  input_id: number | null
+  name: string | null
+  phone: string | null
+  phone_carrier: VietnamMobileCarrier | null
+  uid: string | null
+  email: string | null
+  info1: string | null
+  info2: string | null
+  info3: string | null
+  info4: string | null
+  info5: string | null
+  content: string | null
+  status: CampaignInputStatus
+  note: string | null
+  schedule: string | null
+}
+
+type CampaignInputDataBatchInsertResult = {
+  insertedCount: number
+  rows: CampaignInputData[]
+}
+
+export type CampaignInputDataWriteProgressCallback = (
+  processedCount: number,
+  totalCount: number
+) => void
+
+function notifyCampaignInputDataWriteProgress(
+  onProgress: CampaignInputDataWriteProgressCallback | undefined,
+  processedCount: number,
+  totalCount: number
+): void {
+  try {
+    onProgress?.(processedCount, totalCount)
+  } catch {
+    // Progress is best-effort and must never change the database write result.
   }
-  const actionId = Number.isFinite(campaignId) && campaignId > 0
-    ? await getCampaignActionIdForCurrentUser(campaignId, u.staffId)
-    : null
-  if (actionId) await ensureCurrentUserCanUseCampaignAction(actionId)
-  const isSmsInputData = isMobileManagedSmsCampaignAction(actionId)
-  let inputAction = action
-  if (isSmsInputData && Number.isFinite(campaignId) && campaignId > 0) {
-    const campaign = await getCampaign(campaignId)
-    if (campaign) {
-      const rowIndex = await countActiveCampaignInputData(campaignId)
-      const schedule = action.schedule || campaign.schedule || campaign.originalSchedule || null
-      inputAction = {
-        ...action,
-        phone: normalizeVietnamMobilePhone(action.phone),
-        schedule: schedule || undefined,
-        content: renderMobileManagedInputContent(campaign, { ...action, schedule: schedule || undefined }, rowIndex, schedule)
+}
+
+async function rollbackCreatedCampaignInputData(ids: number[]): Promise<void> {
+  for (const idChunk of chunkArray(ids, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
+    const { error } = await client()
+      .from('auto_campaign_input_data')
+      .update({ is_delete: true })
+      .eq('is_delete', false)
+      .in('id', idChunk)
+    if (error) throw new Error(`Failed to rollback campaign input data: ${error.message}`)
+  }
+}
+
+async function insertCampaignInputDataPayload(
+  payload: CampaignInputDataInsertPayload[],
+  returnRows: boolean,
+  beforeChunk?: () => void,
+  rollbackOnFailure = false,
+  onProgress?: CampaignInputDataWriteProgressCallback
+): Promise<CampaignInputDataBatchInsertResult> {
+  let insertedCount = 0
+  const rows: CampaignInputData[] = []
+  const insertedIds: number[] = []
+  try {
+    for (const payloadChunk of chunkArray(payload, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
+      beforeChunk?.()
+      if (returnRows) {
+        const { data, error } = await client()
+          .from('auto_campaign_input_data')
+          .insert(payloadChunk)
+          .select()
+        if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
+        insertedCount += data?.length ?? payloadChunk.length
+        rows.push(...(data || []).map(row => mapCampaignInputDataFromDB(row)))
+        notifyCampaignInputDataWriteProgress(onProgress, insertedCount, payload.length)
+        continue
+      }
+
+      if (rollbackOnFailure) {
+        const { data, error } = await client()
+          .from('auto_campaign_input_data')
+          .insert(payloadChunk)
+          .select('id')
+        if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
+        insertedCount += data?.length ?? payloadChunk.length
+        insertedIds.push(...(data || []).map(row => Number(row.id)).filter(id => Number.isSafeInteger(id) && id > 0))
+        notifyCampaignInputDataWriteProgress(onProgress, insertedCount, payload.length)
+        continue
+      }
+
+      const { error } = await client()
+        .from('auto_campaign_input_data')
+        .insert(payloadChunk)
+      if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
+      insertedCount += payloadChunk.length
+      notifyCampaignInputDataWriteProgress(onProgress, insertedCount, payload.length)
+    }
+  } catch (insertError) {
+    if (rollbackOnFailure && insertedIds.length > 0) {
+      try {
+        await rollbackCreatedCampaignInputData(insertedIds)
+      } catch (rollbackError) {
+        const insertMessage = insertError instanceof Error ? insertError.message : String(insertError)
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+        throw new Error(`${insertMessage}. Không thể rollback data đã lưu một phần: ${rollbackMessage}`)
       }
     }
+    throw insertError
   }
-  const payload = {
-    campaign_id: inputAction.campaignId,
-    input_id: inputAction.inputId ?? null,
-    name: inputAction.name || null,
-    phone: inputAction.phone || null,
-    phone_carrier: isSmsInputData ? normalizeCampaignInputPhoneCarrier(inputAction.phone, inputAction.phoneCarrier) : null,
-    uid: inputAction.uid || null,
-    email: inputAction.email || null,
-    info1: inputAction.info1 || null,
-    info2: inputAction.info2 || null,
-    info3: inputAction.info3 || null,
-    info4: inputAction.info4 || null,
-    info5: inputAction.info5 || null,
-    content: inputAction.content || null,
-    status: inputAction.status || 'chờ xử lý',
-    note: inputAction.note || null,
-    schedule: inputAction.schedule || null
+  return { insertedCount, rows }
+}
+
+async function createCampaignInputDataBatchInternal(
+  actions: Partial<CampaignInputData>[],
+  returnRows: boolean,
+  beforeChunk?: () => void,
+  rollbackOnFailure = false,
+  onProgress?: CampaignInputDataWriteProgressCallback
+): Promise<CampaignInputDataBatchInsertResult> {
+  if (!Array.isArray(actions) || actions.length === 0) {
+    return { insertedCount: 0, rows: [] }
   }
 
-  const { data, error } = await client()
-    .from('auto_campaign_input_data')
-    .insert(payload)
-    .select()
-    .single()
+  const actionsByCampaignId = new Map<number, Partial<CampaignInputData>[]>()
+  for (const action of actions) {
+    const campaignId = Math.floor(Number(action.campaignId))
+    if (!Number.isSafeInteger(campaignId) || campaignId <= 0) {
+      throw new Error('Chiến dịch của input không hợp lệ.')
+    }
+    const campaignActions = actionsByCampaignId.get(campaignId)
+    if (campaignActions) campaignActions.push(action)
+    else actionsByCampaignId.set(campaignId, [action])
+  }
 
-  if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
-  return mapCampaignInputDataFromDB(data)
+  const u = requireCurrentUser()
+  let insertedCount = 0
+  const insertedRows: CampaignInputData[] = []
+  for (const [campaignId, campaignActions] of actionsByCampaignId) {
+    const { data: campaignRow, error: campaignError } = await client()
+      .from('auto_campaigns')
+      .select('*, auto_campaign_actions(name), auto_accounts(name)')
+      .eq('id', campaignId)
+      .eq('staff_id', u.staffId)
+      .eq('organization_id', u.organizationId)
+      .eq('is_delete', false)
+      .maybeSingle()
+    if (campaignError) throw new Error(`Failed to load campaign for input data: ${campaignError.message}`)
+    if (!campaignRow) throw new Error('Không tìm thấy chiến dịch của input.')
+
+    const campaign = mapCampaignFromDB(campaignRow)
+    if (campaign.dataTargetSourceMode === 'data_group') {
+      throw new Error('Input của chiến dịch Nhóm data chỉ được tạo qua RPC reserve canonical của Nhóm data.')
+    }
+    await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
+
+    const isSmsInputData = isMobileManagedSmsCampaignAction(campaign.actionId)
+    const rowIndexOffset = isSmsInputData
+      ? await countActiveCampaignInputData(campaignId)
+      : 0
+    const payload = campaignActions.map((action, rowIndex): CampaignInputDataInsertPayload => {
+      const schedule = action.schedule || (
+        isSmsInputData
+          ? campaign.schedule || campaign.originalSchedule || null
+          : null
+      )
+      const phone = isSmsInputData
+        ? normalizeVietnamMobilePhone(action.phone)
+        : action.phone || ''
+      const renderRow = {
+        ...action,
+        phone,
+        schedule: schedule || undefined
+      }
+      return {
+        campaign_id: campaignId,
+        input_id: action.inputId ?? null,
+        name: action.name || null,
+        phone: phone || null,
+        phone_carrier: isSmsInputData
+          ? normalizeCampaignInputPhoneCarrier(phone, action.phoneCarrier)
+          : null,
+        uid: action.uid || null,
+        email: action.email || null,
+        info1: action.info1 || null,
+        info2: action.info2 || null,
+        info3: action.info3 || null,
+        info4: action.info4 || null,
+        info5: action.info5 || null,
+        content: isSmsInputData
+          ? renderMobileManagedInputContent(campaign, renderRow, rowIndexOffset + rowIndex, schedule)
+          : action.content || null,
+        status: action.status || 'chờ xử lý',
+        note: action.note || null,
+        schedule: schedule || null
+      }
+    })
+
+    const processedBeforeCampaign = insertedCount
+    const result = await insertCampaignInputDataPayload(
+      payload,
+      returnRows,
+      beforeChunk,
+      rollbackOnFailure,
+      onProgress
+        ? (processedCount) => onProgress(processedBeforeCampaign + processedCount, actions.length)
+        : undefined
+    )
+    insertedCount += result.insertedCount
+    insertedRows.push(...result.rows)
+  }
+  return { insertedCount, rows: insertedRows }
+}
+
+export async function createCampaignInputDataBatch(
+  actions: Partial<CampaignInputData>[],
+  onProgress?: CampaignInputDataWriteProgressCallback
+): Promise<number> {
+  return (await createCampaignInputDataBatchInternal(
+    actions,
+    false,
+    undefined,
+    true,
+    onProgress
+  )).insertedCount
+}
+
+export async function createCampaignInputDataBatchWithRollback(
+  actions: Partial<CampaignInputData>[],
+  beforeChunk?: () => void
+): Promise<number> {
+  if (!Array.isArray(actions) || actions.length === 0) return 0
+  const campaignIds = new Set<number>()
+  for (const action of actions) {
+    const campaignId = Math.floor(Number(action.campaignId))
+    if (!Number.isSafeInteger(campaignId) || campaignId <= 0) {
+      throw new Error('Chiến dịch của input không hợp lệ.')
+    }
+    campaignIds.add(campaignId)
+  }
+  if (campaignIds.size !== 1) {
+    throw new Error('Rollback batch chỉ hỗ trợ data của một chiến dịch.')
+  }
+  return (await createCampaignInputDataBatchInternal(
+    actions,
+    false,
+    beforeChunk,
+    true
+  )).insertedCount
 }
 
 export async function createSmsCampaignInputDataSnapshot(action: Partial<CampaignInputData>): Promise<CampaignInputData> {
@@ -3804,7 +4032,8 @@ async function loadAppendInputDataExistingKeys(campaignId: number, actionId: str
 }
 
 export async function addCampaignInputDataRows(
-  request: AddCampaignInputDataRowsRequest
+  request: AddCampaignInputDataRowsRequest,
+  onProgress?: CampaignInputDataWriteProgressCallback
 ): Promise<AddCampaignInputDataRowsResult> {
   const u = requireCurrentUser()
   const campaignId = Number(request.campaignId)
@@ -3901,13 +4130,13 @@ export async function addCampaignInputDataRows(
 
   let insertedCount = 0
   for (const chunk of chunkArray(payload, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
-    const { data: insertedRows, error: insertError } = await client()
+    const { error: insertError } = await client()
       .from('auto_campaign_input_data')
       .insert(chunk)
-      .select('id')
 
     if (insertError) throw new Error(`Failed to add input data to campaign "${campaign.name}": ${insertError.message}`)
-    insertedCount += insertedRows?.length ?? chunk.length
+    insertedCount += chunk.length
+    notifyCampaignInputDataWriteProgress(onProgress, insertedCount, payload.length)
   }
 
   if (insertedCount > 0) {
@@ -4110,13 +4339,12 @@ export async function addCampaignInputDataToCampaign(
 
     let insertedCount = 0
     for (const chunk of chunkArray(payload, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
-      const { data: insertedRows, error: insertError } = await client()
+      const { error: insertError } = await client()
         .from('auto_campaign_input_data')
         .insert(chunk)
-        .select('id')
 
       if (insertError) throw new Error(`Failed to add input data to campaign "${target.name}": ${insertError.message}`)
-      insertedCount += insertedRows?.length ?? chunk.length
+      insertedCount += chunk.length
     }
 
     await updateCampaign(target.id, {
@@ -4176,24 +4404,79 @@ export async function clearCampaignInputData(campaignId: number): Promise<void> 
 }
 
 export async function deleteCampaignInputData(id: number): Promise<void> {
-  const { data: inputRow, error: inputError } = await client()
-    .from('auto_campaign_input_data')
-    .select('campaign_id, canonical_target_key')
-    .eq('id', id)
-    .eq('is_delete', false)
-    .maybeSingle()
-  if (inputError) throw new Error(`Failed to validate campaign input delete: ${inputError.message}`)
-  if (!inputRow) return
-  const campaign = await getCampaign(Number(inputRow.campaign_id))
-  if (campaign?.dataTargetSourceMode === 'data_group' || inputRow.canonical_target_key) {
-    throw new Error('Canonical input được giữ làm ledger; manual retry phải dùng lại đúng input cũ.')
-  }
-  const { error } = await client()
-    .from('auto_campaign_input_data')
-    .update({ is_delete: true })
-    .eq('id', id)
+  await deleteCampaignInputDataBatch([id])
+}
 
-  if (error) throw new Error(`Failed to delete campaign input data: ${error.message}`)
+async function deleteCampaignInputDataBatchFallback(
+  inputDataIds: number[]
+): Promise<BulkDeleteCampaignInputDataResult> {
+  const u = requireCurrentUser()
+  const inputRows: Array<{ id: number; campaign_id: number; canonical_target_key: string | null }> = []
+  for (const idChunk of chunkArray(inputDataIds, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
+    const { data, error } = await client()
+      .from('auto_campaign_input_data')
+      .select('id, campaign_id, canonical_target_key')
+      .in('id', idChunk)
+      .eq('is_delete', false)
+    if (error) throw new Error(`Failed to validate campaign input delete: ${error.message}`)
+    inputRows.push(...(data || []).map(row => ({
+      id: Number(row.id),
+      campaign_id: Number(row.campaign_id),
+      canonical_target_key: row.canonical_target_key ? String(row.canonical_target_key) : null
+    })))
+  }
+
+  const campaignIds = uniquePositiveIds(inputRows.map(row => row.campaign_id))
+  const writableCampaignIds = new Set<number>()
+  for (const campaignIdChunk of chunkArray(campaignIds, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
+    const { data, error } = await client()
+      .from('auto_campaigns')
+      .select('id, data_target_source_mode')
+      .eq('staff_id', u.staffId)
+      .eq('organization_id', u.organizationId)
+      .eq('is_delete', false)
+      .in('id', campaignIdChunk)
+    if (error) throw new Error(`Failed to validate campaign input delete ownership: ${error.message}`)
+    for (const campaign of data || []) {
+      if (campaign.data_target_source_mode === 'data_group') {
+        throw new Error('Canonical input được giữ làm ledger; manual retry phải dùng lại đúng input cũ.')
+      }
+      writableCampaignIds.add(Number(campaign.id))
+    }
+  }
+
+  const writableIds = inputRows
+    .filter(row => writableCampaignIds.has(row.campaign_id))
+    .map(row => {
+      if (row.canonical_target_key) {
+        throw new Error('Canonical input được giữ làm ledger; manual retry phải dùng lại đúng input cũ.')
+      }
+      return row.id
+    })
+
+  let deletedCount = 0
+  for (const idChunk of chunkArray(writableIds, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
+    const { data, error } = await client()
+      .from('auto_campaign_input_data')
+      .update({ is_delete: true })
+      .eq('is_delete', false)
+      .in('id', idChunk)
+      .select('id')
+    if (error) throw new Error(`Failed to delete campaign input data: ${error.message}`)
+    deletedCount += data?.length ?? 0
+  }
+  return {
+    deletedCount,
+    skippedCount: Math.max(0, inputDataIds.length - deletedCount)
+  }
+}
+
+export async function deleteCampaignInputDataBatch(
+  ids: number[]
+): Promise<BulkDeleteCampaignInputDataResult> {
+  const inputDataIds = uniquePositiveIds(Array.isArray(ids) ? ids : [])
+  if (inputDataIds.length === 0) return { deletedCount: 0, skippedCount: 0 }
+  return deleteCampaignInputDataBatchFallback(inputDataIds)
 }
 
 // =========== CAMPAIGN ERROR STATE (campaign-scoped consecutive bad targets) ===========

@@ -191,6 +191,15 @@ export class SupabaseService {
   listCampaignInputDataPage(query: CampaignInputDataPageQuery) { return campaignRepo.listCampaignInputDataPage(query) }
   listCampaignRelationSummaries(campaignIds: number[]) { return campaignRepo.listCampaignRelationSummaries(campaignIds) }
   createCampaignInputData(action: Partial<CampaignInputData>) { return campaignRepo.createCampaignInputData(action) }
+  createCampaignInputDataBatch(
+    actions: Partial<CampaignInputData>[],
+    onProgress?: campaignRepo.CampaignInputDataWriteProgressCallback
+  ) {
+    return campaignRepo.createCampaignInputDataBatch(actions, onProgress)
+  }
+  createCampaignInputDataBatchWithRollback(actions: Partial<CampaignInputData>[], beforeChunk?: () => void) {
+    return campaignRepo.createCampaignInputDataBatchWithRollback(actions, beforeChunk)
+  }
   createSmsCampaignInputDataSnapshot(action: Partial<CampaignInputData>) { return campaignRepo.createSmsCampaignInputDataSnapshot(action) }
   updateCampaignInputData(id: number, updates: Partial<CampaignInputData>) { return campaignRepo.updateCampaignInputData(id, updates) }
   bulkUpdateCampaignInputDataStatus(campaignId: number, ids: number[], status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>) {
@@ -199,12 +208,16 @@ export class SupabaseService {
   addCampaignInputDataToCampaign(request: AddCampaignInputDataToCampaignRequest) {
     return campaignRepo.addCampaignInputDataToCampaign(request)
   }
-  addCampaignInputDataRows(request: AddCampaignInputDataRowsRequest) {
-    return campaignRepo.addCampaignInputDataRows(request)
+  addCampaignInputDataRows(
+    request: AddCampaignInputDataRowsRequest,
+    onProgress?: campaignRepo.CampaignInputDataWriteProgressCallback
+  ) {
+    return campaignRepo.addCampaignInputDataRows(request, onProgress)
   }
   resetCampaignInputDataForRerun(campaignId: number) { return campaignRepo.resetCampaignInputDataForRerun(campaignId) }
   clearCampaignInputData(campaignId: number) { return campaignRepo.clearCampaignInputData(campaignId) }
   deleteCampaignInputData(id: number) { return campaignRepo.deleteCampaignInputData(id) }
+  deleteCampaignInputDataBatch(ids: number[]) { return campaignRepo.deleteCampaignInputDataBatch(ids) }
 
   // =========== CAMPAIGN DETAILS (per-milestone log) ===========
   listCampaignDetailsByInputData(inputDataId: number) { return campaignRepo.listCampaignDetailsByInputData(inputDataId) }

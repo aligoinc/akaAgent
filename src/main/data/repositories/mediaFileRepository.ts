@@ -31,6 +31,7 @@ const client = () => getSupabaseClient()
 const SECRET_MASK = '********'
 const MEDIA_QUERY_PAGE_SIZE = 1_000
 const MEDIA_ID_QUERY_CHUNK_SIZE = 500
+const MEDIA_UPLOAD_CONCURRENCY = 3
 
 const MEDIA_SETTING_KEYS = {
   provider: 'media.storage.provider',
@@ -78,6 +79,24 @@ function normalizeIds(values: unknown): number[] {
     ids.push(id)
   }
   return ids
+}
+
+async function mapWithBoundedConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  task: (value: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(values.length)
+  let nextIndex = 0
+  const workerCount = Math.min(Math.max(1, concurrency), values.length)
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex
+      nextIndex += 1
+      results[index] = await task(values[index], index)
+    }
+  }))
+  return results
 }
 
 function buildMediaGroupItemRows(
@@ -738,25 +757,29 @@ export async function uploadMediaFiles(localPaths: string[]): Promise<MediaUploa
     localPath,
     mimeType: resolveUploadMimeType(localPath)
   }))
-  const uploaded: MediaFile[] = []
-  const failures: MediaUploadFailure[] = []
-  for (const { localPath, mimeType } of mediaInputs) {
+  const results = await mapWithBoundedConcurrency(mediaInputs, MEDIA_UPLOAD_CONCURRENCY, async ({ localPath, mimeType }) => {
     try {
-      uploaded.push(await uploadPreparedMedia(settings, {
+      const file = await uploadPreparedMedia(settings, {
         uploadPath: localPath,
         originalName: basename(localPath) || 'file',
         persistedLocalPath: localPath,
         mimeType
-      }, user.staffId, user.organizationId))
+      }, user.staffId, user.organizationId)
+      return { file }
     } catch (err) {
-      failures.push({
-        localPath,
-        error: err instanceof Error ? err.message : String(err)
-      })
+      return {
+        failure: {
+          localPath,
+          error: err instanceof Error ? err.message : String(err)
+        } satisfies MediaUploadFailure
+      }
     }
-  }
+  })
 
-  return { files: uploaded, failures }
+  return {
+    files: results.flatMap(result => result.file ? [result.file] : []),
+    failures: results.flatMap(result => result.failure ? [result.failure] : [])
+  }
 }
 
 export async function uploadMediaClipboardImages(inputs: MediaClipboardImageInput[]): Promise<MediaUploadResult> {
@@ -780,21 +803,21 @@ export async function uploadMediaClipboardImages(inputs: MediaClipboardImageInpu
     }
   }
 
-  const uploaded: MediaFile[] = []
-  const failures: MediaUploadFailure[] = []
-  for (let index = 0; index < images.length; index += 1) {
-    const image = images[index]
+  const results = await mapWithBoundedConcurrency(images, MEDIA_UPLOAD_CONCURRENCY, async (image, index) => {
     const failureName = normalizeText(image?.name) || `Ảnh dán #${index + 1}`
     let cleanupPath = ''
     try {
       const prepared = prepareClipboardImage(image, index)
       cleanupPath = prepared.cleanupPath
-      uploaded.push(await uploadPreparedMedia(settings, prepared, user.staffId, user.organizationId))
+      const file = await uploadPreparedMedia(settings, prepared, user.staffId, user.organizationId)
+      return { file }
     } catch (err) {
-      failures.push({
-        localPath: failureName,
-        error: err instanceof Error ? err.message : String(err)
-      })
+      return {
+        failure: {
+          localPath: failureName,
+          error: err instanceof Error ? err.message : String(err)
+        } satisfies MediaUploadFailure
+      }
     } finally {
       if (cleanupPath) {
         try {
@@ -804,9 +827,12 @@ export async function uploadMediaClipboardImages(inputs: MediaClipboardImageInpu
         }
       }
     }
-  }
+  })
 
-  return { files: uploaded, failures }
+  return {
+    files: results.flatMap(result => result.file ? [result.file] : []),
+    failures: results.flatMap(result => result.failure ? [result.failure] : [])
+  }
 }
 
 export async function deleteMediaFiles(ids: number[]): Promise<number[]> {

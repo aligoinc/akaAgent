@@ -15,6 +15,10 @@ export interface ContactTagMutationResult {
 }
 
 const client = () => getSupabaseClient()
+const CONTACT_TAG_QUERY_CHUNK_SIZE = 100
+const CONTACT_TAG_CLEANUP_PAGE_SIZE = 1000
+const CONTACT_TAG_WRITE_CHUNK_SIZE = 100
+const CONTACT_TAG_WRITE_CONCURRENCY = 5
 
 function normalizeName(value: unknown): string {
   return String(value || '').replace(/\s+/g, ' ').trim()
@@ -35,6 +39,43 @@ function normalizeTagIds(values: unknown): number[] {
 
 function sameNumberArray(a: number[], b: number[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index])
+}
+
+async function updateContactTagRows(
+  rows: Array<{ id: unknown; akabizTagIds: number[] }>,
+  staffId: number,
+  errorPrefix: string
+): Promise<void> {
+  const now = new Date().toISOString()
+
+  // A partial upsert is unsafe here because existing contacts have other
+  // required columns. Keep each PATCH scoped to tag fields, but bound the
+  // number of requests in flight and process large mutations in chunks.
+  for (let from = 0; from < rows.length; from += CONTACT_TAG_WRITE_CHUNK_SIZE) {
+    const chunk = rows.slice(from, from + CONTACT_TAG_WRITE_CHUNK_SIZE)
+    let nextIndex = 0
+    let firstError: Error | null = null
+    const workerCount = Math.min(CONTACT_TAG_WRITE_CONCURRENCY, chunk.length)
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (!firstError && nextIndex < chunk.length) {
+        const index = nextIndex
+        nextIndex += 1
+        const row = chunk[index]
+        try {
+          const { error } = await client()
+            .from('auto_account_contacts')
+            .update({ akabiz_tag_ids: row.akabizTagIds, updated_at: now })
+            .eq('id', row.id)
+            .eq('staff_id', staffId)
+
+          if (error) throw new Error(`${errorPrefix}: ${error.message}`)
+        } catch (error) {
+          firstError ||= error instanceof Error ? error : new Error(String(error))
+        }
+      }
+    }))
+    if (firstError) throw firstError
+  }
 }
 
 async function listActiveTagIds(tagIds: number[], staffId: number): Promise<number[]> {
@@ -142,24 +183,29 @@ export async function updateAkaBizContactTag(tagId: number, name: string): Promi
 }
 
 async function removeTagFromContacts(tagId: number, staffId: number): Promise<void> {
-  const { data, error } = await client()
-    .from('auto_account_contacts')
-    .select('id, akabiz_tag_ids')
-    .eq('staff_id', staffId)
-    .contains('akabiz_tag_ids', [tagId])
-
-  if (error) throw new Error(`Failed to list contacts for akaBiz tag cleanup: ${error.message}`)
-  const now = new Date().toISOString()
-  for (const row of data || []) {
-    const current = normalizeTagIds(row.akabiz_tag_ids)
-    const next = current.filter(id => id !== tagId)
-    const { error: updateError } = await client()
+  let lastId = 0
+  while (true) {
+    let query = client()
       .from('auto_account_contacts')
-      .update({ akabiz_tag_ids: next, updated_at: now })
-      .eq('id', row.id)
+      .select('id, akabiz_tag_ids')
       .eq('staff_id', staffId)
+      .contains('akabiz_tag_ids', [tagId])
+      .order('id', { ascending: true })
+      .limit(CONTACT_TAG_CLEANUP_PAGE_SIZE)
+    if (lastId > 0) query = query.gt('id', lastId)
 
-    if (updateError) throw new Error(`Failed to cleanup deleted akaBiz tag from contacts: ${updateError.message}`)
+    const { data, error } = await query
+    if (error) throw new Error(`Failed to list contacts for akaBiz tag cleanup: ${error.message}`)
+
+    const rows = data || []
+    if (rows.length === 0) break
+    lastId = Number(rows[rows.length - 1].id)
+    const updates = rows.map(row => ({
+      id: row.id,
+      akabizTagIds: normalizeTagIds(row.akabiz_tag_ids).filter(id => id !== tagId)
+    }))
+    await updateContactTagRows(updates, staffId, 'Failed to cleanup deleted akaBiz tag from contacts')
+    if (rows.length < CONTACT_TAG_CLEANUP_PAGE_SIZE) break
   }
 }
 
@@ -188,24 +234,16 @@ async function applyTagsToRows(
   const activeTagIds = await listActiveTagIds(tagIds, staffId)
   if (activeTagIds.length === 0 || rows.length === 0) return 0
 
-  const now = new Date().toISOString()
-  let changedCount = 0
+  const updates: Array<{ id: unknown; akabizTagIds: number[] }> = []
   for (const row of rows) {
     const current = normalizeTagIds(row.akabiz_tag_ids)
     const next = normalizeTagIds([...current, ...activeTagIds])
     if (sameNumberArray(current, next)) continue
-
-    const { error } = await client()
-      .from('auto_account_contacts')
-      .update({ akabiz_tag_ids: next, updated_at: now })
-      .eq('id', row.id)
-      .eq('staff_id', staffId)
-
-    if (error) throw new Error(`Failed to apply akaBiz contact tags: ${error.message}`)
-    changedCount += 1
+    updates.push({ id: row.id, akabizTagIds: next })
   }
 
-  return changedCount
+  await updateContactTagRows(updates, staffId, 'Failed to apply akaBiz contact tags')
+  return updates.length
 }
 
 export async function applyAkaBizTagsToContactIds(
@@ -216,15 +254,20 @@ export async function applyAkaBizTagsToContactIds(
   const ids = normalizeTagIds(contactIds)
   if (ids.length === 0) return { success: true, count: 0 }
 
-  const { data, error } = await client()
-    .from('auto_account_contacts')
-    .select('id, akabiz_tag_ids')
-    .eq('staff_id', u.staffId)
-    .eq('is_delete', false)
-    .in('id', ids)
+  const rowsById = new Map<number, { id: unknown; akabiz_tag_ids?: unknown }>()
+  for (let from = 0; from < ids.length; from += CONTACT_TAG_QUERY_CHUNK_SIZE) {
+    const { data, error } = await client()
+      .from('auto_account_contacts')
+      .select('id, akabiz_tag_ids')
+      .eq('staff_id', u.staffId)
+      .eq('is_delete', false)
+      .in('id', ids.slice(from, from + CONTACT_TAG_QUERY_CHUNK_SIZE))
 
-  if (error) throw new Error(`Failed to list contacts for akaBiz tags: ${error.message}`)
-  const count = await applyTagsToRows(data || [], tagIds, u.staffId)
+    if (error) throw new Error(`Failed to list contacts for akaBiz tags: ${error.message}`)
+    for (const row of data || []) rowsById.set(Number(row.id), row)
+  }
+
+  const count = await applyTagsToRows(Array.from(rowsById.values()), tagIds, u.staffId)
   return { success: true, count }
 }
 
@@ -243,19 +286,38 @@ export async function applyAkaBizTagsToContactTargets(
 
   if (normalizedTargets.length === 0) return { success: true, count: 0 }
 
-  const rowsById = new Map<number, { id: unknown; akabiz_tag_ids?: unknown }>()
+  const targetsByScope = new Map<string, {
+    accountId: number
+    contactType: ContactType
+    uids: Set<string>
+  }>()
   for (const target of normalizedTargets) {
-    const { data, error } = await client()
-      .from('auto_account_contacts')
-      .select('id, akabiz_tag_ids')
-      .eq('account_id', target.accountId)
-      .eq('staff_id', u.staffId)
-      .eq('contact_type', target.contactType)
-      .eq('uid', target.uid)
-      .eq('is_delete', false)
+    const key = `${target.accountId}:${target.contactType}`
+    const scope = targetsByScope.get(key) || {
+      accountId: target.accountId,
+      contactType: target.contactType,
+      uids: new Set<string>()
+    }
+    scope.uids.add(target.uid)
+    targetsByScope.set(key, scope)
+  }
 
-    if (error) throw new Error(`Failed to find contacts for akaBiz tags: ${error.message}`)
-    for (const row of data || []) rowsById.set(Number(row.id), row)
+  const rowsById = new Map<number, { id: unknown; akabiz_tag_ids?: unknown }>()
+  for (const scope of targetsByScope.values()) {
+    const uids = Array.from(scope.uids)
+    for (let from = 0; from < uids.length; from += CONTACT_TAG_QUERY_CHUNK_SIZE) {
+      const { data, error } = await client()
+        .from('auto_account_contacts')
+        .select('id, akabiz_tag_ids')
+        .eq('account_id', scope.accountId)
+        .eq('staff_id', u.staffId)
+        .eq('contact_type', scope.contactType)
+        .in('uid', uids.slice(from, from + CONTACT_TAG_QUERY_CHUNK_SIZE))
+        .eq('is_delete', false)
+
+      if (error) throw new Error(`Failed to find contacts for akaBiz tags: ${error.message}`)
+      for (const row of data || []) rowsById.set(Number(row.id), row)
+    }
   }
 
   const count = await applyTagsToRows(Array.from(rowsById.values()), tagIds, u.staffId)

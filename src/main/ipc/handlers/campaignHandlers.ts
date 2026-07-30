@@ -1,5 +1,5 @@
-import { ipcMain } from 'electron'
-import { CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
+import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS, CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputDataWriteProgress, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
 interface CampaignStatusController {
@@ -23,6 +23,28 @@ const canResumeCampaign = (status: string) => status === 'tạm dừng'
 const isStatusOnlyCampaignUpdate = (updates: Partial<Campaign>) => {
   const keys = Object.keys(updates)
   return keys.length === 1 && keys[0] === 'status' && updates.status !== undefined
+}
+
+const createCampaignInputDataProgressEmitter = (
+  event: IpcMainInvokeEvent,
+  rawRequestId: unknown
+): ((processedCount: number, totalCount: number) => void) | undefined => {
+  const requestId = typeof rawRequestId === 'string' ? rawRequestId.trim() : ''
+  if (!requestId || requestId.length > 128) return undefined
+
+  return (processedCount, totalCount) => {
+    if (event.sender.isDestroyed()) return
+    const payload: CampaignInputDataWriteProgress = {
+      requestId,
+      processedCount,
+      totalCount
+    }
+    try {
+      event.sender.send(IPC_EVENTS.DB_CAMPAIGN_INPUT_DATA_WRITE_PROGRESS, payload)
+    } catch {
+      // Progress is best-effort; the database write result remains authoritative.
+    }
+  }
 }
 
 async function assertCanUpdateCampaignFromRenderer(
@@ -145,6 +167,13 @@ export function registerCampaignHandlers(
   })
 
   // Campaign Input Data (việc-cần-làm)
+  ipcMain.handle(IPC_EVENTS.DB_GET_CAMPAIGN_INPUT_DATA_LIMIT, async () => {
+    const value = Number(await supabase.getSystemSettingValue('campaign.input_data.max_rows'))
+    return Number.isSafeInteger(value) && value > 0
+      ? value
+      : CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS
+  })
+
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_INPUT_DATA, async (_, campaignId: number) => {
     return supabase.listCampaignInputData(campaignId)
   })
@@ -159,6 +188,13 @@ export function registerCampaignHandlers(
 
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN_INPUT_DATA, async (_, actionData) => {
     return supabase.createCampaignInputData(actionData)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN_INPUT_DATA_BATCH, async (event, actions, progressRequestId?: string) => {
+    return supabase.createCampaignInputDataBatch(
+      actions,
+      createCampaignInputDataProgressEmitter(event, progressRequestId)
+    )
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN_INPUT_DATA, async (_, id: number, updates) => {
@@ -182,14 +218,22 @@ export function registerCampaignHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_ADD_CAMPAIGN_INPUT_DATA_ROWS, async (
-    _,
-    request: AddCampaignInputDataRowsRequest
+    event,
+    request: AddCampaignInputDataRowsRequest,
+    progressRequestId?: string
   ) => {
-    return supabase.addCampaignInputDataRows(request)
+    return supabase.addCampaignInputDataRows(
+      request,
+      createCampaignInputDataProgressEmitter(event, progressRequestId)
+    )
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_CAMPAIGN_INPUT_DATA, async (_, id: number) => {
     return supabase.deleteCampaignInputData(id)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_DELETE_CAMPAIGN_INPUT_DATA_BATCH, async (_, ids: number[]) => {
+    return supabase.deleteCampaignInputDataBatch(ids)
   })
 
   // Campaign Details (per-milestone log)

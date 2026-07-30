@@ -134,6 +134,8 @@ const client = () => getSupabaseClient()
 const GROUP_ACTIVITY_RE = /\s*(Lần hoạt động gần nhất|Hoạt động gần nhất|Last active|Last activity)[:：]?.*$/i
 const CONTACT_GROUP_PURPOSE_DATA: ContactGroupPurpose = 'data_group'
 const CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST: ContactGroupPurpose = 'zalo_friend_blocklist'
+const CONTACT_TAG_WRITE_CHUNK_SIZE = 100
+const CONTACT_TAG_WRITE_CONCURRENCY = 5
 
 function parseFacebookUrl(value: string): URL | null {
   const raw = String(value || '').trim()
@@ -256,6 +258,41 @@ function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {}
+}
+
+async function updateContactExtraDataRows(
+  rows: Array<{ id: number; extraData: Record<string, unknown> }>,
+  staffId: number,
+  errorPrefix: string,
+  updatedAt: string
+): Promise<void> {
+  // Partial upserts can hit required contact columns or overwrite unrelated
+  // values. Use tag-only PATCH requests with bounded concurrency instead.
+  for (let from = 0; from < rows.length; from += CONTACT_TAG_WRITE_CHUNK_SIZE) {
+    const chunk = rows.slice(from, from + CONTACT_TAG_WRITE_CHUNK_SIZE)
+    let nextIndex = 0
+    let firstError: Error | null = null
+    const workerCount = Math.min(CONTACT_TAG_WRITE_CONCURRENCY, chunk.length)
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (!firstError && nextIndex < chunk.length) {
+        const index = nextIndex
+        nextIndex += 1
+        const row = chunk[index]
+        try {
+          const { error } = await client()
+            .from('auto_account_contacts')
+            .update({ extra_data: row.extraData, updated_at: updatedAt })
+            .eq('id', row.id)
+            .eq('staff_id', staffId)
+
+          if (error) throw new Error(`${errorPrefix}: ${error.message}`)
+        } catch (error) {
+          firstError ||= error instanceof Error ? error : new Error(String(error))
+        }
+      }
+    }))
+    if (firstError) throw firstError
+  }
 }
 
 function toStringArray(value: unknown): string[] {
@@ -1705,6 +1742,7 @@ export async function appendZaloTagsToExistingContacts(
 
     if (error) throw new Error(`Failed to list contacts for Zalo tag mirror: ${error.message}`)
 
+    const updates: Array<{ id: number; extraData: Record<string, unknown> }> = []
     for (const row of data || []) {
       const extra = toRecord(row.extra_data)
       const tagById = new Map<string, string>()
@@ -1725,16 +1763,15 @@ export async function appendZaloTagsToExistingContacts(
         zaloTagNames: nextTags.map(tag => tag.name).filter(Boolean),
         zaloTags: nextTags
       }
-
-      const { error: updateError } = await client()
-        .from('auto_account_contacts')
-        .update({ extra_data: nextExtra, updated_at: now })
-        .eq('id', row.id as number)
-        .eq('staff_id', u.staffId)
-
-      if (updateError) throw new Error(`Failed to mirror Zalo tags to contact: ${updateError.message}`)
-      updatedCount += 1
+      updates.push({ id: row.id as number, extraData: nextExtra })
     }
+    await updateContactExtraDataRows(
+      updates,
+      u.staffId,
+      'Failed to mirror Zalo tags to contact',
+      now
+    )
+    updatedCount += updates.length
   }
 
   return updatedCount
@@ -1880,22 +1917,23 @@ export async function syncZaloLabelMemberships(
 
       if (error) throw new Error(`Failed to list contacts for Zalo label sync: ${error.message}`)
       const rows = data || []
+      const updates: Array<{ id: number; extraData: Record<string, unknown> }> = []
       for (const row of rows) {
         const tags = getZaloTagsForContactUid(row.uid, contactType, tagsByConversation)
         if (getZaloTagExtraSignature(row.extra_data) === getNormalizedZaloTagSignature(tags)) continue
 
-        const { error: updateError } = await client()
-          .from('auto_account_contacts')
-          .update({
-            extra_data: applyZaloTagsToExtra(row.extra_data, tags),
-            updated_at: now
-          })
-          .eq('id', row.id as number)
-          .eq('staff_id', u.staffId)
-
-        if (updateError) throw new Error(`Failed to sync Zalo labels to contact: ${updateError.message}`)
-        updatedCount += 1
+        updates.push({
+          id: row.id as number,
+          extraData: applyZaloTagsToExtra(row.extra_data, tags)
+        })
       }
+      await updateContactExtraDataRows(
+        updates,
+        u.staffId,
+        'Failed to sync Zalo labels to contact',
+        now
+      )
+      updatedCount += updates.length
 
       if (rows.length < CONTACT_LIST_FETCH_CHUNK) break
       from += CONTACT_LIST_FETCH_CHUNK

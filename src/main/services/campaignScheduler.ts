@@ -4673,6 +4673,13 @@ export class CampaignScheduler {
     return Math.max(1, parsed)
   }
 
+  private async createMaterializedCampaignInputDataBatch(
+    rows: Partial<CampaignInputData>[],
+    beforeChunk?: () => void
+  ): Promise<void> {
+    await this.supabase.createCampaignInputDataBatchWithRollback(rows, beforeChunk)
+  }
+
   private async collectSuggestedFriendInputData(account: AutoAccount, campaign: Campaign, workflowId: number): Promise<CampaignInputData[]> {
     const count = this.normalizeSuggestedFriendsCount(campaign.extraSettings?.suggestedFriendsCount)
 
@@ -4717,15 +4724,15 @@ export class CampaignScheduler {
       const profiles = this.normalizeSuggestedFriendProfiles(result.output.suggestedProfiles, count)
       if (profiles.length === 0) return []
 
-      for (const profile of profiles) {
-        await this.supabase.createCampaignInputData({
+      await this.createMaterializedCampaignInputDataBatch(
+        profiles.map<Partial<CampaignInputData>>(profile => ({
           campaignId: campaign.id,
           name: profile.name,
           uid: profile.uid,
           status: 'chờ xử lý',
           note: ''
-        })
-      }
+        }))
+      )
 
       await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${profiles.length} đề xuất bạn bè vào chiến dịch "${campaign.name}"`)
       return await this.supabase.listCampaignInputData(campaign.id)
@@ -5171,16 +5178,19 @@ export class CampaignScheduler {
       profiles.map(profile => this.mapZaloApiRawUserContact(account.id, profile.raw, campaign.actionId))
     )
 
-    for (const profile of profiles) {
+    if (profiles.length > 0) {
       this.throwIfZaloRuntimeStopping(campaign.id)
-      await this.supabase.createCampaignInputData({
-        campaignId: campaign.id,
-        name: profile.name,
-        uid: profile.uid,
-        phone: profile.phone || '',
-        status: 'chờ xử lý',
-        note: ''
-      })
+      await this.createMaterializedCampaignInputDataBatch(
+        profiles.map<Partial<CampaignInputData>>(profile => ({
+          campaignId: campaign.id,
+          name: profile.name,
+          uid: profile.uid,
+          phone: profile.phone || '',
+          status: 'chờ xử lý',
+          note: ''
+        })),
+        () => this.throwIfZaloRuntimeStopping(campaign.id)
+      )
     }
     this.throwIfZaloRuntimeStopping(campaign.id)
 
@@ -5232,16 +5242,19 @@ export class CampaignScheduler {
       profiles.map(profile => this.mapZaloApiRawUserContact(account.id, profile.raw, campaign.actionId))
     )
 
-    for (const profile of profiles) {
+    if (profiles.length > 0) {
       this.throwIfZaloRuntimeStopping(campaign.id)
-      await this.supabase.createCampaignInputData({
-        campaignId: campaign.id,
-        name: profile.name,
-        uid: profile.uid,
-        phone: profile.phone || '',
-        status: 'chờ xử lý',
-        note: ''
-      })
+      await this.createMaterializedCampaignInputDataBatch(
+        profiles.map<Partial<CampaignInputData>>(profile => ({
+          campaignId: campaign.id,
+          name: profile.name,
+          uid: profile.uid,
+          phone: profile.phone || '',
+          status: 'chờ xử lý',
+          note: ''
+        })),
+        () => this.throwIfZaloRuntimeStopping(campaign.id)
+      )
     }
     this.throwIfZaloRuntimeStopping(campaign.id)
 
@@ -5341,17 +5354,18 @@ export class CampaignScheduler {
       await this.logCampaignProgress(campaign.id, `⚠️ Chỉ lấy được ${selectedProfiles.length}/${requestedCount} đề xuất Zalo`)
     }
 
-    for (const profile of selectedProfiles) {
-      this.throwIfZaloRuntimeStopping(campaign.id)
-      await this.supabase.createCampaignInputData({
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    await this.createMaterializedCampaignInputDataBatch(
+      selectedProfiles.map<Partial<CampaignInputData>>(profile => ({
         campaignId: campaign.id,
         name: profile.name || '',
         uid: profile.uid,
         phone: profile.phone || '',
         status: 'chờ xử lý',
         note: ''
-      })
-    }
+      })),
+      () => this.throwIfZaloRuntimeStopping(campaign.id)
+    )
     this.throwIfZaloRuntimeStopping(campaign.id)
 
     await this.markZaloFriendRecommendationMaterialized(campaign, selectedProfiles.length)
@@ -5440,9 +5454,9 @@ export class CampaignScheduler {
       await this.logCampaignProgress(campaign.id, `⚠️ Chỉ lấy được ${selectedProfiles.length}/${limit} lời mời kết bạn đã gửi`)
     }
 
-    for (const profile of selectedProfiles) {
-      this.throwIfZaloRuntimeStopping(campaign.id)
-      await this.supabase.createCampaignInputData({
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    await this.createMaterializedCampaignInputDataBatch(
+      selectedProfiles.map<Partial<CampaignInputData>>(profile => ({
         campaignId: campaign.id,
         name: profile.name || profile.displayName || profile.zaloName || profile.uid,
         uid: profile.uid,
@@ -5451,8 +5465,9 @@ export class CampaignScheduler {
         info1: profile.sentAt === null || profile.sentAt === undefined ? '' : String(profile.sentAt),
         info2: profile.requestMessage || '',
         info3: profile.globalId || ''
-      })
-    }
+      })),
+      () => this.throwIfZaloRuntimeStopping(campaign.id)
+    )
     this.throwIfZaloRuntimeStopping(campaign.id)
 
     await this.markZaloCancelSentFriendRequestMaterialized(campaign, selectedProfiles.length)
@@ -8111,16 +8126,18 @@ export class CampaignScheduler {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
         if (!targetCampaign || targetCampaign.actionId !== MESSAGE_UID_ACTION_ID) continue
 
-        for (const uid of uids) {
-          const name = uidNameByNormalizedUid.get(this.normalizeUidForCompare(uid)) || undefined
-          await this.supabase.createCampaignInputData({
-            campaignId: targetCampaign.id,
-            name,
-            uid,
-            status: 'chờ xử lý',
-            note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
+        await this.supabase.createCampaignInputDataBatch(
+          uids.map<Partial<CampaignInputData>>(uid => {
+            const name = uidNameByNormalizedUid.get(this.normalizeUidForCompare(uid)) || undefined
+            return {
+              campaignId: targetCampaign.id,
+              name,
+              uid,
+              status: 'chờ xử lý',
+              note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
+            }
           })
-        }
+        )
 
         await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${uids.length} UID sang chiến dịch "${targetCampaign.name}"`)
         await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${uids.length} UID từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
@@ -8158,14 +8175,14 @@ export class CampaignScheduler {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
         if (!targetCampaign || targetCampaign.actionId !== COMMENT_SEEDING_POST_ACTION_ID) continue
 
-        for (const postLink of postLinks) {
-          await this.supabase.createCampaignInputData({
+        await this.supabase.createCampaignInputDataBatch(
+          postLinks.map<Partial<CampaignInputData>>(postLink => ({
             campaignId: targetCampaign.id,
             uid: postLink,
             status: 'chờ xử lý',
             note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
-          })
-        }
+          }))
+        )
 
         await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${postLinks.length} link bài post sang chiến dịch "${targetCampaign.name}"`)
         await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${postLinks.length} link bài post từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
@@ -8227,15 +8244,15 @@ export class CampaignScheduler {
           const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
           if (!targetCampaign || targetCampaign.actionId !== config.actionId) continue
 
-          for (const group of groups) {
-            await this.supabase.createCampaignInputData({
+          await this.supabase.createCampaignInputDataBatch(
+            groups.map<Partial<CampaignInputData>>(group => ({
               campaignId: targetCampaign.id,
               name: group.name || group.url,
               uid: group.url,
               status: 'chờ xử lý',
               note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
-            })
-          }
+            }))
+          )
 
           await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${groups.length} link group Facebook sang ${config.label} "${targetCampaign.name}"`)
           await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${groups.length} link group Facebook từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
@@ -9507,16 +9524,15 @@ export class CampaignScheduler {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
         if (!targetCampaign || targetCampaign.actionId !== ZALO_MESSAGE_PHONE_ACTION_ID) continue
 
-        for (const phone of phones) {
-          const phoneKey = this.normalizeExternalValueForCompare(phone)
-          await this.supabase.createCampaignInputData({
+        await this.supabase.createCampaignInputDataBatch(
+          phones.map<Partial<CampaignInputData>>(phone => ({
             campaignId: targetCampaign.id,
-            name: phoneNameByValue.get(phoneKey) || undefined,
+            name: phoneNameByValue.get(this.normalizeExternalValueForCompare(phone)) || undefined,
             phone,
             status: 'chờ xử lý',
             note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
-          })
-        }
+          }))
+        )
 
         const reopenedTarget = await this.supabase.reopenCompletedZaloServerCampaignAfterInputInsert(
           targetCampaign.id,
@@ -9586,14 +9602,14 @@ export class CampaignScheduler {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
         if (!targetCampaign || targetCampaign.actionId !== ZALO_JOIN_GROUP_LINK_ACTION_ID) continue
 
-        for (const link of links) {
-          await this.supabase.createCampaignInputData({
+        await this.supabase.createCampaignInputDataBatch(
+          links.map<Partial<CampaignInputData>>(link => ({
             campaignId: targetCampaign.id,
             uid: link,
             status: 'chờ xử lý',
             note: `Đã thêm từ chiến dịch "${sourceCampaign.name}"`
-          })
-        }
+          }))
+        )
 
         const reopenedTarget = await this.supabase.reopenCompletedZaloServerCampaignAfterInputInsert(
           targetCampaign.id,

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputDataPageResult, CampaignDetail, CampaignDetailPageQuery, CampaignDetailPageResult, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetListQuery, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, ZaloRuntimeRestartRequiredPayload, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AiGenerateCampaignNameRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizSmsShopListItem, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContentTemplateContentType, ContentTemplateGroup, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, ContactListResult, PageInboxContactListQuery, SaveUploadDatasetRequest, SaveUploadDatasetResult, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, EmailCampaignLinkTrackingSummary, MediaClipboardImageInput, MediaFile, MediaGroup, MediaStorageSettings, MediaUploadResult, CustomerFeedbackSubmitRequest, CustomerFeedbackSubmitResult, Automation, AutomationExecutionListQuery, AutomationExecutionListResult, AutomationInput, AutomationListQuery, AutomationListResult, AutomationOptions, AutomationUpdatedEvent, CampaignAutomationExecutionListQuery, CampaignAutomationExecutionListResult, BindCampaignDataGroupSourceRequest, CampaignCreationBundle, CampaignDataGroupChangePreflight, CampaignDataGroupSource, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroup, DataGroupDataset, DataGroupIngestRequest, DataGroupIngestResult, DataGroupLatestIngestStats, DataGroupListQuery, DataGroupListResult, DataGroupMember, DataGroupMemberIdListResult, DataGroupMemberListQuery, DataGroupMemberListResult, DataGroupMemberMutationRequest, DataGroupMutationResult, DataTypeCategoryItem, MoveDataGroupMembersRequest, SnapshotDataGroupToCampaignRequest, SnapshotDataGroupToCampaignResult, UpdateDataGroupRequest } from '../shared/types'
+import { IPC_EVENTS, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputDataPageResult, CampaignInputDataWriteProgress, CampaignDetail, CampaignDetailPageQuery, CampaignDetailPageResult, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetListQuery, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, ZaloRuntimeRestartRequiredPayload, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AiGenerateCampaignNameRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizSmsShopListItem, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContentTemplateContentType, ContentTemplateGroup, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, ContactListResult, PageInboxContactListQuery, SaveUploadDatasetRequest, SaveUploadDatasetResult, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, EmailCampaignLinkTrackingSummary, MediaClipboardImageInput, MediaFile, MediaGroup, MediaStorageSettings, MediaUploadResult, CustomerFeedbackSubmitRequest, CustomerFeedbackSubmitResult, Automation, AutomationExecutionListQuery, AutomationExecutionListResult, AutomationInput, AutomationListQuery, AutomationListResult, AutomationOptions, AutomationUpdatedEvent, CampaignAutomationExecutionListQuery, CampaignAutomationExecutionListResult, BindCampaignDataGroupSourceRequest, CampaignCreationBundle, CampaignDataGroupChangePreflight, CampaignDataGroupSource, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroup, DataGroupDataset, DataGroupIngestRequest, DataGroupIngestResult, DataGroupLatestIngestStats, DataGroupListQuery, DataGroupListResult, DataGroupMember, DataGroupMemberIdListResult, DataGroupMemberListQuery, DataGroupMemberListResult, DataGroupMemberMutationRequest, DataGroupMutationResult, DataTypeCategoryItem, MoveDataGroupMembersRequest, SnapshotDataGroupToCampaignRequest, SnapshotDataGroupToCampaignResult, UpdateDataGroupRequest } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
@@ -225,11 +225,31 @@ const electronAPI = {
   listCampaignInputDataPage: (query: CampaignInputDataPageQuery): Promise<CampaignInputDataPageResult> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CAMPAIGN_INPUT_DATA_PAGE, query),
 
+  getCampaignInputDataLimit: (): Promise<number> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_GET_CAMPAIGN_INPUT_DATA_LIMIT),
+
   listCampaignRelationSummaries: (campaignIds: number[]): Promise<CampaignRelationSummary[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CAMPAIGN_RELATION_SUMMARIES, campaignIds),
 
   createCampaignInputData: (data: Partial<CampaignInputData>): Promise<CampaignInputData> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_CREATE_CAMPAIGN_INPUT_DATA, data),
+
+  createCampaignInputDataBatch: (
+    actions: Partial<CampaignInputData>[],
+    progressRequestId?: string
+  ): Promise<number> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_CREATE_CAMPAIGN_INPUT_DATA_BATCH, actions, progressRequestId),
+
+  onCampaignInputDataWriteProgress: (
+    callback: (progress: CampaignInputDataWriteProgress) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      progress: CampaignInputDataWriteProgress
+    ): void => callback(progress)
+    ipcRenderer.on(IPC_EVENTS.DB_CAMPAIGN_INPUT_DATA_WRITE_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.DB_CAMPAIGN_INPUT_DATA_WRITE_PROGRESS, handler)
+  },
 
   updateCampaignInputData: (id: number, updates: Partial<CampaignInputData>): Promise<CampaignInputData> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_CAMPAIGN_INPUT_DATA, id, updates),
@@ -247,12 +267,16 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_EVENTS.DB_ADD_CAMPAIGN_INPUT_DATA_TO_CAMPAIGNS, request),
 
   addCampaignInputDataRows: (
-    request: AddCampaignInputDataRowsRequest
+    request: AddCampaignInputDataRowsRequest,
+    progressRequestId?: string
   ): Promise<AddCampaignInputDataRowsResult> =>
-    ipcRenderer.invoke(IPC_EVENTS.DB_ADD_CAMPAIGN_INPUT_DATA_ROWS, request),
+    ipcRenderer.invoke(IPC_EVENTS.DB_ADD_CAMPAIGN_INPUT_DATA_ROWS, request, progressRequestId),
 
   deleteCampaignInputData: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CAMPAIGN_INPUT_DATA, id),
+
+  deleteCampaignInputDataBatch: (ids: number[]): Promise<BulkDeleteCampaignInputDataResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CAMPAIGN_INPUT_DATA_BATCH, ids),
 
   // Campaign Details (per-milestone log)
   listCampaignDetailsByInputData: (inputDataId: number): Promise<CampaignDetail[]> =>
