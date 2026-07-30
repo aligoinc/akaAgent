@@ -119,6 +119,7 @@ export async function createCampaignAction(action: Partial<CampaignAction>): Pro
     workflow_id: action.workflowId ?? null,
     test_workflow_id: action.testWorkflowId ?? null,
     allow_multiple_accounts: action.allowMultipleAccounts ?? false,
+    allow_secondary_account: action.allowSecondaryAccount ?? false,
     limit_check_action_codes: action.limitCheckActionCodes ?? []
   }
 
@@ -140,6 +141,7 @@ export async function updateCampaignAction(id: string, updates: Partial<Campaign
   if (updates.workflowId !== undefined) payload.workflow_id = updates.workflowId
   if (updates.testWorkflowId !== undefined) payload.test_workflow_id = updates.testWorkflowId
   if (updates.allowMultipleAccounts !== undefined) payload.allow_multiple_accounts = updates.allowMultipleAccounts
+  if (updates.allowSecondaryAccount !== undefined) payload.allow_secondary_account = updates.allowSecondaryAccount
   if (updates.limitCheckActionCodes !== undefined) payload.limit_check_action_codes = updates.limitCheckActionCodes
 
   const { data, error } = await client()

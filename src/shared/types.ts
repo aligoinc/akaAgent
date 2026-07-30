@@ -345,6 +345,8 @@ export interface CampaignAction {
   workflowId?: number       // engine v2 (BIGINT, FK auto_workflows.id)
   testWorkflowId?: number   // engine v2 test workflow (BIGINT, FK auto_workflows.id)
   allowMultipleAccounts: boolean
+  /** Whether campaigns of this type may configure a fallback account. */
+  allowSecondaryAccount: boolean
   // Candidate action codes for daily/window quota checks, not for action-disable enforcement.
   limitCheckActionCodes: string[]
   /** Semantic target/source types accepted by this action. */
@@ -685,6 +687,11 @@ export interface Campaign {
   name: string
   actionId: string
   accountId: number
+  /**
+   * Configuration-only fallback account.
+   * A future runtime must also require CampaignAction.allowSecondaryAccount before using it.
+   */
+  secondaryAccountId?: number | null
   status: string
   schedule?: string
   originalSchedule?: string | null
@@ -729,6 +736,7 @@ export interface Campaign {
   // Joined fields
   actionName?: string
   accountName?: string
+  secondaryAccountName?: string
 }
 
 export const CAMPAIGN_STATUSES = ['chờ xử lý', 'đang chạy', 'tạm dừng', 'hoàn thành'] as const

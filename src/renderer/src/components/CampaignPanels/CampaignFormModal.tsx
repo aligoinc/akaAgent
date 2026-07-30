@@ -1222,6 +1222,13 @@ const parseDailyTimeSlot = (value: string): string | null => {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
+const getDailyTimeSlotMinutes = (value: string): number | null => {
+  const slot = parseDailyTimeSlot(value)
+  if (!slot) return null
+  const [hour, minute] = slot.split(':').map(Number)
+  return hour * 60 + minute
+}
+
 const parseDailyTimeSlots = (value: string): { slots: string[]; invalidItems: string[] } => {
   const items = String(value || '')
     .split(/[,\r\n]+/)
@@ -1842,6 +1849,7 @@ export default function CampaignFormModal({
     name: campaign?.name || '',
     actionId: initialActionId,
     accountIds: initialAccountIds?.length ? initialAccountIds : (campaign?.accountId ? [campaign.accountId] : [] as number[]),
+    secondaryAccountId: campaign?.secondaryAccountId ?? null as number | null,
     dataTargetSourceMode: (campaign?.dataTargetSourceMode || 'direct') as CampaignDataTargetSourceMode,
     dataGroupId: campaign?.dataGroupId ?? null as number | null,
     schedule: initSchedule(),
@@ -2402,6 +2410,10 @@ export default function CampaignFormModal({
     isPagePostCampaign ||
     isZaloMessageFriendCampaign ||
     isZaloMessageGroupCampaign
+  const usesMultiDailyTimeSlots =
+    !isDataGroupSource &&
+    isMultiDailyTimeSlotsCampaign &&
+    formData.multiDailyTimeSlotsEnabled
   const isPostBackgroundApiModeDisabled = isPagePostCampaign && formData.pagePostMode === 'api'
   const hasSourceContentSelection = supportsSourceContent && (formData.copyContentFromSource || (supportsSourceSharePost && formData.sharePost))
   const isPostBackgroundSourceDisabled = isPostBackgroundCampaign && hasSourceContentSelection
@@ -2603,6 +2615,7 @@ export default function CampaignFormModal({
   const selectedActionPlatform = normalizeCampaignActionPlatform(selectedCampaignAction?.flatformType)
   const actionPlatformForAccountSelection = selectedActionPlatform || selectedActionPlatformFilter
   const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false
+  const allowsSecondaryAccount = selectedCampaignAction?.allowSecondaryAccount === true
   const campaignDailyLimitCap = getCampaignActionDailySendLimit(
     selectedCampaignAction || (formData.actionId ? { id: formData.actionId, flatformType: selectedActionPlatform } : null),
     entitlements
@@ -2623,6 +2636,24 @@ export default function CampaignFormModal({
       : accounts,
     [accounts, actionPlatformForAccountSelection, formData.actionId]
   )
+  const selectedPrimaryAccount = useMemo(() => {
+    if (formData.accountIds.length !== 1) return null
+    return accounts.find(account => account.id === formData.accountIds[0]) || null
+  }, [accounts, formData.accountIds])
+  const selectableSecondaryAccounts = useMemo(() => {
+    if (!allowsSecondaryAccount || !selectedPrimaryAccount || !selectedActionPlatform) return []
+
+    return selectableAccounts.filter(account => {
+      if (account.id === selectedPrimaryAccount.id) return false
+      return selectedActionPlatform !== 'zalo' ||
+        isZaloWebAccount(account) === isZaloWebAccount(selectedPrimaryAccount)
+    })
+  }, [
+    allowsSecondaryAccount,
+    selectableAccounts,
+    selectedActionPlatform,
+    selectedPrimaryAccount
+  ])
   const selectedCampaignNameAccount = useMemo(() => {
     if (formData.accountIds.length !== 1) return null
     return accounts.find(account => account.id === formData.accountIds[0]) || null
@@ -2650,7 +2681,11 @@ export default function CampaignFormModal({
 
     return { byGroup, ungrouped }
   }, [selectableAccounts, selectableAccountGroups])
-  const isSingleAccountSelection = Boolean((campaign && campaign.id) || requiresSingleAccount)
+  const isSingleAccountSelection = Boolean(
+    (campaign && campaign.id) ||
+    requiresSingleAccount ||
+    formData.secondaryAccountId !== null
+  )
   const selectedAccountIdsSet = useMemo(() => new Set(formData.accountIds), [formData.accountIds])
   const selectedAllSelectableAccounts = selectableAccounts.length > 0 && selectableAccounts.every(account => selectedAccountIdsSet.has(account.id))
   const selectedPostBumpAccountIdsSet = useMemo(
@@ -3784,6 +3819,51 @@ export default function CampaignFormModal({
   }, [isSingleAccountSelection, formData.accountIds.length])
 
   useEffect(() => {
+    if (formData.secondaryAccountId === null) return
+    if (!selectedCampaignAction) return
+
+    if (selectedCampaignAction.allowSecondaryAccount !== false && formData.accountIds.length === 1) {
+      const primaryAccount = accounts.find(account => account.id === formData.accountIds[0])
+      const secondaryAccount = accounts.find(account => account.id === formData.secondaryAccountId)
+
+      // Preserve hydrated ids while the account catalog is loading or temporarily incomplete.
+      // Save validation will surface a missing account if the user submits in this state.
+      if (!primaryAccount || !secondaryAccount) return
+
+      const primaryPlatform = normalizeCampaignActionPlatform(primaryAccount.flatformType)
+      const secondaryPlatform = normalizeCampaignActionPlatform(secondaryAccount.flatformType)
+      const hasPlatformMismatch =
+        primaryPlatform !== secondaryPlatform ||
+        (!!selectedActionPlatform && (
+          primaryPlatform !== selectedActionPlatform ||
+          secondaryPlatform !== selectedActionPlatform
+        ))
+      const hasZaloSubtypeMismatch =
+        primaryPlatform === 'zalo' &&
+        secondaryPlatform === 'zalo' &&
+        isZaloWebAccount(primaryAccount) !== isZaloWebAccount(secondaryAccount)
+      const isIncompatible =
+        primaryAccount.id === secondaryAccount.id ||
+        hasPlatformMismatch ||
+        hasZaloSubtypeMismatch
+
+      if (!isIncompatible) return
+    }
+
+    setFormData(prev => (
+      prev.secondaryAccountId === null
+        ? prev
+        : { ...prev, secondaryAccountId: null }
+    ))
+  }, [
+    accounts,
+    formData.accountIds,
+    formData.secondaryAccountId,
+    selectedActionPlatform,
+    selectedCampaignAction
+  ])
+
+  useEffect(() => {
     if (!isZaloMessageGroupRealtimeCampaign || formData.scheduleType === 'daily') return
     setFormData(prev => ({
       ...prev,
@@ -3797,12 +3877,20 @@ export default function CampaignFormModal({
     if (!actionPlatformForAccountSelection) return
     const allowedIds = new Set(selectableAccounts.map(account => account.id))
     setFormData(prev => {
-      const nextAccountIds = prev.accountIds.filter(id => allowedIds.has(id))
+      const nextAccountIds = prev.accountIds.filter(id => {
+        const account = accounts.find(item => item.id === id)
+        // Do not drop a hydrated id just because the account catalog is still incomplete.
+        return !account || allowedIds.has(id)
+      })
       if (nextAccountIds.length === prev.accountIds.length) return prev
       invalidateCampaignNameAiRequest()
       return { ...prev, accountIds: nextAccountIds }
     })
-  }, [actionPlatformForAccountSelection, selectableAccounts.map(account => account.id).join(',')])
+  }, [
+    accounts,
+    actionPlatformForAccountSelection,
+    selectableAccounts
+  ])
 
   useEffect(() => {
     if (!needsZaloLabels || formData.accountIds.length === 0) {
@@ -5564,7 +5652,7 @@ export default function CampaignFormModal({
           ? (campaign?.extraSettings?.suggestedFriendsCount ?? formData.suggestedFriendsCount)
           : formData.suggestedFriendsCount)
         : 10
-      const normalizedMultiDailySlots = isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled
+      const normalizedMultiDailySlots = usesMultiDailyTimeSlots
         ? parseDailyTimeSlots(formData.multiDailyTimeSlots).slots
         : []
       const scheduleInput = normalizedMultiDailySlots.length > 0
@@ -5722,6 +5810,7 @@ export default function CampaignFormModal({
           name: formData.name,
           actionId: formData.actionId,
           accountId,
+          secondaryAccountId: allowsSecondaryAccount ? formData.secondaryAccountId : null,
           dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct',
           dataGroupId: isDataGroupSource ? formData.dataGroupId : null,
           ...(cloneFromId ? { status: 'tạm dừng' } : {}),
@@ -5942,8 +6031,8 @@ export default function CampaignFormModal({
             findDataRerunAfterHours: canUseRerunAfterCompletion
               ? normalizeHourValue(formData.findDataRerunAfterHours)
               : DEFAULT_FIND_DATA_RERUN_AFTER_HOURS,
-            multiDailyTimeSlotsEnabled: !isDataGroupSource && isMultiDailyTimeSlotsCampaign ? formData.multiDailyTimeSlotsEnabled : false,
-            multiDailyTimeSlots: !isDataGroupSource && isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled
+            multiDailyTimeSlotsEnabled: usesMultiDailyTimeSlots,
+            multiDailyTimeSlots: usesMultiDailyTimeSlots
               ? normalizedMultiDailySlots.join(',')
               : '',
             isFindPostByKeywords: canUsePostContentConditionsForSave ? formData.isFindPostByKeywords : false,
@@ -6008,6 +6097,41 @@ export default function CampaignFormModal({
         'error'
       )
       return
+    }
+    if (formData.secondaryAccountId !== null) {
+      if (!allowsSecondaryAccount) {
+        showAlert('Hành động chiến dịch này không hỗ trợ tài khoản phụ.', 'error')
+        return
+      }
+      if (formData.accountIds.length !== 1) {
+        showAlert('Khi chọn tài khoản phụ, vui lòng chỉ chọn 1 tài khoản chính.', 'error')
+        return
+      }
+
+      const primaryAccount = accounts.find(account => account.id === formData.accountIds[0])
+      const secondaryAccount = accounts.find(account => account.id === formData.secondaryAccountId)
+      if (!primaryAccount || !secondaryAccount) {
+        showAlert('Tài khoản chính hoặc tài khoản phụ không còn tồn tại. Vui lòng chọn lại.', 'error')
+        return
+      }
+      if (primaryAccount.id === secondaryAccount.id) {
+        showAlert('Tài khoản phụ phải khác tài khoản chính.', 'error')
+        return
+      }
+      if (
+        normalizeCampaignActionPlatform(primaryAccount.flatformType) !== selectedActionPlatform ||
+        normalizeCampaignActionPlatform(secondaryAccount.flatformType) !== selectedActionPlatform
+      ) {
+        showAlert('Tài khoản phụ phải cùng nền tảng với tài khoản chính và chiến dịch.', 'error')
+        return
+      }
+      if (
+        selectedActionPlatform === 'zalo' &&
+        isZaloWebAccount(primaryAccount) !== isZaloWebAccount(secondaryAccount)
+      ) {
+        showAlert('Tài khoản phụ Zalo phải cùng loại QR hoặc Trình duyệt với tài khoản chính.', 'error')
+        return
+      }
     }
     if (selectedActionPlatform) {
       const invalidAccount = formData.accountIds
@@ -6228,7 +6352,8 @@ export default function CampaignFormModal({
       showAlert(postBackgroundError, 'error')
       return
     }
-    if (isMultiDailyTimeSlotsCampaign && formData.multiDailyTimeSlotsEnabled) {
+    let validatedMultiDailyTimeSlots: string[] | null = null
+    if (usesMultiDailyTimeSlots) {
       const { slots, invalidItems } = parseDailyTimeSlots(formData.multiDailyTimeSlots)
       if (invalidItems.length > 0) {
         showAlert(`Khung giờ không hợp lệ: ${invalidItems.join(', ')}. Vui lòng nhập dạng hh:mm, ví dụ 09:00, 10:30.`, 'error')
@@ -6236,6 +6361,32 @@ export default function CampaignFormModal({
       }
       if (slots.length < 2) {
         showAlert('Vui lòng nhập ít nhất 2 khung giờ chạy trong ngày.', 'error')
+        return
+      }
+      validatedMultiDailyTimeSlots = slots
+    }
+    if (!isMobileManagedSmsCampaign && formData.useDailyStopTime) {
+      const stopTimeMinutes = getDailyTimeSlotMinutes(formData.dailyStopTime)
+      if (stopTimeMinutes === null) {
+        showAlert('Vui lòng chọn giờ dừng chạy.', 'error')
+        return
+      }
+
+      const latestRunTime = validatedMultiDailyTimeSlots
+        ? validatedMultiDailyTimeSlots[validatedMultiDailyTimeSlots.length - 1]
+        : getDateTimeLocalTime(formData.schedule)
+      const latestRunTimeMinutes = getDailyTimeSlotMinutes(latestRunTime)
+      if (latestRunTimeMinutes === null) {
+        showAlert('Vui lòng chọn ngày và giờ chạy trước.', 'error')
+        return
+      }
+      if (stopTimeMinutes <= latestRunTimeMinutes) {
+        showAlert(
+          validatedMultiDailyTimeSlots
+            ? `Giờ dừng chạy trong ngày phải sau khung giờ chạy cuối cùng (${latestRunTime}).`
+            : `Giờ dừng chạy trong ngày phải sau giờ chạy (${latestRunTime}).`,
+          'error'
+        )
         return
       }
     }
@@ -10275,6 +10426,10 @@ export default function CampaignFormModal({
       name: displayName,
       actionId,
       accountId: accountIds[0] || Number(payload.accountId) || 0,
+      secondaryAccountId: payload.secondaryAccountId ?? null,
+      secondaryAccountName: payload.secondaryAccountId
+        ? accounts.find(account => account.id === payload.secondaryAccountId)?.name
+        : undefined,
       status: 'Tạm',
       schedule: payload.schedule,
       originalSchedule: payload.originalSchedule || payload.schedule || null,
@@ -13984,8 +14139,10 @@ export default function CampaignFormModal({
 
                   <div className="stepper-form-group" ref={accountDropdownRef}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label style={{ margin: 0 }}>Tài khoản <span className="required">*</span></label>
-                      {selectableAccounts.length > 0 && !(campaign && campaign.id) && !requiresSingleAccount && !isSavedDataGroupIdentityLocked && (
+                      <label style={{ margin: 0 }}>
+                        {allowsSecondaryAccount ? 'Tài khoản chính' : 'Tài khoản'} <span className="required">*</span>
+                      </label>
+                      {selectableAccounts.length > 0 && !isSingleAccountSelection && !isSavedDataGroupIdentityLocked && (
                         <button
                           type="button"
                           className="btn btn-ghost"
@@ -14146,6 +14303,49 @@ export default function CampaignFormModal({
                       )}
                     </div>
                   </div>
+
+                  {allowsSecondaryAccount && (
+                    <div className="stepper-form-group">
+                      <label>
+                        Tài khoản phụ <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>(không bắt buộc)</span>
+                      </label>
+                      <select
+                        className="stepper-input"
+                        value={formData.secondaryAccountId ?? ''}
+                        disabled={formData.accountIds.length !== 1}
+                        onChange={event => {
+                          const value = event.target.value
+                          setFormData(prev => ({
+                            ...prev,
+                            secondaryAccountId: value ? Number(value) : null
+                          }))
+                        }}
+                      >
+                        <option value="">-- Không sử dụng tài khoản phụ --</option>
+                        {selectableSecondaryAccounts.map(account => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
+                            {account.flatformType === 'zalo' ? ` — ${getAccountPlatformLabel(account)}` : ''}
+                            {account.flatformType !== 'sms' ? ` (${account.loginStatus || '-'})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {formData.accountIds.length !== 1 && (
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                          Chọn đúng 1 tài khoản chính để cài đặt tài khoản phụ.
+                        </div>
+                      )}
+                      {formData.accountIds.length === 1 && selectableSecondaryAccounts.length === 0 && (
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                          Chưa có tài khoản phụ cùng nền tảng
+                          {selectedActionPlatform === 'zalo' ? ' và cùng loại Zalo' : ''} phù hợp.
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
+                        Tài khoản phụ sẽ được dùng để chạy chiến dịch khi hành động của tài khoản chính bị Facebook/Zalo tạm hạn chế.
+                      </div>
+                    </div>
+                  )}
 
                   <div className="stepper-form-group">
                     <label>Tên chiến dịch <span className="required">*</span></label>

@@ -2575,6 +2575,16 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           platform: ''
         })
       }
+      if (campaign.secondaryAccountId) {
+        const secondaryValue = String(campaign.secondaryAccountId)
+        if (!optionMap.has(secondaryValue)) {
+          optionMap.set(secondaryValue, {
+            value: secondaryValue,
+            label: campaign.secondaryAccountName || `ID: ${campaign.secondaryAccountId}`,
+            platform: ''
+          })
+        }
+      }
     })
     return Array.from(optionMap.values()).sort(compareCampaignFilterOptionsByPlatform)
   }, [accounts, campaigns])
@@ -4974,7 +4984,11 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     const searchQuery = normalizeFilterText(campaignNameSearch)
 
     return campaigns.filter(campaign => {
-      if (filterAccountId && campaign.accountId !== filterAccountId) return false
+      if (
+        filterAccountId
+        && campaign.accountId !== filterAccountId
+        && campaign.secondaryAccountId !== filterAccountId
+      ) return false
 
       if (searchQuery && !normalizeFilterText(campaign.name).includes(searchQuery)) return false
 
@@ -4988,7 +5002,11 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
       if (statusFilters.length > 0 && !statusFilters.includes(campaign.status)) return false
 
-      if (accountFilters.length > 0 && !accountFilters.includes(String(campaign.accountId))) return false
+      if (
+        accountFilters.length > 0
+        && !accountFilters.includes(String(campaign.accountId))
+        && (!campaign.secondaryAccountId || !accountFilters.includes(String(campaign.secondaryAccountId)))
+      ) return false
 
       if (platformFilters.length > 0) {
         const actionPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
@@ -5021,8 +5039,17 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     [filteredCampaigns, selectedIds]
   )
 
+  const filterAccountCampaign = filterAccountId
+    ? campaigns.find(campaign => (
+      campaign.accountId === filterAccountId || campaign.secondaryAccountId === filterAccountId
+    ))
+    : undefined
   const filterAccountName = filterAccountId
-    ? accounts.find(a => a.id === filterAccountId)?.name || `ID: ${filterAccountId}`
+    ? accounts.find(account => account.id === filterAccountId)?.name
+      || (filterAccountCampaign?.accountId === filterAccountId
+        ? filterAccountCampaign.accountName
+        : filterAccountCampaign?.secondaryAccountName)
+      || `ID: ${filterAccountId}`
     : null
 
   const emptyCampaignText = campaigns.length === 0
@@ -5708,11 +5735,22 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                 const actionLabel = campaign.actionName || actionById.get(campaign.actionId)?.name || campaign.actionId
 	                const account = accountById.get(campaign.accountId)
 	                const accountLabel = campaign.accountName || account?.name || '-'
+	                const secondaryAccount = campaign.secondaryAccountId
+	                  ? accountById.get(campaign.secondaryAccountId)
+	                  : undefined
+	                const secondaryAccountLabel = campaign.secondaryAccountName
+	                  || secondaryAccount?.name
+	                  || (campaign.secondaryAccountId ? `#${campaign.secondaryAccountId}` : '')
 	                const campaignPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
 	                  || normalizeCampaignPlatform(account?.flatformType)
 	                  || inferCampaignPlatformFromActionId(campaign.actionId)
 	                const isSmsAccount = campaignPlatform === 'sms' || account?.flatformType === 'sms'
 	                const accountLoginStatus = isSmsAccount ? '' : (account?.loginStatus || '-')
+	                const accountTooltip = [
+	                  accountLabel,
+	                  secondaryAccountLabel,
+	                  accountLoginStatus ? `Trạng thái: ${accountLoginStatus}` : ''
+	                ].filter(Boolean).join('\n')
 	                const isZaloCampaign = campaignPlatform === 'zalo'
                 const scheduleTypeLabel = getCampaignListScheduleTypeLabel(campaign.scheduleType)
                 const scheduleTimeLabel = formatCompactDateTime(campaign.schedule)
@@ -6010,9 +6048,12 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                         )}
                       </div>
                     </div>
-	                    <div className="campaign-col col-account" title={isSmsAccount ? accountLabel : `${accountLabel}\n${accountLoginStatus}`}>
+	                    <div className="campaign-col col-account" title={accountTooltip}>
 	                      <div className="campaign-two-line-cell">
 	                        <div className="campaign-strong-line">{accountLabel}</div>
+	                        {secondaryAccountLabel && (
+	                          <div className="campaign-meta-line">{secondaryAccountLabel}</div>
+	                        )}
 	                        {!isSmsAccount && (
 	                          <div className={`campaign-account-login-badge ${getAccountLoginStatusClass(accountLoginStatus)}`}>
 	                            {accountLoginStatus}
