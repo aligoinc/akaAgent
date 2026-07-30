@@ -44,7 +44,7 @@ import {
 import { formatStoredCampaignLogLine } from '../../../shared/campaignLogFormat'
 import * as accountActionRepo from './accountActionRepository'
 import * as accountRepo from './accountRepository'
-import { listDataGroups } from './dataGroupRepository'
+import { finalizeDataGroupCampaign, listDataGroups } from './dataGroupRepository'
 import * as errorPolicyRepo from './errorPolicyRepository'
 import {
   canUseCampaignActionWithEntitlements,
@@ -210,6 +210,14 @@ export interface ZaloServerCampaignFinalizationResult {
   accountId: number | null
   campaignStatus: string | null
   accountStatus: string | null
+}
+
+export interface CampaignFinalizationResult {
+  completed: boolean
+  reason: string
+  campaignId: number
+  campaignStatus: string | null
+  pendingInputCount: number
 }
 
 export interface ZaloServerMultiDailySlotAdvanceResult {
@@ -1042,6 +1050,47 @@ export async function finalizeZaloServerCampaign(
   }
 }
 
+export async function finalizeCampaign(
+  campaignId: number,
+  note?: string | null,
+  expectedStatus: 'chờ xử lý' | 'đang chạy' = 'đang chạy'
+): Promise<CampaignFinalizationResult> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for finalization')
+  }
+
+  const u = requireCurrentUser()
+  const auth = requireCurrentUserCredentials()
+  const { data, error } = await client().rpc('aka_agent_finalize_campaign', {
+    p_staff_id: u.staffId,
+    p_organization_id: u.organizationId,
+    p_campaign_id: normalizedCampaignId,
+    p_note: note ?? null,
+    p_update_note: note !== undefined,
+    p_expected_status: expectedStatus,
+    p_auth_username: auth.username,
+    p_auth_password: auth.password
+  })
+  if (error) {
+    throw new Error(
+      `Failed to finalize campaign with pending-input guard: ${error.message}. ` +
+      'Ensure migration v214 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Campaign finalization returned no result')
+  const pendingInputCount = Number(row.pending_input_count || 0)
+  return {
+    completed: row.completed === true,
+    reason: String(row.reason || 'not_found'),
+    campaignId: Number(row.campaign_id || normalizedCampaignId),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    pendingInputCount: Number.isFinite(pendingInputCount) ? Math.max(0, pendingInputCount) : 0
+  }
+}
+
 export async function advanceZaloServerMultiDailySlot(
   campaignId: number,
   accountId: number,
@@ -1796,7 +1845,7 @@ export async function updateClaimedZaloServerCampaign(
  * target finalizer committed first, reopen only that completed snapshot; a
  * newer pause or already-running state must win the CAS.
  */
-export async function reopenCompletedZaloServerCampaignAfterInputInsert(
+export async function reopenCompletedCampaignAfterInputInsert(
   id: number,
   expectedActionId: string
 ): Promise<Campaign | null> {
@@ -1806,6 +1855,7 @@ export async function reopenCompletedZaloServerCampaignAfterInputInsert(
     .update({
       status: 'chờ xử lý',
       note: null,
+      completed_at: null,
       updated_at: new Date().toISOString()
     })
     .eq('id', id)
@@ -1816,7 +1866,7 @@ export async function reopenCompletedZaloServerCampaignAfterInputInsert(
     .select('*, auto_campaign_actions(name), auto_accounts(name)')
     .maybeSingle()
 
-  if (error) throw new Error(`Failed to reopen Zalo Server campaign after input insert: ${error.message}`)
+  if (error) throw new Error(`Failed to reopen campaign after input insert: ${error.message}`)
   return data ? mapCampaignFromDB(data) : null
 }
 
@@ -2186,37 +2236,62 @@ export async function maintainCampaignSchedules(
       if (!nextSchedule) continue
 
       if (isPastScheduleEnd(campaign, nextSchedule)) {
-        const updated = await updateCampaign(campaign.id, {
-          schedule: nextSchedule.toISOString(),
-          ...(campaign.status !== 'hoàn thành'
-            ? {
-              status: 'hoàn thành',
-              note: 'Chiến dịch đã hết ngày kết thúc'
-            }
-            : {})
+        await updateCampaign(campaign.id, {
+          schedule: nextSchedule.toISOString()
         })
+        if (campaign.dataTargetSourceMode === 'data_group') {
+          await finalizeDataGroupCampaign(campaign.id, 'Chiến dịch đã hết ngày kết thúc')
+        } else {
+          await finalizeCampaign(
+            campaign.id,
+            'Chiến dịch đã hết ngày kết thúc',
+            'chờ xử lý'
+          )
+        }
+        const updated = await getCampaign(campaign.id)
+        if (!updated) throw new Error('Không tìm thấy chiến dịch sau khi kiểm tra data trước khi hoàn thành.')
         updatedCampaigns.push(updated)
         continue
       }
 
       if (scheduleType === 'daily') {
         if (campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) {
-          if (campaign.status !== 'hoàn thành') {
-            const updated = await updateCampaign(campaign.id, {
-              status: 'hoàn thành',
-              note: 'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày'
-            })
+          if (campaign.dataTargetSourceMode === 'data_group') {
+            await finalizeDataGroupCampaign(
+              campaign.id,
+              'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày'
+            )
+          } else {
+            await finalizeCampaign(
+              campaign.id,
+              'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày',
+              'chờ xử lý'
+            )
+          }
+          const updated = await getCampaign(campaign.id)
+          if (!updated) throw new Error('Không tìm thấy chiến dịch sinh nhật sau khi kiểm tra data.')
+          if (updated.status !== campaign.status || updated.note !== campaign.note) {
             updatedCampaigns.push(updated)
           }
           continue
         }
 
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
-          if (campaign.status !== 'hoàn thành') {
-            const updated = await updateCampaign(campaign.id, {
-              status: 'hoàn thành',
-              note: 'Chiến dịch lướt newsfeed không chạy tiếp qua ngày'
-            })
+          if (campaign.dataTargetSourceMode === 'data_group') {
+            await finalizeDataGroupCampaign(
+              campaign.id,
+              'Chiến dịch lướt newsfeed không chạy tiếp qua ngày'
+            )
+          } else {
+            await finalizeCampaign(
+              campaign.id,
+              'Chiến dịch lướt newsfeed không chạy tiếp qua ngày',
+              'chờ xử lý'
+            )
+          }
+          const updated = await getCampaign(campaign.id)
+          if (!updated) throw new Error('Không tìm thấy chiến dịch newsfeed sau khi kiểm tra data.')
+          if (updated.status !== campaign.status || updated.note !== campaign.note) {
             updatedCampaigns.push(updated)
           }
           continue

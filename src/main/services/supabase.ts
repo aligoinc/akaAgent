@@ -147,8 +147,8 @@ export class SupabaseService {
   updateClaimedZaloServerCampaign(id: number, updates: Partial<Campaign>) {
     return campaignRepo.updateClaimedZaloServerCampaign(id, updates)
   }
-  reopenCompletedZaloServerCampaignAfterInputInsert(id: number, expectedActionId: string) {
-    return campaignRepo.reopenCompletedZaloServerCampaignAfterInputInsert(id, expectedActionId)
+  reopenCompletedCampaignAfterInputInsert(id: number, expectedActionId: string) {
+    return campaignRepo.reopenCompletedCampaignAfterInputInsert(id, expectedActionId)
   }
   setZaloServerCampaignStatus(id: number, status: campaignRepo.ZaloServerControlStatus) {
     return campaignRepo.setZaloServerCampaignStatus(id, status)
@@ -161,6 +161,13 @@ export class SupabaseService {
   }
   finalizeZaloServerCampaign(campaignId: number, note?: string | null) {
     return campaignRepo.finalizeZaloServerCampaign(campaignId, note)
+  }
+  finalizeCampaign(
+    campaignId: number,
+    note?: string | null,
+    expectedStatus: 'chờ xử lý' | 'đang chạy' = 'đang chạy'
+  ) {
+    return campaignRepo.finalizeCampaign(campaignId, note, expectedStatus)
   }
   advanceZaloServerMultiDailySlot(campaignId: number, accountId: number, nextSchedule: string) {
     return campaignRepo.advanceZaloServerMultiDailySlot(campaignId, accountId, nextSchedule)
