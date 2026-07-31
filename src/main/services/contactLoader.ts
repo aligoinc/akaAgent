@@ -72,6 +72,9 @@ const PAGE_INBOX_BATCH_SIZE = 500
 const PAGE_INBOX_MAX_CONTACTS = 100000
 const PAGE_INBOX_MAX_FETCH_FAILURES = 3
 const ZALO_FRIEND_PAGE_SIZE = 500
+const ZALO_FRIEND_API_MIN_DELAY_MS = 2000
+const ZALO_FRIEND_API_MAX_DELAY_MS = 5000
+const ZALO_FRIEND_API_429_RETRY_DELAYS_MS = [15_000, 30_000, 60_000] as const
 const ZALO_GROUP_INFO_BATCH_SIZE = 50
 const PHONE_RE = /((\+?84|0)[\s.-]?)?(3[2-9]|5[689]|7[06-9]|8[1-689]|9[0-46-9])[0-9\s.-]{7,}/g
 
@@ -710,10 +713,24 @@ export class ContactLoader {
         contactType,
         runKey: loadState.runKey
       })
-      const session = await this.zaloRuntime.checkSession(accountId)
+      const session = await this.runZaloFriendApiWith429Retry(
+        accountId,
+        loadState,
+        'kiểm tra phiên đăng nhập',
+        () => this.zaloRuntime!.checkSession(accountId),
+        result => !result.loggedIn && this.isZalo429Error(result.reason)
+      )
       if (!session.loggedIn) {
         throw new Error(session.reason || 'Tài khoản chưa đăng nhập Zalo')
       }
+
+      const initialDelayMs = this.getZaloFriendApiDelayMs()
+      this.sendProgress(`⏳ Chờ ${(initialDelayMs / 1000).toFixed(1)} giây trước khi đọc danh sách ${typeName}...`, {
+        accountId,
+        contactType,
+        runKey: loadState.runKey
+      })
+      await this.waitForZaloFriendApiDelay(accountId, loadState, initialDelayMs)
 
       const contacts: ZaloUserContactInput[] = []
       let page = 1
@@ -723,7 +740,12 @@ export class ContactLoader {
           contactType,
           runKey: loadState.runKey
         })
-        const rows = await this.zaloRuntime.getAllFriendsPage(accountId, ZALO_FRIEND_PAGE_SIZE, page)
+        const rows = await this.runZaloFriendApiWith429Retry(
+          accountId,
+          loadState,
+          `đọc trang ${page} danh sách ${typeName}`,
+          () => this.zaloRuntime!.getAllFriendsPage(accountId, ZALO_FRIEND_PAGE_SIZE, page)
+        )
         for (const row of rows) {
           const contact = this.mapZaloUserContact(accountId, row)
           if (contact) contacts.push(contact)
@@ -734,6 +756,13 @@ export class ContactLoader {
           runKey: loadState.runKey
         })
         if (rows.length < ZALO_FRIEND_PAGE_SIZE) break
+        const pageDelayMs = this.getZaloFriendApiDelayMs()
+        this.sendProgress(`⏳ Chờ ${(pageDelayMs / 1000).toFixed(1)} giây trước khi đọc trang tiếp theo...`, {
+          accountId,
+          contactType,
+          runKey: loadState.runKey
+        })
+        await this.waitForZaloFriendApiDelay(accountId, loadState, pageDelayMs)
         page += 1
       }
 
@@ -821,6 +850,77 @@ export class ContactLoader {
         this.activeLoads.delete(accountId)
         this.cancelledLoads.delete(accountId)
       }
+    }
+  }
+
+  private getZaloFriendApiDelayMs(): number {
+    return Math.floor(
+      Math.random() * (ZALO_FRIEND_API_MAX_DELAY_MS - ZALO_FRIEND_API_MIN_DELAY_MS + 1)
+    ) + ZALO_FRIEND_API_MIN_DELAY_MS
+  }
+
+  private isZalo429Error(value: unknown): boolean {
+    if (typeof value === 'string') {
+      return /\b429\b|too many requests/i.test(value)
+    }
+    if (!value || typeof value !== 'object') return false
+
+    const error = value as {
+      message?: unknown
+      status?: unknown
+      response?: { status?: unknown }
+      cause?: unknown
+    }
+    if (Number(error.response?.status) === 429 || Number(error.status) === 429) return true
+    if (typeof error.message === 'string' && this.isZalo429Error(error.message)) return true
+    return error.cause !== value && this.isZalo429Error(error.cause)
+  }
+
+  private async runZaloFriendApiWith429Retry<T>(
+    accountId: number,
+    loadState: ActiveContactLoad,
+    operationLabel: string,
+    operation: () => Promise<T>,
+    resultIs429: (result: T) => boolean = () => false
+  ): Promise<T> {
+    let retryIndex = 0
+    while (true) {
+      try {
+        const result = await operation()
+        if (!resultIs429(result) || retryIndex >= ZALO_FRIEND_API_429_RETRY_DELAYS_MS.length) {
+          return result
+        }
+      } catch (err) {
+        if (!this.isZalo429Error(err) || retryIndex >= ZALO_FRIEND_API_429_RETRY_DELAYS_MS.length) {
+          throw err
+        }
+      }
+
+      const retryDelayMs = ZALO_FRIEND_API_429_RETRY_DELAYS_MS[retryIndex]
+      this.sendProgress(
+        `⚠️ Zalo đang giới hạn request khi ${operationLabel}. Tự thử lại sau ${retryDelayMs / 1000} giây (${retryIndex + 1}/${ZALO_FRIEND_API_429_RETRY_DELAYS_MS.length})...`,
+        {
+          accountId,
+          contactType: loadState.contactType,
+          runKey: loadState.runKey
+        }
+      )
+      await this.waitForZaloFriendApiDelay(accountId, loadState, retryDelayMs)
+      retryIndex += 1
+    }
+  }
+
+  private async waitForZaloFriendApiDelay(
+    accountId: number,
+    loadState: ActiveContactLoad,
+    delayMs: number
+  ): Promise<void> {
+    const deadline = Date.now() + Math.max(0, delayMs)
+    while (Date.now() < deadline) {
+      if (this.isLoadCancelled(accountId, loadState.variables) || loadState.controller.signal.aborted) {
+        throw new Error('Đã dừng quét bạn bè Zalo')
+      }
+      await this.sleep(Math.min(250, deadline - Date.now()))
     }
   }
 
