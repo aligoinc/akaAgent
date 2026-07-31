@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -66,7 +66,7 @@ type DetailTab = 'info' | 'data' | 'actions' | 'automation' | 'automationActivat
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
-type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'actionsTime' | 'actionsStatus' | 'findDataLogScope'
+type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'actionsTime' | 'actionsStatus' | 'findDataLogScope'
 type DetailTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'custom'
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
 type FindDataLogScope = 'visible' | 'all'
@@ -576,6 +576,14 @@ const INPUT_DATA_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUS
   value: status,
   label: status
 }))
+
+const INPUT_DATA_ORIGIN_FILTER_OPTIONS: Array<{ value: CampaignInputOriginFilter; label: string }> = [
+  { value: 'all', label: 'Tất cả nguồn' },
+  { value: 'data_group', label: 'Nhóm data' },
+  { value: 'automation', label: 'Automation' },
+  { value: 'manual_or_api', label: 'Thủ công / API' },
+  { value: 'direct', label: 'Data trực tiếp' }
+]
 
 const formatCampaignInputOrigin = (item: CampaignInputData): string => {
   const labels = (item.origins || []).map(origin => {
@@ -1270,6 +1278,10 @@ const getDetailStatusFilterLabel = (options: CampaignFilterOption[], status: str
   if (!status) return 'Tất cả'
   return options.find(option => option.value === status)?.label || status
 }
+
+const getInputDataOriginFilterLabel = (filter: CampaignInputOriginFilter) => (
+  INPUT_DATA_ORIGIN_FILTER_OPTIONS.find(option => option.value === filter)?.label || 'Tất cả nguồn'
+)
 
 const getFindDataLogScopeLabel = (scope: FindDataLogScope) => (
   scope === 'all' ? 'Tất cả log' : 'Log tìm kiếm'
@@ -5072,7 +5084,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     onDateFromChange: (value: string) => void,
     onDateToChange: (value: string) => void,
     statusOptions: CampaignFilterOption[],
-    onStatusChange: (value: string) => void
+    onStatusChange: (value: string) => void,
+    additionalFilter?: ReactNode
   ) => (
     <div className="detail-filter-controls">
       <div className="report-dropdown-field detail-filter-dropdown-field detail-filter-range-field">
@@ -5199,6 +5212,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           </div>
         )}
       </div>
+      {additionalFilter}
     </div>
   )
 
@@ -6301,22 +6315,51 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                       value => setInputDataFilters(prev => ({ ...prev, dateFrom: value })),
                       value => setInputDataFilters(prev => ({ ...prev, dateTo: value })),
                       INPUT_DATA_STATUS_FILTER_OPTIONS,
-                      value => setInputDataFilters(prev => ({ ...prev, status: value }))
-	                    )}
-	                    <label className="detail-filter-field input-data-origin-filter">
-	                      <span>Nguồn thêm data</span>
-	                      <select
-	                        className="form-control detail-filter-control"
-	                        value={inputDataOriginFilter}
-	                        onChange={event => setInputDataOriginFilter(event.target.value as CampaignInputOriginFilter)}
-	                      >
-	                        <option value="all">Tất cả nguồn</option>
-	                        <option value="data_group">Nhóm data</option>
-	                        <option value="automation">Automation</option>
-	                        <option value="manual_or_api">Thủ công / API</option>
-	                        <option value="direct">Data trực tiếp</option>
-	                      </select>
-	                    </label>
+                      value => setInputDataFilters(prev => ({ ...prev, status: value })),
+                      <div className="report-dropdown-field detail-filter-dropdown-field input-data-origin-filter">
+                        <span>Nguồn thêm data</span>
+                        <button
+                          type="button"
+                          className={`report-filter-button detail-filter-button ${openDetailDropdown === 'inputDataOrigin' ? 'active' : ''}`}
+                          onClick={event => handleDetailDropdownToggle(
+                            'inputDataOrigin',
+                            event.currentTarget,
+                            DETAIL_POPOVER_MIN_WIDTH,
+                            getDetailOptionPopoverHeight(INPUT_DATA_ORIGIN_FILTER_OPTIONS.length)
+                          )}
+                        >
+                          <strong>{getInputDataOriginFilterLabel(inputDataOriginFilter)}</strong>
+                          <ChevronDown size={14} />
+                        </button>
+                        {openDetailDropdown === 'inputDataOrigin' && detailPopoverPosition && (
+                          <div
+                            className="report-filter-popover detail-filter-popover"
+                            style={{
+                              top: detailPopoverPosition.top ?? 'auto',
+                              bottom: detailPopoverPosition.bottom ?? 'auto',
+                              left: detailPopoverPosition.left,
+                              width: detailPopoverPosition.width
+                            }}
+                          >
+                            <div className="report-option-list">
+                              {INPUT_DATA_ORIGIN_FILTER_OPTIONS.map(option => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className={`report-option-button ${inputDataOriginFilter === option.value ? 'selected' : ''}`}
+                                  onClick={() => {
+                                    setInputDataOriginFilter(option.value)
+                                    closeDetailDropdown()
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 	                    <label className="campaign-input-data-search">
 	                      <Search size={14} />
 	                      <input
