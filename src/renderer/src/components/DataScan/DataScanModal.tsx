@@ -973,8 +973,6 @@ export default function DataScanModal({
 }: DataScanModalProps) {
   const { accounts, loadAccounts } = useCampaignStore()
   const entitlements = useAuthStore(state => state.user?.entitlements)
-  const isZaloServer = useAuthStore(state => state.user?.isZaloServer === true)
-  const serverOperationState = useZaloServerOperationState(isZaloServer)
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
   const isDataGroupTargetMode = targetDataGroup != null
@@ -1122,6 +1120,8 @@ export default function DataScanModal({
     () => accounts.find(account => account.id === accountId),
     [accounts, accountId]
   )
+  const isSelectedAccountZaloServer = selectedAccount?.isZaloServer === true
+  const serverOperationState = useZaloServerOperationState(isSelectedAccountZaloServer)
   const selectedDataset = useMemo(
     () => contactDatasets.find(dataset => dataset.id === selectedDatasetId) || null,
     [contactDatasets, selectedDatasetId]
@@ -2362,7 +2362,7 @@ export default function DataScanModal({
     const unsubscribe = window.electronAPI.onContactsProgress(({ accountId: progressAccountId, contactType, message, operationId }) => {
       if (progressAccountId !== undefined && accountId !== '' && progressAccountId !== accountId) return
       if (contactType !== undefined && contactType !== actionDef.contactType) return
-      if (isZaloServer && operationId) {
+      if (isSelectedAccountZaloServer && operationId) {
         const operation = serverOperationState?.operations.find(item => item.operationId === operationId)
         if (operation && serverScanCommand && operation.command !== serverScanCommand) return
         if (handledServerScanOperationIdsRef.current.has(operationId)) return
@@ -2374,13 +2374,13 @@ export default function DataScanModal({
       ))
     })
     return unsubscribe
-  }, [accountId, actionDef.contactType, isZaloServer, serverOperationState, serverScanCommand])
+  }, [accountId, actionDef.contactType, isSelectedAccountZaloServer, serverOperationState, serverScanCommand])
 
   useEffect(() => {
     if (!window.electronAPI?.onContactsCompleted || accountId === '') return
     const unsubscribe = window.electronAPI.onContactsCompleted(async ({ accountId: completedAccountId, contactType, result, operationId }) => {
       if (completedAccountId !== accountId || contactType !== actionDef.contactType) return
-      if (isZaloServer && operationId) {
+      if (isSelectedAccountZaloServer && operationId) {
         const operation = serverOperationState?.operations.find(item => item.operationId === operationId)
         if (operation && serverScanCommand && operation.command !== serverScanCommand) return
         const trackedOperationId = trackedServerScanOperationIdRef.current
@@ -2470,7 +2470,7 @@ export default function DataScanModal({
     isPostLikesAction,
     isProfileFriendsAction,
     isZaloGroupMembersAction,
-    isZaloServer,
+    isSelectedAccountZaloServer,
     loadCachedContacts,
     loadContactDatasets,
     loadContactGroups,
@@ -2544,7 +2544,7 @@ export default function DataScanModal({
 
   useEffect(() => {
     if (
-      !isZaloServer ||
+      !isSelectedAccountZaloServer ||
       !serverOperationState ||
       accountId === '' ||
       !serverScanCommand
@@ -2638,7 +2638,7 @@ export default function DataScanModal({
     void settleServerScanOperation(terminalOperation, false)
   }, [
     accountId,
-    isZaloServer,
+    isSelectedAccountZaloServer,
     serverOperationState,
     serverScanCommand,
     settleServerScanOperation
@@ -3349,7 +3349,7 @@ export default function DataScanModal({
 
     // Local scans keep the existing immediate-stop behavior. Only the remote
     // runtime needs an acknowledgement before its snapshot is ignored.
-    if (!isZaloServer) {
+    if (!isSelectedAccountZaloServer) {
       if (closeAfterStop) {
         await cancelScan().catch(err => console.warn('Failed to cancel contact load:', err))
         onClose()

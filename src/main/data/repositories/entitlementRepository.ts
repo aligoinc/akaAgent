@@ -37,6 +37,7 @@ export const EMAIL_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Email chưa đư�
 export const ZALO_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.'
 export const ZALO_QR_FEATURE_UNAVAILABLE_MESSAGE = 'Gói hiện tại không hỗ trợ tài khoản Zalo (mã QR).'
 export const ZALO_WEB_FEATURE_UNAVAILABLE_MESSAGE = 'Gói hiện tại không hỗ trợ tài khoản Zalo (trình duyệt).'
+export const ZALO_SERVER_FEATURE_UNAVAILABLE_MESSAGE = 'Gói hiện tại không hỗ trợ tài khoản Zalo chạy trên server.'
 export const SMS_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng SMS chưa được kích hoạt hoặc đã hết hạn.'
 
 export const FACEBOOK_FANPAGE_CAMPAIGN_ACTION_IDS = new Set([
@@ -102,6 +103,7 @@ interface OrganizationProductRow {
   max_sends_per_day?: number | string | null
   max_accounts?: number | string | null
   is_zalo_show_web?: boolean | null
+  is_zalo_server?: boolean | null
   created_at?: string | null
 }
 
@@ -111,7 +113,7 @@ export interface OrganizationEntitlementAccess {
 }
 
 export function emptyZaloAccountCapabilities(): ZaloAccountCapabilities {
-  return { qr: false, web: false }
+  return { qr: false, web: false, server: false }
 }
 
 export function emptyAuthEntitlements(): AuthEntitlements {
@@ -229,7 +231,8 @@ function resolveZaloAccountCapabilities(rows: OrganizationProductRow[]): ZaloAcc
   const effectiveRow = getNewestZaloProductRow(rows, true)
   return {
     qr: effectiveRow !== null,
-    web: effectiveRow?.is_zalo_show_web === true
+    web: effectiveRow?.is_zalo_show_web === true,
+    server: effectiveRow?.is_zalo_server === true
   }
 }
 
@@ -253,7 +256,7 @@ export async function loadOrganizationEntitlementAccess(
   const entitlements = emptyAuthEntitlements()
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('id, product_id, expiration_date, package_type, max_sends_per_day, max_accounts, is_zalo_show_web, created_at')
+    .select('id, product_id, expiration_date, package_type, max_sends_per_day, max_accounts, is_zalo_show_web, is_zalo_server, created_at')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)
@@ -300,7 +303,7 @@ export async function loadOrganizationZaloAccountCapabilities(
 export async function loadOrganizationAccountProducts(organizationId: number): Promise<AuthAccountProduct[]> {
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('id, product_id, product_name, package_name, package_type, expiration_date, max_accounts, is_zalo_show_web, created_at')
+    .select('id, product_id, product_name, package_name, package_type, expiration_date, max_accounts, is_zalo_show_web, is_zalo_server, created_at')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)
@@ -375,7 +378,7 @@ export async function loadCurrentUserEffectiveEntitlements(): Promise<AuthEntitl
 
 type ZaloCapabilityUser = Partial<Pick<
   AuthUser,
-  'entitlements' | 'isZaloShowWeb' | 'zaloAccountCapabilities'
+  'entitlements' | 'isZaloServer' | 'isZaloShowWeb' | 'zaloAccountCapabilities'
 >>
 
 /**
@@ -387,10 +390,16 @@ export function getUserZaloAccountCapabilities(
   user: ZaloCapabilityUser | null | undefined
 ): ZaloAccountCapabilities {
   const capabilities = user?.zaloAccountCapabilities
-  if (capabilities && typeof capabilities.qr === 'boolean' && typeof capabilities.web === 'boolean') {
+  if (
+    capabilities &&
+    typeof capabilities.qr === 'boolean' &&
+    typeof capabilities.web === 'boolean' &&
+    typeof capabilities.server === 'boolean'
+  ) {
     return {
       qr: capabilities.qr || capabilities.web,
-      web: capabilities.web
+      web: capabilities.web,
+      server: capabilities.server
     }
   }
 
@@ -398,7 +407,8 @@ export function getUserZaloAccountCapabilities(
   const legacyWeb = hasLegacyZaloEntitlement && user?.isZaloShowWeb === true
   return {
     qr: hasLegacyZaloEntitlement,
-    web: legacyWeb
+    web: legacyWeb,
+    server: hasLegacyZaloEntitlement && user?.isZaloServer === true
   }
 }
 
@@ -407,17 +417,23 @@ export function loadCurrentUserZaloAccountCapabilities(): ZaloAccountCapabilitie
 }
 
 export function canUseZaloAccountWithCapabilities(
-  accountOrShowWeb: Pick<AutoAccount, 'isZaloShowWeb'> | boolean,
-  capabilities: Partial<ZaloAccountCapabilities> | null | undefined
+  accountOrShowWeb: Pick<AutoAccount, 'isZaloShowWeb' | 'isZaloServer'> | boolean,
+  capabilities: Partial<ZaloAccountCapabilities> | null | undefined,
+  isZaloServer = false
 ): boolean {
   const isShowWeb = typeof accountOrShowWeb === 'boolean'
     ? accountOrShowWeb
     : accountOrShowWeb.isZaloShowWeb === true
+  const isServer = typeof accountOrShowWeb === 'boolean'
+    ? isZaloServer
+    : accountOrShowWeb.isZaloServer === true
+  if (isShowWeb && isServer) return false
+  if (isServer) return capabilities?.server === true
   return isShowWeb ? capabilities?.web === true : capabilities?.qr === true
 }
 
 export function canUseAccountWithEntitlementsAndCapabilities(
-  account: Pick<AutoAccount, 'flatformType' | 'isZaloShowWeb'>,
+  account: Pick<AutoAccount, 'flatformType' | 'isZaloShowWeb' | 'isZaloServer'>,
   entitlements: Partial<AuthEntitlements> | null | undefined,
   zaloAccountCapabilities: Partial<ZaloAccountCapabilities> | null | undefined
 ): boolean {
@@ -426,13 +442,18 @@ export function canUseAccountWithEntitlementsAndCapabilities(
     || canUseZaloAccountWithCapabilities(account, zaloAccountCapabilities)
 }
 
-export async function ensureCurrentUserCanUseZaloAccountType(isZaloShowWeb: boolean): Promise<void> {
+export async function ensureCurrentUserCanUseZaloAccountType(
+  isZaloShowWeb: boolean,
+  isZaloServer = false
+): Promise<void> {
   await ensureCurrentUserFeatureActive('zalo')
   const capabilities = loadCurrentUserZaloAccountCapabilities()
-  if (!canUseZaloAccountWithCapabilities(isZaloShowWeb, capabilities)) {
-    throw new Error(isZaloShowWeb
-      ? ZALO_WEB_FEATURE_UNAVAILABLE_MESSAGE
-      : ZALO_QR_FEATURE_UNAVAILABLE_MESSAGE)
+  if (!canUseZaloAccountWithCapabilities(isZaloShowWeb, capabilities, isZaloServer)) {
+    throw new Error(isZaloServer
+      ? ZALO_SERVER_FEATURE_UNAVAILABLE_MESSAGE
+      : isZaloShowWeb
+        ? ZALO_WEB_FEATURE_UNAVAILABLE_MESSAGE
+        : ZALO_QR_FEATURE_UNAVAILABLE_MESSAGE)
   }
 }
 

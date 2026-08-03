@@ -2,7 +2,7 @@ import { BrowserWindow, webContents } from 'electron'
 import { AutoAccount, IPC_EVENTS } from '../../../shared/types'
 import { WebviewRegistry } from '../../playwright/webviewController'
 import * as accountRepo from '../../data/repositories/accountRepository'
-import { getCurrentUser, isCurrentUserZaloServerEnabled } from '../../data/currentUser'
+import { getCurrentUser } from '../../data/currentUser'
 import {
   getZaloRuntimeRestartRequired,
   isZaloLocalStartupHandoffBlocked
@@ -136,6 +136,7 @@ async function checkZaloApiAccounts(
   for (const account of accounts) {
     if (!canContinue()) break
     if (account.flatformType !== 'zalo' || account.loginStatus !== 'đã đăng nhập') continue
+    if (account.isZaloServer) continue
     if (account.isZaloShowWeb) {
       if (!zaloRuntime.hasVerifiedWebSession(account.id)) continue
     } else if (!account.hasZaloSession) {
@@ -206,8 +207,7 @@ export function startAccountPoller(
       const hasFacebookChanges = await checkFacebookWebviewAccounts(accounts, webviewRegistry)
       const now = Date.now()
       const canCheckZalo = !getZaloRuntimeRestartRequired() &&
-        !isZaloLocalStartupHandoffBlocked() &&
-        !isCurrentUserZaloServerEnabled()
+        !isZaloLocalStartupHandoffBlocked()
       const shouldCheckZaloWeb = canCheckZalo && accounts.some(account => (
         account.flatformType === 'zalo' && account.isZaloShowWeb
       ))

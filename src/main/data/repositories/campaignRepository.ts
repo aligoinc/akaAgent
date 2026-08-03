@@ -63,14 +63,14 @@ import { randomUUID } from 'node:crypto'
 
 const client = () => getSupabaseClient()
 const CAMPAIGN_PRIMARY_ACCOUNT_RELATION =
-  'primary_account:auto_accounts!auto_campaigns_account_id_fkey(name)'
+  'primary_account:auto_accounts!auto_campaigns_account_id_fkey(name, flatform_type, is_zalo_show_web, is_zalo_server)'
 const CAMPAIGN_RELATIONS =
   `auto_campaign_actions(name), ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`
 const CAMPAIGN_SELECT = `*, ${CAMPAIGN_RELATIONS}`
 const CAMPAIGN_ACTION_STATUS_SELECT =
   `*, auto_campaign_actions(name, is_active, is_delete), ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`
 const CAMPAIGN_ZALO_REALTIME_SELECT =
-  '*, auto_campaign_actions(name), primary_account:auto_accounts!auto_campaigns_account_id_fkey(name, login_status, status, is_active, is_zalo_show_web)'
+  '*, auto_campaign_actions(name), primary_account:auto_accounts!auto_campaigns_account_id_fkey(name, login_status, status, is_active, is_zalo_show_web, is_zalo_server)'
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const VIETNAM_UTC_OFFSET = '+07:00'
 const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
@@ -1498,7 +1498,14 @@ export async function listCampaigns(): Promise<Campaign[]> {
 
   if (error) throw new Error(`Failed to list campaigns: ${error.message}`)
   const entitlements = await loadCurrentUserEffectiveEntitlements()
-  const campaigns = filterCampaignsByEntitlements((data || []).map(row => mapCampaignFromDB(row)), entitlements)
+  const zaloCapabilities = loadCurrentUserZaloAccountCapabilities()
+  const visibleRows = (data || []).filter(row => {
+    const account = (row as Record<string, any>).primary_account || {}
+    if (String(account.flatform_type || '').trim().toLowerCase() !== 'zalo') return true
+    if (account.is_zalo_show_web === true) return zaloCapabilities.web
+    return account.is_zalo_server === true ? zaloCapabilities.server : zaloCapabilities.qr
+  })
+  const campaigns = filterCampaignsByEntitlements(visibleRows.map(row => mapCampaignFromDB(row)), entitlements)
   const campaignsWithSecondaryAccountNames = await attachCampaignSecondaryAccountNames(
     campaigns,
     u.staffId,
@@ -1508,10 +1515,13 @@ export async function listCampaigns(): Promise<Campaign[]> {
   return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
 }
 
-export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloRealtimeGroupCampaignSnapshot[]> {
+export async function listZaloRealtimeGroupCampaignSnapshots(
+  runtimeTarget: CampaignRuntimeTarget = 'desktop'
+): Promise<ZaloRealtimeGroupCampaignSnapshot[]> {
   const u = requireCurrentUser()
   const entitlements = await loadCurrentUserEffectiveEntitlements()
-  if (!entitlements.zalo || !loadCurrentUserZaloAccountCapabilities().qr) return []
+  const capabilities = loadCurrentUserZaloAccountCapabilities()
+  if (!entitlements.zalo || (runtimeTarget === 'server' ? !capabilities.server : !capabilities.qr)) return []
 
   const { data, error } = await client()
     .from('auto_campaigns')
@@ -1526,6 +1536,7 @@ export async function listZaloRealtimeGroupCampaignSnapshots(): Promise<ZaloReal
   return (data || []).flatMap(row => {
     const account = (row as Record<string, any>).primary_account || {}
     if (account.is_zalo_show_web === true) return []
+    if ((account.is_zalo_server === true) !== (runtimeTarget === 'server')) return []
     return [{
       campaign: mapCampaignFromDB(row),
       accountLoginStatus: String(account.login_status || ''),
@@ -1625,8 +1636,11 @@ async function validateSecondaryCampaignAccount(
     throw new Error('Tài khoản phụ phải cùng nền tảng với tài khoản chính và loại chiến dịch.')
   }
 
-  if (primaryPlatform === 'zalo' && primaryAccount.isZaloShowWeb !== secondaryAccount.isZaloShowWeb) {
-    throw new Error('Tài khoản phụ Zalo phải cùng loại QR hoặc Trình duyệt với tài khoản chính.')
+  if (primaryPlatform === 'zalo' && (
+    primaryAccount.isZaloShowWeb !== secondaryAccount.isZaloShowWeb ||
+    primaryAccount.isZaloServer !== secondaryAccount.isZaloServer
+  )) {
+    throw new Error('Tài khoản phụ Zalo phải cùng loại QR local, Trình duyệt hoặc Server với tài khoản chính.')
   }
 
   return secondaryAccountId
@@ -2437,9 +2451,8 @@ export async function maintainCampaignSchedules(
 
   const u = requireCurrentUser()
   const todayStart = startOfVietnamDay()
-  const accountRelation = platformScope === 'all'
-    ? CAMPAIGN_PRIMARY_ACCOUNT_RELATION
-    : 'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type, is_zalo_show_web, staff_id)'
+  const accountRelation =
+    'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type, is_zalo_show_web, is_zalo_server, staff_id)'
   let query = client()
     .from('auto_campaigns')
     .select(`*, auto_campaign_actions(name), ${accountRelation}`)
@@ -2455,14 +2468,19 @@ export async function maintainCampaignSchedules(
     if (runtimeContext.runtimeTarget === 'server') {
       query = query
         .eq('primary_account.is_zalo_show_web', false)
+        .eq('primary_account.is_zalo_server', true)
         .eq('primary_account.staff_id', u.staffId)
         .or(
           `organization_id.is.null,organization_id.eq.${u.organizationId}`,
           { referencedTable: 'primary_account' }
         )
+    } else {
+      query = query.eq('primary_account.is_zalo_server', false)
     }
   } else if (platformScope === 'non-zalo') {
     query = query.neq('primary_account.flatform_type', 'zalo')
+  } else if (runtimeContext.runtimeTarget === 'desktop') {
+    query = query.eq('primary_account.is_zalo_server', false)
   }
 
   const { data, error } = await query

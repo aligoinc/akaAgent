@@ -605,7 +605,7 @@ export class ZaloRuntimeService {
 
   private async runWarmStoredSessions(runtimeTarget: ZaloAccountRuntimeTarget): Promise<void> {
     const version = this.cacheVersion
-    const entries = await this.supabase.listZaloAccountsWithSession()
+    const entries = await this.supabase.listZaloAccountsWithSession(runtimeTarget)
     if (entries.length > 0) {
       console.log(`[ZaloRuntime] Warming ${entries.length} stored Zalo session(s).`)
     }

@@ -8,6 +8,7 @@ import {
   loadOrganizationEntitlements
 } from './entitlementRepository'
 import {
+  loadStaffZaloAccountCapabilitySnapshot,
   loadStaffZaloServerModeSnapshot,
   type StaffZaloRuntimeModeSnapshot
 } from './zaloRuntimeModeRepository'
@@ -46,6 +47,9 @@ interface ZaloServerDiscoveryRow {
   max_sends_per_day?: number | string | null
   max_accounts?: number | string | null
   created_at?: string | null
+  zalo_qr_enabled?: boolean | null
+  zalo_web_enabled?: boolean | null
+  zalo_server_enabled?: boolean | null
 }
 
 interface ZaloServerDiscoveryPage {
@@ -116,7 +120,11 @@ async function buildServerAuthUser(
     useTestWorkflow: !!staff.use_test_workflow,
     isZaloServer: resolvedModeSnapshot.isZaloServer,
     isZaloShowWeb: resolvedModeSnapshot.isZaloShowWeb,
-    zaloAccountCapabilities: { qr: true, web: false },
+    zaloAccountCapabilities: {
+      qr: resolvedModeSnapshot.isZaloServer || !resolvedModeSnapshot.isZaloShowWeb,
+      web: resolvedModeSnapshot.isZaloShowWeb,
+      server: resolvedModeSnapshot.isZaloServer
+    },
     entitlements: context.entitlements,
     accountProducts: context.accountProducts,
     zaloRuntimeModeRevision: resolvedModeSnapshot.revision
@@ -150,6 +158,9 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
   if (!username) throw new Error(`Missing username returned for staff ${staffId}`)
   if (!revision.startsWith(`${entitlementId}:`)) {
     throw new Error(`Invalid mode_revision returned for staff ${staffId}`)
+  }
+  if (row.zalo_server_enabled !== true || row.zalo_qr_enabled !== true) {
+    throw new Error(`Invalid Zalo Server capability returned for staff ${staffId}`)
   }
 
   const packageType = row.package_type == null
@@ -191,9 +202,16 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
     organizationName: String(row.organization_name || ''),
     isAdminAkabiz: row.is_admin_akabiz === true,
     useTestWorkflow: row.use_test_workflow === true,
-    isZaloServer: true,
-    isZaloShowWeb: false,
-    zaloAccountCapabilities: { qr: true, web: false },
+    // Keep these two AuthUser fields as the legacy global snapshot. New
+    // server routing reads zaloAccountCapabilities.server plus the account
+    // subtype, so Web+Server capability does not make both legacy flags true.
+    isZaloServer: row.zalo_server_enabled === true && row.zalo_web_enabled !== true,
+    isZaloShowWeb: row.zalo_web_enabled === true,
+    zaloAccountCapabilities: {
+      qr: row.zalo_qr_enabled === true,
+      web: row.zalo_web_enabled === true,
+      server: row.zalo_server_enabled === true
+    },
     entitlements,
     accountProducts: [accountProduct],
     zaloRuntimeModeRevision: revision
@@ -262,7 +280,7 @@ async function loadDiscoveryPage(
     throw new Error(`Zalo server discovery page size must be between 1 and ${PAGE_SIZE}`)
   }
 
-  const { data, error } = await client().rpc('discover_zalo_server_runtime_users', {
+  const { data, error } = await client().rpc('discover_zalo_server_account_runtime_users', {
     p_after_staff_id: afterStaffId,
     p_limit: limit
   })
@@ -343,8 +361,8 @@ export async function loadActiveZaloServerUser(
 }
 
 /**
- * Discover every active staff whose organization currently grants QR, does
- * not grant Web, and has a newest effective Zalo product requesting Server.
+ * Discover every active staff whose newest effective Zalo product grants the
+ * additive Server capability. Web may be granted at the same time.
  * This does not read passwords or bind/check a device.
  */
 export async function listActiveZaloServerUsers(): Promise<ZaloServerRuntimeUser[]> {
@@ -457,8 +475,8 @@ export async function hasLiveZaloServerRealtimeCapability(
     !staff.is_active
   ) return false
 
-  const modeSnapshot = await loadStaffZaloServerModeSnapshot(normalizedStaffId)
-  if (!modeSnapshot.isZaloServer) return false
+  const capabilitySnapshot = await loadStaffZaloAccountCapabilitySnapshot(normalizedStaffId)
+  if (!capabilitySnapshot.server) return false
 
   const organizationNames = await loadOrganizationNameMap([normalizedOrganizationId])
   if (!organizationNames.has(normalizedOrganizationId)) return false

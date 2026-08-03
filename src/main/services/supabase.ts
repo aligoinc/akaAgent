@@ -81,7 +81,9 @@ export class SupabaseService {
   deleteAccount(id: number) { return accountRepo.deleteAccount(id) }
   getEligibleAccounts() { return accountRepo.getEligibleAccounts() }
   getAccountZaloSession(id: number) { return accountRepo.getAccountZaloSession(id) }
-  listZaloAccountsWithSession() { return accountRepo.listZaloAccountsWithSession() }
+  listZaloAccountsWithSession(runtimeTarget?: accountRepo.ZaloAccountRuntimeTarget) {
+    return accountRepo.listZaloAccountsWithSession(runtimeTarget)
+  }
   upsertZaloAccount(input: accountRepo.ZaloAccountUpsertInput) { return accountRepo.upsertZaloAccount(input) }
   updateAccountZaloSession(id: number, input: { zaloAccountId: number; session: ZaloSessionCredentials; verified?: boolean; clearError?: boolean }) {
     return accountRepo.updateAccountZaloSession(id, input)
@@ -103,6 +105,21 @@ export class SupabaseService {
     requiresLogin = true
   ) {
     return accountRepo.claimZaloAccountRuntimeOperation(id, runtimeTarget, requiresLogin)
+  }
+  claimZaloAccountTypeChange(
+    id: number,
+    runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,
+    previousStatus: accountRepo.AccountRuntimePreviousStatus
+  ) {
+    return accountRepo.claimZaloAccountTypeChange(id, runtimeTarget, previousStatus)
+  }
+  releaseZaloAccountTypeChange(
+    id: number,
+    runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,
+    previousStatus: accountRepo.AccountRuntimePreviousStatus,
+    claimToken: string
+  ) {
+    return accountRepo.releaseZaloAccountTypeChange(id, runtimeTarget, previousStatus, claimToken)
   }
   releaseZaloAccountRuntimeOperation(
     id: number,
@@ -186,7 +203,9 @@ export class SupabaseService {
     return campaignRepo.maintainZaloServerCampaignSchedules(runtimeModeRevision)
   }
   maintainNonZaloCampaignSchedules() { return campaignRepo.maintainNonZaloCampaignSchedules() }
-  listZaloRealtimeGroupCampaignSnapshots() { return campaignRepo.listZaloRealtimeGroupCampaignSnapshots() }
+  listZaloRealtimeGroupCampaignSnapshots(runtimeTarget: campaignRepo.CampaignRuntimeTarget = 'desktop') {
+    return campaignRepo.listZaloRealtimeGroupCampaignSnapshots(runtimeTarget)
+  }
   enqueueZaloRealtimeGroupEvent(request: campaignRepo.EnqueueZaloRealtimeGroupEventRequest) {
     return campaignRepo.enqueueZaloRealtimeGroupEvent(request)
   }

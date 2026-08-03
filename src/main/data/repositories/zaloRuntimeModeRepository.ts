@@ -19,6 +19,45 @@ export interface StaffZaloRuntimeModeSnapshot {
   revision: string
 }
 
+export interface StaffZaloAccountCapabilitySnapshot {
+  qr: boolean
+  web: boolean
+  server: boolean
+  revision: string
+}
+
+/**
+ * Account-scoped capability snapshot used by new mixed Zalo runtimes. The
+ * legacy runtime-mode RPC below intentionally keeps Web-over-Server semantics
+ * for old desktop/App Server binaries.
+ */
+export async function loadStaffZaloAccountCapabilitySnapshot(
+  staffId: number
+): Promise<StaffZaloAccountCapabilitySnapshot> {
+  const normalizedStaffId = Math.floor(Number(staffId))
+  if (!Number.isSafeInteger(normalizedStaffId) || normalizedStaffId <= 0) {
+    throw new Error('Staff ID không hợp lệ.')
+  }
+
+  const { data, error } = await client().rpc('get_staff_zalo_account_capabilities', {
+    p_staff_id: normalizedStaffId
+  })
+  if (error) {
+    console.error('[zalo-account-capabilities] load staff capabilities:', error)
+    throw new Error('Không thể kiểm tra quyền tài khoản Zalo. Vui lòng thử lại sau.')
+  }
+
+  const payload = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  const revision = String(payload?.revision || '').trim()
+  if (!payload || !revision) throw new Error('Tài khoản staff không còn hoạt động.')
+  return {
+    qr: payload.zalo_qr_enabled === true,
+    web: payload.zalo_web_enabled === true,
+    server: payload.zalo_server_enabled === true,
+    revision
+  }
+}
+
 export async function loadStaffZaloServerModeSnapshot(
   staffId: number
 ): Promise<StaffZaloRuntimeModeSnapshot> {

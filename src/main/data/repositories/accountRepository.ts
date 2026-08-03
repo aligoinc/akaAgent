@@ -7,6 +7,7 @@ import * as accountGroupRepo from './accountGroupRepository'
 import * as proxyRepo from './proxyRepository'
 import {
   canUseAccountWithEntitlementsAndCapabilities,
+  canUseZaloAccountWithCapabilities,
   ensureCurrentUserCanUseAccountPlatform,
   ensureCurrentUserCanUseZaloAccountType,
   ensureCurrentUserEmailFeatureActive,
@@ -23,6 +24,7 @@ const ACCOUNT_SELECT = [
   'name',
   'flatform_type',
   'is_zalo_show_web',
+  'is_zalo_server',
   'username',
   'password',
   'mobile_device_id',
@@ -97,20 +99,12 @@ function getPlatformDisplayName(flatformType: string | null | undefined): string
 
 async function countStaffAccountsByPlatform(staffId: number, flatformType: string): Promise<number> {
   if (flatformType === 'zalo') {
-    const capabilities = loadCurrentUserZaloAccountCapabilities()
-    if (!capabilities.qr && !capabilities.web) return 0
-
-    let query = client()
+    const { count, error } = await client()
       .from('auto_accounts')
       .select('id', { count: 'exact', head: true })
       .eq('staff_id', staffId)
       .eq('flatform_type', 'zalo')
       .eq('is_delete', false)
-    if (capabilities.qr !== capabilities.web) {
-      query = query.eq('is_zalo_show_web', capabilities.web)
-    }
-
-    const { count, error } = await query
     if (error) throw new Error(`Failed to count Zalo accounts: ${error.message}`)
     return count || 0
   }
@@ -165,7 +159,7 @@ export async function getAccount(id: number): Promise<AutoAccount | null> {
 }
 
 export async function getAccountZaloSession(id: number): Promise<AccountZaloSession | null> {
-  await ensureCurrentUserCanUseZaloAccountType(false)
+  await ensureCurrentUserFeatureActive('zalo')
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -179,18 +173,26 @@ export async function getAccountZaloSession(id: number): Promise<AccountZaloSess
 
   if (error) throw new Error(`Failed to get account Zalo session: ${error.message}`)
   if (!data) return null
+  const account = mapAccountFromDB(toDbRow(data))
+  await ensureCurrentUserCanUseZaloAccountType(false, account.isZaloServer)
   return {
-    account: mapAccountFromDB(toDbRow(data)),
+    account,
     session: normalizeZaloSession((data as any).zalo_session)
   }
 }
 
-export async function listZaloAccountsWithSession(): Promise<AccountZaloSession[]> {
+export async function listZaloAccountsWithSession(
+  runtimeTarget?: ZaloAccountRuntimeTarget
+): Promise<AccountZaloSession[]> {
   await ensureCurrentUserFeatureActive('zalo')
   const capabilities = loadCurrentUserZaloAccountCapabilities()
-  if (!capabilities.qr) return []
+  if (
+    (runtimeTarget === 'server' && !capabilities.server) ||
+    (runtimeTarget === 'desktop' && !capabilities.qr) ||
+    (runtimeTarget === undefined && !capabilities.qr && !capabilities.server)
+  ) return []
   const u = requireCurrentUser()
-  const { data, error } = await client()
+  let query = client()
     .from('auto_accounts')
     .select(ACCOUNT_WITH_ZALO_SESSION_SELECT)
     .eq('staff_id', u.staffId)
@@ -198,6 +200,8 @@ export async function listZaloAccountsWithSession(): Promise<AccountZaloSession[
     .eq('flatform_type', 'zalo')
     .eq('is_zalo_show_web', false)
     .not('zalo_session', 'is', null)
+  if (runtimeTarget) query = query.eq('is_zalo_server', runtimeTarget === 'server')
+  const { data, error } = await query
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(`Failed to list Zalo accounts with session: ${error.message}`)
@@ -206,7 +210,11 @@ export async function listZaloAccountsWithSession(): Promise<AccountZaloSession[
       account: mapAccountFromDB(toDbRow(row)),
       session: normalizeZaloSession((row as any).zalo_session)
     }))
-    .filter(entry => !!entry.session)
+    .filter(entry => (
+      !!entry.session &&
+      (runtimeTarget === undefined || entry.account.isZaloServer === (runtimeTarget === 'server')) &&
+      canUseZaloAccountWithCapabilities(entry.account, capabilities)
+    ))
 }
 
 export async function listAccounts(): Promise<AutoAccount[]> {
@@ -234,11 +242,15 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
   const u = requireCurrentUser()
   const flatformType = account.flatformType || 'facebook'
   const isZaloShowWeb = flatformType === 'zalo' && account.isZaloShowWeb === true
-  if (flatformType !== 'zalo' && account.isZaloShowWeb === true) {
-    throw new Error('Chỉ tài khoản Zalo mới được sử dụng chế độ trình duyệt.')
+  const isZaloServer = flatformType === 'zalo' && account.isZaloServer === true
+  if (flatformType !== 'zalo' && (account.isZaloShowWeb === true || account.isZaloServer === true)) {
+    throw new Error('Chỉ tài khoản Zalo mới được chọn loại runtime Zalo.')
+  }
+  if (isZaloShowWeb && isZaloServer) {
+    throw new Error('Tài khoản Zalo Web không thể đồng thời chạy trên server.')
   }
   await ensureCurrentUserCanUseAccountPlatform(flatformType)
-  if (flatformType === 'zalo') await ensureCurrentUserCanUseZaloAccountType(isZaloShowWeb)
+  if (flatformType === 'zalo') await ensureCurrentUserCanUseZaloAccountType(isZaloShowWeb, isZaloServer)
   await ensureAccountQuotaAvailable(u.staffId, flatformType)
   const accountGroupId = await accountGroupRepo.validateAccountGroupForAccount(account.accountGroupId, flatformType)
   const proxyId = await proxyRepo.validateProxyForAccount(account.proxyId)
@@ -246,6 +258,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
     name: account.name,
     flatform_type: flatformType,
     is_zalo_show_web: isZaloShowWeb,
+    is_zalo_server: isZaloServer,
     login_status: account.loginStatus || 'ch\u01b0a \u0111\u0103ng nh\u1eadp',
     status: account.status || 'ch\u1edd x\u1eed l\u00fd',
     is_active: account.isActive ?? true,
@@ -268,6 +281,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
 
 export interface UpdateAccountOptions {
   zaloTypeChangePreviousStatus?: 'chờ xử lý' | 'tạm dừng'
+  zaloTypeChangeClaimToken?: string
 }
 
 export async function updateAccount(
@@ -280,19 +294,31 @@ export async function updateAccount(
   const current = await getAccount(id)
   if (!current) throw new Error('Không tìm thấy tài khoản')
   const targetFlatformType = updates.flatformType ?? current.flatformType
-  if (targetFlatformType !== 'zalo' && updates.isZaloShowWeb === true) {
-    throw new Error('Chỉ tài khoản Zalo mới được sử dụng chế độ trình duyệt.')
+  if (
+    targetFlatformType !== current.flatformType &&
+    (targetFlatformType === 'zalo' || current.flatformType === 'zalo')
+  ) {
+    throw new Error('Không hỗ trợ đổi trực tiếp tài khoản Zalo sang nền tảng khác.')
+  }
+  if (targetFlatformType !== 'zalo' && (updates.isZaloShowWeb === true || updates.isZaloServer === true)) {
+    throw new Error('Chỉ tài khoản Zalo mới được chọn loại runtime Zalo.')
   }
   const targetIsZaloShowWeb = targetFlatformType === 'zalo'
     ? (updates.isZaloShowWeb ?? (current.flatformType === 'zalo' && current.isZaloShowWeb))
     : false
+  const targetIsZaloServer = targetFlatformType === 'zalo'
+    ? (updates.isZaloServer ?? (current.flatformType === 'zalo' && current.isZaloServer))
+    : false
+  if (targetIsZaloShowWeb && targetIsZaloServer) {
+    throw new Error('Tài khoản Zalo Web không thể đồng thời chạy trên server.')
+  }
   await ensureCurrentUserCanUseAccountPlatform(targetFlatformType)
   await ensureCurrentUserCanUseAccountPlatform(current.flatformType)
   if (current.flatformType === 'zalo') {
-    await ensureCurrentUserCanUseZaloAccountType(current.isZaloShowWeb)
+    await ensureCurrentUserCanUseZaloAccountType(current.isZaloShowWeb, current.isZaloServer)
   }
   if (targetFlatformType === 'zalo') {
-    await ensureCurrentUserCanUseZaloAccountType(targetIsZaloShowWeb)
+    await ensureCurrentUserCanUseZaloAccountType(targetIsZaloShowWeb, targetIsZaloServer)
   }
   if (updates.flatformType !== undefined && targetFlatformType !== current.flatformType) {
     await ensureAccountQuotaAvailable(u.staffId, targetFlatformType)
@@ -301,6 +327,9 @@ export async function updateAccount(
   if (updates.flatformType !== undefined) payload.flatform_type = updates.flatformType
   if (updates.isZaloShowWeb !== undefined || updates.flatformType !== undefined) {
     payload.is_zalo_show_web = targetIsZaloShowWeb
+  }
+  if (updates.isZaloServer !== undefined || updates.flatformType !== undefined) {
+    payload.is_zalo_server = targetIsZaloServer
   }
   if (updates.loginStatus !== undefined) payload.login_status = updates.loginStatus
   if (updates.status !== undefined) payload.status = updates.status
@@ -322,44 +351,38 @@ export async function updateAccount(
   const changesZaloRuntimeType = (
     current.flatformType === 'zalo' &&
     targetFlatformType === 'zalo' &&
-    targetIsZaloShowWeb !== current.isZaloShowWeb
+    (
+      targetIsZaloShowWeb !== current.isZaloShowWeb ||
+      targetIsZaloServer !== current.isZaloServer
+    )
   )
-  const changesToOrFromZalo = (
-    targetFlatformType !== current.flatformType &&
-    (targetFlatformType === 'zalo' || current.flatformType === 'zalo')
+  const crossesZaloWebBoundary = changesZaloRuntimeType && (
+    targetIsZaloShowWeb !== current.isZaloShowWeb
   )
   if (changesZaloRuntimeType) {
     const claimedPreviousStatus = options.zaloTypeChangePreviousStatus
-    if (claimedPreviousStatus) {
-      if (current.status !== 'đang chạy') {
-        throw new Error('Quyền giữ chỗ tài khoản Zalo đã hết hiệu lực. Vui lòng thử lại.')
-      }
-      payload.status = claimedPreviousStatus
-    } else if (current.status === 'đang chạy') {
-      throw new Error('Không thể đổi loại tài khoản Zalo khi tài khoản đang chạy.')
-    } else {
-      // The account status belongs to the runtime. A renderer payload must not
-      // silently resume a paused account while changing QR <-> Web.
-      delete payload.status
+    if (!claimedPreviousStatus || !options.zaloTypeChangeClaimToken) {
+      throw new Error('Thiếu quyền giữ chỗ khi đổi loại tài khoản Zalo. Vui lòng thử lại.')
     }
-    Object.assign(payload, {
-      zalo_account_id: null,
-      zalo_session: null,
-      zalo_session_updated_at: null,
-      zalo_session_last_verified_at: null,
-      zalo_session_last_error: null,
-      login_status: 'chưa đăng nhập'
-    })
-  } else if (changesToOrFromZalo) {
-    Object.assign(payload, {
-      zalo_account_id: null,
-      zalo_session: null,
-      zalo_session_updated_at: null,
-      zalo_session_last_verified_at: null,
-      zalo_session_last_error: null,
-      login_status: 'chưa đăng nhập',
-      status: 'chờ xử lý'
-    })
+    if (current.status !== 'đang chạy') {
+      throw new Error('Quyền giữ chỗ tài khoản Zalo đã hết hiệu lực. Vui lòng thử lại.')
+    }
+    // Keep the tokenized claim in `đang chạy` across the subtype CAS. The
+    // token-aware release RPC restores the exact previous status and clears
+    // the token after the flags have changed. Restoring status here would
+    // leave a stale ownership token that a later retry could mistake for a
+    // live claim.
+    delete payload.status
+    if (crossesZaloWebBoundary) {
+      Object.assign(payload, {
+        zalo_account_id: null,
+        zalo_session: null,
+        zalo_session_updated_at: null,
+        zalo_session_last_verified_at: null,
+        zalo_session_last_error: null,
+        login_status: 'chưa đăng nhập'
+      })
+    }
   }
 
   let updateQuery = client()
@@ -371,9 +394,9 @@ export async function updateAccount(
     updateQuery = updateQuery
       .eq('flatform_type', 'zalo')
       .eq('is_zalo_show_web', current.isZaloShowWeb)
-    updateQuery = options.zaloTypeChangePreviousStatus
-      ? updateQuery.eq('status', 'đang chạy')
-      : updateQuery.neq('status', 'đang chạy')
+      .eq('is_zalo_server', current.isZaloServer)
+      .eq('status', 'đang chạy')
+      .eq('runtime_operation_claim_token', options.zaloTypeChangeClaimToken!)
   }
   const { data, error } = await updateQuery
     .select(ACCOUNT_SELECT)
@@ -442,6 +465,7 @@ export async function updateClaimedZaloServerAccount(
     .eq('staff_id', u.staffId)
     .eq('flatform_type', 'zalo')
     .eq('is_zalo_show_web', false)
+    .eq('is_zalo_server', true)
     .eq('status', 'đang chạy')
     .select(ACCOUNT_SELECT)
     .maybeSingle()
@@ -510,7 +534,8 @@ export async function upsertZaloAccount(input: ZaloAccountUpsertInput): Promise<
 
 async function requireCompatibleZaloAccount(
   id: number,
-  expectedShowWeb?: boolean
+  expectedShowWeb?: boolean,
+  expectedServer?: boolean
 ): Promise<AutoAccount> {
   const account = await getAccount(id)
   if (!account || account.flatformType !== 'zalo') {
@@ -520,6 +545,11 @@ async function requireCompatibleZaloAccount(
     throw new Error(expectedShowWeb
       ? 'Tài khoản này không phải Zalo (trình duyệt).'
       : 'Tài khoản này không phải Zalo (mã QR).')
+  }
+  if (expectedServer !== undefined && account.isZaloServer !== expectedServer) {
+    throw new Error(expectedServer
+      ? 'Tài khoản này không phải Zalo chạy trên server.'
+      : 'Tài khoản này không phải Zalo chạy trên máy này.')
   }
   return account
 }
@@ -533,8 +563,9 @@ export async function updateAccountZaloSession(
     clearError?: boolean
   }
 ): Promise<AutoAccount> {
-  await ensureCurrentUserCanUseZaloAccountType(false)
-  await requireCompatibleZaloAccount(id, false)
+  await ensureCurrentUserFeatureActive('zalo')
+  const account = await requireCompatibleZaloAccount(id, false)
+  await ensureCurrentUserCanUseZaloAccountType(false, account.isZaloServer)
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const payload = {
@@ -832,6 +863,10 @@ export interface ZaloAccountRuntimeOperationClaim {
   reason: string | null
 }
 
+export interface ZaloAccountTypeChangeClaim extends ZaloAccountRuntimeOperationClaim {
+  claimToken: string | null
+}
+
 export interface NonZaloAccountRuntimeOperationClaim extends ZaloAccountRuntimeOperationClaim {
   claimToken: string | null
 }
@@ -1045,6 +1080,128 @@ export async function claimZaloAccountRuntimeOperation(
     previousStatus,
     reason: typeof payload.reason === 'string' ? payload.reason : null
   }
+}
+
+/**
+ * Reserve an account while changing its persisted Zalo subtype. Unlike a
+ * normal runtime operation this token remains authoritative after the subtype
+ * flags change, and the SQL guard also rejects any running campaign/input work.
+ */
+export async function claimZaloAccountTypeChange(
+  accountId: number,
+  runtimeTarget: ZaloAccountRuntimeTarget,
+  previousStatus: AccountRuntimePreviousStatus
+): Promise<ZaloAccountTypeChangeClaim> {
+  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'Zalo account type change')
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Zalo runtime target must be desktop or server')
+  }
+  assertRuntimePreviousStatus(previousStatus)
+
+  const u = requireCurrentUser()
+  const claimToken = randomUUID()
+  const cleanupAmbiguousClaim = async (): Promise<void> => {
+    try {
+      const { error: cleanupError } = await client().rpc('release_zalo_account_runtime_operation', {
+        p_account_id: normalizedAccountId,
+        p_staff_id: u.staffId,
+        p_runtime_target: runtimeTarget,
+        p_previous_status: previousStatus,
+        p_claim_token: claimToken
+      })
+      if (cleanupError) {
+        console.warn('Failed to clean up an ambiguous Zalo account type-change claim:', cleanupError.message)
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to clean up an ambiguous Zalo account type-change claim:', cleanupError)
+    }
+  }
+
+  const { data, error } = await (async () => {
+    try {
+      return await client().rpc('claim_zalo_account_runtime_operation', {
+        p_account_id: normalizedAccountId,
+        p_staff_id: u.staffId,
+        p_runtime_target: runtimeTarget,
+        p_previous_status: previousStatus,
+        p_claim_token: claimToken,
+        p_requires_login: false
+      })
+    } catch (claimError) {
+      await cleanupAmbiguousClaim()
+      const message = claimError instanceof Error ? claimError.message : String(claimError)
+      throw new Error(
+        `Failed to claim Zalo account type change atomically: ${message}. ` +
+        'Ensure migration v219 is applied; no non-atomic fallback was attempted.'
+      )
+    }
+  })()
+
+  if (error) {
+    await cleanupAmbiguousClaim()
+    throw new Error(
+      `Failed to claim Zalo account type change atomically: ${error.message}. ` +
+      'Ensure migration v219 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const rawPayload = Array.isArray(data) ? data[0] : data
+  if (!rawPayload || typeof rawPayload !== 'object') {
+    await cleanupAmbiguousClaim()
+    throw new Error('Zalo account type-change claim completed without a valid result payload')
+  }
+  const payload = rawPayload as Record<string, unknown>
+  const returnedPreviousStatus = payload.previous_status === 'chờ xử lý' || payload.previous_status === 'tạm dừng'
+    ? payload.previous_status
+    : null
+  const returnedClaimToken = typeof payload.claim_token === 'string' && payload.claim_token.trim()
+    ? payload.claim_token.trim()
+    : null
+  const claimed = payload.claimed === true
+  if (claimed && (returnedPreviousStatus !== previousStatus || returnedClaimToken !== claimToken)) {
+    await cleanupAmbiguousClaim()
+    throw new Error('Zalo account type-change claim completed without the expected ownership token')
+  }
+
+  return {
+    claimed,
+    accountId: normalizeRecoveryCount(payload.account_id ?? normalizedAccountId),
+    staffId: u.staffId,
+    previousStatus: returnedPreviousStatus,
+    claimToken: claimed ? claimToken : null,
+    reason: typeof payload.reason === 'string' ? payload.reason : null
+  }
+}
+
+export async function releaseZaloAccountTypeChange(
+  accountId: number,
+  runtimeTarget: ZaloAccountRuntimeTarget,
+  previousStatus: AccountRuntimePreviousStatus,
+  claimToken: string
+): Promise<boolean> {
+  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'Zalo account type-change release')
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Zalo runtime target must be desktop or server')
+  }
+  assertRuntimePreviousStatus(previousStatus)
+  const normalizedClaimToken = String(claimToken || '').trim()
+  if (!normalizedClaimToken) throw new Error('Zalo account type-change claim token is required for release')
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('release_zalo_account_runtime_operation', {
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: runtimeTarget,
+    p_previous_status: previousStatus,
+    p_claim_token: normalizedClaimToken
+  })
+  if (error) {
+    throw new Error(
+      `Failed to release Zalo account type change atomically: ${error.message}. ` +
+      'Ensure migration v219 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+  return data === true
 }
 
 export async function releaseZaloAccountRuntimeOperation(

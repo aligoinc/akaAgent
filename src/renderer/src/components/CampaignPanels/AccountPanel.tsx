@@ -16,7 +16,7 @@ import AccountGroupManagerModal from './AccountGroupManagerModal'
 import ProxyManagerModal from './ProxyManagerModal'
 import { useUiStore } from '../../stores/uiStore'
 import { canUsePlatform, getFirstAllowedPlatform } from '../../utils/entitlements'
-import { getAccountPlatformLabel, isZaloWebAccount } from '../../utils/accountLabels'
+import { getAccountPlatformLabel, isZaloServerAccount, isZaloWebAccount } from '../../utils/accountLabels'
 import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
 import type { ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
 
@@ -140,13 +140,14 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   } = useCampaignStore()
   const authUser = useAuthStore(state => state.user)
   const entitlements = authUser?.entitlements
-  const isZaloServer = authUser?.isZaloServer === true
   const zaloAccountCapabilities = authUser?.zaloAccountCapabilities
-  const serverOperationState = useZaloServerOperationState(isZaloServer)
   const canUseFacebookAccount = canUsePlatform('facebook', entitlements)
   const canUseZaloFeature = canUsePlatform('zalo', entitlements)
   const canUseZaloQr = zaloAccountCapabilities?.qr === true
   const canUseZaloWeb = zaloAccountCapabilities?.web === true
+  const canUseZaloServer = zaloAccountCapabilities?.server === true
+  const hasZaloServerAccounts = accounts.some(isZaloServerAccount)
+  const serverOperationState = useZaloServerOperationState(hasZaloServerAccounts)
   const canUseEmailFeature = canUsePlatform('email', entitlements)
   const allowedAccountPlatforms = useMemo(
     () => ['facebook', 'zalo', 'email'].filter(platform => canUsePlatform(platform, entitlements)),
@@ -174,7 +175,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [formData, setFormData] = useState({
     name: '',
     flatformType: defaultAccountPlatform,
-    isZaloShowWeb: defaultAccountPlatform === 'zalo' && !canUseZaloQr && canUseZaloWeb,
+    isZaloShowWeb: false,
+    isZaloServer: false,
     accountGroupId: null as number | null,
     proxyId: null as number | null
   })
@@ -196,12 +198,17 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
   useEffect(() => {
     if (!editingAccount && formData.flatformType === 'zalo') {
-      if (formData.isZaloShowWeb && !canUseZaloWeb && canUseZaloQr) {
-        setFormData(prev => ({ ...prev, isZaloShowWeb: false }))
-        return
-      }
-      if (!formData.isZaloShowWeb && !canUseZaloQr && canUseZaloWeb) {
-        setFormData(prev => ({ ...prev, isZaloShowWeb: true }))
+      const selectedTypeAvailable = formData.isZaloServer
+        ? canUseZaloServer
+        : formData.isZaloShowWeb
+          ? canUseZaloWeb
+          : canUseZaloQr
+      if (!selectedTypeAvailable) {
+        setFormData(prev => ({
+          ...prev,
+          isZaloShowWeb: !canUseZaloQr && canUseZaloWeb,
+          isZaloServer: !canUseZaloQr && !canUseZaloWeb && canUseZaloServer
+        }))
         return
       }
     }
@@ -209,7 +216,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setFormData(prev => ({
       ...prev,
       flatformType: defaultAccountPlatform,
-      isZaloShowWeb: defaultAccountPlatform === 'zalo' && !canUseZaloQr && canUseZaloWeb,
+      isZaloShowWeb: false,
+      isZaloServer: false,
       accountGroupId: null
     }))
     if (formData.flatformType === 'email') {
@@ -219,17 +227,21 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   }, [
     allowedAccountPlatforms,
     canUseZaloQr,
+    canUseZaloServer,
     canUseZaloWeb,
     defaultAccountPlatform,
     editingAccount,
     formData.flatformType,
-    formData.isZaloShowWeb
+    formData.isZaloShowWeb,
+    formData.isZaloServer
   ])
 
   useEffect(() => {
     if (!window.electronAPI?.onZaloLoginQrEvent) return
     return window.electronAPI.onZaloLoginQrEvent((event) => {
-      if (isZaloServer && event.operationId) {
+      const activeAccountId = zaloLoginAccount?.id
+      if (activeAccountId && event.accountId !== activeAccountId) return
+      if (event.operationId) {
         if (handledServerQrOperationIdsRef.current.has(event.operationId)) return
         trackedServerQrOperationIdRef.current = event.operationId
         if (['success', 'error', 'expired', 'declined', 'cancelled'].includes(event.status)) {
@@ -237,8 +249,6 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
           trackedServerQrOperationIdRef.current = null
         }
       }
-      const activeAccountId = zaloLoginAccount?.id
-      if (activeAccountId && event.accountId !== activeAccountId) return
 
       setZaloLoginEvent(prev => {
         return event
@@ -261,10 +271,11 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         useUiStore.getState().showAlert(event.message || 'Đăng nhập Zalo thất bại', 'error')
       }
     })
-  }, [isZaloServer, loadAccounts, zaloLoginAccount?.id])
+  }, [loadAccounts, zaloLoginAccount?.id])
 
   useEffect(() => {
-    if (!isZaloServer || !serverOperationState) return
+    if (!hasZaloServerAccounts || !serverOperationState) return
+    if (zaloLoginAccount && !isZaloServerAccount(zaloLoginAccount)) return
     const previousServerStartedAt = previousServerStartedAtRef.current
     const serverRestarted = !!previousServerStartedAt &&
       !!serverOperationState.serverStartedAt &&
@@ -348,7 +359,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       const account = accounts.find(item => (
         item.id === runningOperation.accountId
         && item.flatformType === 'zalo'
-        && !isZaloWebAccount(item)
+        && isZaloServerAccount(item)
       ))
       if (!account) return
       trackedServerQrOperationIdRef.current = runningOperation.operationId
@@ -372,7 +383,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
     const terminalOperation = qrOperations.find(operation => operation.status !== 'running')
     if (terminalOperation) settleTerminalOperation(terminalOperation, false)
-  }, [accounts, isZaloServer, loadAccounts, serverOperationState])
+  }, [accounts, hasZaloServerAccounts, loadAccounts, serverOperationState, zaloLoginAccount?.id])
 
   useEffect(() => {
     if (!zaloQrExpiresAt || !zaloLoginAccount) return
@@ -388,7 +399,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     setFormData({
       name: '',
       flatformType: defaultAccountPlatform,
-      isZaloShowWeb: defaultAccountPlatform === 'zalo' && !canUseZaloQr && canUseZaloWeb,
+      isZaloShowWeb: false,
+      isZaloServer: false,
       accountGroupId: null,
       proxyId: null
     })
@@ -449,19 +461,29 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const formAccountGroups = accountGroups.filter(group => group.flatformType === formData.flatformType && group.isActive)
   const activeProxies = proxies.filter(proxy => proxy.isActive && !proxy.isDelete)
   const formAccountType = formData.flatformType === 'zalo'
-    ? (formData.isZaloShowWeb ? 'zalo_web' : 'zalo_qr')
+    ? (formData.isZaloServer ? 'zalo_server' : formData.isZaloShowWeb ? 'zalo_web' : 'zalo_qr')
     : formData.flatformType
   const editingZaloAccount = editingAccount?.flatformType === 'zalo'
-  const showZaloQrOption = canUseZaloQr || Boolean(editingAccount && editingZaloAccount && !isZaloWebAccount(editingAccount))
+  const showZaloQrOption = canUseZaloQr || Boolean(
+    editingAccount && editingZaloAccount && !isZaloWebAccount(editingAccount) && !isZaloServerAccount(editingAccount)
+  )
   const showZaloWebOption = canUseZaloWeb || Boolean(editingAccount && editingZaloAccount && isZaloWebAccount(editingAccount))
-  const canChangeAccountType = !editingAccount || (editingZaloAccount && canUseZaloQr && canUseZaloWeb)
+  const showZaloServerOption = canUseZaloServer || Boolean(
+    editingAccount && editingZaloAccount && isZaloServerAccount(editingAccount)
+  )
+  const availableZaloTypeCount = [showZaloQrOption, showZaloWebOption, showZaloServerOption]
+    .filter(Boolean).length
+  const canChangeAccountType = !editingAccount || (editingZaloAccount && availableZaloTypeCount > 1)
 
   const handleAccountTypeChange = (value: string) => {
-    const nextPlatform = value === 'zalo_qr' || value === 'zalo_web' ? 'zalo' : value
+    const nextPlatform = value === 'zalo_qr' || value === 'zalo_web' || value === 'zalo_server'
+      ? 'zalo'
+      : value
     setFormData(prev => ({
       ...prev,
       flatformType: nextPlatform,
       isZaloShowWeb: value === 'zalo_web',
+      isZaloServer: value === 'zalo_server',
       accountGroupId: prev.flatformType === nextPlatform ? prev.accountGroupId : null
     }))
   }
@@ -495,7 +517,16 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         useUiStore.getState().showAlert('Gói Zalo Trình duyệt chưa được kích hoạt hoặc đã hết hạn.', 'error')
         return
       }
-      if (formData.flatformType === 'zalo' && !formData.isZaloShowWeb && !canUseZaloQr) {
+      if (formData.flatformType === 'zalo' && formData.isZaloServer && !canUseZaloServer) {
+        useUiStore.getState().showAlert('Gói Zalo chạy trên server chưa được kích hoạt hoặc đã hết hạn.', 'error')
+        return
+      }
+      if (
+        formData.flatformType === 'zalo' &&
+        !formData.isZaloShowWeb &&
+        !formData.isZaloServer &&
+        !canUseZaloQr
+      ) {
         useUiStore.getState().showAlert('Gói Zalo mã QR chưa được kích hoạt hoặc đã hết hạn.', 'error')
         return
       }
@@ -508,6 +539,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         name: formData.name,
         flatformType: formData.flatformType,
         isZaloShowWeb: formData.flatformType === 'zalo' && formData.isZaloShowWeb,
+        isZaloServer: formData.flatformType === 'zalo' && formData.isZaloServer,
         accountGroupId: formData.accountGroupId,
         proxyId: formData.proxyId
       }
@@ -518,10 +550,23 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       let createdFacebookAccount: AutoAccount | null = null
       if (editingAccount) {
         const zaloSubtypeChanged = editingAccount.flatformType === 'zalo'
-          && isZaloWebAccount(editingAccount) !== payload.isZaloShowWeb
+          && (
+            isZaloWebAccount(editingAccount) !== payload.isZaloShowWeb ||
+            isZaloServerAccount(editingAccount) !== payload.isZaloServer
+          )
         const updated = await updateAccount(editingAccount.id, payload)
         accountId = editingAccount.id
-        if (zaloSubtypeChanged) changedZaloAccount = updated
+        if (zaloSubtypeChanged) {
+          const crossesWebBoundary = isZaloWebAccount(editingAccount) !== isZaloWebAccount(updated)
+          if (crossesWebBoundary || !updated.hasZaloSession) {
+            changedZaloAccount = updated
+          } else {
+            useUiStore.getState().showAlert(
+              `Đã chuyển "${updated.name}" sang ${getAccountPlatformLabel(updated)} và giữ nguyên phiên đăng nhập Zalo.`,
+              'success'
+            )
+          }
+        }
         if (proxyChanged) {
           if (editingAccount.flatformType === 'zalo') {
             useUiStore.getState().showAlert('Đã lưu proxy thành công.', 'success')
@@ -596,6 +641,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
       name: account.name,
       flatformType: account.flatformType,
       isZaloShowWeb: isZaloWebAccount(account),
+      isZaloServer: isZaloServerAccount(account),
       accountGroupId: account.accountGroupId ?? null,
       proxyId: account.proxyId ?? null
     })
@@ -706,18 +752,31 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     try {
       const result = await window.electronAPI.startZaloLoginQr(account.id)
       if (!result.success) {
-        setZaloLoginAccount(null)
-        setZaloLoginEvent(null)
         setZaloQrExpiresAt(null)
         setZaloQrRemainingSeconds(null)
-        useUiStore.getState().showAlert(result.reason || 'Không thể bắt đầu đăng nhập Zalo', 'error')
+        const reason = result.reason || 'Không thể bắt đầu đăng nhập Zalo'
+        if (isZaloServerAccount(account)) {
+          // Creating/converting a Server account is a DB operation and must not
+          // be rolled back merely because the VPS is temporarily offline. Keep
+          // the modal open so the user can retry QR after the connection returns.
+          setZaloLoginEvent({ accountId: account.id, status: 'error', message: reason })
+        } else {
+          setZaloLoginAccount(null)
+          setZaloLoginEvent(null)
+          useUiStore.getState().showAlert(reason, 'error')
+        }
       }
     } catch (err: any) {
-      setZaloLoginAccount(null)
-      setZaloLoginEvent(null)
       setZaloQrExpiresAt(null)
       setZaloQrRemainingSeconds(null)
-      useUiStore.getState().showAlert(`Lỗi đăng nhập Zalo: ${err.message}`, 'error')
+      const reason = `Lỗi đăng nhập Zalo: ${err.message}`
+      if (isZaloServerAccount(account)) {
+        setZaloLoginEvent({ accountId: account.id, status: 'error', message: reason })
+      } else {
+        setZaloLoginAccount(null)
+        setZaloLoginEvent(null)
+        useUiStore.getState().showAlert(reason, 'error')
+      }
     } finally {
       setZaloLoginStarting(false)
     }
@@ -744,7 +803,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
 
     // Keep the long-standing local behavior: closing the modal immediately
     // requests cancellation without making the UI depend on a local callback.
-    if (!isZaloServer) {
+    if (!zaloLoginAccount?.isZaloServer) {
       closeModal()
       await window.electronAPI?.cancelZaloLoginQr?.(accountId).catch(() => {})
       return
@@ -959,6 +1018,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                     )}
                     {(!editingAccount || editingZaloAccount) && showZaloWebOption && (
                       <option value="zalo_web">Zalo (trình duyệt)</option>
+                    )}
+                    {(!editingAccount || editingZaloAccount) && showZaloServerOption && (
+                      <option value="zalo_server">Zalo (web) - Chạy trên server</option>
                     )}
                     {(!editingAccount || editingAccount.flatformType === 'email') && canUseEmailFeature && (
                       <option value="email">Email</option>
@@ -1255,7 +1317,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
               <div style={zaloModalMessageStyle}>
                 {zaloLoginEvent?.displayName && zaloLoginEvent.status !== 'scanned' && <strong>{zaloLoginEvent.displayName}</strong>}
                 <span>{zaloLoginEvent?.message || 'Đang chờ trạng thái đăng nhập Zalo...'}</span>
-                {zaloLoginEvent?.status === 'expired' && (
+                {(zaloLoginEvent?.status === 'expired' || zaloLoginEvent?.status === 'error') && (
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
@@ -1264,7 +1326,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                     style={zaloRetryButtonStyle}
                   >
                     {zaloLoginStarting && <Loader2 size={14} className="animate-spin" />}
-                    {zaloLoginStarting ? 'Đang tạo QR...' : 'Đăng nhập lại'}
+                    {zaloLoginStarting ? 'Đang tạo QR...' : zaloLoginEvent.status === 'error' ? 'Thử lại' : 'Đăng nhập lại'}
                   </button>
                 )}
               </div>

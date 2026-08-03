@@ -2483,7 +2483,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     loadCampaignInputData, refreshCampaignInputData, loadCampaignDetails, loadCampaignDetailPage, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
-  const isZaloServer = useAuthStore(s => !!s.user?.isZaloServer)
+  const hasZaloServerAccounts = accounts.some(account => account.isZaloServer)
   const entitlements = useAuthStore(s => s.user?.entitlements)
   const canManageCampaignActions = isAdminAkabiz
   const canViewAllFindDataLogs = isAdminAkabiz
@@ -2636,7 +2636,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
       refreshInFlight = true
       try {
-        await loadCampaigns(isZaloServer ? { silent: true } : undefined)
+        await loadCampaigns(hasZaloServerAccounts ? { silent: true } : undefined)
       } finally {
         refreshInFlight = false
         markInitialCampaignLoadSettled()
@@ -2647,7 +2647,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
     const intervalId = window.setInterval(() => {
       void refreshCampaignsIfVisible()
-    }, isZaloServer
+    }, hasZaloServerAccounts
       ? SERVER_CAMPAIGN_LIST_REFRESH_INTERVAL_MS
       : LOCAL_CAMPAIGN_LIST_REFRESH_INTERVAL_MS)
 
@@ -2657,15 +2657,15 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    if (isZaloServer) window.addEventListener('focus', refreshCampaignsIfVisible)
+    if (hasZaloServerAccounts) window.addEventListener('focus', refreshCampaignsIfVisible)
 
     return () => {
       isDisposed = true
       window.clearInterval(intervalId)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
-      if (isZaloServer) window.removeEventListener('focus', refreshCampaignsIfVisible)
+      if (hasZaloServerAccounts) window.removeEventListener('focus', refreshCampaignsIfVisible)
     }
-  }, [isActive, isZaloServer, loadCampaigns])
+  }, [hasZaloServerAccounts, isActive, loadCampaigns])
 
   useEffect(() => {
     setDataGroupSourceStatuses(prev => {

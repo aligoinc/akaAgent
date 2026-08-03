@@ -123,7 +123,7 @@ export class ZaloRealtimeGroupCampaignManager {
   }
 
   private async doRefresh(_reason: string, generation: number): Promise<void> {
-    const snapshots = await this.supabase.listZaloRealtimeGroupCampaignSnapshots()
+    const snapshots = await this.supabase.listZaloRealtimeGroupCampaignSnapshots(this.runtimeTarget)
     if (!this.isActiveGeneration(generation)) return
     const nextByAccount = new Map<number, RealtimeCampaignConfig[]>()
 

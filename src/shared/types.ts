@@ -57,6 +57,8 @@ export interface AutoAccount {
   flatformType: string
   /** Zalo runtime subtype. Always false for non-Zalo accounts. */
   isZaloShowWeb: boolean
+  /** Zalo zca-js runtime hosted by akaAgent Server. Always false for Web/non-Zalo accounts. */
+  isZaloServer: boolean
   username?: string | null
   password?: string | null
   mobileDeviceId?: string | null
@@ -2319,6 +2321,8 @@ export interface ZaloAccountCapabilities {
   qr: boolean
   /** Optional Zalo Web accounts added when that selected row enables Show Web. */
   web: boolean
+  /** Optional zca-js accounts executed by akaAgent Server. */
+  server: boolean
 }
 
 export interface AuthUser {
