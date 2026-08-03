@@ -7,9 +7,9 @@ export interface AuthProductCatalogItem {
   order: number
 }
 
-export const AUTH_ZALO_QR_PRODUCT_ID = 16 as const
-export const AUTH_ZALO_CONFIGURABLE_PRODUCT_ID = 18 as const
-export const AUTH_ZALO_PRODUCT_IDS = [AUTH_ZALO_QR_PRODUCT_ID, AUTH_ZALO_CONFIGURABLE_PRODUCT_ID] as const
+export const AUTH_ZALO_PRODUCT_16_ID = 16 as const
+export const AUTH_ZALO_PRODUCT_18_ID = 18 as const
+export const AUTH_ZALO_PRODUCT_IDS = [AUTH_ZALO_PRODUCT_16_ID, AUTH_ZALO_PRODUCT_18_ID] as const
 
 export const AUTH_PRODUCT_CATALOG: AuthProductCatalogItem[] = [
   { feature: 'facebookCore', productId: 3, label: 'Facebook', order: 1 },
@@ -36,8 +36,8 @@ export const AUTH_PRODUCTS_BY_FEATURE = AUTH_PRODUCT_CATALOG.reduce((acc, item) 
 export type AuthSingleProductFeature = Exclude<AuthEntitlementFeature, 'zalo'>
 
 // Only features with exactly one product may use this singular lookup. Zalo
-// intentionally has no primary product because products 16 and 18 grant
-// different account capabilities.
+// intentionally has no primary product because the newest effective row across
+// products 16 and 18 determines the complete Zalo capability snapshot.
 export const AUTH_PRODUCT_BY_FEATURE = AUTH_PRODUCT_CATALOG.reduce((acc, item) => {
   if (item.feature === 'zalo') return acc
   if (!acc[item.feature]) acc[item.feature] = item

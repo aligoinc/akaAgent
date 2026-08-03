@@ -157,8 +157,8 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
     : String(row.package_type).trim() || null
   const maxAccounts = normalizePositiveInteger(row.max_accounts)
   const configuredDailySendLimit = normalizePositiveInteger(row.max_sends_per_day)
-  // v182 discovery already aggregates both effective Zalo products and
-  // applies the demo fallback only when every effective package is demo.
+  // Discovery returns the limits resolved from the one newest effective Zalo
+  // product row and applies the demo fallback for that selected package.
   const dailySendLimit = configuredDailySendLimit
   const entitlements = emptyAuthEntitlements()
   entitlements.zalo = true
@@ -344,7 +344,7 @@ export async function loadActiveZaloServerUser(
 
 /**
  * Discover every active staff whose organization currently grants QR, does
- * not grant Web, and has at least one effective Zalo product requesting Server.
+ * not grant Web, and has a newest effective Zalo product requesting Server.
  * This does not read passwords or bind/check a device.
  */
 export async function listActiveZaloServerUsers(): Promise<ZaloServerRuntimeUser[]> {

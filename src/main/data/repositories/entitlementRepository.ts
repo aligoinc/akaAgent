@@ -10,9 +10,7 @@ import {
   AUTH_PRODUCT_BY_FEATURE,
   AUTH_PRODUCT_IDS,
   AUTH_PRODUCTS_BY_FEATURE,
-  AUTH_ZALO_CONFIGURABLE_PRODUCT_ID,
   AUTH_ZALO_PRODUCT_IDS,
-  AUTH_ZALO_QR_PRODUCT_ID,
   getAuthProductById
 } from '../../../shared/authProductCatalog'
 import { getVietnamDayStart } from '../../../shared/vietnamTime'
@@ -27,8 +25,6 @@ export const FACEBOOK_CORE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookCore.pro
 export const FACEBOOK_FANPAGE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId
 export const EMAIL_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.email.productId
 export const ZALO_PRODUCT_IDS = AUTH_ZALO_PRODUCT_IDS
-export const ZALO_QR_PRODUCT_ID = AUTH_ZALO_QR_PRODUCT_ID
-export const ZALO_CONFIGURABLE_PRODUCT_ID = AUTH_ZALO_CONFIGURABLE_PRODUCT_ID
 export const SMS_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.sms.productId
 export const AKA_AGENT_PRODUCT_ID = FACEBOOK_CORE_PRODUCT_ID
 export const DEFAULT_DEMO_DAILY_SEND_LIMIT = 30
@@ -201,40 +197,20 @@ function getFeatureAccountLimit(rows: OrganizationProductRow[]): number | null {
   return limits.length > 0 ? Math.max(...limits) : null
 }
 
-function compareNewestOrganizationProduct(
-  left: OrganizationProductRow,
-  right: OrganizationProductRow
-): number {
-  const leftCreatedAt = Date.parse(String(left.created_at || ''))
-  const rightCreatedAt = Date.parse(String(right.created_at || ''))
-  const normalizedLeftCreatedAt = Number.isFinite(leftCreatedAt) ? leftCreatedAt : 0
-  const normalizedRightCreatedAt = Number.isFinite(rightCreatedAt) ? rightCreatedAt : 0
-  if (normalizedLeftCreatedAt !== normalizedRightCreatedAt) {
-    return normalizedRightCreatedAt - normalizedLeftCreatedAt
-  }
-  return Number(right.id || 0) - Number(left.id || 0)
-}
-
-function getNewestProductRow(
+function getNewestZaloProductRow(
   rows: OrganizationProductRow[],
-  productId: number,
   activeOnly: boolean
 ): OrganizationProductRow | null {
-  const candidates = rows.filter(row => (
-    Number(row.product_id) === productId &&
+  // Both entitlement queries order with the same database-side rule as the
+  // SQL resolver. Keep that exact order here instead of reparsing timestamptz
+  // or bigint values in JavaScript, which could lose sub-millisecond/64-bit
+  // precision and select a different winner.
+  return rows.find(row => (
+    ZALO_PRODUCT_IDS.includes(
+      Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
+    ) &&
     (!activeOnly || isExpirationActive(row.expiration_date))
-  ))
-  candidates.sort(compareNewestOrganizationProduct)
-  return candidates[0] || null
-}
-
-function getEffectiveZaloProductRows(
-  rows: OrganizationProductRow[],
-  activeOnly: boolean
-): OrganizationProductRow[] {
-  return ZALO_PRODUCT_IDS
-    .map(productId => getNewestProductRow(rows, productId, activeOnly))
-    .filter((row): row is OrganizationProductRow => !!row)
+  )) || null
 }
 
 function getZaloDailySendLimit(rows: OrganizationProductRow[]): number | null {
@@ -250,13 +226,10 @@ function getZaloDailySendLimit(rows: OrganizationProductRow[]): number | null {
 }
 
 function resolveZaloAccountCapabilities(rows: OrganizationProductRow[]): ZaloAccountCapabilities {
-  const activeRows = getEffectiveZaloProductRows(rows, true)
-  const hasProduct16 = activeRows.some(row => Number(row.product_id) === ZALO_QR_PRODUCT_ID)
-  const product18 = activeRows.find(row => Number(row.product_id) === ZALO_CONFIGURABLE_PRODUCT_ID)
-  const product18UsesWeb = product18?.is_zalo_show_web === true
+  const effectiveRow = getNewestZaloProductRow(rows, true)
   return {
-    qr: hasProduct16 || (!!product18 && !product18UsesWeb),
-    web: !!product18 && product18UsesWeb
+    qr: effectiveRow !== null,
+    web: effectiveRow?.is_zalo_show_web === true
   }
 }
 
@@ -295,8 +268,11 @@ export async function loadOrganizationEntitlementAccess(
   const rows = (data || []) as unknown as OrganizationProductRow[]
   for (const [feature, productIds] of Object.entries(FEATURE_PRODUCT_IDS) as Array<[EntitlementFeature, readonly number[]]>) {
     const featureRows = rows.filter(row => productIds.includes(Number(row.product_id)))
+    const effectiveZaloRow = feature === 'zalo'
+      ? getNewestZaloProductRow(featureRows, true)
+      : null
     const effectiveRows = feature === 'zalo'
-      ? getEffectiveZaloProductRows(featureRows, true)
+      ? (effectiveZaloRow ? [effectiveZaloRow] : [])
       : featureRows
     entitlements[feature] = effectiveRows.some(row => isExpirationActive(row.expiration_date))
     entitlements.dailySendLimits[feature] = feature === 'zalo'
@@ -337,15 +313,13 @@ export async function loadOrganizationAccountProducts(organizationId: number): P
   }
 
   const rows = (data || []) as unknown as OrganizationProductRow[]
-  const effectiveRows = rows.filter(row => !ZALO_PRODUCT_IDS.includes(
-    Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
+  const effectiveZaloRow = getNewestZaloProductRow(rows, true)
+    || getNewestZaloProductRow(rows, false)
+  const effectiveRows = rows.filter(row => (
+    !ZALO_PRODUCT_IDS.includes(
+      Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
+    ) || row === effectiveZaloRow
   ))
-  for (const productId of ZALO_PRODUCT_IDS) {
-    const effectiveZaloRow = getNewestProductRow(rows, productId, true)
-      || getNewestProductRow(rows, productId, false)
-    if (effectiveZaloRow) effectiveRows.push(effectiveZaloRow)
-  }
-  effectiveRows.sort(compareNewestOrganizationProduct)
 
   return effectiveRows.map(row => {
     const organizationProductId = Number(row.id)
@@ -414,13 +388,16 @@ export function getUserZaloAccountCapabilities(
 ): ZaloAccountCapabilities {
   const capabilities = user?.zaloAccountCapabilities
   if (capabilities && typeof capabilities.qr === 'boolean' && typeof capabilities.web === 'boolean') {
-    return { qr: capabilities.qr, web: capabilities.web }
+    return {
+      qr: capabilities.qr || capabilities.web,
+      web: capabilities.web
+    }
   }
 
   const hasLegacyZaloEntitlement = user?.entitlements?.zalo === true
   const legacyWeb = hasLegacyZaloEntitlement && user?.isZaloShowWeb === true
   return {
-    qr: hasLegacyZaloEntitlement && !legacyWeb,
+    qr: hasLegacyZaloEntitlement,
     web: legacyWeb
   }
 }

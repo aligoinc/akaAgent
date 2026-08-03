@@ -32,8 +32,8 @@ Migration thêm một cột vào `org_organization_product`:
 - `is_zalo_server=false`: toàn bộ staff của organization chạy Zalo trên app desktop;
 - `is_zalo_server=true`: toàn bộ staff của organization chạy Zalo trên app server.
 
-Với mỗi product Zalo `16` và `18`, hệ thống chọn riêng row còn hạn, chưa
-soft-delete và mới nhất theo `created_at DESC, id DESC`. Cột cũ cùng tên trên
+Trong toàn bộ Product Zalo `16` và `18`, hệ thống chỉ chọn một row còn hạn, chưa
+soft-delete và mới nhất theo `created_at DESC NULLS LAST, id DESC`. Cột cũ cùng tên trên
 `org_staff` chỉ được giữ để binary cũ không lỗi schema và không còn quyết định
 runtime.
 
@@ -45,23 +45,31 @@ Migration đồng thời tạo các RPC transaction để:
 - kiểm tra trạng thái Zalo đang chạy trong lúc bàn giao;
 - recovery Zalo server sau khi app bị tắt đột ngột;
 - recovery runtime desktop theo đúng phạm vi.
-- đọc cờ kèm revision bắt đầu bằng `entitlement_id:xmin` và chứa revision của
-  cả hai product hiệu lực để loại marker VPS cũ sau mọi lần đổi mode.
+- đọc cờ kèm revision `entitlement_id:xmin` của đúng row Product 16/18 mới nhất
+  đang được chọn để loại marker VPS cũ sau mọi lần đổi mode.
 - discover toàn bộ staff chạy server bằng RPC keyset tối đa 1.000 row mỗi trang,
   không query entitlement/mode riêng cho từng organization.
 
-Product 16 luôn cấp tài khoản Zalo mã QR. Product 18 cấp Zalo trình duyệt khi
-`is_zalo_show_web=true`, ngược lại cấp Zalo mã QR. Khi có quyền Web, desktop chạy
-Web và các account QR hợp lệ ở local; VPS không chạy Zalo nhưng cờ
+Trong các row Product 16/18 còn hạn, chỉ row mới nhất toàn cục theo
+`created_at DESC NULLS LAST, id DESC` có hiệu lực. Row đó luôn cấp Zalo mã QR và khi
+`is_zalo_show_web=true` thì cấp thêm Zalo trình duyệt; mọi row cũ hơn bị bỏ qua.
+Khi có quyền Web, desktop chạy Web và các account QR hợp lệ ở local; VPS không
+chạy Zalo nhưng cờ
 `is_zalo_server` vẫn được giữ để tự có hiệu lực lại sau khi tắt Web và khởi động
-lại app. Giới hạn account và số gửi/ngày lấy mức lớn nhất của hai row hiệu lực.
+lại app. Giới hạn account và số gửi/ngày chỉ lấy từ row được chọn.
+
+Quy tắc Product 16 cũng được bật Web bắt đầu từ
+`migrations/migration_v218_zalo_web_product_16_and_18.sql`. Chỉ bật
+`is_zalo_show_web=true` trên Product 16 sau khi database đã áp dụng v218 và
+desktop/app server đã được cập nhật lên build tương ứng.
 
 Migration v182 không thể phục hồi những cờ Server đã bị v179 xoá trước đây.
 Organization bị ảnh hưởng cần bật lại `is_zalo_server=true` một lần sau deploy;
 từ v182 trở đi bật Web không còn tự xoá cờ này.
 
 Migration không backfill từ staff và mọi row hiện tại mặc định `false`. Sau khi đã
-deploy API, desktop và app server mới, bật server trên đúng row entitlement cần dùng:
+deploy API, desktop và app server mới, bật server trên đúng row entitlement mới
+nhất sẽ được resolver chọn:
 
 ```sql
 UPDATE public.org_organization_product

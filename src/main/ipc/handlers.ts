@@ -58,8 +58,7 @@ import {
   ACCOUNT_EXPIRED_MESSAGE,
   getUserZaloAccountCapabilities,
   loadOrganizationAccountProducts,
-  loadOrganizationEntitlementAccess,
-  ZALO_CONFIGURABLE_PRODUCT_ID
+  loadOrganizationEntitlementAccess
 } from '../data/repositories/entitlementRepository'
 import { readBlockScreenshotDataUrl } from '../services/blockScreenshotService'
 import { readCampaignPreviewFileDataUrl } from '../services/campaignPreviewFileService'
@@ -490,8 +489,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const ensureDesktopZaloHandoffBeforeExit = async (): Promise<void> => {
     const sessionUser = getCurrentUser()
     // Server control clients do not own local Zalo work. A session with Web
-    // capability may still own QR accounts (product 16), so it must not skip
-    // the existing local<->server handoff checks.
+    // capability also owns QR accounts locally, so it must not skip the
+    // existing local<->server handoff checks.
     if (sessionUser?.isZaloServer) return
     if (sessionUser) {
       await settleDesktopHandoffMarkerBeforeExit(
@@ -678,25 +677,32 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         return
       }
 
-      // Only a Show Web flag change on an active product 18 is restart-only.
-      // Removing/expiring product 18 must hide Web accounts immediately, even
-      // when product 16 keeps the organization's general Zalo entitlement alive.
-      const currentConfigurableZaloProduct = currentUser.accountProducts.find(product => (
-        product.productId === ZALO_CONFIGURABLE_PRODUCT_ID && product.isActive
-      ))
-      const liveConfigurableZaloProduct = liveAccountProducts.find(product => (
-        product.productId === ZALO_CONFIGURABLE_PRODUCT_ID && product.isActive
-      ))
-      const hasSameEffectiveConfigurableZaloProduct = (
-        currentConfigurableZaloProduct?.organizationProductId != null &&
-        currentConfigurableZaloProduct.organizationProductId === liveConfigurableZaloProduct?.organizationProductId
+      // Changing Show Web on the same newest effective Product 16/18 row is
+      // restart-only. A different newest row must apply immediately so older
+      // rows cannot contribute capabilities after the selection changes.
+      const getEffectiveZaloProductRowId = (
+        products: typeof currentUser.accountProducts
+      ): number | null => products.find(product => (
+        product.feature === 'zalo' && product.isActive
+      ))?.organizationProductId ?? null
+      const currentEffectiveZaloProductRowId = getEffectiveZaloProductRowId(
+        currentUser.accountProducts
       )
+      const liveEffectiveZaloProductRowId = getEffectiveZaloProductRowId(liveAccountProducts)
+      const hasSameEffectiveZaloProduct = (
+        currentEffectiveZaloProductRowId !== null &&
+        currentEffectiveZaloProductRowId === liveEffectiveZaloProductRowId
+      )
+      const currentZaloAccountCapabilities = getUserZaloAccountCapabilities(currentUser)
       const hasRestartOnlyWebFlagChange = (
-        hasSameEffectiveConfigurableZaloProduct &&
-        getUserZaloAccountCapabilities(currentUser).web !== liveEntitlementAccess.zaloAccountCapabilities.web
+        hasSameEffectiveZaloProduct &&
+        (
+          currentZaloAccountCapabilities.qr !== liveEntitlementAccess.zaloAccountCapabilities.qr ||
+          currentZaloAccountCapabilities.web !== liveEntitlementAccess.zaloAccountCapabilities.web
+        )
       )
       const nextZaloAccountCapabilities = hasRestartOnlyWebFlagChange
-        ? getUserZaloAccountCapabilities(currentUser)
+        ? currentZaloAccountCapabilities
         : liveEntitlementAccess.zaloAccountCapabilities
       const updatedUser = {
         ...currentUser,
@@ -815,14 +821,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       // remain attached independently through their visible browser tabs.
       warmZaloSessions()
       zaloRealtimeGroupManager?.start()
-      return
-    }
-
-    if (user?.entitlements?.zalo && zaloCapabilities.web) {
-      zaloRealtimeGroupManager?.stop()
-      // Web-only organizations must not keep a hidden zca-js listener/session
-      // alive, while their visible Chromium tabs remain attached.
-      zaloRuntime.clearQrRuntime()
       return
     }
 
