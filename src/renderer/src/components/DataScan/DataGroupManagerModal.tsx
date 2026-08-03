@@ -383,6 +383,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const datasetLoadSeqRef = useRef(0)
   const addMenuRef = useRef<HTMLDivElement | null>(null)
   const pageSelectionRef = useRef<HTMLInputElement | null>(null)
+  const copyNoticeTimerRef = useRef<number | null>(null)
 
   const [apiUnavailable, setApiUnavailable] = useState(false)
   const [dataTypeItems, setDataTypeItems] = useState<DataTypeCatalogItem[]>([])
@@ -425,6 +426,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const [editingGroupDataTypeCategoryItemId, setEditingGroupDataTypeCategoryItemId] = useState<number | ''>('')
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [draggedGroupId, setDraggedGroupId] = useState<number | null>(null)
+  const [copyNotice, setCopyNotice] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   const [memberSearch, setMemberSearch] = useState('')
   const debouncedMemberSearch = useDebouncedValue(memberSearch)
@@ -463,6 +465,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   useEffect(() => {
     void loadAccounts()
   }, [loadAccounts])
+
+  useEffect(() => () => {
+    if (copyNoticeTimerRef.current !== null) window.clearTimeout(copyNoticeTimerRef.current)
+  }, [])
 
   useEffect(() => {
     const catalogApi = getDataTypeCatalogApi()
@@ -900,6 +906,21 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     setEditingGroupId(group.id)
     setEditingGroupName(group.name)
     setEditingGroupDataTypeCategoryItemId(getGroupDataTypeId(group) ?? '')
+  }
+
+  const copyGroupId = async (groupId: number) => {
+    try {
+      await navigator.clipboard.writeText(String(groupId))
+      setCopyNotice({ message: `Đã copy ID ${groupId}`, type: 'success' })
+    } catch (error) {
+      console.error('Failed to copy data-group ID:', error)
+      setCopyNotice({ message: 'Không thể copy ID nhóm', type: 'error' })
+    }
+    if (copyNoticeTimerRef.current !== null) window.clearTimeout(copyNoticeTimerRef.current)
+    copyNoticeTimerRef.current = window.setTimeout(() => {
+      setCopyNotice(null)
+      copyNoticeTimerRef.current = null
+    }, 1600)
   }
 
   const submitRenameGroup = async (group: DataGroup) => {
@@ -1715,7 +1736,22 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                         </div>
                       ) : (
                         <>
-                          <div className="data-group-manager-group-name">{group.name}</div>
+                          <div className="data-group-manager-group-name-row">
+                            <div className="data-group-manager-group-name" title={group.name}>{group.name}</div>
+                            <button
+                              type="button"
+                              className="data-group-manager-id-copy"
+                              onClick={event => {
+                                event.stopPropagation()
+                                void copyGroupId(group.id)
+                              }}
+                              title={`Sao chép ID nhóm ${group.id}`}
+                              aria-label={`Sao chép ID nhóm ${group.id}`}
+                            >
+                              <span>ID: {group.id}</span>
+                              <Copy size={11} />
+                            </button>
+                          </div>
                           <div className="data-group-manager-group-meta">
                             <span>{formatCount(group.activeMembershipCount)} data</span>
                             <span className="data-group-manager-type-badge">{getGroupDataTypeName(group)}</span>
@@ -1774,7 +1810,21 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               <div className="data-group-manager-active-title">
                 <span className="data-group-manager-active-color" style={{ background: activeGroup?.color || 'var(--text-tertiary)' }} />
                 <div>
-                  <h3>{activeGroup?.name || 'Chưa chọn nhóm'}</h3>
+                  <div className="data-group-manager-active-name-row">
+                    <h3 title={activeGroup?.name}>{activeGroup?.name || 'Chưa chọn nhóm'}</h3>
+                    {activeGroup && (
+                      <button
+                        type="button"
+                        className="data-group-manager-id-copy is-active-header"
+                        onClick={() => void copyGroupId(activeGroup.id)}
+                        title={`Sao chép ID nhóm ${activeGroup.id}`}
+                        aria-label={`Sao chép ID nhóm ${activeGroup.id}`}
+                      >
+                        <span>ID: {activeGroup.id}</span>
+                        <Copy size={12} />
+                      </button>
+                    )}
+                  </div>
                   <div className="data-group-manager-active-meta">
                     <span>{activeGroup ? `${formatCount(activeGroup.activeMembershipCount)} data trong nhóm` : 'Chọn một nhóm để xem data'}</span>
                     {activeGroup && (
@@ -2028,6 +2078,16 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               </button>
             </span>
           </footer>
+        )}
+
+        {copyNotice && (
+          <div
+            className={`data-group-manager-copy-notice is-${copyNotice.type}`}
+            role={copyNotice.type === 'error' ? 'alert' : 'status'}
+          >
+            {copyNotice.type === 'success' ? <Check size={14} /> : <X size={14} />}
+            <span>{copyNotice.message}</span>
+          </div>
         )}
       </section>
 
