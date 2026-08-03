@@ -41,7 +41,7 @@ export default function AppUtilityTopbar({
 
   return (
     <header className="app-utility-topbar" aria-label="Thanh công cụ ứng dụng">
-      <div className="app-utility-title" title="akaBizAuto">akaBizAuto</div>
+      <div className="app-utility-title" title="akaBiz">akaBiz</div>
       <div className="app-utility-actions">
         <span className="app-utility-version">v{currentVersion || '...'}</span>
         <button

@@ -1764,6 +1764,9 @@ export class ContactLoader {
     if (!account) return 'Không tìm thấy tài khoản'
     if (!account.isActive) return 'Tài khoản đang bị tắt, không thể quét data'
     if (account.flatformType !== 'zalo') return 'Hành động này chỉ hỗ trợ tài khoản Zalo'
+    if ((account.isZaloServer === true) !== (this.zaloRuntimeTarget === 'server')) {
+      return 'Tài khoản không thuộc runtime Zalo hiện tại'
+    }
     if (account.loginStatus !== 'đã đăng nhập') return 'Tài khoản chưa đăng nhập Zalo'
     if (account.status === 'đang chạy') {
       return 'Tài khoản đang chạy chiến dịch hoặc quét data, vui lòng đợi hoàn tất hoặc tạm dừng tác vụ hiện tại.'

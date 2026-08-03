@@ -42,7 +42,7 @@ import {
   type AkaBizDesktopCampaignSummary
 } from './akaBizDesktopSqliteClient'
 import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
-import { getCurrentUser, isCurrentUserZaloServerEnabled } from '../data/currentUser'
+import { getCurrentUser } from '../data/currentUser'
 import {
   ensureCurrentUserCanUseCampaignAction,
   getAccountActionDailySendLimit,
@@ -118,6 +118,8 @@ export interface CampaignSchedulerOptions {
   runtimeModeRevision?: string | null | (() => string | null)
   maintenanceCoordinator?: DailyMaintenanceBarrier
   logSink?: CampaignSchedulerLogSink
+  /** App Server lifecycle hook when a live DB claim rejects this runtime owner. */
+  onRuntimeOwnershipLost?: () => void
 }
 
 interface RuntimeErrorResult {
@@ -603,6 +605,8 @@ export class CampaignScheduler {
   private runtimeModeRevision: string | null | (() => string | null)
   private maintenanceCoordinator?: DailyMaintenanceBarrier
   private logSink?: CampaignSchedulerLogSink
+  private onRuntimeOwnershipLost?: () => void
+  private runtimeOwnershipLossReported = false
 
   constructor(
     supabase: SupabaseService,
@@ -623,6 +627,7 @@ export class CampaignScheduler {
     this.runtimeModeRevision = options.runtimeModeRevision || null
     this.maintenanceCoordinator = options.maintenanceCoordinator
     this.logSink = options.logSink
+    this.onRuntimeOwnershipLost = options.onRuntimeOwnershipLost
   }
 
   setPageRegistry(reg: PageControllerRegistry): void {
@@ -711,6 +716,24 @@ export class CampaignScheduler {
     this.backgroundPages.destroyAll()
     if (this.runtimeTarget !== 'server') {
       this.sendLog('⏹ Scheduler đã dừng.')
+    }
+  }
+
+  /**
+   * Stop polling without aborting an already claimed Zalo unit. Server
+   * entitlement loss is observed by the DB run-control guard, which lets the
+   * current target settle and prevents the next target from starting.
+   */
+  stopAcceptingNewZaloWork(): void {
+    this.running = false
+    this.schedulerConnectivityIssueActive = false
+    if (this.startDelayTimeoutId) {
+      clearTimeout(this.startDelayTimeoutId)
+      this.startDelayTimeoutId = null
+    }
+    if (this.intervalId) {
+      clearInterval(this.intervalId)
+      this.intervalId = null
     }
   }
 
@@ -1066,8 +1089,10 @@ export class CampaignScheduler {
   private shouldProcessAccountForRuntime(account: AutoAccount): boolean {
     const isZaloAccount = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZaloAccount && this.zaloRuntimeStopRequested) return false
-    if (this.runtimeTarget === 'server') return isZaloAccount && !account.isZaloShowWeb
-    return !isZaloAccount || account.isZaloShowWeb || !isCurrentUserZaloServerEnabled()
+    if (this.runtimeTarget === 'server') {
+      return isZaloAccount && account.isZaloServer === true && !account.isZaloShowWeb
+    }
+    return !isZaloAccount || account.isZaloServer !== true
   }
 
   private isRealtimeCampaignDisabledForRuntime(account: AutoAccount, campaign: Campaign): boolean {
@@ -2272,6 +2297,10 @@ export class CampaignScheduler {
     const loggedSkippedLimitActionCodes = new Set<string>()
 
     for (let i = 0; i < targets.length; i++) {
+      // A graceful Server capability drain owns only the target/batch that
+      // already crossed its DB unit claim. Do not run preflight or mutate a
+      // later pending target while the runtime is stopping.
+      if (this.isServerZaloCampaign(account, campaign) && !this.running) return
       const detail = targets[i]
       // Completed/paused/error rows are only historical context. Skip them
       // before any per-target DB guards so large campaigns resume immediately
@@ -2295,6 +2324,7 @@ export class CampaignScheduler {
       // unit; an already-started target is allowed to finish below.
       const serverBoundary = await this.getServerZaloBoundaryReason(account, campaign)
       const cur = serverBoundary.paused ? null : await this.supabase.getCampaign(campaign.id)
+      if (this.isServerZaloCampaign(account, campaign) && !this.running) return
       if (
         serverBoundary.paused ||
         this.isCampaignPauseRequested(campaign.id) ||
@@ -2308,10 +2338,12 @@ export class CampaignScheduler {
         await this.releaseRunningAccount(account.id)
         return
       }
+      if (this.isServerZaloCampaign(account, campaign) && !this.running) return
 
       const accountBlockReason = this.isServerZaloCampaign(account, campaign)
         ? serverBoundary.hardStopReason
         : await this.getAccountRunBlockReason(account.id, 'đang chạy')
+      if (this.isServerZaloCampaign(account, campaign) && !this.running) return
       if (accountBlockReason) {
         stoppedBeforeCompletion = true
         await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
@@ -2330,12 +2362,14 @@ export class CampaignScheduler {
       }
 
       if (detail && this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)) {
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!)
         zaloFriendBlocklistSkippedCount += 1
         continue
       }
 
       const groupPostApproval = await this.resolveGroupPostApprovalForTarget(account.id, campaign, detail)
+      if (this.isServerZaloCampaign(account, campaign) && !this.running) return
       const executableTargetActionDescriptors = groupPostApproval.skipPostByKnownApproval
         ? executableActionDescriptors.filter(action => action.code !== 'fb_post_group')
         : executableActionDescriptors
@@ -2356,6 +2390,7 @@ export class CampaignScheduler {
             quotaTargetActionDescriptors,
             limitConfig
           )
+          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           if (newsfeedAvailability.disabledStatus) {
             stoppedBeforeCompletion = true
             await this.handleLimitStatus(account, campaign, newsfeedAvailability.disabledStatus)
@@ -2384,6 +2419,7 @@ export class CampaignScheduler {
           await this.logSkippedLimitActionsOnce(campaign, newsfeedAvailability.blockedLimitStatuses, loggedSkippedLimitActionCodes)
         } else {
           const disabledStatus = await this.checkActionDisabled(account, executableTargetActionDescriptors)
+          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           if (disabledStatus && !disabledStatus.ok) {
             stoppedBeforeCompletion = true
             await this.handleLimitStatus(account, campaign, disabledStatus)
@@ -2391,6 +2427,7 @@ export class CampaignScheduler {
           }
 
           const limitResult = await this.checkActionLimitsForContinuation(account, campaign, quotaTargetActionDescriptors, limitConfig)
+          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           if (limitResult.limitStatus) {
             stoppedBeforeCompletion = true
             await this.handleLimitStatus(account, campaign, limitResult.limitStatus)
@@ -2408,6 +2445,7 @@ export class CampaignScheduler {
       const automationPage = browserlessRun
         ? { page: null, source: 'background' as const }
         : await this.getAutomationPage(account, campaign.id)
+      if (this.isServerZaloCampaign(account, campaign) && !this.running) return
       const page = automationPage.page
 
       let currentSourceLink = ''
@@ -2436,6 +2474,7 @@ export class CampaignScheduler {
           limitConfig,
           groupPostApproval.skipPostByKnownApproval
         )
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         const groupPostShareTargets = this.buildGroupPostShareTargets(
           campaign,
           details,
@@ -2444,6 +2483,7 @@ export class CampaignScheduler {
           groupPostShareMaxCount
         )
         const baseVariables = await this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval, mediaTempPaths, skippedLimitActionCodes)
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         const variables = {
           ...baseVariables,
           enableGroupPostShareToJoinedGroups: campaign.extraSettings?.enableGroupPostShareToJoinedGroups === true && groupPostShareMaxCount > 0 && groupPostShareTargets.length > 0,
@@ -3510,6 +3550,7 @@ export class CampaignScheduler {
     zaloFriendBlocklist: ZaloFriendBlocklistContext | null
   ): Promise<void> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    if (this.isServerZaloCampaign(account, campaign) && !this.running) return
 
     const mediaTempPaths: string[] = []
     try {
@@ -3532,6 +3573,7 @@ export class CampaignScheduler {
       } else {
         const baseMessage = this.getRawCampaignContentForIndex(campaign, 0)
         simpleAttachments = await this.resolveCampaignMediaForIndex(campaign, 0, false, mediaTempPaths)
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         if (!baseMessage.trim() && simpleAttachments.length === 0) {
           const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
           await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
@@ -3554,6 +3596,7 @@ export class CampaignScheduler {
         const now = new Date()
         const remainingDetails: CampaignInputData[] = []
         for (const detail of details) {
+          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           if (
             detail.status === 'chờ xử lý' &&
             !this.getFutureInputSchedule(detail, now) &&
@@ -3575,12 +3618,14 @@ export class CampaignScheduler {
       let batchIndex = 0
 
       while (index < details.length) {
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         // Zalo forwarding is atomic per batch. A batch that already entered the
         // API may finish, but no new batch may be assembled after hard end.
         if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
           await this.releaseRunningAccount(account.id)
           return
         }
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
 
         const loopRuntimeStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (loopRuntimeStopReason) {
@@ -3594,6 +3639,7 @@ export class CampaignScheduler {
         }
         const serverBoundary = await this.getServerZaloBoundaryReason(account, campaign)
         const cur = serverBoundary.paused ? null : await this.supabase.getCampaign(campaign.id)
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         if (
           serverBoundary.paused ||
           this.isCampaignPauseRequested(campaign.id) ||
@@ -3606,6 +3652,7 @@ export class CampaignScheduler {
         const accountBlockReason = this.isServerZaloCampaign(account, campaign)
           ? serverBoundary.hardStopReason
           : await this.getAccountRunBlockReason(account.id, 'đang chạy')
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         if (accountBlockReason) {
           stoppedBeforeCompletion = true
           await this.stopCampaignForAccountCondition(account, campaign, accountBlockReason)
@@ -3620,6 +3667,7 @@ export class CampaignScheduler {
           shouldCheckQuota,
           limitConfig
         )
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         if (!capacity.ok || capacity.capacity < 1) {
           stoppedBeforeCompletion = true
           await this.handleLimitStatus(account, campaign, capacity.limitStatus || {
@@ -3635,12 +3683,14 @@ export class CampaignScheduler {
         let stopAfterInvalidTarget = false
 
         while (index < details.length && batch.length < capacity.capacity) {
+          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           // Target resolution can take long enough to cross the boundary. Stop
           // building the batch before resolving or reserving another target.
           if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
             await this.releaseRunningAccount(account.id)
             return
           }
+          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           if (this.getZaloRuntimeStopReason(campaign.id)) {
             stoppedBeforeCompletion = true
             break
@@ -3658,6 +3708,7 @@ export class CampaignScheduler {
           }
 
           if (this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)) {
+            if (this.isServerZaloCampaign(account, campaign) && !this.running) return
             await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!, { logProgress: false })
             zaloFriendBlocklistSkippedCount += 1
             continue
@@ -3688,6 +3739,7 @@ export class CampaignScheduler {
               stoppedBeforeCompletion = true
               break
             }
+            if (this.isServerZaloCampaign(account, campaign) && !this.running) return
             await this.upsertZaloResolvedProfileTarget(account, resolvedTarget, campaign.actionId)
             if (this.getZaloRuntimeStopReason(campaign.id)) {
               stoppedBeforeCompletion = true
@@ -3719,8 +3771,10 @@ export class CampaignScheduler {
         const batchAttachments = usesAdvancedContent
           ? await this.resolveCampaignMediaForIndex(campaign, batchIndex, false, mediaTempPaths)
           : (simpleAttachments || [])
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         batchIndex += 1
         const message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage)
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         const contentStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (contentStopReason) {
           if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
@@ -3738,6 +3792,7 @@ export class CampaignScheduler {
           await this.releaseRunningAccount(account.id)
           return
         }
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
 
         if (this.isServerZaloCampaign(account, campaign)) {
           const canStartBatch = await this.beginServerZaloRunUnit(
@@ -5942,6 +5997,7 @@ export class CampaignScheduler {
   private isServerZaloCampaign(account: AutoAccount, campaign: Campaign): boolean {
     return this.runtimeTarget === 'server' &&
       String(account.flatformType || '').trim().toLowerCase() === 'zalo' &&
+      account.isZaloServer === true &&
       !account.isZaloShowWeb &&
       String(campaign.actionId || '').trim().toLowerCase().startsWith('zalo_')
   }
@@ -6014,6 +6070,11 @@ export class CampaignScheduler {
     inputDataIds: number[]
   ): Promise<boolean> {
     if (!this.isServerZaloCampaign(account, campaign)) return true
+    // `stopAcceptingNewZaloWork()` flips `running` before waiting for the
+    // already-claimed unit to settle. Keep that local drain boundary even if
+    // the product capability is toggled off and back on while this runtime is
+    // still stopping; only a reconciled runtime may claim the next unit.
+    if (!this.running) return false
 
     const claim = await this.supabase.claimZaloServerRunUnit(
       campaign.id,
@@ -6030,6 +6091,26 @@ export class CampaignScheduler {
     if (claim.reason === 'runtime_control_paused') {
       this.latchServerZaloPause(campaign.id, claim.campaignStatus, claim.accountStatus)
       await this.completePauseAtBoundary(account, campaign)
+      return false
+    }
+
+    if (claim.reason === 'runtime_not_owner') {
+      // Capability loss is a graceful ownership boundary. The current target
+      // (or realtime batch) has already settled before this next-unit claim,
+      // and the rejected input is still pending. Stop locally *now* and signal
+      // the manager instead of waiting for its discovery poll: capability may
+      // be restored before that poll, otherwise the already-claimed parent
+      // campaign/account could remain running forever. Manager recovery is
+      // scoped to Server-subtype rows and does not consume bad-target policy.
+      this.stopAcceptingNewZaloWork()
+      if (!this.runtimeOwnershipLossReported) {
+        this.runtimeOwnershipLossReported = true
+        try {
+          this.onRuntimeOwnershipLost?.()
+        } catch (error) {
+          console.error('Failed to notify Zalo Server ownership loss:', error)
+        }
+      }
       return false
     }
 

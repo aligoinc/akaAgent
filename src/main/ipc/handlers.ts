@@ -34,7 +34,6 @@ import { registerReportHandlers } from './handlers/reportHandlers'
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
-  isCurrentUserZaloServerEnabled,
   setCurrentUser,
   setCurrentUserCredentials
 } from '../data/currentUser'
@@ -50,9 +49,7 @@ import {
   isZaloLocalStartupHandoffBlocked,
   loadStaffZaloServerMode,
   loadStaffZaloServerModeSnapshot,
-  markZaloRuntimeRestartRequired,
-  shouldRouteCurrentUserZaloCleanupToServer,
-  ZALO_LOCAL_STARTUP_HANDOFF_MESSAGE
+  markZaloRuntimeRestartRequired
 } from '../data/repositories/zaloRuntimeModeRepository'
 import {
   ACCOUNT_EXPIRED_MESSAGE,
@@ -163,13 +160,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const dailyMaintenance = new DailyMaintenanceCoordinator(async () => {
     const user = getCurrentUser()
     if (!user) return
-    const updatedCampaigns = !forceFullDesktopMaintenance && (
-      getZaloRuntimeRestartRequired() ||
-      isZaloLocalStartupHandoffBlocked() ||
-      isCurrentUserZaloServerEnabled()
-    )
-      ? await supabase.maintainNonZaloCampaignSchedules()
-      : await supabase.maintainCampaignSchedules()
+    const updatedCampaigns = await supabase.maintainCampaignSchedules()
     for (const campaign of updatedCampaigns) {
       try {
         mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
@@ -184,14 +175,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     scopeKey: () => {
       const user = getCurrentUser()
       if (!user) return 'signed-out'
-      const scope = forceFullDesktopMaintenance
-        ? 'desktop-all'
-        : user.isZaloServer
-        ? 'server-zalo'
-        : isZaloLocalStartupHandoffBlocked()
-          ? 'desktop-non-zalo-handoff'
-          : 'desktop-all'
-      return `${user.staffId}:${scope}`
+      return `${user.staffId}:desktop-owned`
     }
   })
   const campaignScheduler = new CampaignScheduler(
@@ -380,7 +364,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     // Show Web is intentionally a restart-only setting. Do not add handoff,
     // ownership, cleanup or "mode changed while running" coordination here;
     // the user closes and reopens the app to apply the new browser mode.
-    if ((activationUser?.isZaloShowWeb || liveIsZaloShowWeb) && !liveIsZaloServer) {
+    if (activationUser?.isZaloShowWeb !== liveIsZaloShowWeb) {
       restartRequiredActivation = Promise.resolve()
       return restartRequiredActivation
     }
@@ -560,23 +544,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         zaloRuntime.abandonWarmSessionClaims()
         accountZaloOperations?.abandonClaims()
         accountPollerController?.abandonZaloClaims()
-        const excludeZalo = desktopZaloOwnershipRelinquished || (options.excludeZalo ?? (
-          user.isZaloServer || isZaloLocalStartupHandoffBlocked()
-        ))
-        // QR rows excluded by ownership remain untouched. Any Zalo row that the
-        // desktop recovery is allowed to settle (including Web) is no-retry.
+        // Migration v219 resolves Zalo ownership from each account. The legacy
+        // flag remains in the RPC contract, but this desktop must never exclude
+        // every Zalo row merely because the old global snapshot says Server.
+        const excludeZalo = options.excludeZalo === true
         const zaloUncertainNoRetry = options.zaloUncertainNoRetry ?? true
-        const recoveryResult = await supabase.resetDesktopRunningStatuses(
+        await supabase.resetDesktopRunningStatuses(
           user.staffId,
           excludeZalo,
           zaloUncertainNoRetry
         )
-        if (!excludeZalo && recoveryResult.excludeZalo && !user.isZaloServer) {
-          // The product switched local -> server after the pre-exit mode check
-          // but before this atomic RPC acquired its entitlement lock. No Zalo
-          // row was reset, so finish the same proven-idle server handoff now.
-          await activateZaloRuntimeRestartRequired(true)
-        }
         try {
           await supabase.enableDueAccountActions()
         } catch (error) {
@@ -632,7 +609,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     cancelLocalHandoffRetry()
     cancelDesktopHandoffAckRetry()
     try {
-      await ensureDesktopZaloHandoffBeforeExit()
       contactLoader.stopAll()
       campaignScheduler.stop()
       await automationProcessor.stop()
@@ -677,33 +653,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         return
       }
 
-      // Changing Show Web on the same newest effective Product 16/18 row is
-      // restart-only. A different newest row must apply immediately so older
-      // rows cannot contribute capabilities after the selection changes.
-      const getEffectiveZaloProductRowId = (
-        products: typeof currentUser.accountProducts
-      ): number | null => products.find(product => (
-        product.feature === 'zalo' && product.isActive
-      ))?.organizationProductId ?? null
-      const currentEffectiveZaloProductRowId = getEffectiveZaloProductRowId(
-        currentUser.accountProducts
-      )
-      const liveEffectiveZaloProductRowId = getEffectiveZaloProductRowId(liveAccountProducts)
-      const hasSameEffectiveZaloProduct = (
-        currentEffectiveZaloProductRowId !== null &&
-        currentEffectiveZaloProductRowId === liveEffectiveZaloProductRowId
-      )
-      const currentZaloAccountCapabilities = getUserZaloAccountCapabilities(currentUser)
-      const hasRestartOnlyWebFlagChange = (
-        hasSameEffectiveZaloProduct &&
-        (
-          currentZaloAccountCapabilities.qr !== liveEntitlementAccess.zaloAccountCapabilities.qr ||
-          currentZaloAccountCapabilities.web !== liveEntitlementAccess.zaloAccountCapabilities.web
-        )
-      )
-      const nextZaloAccountCapabilities = hasRestartOnlyWebFlagChange
-        ? currentZaloAccountCapabilities
-        : liveEntitlementAccess.zaloAccountCapabilities
+      // Web and Server are additive capabilities in v219, not global runtime
+      // modes. Apply changes immediately; stored account subtypes stay intact.
+      const nextZaloAccountCapabilities = liveEntitlementAccess.zaloAccountCapabilities
       const updatedUser = {
         ...currentUser,
         entitlements: liveEntitlements,
@@ -714,26 +666,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       const accountProductsChanged = JSON.stringify(currentUser.accountProducts || []) !== JSON.stringify(liveAccountProducts)
       const zaloCapabilitiesChanged = JSON.stringify(currentUser.zaloAccountCapabilities)
         !== JSON.stringify(nextZaloAccountCapabilities)
-      const pendingRuntimeRestart = getZaloRuntimeRestartRequired()
-      const runtimeModeChanged = !!pendingRuntimeRestart
       if (reason !== 'login' && (
         entitlementsChanged ||
         accountProductsChanged ||
-        zaloCapabilitiesChanged ||
-        runtimeModeChanged
+        zaloCapabilitiesChanged
       )) {
-        if (pendingRuntimeRestart) {
-          void activateZaloRuntimeRestartRequired(
-            pendingRuntimeRestart.databaseIsZaloServer,
-            pendingRuntimeRestart.databaseIsZaloShowWeb
-          )
-        }
-
         setCurrentUser(updatedUser)
-        if (!runtimeModeChanged && runtimeCredentials) {
+        if (runtimeCredentials) {
           zaloServerClient.start(updatedUser, runtimeCredentials.username, runtimeCredentials.password)
         }
-        if (!runtimeModeChanged) syncZaloBackgroundForCurrentUser(`${reason}-entitlement-refresh`)
+        syncZaloBackgroundForCurrentUser(`${reason}-entitlement-refresh`)
         notifyRendererUserUpdated(updatedUser)
       } else {
         setCurrentUser(updatedUser)
@@ -757,38 +699,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }, delayMs)
   }
 
-  const runZaloRuntimeModeCheck = async (): Promise<void> => {
-    const checkedUser = getCurrentUser()
-    if (!checkedUser) return
-    const pendingRestart = getZaloRuntimeRestartRequired()
-    if (pendingRestart) {
-      // A direct QR/scan/session IPC can discover the mismatch before this
-      // poll. Activate cleanup/modal here instead of waiting for entitlement
-      // refresh to succeed.
-      void activateZaloRuntimeRestartRequired(
-        pendingRestart.databaseIsZaloServer,
-        pendingRestart.databaseIsZaloShowWeb
-      )
-      return
-    }
-    try {
-      const liveMode = await loadStaffZaloServerModeSnapshot(checkedUser.staffId)
-      const currentUser = getCurrentUser()
-      if (!currentUser || currentUser.staffId !== checkedUser.staffId) return
-      if (
-        currentUser.isZaloServer !== liveMode.isZaloServer
-        || currentUser.isZaloShowWeb !== liveMode.isZaloShowWeb
-      ) {
-        void activateZaloRuntimeRestartRequired(
-          liveMode.isZaloServer,
-          liveMode.isZaloShowWeb
-        )
-      }
-    } catch (error) {
-      console.error('[RuntimeMode] Failed to refresh Zalo runtime mode:', error)
-    }
-  }
-
   const warmZaloSessions = (): void => {
     void zaloRuntime.warmStoredSessions('desktop')
       .then(() => {
@@ -806,16 +716,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const syncZaloBackgroundForCurrentUser = (_reason: string): void => {
     const user = getCurrentUser()
     const zaloCapabilities = getUserZaloAccountCapabilities(user)
-    if (isZaloLocalStartupHandoffBlocked()) {
-      zaloRealtimeGroupManager?.stop()
-      zaloRuntime.clearAll()
-      return
-    }
-    if (user?.entitlements?.zalo && user.isZaloServer) {
-      zaloRealtimeGroupManager?.stop()
-      zaloRuntime.clearAll()
-      return
-    }
     if (user?.entitlements?.zalo && zaloCapabilities.qr) {
       // Only QR accounts use stored zca-js sessions and realtime. Web accounts
       // remain attached independently through their visible browser tabs.
@@ -1046,13 +946,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     void runSessionExpiryCheck('runtime')
   }, RUNTIME_ENTITLEMENT_REFRESH_INTERVAL_MS)
 
-  // Keep this independent from entitlement refresh. Slow product queries must
-  // not postpone the mandatory mode-change modal beyond the next 30s poll.
-  setInterval(() => {
-    if (!getCurrentUser()) return
-    void runZaloRuntimeModeCheck()
-  }, RUNTIME_ENTITLEMENT_REFRESH_INTERVAL_MS)
-
   let quitCleanupStarted = false
   let quitCleanupCompleted = false
   app.on('before-quit', (event) => {
@@ -1076,7 +969,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         clearSessionExpiryTimer()
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
-        await ensureDesktopZaloHandoffBeforeExit()
         contactLoader.stopAll()
         campaignScheduler.stop()
         await automationProcessor.stop()
@@ -1150,17 +1042,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       accountPollerController?.resetZaloRuntimeBlock()
       runtimeCredentials = { username, password }
       const loginUser = getCurrentUser()
-      const requiresLocalHandoff = !!(
-        loginUser &&
-        !loginUser.isZaloServer &&
-        getUserZaloAccountCapabilities(loginUser).qr &&
-        loginUser.entitlements.zalo
-      )
-      const handoffGeneration = requiresLocalHandoff
-        ? beginLocalZaloHandoff()
-        : localHandoffGeneration
       try {
-        if (loginUser?.isZaloServer) {
+        if (loginUser && getUserZaloAccountCapabilities(loginUser).server) {
           // Do not put the login screen behind VPS availability. A marker from
           // an older local runtime is acknowledged in the bounded background
           // retry loop while this desktop remains a DB-backed control client.
@@ -1172,19 +1055,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
               0
             )
           }
-        } else if (loginUser && getUserZaloAccountCapabilities(loginUser).qr) {
-          // A local-mode login can clear a stale marker immediately after the
-          // entitlement has switched back; it does not start a VPS runtime.
-          await acknowledgeDesktopHandoffMarker(
-            loginUser.staffId,
-            loginUser.organizationId,
-            { username, password }
-          )
         }
-        const recovered = await runScopedRecovery(
-          'login',
-          requiresLocalHandoff ? { excludeZalo: true } : undefined
-        )
+        const recovered = await runScopedRecovery('login')
         if (!recovered) throw new Error(LOGIN_RECOVERY_FAILED_MESSAGE)
 
         try {
@@ -1205,7 +1077,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         syncZaloBackgroundForCurrentUser('login')
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
         await automationProcessor.start()
-        if (requiresLocalHandoff) scheduleLocalZaloHandoffRetry(handoffGeneration, 0)
       } catch (error) {
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
@@ -1239,7 +1110,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
-      await ensureDesktopZaloHandoffBeforeExit()
       contactLoader.stopAll()
       campaignScheduler.stop()
       await automationProcessor.stop()
@@ -1259,11 +1129,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       runtimeCredentials = { ...runtimeCredentials, password: newPassword }
       const user = getCurrentUser()
       if (user) zaloServerClient.start(user, runtimeCredentials.username, newPassword)
-      if (isZaloLocalStartupHandoffBlocked()) {
-        if (localHandoffRetryTimer) clearTimeout(localHandoffRetryTimer)
-        localHandoffRetryTimer = null
-        scheduleLocalZaloHandoffRetry(localHandoffGeneration, 0)
-      }
     }
   })
   registerUpdateHandlers(mainWindow)
@@ -1299,7 +1164,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         throw new Error('Tài khoản Zalo của chiến dịch không còn phù hợp với gói hiện tại.')
       }
       if (account?.flatformType === 'zalo') {
-        if (!account.isZaloShowWeb && shouldRouteCurrentUserZaloCleanupToServer()) {
+        if (account.isZaloServer) {
           const result = await supabase.setZaloServerCampaignStatus(campaignId, status)
           if (!result.ok) {
             if (result.reason === 'runtime_not_owner') {
@@ -1314,10 +1179,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
           const updated = await supabase.getCampaign(campaignId)
           if (!updated) throw new Error('Không tìm thấy chiến dịch.')
           return updated
-        }
-
-        if (isZaloLocalStartupHandoffBlocked()) {
-          throw new Error(ZALO_LOCAL_STARTUP_HANDOFF_MESSAGE)
         }
       }
 

@@ -38,6 +38,14 @@ const QUICK_COMMAND_TIMEOUT_MS = 10 * 60 * 1000
 const CONNECT_TIMEOUT_MS = 15_000
 const RUNTIME_HANDOFF_TIMEOUT_MS = 45_000
 const DESKTOP_HANDOFF_READY_TIMEOUT_MS = 10_000
+const CLEANUP_COMMANDS = new Set<ZaloServerCommandName>([
+  'zalo.loginQr.cancel',
+  'contacts.cancel'
+])
+
+interface CleanupRuntimeGuard {
+  expectedRuntimeStartedAt: string
+}
 
 interface LoginCredentials {
   username: string
@@ -70,6 +78,9 @@ export class ZaloServerClient {
   private tokenExpiresAt = 0
   private authenticated = false
   private stopped = true
+  private cleanupOnly = false
+  private runtimeStartedAt: string | null = null
+  private cleanupRuntimeStartedAt: string | null = null
   private connecting = false
   private reconnectDelayMs = RECONNECT_MIN_DELAY_MS
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -90,7 +101,7 @@ export class ZaloServerClient {
   }
 
   isEnabled(): boolean {
-    return this.user?.isZaloServer === true && this.user.entitlements.zalo === true
+    return !!this.user && this.user.entitlements.zalo === true && this.hasServerCapability(this.user)
   }
 
   isConnected(): boolean {
@@ -111,34 +122,63 @@ export class ZaloServerClient {
       username: String(username || '').trim(),
       password: String(password || '')
     }
-    const useServerRuntime = user.isZaloServer === true && user.entitlements.zalo === true
-    const canReuseLifecycle = !this.stopped &&
-      useServerRuntime &&
+    const useServerRuntime = user.entitlements.zalo === true && this.hasServerCapability(user)
+    const cleanupRuntimeStartedAt = this.cleanupOnly
+      ? this.cleanupRuntimeStartedAt
+      : this.runtimeStartedAt
+    const sameLifecycleIdentity = !this.stopped &&
       this.user?.staffId === user.staffId &&
       this.user.organizationId === user.organizationId &&
       this.credentials?.username === credentials.username &&
       this.credentials.password === credentials.password
 
-    if (canReuseLifecycle) {
+    if (sameLifecycleIdentity && useServerRuntime) {
       this.user = user
       this.credentials = credentials
+      this.cleanupOnly = false
+      this.cleanupRuntimeStartedAt = null
       if (!this.socket && !this.connecting && !this.reconnectTimer) {
         void this.connect(this.generation)
       }
       return
     }
 
+    if (
+      sameLifecycleIdentity &&
+      !useServerRuntime &&
+      this.isConnected() &&
+      !!cleanupRuntimeStartedAt &&
+      Number.isFinite(this.tokenExpiresAt) &&
+      this.tokenExpiresAt > Date.now()
+    ) {
+      // Capability loss must not strand an already-running QR/contact
+      // operation. Keep only this authenticated socket and bind cleanup to the
+      // exact App Server runtime generation observed before capability loss.
+      // No disabled lifecycle may reconnect or mint a new session.
+      this.user = user
+      this.credentials = credentials
+      this.cleanupOnly = true
+      this.cleanupRuntimeStartedAt = cleanupRuntimeStartedAt
+      if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+      return
+    }
+
     this.stop()
-    this.user = user
     if (!useServerRuntime) return
+    this.user = user
     this.credentials = credentials
     this.stopped = false
+    this.cleanupOnly = false
     void this.connect(this.generation)
   }
 
   stop(): void {
     this.generation += 1
     this.stopped = true
+    this.cleanupOnly = false
+    this.runtimeStartedAt = null
+    this.cleanupRuntimeStartedAt = null
     this.connecting = false
     this.credentials = null
     this.user = null
@@ -168,14 +208,37 @@ export class ZaloServerClient {
     this.operationSnapshots.clear()
   }
 
+  private hasServerCapability(user: AuthUser): boolean {
+    const serverCapability = user.zaloAccountCapabilities?.server
+    return typeof serverCapability === 'boolean'
+      ? serverCapability
+      : user.isZaloServer === true
+  }
+
   async executeCommand<T = unknown>(command: ZaloServerCommandName, ...args: unknown[]): Promise<T> {
     const socket = this.socket
-    if (!this.isEnabled()) throw new Error('Gói Zalo của doanh nghiệp không bật chế độ chạy trên server')
+    const generation = this.generation
+    const cleanupCommand = CLEANUP_COMMANDS.has(command)
+    const cleanupOnlyAllowed = cleanupCommand &&
+      this.cleanupOnly &&
+      !!this.cleanupRuntimeStartedAt
+    if (!this.isEnabled() && !cleanupOnlyAllowed) {
+      throw new Error('Gói Zalo của doanh nghiệp không bật chế độ chạy trên server')
+    }
     if (!this.isConnected() || !socket || socket.readyState !== WebSocket.OPEN) {
       throw new Error('akaAgent Zalo Server chưa kết nối. Vui lòng kiểm tra app server trên VPS.')
     }
+    if (!this.isCurrentSocket(socket, generation)) {
+      throw new Error('Kết nối akaAgent Zalo Server đã thay đổi. Vui lòng thử lại.')
+    }
+    const expectedRuntimeStartedAt = this.cleanupOnly
+      ? this.cleanupRuntimeStartedAt
+      : this.runtimeStartedAt
+    const commandArgs = cleanupCommand && expectedRuntimeStartedAt
+      ? [...args, { expectedRuntimeStartedAt } satisfies CleanupRuntimeGuard]
+      : args
     const requestId = randomUUID()
-    const request: ZaloServerCommandRequest = { type: 'command', requestId, command, args }
+    const request: ZaloServerCommandRequest = { type: 'command', requestId, command, args: commandArgs }
     const result = await new Promise<unknown>((resolve, reject) => {
       const timeoutMs = this.getCommandTimeoutMs(command)
       const timeout = timeoutMs === null
@@ -189,6 +252,13 @@ export class ZaloServerClient {
         reject,
         timeout
       })
+      if (!this.isCurrentSocket(socket, generation)) {
+        const pending = this.pendingCommands.get(requestId)
+        if (pending?.timeout) clearTimeout(pending.timeout)
+        this.pendingCommands.delete(requestId)
+        reject(new Error('Kết nối akaAgent Zalo Server đã thay đổi. Vui lòng thử lại.'))
+        return
+      }
       socket.send(JSON.stringify(request), error => {
         if (!error) return
         const pending = this.pendingCommands.get(requestId)
@@ -291,7 +361,13 @@ export class ZaloServerClient {
   }
 
   private async connect(generation: number): Promise<void> {
-    if (!this.isCurrentGeneration(generation) || this.connecting || !this.credentials || !this.user) return
+    if (
+      !this.isCurrentGeneration(generation) ||
+      this.cleanupOnly ||
+      this.connecting ||
+      !this.credentials ||
+      !this.user
+    ) return
     if (this.socket && (this.socket.readyState === WebSocket.CONNECTING || this.socket.readyState === WebSocket.OPEN)) {
       return
     }
@@ -415,6 +491,7 @@ export class ZaloServerClient {
       socket.once('close', (_code, reason) => {
         clearTimeout(timeout)
         const isCurrentSocket = this.isCurrentSocket(socket, generation)
+        const wasCleanupOnly = isCurrentSocket && this.cleanupOnly
         if (isCurrentSocket) {
           this.socket = null
           this.authenticated = false
@@ -427,7 +504,14 @@ export class ZaloServerClient {
           settled = true
           reject(new Error(reason.toString() || 'WebSocket đã đóng'))
         }
-        if (isCurrentSocket) this.scheduleReconnect(generation)
+        if (wasCleanupOnly) {
+          // A disabled lifecycle may use only the socket that was already
+          // authenticated. Network/auth-token expiry retires it completely;
+          // only a later capability-enabled start may authenticate again.
+          this.stop()
+        } else if (isCurrentSocket) {
+          this.scheduleReconnect(generation)
+        }
       })
     })
   }
@@ -458,6 +542,7 @@ export class ZaloServerClient {
       return
     }
     if (message.type === 'hello') {
+      this.updateRuntimeStartedAt(message.snapshot)
       const serverRestarted = !!this.serverStartedAt && this.serverStartedAt !== message.snapshot.startedAt
       if (serverRestarted) this.lastSequence = 0
       this.serverStartedAt = message.snapshot.startedAt
@@ -489,6 +574,7 @@ export class ZaloServerClient {
       return
     }
     if (message.type === 'snapshot') {
+      this.updateRuntimeStartedAt(message.snapshot)
       this.scheduleDatabaseSnapshotRefresh(socket, generation)
     }
   }
@@ -586,12 +672,12 @@ export class ZaloServerClient {
   }
 
   private scheduleReconnect(generation: number): void {
-    if (!this.isCurrentGeneration(generation) || this.reconnectTimer) return
+    if (!this.isCurrentGeneration(generation) || this.cleanupOnly || this.reconnectTimer) return
     const delay = Math.round(this.reconnectDelayMs * (0.5 + Math.random() * 0.5))
     this.reconnectDelayMs = Math.min(RECONNECT_MAX_DELAY_MS, this.reconnectDelayMs * 2)
     const timer = setTimeout(() => {
       if (this.reconnectTimer === timer) this.reconnectTimer = null
-      if (!this.isCurrentGeneration(generation)) return
+      if (!this.isCurrentGeneration(generation) || this.cleanupOnly) return
       void this.connect(generation)
     }, delay)
     this.reconnectTimer = timer
@@ -611,6 +697,26 @@ export class ZaloServerClient {
     return this.tokenExpiresAt - SESSION_REUSE_SAFETY_MS > Date.now()
       ? this.token
       : null
+  }
+
+  private updateRuntimeStartedAt(snapshot: {
+    staffs: Array<{ staffId: number; organizationId: number; startedAt: string | null }>
+  }): void {
+    const user = this.user
+    if (!user) return
+    const runtime = snapshot.staffs.find(staff =>
+      staff.staffId === user.staffId && staff.organizationId === user.organizationId
+    )
+    if (
+      this.cleanupOnly &&
+      (!runtime?.startedAt || runtime.startedAt !== this.cleanupRuntimeStartedAt)
+    ) {
+      // The graceful drain ended or the server created a new staff runtime.
+      // Never carry cleanup authority across that generation boundary.
+      this.stop()
+      return
+    }
+    if (runtime?.startedAt) this.runtimeStartedAt = runtime.startedAt
   }
 
   private isCurrentGeneration(generation: number): boolean {

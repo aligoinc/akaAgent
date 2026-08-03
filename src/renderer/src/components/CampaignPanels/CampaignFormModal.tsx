@@ -58,7 +58,7 @@ import {
   getAccountActionDailySendLimit,
   getCampaignActionDailySendLimit
 } from '../../utils/entitlements'
-import { getAccountPlatformLabel, isZaloWebAccount } from '../../utils/accountLabels'
+import { getAccountPlatformLabel, isZaloServerAccount, isZaloWebAccount } from '../../utils/accountLabels'
 import { countSmsContentVariants, MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../../../shared/smsContent'
 import { renderContentSpinMax, serializeContentVariants, splitContentVariants } from '../../../../shared/contentSpin'
 import {
@@ -2646,7 +2646,10 @@ export default function CampaignFormModal({
     return selectableAccounts.filter(account => {
       if (account.id === selectedPrimaryAccount.id) return false
       return selectedActionPlatform !== 'zalo' ||
-        isZaloWebAccount(account) === isZaloWebAccount(selectedPrimaryAccount)
+        (
+          isZaloWebAccount(account) === isZaloWebAccount(selectedPrimaryAccount) &&
+          isZaloServerAccount(account) === isZaloServerAccount(selectedPrimaryAccount)
+        )
     })
   }, [
     allowsSecondaryAccount,
@@ -3841,7 +3844,10 @@ export default function CampaignFormModal({
       const hasZaloSubtypeMismatch =
         primaryPlatform === 'zalo' &&
         secondaryPlatform === 'zalo' &&
-        isZaloWebAccount(primaryAccount) !== isZaloWebAccount(secondaryAccount)
+        (
+          isZaloWebAccount(primaryAccount) !== isZaloWebAccount(secondaryAccount) ||
+          isZaloServerAccount(primaryAccount) !== isZaloServerAccount(secondaryAccount)
+        )
       const isIncompatible =
         primaryAccount.id === secondaryAccount.id ||
         hasPlatformMismatch ||
@@ -6127,9 +6133,12 @@ export default function CampaignFormModal({
       }
       if (
         selectedActionPlatform === 'zalo' &&
-        isZaloWebAccount(primaryAccount) !== isZaloWebAccount(secondaryAccount)
+        (
+          isZaloWebAccount(primaryAccount) !== isZaloWebAccount(secondaryAccount) ||
+          isZaloServerAccount(primaryAccount) !== isZaloServerAccount(secondaryAccount)
+        )
       ) {
-        showAlert('Tài khoản phụ Zalo phải cùng loại QR hoặc Trình duyệt với tài khoản chính.', 'error')
+        showAlert('Tài khoản phụ Zalo phải cùng loại QR local, Trình duyệt hoặc Server với tài khoản chính.', 'error')
         return
       }
     }

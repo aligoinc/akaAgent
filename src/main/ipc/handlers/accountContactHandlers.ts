@@ -8,10 +8,6 @@ import {
   ensureCurrentUserCanUseAccountPlatform,
   ensureCurrentUserFeatureActive
 } from '../../data/repositories/entitlementRepository'
-import {
-  shouldRouteCurrentUserZaloCleanupToServer,
-  shouldRouteCurrentUserZaloToServer
-} from '../../data/repositories/zaloRuntimeModeRepository'
 
 async function ensureContactAccess(
   supabase: SupabaseService,
@@ -50,7 +46,7 @@ export function registerAccountContactHandlers(
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_FRIENDS, async (_, accountId: number) => {
     await ensureContactAccess(supabase, accountId, 'person')
     const account = await supabase.getAccount(accountId)
-    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb && await shouldRouteCurrentUserZaloToServer()) {
+    if (account?.flatformType === 'zalo' && account.isZaloServer) {
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.loadFriends', accountId)
     }
@@ -60,7 +56,7 @@ export function registerAccountContactHandlers(
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_GROUPS, async (_, accountId: number) => {
     await ensureContactAccess(supabase, accountId, 'group')
     const account = await supabase.getAccount(accountId)
-    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb && await shouldRouteCurrentUserZaloToServer()) {
+    if (account?.flatformType === 'zalo' && account.isZaloServer) {
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.loadGroups', accountId)
     }
@@ -100,7 +96,7 @@ export function registerAccountContactHandlers(
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_ZALO_GROUP_MEMBERS, async (_, accountId: number, request: ZaloGroupMemberScanRequest) => {
     await ensureContactAccess(supabase, accountId, 'zalo_tag')
     const account = await supabase.getAccount(accountId)
-    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb && await shouldRouteCurrentUserZaloToServer()) {
+    if (account?.flatformType === 'zalo' && account.isZaloServer) {
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.loadZaloGroupMembers', accountId, request)
     }
@@ -108,8 +104,11 @@ export function registerAccountContactHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_CANCEL_LOAD, async (_, accountId: number) => {
-    const account = await supabase.getAccount(accountId).catch(() => null)
-    if (account?.flatformType === 'zalo' && !account.isZaloShowWeb && shouldRouteCurrentUserZaloCleanupToServer()) {
+    const account = await supabase.getAccountIgnoringCapability(accountId)
+    if (!account) {
+      throw new Error('Tài khoản không tồn tại hoặc không thuộc quyền quản lý của bạn')
+    }
+    if (account?.flatformType === 'zalo' && account.isZaloServer) {
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.cancel', accountId)
     }

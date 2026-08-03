@@ -82,6 +82,7 @@ export default function App() {
   const accountRealtimeRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const runtimePlatform = window.electronAPI?.platform || 'unknown'
   const platformClass = `platform-${runtimePlatform}`
+  const hasZaloServerAccounts = accounts.some(account => account.isZaloServer)
 
   const startAuthBootstrap = useCallback(() => {
     if (authBootstrapStarted.current) return
@@ -234,7 +235,7 @@ export default function App() {
   }, [loadAccounts])
 
   useEffect(() => {
-    if (!user?.isZaloServer || activePage !== 'campaigns') return
+    if (!hasZaloServerAccounts || activePage !== 'campaigns') return
 
     const refresh = () => {
       if (document.visibilityState !== 'visible') return
@@ -253,7 +254,7 @@ export default function App() {
       window.removeEventListener('focus', refresh)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [activePage, loadAccounts, user?.isZaloServer])
+  }, [activePage, hasZaloServerAccounts, loadAccounts])
 
   // Listen for realtime campaign status updates (scheduler → renderer)
   useEffect(() => {

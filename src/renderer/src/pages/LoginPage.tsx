@@ -87,7 +87,7 @@ export default function LoginPage() {
             <img src={appIconUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           </div>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary, #fff)' }}>akaBizAuto</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary, #fff)' }}>akaBiz</div>
             <div style={{ fontSize: 11, color: 'var(--text-tertiary, #888)' }}>Đăng nhập để tiếp tục</div>
           </div>
         </div>

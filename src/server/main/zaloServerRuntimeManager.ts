@@ -20,6 +20,7 @@ import {
   type ZaloServerRuntimeUser
 } from '../../main/data/repositories/serverRuntimeRepository'
 import {
+  loadStaffZaloAccountCapabilitySnapshot,
   loadStaffZaloServerMode,
   loadStaffZaloServerModeSnapshot
 } from '../../main/data/repositories/zaloRuntimeModeRepository'
@@ -38,7 +39,7 @@ const RECONCILE_LIFECYCLE_CONCURRENCY = 25
 const RECENT_EVENT_LIMIT = 1000
 const RECENT_OPERATION_LIMIT_PER_STAFF = 200
 const SNAPSHOT_BROADCAST_COALESCE_MS = 50
-const ZALO_SERVER_MODE_DISABLED_MESSAGE = 'Gói Zalo của doanh nghiệp đã chuyển về chế độ chạy local'
+const ZALO_SERVER_MODE_DISABLED_MESSAGE = 'Gói Zalo của doanh nghiệp không còn quyền chạy tài khoản trên server'
 
 interface StaffRuntime {
   user: ZaloServerRuntimeUser
@@ -57,6 +58,12 @@ interface StaffRuntime {
   controlOperationIds: Map<number, string>
   ownsZaloRuntimeState: boolean
   stopDeferred: boolean
+  gracefulCapabilityLoss: boolean
+  acceptsCleanupCommands: boolean
+}
+
+interface CleanupRuntimeGuard {
+  expectedRuntimeStartedAt: string
 }
 
 export interface ZaloServerRuntimeManagerOptions {
@@ -173,18 +180,18 @@ export class ZaloServerRuntimeManager {
       if (this.state === 'stopping' || this.state === 'stopped') {
         throw new Error('akaAgent Zalo Server đang dừng')
       }
-      if (this.initialDiscoveryComplete && !this.lastDiscoveredStaffIds.has(user.staffId)) {
-        this.handoffRequiredStaffIds.add(user.staffId)
-      }
       const existing = this.runtimes.get(user.staffId)
       if (existing) {
         // A deferred stop may still have commands holding the old AuthUser
         // object through AsyncLocalStorage. Do not overwrite that object with
         // a newly discovered session before the stop has actually settled.
         if (existing.stopDeferred || existing.state === 'stopping') {
-          await this.stopRuntime(user.staffId)
+          // Capability can be restored while an earlier graceful drain is
+          // still finishing its current target/share batch. Retry that same
+          // boundary; a non-graceful stop here would turn it into an abort.
+          await this.stopRuntime(user.staffId, true)
           if (this.runtimes.has(user.staffId)) return
-          await this.startRuntime(user, this.handoffRequiredStaffIds.has(user.staffId))
+          await this.startRuntime(user, false)
           if (this.runtimes.get(user.staffId)?.state === 'running') {
             this.handoffRequiredStaffIds.delete(user.staffId)
           }
@@ -211,7 +218,7 @@ export class ZaloServerRuntimeManager {
         await this.stopRuntime(user.staffId)
         if (this.runtimes.has(user.staffId)) return
       }
-      await this.startRuntime(user, this.handoffRequiredStaffIds.has(user.staffId))
+      await this.startRuntime(user, false)
       if (this.runtimes.get(user.staffId)?.state === 'running') {
         this.handoffRequiredStaffIds.delete(user.staffId)
       }
@@ -227,9 +234,11 @@ export class ZaloServerRuntimeManager {
 
     return this.runStaffLifecycle(normalizedStaffId, () =>
       runWithCurrentUser(requestUser, async (): Promise<ZaloServerRuntimeHandoffResponse> => {
-        // Authentication intentionally accepts mode=false, but a stale or
-        // premature request must never stop the currently selected server.
-        if (await loadStaffZaloServerMode(normalizedStaffId)) {
+        // Authentication intentionally accepts legacy mode=false, but a stale
+        // v218 desktop must never stop additive Server accounts when the one
+        // selected product grants Web+Server at the same time.
+        const liveCapabilities = await loadStaffZaloAccountCapabilitySnapshot(normalizedStaffId)
+        if (liveCapabilities.server || await loadStaffZaloServerMode(normalizedStaffId)) {
           const runtime = this.runtimes.get(normalizedStaffId)
           const supabase = runtime?.supabase || new SupabaseService()
           const runningState = await supabase.inspectStaffZaloRunningState(normalizedStaffId)
@@ -254,15 +263,23 @@ export class ZaloServerRuntimeManager {
         const wasServerOwned = runtime?.ownsZaloRuntimeState === true
 
         if (runtime) {
-          await this.stopRuntime(normalizedStaffId)
+          // This endpoint exists only for legacy global-mode desktops. A v218
+          // request can race additive capability changes, so it must use the
+          // same drain boundary as normal v219 capability loss: finish the
+          // current target/batch, claim nothing new, then recover only Server
+          // subtype rows. It must never turn that race into an uncertain abort.
+          await this.stopRuntime(normalizedStaffId, true)
         }
 
         const remainingRuntime = this.runtimes.get(normalizedStaffId)
         const processServerOwned = remainingRuntime?.ownsZaloRuntimeState === true
         const supabase = runtime?.supabase || remainingRuntime?.supabase || new SupabaseService()
-        const liveIsZaloServer = await loadStaffZaloServerMode(normalizedStaffId)
+        const [liveIsLegacyZaloServer, liveAccountCapabilities] = await Promise.all([
+          loadStaffZaloServerMode(normalizedStaffId),
+          loadStaffZaloAccountCapabilitySnapshot(normalizedStaffId)
+        ])
 
-        if (processServerOwned || liveIsZaloServer) {
+        if (processServerOwned || liveIsLegacyZaloServer || liveAccountCapabilities.server) {
           const runningState = await supabase.inspectStaffZaloRunningState(normalizedStaffId)
           this.notifySnapshot()
           return {
@@ -482,82 +499,143 @@ export class ZaloServerRuntimeManager {
     controlOperationId?: string
   ): Promise<unknown> {
     const runtime = this.runtimes.get(staffId)
-    if (!runtime || runtime.state !== 'running' || !runtime.supabase || !runtime.zaloRuntime || !runtime.contactLoader) {
+    if (!runtime || !runtime.supabase || !runtime.zaloRuntime || !runtime.contactLoader) {
       throw new Error('Runtime Zalo của staff chưa sẵn sàng')
     }
+    if (this.isStoppingOrStopped()) throw new Error('akaAgent Zalo Server đang dừng')
 
-    const transitionCommand = command === 'campaign.pause' ||
-      command === 'contacts.cancel' ||
-      command === 'zalo.loginQr.cancel'
-    if (!transitionCommand && !await loadStaffZaloServerMode(staffId)) {
-      throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
-    }
-    if (this.runtimes.get(staffId) !== runtime || runtime.state !== 'running') {
+    const cleanupCommand = command === 'contacts.cancel' || command === 'zalo.loginQr.cancel'
+    const cleanupGuard = cleanupCommand ? this.parseCleanupRuntimeGuard(args[1]) : null
+    const liveCapabilities = await loadStaffZaloAccountCapabilitySnapshot(staffId)
+    if (this.isStoppingOrStopped() || this.runtimes.get(staffId) !== runtime) {
       throw new Error('Runtime Zalo của staff đang dừng')
     }
 
-    if (command === 'campaign.pause') {
-      const campaignId = this.normalizePositiveId(args[0], 'Campaign ID')
-      const operation = runWithCurrentUser(runtime.user, () => runtime.scheduler!.requestPauseCampaign(campaignId))
-      runtime.activeCommands.add(operation)
-      try {
-        return await operation
-      } finally {
-        runtime.activeCommands.delete(operation)
+    let queueGracefulStop = false
+    if (!liveCapabilities.server) {
+      if (!cleanupCommand) throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
+      if (!this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)) {
+        throw new Error('Runtime Zalo đã thay đổi; không thể gửi lệnh dọn dẹp vào runtime mới')
       }
-    }
-
-    const accountId = this.normalizeAccountId(args[0])
-    const bypassReservation = command === 'contacts.cancel' || command === 'zalo.loginQr.cancel'
-    const bypassAccountValidation = bypassReservation || command === 'zalo.runtime.invalidate'
-    const bindsControlEvents = !!controlOperationId && (
-      command === 'zalo.loginQr.start' ||
-      command === 'contacts.loadFriends' ||
-      command === 'contacts.loadGroups' ||
-      command === 'contacts.loadZaloGroupMembers'
-    )
-    if (!bypassAccountValidation) {
-      const account = await runWithCurrentUser(runtime.user, () => runtime.supabase!.getAccount(accountId))
-      if (!account || account.flatformType !== 'zalo') {
-        throw new Error('Tài khoản không phải Zalo hoặc không còn tồn tại')
-      }
-      if (this.runtimes.get(staffId) !== runtime || runtime.state !== 'running') {
+      if (runtime.state === 'running') {
+        runtime.state = 'stopping'
+        runtime.gracefulCapabilityLoss = true
+        runtime.acceptsCleanupCommands = true
+        runtime.scheduler?.stopAcceptingNewZaloWork()
+        runtime.realtimeManager?.stop()
+        queueGracefulStop = true
+        this.notifySnapshot()
+      } else if (
+        runtime.state !== 'stopping' ||
+        !runtime.gracefulCapabilityLoss ||
+        !runtime.acceptsCleanupCommands
+      ) {
         throw new Error('Runtime Zalo của staff đang dừng')
       }
+    } else if (runtime.state !== 'running') {
+      if (
+        !cleanupCommand ||
+        runtime.state !== 'stopping' ||
+        !runtime.gracefulCapabilityLoss ||
+        !runtime.acceptsCleanupCommands ||
+        !this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)
+      ) {
+        throw new Error('Runtime Zalo của staff đang dừng')
+      }
+    } else if (cleanupGuard && !this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)) {
+      throw new Error('Runtime Zalo đã thay đổi; không thể gửi lệnh dọn dẹp vào runtime mới')
     }
-    if (!bypassReservation && !runtime.scheduler?.tryReserveExternalAccount(accountId)) {
-      throw new Error('Tài khoản Zalo đang thực hiện một tác vụ khác')
-    }
-    if (bindsControlEvents && controlOperationId) {
-      runtime.controlOperationIds.set(accountId, controlOperationId)
-    }
-    let holdQrReservation = false
-    let claimedPreviousStatus: 'chờ xử lý' | 'tạm dừng' | null = null
-    const requiresAccountClaim = command === 'zalo.loginQr.start' ||
-      command === 'zalo.session.check' ||
-      command === 'zalo.logout' ||
-      command === 'zalo.labels.sync'
-    const operation = runWithCurrentUser(runtime.user, async () => {
-      try {
-        if (requiresAccountClaim) {
-          const claim = await runtime.supabase!.claimZaloAccountRuntimeOperation(
-            accountId,
-            'server',
-            command !== 'zalo.loginQr.start'
-          )
-          if (!claim.claimed || !claim.previousStatus) {
-            const reason = claim.reason === 'runtime_not_owner'
-              ? ZALO_SERVER_MODE_DISABLED_MESSAGE
-              : 'Tài khoản Zalo đang thực hiện một tác vụ khác'
-            throw new Error(reason)
-          }
-          claimedPreviousStatus = claim.previousStatus
-          if (command === 'zalo.loginQr.start') {
-            runtime.qrAccountClaims.set(accountId, claim.previousStatus)
-          }
-        }
 
-        switch (command) {
+    let releaseCleanupLease = (): void => {}
+    let cleanupLease: Promise<void> | null = null
+    if (cleanupCommand) {
+      cleanupLease = new Promise<void>(resolve => { releaseCleanupLease = resolve })
+      runtime.activeCommands.add(cleanupLease)
+    }
+    if (queueGracefulStop) {
+      void this.runStaffLifecycle(staffId, async () => {
+        if (this.runtimes.get(staffId) !== runtime) return
+        await this.stopRuntime(staffId, true)
+      }).catch(error => {
+        console.error(`[ZaloServerRuntimeManager] Failed to drain staff ${staffId} after capability loss:`, error)
+      })
+    }
+
+    try {
+      if (command === 'campaign.pause') {
+        const campaignId = this.normalizePositiveId(args[0], 'Campaign ID')
+        const operation = runWithCurrentUser(runtime.user, () => runtime.scheduler!.requestPauseCampaign(campaignId))
+        runtime.activeCommands.add(operation)
+        try {
+          return await operation
+        } finally {
+          runtime.activeCommands.delete(operation)
+        }
+      }
+
+      const accountId = this.normalizeAccountId(args[0])
+      const bypassReservation = cleanupCommand
+      const bypassAccountValidation = command === 'zalo.runtime.invalidate'
+      const bindsControlEvents = !!controlOperationId && (
+        command === 'zalo.loginQr.start' ||
+        command === 'contacts.loadFriends' ||
+        command === 'contacts.loadGroups' ||
+        command === 'contacts.loadZaloGroupMembers'
+      )
+      if (!bypassAccountValidation) {
+        const account = await runWithCurrentUser(runtime.user, () => cleanupCommand
+          ? runtime.supabase!.getAccountIgnoringCapability(accountId)
+          : runtime.supabase!.getAccount(accountId)
+        )
+        if (!account || account.flatformType !== 'zalo' || !account.isZaloServer || account.isZaloShowWeb) {
+          throw new Error('Tài khoản không thuộc runtime Zalo Server hoặc không còn tồn tại')
+        }
+        if (this.isStoppingOrStopped() || this.runtimes.get(staffId) !== runtime) {
+          throw new Error('Runtime Zalo của staff đang dừng')
+        }
+        if (runtime.state !== 'running' && !(
+          cleanupCommand &&
+          runtime.state === 'stopping' &&
+          runtime.gracefulCapabilityLoss &&
+          runtime.acceptsCleanupCommands &&
+          this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)
+        )) {
+          throw new Error('Runtime Zalo của staff đang dừng')
+        }
+      }
+      if (!bypassReservation && !runtime.scheduler?.tryReserveExternalAccount(accountId)) {
+        throw new Error('Tài khoản Zalo đang thực hiện một tác vụ khác')
+      }
+      if (bindsControlEvents && controlOperationId) {
+        runtime.controlOperationIds.set(accountId, controlOperationId)
+      }
+      let holdQrReservation = false
+      let claimedPreviousStatus: 'chờ xử lý' | 'tạm dừng' | null = null
+      const requiresAccountClaim = command === 'zalo.loginQr.start' ||
+        command === 'zalo.session.check' ||
+        command === 'zalo.logout' ||
+        command === 'zalo.labels.sync'
+      const operation = runWithCurrentUser(runtime.user, async () => {
+        try {
+          if (requiresAccountClaim) {
+            const claim = await runtime.supabase!.claimZaloAccountRuntimeOperation(
+              accountId,
+              'server',
+              command !== 'zalo.loginQr.start'
+            )
+            if (!claim.claimed || !claim.previousStatus) {
+              const reason = claim.reason === 'runtime_not_owner'
+                ? ZALO_SERVER_MODE_DISABLED_MESSAGE
+                : 'Tài khoản Zalo đang thực hiện một tác vụ khác'
+              throw new Error(reason)
+            }
+            claimedPreviousStatus = claim.previousStatus
+            if (command === 'zalo.loginQr.start') {
+              runtime.qrAccountClaims.set(accountId, claim.previousStatus)
+            }
+          }
+
+          switch (command) {
           case 'zalo.loginQr.start': {
             const result = await runtime.zaloRuntime!.startLoginQr(accountId)
             holdQrReservation = result.success
@@ -599,30 +677,34 @@ export class ZaloServerRuntimeManager {
             return { success: true, accountId }
           default:
             throw new Error(`Lệnh server không được hỗ trợ: ${String(command)}`)
-        }
-      } finally {
-        if (claimedPreviousStatus && !holdQrReservation) {
-          if (command === 'zalo.loginQr.start') {
-            await this.releaseQrAccountClaim(runtime, accountId).catch(error => {
-              console.error(`[ZaloServerRuntimeManager] Cannot release QR claim for account ${accountId}:`, error)
-            })
-          } else {
-            await this.restoreAccountClaim(runtime, accountId, claimedPreviousStatus).catch(error => {
-              console.error(`[ZaloServerRuntimeManager] Cannot release command claim for account ${accountId}:`, error)
-            })
+          }
+        } finally {
+          if (claimedPreviousStatus && !holdQrReservation) {
+            if (command === 'zalo.loginQr.start') {
+              await this.releaseQrAccountClaim(runtime, accountId).catch(error => {
+                console.error(`[ZaloServerRuntimeManager] Cannot release QR claim for account ${accountId}:`, error)
+              })
+            } else {
+              await this.restoreAccountClaim(runtime, accountId, claimedPreviousStatus).catch(error => {
+                console.error(`[ZaloServerRuntimeManager] Cannot release command claim for account ${accountId}:`, error)
+              })
+            }
+          }
+          if (!bypassReservation && !holdQrReservation) runtime.scheduler?.releaseExternalAccount(accountId)
+          if (bindsControlEvents && controlOperationId && !holdQrReservation) {
+            this.clearBoundControlOperation(runtime, accountId, controlOperationId)
           }
         }
-        if (!bypassReservation && !holdQrReservation) runtime.scheduler?.releaseExternalAccount(accountId)
-        if (bindsControlEvents && controlOperationId && !holdQrReservation) {
-          this.clearBoundControlOperation(runtime, accountId, controlOperationId)
-        }
+      })
+      runtime.activeCommands.add(operation)
+      try {
+        return await operation
+      } finally {
+        runtime.activeCommands.delete(operation)
       }
-    })
-    runtime.activeCommands.add(operation)
-    try {
-      return await operation
     } finally {
-      runtime.activeCommands.delete(operation)
+      if (cleanupLease) runtime.activeCommands.delete(cleanupLease)
+      releaseCleanupLease()
     }
   }
 
@@ -665,27 +747,9 @@ export class ZaloServerRuntimeManager {
     const users = await listActiveZaloServerUsers()
     if (this.state === 'stopping' || this.state === 'stopped') return
     const activeStaffIds = new Set(users.map(user => user.staffId))
-    if (!this.initialDiscoveryComplete) {
-      // On first launch, only a durable marker from this VPS proves that a
-      // running row was left by a crashed server. Every other staff must wait
-      // for a possibly-live desktop to settle its own work.
-      for (const user of users) {
-        const markerMatches = this.options.ownershipStore.matchesModeRevision(
-          user.staffId,
-          user.zaloRuntimeModeRevision
-        )
-        if (!markerMatches) {
-          // A stale marker must never later authorize unconditional handoff
-          // recovery after an offline true -> false -> true cycle.
-          this.options.ownershipStore.release(user.staffId)
-          this.handoffRequiredStaffIds.add(user.staffId)
-        }
-      }
-    } else {
-      for (const staffId of activeStaffIds) {
-        if (!this.lastDiscoveredStaffIds.has(staffId)) this.handoffRequiredStaffIds.add(staffId)
-      }
-    }
+    // Account ownership is durable from v219 onward. A newly discovered
+    // Server capability can start eagerly, even with zero Server accounts;
+    // recovery is scoped to account.is_zalo_server and cannot touch Desktop.
     await runWithConcurrency(users, RECONCILE_LIFECYCLE_CONCURRENCY, async user => {
       try {
         await this.ensureUser(user)
@@ -697,7 +761,7 @@ export class ZaloServerRuntimeManager {
       .filter(staffId => !activeStaffIds.has(staffId))
     await runWithConcurrency(staleStaffIds, RECONCILE_LIFECYCLE_CONCURRENCY, async staffId => {
       try {
-        await this.stopRuntimeSerialized(staffId)
+        await this.stopRuntimeSerialized(staffId, true)
       } catch (error) {
         console.error(`[ZaloServerRuntimeManager] Failed to stop staff ${staffId}:`, error)
       }
@@ -728,7 +792,9 @@ export class ZaloServerRuntimeManager {
       qrReleasePromises: new Map(),
       controlOperationIds: new Map(),
       ownsZaloRuntimeState: false,
-      stopDeferred: false
+      stopDeferred: false,
+      gracefulCapabilityLoss: false,
+      acceptsCleanupCommands: false
     }
     this.runtimes.set(user.staffId, runtime)
     this.notifySnapshot()
@@ -792,7 +858,24 @@ export class ZaloServerRuntimeManager {
             // The mutable runtime user is refreshed by discovery and again
             // after warmup, so every DB ownership check sees the live revision.
             runtimeModeRevision: () => user.zaloRuntimeModeRevision,
-            maintenanceCoordinator: maintenance
+            maintenanceCoordinator: maintenance,
+            onRuntimeOwnershipLost: () => {
+              // A unit claim is a stronger/faster ownership signal than the
+              // discovery interval. Queue the normal graceful lifecycle stop;
+              // it waits for this scheduler turn to return, then recovers only
+              // Server-subtype rows even if capability was already restored.
+              // Recheck the captured runtime *inside* the serialized task so a
+              // delayed callback from an old generation cannot stop a newer one.
+              void this.runStaffLifecycle(user.staffId, async () => {
+                if (this.runtimes.get(user.staffId) !== runtime) return
+                await this.stopRuntime(user.staffId, true)
+              }).catch(error => {
+                console.error(
+                  `[ZaloServerRuntimeManager] Failed to reconcile ownership loss for staff ${user.staffId}:`,
+                  error
+                )
+              })
+            }
           }
         )
         const contactLoader = new ContactLoader(
@@ -811,18 +894,17 @@ export class ZaloServerRuntimeManager {
         runtime.realtimeManager = realtimeManager
         runtime.eventWindow = eventWindow
 
-        const liveModeBeforeRecovery = await loadStaffZaloServerModeSnapshot(user.staffId)
+        const liveModeBeforeRecovery = await loadStaffZaloAccountCapabilitySnapshot(user.staffId)
         this.assertRuntimeMayStart(runtime)
-        if (!liveModeBeforeRecovery.isZaloServer) {
+        if (!liveModeBeforeRecovery.server) {
           throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
         }
         if (expectedModeRevision && liveModeBeforeRecovery.revision !== expectedModeRevision) {
           throw new Error('runtime_mode_revision_mismatch')
         }
         // The revision belongs to the effective organization entitlement.
-        // While the live flag remains true, adopt the latest revision without
-        // interrupting server work; actual local startup must pass through the
-        // serialized handoff endpoint above.
+        // While Server capability remains true, adopt the latest revision;
+        // per-account DB guards prevent either runtime from crossing owners.
         user.zaloRuntimeModeRevision = liveModeBeforeRecovery.revision
         await supabase.recoverServerZaloRunningState(user.staffId, {
           expectedModeRevision: liveModeBeforeRecovery.revision,
@@ -838,9 +920,9 @@ export class ZaloServerRuntimeManager {
         this.assertRuntimeMayStart(runtime)
         await zaloRuntime.warmStoredSessions('server')
         this.assertRuntimeMayStart(runtime)
-        const liveModeAfterWarmup = await loadStaffZaloServerModeSnapshot(user.staffId)
+        const liveModeAfterWarmup = await loadStaffZaloAccountCapabilitySnapshot(user.staffId)
         this.assertRuntimeMayStart(runtime)
-        if (!liveModeAfterWarmup.isZaloServer) {
+        if (!liveModeAfterWarmup.server) {
           throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
         }
         if (expectedModeRevision && liveModeAfterWarmup.revision !== expectedModeRevision) {
@@ -869,18 +951,32 @@ export class ZaloServerRuntimeManager {
     }
   }
 
-  private async stopRuntime(staffId: number): Promise<void> {
+  private async stopRuntime(staffId: number, gracefulCapabilityLoss = false): Promise<void> {
     const runtime = this.runtimes.get(staffId)
     if (!runtime) return
     const wasWaitingForDesktop = runtime.state === 'waiting'
+    const wasAlreadyStopping = runtime.state === 'stopping'
+    if (!wasAlreadyStopping) {
+      runtime.gracefulCapabilityLoss = gracefulCapabilityLoss
+      runtime.acceptsCleanupCommands = gracefulCapabilityLoss
+    } else if (!gracefulCapabilityLoss) {
+      // App Server shutdown and explicit forced handoff always win over a
+      // capability-loss drain. No command may enter once forced stop begins.
+      runtime.gracefulCapabilityLoss = false
+      runtime.acceptsCleanupCommands = false
+    }
     runtime.state = 'stopping'
     this.notifySnapshot()
     await runWithCurrentUser(runtime.user, async () => {
       try {
         if (wasWaitingForDesktop) return
-        runtime.contactLoader?.stopAll()
-        runtime.scheduler?.blockZaloRuntimeForRestart(null)
-        runtime.scheduler?.stop()
+        if (runtime.gracefulCapabilityLoss) {
+          runtime.scheduler?.stopAcceptingNewZaloWork()
+        } else {
+          runtime.contactLoader?.stopAll()
+          runtime.scheduler?.blockZaloRuntimeForRestart(null)
+          runtime.scheduler?.stop()
+        }
         runtime.realtimeManager?.stop()
         const waitForQr = runtime.zaloRuntime?.cancelAllLoginQrAndWait() ?? Promise.resolve(true)
         const pendingCommands = Array.from(runtime.activeCommands)
@@ -902,6 +998,31 @@ export class ZaloServerRuntimeManager {
           runtime.lastError = 'Đang chờ tác vụ Zalo hiện tại kết thúc an toàn'
           return
         }
+        runtime.acceptsCleanupCommands = false
+        const cleanupCommands = Array.from(runtime.activeCommands)
+        const [cleanupCommandsSettled, finalQrSettled, finalContactLoaderIdle] = await Promise.all([
+          cleanupCommands.length === 0
+            ? Promise.resolve(true)
+            : Promise.race([
+                Promise.allSettled(cleanupCommands).then(() => true),
+                new Promise<false>(resolve => setTimeout(() => resolve(false), 30_000))
+              ]),
+          runtime.zaloRuntime?.cancelAllLoginQrAndWait() ?? Promise.resolve(true),
+          runtime.contactLoader?.waitForIdle(30_000, 'zalo') ?? Promise.resolve(true)
+        ])
+        if (!cleanupCommandsSettled || !finalQrSettled || !finalContactLoaderIdle) {
+          if (runtime.gracefulCapabilityLoss && !this.isStoppingOrStopped()) {
+            runtime.acceptsCleanupCommands = true
+          }
+          runtime.stopDeferred = true
+          runtime.lastError = 'Đang chờ tác vụ Zalo hiện tại kết thúc an toàn'
+          return
+        }
+        // All current work has settled. These calls now only release cached
+        // resources and cannot turn a graceful entitlement drain into an
+        // uncertain mid-target abort.
+        runtime.contactLoader?.stopAll()
+        runtime.scheduler?.stop()
         await Promise.allSettled(
           Array.from(runtime.qrAccountClaims.keys()).map(accountId =>
             this.releaseQrAccountClaim(runtime, accountId)
@@ -918,6 +1039,8 @@ export class ZaloServerRuntimeManager {
           this.options.ownershipStore.release(staffId)
         }
         runtime.stopDeferred = false
+        runtime.gracefulCapabilityLoss = false
+        runtime.acceptsCleanupCommands = false
         runtime.lastError = null
       } catch (error) {
         runtime.stopDeferred = true
@@ -935,8 +1058,8 @@ export class ZaloServerRuntimeManager {
     this.notifySnapshot()
   }
 
-  private stopRuntimeSerialized(staffId: number): Promise<void> {
-    return this.runStaffLifecycle(staffId, () => this.stopRuntime(staffId))
+  private stopRuntimeSerialized(staffId: number, gracefulCapabilityLoss = false): Promise<void> {
+    return this.runStaffLifecycle(staffId, () => this.stopRuntime(staffId, gracefulCapabilityLoss))
   }
 
   private runStaffLifecycle<T>(staffId: number, task: () => Promise<T>): Promise<T> {
@@ -1010,7 +1133,9 @@ export class ZaloServerRuntimeManager {
   private async syncLabels(runtime: StaffRuntime, accountId: number): Promise<ZaloLabelOption[]> {
     const supabase = runtime.supabase!
     const account = await supabase.getAccount(accountId)
-    if (!account || account.flatformType !== 'zalo') throw new Error('Tài khoản không phải Zalo')
+    if (!account || account.flatformType !== 'zalo' || !account.isZaloServer || account.isZaloShowWeb) {
+      throw new Error('Tài khoản không thuộc runtime Zalo Server')
+    }
     const labels = await runtime.zaloRuntime!.listLabels(accountId)
     if (labels.length === 0) {
       await supabase.deleteContacts(accountId, 'zalo_tag')
@@ -1253,6 +1378,21 @@ export class ZaloServerRuntimeManager {
       startedAt: runtime.startedAt,
       lastError: runtime.lastError
     }
+  }
+
+  private parseCleanupRuntimeGuard(value: unknown): CleanupRuntimeGuard | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const expectedRuntimeStartedAt = String(
+      (value as Partial<CleanupRuntimeGuard>).expectedRuntimeStartedAt || ''
+    ).trim()
+    return expectedRuntimeStartedAt ? { expectedRuntimeStartedAt } : null
+  }
+
+  private cleanupGuardMatchesRuntime(
+    runtime: StaffRuntime,
+    guard: CleanupRuntimeGuard | null
+  ): boolean {
+    return !!runtime.startedAt && guard?.expectedRuntimeStartedAt === runtime.startedAt
   }
 
   private normalizeAccountId(value: unknown): number {

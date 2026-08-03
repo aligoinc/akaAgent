@@ -2,10 +2,10 @@ import { useEffect, useRef, useCallback } from 'react'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
-  Info, FolderCog, QrCode, LogOut, Smartphone
+  Info, FolderCog, QrCode, LogOut, ServerCog, Smartphone
 } from 'lucide-react'
 import { AutoAccount } from '../../../../shared/types'
-import { isZaloWebAccount } from '../../utils/accountLabels'
+import { isZaloServerAccount, isZaloWebAccount } from '../../utils/accountLabels'
 
 const PLATFORM_URLS: Record<string, string> = {
   facebook: 'https://www.facebook.com',
@@ -102,6 +102,7 @@ export default function AccountContextMenu({
   const isDisabled = !account.isActive
   const isZalo = account.flatformType === 'zalo'
   const isZaloShowWeb = isZaloWebAccount(account)
+  const isZaloServer = isZaloServerAccount(account)
   const isSmsAccount = account.flatformType === 'sms'
   const isBrowserless = BROWSERLESS_PLATFORMS.has(account.flatformType)
     && !(account.flatformType === 'zalo' && isZaloShowWeb)
@@ -157,15 +158,19 @@ export default function AccountContextMenu({
               className="context-menu-item"
               onClick={() => handleAction(() => onZaloLogin(account))}
             >
-              {isZaloShowWeb ? <Globe size={14} /> : <QrCode size={14} />}
-              <span>{isZaloShowWeb ? 'Mở Zalo Web để đăng nhập' : (account.hasZaloSession ? 'Đăng nhập lại Zalo' : 'Đăng nhập Zalo QR')}</span>
+              {isZaloShowWeb ? <Globe size={14} /> : isZaloServer ? <ServerCog size={14} /> : <QrCode size={14} />}
+              <span>{isZaloShowWeb
+                ? 'Mở Zalo Web để đăng nhập'
+                : isZaloServer
+                  ? (account.hasZaloSession ? 'Đăng nhập lại Zalo trên server' : 'Đăng nhập Zalo trên server')
+                  : (account.hasZaloSession ? 'Đăng nhập lại Zalo' : 'Đăng nhập Zalo QR')}</span>
             </button>
             <button
               className="context-menu-item"
               onClick={() => handleAction(() => onCheckZaloSession(account))}
             >
               <Shield size={14} />
-              <span>Kiểm tra đăng nhập Zalo</span>
+              <span>{isZaloServer ? 'Kiểm tra đăng nhập Zalo trên server' : 'Kiểm tra đăng nhập Zalo'}</span>
             </button>
             {(isZaloShowWeb ? account.loginStatus === 'đã đăng nhập' : account.hasZaloSession) && (
               <button

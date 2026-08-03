@@ -246,11 +246,11 @@ export default function TopBar({
   return (
     <aside className={`app-sidebar ${sidebarExpanded ? 'is-expanded' : 'is-collapsed'}`}>
       <div className="app-sidebar-header">
-        <div className="app-sidebar-brand" title="akaBizAuto">
+        <div className="app-sidebar-brand" title="akaBiz">
           <span className="app-sidebar-logo">
             <img src={appIconUrl} alt="" />
           </span>
-          <span className="app-sidebar-label app-sidebar-brand-name">akaBizAuto</span>
+          <span className="app-sidebar-label app-sidebar-brand-name">akaBiz</span>
         </div>
         <button
           type="button"
@@ -295,7 +295,7 @@ export default function TopBar({
           </span>
           <span className="app-sidebar-label app-sidebar-account-copy">
             <strong>{user?.name || 'Tài khoản'}</strong>
-            <span>{user?.organizationName || 'akaBizAuto'}</span>
+            <span>{user?.organizationName || 'akaBiz'}</span>
           </span>
           <ChevronRight size={15} className="app-sidebar-account-chevron" />
         </button>
@@ -308,7 +308,7 @@ export default function TopBar({
               </span>
               <div className="app-sidebar-flyout-user">
                 <strong>{user?.name || 'Tài khoản'}</strong>
-                <span>{user?.organizationName || 'akaBizAuto'} · v{currentVersion || '...'}</span>
+                <span>{user?.organizationName || 'akaBiz'} · v{currentVersion || '...'}</span>
               </div>
             </div>
 
