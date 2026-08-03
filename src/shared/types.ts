@@ -2315,9 +2315,9 @@ export interface AuthAccountProduct {
 }
 
 export interface ZaloAccountCapabilities {
-  /** Zalo QR/zca-js accounts backed by auto_accounts.zalo_session. */
+  /** Zalo QR/zca-js accounts granted by the newest effective Zalo product row. */
   qr: boolean
-  /** Zalo Web accounts backed by the local Chromium partition. */
+  /** Optional Zalo Web accounts added when that selected row enables Show Web. */
   web: boolean
 }
 
