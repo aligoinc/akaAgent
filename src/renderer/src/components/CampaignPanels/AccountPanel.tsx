@@ -1171,7 +1171,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                     <span className="account-card-name-text" title={account.name}>{account.name}</span>
                   </div>
                   <div className="account-card-meta">
-                    <span className="account-tag" style={{ color: 'var(--accent-info)' }}>{getAccountPlatformLabel(account)}</span>
+                    <span className="account-tag" style={{ color: 'var(--accent-info)' }}>
+                      {isZaloServerAccount(account) ? 'Zalo (web)' : getAccountPlatformLabel(account)}
+                    </span>
                     {!isSmsAccount && (
                       <span style={{ color: getLoginColor(account.loginStatus), fontSize: '10px' }}>{account.loginStatus}</span>
                     )}
