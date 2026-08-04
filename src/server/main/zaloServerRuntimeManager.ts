@@ -1333,7 +1333,15 @@ export class ZaloServerRuntimeManager {
     if (this.recentEvents.length > RECENT_EVENT_LIMIT) {
       this.recentEvents.splice(0, this.recentEvents.length - RECENT_EVENT_LIMIT)
     }
-    this.options.publishEvent(event)
+    // Login QR là trạng thái live tạm thời, KHÔNG phải lịch sử để replay khi reconnect.
+    // Client nối lại đã dựng lại trạng thái QR từ operations snapshot; nếu buffer event
+    // này thì mỗi lần mở app server sẽ phát lại "Đăng nhập Zalo thành công" cũ. Vì vậy
+    // gửi live (không buffer) thay vì publishEvent (có buffer trong hello).
+    if (channel === IPC_EVENTS.ZALO_LOGIN_QR_EVENT) {
+      this.options.publishLiveEvent(event)
+    } else {
+      this.options.publishEvent(event)
+    }
     const adminWindow = this.options.adminWindow()
     try {
       if (adminWindow && !adminWindow.isDestroyed()) {
