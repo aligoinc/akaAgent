@@ -22,7 +22,6 @@ import {
   selectAdvancedContentItem
 } from '../../shared/advancedContent'
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../shared/smsContent'
-import { getVietnamDayStart } from '../../shared/vietnamTime'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -480,7 +479,6 @@ const ZALO_RUNTIME_SHUTDOWN_UNCERTAIN_NOTE =
 const ZALO_RUNTIME_SHUTDOWN_NOTE = 'Runtime Zalo đang dừng.'
 const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_diagnosis'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
-const DAY_IN_MS = 24 * 60 * 60 * 1000
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
 const DATA_GROUP_WAITING_NOTES = new Set(['Chờ data phù hợp', 'Chờ data mới'])
@@ -959,12 +957,18 @@ export class CampaignScheduler {
     return 'completed'
   }
 
+  private getReadyRuntimeClock() {
+    return this.maintenanceCoordinator
+      ? this.maintenanceCoordinator.ensureReady()
+      : this.supabase.getRuntimeClock()
+  }
+
   private async tick(): Promise<void> {
     if (!this.running || this.dispatching) return
     this.dispatching = true
 
     try {
-      await this.maintenanceCoordinator?.ensureReady()
+      await this.getReadyRuntimeClock()
       if (!this.running) return
 
       // Hard end belongs to the DB subscription lifecycle, so sweep it before
@@ -984,6 +988,12 @@ export class CampaignScheduler {
       for (const account of accounts) {
         if (!this.running) break
 
+        // This call normally only advances the cached monotonic anchor. It
+        // refreshes DB time/maintenance if a long tick crosses cache expiry or
+        // Vietnam midnight before reaching this account.
+        const accountClock = await this.getReadyRuntimeClock()
+        if (!this.running) break
+
         // The server owns only eligible QR Zalo accounts. Hard-ended campaigns
         // outside that runtime are already covered by the tenant-scoped sweep
         // above, so never route an ineligible account through the narrow server
@@ -991,17 +1001,20 @@ export class CampaignScheduler {
         if (!this.shouldProcessAccountForRuntime(account)) continue
 
         if (this.isSmsAccount(account)) {
-          await this.refreshDueMobileManagedCampaignLimitNotes(account)
+          await this.refreshDueMobileManagedCampaignLimitNotes(account, accountClock.dbNow)
           continue
         }
 
         // Finalize an expired Data Group subscription before runtime eligibility
         // checks. Hard end is a database lifecycle boundary and must not depend on
         // the account being logged in or having a mounted browser tab.
-        const pendingCampaigns = await this.supabase.getPendingCampaigns(account.id)
+        const pendingCampaigns = await this.supabase.getPendingCampaigns(account.id, accountClock.dbNow)
         const campaigns: Campaign[] = []
         for (const campaign of pendingCampaigns) {
-          if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) continue
+          if (await this.finalizeDataGroupCampaignAtHardEnd(
+            campaign,
+            new Date(accountClock.dbNow)
+          )) continue
           if (this.isRealtimeCampaignDisabledForRuntime(account, campaign)) continue
           campaigns.push(campaign)
         }
@@ -1068,18 +1081,21 @@ export class CampaignScheduler {
   private async runAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): Promise<void> {
     for (const campaign of campaigns) {
       if (!this.running) break
-      await this.maintenanceCoordinator?.ensureReady()
+      const runtimeClock = await this.getReadyRuntimeClock()
       if (!this.running) break
       if (!this.shouldProcessAccountForRuntime(account)) break
       const currentCampaign = await this.supabase.getCampaign(campaign.id)
       if (!this.running) break
+      const businessNow = new Date(runtimeClock.dbNow)
+      if (!Number.isFinite(businessNow.getTime())) throw new Error('DB runtime clock is invalid')
       if (
         !currentCampaign ||
         this.isRealtimeCampaignDisabledForRuntime(account, currentCampaign) ||
         currentCampaign.status !== 'chờ xử lý' ||
         currentCampaign.isDelete ||
         !currentCampaign.schedule ||
-        new Date(currentCampaign.schedule).getTime() > Date.now()
+        new Date(currentCampaign.schedule).getTime() > businessNow.getTime() ||
+        this.isAfterDailyStopTime(businessNow, currentCampaign.dailyStopTime)
       ) {
         continue
       }
@@ -1108,8 +1124,8 @@ export class CampaignScheduler {
     return String(account.flatformType || '').trim().toLowerCase() === 'sms'
   }
 
-  private async refreshDueMobileManagedCampaignLimitNotes(account: AutoAccount): Promise<void> {
-    const campaigns = await this.supabase.getDueMobileManagedCampaignsForLimitCheck(account.id)
+  private async refreshDueMobileManagedCampaignLimitNotes(account: AutoAccount, dbNow: string): Promise<void> {
+    const campaigns = await this.supabase.getDueMobileManagedCampaignsForLimitCheck(account.id, dbNow)
     for (const campaign of campaigns) {
       try {
         await this.refreshMobileManagedCampaignLimitNote(account, campaign)
@@ -1210,10 +1226,21 @@ export class CampaignScheduler {
     return finalized.completed && updated.status === 'hoàn thành'
   }
 
-  private isDataGroupCampaignHardEnded(campaign: Campaign, now = Date.now()): boolean {
+  private async getDatabaseBusinessNow(): Promise<Date> {
+    const clock = await this.supabase.getRuntimeClock()
+    const now = new Date(clock.dbNow)
+    if (!Number.isFinite(now.getTime())) throw new Error('DB runtime clock is invalid')
+    return now
+  }
+
+  private requiresDataGroupHardEndCheck(campaign: Campaign): boolean {
+    return campaign.dataTargetSourceMode === 'data_group' && Boolean(campaign.scheduleEndDate)
+  }
+
+  private isDataGroupCampaignHardEnded(campaign: Campaign, now: Date): boolean {
     if (campaign.dataTargetSourceMode !== 'data_group' || !campaign.scheduleEndDate) return false
     const hardEndAt = new Date(campaign.scheduleEndDate).getTime()
-    return !Number.isNaN(hardEndAt) && now >= hardEndAt
+    return !Number.isNaN(hardEndAt) && now.getTime() >= hardEndAt
   }
 
   private async sweepExpiredDataGroupCampaigns(): Promise<void> {
@@ -1255,8 +1282,13 @@ export class CampaignScheduler {
    * even when the finalizer observed an already-running target and therefore
    * could not complete the campaign in this pass.
    */
-  private async finalizeDataGroupCampaignAtHardEnd(campaign: Campaign): Promise<boolean> {
-    if (!this.isDataGroupCampaignHardEnded(campaign)) return false
+  private async finalizeDataGroupCampaignAtHardEnd(
+    campaign: Campaign,
+    businessNow?: Date
+  ): Promise<boolean> {
+    if (!this.requiresDataGroupHardEndCheck(campaign)) return false
+    const now = businessNow || await this.getDatabaseBusinessNow()
+    if (!this.isDataGroupCampaignHardEnded(campaign, now)) return false
     const completed = await this.transitionCampaignToCompleted(campaign, DATA_GROUP_HARD_END_NOTE)
     if (completed) {
       await this.logCampaignProgress(campaign.id, `⏹ ${DATA_GROUP_HARD_END_NOTE}`)
@@ -1278,7 +1310,7 @@ export class CampaignScheduler {
     }
 
     // Check end date
-    const now = new Date()
+    const now = await this.getDatabaseBusinessNow()
     if (await this.handleZaloRealtimeGroupCompletion(campaign, now)) {
       return
     }
@@ -1703,13 +1735,13 @@ export class CampaignScheduler {
     }
   }
 
-  private getVietnamDateKey(date = new Date()): string {
+  private getVietnamDateKey(date: Date): string {
     const parts = this.getVietnamDateTimeParts(date)
     const pad = (value: number) => String(value).padStart(2, '0')
     return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`
   }
 
-  private getVietnamBirthdayKey(date = new Date()): string {
+  private getVietnamBirthdayKey(date: Date): string {
     const parts = this.getVietnamDateTimeParts(date)
     const pad = (value: number) => String(value).padStart(2, '0')
     return `${pad(parts.day)}/${pad(parts.month)}`
@@ -1773,12 +1805,12 @@ export class CampaignScheduler {
     return date && !Number.isNaN(date.getTime()) ? this.getVietnamDateKey(date) : ''
   }
 
-  private isZaloRealtimeReceivingWindowActive(campaign: Campaign, now = new Date()): boolean {
+  private isZaloRealtimeReceivingWindowActive(campaign: Campaign, now: Date): boolean {
     const endDateKey = this.getZaloRealtimeEndDateKey(campaign)
     return Boolean(endDateKey) && this.getVietnamDateKey(now) <= endDateKey
   }
 
-  private getZaloRealtimeWaitSchedule(campaign: Campaign, now = new Date()): Date {
+  private getZaloRealtimeWaitSchedule(campaign: Campaign, now: Date): Date {
     const anchor = campaign.originalSchedule || campaign.schedule || now.toISOString()
     const anchorDate = new Date(anchor)
     const anchorParts = Number.isNaN(anchorDate.getTime())
@@ -1795,7 +1827,7 @@ export class CampaignScheduler {
     if (!this.isZaloRealtimeGroupCampaign(campaign)) return true
 
     const details = await this.supabase.listCampaignInputData(campaign.id)
-    const now = new Date()
+    const now = await this.getDatabaseBusinessNow()
     let earliestFutureInputSchedule: Date | null = null
     let pendingCount = 0
 
@@ -2113,8 +2145,14 @@ export class CampaignScheduler {
       }
     }
 
-    if (this.shouldMaterializeZaloBirthdayInputData(campaign, details)) {
-      details = await this.materializeZaloBirthdayInputData(account, campaign)
+    const birthdayBusinessNow = this.isZaloBirthdayCampaign(campaign) && details.length === 0
+      ? await this.getDatabaseBusinessNow()
+      : null
+    if (
+      birthdayBusinessNow &&
+      this.shouldMaterializeZaloBirthdayInputData(campaign, details, birthdayBusinessNow)
+    ) {
+      details = await this.materializeZaloBirthdayInputData(account, campaign, birthdayBusinessNow)
       if (this.isCampaignPauseRequested(campaign.id)) {
         await this.releaseRunningAccount(account.id)
         await this.completeCampaignPause(campaign)
@@ -2336,7 +2374,11 @@ export class CampaignScheduler {
         return
       }
 
-      if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+      const needsInputScheduleClock = Boolean(detail?.schedule)
+      const targetBusinessNow = this.requiresDataGroupHardEndCheck(campaign) || needsInputScheduleClock
+        ? await this.getDatabaseBusinessNow()
+        : undefined
+      if (await this.finalizeDataGroupCampaignAtHardEnd(campaign, targetBusinessNow)) {
         await this.releaseRunningAccount(account.id)
         return
       }
@@ -2354,7 +2396,9 @@ export class CampaignScheduler {
       }
 
       if (detail) {
-        const futureSchedule = this.getFutureInputSchedule(detail, new Date())
+        const futureSchedule = detail.schedule && targetBusinessNow
+          ? this.getFutureInputSchedule(detail, targetBusinessNow)
+          : null
         if (futureSchedule) {
           if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
             earliestFutureInputSchedule = futureSchedule
@@ -2441,6 +2485,10 @@ export class CampaignScheduler {
         }
       } catch (err) {
         console.error('Rate limit check error:', err)
+        const message = `Không thể kiểm tra giới hạn hành động từ DB; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
+        await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
+        await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
+        return
       }
 
       const browserlessRun = this.isBrowserlessCampaign(campaign)
@@ -2477,12 +2525,13 @@ export class CampaignScheduler {
           groupPostApproval.skipPostByKnownApproval
         )
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
-        const groupPostShareTargets = this.buildGroupPostShareTargets(
+        const groupPostShareTargets = await this.buildGroupPostShareTargets(
           campaign,
           details,
           detail,
           consumedGroupPostInputDataIds,
-          groupPostShareMaxCount
+          groupPostShareMaxCount,
+          targetBusinessNow
         )
         const baseVariables = await this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval, mediaTempPaths, skippedLimitActionCodes)
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
@@ -2501,6 +2550,14 @@ export class CampaignScheduler {
 
         if (account.flatformType === 'zalo') {
           this.throwIfZaloRuntimeStopping(campaign.id)
+        }
+
+        // Quota/page preparation above can outlive the earlier boundary check.
+        // The synchronized clock advances locally, so this recheck is cheap and
+        // defines the last point before a new target becomes the current unit.
+        if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+          await this.releaseRunningAccount(account.id)
+          return
         }
 
         // For Zalo Server this RPC is the linearization point with DB pause:
@@ -3000,12 +3057,18 @@ export class CampaignScheduler {
       }
 
       details = await this.supabase.listCampaignInputData(campaign.id)
-      const now = new Date()
+      const scheduleNow = details.some(detail =>
+        detail.status === 'chờ xử lý' && Boolean(detail.schedule)
+      )
+        ? await this.getDatabaseBusinessNow()
+        : null
       const pendingTargets: FacebookGroupInviteTarget[] = []
       earliestFutureInputSchedule = null
       for (const detail of details) {
         if (detail.status !== 'chờ xử lý') continue
-        const futureSchedule = this.getFutureInputSchedule(detail, now)
+        const futureSchedule = detail.schedule && scheduleNow
+          ? this.getFutureInputSchedule(detail, scheduleNow)
+          : null
         if (futureSchedule) {
           if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
             earliestFutureInputSchedule = futureSchedule
@@ -3595,13 +3658,17 @@ export class CampaignScheduler {
 
       let zaloFriendBlocklistSkippedCount = 0
       if (zaloFriendBlocklist && campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
-        const now = new Date()
+        const scheduleNow = details.some(detail =>
+          detail.status === 'chờ xử lý' && Boolean(detail.schedule)
+        )
+          ? await this.getDatabaseBusinessNow()
+          : null
         const remainingDetails: CampaignInputData[] = []
         for (const detail of details) {
           if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           if (
             detail.status === 'chờ xử lý' &&
-            !this.getFutureInputSchedule(detail, now) &&
+            (!detail.schedule || !scheduleNow || !this.getFutureInputSchedule(detail, scheduleNow)) &&
             this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)
           ) {
             await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist, { logProgress: false })
@@ -3688,7 +3755,10 @@ export class CampaignScheduler {
           if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           // Target resolution can take long enough to cross the boundary. Stop
           // building the batch before resolving or reserving another target.
-          if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
+          const targetBusinessNow = this.requiresDataGroupHardEndCheck(campaign)
+            ? await this.getDatabaseBusinessNow()
+            : undefined
+          if (await this.finalizeDataGroupCampaignAtHardEnd(campaign, targetBusinessNow)) {
             await this.releaseRunningAccount(account.id)
             return
           }
@@ -3701,7 +3771,12 @@ export class CampaignScheduler {
           index += 1
 
           if (detail.status !== 'chờ xử lý') continue
-          const futureSchedule = this.getFutureInputSchedule(detail, new Date())
+          const inputScheduleNow = detail.schedule
+            ? targetBusinessNow || await this.getDatabaseBusinessNow()
+            : null
+          const futureSchedule = inputScheduleNow
+            ? this.getFutureInputSchedule(detail, inputScheduleNow)
+            : null
           if (futureSchedule) {
             if (!earliestFutureInputSchedule || futureSchedule.getTime() < earliestFutureInputSchedule.getTime()) {
               earliestFutureInputSchedule = futureSchedule
@@ -4543,10 +4618,14 @@ export class CampaignScheduler {
     return !campaign.extraSettings?.zaloFriendDataMaterializedAt
   }
 
-  private shouldMaterializeZaloBirthdayInputData(campaign: Campaign, details: CampaignInputData[]): boolean {
+  private shouldMaterializeZaloBirthdayInputData(
+    campaign: Campaign,
+    details: CampaignInputData[],
+    businessNow: Date
+  ): boolean {
     if (!this.isZaloBirthdayCampaign(campaign)) return false
     if (details.length > 0) return false
-    return campaign.extraSettings?.zaloBirthdayDataMaterializedDate !== this.getVietnamDateKey()
+    return campaign.extraSettings?.zaloBirthdayDataMaterializedDate !== this.getVietnamDateKey(businessNow)
   }
 
   private shouldMaterializeZaloFriendRecommendationInputData(campaign: Campaign, details: CampaignInputData[]): boolean {
@@ -4644,13 +4723,14 @@ export class CampaignScheduler {
     return this.normalizeGroupPostShareName(value).toLocaleLowerCase('vi-VN')
   }
 
-  private buildGroupPostShareTargets(
+  private async buildGroupPostShareTargets(
     campaign: Campaign,
     details: CampaignInputData[],
     currentDetail: CampaignInputData | null,
     consumedInputDataIds: Set<number>,
-    maxShareCount: number
-  ): GroupPostShareTarget[] {
+    maxShareCount: number,
+    businessNow?: Date
+  ): Promise<GroupPostShareTarget[]> {
     if (
       campaign.actionId !== GROUP_POST_ACTION_ID ||
       campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true ||
@@ -4659,7 +4739,16 @@ export class CampaignScheduler {
       return []
     }
 
-    const now = new Date()
+    const hasScheduledRunnableDetail = details.some(detail =>
+      detail &&
+      !detail.isDelete &&
+      detail.status === 'chờ xử lý' &&
+      !consumedInputDataIds.has(detail.id) &&
+      Boolean(detail.schedule)
+    )
+    const scheduleNow = hasScheduledRunnableDetail
+      ? businessNow || await this.getDatabaseBusinessNow()
+      : null
     const nameCounts = new Map<string, number>()
     for (const detail of details) {
       if (!detail || detail.isDelete) continue
@@ -4671,7 +4760,7 @@ export class CampaignScheduler {
     const runnableDetails = details.filter(detail => {
       if (!detail || detail.isDelete || detail.status !== 'chờ xử lý') return false
       if (consumedInputDataIds.has(detail.id)) return false
-      if (this.getFutureInputSchedule(detail, now)) return false
+      if (detail.schedule && scheduleNow && this.getFutureInputSchedule(detail, scheduleNow)) return false
       return !!this.normalizeGroupPostShareName(detail.name)
     })
 
@@ -5274,11 +5363,15 @@ export class CampaignScheduler {
     return text.length >= 5 && text.slice(0, 5) === todayDdMm
   }
 
-  private async materializeZaloBirthdayInputData(account: AutoAccount, campaign: Campaign): Promise<CampaignInputData[]> {
+  private async materializeZaloBirthdayInputData(
+    account: AutoAccount,
+    campaign: Campaign,
+    businessNow: Date
+  ): Promise<CampaignInputData[]> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     this.throwIfZaloRuntimeStopping(campaign.id)
-    const todayDateKey = this.getVietnamDateKey()
-    const todayDdMm = this.getVietnamBirthdayKey()
+    const todayDateKey = this.getVietnamDateKey(businessNow)
+    const todayDdMm = this.getVietnamBirthdayKey(businessNow)
 
     await this.logCampaignProgress(campaign.id, `🔄 Đang quét danh sách bạn bè Zalo live để lọc sinh nhật ${todayDdMm}`)
 
@@ -6568,7 +6661,7 @@ export class CampaignScheduler {
       await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
         errorCode: policy.errorCode,
         reason: message,
-        dateEnable: this.resolvePolicyActionDateEnable(policy)
+        dateEnable: await this.resolvePolicyActionDateEnable(policy)
       })
     }
 
@@ -6667,9 +6760,9 @@ export class CampaignScheduler {
       .trim()
   }
 
-  private resolvePolicyActionDateEnable(policy: AutoErrorPolicy): string | null | undefined {
+  private async resolvePolicyActionDateEnable(policy: AutoErrorPolicy): Promise<string | null | undefined> {
     if (policy.disableActionMode === 'end_of_day') {
-      return new Date(getVietnamDayStart().getTime() + DAY_IN_MS).toISOString()
+      return (await this.supabase.getRuntimeClock()).nextVietnamMidnight
     }
     if (policy.disableActionMode === 'indefinite') return null
     return undefined
@@ -9347,7 +9440,12 @@ export class CampaignScheduler {
       .replace(/\[info5\]/g, this.firstNonEmptyString(inputData.info5))
   }
 
-  private getZaloSmsContentForDetail(contentMessage: string | null | undefined, inputData: CampaignInputData | null, created: CampaignDetail): string {
+  private getZaloSmsContentForDetail(
+    contentMessage: string | null | undefined,
+    inputData: CampaignInputData | null,
+    created: CampaignDetail,
+    businessNow?: Date
+  ): string {
     const variants = this.splitSmsContent(contentMessage)
     const index = variants.length > 0 ? Math.abs(Number(created.id) || 0) % variants.length : 0
     const data = created.data || {}
@@ -9365,16 +9463,42 @@ export class CampaignScheduler {
       info4: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info4'), inputData?.info4),
       info5: this.firstNonEmptyString(this.getRecordValue(detailInputData, 'info5'), inputData?.info5)
     }
-    const rendered = this.renderZaloTemplate(variants[index] || '', mergedInputData, target as ZaloResolvedTarget | null)
+    const rendered = this.renderZaloTemplate(
+      variants[index] || '',
+      mergedInputData,
+      target as ZaloResolvedTarget | null,
+      false,
+      businessNow
+    )
     return this.renderExternalSmsLegacyTokens(rendered, mergedInputData, target)
   }
 
-  private getInternalSmsContentForZaloDetail(sourceCampaign: Campaign, inputData: CampaignInputData | null, created: CampaignDetail): string {
-    return this.getZaloSmsContentForDetail(sourceCampaign.extraSettings?.internalSmsContent, inputData, created)
+  private getInternalSmsContentForZaloDetail(
+    sourceCampaign: Campaign,
+    inputData: CampaignInputData | null,
+    created: CampaignDetail,
+    businessNow?: Date
+  ): string {
+    return this.getZaloSmsContentForDetail(
+      sourceCampaign.extraSettings?.internalSmsContent,
+      inputData,
+      created,
+      businessNow
+    )
   }
 
-  private getExternalSmsContentForZaloDetail(sourceCampaign: Campaign, inputData: CampaignInputData | null, created: CampaignDetail): string {
-    return this.getZaloSmsContentForDetail(sourceCampaign.extraSettings?.externalSmsContent, inputData, created)
+  private getExternalSmsContentForZaloDetail(
+    sourceCampaign: Campaign,
+    inputData: CampaignInputData | null,
+    created: CampaignDetail,
+    businessNow?: Date
+  ): string {
+    return this.getZaloSmsContentForDetail(
+      sourceCampaign.extraSettings?.externalSmsContent,
+      inputData,
+      created,
+      businessNow
+    )
   }
 
   private getZaloDetailSmsInputSnapshot(created: CampaignDetail, inputData: CampaignInputData | null, phone: string): Partial<CampaignInputData> {
@@ -9480,8 +9604,13 @@ export class CampaignScheduler {
     const pushKey = this.getExternalSmsPushKey(sourceCampaign, inputData, phone)
     if (this.internalSmsPushedDetailKeys.has(pushKey)) return
 
-    const nowIso = new Date().toISOString()
-    const content = this.getInternalSmsContentForZaloDetail(sourceCampaign, inputData, created)
+    const nowIso = (await this.getDatabaseBusinessNow()).toISOString()
+    const content = this.getInternalSmsContentForZaloDetail(
+      sourceCampaign,
+      inputData,
+      created,
+      new Date(nowIso)
+    )
     const inputSnapshot = this.getZaloDetailSmsInputSnapshot(created, inputData, phone)
     let successCount = 0
 
@@ -9545,7 +9674,8 @@ export class CampaignScheduler {
       return
     }
 
-    const content = this.getExternalSmsContentForZaloDetail(sourceCampaign, inputData, created)
+    const templateNow = await this.getTemplateBusinessNow(sourceCampaign.extraSettings?.externalSmsContent)
+    const content = this.getExternalSmsContentForZaloDetail(sourceCampaign, inputData, created, templateNow)
     const name = this.getZaloDetailSmsName(created, inputData)
     let successCount = 0
 
@@ -9855,7 +9985,7 @@ export class CampaignScheduler {
     const initialDelay = this.normalizePostBumpMinutes(extra.postBumpInitialDelayMinutes, 30, 0)
     const interval = this.normalizePostBumpMinutes(extra.postBumpIntervalMinutes, 10, 1)
     const startIndex = this.normalizePostBumpRotationIndex(extra.postBumpRotationIndex, targets.length)
-    const now = new Date()
+    const now = await this.getDatabaseBusinessNow()
     const earliestByCampaign = new Map<number, Date>()
 
     for (let i = 0; i < count; i++) {
@@ -9980,7 +10110,7 @@ export class CampaignScheduler {
       actionId: COMMENT_SEEDING_POST_ACTION_ID,
       accountId,
       status: 'chờ xử lý',
-      schedule: new Date().toISOString(),
+      schedule: (await this.getDatabaseBusinessNow()).toISOString(),
       scheduleType: 'daily',
       scheduleEndDate: null,
       dailyStopTime: null,
@@ -10022,7 +10152,7 @@ export class CampaignScheduler {
 
   private async getNextPendingInputSchedule(campaignId: number): Promise<Date | null> {
     const details = await this.supabase.listCampaignInputData(campaignId)
-    const now = new Date()
+    const now = await this.getDatabaseBusinessNow()
     let earliestFuture: Date | null = null
 
     for (const detail of details) {
@@ -10356,7 +10486,7 @@ export class CampaignScheduler {
       await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
         errorCode: policy.errorCode,
         reason: message,
-        dateEnable: this.resolvePolicyActionDateEnable(policy)
+        dateEnable: await this.resolvePolicyActionDateEnable(policy)
       })
       this.throwIfZaloRuntimeStopping(campaign.id)
       stopAfterTarget = true
@@ -10610,31 +10740,47 @@ export class CampaignScheduler {
     return target?.displayName || target?.originalName || target?.phone || target?.uid || 'target'
   }
 
+  private templateUsesDatabaseDate(template: string | undefined | null): boolean {
+    return /#\{(?:TODAY|TOMORROW|YESTERDAY)\([^}]*\)\}/.test(String(template || ''))
+  }
+
+  private async getTemplateBusinessNow(
+    ...templates: Array<string | undefined | null>
+  ): Promise<Date | undefined> {
+    return templates.some(template => this.templateUsesDatabaseDate(template))
+      ? await this.getDatabaseBusinessNow()
+      : undefined
+  }
+
   private renderZaloTemplate(
     template: string | undefined | null,
     inputData: Record<string, unknown> | undefined,
     target?: ZaloResolvedTarget | null,
-    formatted = false
+    formatted = false,
+    businessNow?: Date
   ): string {
     if (formatted) {
       return transformFormattedContentText(
         template,
-        text => this.renderZaloTemplateText(text, inputData, target)
+        text => this.renderZaloTemplateText(text, inputData, target, businessNow)
       )
     }
-    return this.renderZaloTemplateText(template, inputData, target)
+    return this.renderZaloTemplateText(template, inputData, target, businessNow)
   }
 
   private renderZaloTemplateText(
     template: string | undefined | null,
     inputData: Record<string, unknown> | undefined,
-    target?: ZaloResolvedTarget | null
+    target?: ZaloResolvedTarget | null,
+    businessNow?: Date
   ): string {
     const raw = this.renderSpinContent(template)
     if (!raw) return ''
-    const now = new Date()
     const formatDate = (format: string, offsetDays = 0): string => {
-      const date = new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000)
+      if (!businessNow) {
+        throw new Error('DB runtime clock is required for relative date template tokens')
+      }
+      const date = new Date(businessNow.getTime() + offsetDays * 24 * 60 * 60 * 1000)
       const parts = new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Ho_Chi_Minh',
         year: 'numeric',
@@ -10690,7 +10836,8 @@ export class CampaignScheduler {
     metadata?: BlockRuntimeMetadata
   ): Promise<ZaloOutgoingText> {
     const formatted = this.isFormattedContentCampaign(campaign)
-    const rendered = this.renderZaloTemplate(rawMessage, inputData, target, formatted)
+    const businessNow = await this.getTemplateBusinessNow(rawMessage)
+    const rendered = this.renderZaloTemplate(rawMessage, inputData, target, formatted, businessNow)
     if (formatted) return convertHtmlToZaloMessage(rendered)
     return this.rewriteZaloMessageForRun(account, campaign, rendered, metadata)
   }
@@ -11607,7 +11754,14 @@ export class CampaignScheduler {
     if (!target?.uid) return { ok: true, skipped: true }
     const actionCode = 'zalo_add_friend'
     const actionName = 'Kết bạn'
-    const message = this.renderZaloTemplate(options.message, options.inputData, target).slice(0, 150)
+    const businessNow = await this.getTemplateBusinessNow(options.message)
+    const message = this.renderZaloTemplate(
+      options.message,
+      options.inputData,
+      target,
+      false,
+      businessNow
+    ).slice(0, 150)
 
     try {
       const response = await this.zaloRuntime.sendFriendRequestToUser(account.id, target.uid, message)
@@ -11805,7 +11959,14 @@ export class CampaignScheduler {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const target = options.target
     if (!target?.uid) return { ok: true, skipped: true }
-    const alias = this.renderZaloTemplate(options.alias, options.inputData, target).trim()
+    const businessNow = await this.getTemplateBusinessNow(options.alias)
+    const alias = this.renderZaloTemplate(
+      options.alias,
+      options.inputData,
+      target,
+      false,
+      businessNow
+    ).trim()
     if (!alias) {
       return {
         ok: true,
@@ -11978,8 +12139,21 @@ export class CampaignScheduler {
       }
     }
 
-    const subject = this.renderZaloTemplate(options.subject, options.inputData).trim()
-    const renderedBody = this.renderZaloTemplate(options.body, options.inputData)
+    const businessNow = await this.getTemplateBusinessNow(options.subject, options.body)
+    const subject = this.renderZaloTemplate(
+      options.subject,
+      options.inputData,
+      undefined,
+      false,
+      businessNow
+    ).trim()
+    const renderedBody = this.renderZaloTemplate(
+      options.body,
+      options.inputData,
+      undefined,
+      false,
+      businessNow
+    )
     const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
       .map(item => String(item || '').trim())
       .filter(Boolean)

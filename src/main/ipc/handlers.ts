@@ -1,4 +1,4 @@
-import { app, ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, BrowserWindow, powerMonitor } from 'electron'
 import { AuthEntitlements, AuthUser, IPC_EVENTS } from '../../shared/types'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { PageControllerRegistry } from '../v2/runtime/pageController'
@@ -157,10 +157,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   )
   const emailRuntime = new EmailRuntimeService(supabase)
-  const dailyMaintenance = new DailyMaintenanceCoordinator(async () => {
+  const dailyMaintenance = new DailyMaintenanceCoordinator(async (dateKey) => {
     const user = getCurrentUser()
     if (!user) return
-    const updatedCampaigns = await supabase.maintainCampaignSchedules()
+    const updatedCampaigns = await supabase.maintainCampaignSchedules(dateKey)
     for (const campaign of updatedCampaigns) {
       try {
         mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
@@ -172,6 +172,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       console.log(`[ScheduleMaintenance] updated ${updatedCampaigns.length} campaign schedules.`)
     }
   }, {
+    loadClock: () => supabase.getRuntimeClock(),
     scopeKey: () => {
       const user = getCurrentUser()
       if (!user) return 'signed-out'
@@ -926,7 +927,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }, Math.max(0, delayMs))
   }
 
-  const runScheduleMaintenance = async (reason: 'login' | 'new-day'): Promise<void> => {
+  const runScheduleMaintenance = async (reason: 'login' | 'resume'): Promise<void> => {
     if (!getCurrentUser()) return
     try {
       await dailyMaintenance.ensureReady()
@@ -936,10 +937,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   }
 
-  setInterval(() => {
+  powerMonitor.on('suspend', () => {
+    supabase.invalidateRuntimeClock()
+  })
+
+  powerMonitor.on('resume', () => {
+    supabase.invalidateRuntimeClock()
     if (!getCurrentUser()) return
-    void runScheduleMaintenance('new-day').catch(() => {})
-  }, 60 * 1000)
+    void runScheduleMaintenance('resume').catch(() => {})
+  })
 
   setInterval(() => {
     if (!getCurrentUser()) return

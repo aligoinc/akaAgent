@@ -123,7 +123,10 @@ export class ZaloRealtimeGroupCampaignManager {
   }
 
   private async doRefresh(_reason: string, generation: number): Promise<void> {
-    const snapshots = await this.supabase.listZaloRealtimeGroupCampaignSnapshots(this.runtimeTarget)
+    const [clock, snapshots] = await Promise.all([
+      this.supabase.getRuntimeClock(),
+      this.supabase.listZaloRealtimeGroupCampaignSnapshots(this.runtimeTarget)
+    ])
     if (!this.isActiveGeneration(generation)) return
     const nextByAccount = new Map<number, RealtimeCampaignConfig[]>()
 
@@ -133,7 +136,7 @@ export class ZaloRealtimeGroupCampaignManager {
       if (snapshot.accountLoginStatus !== 'đã đăng nhập') continue
       if (snapshot.accountStatus !== 'chờ xử lý' && snapshot.accountStatus !== 'đang chạy') continue
       if (!snapshot.accountIsActive) continue
-      if (!this.isReceivingWindowActive(config)) continue
+      if (!this.isReceivingWindowActive(config, clock.vietnamDateKey)) continue
 
       const items = nextByAccount.get(config.accountId) || []
       items.push(config)
@@ -427,7 +430,6 @@ export class ZaloRealtimeGroupCampaignManager {
     return (this.campaignsByAccount.get(accountId) || [])
       .filter(item => item.triggers.has(trigger))
       .filter(item => item.groupIds.has(normalizedGroupId))
-      .filter(item => this.isReceivingWindowActive(item))
   }
 
   private async enqueueEvent(
@@ -443,7 +445,16 @@ export class ZaloRealtimeGroupCampaignManager {
     const generation = this.generation
     if (!this.isActiveGeneration(generation)) return
     try {
-      const scheduleAt = this.getNextInputSchedule(item.campaign, new Date())
+      const clock = await this.supabase.getRuntimeClock()
+      if (!this.isReceivingWindowActive(item, clock.vietnamDateKey)) {
+        this.refreshSoon('receiving-window-ended')
+        return
+      }
+      const eventTime = new Date(clock.dbNow)
+      if (!Number.isFinite(eventTime.getTime())) {
+        throw new Error('DB runtime clock is invalid')
+      }
+      const scheduleAt = this.getNextInputSchedule(item.campaign, eventTime)
       const result = await this.supabase.enqueueZaloRealtimeGroupEvent({
         runtimeTarget: this.runtimeTarget,
         campaignId: item.campaign.id,
@@ -453,7 +464,7 @@ export class ZaloRealtimeGroupCampaignManager {
         triggerType: input.trigger,
         targetUid: input.targetUid,
         targetName: input.targetName,
-        eventTime: new Date().toISOString(),
+        eventTime: clock.dbNow,
         scheduleAt: scheduleAt.toISOString(),
         rawPayload: input.rawPayload
       })
@@ -541,9 +552,8 @@ export class ZaloRealtimeGroupCampaignManager {
     )
   }
 
-  private isReceivingWindowActive(item: RealtimeCampaignConfig): boolean {
-    const todayKey = getVietnamDateKey()
-    return todayKey <= item.endDateKey
+  private isReceivingWindowActive(item: RealtimeCampaignConfig, vietnamDateKey: string): boolean {
+    return vietnamDateKey <= item.endDateKey
   }
 
   private broadcastCampaign(campaign: Campaign): void {
@@ -589,7 +599,7 @@ function normalizeDateKey(value: unknown): string {
   return getVietnamDateKey(date)
 }
 
-function getVietnamDateKey(date = new Date()): string {
+function getVietnamDateKey(date: Date): string {
   const parts = getVietnamDateTimeParts(date)
   return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`
 }

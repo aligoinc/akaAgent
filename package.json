@@ -1,6 +1,6 @@
 {
   "name": "aka-biz-auto",
-  "version": "5.5.0",
+  "version": "5.6.0",
   "description": "Browser Automation Desktop App with Visual Flow Builder",
   "main": "./out/main/index.js",
   "author": "akaBiz",

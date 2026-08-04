@@ -779,9 +779,20 @@ function makeVietnamDate(parts: Partial<VietnamDateTimeParts> & Pick<VietnamDate
   )
 }
 
-function startOfVietnamDay(date = new Date()): Date {
-  const parts = parseVietnamParts(date)
-  return makeVietnamDate({ year: parts.year, month: parts.month, day: parts.day })
+function startOfVietnamDateKey(dateKey: string): Date {
+  const normalized = String(dateKey || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new Error('DB Vietnam date key is invalid')
+  }
+  const date = new Date(`${normalized}T00:00:00${VIETNAM_UTC_OFFSET}`)
+  if (!Number.isFinite(date.getTime())) throw new Error('DB Vietnam date key is invalid')
+  return date
+}
+
+function parseDatabaseNow(dbNow: string): Date {
+  const date = new Date(dbNow)
+  if (!Number.isFinite(date.getTime())) throw new Error('DB runtime clock is invalid')
+  return date
 }
 
 function addVietnamDays(day: Date, amount: number): Date {
@@ -2399,9 +2410,9 @@ export async function claimCampaignRuntime(
   return data === true
 }
 
-export async function getPendingCampaigns(accountId: number): Promise<Campaign[]> {
+export async function getPendingCampaigns(accountId: number, dbNow: string): Promise<Campaign[]> {
   const u = requireCurrentUser()
-  const now = new Date()
+  const now = parseDatabaseNow(dbNow)
   const currentVietnamTime = formatVietnamTimeForQuery(now)
   const { data, error } = await client()
     .from('auto_campaigns')
@@ -2422,9 +2433,12 @@ export async function getPendingCampaigns(accountId: number): Promise<Campaign[]
   return (data || []).map(row => mapCampaignFromDB(row))
 }
 
-export async function getDueMobileManagedCampaignsForLimitCheck(accountId: number): Promise<Campaign[]> {
+export async function getDueMobileManagedCampaignsForLimitCheck(
+  accountId: number,
+  dbNow: string
+): Promise<Campaign[]> {
   const u = requireCurrentUser()
-  const now = new Date()
+  const now = parseDatabaseNow(dbNow)
   const { data, error } = await client()
     .from('auto_campaigns')
     .select(CAMPAIGN_SELECT)
@@ -2442,6 +2456,7 @@ export async function getDueMobileManagedCampaignsForLimitCheck(accountId: numbe
 type CampaignSchedulePlatformScope = 'all' | 'zalo' | 'non-zalo'
 
 export async function maintainCampaignSchedules(
+  vietnamDateKey: string,
   platformScope: CampaignSchedulePlatformScope = 'all',
   runtimeContext: DataGroupRuntimeContext = { runtimeTarget: 'desktop' }
 ): Promise<Campaign[]> {
@@ -2450,7 +2465,7 @@ export async function maintainCampaignSchedules(
   }
 
   const u = requireCurrentUser()
-  const todayStart = startOfVietnamDay()
+  const todayStart = startOfVietnamDateKey(vietnamDateKey)
   const accountRelation =
     'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type, is_zalo_show_web, is_zalo_server, staff_id)'
   let query = client()
@@ -2676,21 +2691,22 @@ export async function maintainCampaignSchedules(
   return updatedCampaigns
 }
 
-export function maintainZaloCampaignSchedules(): Promise<Campaign[]> {
-  return maintainCampaignSchedules('zalo')
+export function maintainZaloCampaignSchedules(vietnamDateKey: string): Promise<Campaign[]> {
+  return maintainCampaignSchedules(vietnamDateKey, 'zalo')
 }
 
 export function maintainZaloServerCampaignSchedules(
-  runtimeModeRevision: string
+  runtimeModeRevision: string,
+  vietnamDateKey: string
 ): Promise<Campaign[]> {
-  return maintainCampaignSchedules('zalo', {
+  return maintainCampaignSchedules(vietnamDateKey, 'zalo', {
     runtimeTarget: 'server',
     runtimeModeRevision
   })
 }
 
-export function maintainNonZaloCampaignSchedules(): Promise<Campaign[]> {
-  return maintainCampaignSchedules('non-zalo')
+export function maintainNonZaloCampaignSchedules(vietnamDateKey: string): Promise<Campaign[]> {
+  return maintainCampaignSchedules(vietnamDateKey, 'non-zalo')
 }
 
 async function listStaffCampaignIds(staffId: number, context: string): Promise<number[]> {
@@ -5141,23 +5157,30 @@ export async function getAccountRateLimitStatus(
   const dailyLimit = limitConfig?.dailyLimit && limitConfig.dailyLimit > 0 ? limitConfig.dailyLimit : 30
   const rateLimitCount = limitConfig?.rateLimitCount && limitConfig.rateLimitCount > 0 ? limitConfig.rateLimitCount : 9
   const rateLimitMinutes = limitConfig?.rateLimitMinutes && limitConfig.rateLimitMinutes > 0 ? limitConfig.rateLimitMinutes : 65
-  const actionStatus = await accountActionRepo.getAccountActionStatus(accountId, normalizedActionCode)
+  const actionSnapshot = await accountActionRepo.getAccountActionStatusSnapshot(accountId, normalizedActionCode)
+  const actionStatus = actionSnapshot.status
+  const dbNowMs = new Date(actionSnapshot.clock.dbNow).getTime()
 
-  const disabledStatus = buildAccountActionDisabledStatus(actionStatus, normalizedActionCode, actionName)
+  const disabledStatus = buildAccountActionDisabledStatus(
+    actionStatus,
+    normalizedActionCode,
+    actionName,
+    dbNowMs
+  )
   if (disabledStatus) return disabledStatus
 
   const dailyActionCount = actionStatus.countActionInDay
 
   if (dailyActionCount >= dailyLimit) {
     // Daily limit → đợi tới 00:00 ngày mai mới reset
-    const tomorrow = addVietnamDays(startOfVietnamDay(), 1)
+    const tomorrow = new Date(actionSnapshot.clock.nextVietnamMidnight)
     return {
       ok: false,
       actionCode: normalizedActionCode,
       actionName,
       errorCode: 'error_limit_in_day',
       isDailyLimit: true,
-      retryAfterMs: tomorrow.getTime() - Date.now(),
+      retryAfterMs: Math.max(0, tomorrow.getTime() - dbNowMs),
       currentCount: dailyActionCount,
       limit: dailyLimit,
       dailyActionCount,
@@ -5166,7 +5189,7 @@ export async function getAccountRateLimitStatus(
     }
   }
 
-  const timeFrameStart = new Date(new Date().getTime() - rateLimitMinutes * 60 * 1000)
+  const timeFrameStart = new Date(dbNowMs - rateLimitMinutes * 60 * 1000)
   const timeFrameStartIso = timeFrameStart.toISOString()
 
   const windowActionCount = await countLimitDetailsInWindow(accountId, normalizedActionCode, timeFrameStartIso)
@@ -5177,7 +5200,7 @@ export async function getAccountRateLimitStatus(
     let retryAfterMs = rateLimitMinutes * 60 * 1000
     if (oldestCreatedAt) {
       const oldestTime = new Date(oldestCreatedAt).getTime()
-      retryAfterMs = Math.max(60 * 1000, (oldestTime + rateLimitMinutes * 60 * 1000) - Date.now())
+      retryAfterMs = Math.max(60 * 1000, (oldestTime + rateLimitMinutes * 60 * 1000) - dbNowMs)
     }
     return {
       ok: false,
@@ -5214,12 +5237,13 @@ export async function getAccountRateLimitStatus(
 function buildAccountActionDisabledStatus(
   actionStatus: AutoAccountActionStatus,
   actionCode: string,
-  actionName: string
+  actionName: string,
+  dbNowMs: number
 ): AccountActionLimitStatus | null {
   if (!actionStatus.isDisable) return null
 
   const retryAfterMs = actionStatus.dateEnable
-    ? Math.max(0, new Date(actionStatus.dateEnable).getTime() - Date.now())
+    ? Math.max(0, new Date(actionStatus.dateEnable).getTime() - dbNowMs)
     : undefined
   if (actionStatus.dateEnable && retryAfterMs !== undefined && retryAfterMs <= 0) return null
 
@@ -5245,8 +5269,13 @@ export async function getAccountActionDisabledStatus(
   const normalizedActionCode = actionCode.trim()
   if (!normalizedActionCode) return { ok: true }
 
-  const actionStatus = await accountActionRepo.getAccountActionStatus(accountId, normalizedActionCode)
-  return buildAccountActionDisabledStatus(actionStatus, normalizedActionCode, actionName) || {
+  const actionSnapshot = await accountActionRepo.getAccountActionStatusSnapshot(accountId, normalizedActionCode)
+  return buildAccountActionDisabledStatus(
+    actionSnapshot.status,
+    normalizedActionCode,
+    actionName,
+    new Date(actionSnapshot.clock.dbNow).getTime()
+  ) || {
     ok: true,
     actionCode: normalizedActionCode,
     actionName

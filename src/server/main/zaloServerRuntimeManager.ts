@@ -838,13 +838,18 @@ export class ZaloServerRuntimeManager {
             }
           }
         )
-        const maintenance = new DailyMaintenanceCoordinator(async () => {
+        const maintenance = new DailyMaintenanceCoordinator(async (dateKey) => {
           const updatedCampaigns = await supabase.maintainZaloServerCampaignSchedules(
-            user.zaloRuntimeModeRevision
+            user.zaloRuntimeModeRevision,
+            dateKey
           )
           for (const campaign of updatedCampaigns) {
             eventWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
           }
+        }, {
+          // runtimeClockRepository coalesces concurrent staff startup/ticks in
+          // this App Server process into one in-flight clock RPC.
+          loadClock: () => supabase.getRuntimeClock()
         })
         const scheduler = new CampaignScheduler(
           supabase,
