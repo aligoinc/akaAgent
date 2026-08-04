@@ -18,12 +18,16 @@ import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogReposi
 import * as systemSettingsRepo from '../data/repositories/systemSettingsRepository'
 import * as emailTrackingRepo from '../data/repositories/emailTrackingRepository'
 import * as dataGroupRepo from '../data/repositories/dataGroupRepository'
+import * as runtimeClockRepo from '../data/repositories/runtimeClockRepository'
 
 /**
  * Facade that delegates to individual repositories.
  * Keeps a thin service API so callers do not know repository boundaries.
  */
 export class SupabaseService {
+  getRuntimeClock() { return runtimeClockRepo.getDatabaseRuntimeClock() }
+  invalidateRuntimeClock() { runtimeClockRepo.invalidateDatabaseRuntimeClock() }
+
   // =========== RECOVERY ===========
   async resetRunningStatuses(staffId: number): Promise<void> {
     console.log(`[Supabase] Resetting "đang chạy" statuses to "chờ xử lý" for staff ${staffId}...`)
@@ -195,14 +199,22 @@ export class SupabaseService {
   claimCampaignRuntime(campaignId: number, accountId: number, runtimeTarget: campaignRepo.CampaignRuntimeTarget) {
     return campaignRepo.claimCampaignRuntime(campaignId, accountId, runtimeTarget)
   }
-  getPendingCampaigns(accountId: number) { return campaignRepo.getPendingCampaigns(accountId) }
-  getDueMobileManagedCampaignsForLimitCheck(accountId: number) { return campaignRepo.getDueMobileManagedCampaignsForLimitCheck(accountId) }
-  maintainCampaignSchedules() { return campaignRepo.maintainCampaignSchedules() }
-  maintainZaloCampaignSchedules() { return campaignRepo.maintainZaloCampaignSchedules() }
-  maintainZaloServerCampaignSchedules(runtimeModeRevision: string) {
-    return campaignRepo.maintainZaloServerCampaignSchedules(runtimeModeRevision)
+  getPendingCampaigns(accountId: number, dbNow: string) { return campaignRepo.getPendingCampaigns(accountId, dbNow) }
+  getDueMobileManagedCampaignsForLimitCheck(accountId: number, dbNow: string) {
+    return campaignRepo.getDueMobileManagedCampaignsForLimitCheck(accountId, dbNow)
   }
-  maintainNonZaloCampaignSchedules() { return campaignRepo.maintainNonZaloCampaignSchedules() }
+  maintainCampaignSchedules(vietnamDateKey: string) {
+    return campaignRepo.maintainCampaignSchedules(vietnamDateKey)
+  }
+  maintainZaloCampaignSchedules(vietnamDateKey: string) {
+    return campaignRepo.maintainZaloCampaignSchedules(vietnamDateKey)
+  }
+  maintainZaloServerCampaignSchedules(runtimeModeRevision: string, vietnamDateKey: string) {
+    return campaignRepo.maintainZaloServerCampaignSchedules(runtimeModeRevision, vietnamDateKey)
+  }
+  maintainNonZaloCampaignSchedules(vietnamDateKey: string) {
+    return campaignRepo.maintainNonZaloCampaignSchedules(vietnamDateKey)
+  }
   listZaloRealtimeGroupCampaignSnapshots(runtimeTarget: campaignRepo.CampaignRuntimeTarget = 'desktop') {
     return campaignRepo.listZaloRealtimeGroupCampaignSnapshots(runtimeTarget)
   }

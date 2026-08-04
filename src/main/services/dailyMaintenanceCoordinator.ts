@@ -1,23 +1,18 @@
-const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
-
 export type DailyMaintenanceTask = (dateKey: string) => Promise<unknown>
 
+export interface DailyMaintenanceClock {
+  dbNow: string
+  vietnamDateKey: string
+  nextVietnamMidnight: string
+}
+
 export interface DailyMaintenanceCoordinatorOptions {
-  now?: () => Date
+  loadClock: () => Promise<DailyMaintenanceClock>
   scopeKey?: () => string
 }
 
 export interface DailyMaintenanceBarrier {
-  ensureReady(): Promise<void>
-}
-
-export function getVietnamMaintenanceDateKey(date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: VIETNAM_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(date)
+  ensureReady(): Promise<DailyMaintenanceClock>
 }
 
 /**
@@ -27,23 +22,24 @@ export function getVietnamMaintenanceDateKey(date = new Date()): string {
  */
 export class DailyMaintenanceCoordinator implements DailyMaintenanceBarrier {
   private readonly runMaintenance: DailyMaintenanceTask
-  private readonly now: () => Date
+  private readonly loadClock: () => Promise<DailyMaintenanceClock>
   private readonly scopeKey: () => string
   private completedRunKey: string | null = null
   private inFlight: Promise<void> | null = null
   private generation = 0
 
-  constructor(runMaintenance: DailyMaintenanceTask, options: DailyMaintenanceCoordinatorOptions = {}) {
+  constructor(runMaintenance: DailyMaintenanceTask, options: DailyMaintenanceCoordinatorOptions) {
     this.runMaintenance = runMaintenance
-    this.now = options.now || (() => new Date())
+    this.loadClock = options.loadClock
     this.scopeKey = options.scopeKey || (() => 'default')
   }
 
-  async ensureReady(): Promise<void> {
+  async ensureReady(): Promise<DailyMaintenanceClock> {
     while (true) {
-      const dateKey = getVietnamMaintenanceDateKey(this.now())
+      const clock = await this.loadClock()
+      const dateKey = clock.vietnamDateKey
       const runKey = `${this.scopeKey()}::${dateKey}`
-      if (this.completedRunKey === runKey) return
+      if (this.completedRunKey === runKey) return clock
 
       if (!this.inFlight) {
         this.inFlight = this.runForDate(dateKey, runKey, this.generation)
@@ -54,8 +50,9 @@ export class DailyMaintenanceCoordinator implements DailyMaintenanceBarrier {
       // Midnight can pass while maintenance is running. Re-check the Vietnam
       // date before releasing the caller so discovery never crosses an
       // unmaintained day boundary.
-      const currentRunKey = `${this.scopeKey()}::${getVietnamMaintenanceDateKey(this.now())}`
-      if (this.completedRunKey === currentRunKey) return
+      const currentClock = await this.loadClock()
+      const currentRunKey = `${this.scopeKey()}::${currentClock.vietnamDateKey}`
+      if (this.completedRunKey === currentRunKey) return currentClock
     }
   }
 
