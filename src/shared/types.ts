@@ -414,6 +414,8 @@ export interface AutoAccountActionStatus {
   updatedAt?: string
 }
 
+export type AutoErrorDisableActionMode = 'fixed_minutes' | 'end_of_day' | 'indefinite'
+
 export interface AutoErrorPolicy {
   id: number
   errorType: string
@@ -427,6 +429,7 @@ export interface AutoErrorPolicy {
   updateStatusCampaign?: string | null
   disableActionCodes: string[]
   timeDisableActions?: number | null
+  disableActionMode: AutoErrorDisableActionMode
   countConsecutiveErrors?: number | null
   zaloErrorCodes: string[]
   detailStatus?: string | null

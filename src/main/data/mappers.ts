@@ -144,6 +144,7 @@ export function mapAutoAccountActionStatusFromDB(row: Record<string, unknown>): 
 }
 
 export function mapAutoErrorPolicyFromDB(row: Record<string, unknown>): AutoErrorPolicy {
+  const disableActionMode = String(row.disable_action_mode || '').trim()
   return {
     id: row.id as number,
     errorType: row.error_type as string,
@@ -157,6 +158,9 @@ export function mapAutoErrorPolicyFromDB(row: Record<string, unknown>): AutoErro
     updateStatusCampaign: (row.update_status_campaign as string | null) ?? null,
     disableActionCodes: Array.isArray(row.disable_action_codes) ? row.disable_action_codes as string[] : [],
     timeDisableActions: (row.time_disable_actions as number | null) ?? null,
+    disableActionMode: disableActionMode === 'end_of_day' || disableActionMode === 'indefinite'
+      ? disableActionMode
+      : 'fixed_minutes',
     countConsecutiveErrors: (row.count_consecutive_errors as number | null) ?? null,
     zaloErrorCodes: Array.isArray(row.zalo_error_codes) ? row.zalo_error_codes as string[] : [],
     detailStatus: (row.detail_status as string | null) ?? null,
