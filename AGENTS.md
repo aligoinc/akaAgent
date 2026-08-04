@@ -26,6 +26,8 @@ Windows packaging có native module `better-sqlite3`; luôn dùng `npm run build
 
 **Electron 33 + React 19 desktop app** cho automation Facebook/Zalo/Email. Build qua `electron-vite`. State Zustand. Canvas `@xyflow/react`. DB Supabase. Code editor Monaco.
 
+**Supabase production của repo này** là project `akachat`, project ref `cgjbsmqtfhqvttudyjzq`, cũng là ref trong `supabase/.temp/project-ref` và fallback URL trong `src/main/data/supabaseClient.ts`. Project ref `yfkvwgapqmywaoftwuzc` (tên `aka_agent`) là project legacy/khác và tuyệt đối không query hoặc mutate khi làm việc trong repo này. Không chọn project theo tên từ `supabase projects list`; trước mọi thao tác DB phải verify ref và ưu tiên `supabase db query --linked`.
+
 ### 3-layer Electron split (`src/`)
 
 | Layer | Path | Trách nhiệm |
