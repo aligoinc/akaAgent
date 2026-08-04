@@ -20,6 +20,7 @@ const TRANSIENT_RETRY_DELAY_MS = 300
 export interface DisableAccountActionContext {
   errorCode?: string | null
   reason?: string | null
+  dateEnable?: string | null
 }
 
 function normalizeRateLimitMinutes(value: unknown): number {
@@ -376,9 +377,11 @@ export async function disableAccountActions(
   const codes = Array.from(new Set(actionCodes.map(code => code.trim()).filter(Boolean)))
   if (codes.length === 0) return
 
-  const dateEnable = minutes && minutes > 0
-    ? new Date(Date.now() + minutes * 60 * 1000).toISOString()
-    : null
+  const dateEnable = context?.dateEnable !== undefined
+    ? context.dateEnable
+    : minutes && minutes > 0
+      ? new Date(Date.now() + minutes * 60 * 1000).toISOString()
+      : null
   const disabledAt = new Date().toISOString()
 
   for (const actionCode of codes) {

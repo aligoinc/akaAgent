@@ -22,6 +22,7 @@ import {
   selectAdvancedContentItem
 } from '../../shared/advancedContent'
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../shared/smsContent'
+import { getVietnamDayStart } from '../../shared/vietnamTime'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -479,6 +480,7 @@ const ZALO_RUNTIME_SHUTDOWN_UNCERTAIN_NOTE =
 const ZALO_RUNTIME_SHUTDOWN_NOTE = 'Runtime Zalo đang dừng.'
 const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_diagnosis'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
+const DAY_IN_MS = 24 * 60 * 60 * 1000
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
 const DATA_GROUP_WAITING_NOTES = new Set(['Chờ data phù hợp', 'Chờ data mới'])
@@ -6565,7 +6567,8 @@ export class CampaignScheduler {
     if (policy.disableActionCodes.length > 0) {
       await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
         errorCode: policy.errorCode,
-        reason: message
+        reason: message,
+        dateEnable: this.resolvePolicyActionDateEnable(policy)
       })
     }
 
@@ -6662,6 +6665,14 @@ export class CampaignScheduler {
       .replace(/\[action\]/g, replacements.actionName || replacements.action || replacements.a || '')
       .replace(/\[action_code\]/g, replacements.actionCode || replacements.action_code || '')
       .trim()
+  }
+
+  private resolvePolicyActionDateEnable(policy: AutoErrorPolicy): string | null | undefined {
+    if (policy.disableActionMode === 'end_of_day') {
+      return new Date(getVietnamDayStart().getTime() + DAY_IN_MS).toISOString()
+    }
+    if (policy.disableActionMode === 'indefinite') return null
+    return undefined
   }
 
   /** Build variables object inject vào engine v2. */
@@ -10344,7 +10355,8 @@ export class CampaignScheduler {
     if (policy.disableActionCodes.length > 0) {
       await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
         errorCode: policy.errorCode,
-        reason: message
+        reason: message,
+        dateEnable: this.resolvePolicyActionDateEnable(policy)
       })
       this.throwIfZaloRuntimeStopping(campaign.id)
       stopAfterTarget = true
