@@ -1889,6 +1889,35 @@ export class CampaignScheduler {
     return hasSource ? FIND_DATA_SOURCE_WAIT_NOTE : null
   }
 
+  /**
+   * Read the current action-limit state without creating/resetting/locking the
+   * quota row. A first-time block is claimed once below so its note can be
+   * persisted safely; subsequent ticks skip the claim while the DB values are
+   * still blocked.
+   */
+  private async getCampaignPreclaimLimitStatus(
+    account: AutoAccount,
+    campaign: Campaign,
+    action: CampaignAction
+  ): Promise<AccountActionLimitStatus | null> {
+    const {
+      executable: preflightExecutableActionDescriptors,
+      quota: preflightQuotaActionDescriptors
+    } = this.getCampaignPreflightActionDescriptors(campaign, action)
+
+    const disabledStatus = await this.checkActionDisabled(account, preflightExecutableActionDescriptors, true)
+    if (disabledStatus && !disabledStatus.ok) return disabledStatus
+
+    const limitResult = await this.checkActionLimitsForContinuation(
+      account,
+      campaign,
+      preflightQuotaActionDescriptors,
+      campaign.extraSettings?.actionLimits,
+      true
+    )
+    return limitResult.limitStatus
+  }
+
   private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
     let runtimeClaimed = false
     const isZaloCampaign = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
@@ -1903,6 +1932,14 @@ export class CampaignScheduler {
       }
       campaign = currentCampaign
 
+      const preclaimAction = await this.supabase.getCampaignAction(campaign.actionId)
+      const preclaimLimitStatus = preclaimAction
+        ? await this.getCampaignPreclaimLimitStatus(account, campaign, preclaimAction)
+        : null
+      if (preclaimLimitStatus && this.isLimitNoteText(campaign.note)) {
+        return
+      }
+
       const claimed = await this.supabase.claimCampaignRuntime(
         campaign.id,
         account.id,
@@ -1916,6 +1953,15 @@ export class CampaignScheduler {
       }
 
       await this.broadcastClaimedRuntimeState(campaign.id)
+
+      if (preclaimLimitStatus) {
+        await this.releaseClaimedCampaignPreflight(
+          account.id,
+          campaign,
+          await this.buildLimitPreflightNote(preclaimLimitStatus)
+        )
+        return
+      }
 
       // The mode may change immediately after the atomic claim commits. Do not
       // let that already-claimed campaign advance into preflight/runtime writes.
@@ -1964,7 +2010,7 @@ export class CampaignScheduler {
         return
       }
 
-      const action = await this.supabase.getCampaignAction(campaign.actionId)
+      const action = preclaimAction || await this.supabase.getCampaignAction(campaign.actionId)
       if (!action) {
         await this.releaseClaimedCampaignPreflight(account.id, campaign, 'Không tìm thấy loại chiến dịch')
         return
@@ -1983,39 +2029,6 @@ export class CampaignScheduler {
 
       const executableActionDescriptors = this.getCampaignExecutableActionDescriptors(campaign, action)
       const quotaActionDescriptors = this.getCampaignActionDescriptors(campaign, action)
-      const preflightExecutableActionDescriptors = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
-        ? []
-        : campaign.actionId === 'facebook_group_post' && campaign.extraSettings?.skipPostIfGroupRequiresApproval === true
-          ? executableActionDescriptors.filter(action => action.code !== 'fb_post_group')
-          : executableActionDescriptors
-      const preflightQuotaActionDescriptors = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
-        ? []
-        : campaign.actionId === 'facebook_group_post' && campaign.extraSettings?.skipPostIfGroupRequiresApproval === true
-          ? quotaActionDescriptors.filter(action => action.code !== 'fb_post_group')
-          : quotaActionDescriptors
-      const preflightDisabled = await this.checkActionDisabled(account, preflightExecutableActionDescriptors)
-      if (preflightDisabled && !preflightDisabled.ok) {
-        await this.releaseClaimedCampaignPreflight(
-          account.id,
-          campaign,
-          await this.buildLimitPreflightNote(preflightDisabled)
-        )
-        return
-      }
-      const preflightLimit = await this.checkActionLimitsForContinuation(
-        account,
-        campaign,
-        preflightQuotaActionDescriptors,
-        campaign.extraSettings?.actionLimits
-      )
-      if (preflightLimit.limitStatus) {
-        await this.releaseClaimedCampaignPreflight(
-          account.id,
-          campaign,
-          await this.buildLimitPreflightNote(preflightLimit.limitStatus)
-        )
-        return
-      }
 
       if (!(await this.ensureZaloSessionReadyForCampaign(account, campaign))) {
         await this.releaseRunningAccount(account.id)
@@ -5663,6 +5676,32 @@ export class CampaignScheduler {
     return resolveCampaignExecutableActionDescriptors(campaign, campaignAction)
   }
 
+  private getCampaignPreflightActionDescriptors(
+    campaign: Campaign,
+    campaignAction: CampaignAction,
+    executableActionDescriptors = this.getCampaignExecutableActionDescriptors(campaign, campaignAction),
+    quotaActionDescriptors = this.getCampaignActionDescriptors(campaign, campaignAction)
+  ): { executable: CampaignActionDescriptor[]; quota: CampaignActionDescriptor[] } {
+    if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+      return { executable: [], quota: [] }
+    }
+
+    if (
+      campaign.actionId === GROUP_POST_ACTION_ID &&
+      campaign.extraSettings?.skipPostIfGroupRequiresApproval === true
+    ) {
+      return {
+        executable: executableActionDescriptors.filter(descriptor => descriptor.code !== 'fb_post_group'),
+        quota: quotaActionDescriptors.filter(descriptor => descriptor.code !== 'fb_post_group')
+      }
+    }
+
+    return {
+      executable: executableActionDescriptors,
+      quota: quotaActionDescriptors
+    }
+  }
+
   private resolveCampaignWorkflow(action: CampaignAction): { workflowId?: number; missingNote: string } {
     const useTestWorkflow = getCurrentUser()?.useTestWorkflow === true
     const workflowId = useTestWorkflow ? action.testWorkflowId : action.workflowId
@@ -5689,14 +5728,13 @@ export class CampaignScheduler {
 
   private async checkActionDisabled(
     account: AutoAccount,
-    actionDescriptors: CampaignActionDescriptor[]
+    actionDescriptors: CampaignActionDescriptor[],
+    readOnly = false
   ): Promise<AccountActionLimitStatus | null> {
     for (const action of actionDescriptors) {
-      const disabledStatus = await this.supabase.getAccountActionDisabledStatus(
-        account.id,
-        action.code,
-        action.name
-      )
+      const disabledStatus = readOnly
+        ? await this.supabase.peekAccountActionDisabledStatus(account.id, action.code, action.name)
+        : await this.supabase.getAccountActionDisabledStatus(account.id, action.code, action.name)
       if (!disabledStatus.ok) return disabledStatus
     }
     return null
@@ -5706,17 +5744,16 @@ export class CampaignScheduler {
     account: AutoAccount,
     campaign: Campaign,
     actionDescriptors: CampaignActionDescriptor[],
-    limitConfig?: CampaignActionLimitSettings
+    limitConfig?: CampaignActionLimitSettings,
+    readOnly = false
   ): Promise<AccountActionLimitStatus | null> {
     void campaign
     const entitlements = await loadCurrentUserEffectiveEntitlements()
     for (const action of actionDescriptors) {
-      const limitStatus = await this.supabase.getAccountRateLimitStatus(
-        account.id,
-        action.code,
-        action.name,
-        this.getActionLimitConfig(action.code, limitConfig, account, entitlements)
-      )
+      const actionLimitConfig = this.getActionLimitConfig(action.code, limitConfig, account, entitlements)
+      const limitStatus = readOnly
+        ? await this.supabase.peekAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig)
+        : await this.supabase.getAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig)
       if (!limitStatus.ok) return limitStatus
     }
     return null
@@ -5879,10 +5916,11 @@ export class CampaignScheduler {
     account: AutoAccount,
     campaign: Campaign,
     actionDescriptors: CampaignActionDescriptor[],
-    limitConfig?: CampaignActionLimitSettings
+    limitConfig?: CampaignActionLimitSettings,
+    readOnly = false
   ): Promise<ActionLimitContinuationResult> {
     if (!this.shouldContinueWhenActionLimitReached(limitConfig)) {
-      const limitStatus = await this.checkActionLimits(account, campaign, actionDescriptors, limitConfig)
+      const limitStatus = await this.checkActionLimits(account, campaign, actionDescriptors, limitConfig, readOnly)
       return {
         limitStatus,
         runnableActionDescriptors: actionDescriptors,
@@ -5897,12 +5935,10 @@ export class CampaignScheduler {
     const skippedLimitStatuses: AccountActionLimitStatus[] = []
 
     for (const action of actionDescriptors) {
-      const limitStatus = await this.supabase.getAccountRateLimitStatus(
-        account.id,
-        action.code,
-        action.name,
-        this.getActionLimitConfig(action.code, limitConfig, account, entitlements)
-      )
+      const actionLimitConfig = this.getActionLimitConfig(action.code, limitConfig, account, entitlements)
+      const limitStatus = readOnly
+        ? await this.supabase.peekAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig)
+        : await this.supabase.getAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig)
       if (limitStatus.ok) {
         runnableActionDescriptors.push(action)
         continue
