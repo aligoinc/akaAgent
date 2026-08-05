@@ -112,6 +112,61 @@ export async function getAccountActionStatusSnapshot(
   }
 }
 
+/**
+ * Read-only quota snapshot for scheduler prechecks performed before a runtime
+ * claim. Missing rows and rows from an older Vietnam day are interpreted as a
+ * zero daily count without creating or updating database state.
+ */
+export async function peekAccountActionStatusSnapshot(
+  accountId: number,
+  actionCode: string
+): Promise<AccountActionStatusSnapshot> {
+  const normalizedCode = actionCode.trim()
+  if (!normalizedCode) throw new Error('Mã hành động không hợp lệ')
+
+  const clock = await getDatabaseRuntimeClock()
+  const { data, error } = await client()
+    .from('auto_account_action_status')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('action_code', normalizedCode)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to peek account action status: ${error.message}`)
+
+  if (!data) {
+    return {
+      status: {
+        id: 0,
+        accountId,
+        actionCode: normalizedCode,
+        countActionInDay: 0,
+        countDate: clock.vietnamDateKey,
+        isDisable: false,
+        dateEnable: null,
+        disabledErrorCode: null,
+        disabledReason: null,
+        disabledAt: null
+      },
+      clock
+    }
+  }
+
+  const status = mapAutoAccountActionStatusFromDB(data as Record<string, unknown>)
+  if (status.countDate > clock.vietnamDateKey) {
+    throw new Error(
+      `Account action status date ${status.countDate} is ahead of DB Vietnam date ${clock.vietnamDateKey}`
+    )
+  }
+
+  if (status.countDate < clock.vietnamDateKey) {
+    status.countActionInDay = 0
+    status.countDate = clock.vietnamDateKey
+  }
+
+  return { status, clock }
+}
+
 export async function getAccountActionStatus(accountId: number, actionCode: string): Promise<AutoAccountActionStatus> {
   return (await getAccountActionStatusSnapshot(accountId, actionCode)).status
 }

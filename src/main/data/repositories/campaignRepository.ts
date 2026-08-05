@@ -2580,7 +2580,8 @@ export async function maintainCampaignSchedules(
         // schedule due so the scheduler can run it immediately when eligible.
         if (campaign.continueNextDay) {
           const updated = await updateCampaign(campaign.id, {
-            schedule: nextSchedule.toISOString()
+            schedule: nextSchedule.toISOString(),
+            note: null
           })
           updatedCampaigns.push(updated)
         }
@@ -2668,7 +2669,8 @@ export async function maintainCampaignSchedules(
       }
 
       const updated = await updateCampaign(campaign.id, {
-        schedule: nextSchedule.toISOString()
+        schedule: nextSchedule.toISOString(),
+        note: null
       })
       updatedCampaigns.push(updated)
     } catch (err) {
@@ -5145,11 +5147,12 @@ export async function deleteCampaignDetail(id: number): Promise<void> {
   if (error) throw new Error(`Failed to delete campaign detail: ${error.message}`)
 }
 
-export async function getAccountRateLimitStatus(
+async function resolveAccountRateLimitStatus(
   accountId: number,
   actionCode: string,
   actionName: string,
-  limitConfig?: ActionLimitConfig
+  limitConfig: ActionLimitConfig | undefined,
+  actionSnapshot: accountActionRepo.AccountActionStatusSnapshot
 ): Promise<AccountActionLimitStatus> {
   const normalizedActionCode = actionCode.trim()
   if (!normalizedActionCode) return { ok: true }
@@ -5157,7 +5160,6 @@ export async function getAccountRateLimitStatus(
   const dailyLimit = limitConfig?.dailyLimit && limitConfig.dailyLimit > 0 ? limitConfig.dailyLimit : 30
   const rateLimitCount = limitConfig?.rateLimitCount && limitConfig.rateLimitCount > 0 ? limitConfig.rateLimitCount : 9
   const rateLimitMinutes = limitConfig?.rateLimitMinutes && limitConfig.rateLimitMinutes > 0 ? limitConfig.rateLimitMinutes : 65
-  const actionSnapshot = await accountActionRepo.getAccountActionStatusSnapshot(accountId, normalizedActionCode)
   const actionStatus = actionSnapshot.status
   const dbNowMs = new Date(actionSnapshot.clock.dbNow).getTime()
 
@@ -5234,6 +5236,30 @@ export async function getAccountRateLimitStatus(
   }
 }
 
+export async function getAccountRateLimitStatus(
+  accountId: number,
+  actionCode: string,
+  actionName: string,
+  limitConfig?: ActionLimitConfig
+): Promise<AccountActionLimitStatus> {
+  const normalizedActionCode = actionCode.trim()
+  if (!normalizedActionCode) return { ok: true }
+  const actionSnapshot = await accountActionRepo.getAccountActionStatusSnapshot(accountId, normalizedActionCode)
+  return resolveAccountRateLimitStatus(accountId, normalizedActionCode, actionName, limitConfig, actionSnapshot)
+}
+
+export async function peekAccountRateLimitStatus(
+  accountId: number,
+  actionCode: string,
+  actionName: string,
+  limitConfig?: ActionLimitConfig
+): Promise<AccountActionLimitStatus> {
+  const normalizedActionCode = actionCode.trim()
+  if (!normalizedActionCode) return { ok: true }
+  const actionSnapshot = await accountActionRepo.peekAccountActionStatusSnapshot(accountId, normalizedActionCode)
+  return resolveAccountRateLimitStatus(accountId, normalizedActionCode, actionName, limitConfig, actionSnapshot)
+}
+
 function buildAccountActionDisabledStatus(
   actionStatus: AutoAccountActionStatus,
   actionCode: string,
@@ -5270,6 +5296,27 @@ export async function getAccountActionDisabledStatus(
   if (!normalizedActionCode) return { ok: true }
 
   const actionSnapshot = await accountActionRepo.getAccountActionStatusSnapshot(accountId, normalizedActionCode)
+  return buildAccountActionDisabledStatus(
+    actionSnapshot.status,
+    normalizedActionCode,
+    actionName,
+    new Date(actionSnapshot.clock.dbNow).getTime()
+  ) || {
+    ok: true,
+    actionCode: normalizedActionCode,
+    actionName
+  }
+}
+
+export async function peekAccountActionDisabledStatus(
+  accountId: number,
+  actionCode: string,
+  actionName: string
+): Promise<AccountActionLimitStatus> {
+  const normalizedActionCode = actionCode.trim()
+  if (!normalizedActionCode) return { ok: true }
+
+  const actionSnapshot = await accountActionRepo.peekAccountActionStatusSnapshot(accountId, normalizedActionCode)
   return buildAccountActionDisabledStatus(
     actionSnapshot.status,
     normalizedActionCode,
