@@ -6,6 +6,7 @@ import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
 import { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 import { EmailRuntimeService } from '../../services/emailRuntimeService'
 import { ZaloServerClient } from '../../services/zaloServerClient'
+import { ZaloChatApiClient } from '../../services/zaloChatApiClient'
 import {
   ensureCurrentUserCanUseAccountPlatform,
   ensureCurrentUserCanUseZaloAccountType,
@@ -79,7 +80,8 @@ export function registerAccountHandlers(
   emailRuntime?: EmailRuntimeService,
   mainWindow?: BrowserWindow,
   zaloRealtimeRefresh?: ZaloRealtimeRefreshController,
-  zaloServerClient?: ZaloServerClient
+  zaloServerClient?: ZaloServerClient,
+  zaloChatApiClient?: ZaloChatApiClient
 ): AccountZaloOperationController {
   type PreviousZaloAccountStatus = 'chờ xử lý' | 'tạm dừng'
   const localQrClaims = new Map<number, PreviousZaloAccountStatus>()
@@ -99,7 +101,12 @@ export function registerAccountHandlers(
     account.isZaloServer ? 'server' : 'desktop'
   )
 
-  const shouldRouteZaloAccountToServer = (account: AutoAccount): boolean => account.isZaloServer
+  const shouldRouteZaloAccountToChatApi = (account: AutoAccount): boolean => (
+    account.isZaloServer && zaloChatApiClient?.isEnabled() === true
+  )
+  const shouldRouteZaloAccountToServer = (account: AutoAccount): boolean => (
+    account.isZaloServer && !shouldRouteZaloAccountToChatApi(account)
+  )
   const shouldRouteZaloAccountCleanupToServer = shouldRouteZaloAccountToServer
 
   const trackLocalOperation = <T>(operation: Promise<T>): Promise<T> => {
@@ -279,9 +286,9 @@ export function registerAccountHandlers(
     let zaloTypeChangeReleased = false
     try {
       if (changesZaloType) {
-        if (existing!.isZaloServer) {
+        if (shouldRouteZaloAccountToServer(existing!)) {
           void zaloServerClient?.executeCommand('zalo.runtime.invalidate', id).catch(() => {})
-        } else {
+        } else if (!shouldRouteZaloAccountToChatApi(existing!)) {
           zaloRuntime?.invalidateAccount(id)
         }
         if (crossesZaloWebBoundary) await zaloRuntime!.resetAccountTypeSession(id)
@@ -349,7 +356,7 @@ export function registerAccountHandlers(
     }
     if (existing?.flatformType === 'zalo' && shouldRouteZaloAccountCleanupToServer(existing)) {
       void zaloServerClient?.executeCommand('zalo.runtime.invalidate', id).catch(() => {})
-    } else {
+    } else if (!existing || !shouldRouteZaloAccountToChatApi(existing)) {
       zaloRuntime?.invalidateAccount(id)
       zaloRuntime?.detachWebSession(id)
     }
@@ -432,6 +439,9 @@ export function registerAccountHandlers(
     if (account.isZaloShowWeb) {
       return { success: false, accountId, reason: 'Hãy mở tab Zalo Web để đăng nhập' }
     }
+    if (shouldRouteZaloAccountToChatApi(account)) {
+      return zaloChatApiClient!.startLoginQr(accountId)
+    }
     if (shouldRouteZaloAccountToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.loginQr.start', accountId)
         ?? { success: false, accountId, reason: 'Chưa kết nối akaAgent Zalo Server' }
@@ -471,6 +481,9 @@ export function registerAccountHandlers(
     if (!account || account.flatformType !== 'zalo') {
       throw new Error('Không tìm thấy tài khoản Zalo thuộc quyền quản lý của bạn')
     }
+    if (shouldRouteZaloAccountToChatApi(account)) {
+      return zaloChatApiClient!.cancelLoginQr(accountId)
+    }
     if (shouldRouteZaloAccountCleanupToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.loginQr.cancel', accountId)
         ?? { success: false, accountId, reason: 'Chưa kết nối akaAgent Zalo Server' }
@@ -489,6 +502,9 @@ export function registerAccountHandlers(
   ipcMain.handle(IPC_EVENTS.ZALO_CHECK_SESSION, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
     const account = await requireZaloAccount(accountId)
+    if (shouldRouteZaloAccountToChatApi(account)) {
+      return zaloChatApiClient!.checkSession(accountId)
+    }
     if (shouldRouteZaloAccountToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.session.check', accountId)
         ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }
@@ -503,6 +519,11 @@ export function registerAccountHandlers(
   ipcMain.handle(IPC_EVENTS.ZALO_LOGOUT, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
     const account = await requireZaloAccount(accountId)
+    if (shouldRouteZaloAccountToChatApi(account)) {
+      const result = await zaloChatApiClient!.logout(accountId)
+      sendAccountStatusUpdated(mainWindow)
+      return result
+    }
     if (shouldRouteZaloAccountToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.logout', accountId)
         ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }

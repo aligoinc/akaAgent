@@ -896,7 +896,12 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         }
         const result = await window.electronAPI.logoutZalo(account.id)
         await loadAccounts()
-        useUiStore.getState().showAlert(result.reason || 'Đã xoá session Zalo khỏi tài khoản', 'success')
+        useUiStore.getState().showAlert(
+          result.reason || (result.success
+            ? 'Đã xoá session Zalo khỏi tài khoản'
+            : 'Không thể đăng xuất Zalo'),
+          result.success ? 'success' : 'error'
+        )
       },
       { title: 'Đăng xuất Zalo', confirmText: 'Đăng xuất', variant: 'danger' }
     )

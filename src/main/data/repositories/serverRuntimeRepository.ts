@@ -16,6 +16,11 @@ import {
 const client = () => getSupabaseClient()
 const PAGE_SIZE = 1000
 const ID_CHUNK_SIZE = 100
+const ZALO_CHAT_API_ORGANIZATION_ID = 1
+
+function isZaloChatApiOrganization(organizationId: number): boolean {
+  return organizationId === ZALO_CHAT_API_ORGANIZATION_ID
+}
 
 interface ServerStaffRow {
   id: number
@@ -357,7 +362,10 @@ export async function loadActiveZaloServerUser(
   const normalizedStaffId = requirePositiveSafeInteger(staffId, 'staff_id')
   const page = await loadDiscoveryPage(normalizedStaffId - 1, 1)
   const user = page.users[0]
-  return user?.staffId === normalizedStaffId ? user : null
+  return user?.staffId === normalizedStaffId &&
+    !isZaloChatApiOrganization(user.organizationId)
+    ? user
+    : null
 }
 
 /**
@@ -380,6 +388,7 @@ export async function listActiveZaloServerUsers(): Promise<ZaloServerRuntimeUser
         )
       }
       seenStaffIds.add(user.staffId)
+      if (isZaloChatApiOrganization(user.organizationId)) continue
       users.push(user)
     }
 
@@ -456,6 +465,7 @@ export async function hasLiveZaloServerRealtimeCapability(
     !Number.isSafeInteger(normalizedStaffId) || normalizedStaffId <= 0 ||
     !Number.isSafeInteger(normalizedOrganizationId) || normalizedOrganizationId <= 0
   ) return false
+  if (isZaloChatApiOrganization(normalizedOrganizationId)) return false
 
   const { data, error } = await client()
     .from('org_staff')
