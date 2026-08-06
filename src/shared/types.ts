@@ -868,15 +868,15 @@ export const DATA_GROUP_PORTABLE_ACTION_IDS = [
   'facebook_find_data_search',
   'facebook_comment_seeding',
   'facebook_comment_seeding_post',
+  'facebook_message_friend',
+  'facebook_group_invite',
+  'facebook_page_post',
   'zalo_message_phone',
   'zalo_join_group_link',
   'email_send'
 ] as const
 
 export const DATA_GROUP_ACCOUNT_BOUND_ACTION_IDS = [
-  'facebook_message_friend',
-  'facebook_group_invite',
-  'facebook_page_post',
   'zalo_message_friend',
   'zalo_message_group_member',
   'zalo_message_remarketing_customer',
@@ -1826,6 +1826,21 @@ export interface BindCampaignDataGroupSourceRequest {
   bundleId?: number | null
 }
 
+export interface DataGroupCampaignTargetPreviewRequest {
+  groupId: number
+  actionId: string
+  accountIds: number[]
+}
+
+export interface DataGroupCampaignTargetPreview {
+  accountId: number
+  activeMembershipCount: number
+  compatibleMembershipCount: number
+  validTargetCount: number
+  incompatibleMembershipCount: number
+  duplicateTargetCount: number
+}
+
 export interface SnapshotDataGroupToCampaignRequest {
   requestId: string
   campaignId: number
@@ -2773,6 +2788,7 @@ export const IPC_EVENTS = {
   DATA_GROUPS_MOVE_MEMBERS: 'data-groups:move-members',
   DATA_GROUPS_EXPORT_MEMBERS: 'data-groups:export-members',
   DATA_TYPE_CATEGORIES_LIST: 'data-types:list',
+  CAMPAIGN_DATA_GROUP_TARGETS_PREVIEW: 'campaign:data-group-targets:preview',
   CAMPAIGN_DATA_GROUP_SOURCE_BIND: 'campaign:data-group-source:bind',
   CAMPAIGN_DATA_GROUP_SOURCE_PREFLIGHT_CHANGE: 'campaign:data-group-source:preflight-change',
   CAMPAIGN_DATA_GROUP_SOURCE_GET: 'campaign:data-group-source:get',

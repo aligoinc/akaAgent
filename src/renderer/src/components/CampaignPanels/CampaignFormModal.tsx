@@ -23,6 +23,7 @@ import {
   CampaignMediaSnapshot,
   CampaignExtraSettings,
   DataGroup,
+  DataGroupCampaignTargetPreview,
   FindDataOutputKind,
   FindDataTargetDataGroup,
   ContentTemplate,
@@ -2209,6 +2210,8 @@ export default function CampaignFormModal({
   })
   const [selectedDataGroupName, setSelectedDataGroupName] = useState('')
   const [selectedDataGroup, setSelectedDataGroup] = useState<DataGroup | null>(null)
+  const [dataGroupTargetPreview, setDataGroupTargetPreview] = useState<DataGroupCampaignTargetPreview[]>([])
+  const [dataGroupTargetPreviewStatus, setDataGroupTargetPreviewStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [campaignPickerRefreshing, setCampaignPickerRefreshing] = useState(false)
   const [contentTemplates, setContentTemplates] = useState<ContentTemplate[]>([])
   const [contentTemplateGroups, setContentTemplateGroups] = useState<ContentTemplateGroup[]>([])
@@ -2662,6 +2665,7 @@ export default function CampaignFormModal({
     return accounts.find(account => account.id === formData.accountIds[0]) || null
   }, [accounts, formData.accountIds])
   const campaignNameAccountIdsKey = formData.accountIds.join(',')
+  const dataGroupPreviewAccountIdsKey = formData.accountIds.join(',')
   const campaignNameCurrentDateLabel = getVietnamDayMonthLabel()
   const selectableAccountGroups = useMemo(
     () => accountGroups.filter(group => !actionPlatformForAccountSelection || normalizeCampaignActionPlatform(group.flatformType) === actionPlatformForAccountSelection),
@@ -3007,6 +3011,75 @@ export default function CampaignFormModal({
     void hydrateSelectedGroupName()
     return () => { disposed = true }
   }, [formData.dataGroupId])
+
+  useEffect(() => {
+    const groupId = Number(formData.dataGroupId)
+    const accountIds = Array.from(new Set(formData.accountIds))
+    if (
+      !isDataGroupSource
+      || !Number.isSafeInteger(groupId)
+      || groupId <= 0
+      || !formData.actionId
+      || accountIds.length === 0
+    ) {
+      setDataGroupTargetPreview([])
+      setDataGroupTargetPreviewStatus('idle')
+      return
+    }
+
+    let disposed = false
+    setDataGroupTargetPreview([])
+    setDataGroupTargetPreviewStatus('loading')
+    const loadPreview = async () => {
+      try {
+        const preview = await window.electronAPI.previewDataGroupCampaignTargets({
+          groupId,
+          actionId: formData.actionId,
+          accountIds
+        })
+        if (disposed) return
+        if (preview.length !== accountIds.length) {
+          throw new Error('Data Group target preview did not return every selected account.')
+        }
+        setDataGroupTargetPreview(preview)
+        setDataGroupTargetPreviewStatus('ready')
+      } catch (error) {
+        console.error('Failed to preview valid Data Group campaign targets:', error)
+        if (!disposed) {
+          setDataGroupTargetPreview([])
+          setDataGroupTargetPreviewStatus('error')
+        }
+      }
+    }
+
+    void loadPreview()
+    return () => { disposed = true }
+  }, [dataGroupPreviewAccountIdsKey, formData.actionId, formData.dataGroupId, isDataGroupSource])
+
+  const dataGroupTargetPreviewLabel = useMemo(() => {
+    if (dataGroupTargetPreviewStatus === 'loading') return 'Đang tính data hợp lệ...'
+    if (dataGroupTargetPreviewStatus === 'error') {
+      const totalLabel = selectedDataGroup
+        ? `${selectedDataGroup.activeMembershipCount.toLocaleString('vi-VN')} data trong nhóm · `
+        : ''
+      return `${totalLabel}Chưa tính được số data hợp lệ`
+    }
+    if (formData.accountIds.length === 0) return 'Chọn tài khoản để tính data hợp lệ'
+    if (dataGroupTargetPreviewStatus !== 'ready' || dataGroupTargetPreview.length === 0) {
+      return 'Chưa tính được số data hợp lệ'
+    }
+
+    const counts = dataGroupTargetPreview.map(item => item.validTargetCount)
+    const minimum = Math.min(...counts)
+    const maximum = Math.max(...counts)
+    if (counts.length === 1) {
+      return `${minimum.toLocaleString('vi-VN')} data hợp lệ cho chiến dịch`
+    }
+    if (minimum === maximum) {
+      return `${minimum.toLocaleString('vi-VN')} data hợp lệ cho mỗi chiến dịch`
+    }
+    return `${minimum.toLocaleString('vi-VN')}–${maximum.toLocaleString('vi-VN')} data hợp lệ cho mỗi chiến dịch`
+  }, [dataGroupTargetPreview, dataGroupTargetPreviewStatus, formData.accountIds.length, selectedDataGroup])
 
   useEffect(() => {
     if (
@@ -7540,7 +7613,7 @@ export default function CampaignFormModal({
   }
 
   const onFriendsSelected = (contacts: AutoAccountContact[]) => {
-    const personContacts = contacts.filter(c => c.contactType === 'person' && (!isFacebookGroupInviteCampaign || c.isFriend === true))
+    const personContacts = contacts.filter(c => c.contactType === 'person')
     const newRows: Partial<CampaignInputData>[] = personContacts.map(c => ({
       name: c.name,
       uid: c.url || c.uid || '',
@@ -7550,7 +7623,7 @@ export default function CampaignFormModal({
       status: 'chờ xử lý'
     }))
     if (newRows.length === 0) {
-      showAlert(isFacebookGroupInviteCampaign ? 'Vui lòng chọn bạn bè Facebook đã quét.' : 'Không có data hợp lệ để thêm vào chiến dịch.', 'error')
+      showAlert('Không có data hợp lệ để thêm vào chiến dịch.', 'error')
       return
     }
     const addedCount = appendUniqueDetails(newRows)
@@ -15192,7 +15265,7 @@ export default function CampaignFormModal({
                         <span className="campaign-data-source-radio" aria-hidden="true" />
                         <span>
                           <strong>Chọn nhóm data để chạy</strong>
-                          <small>Chạy trực tiếp theo nhóm data đã chọn, không cần copy vào danh sách.</small>
+                          <small>Hệ thống tự lấy data hợp lệ theo hành động và tài khoản đã chọn.</small>
                         </span>
                       </label>
                     </div>
@@ -15237,7 +15310,7 @@ export default function CampaignFormModal({
                             <span className="campaign-data-group-control-copy">
                               <strong>{selectedDataGroup.name}</strong>
                               <small>
-                                {selectedDataGroup.activeMembershipCount.toLocaleString('vi-VN')} data
+                                {dataGroupTargetPreviewLabel}
                                 {' · '}
                                 {getDataGroupSemanticTypeName(selectedDataGroup)}
                               </small>

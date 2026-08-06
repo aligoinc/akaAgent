@@ -6,6 +6,8 @@ import {
   CreateCampaignBundleRequest,
   CreateDataGroupRequest,
   DataGroup,
+  DataGroupCampaignTargetPreview,
+  DataGroupCampaignTargetPreviewRequest,
   DataGroupIngestRequest,
   DataGroupIngestResult,
   DataGroupLatestIngestStats,
@@ -535,6 +537,26 @@ export async function bindCampaignDataGroupSource(
   })
   if (error) throwRpcError('Failed to bind campaign data group source', error)
   return mapSource(unwrapRpcRow(data))
+}
+
+export async function previewDataGroupCampaignTargets(
+  request: DataGroupCampaignTargetPreviewRequest
+): Promise<DataGroupCampaignTargetPreview[]> {
+  const { data, error } = await client().rpc('aka_agent_preview_data_group_campaign_targets', {
+    ...identityParams(),
+    p_group_id: request.groupId,
+    p_action_id: request.actionId,
+    p_account_ids: request.accountIds
+  })
+  if (error) throwRpcError('Failed to preview campaign data group targets', error)
+  return unwrapRpcRows(data).map(row => ({
+    accountId: asNumber(row.account_id),
+    activeMembershipCount: asNumber(row.active_membership_count),
+    compatibleMembershipCount: asNumber(row.compatible_membership_count),
+    validTargetCount: asNumber(row.valid_target_count),
+    incompatibleMembershipCount: asNumber(row.incompatible_membership_count),
+    duplicateTargetCount: asNumber(row.duplicate_target_count)
+  }))
 }
 
 export async function snapshotDataGroupToCampaign(

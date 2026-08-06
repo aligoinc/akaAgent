@@ -1930,8 +1930,9 @@ BEGIN
     RAISE EXCEPTION 'v219_smoke: Control delete rejected SMS: %', v_result;
   END IF;
 
-  -- Service-role Data Group implementations own exact Server Zalo. The
-  -- credentialed overloads intentionally switch to desktop-local ownership.
+  -- Service-role Data Group implementations own exact Server Zalo. The v224
+  -- tenant wrappers route UI provisioning by account subtype while these
+  -- service-only core ownership checks remain unchanged.
   INSERT INTO public.auto_account_contact_groups (
     account_id, contact_type, name, purpose,
     staff_id, organization_id, is_delete
@@ -2012,8 +2013,9 @@ BEGIN
     v_server_data_group_campaign_id, v_data_group_id,
     NULL::text, NULL::text
   );
-  IF COALESCE(v_data_group_preflight.allowed, true) THEN
-    RAISE EXCEPTION 'v219_smoke: desktop Data Group preflight accepted Server Zalo';
+  IF NOT COALESCE(v_data_group_preflight.allowed, false) THEN
+    RAISE EXCEPTION 'v219_smoke: tenant Data Group preflight rejected Server Zalo: %',
+      row_to_json(v_data_group_preflight);
   END IF;
 
   v_rejected := false;
@@ -2077,8 +2079,8 @@ BEGIN
   IF public.aka_agent_get_campaign_data_group_source(
     v_staff_id, v_organization_id, v_server_data_group_campaign_id,
     NULL::text, NULL::text
-  ) IS NOT NULL THEN
-    RAISE EXCEPTION 'v219_smoke: desktop Data Group get exposed Server Zalo';
+  ) IS NULL THEN
+    RAISE EXCEPTION 'v219_smoke: tenant Data Group get hid Server Zalo';
   END IF;
   PERFORM public.aka_agent_stop_campaign_data_group_source(
     v_staff_id, v_organization_id, v_server_data_group_campaign_id,
