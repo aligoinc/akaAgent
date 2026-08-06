@@ -2093,7 +2093,7 @@ function AddDataToCurrentCampaignModal({
     let nextRows: Partial<CampaignInputData>[] = []
     if (dataScanPicker.mode === 'friends' || dataScanPicker.mode === 'users') {
       nextRows = contacts
-        .filter(contact => contact.contactType === 'person' && (campaign.actionId !== FACEBOOK_GROUP_INVITE_ACTION_ID || contact.isFriend === true))
+        .filter(contact => contact.contactType === 'person')
         .map(contact => ({
           name: contact.name,
           uid: dataScanPicker.action.startsWith('zalo_') ? (contact.uid || contact.url || '') : (contact.url || contact.uid || ''),

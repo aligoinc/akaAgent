@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
+import { AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import { ZaloServerClient } from '../../services/zaloServerClient'
@@ -301,6 +301,13 @@ export function registerAccountContactHandlers(
   ipcMain.handle(
     IPC_EVENTS.DATA_GROUPS_MOVE_MEMBERS,
     async (_, request: MoveDataGroupMembersRequest) => supabase.moveDataGroupMembers(request)
+  )
+
+  ipcMain.handle(
+    IPC_EVENTS.CAMPAIGN_DATA_GROUP_TARGETS_PREVIEW,
+    async (_, request: DataGroupCampaignTargetPreviewRequest) => (
+      supabase.previewDataGroupCampaignTargets(request)
+    )
   )
 
   ipcMain.handle(

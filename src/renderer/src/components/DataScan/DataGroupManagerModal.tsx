@@ -1753,7 +1753,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                             </button>
                           </div>
                           <div className="data-group-manager-group-meta">
-                            <span>{formatCount(group.activeMembershipCount)} data</span>
+                            <span>
+                              {formatCount(group.activeMembershipCount)} data{selectionMode && compatibleActionId ? ' trong nhóm' : ''}
+                            </span>
                             <span className="data-group-manager-type-badge">{getGroupDataTypeName(group)}</span>
                           </div>
                         </>
