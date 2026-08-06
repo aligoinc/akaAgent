@@ -1,5 +1,5 @@
 import { app, ipcMain, BrowserWindow, powerMonitor } from 'electron'
-import { AuthEntitlements, AuthUser, IPC_EVENTS } from '../../shared/types'
+import { AuthEntitlements, AuthUser, IPC_EVENTS, ZaloLoginQrEvent } from '../../shared/types'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { PageControllerRegistry } from '../v2/runtime/pageController'
 import { SupabaseService } from '../services/supabase'
@@ -10,6 +10,7 @@ import { ZaloRuntimeService } from '../services/zaloRuntimeService'
 import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupCampaignManager'
 import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { ZaloServerClient } from '../services/zaloServerClient'
+import { ZaloChatApiClient } from '../services/zaloChatApiClient'
 import { DesktopZaloHandoffStore } from '../services/desktopZaloHandoffStore'
 import { DailyMaintenanceCoordinator } from '../services/dailyMaintenanceCoordinator'
 import { AutomationProcessor } from '../services/automationProcessor'
@@ -138,20 +139,35 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   let runtimeCredentials: { username: string; password: string } | null = null
   let forceFullDesktopMaintenance = false
   let zaloRealtimeGroupManager: ZaloRealtimeGroupCampaignManager | null = null
+  const emitZaloLoginQrEvent = (event: ZaloLoginQrEvent): void => {
+    try {
+      mainWindow.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, event)
+      if (event.status === 'success' || event.status === 'error' || event.status === 'cancelled') {
+        mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+        zaloRealtimeGroupManager?.refreshSoon(`zalo-login-${event.status}`)
+      }
+    } catch {
+      // Window may be closed
+    }
+  }
+  const zaloChatApiClient = new ZaloChatApiClient(emitZaloLoginQrEvent)
+  const startZaloRemoteClients = (user: AuthUser, username: string, password: string): void => {
+    if (user.organizationId === 1) {
+      zaloServerClient.stop()
+      zaloChatApiClient.start(user, username, password)
+      return
+    }
+    zaloChatApiClient.stop()
+    zaloServerClient.start(user, username, password)
+  }
+  const stopZaloRemoteClients = (): void => {
+    zaloServerClient.stop()
+    zaloChatApiClient.stop()
+  }
   const zaloRuntime = new ZaloRuntimeService(
     supabase,
     (id) => supabase.getProxy(id),
-    (event) => {
-      try {
-        mainWindow.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, event)
-        if (event.status === 'success' || event.status === 'error' || event.status === 'cancelled') {
-          mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
-          zaloRealtimeGroupManager?.refreshSoon(`zalo-login-${event.status}`)
-        }
-      } catch {
-        // Window may be closed
-      }
-    },
+    emitZaloLoginQrEvent,
     () => {
       try { mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
     }
@@ -377,7 +393,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     contactLoader.blockZaloRuntimeForRestart()
     accountPollerController?.blockZaloRuntime()
     zaloRealtimeGroupManager?.stop()
-    zaloServerClient.stop()
+    stopZaloRemoteClients()
 
     const activation = (async () => {
       if (!activationUser) return
@@ -614,7 +630,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       campaignScheduler.stop()
       await automationProcessor.stop()
       accountPollerController?.blockZaloRuntime()
-      zaloServerClient.stop()
+      stopZaloRemoteClients()
       zaloRealtimeGroupManager?.stop()
       await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
       await restartRequiredActivation?.catch(() => {})
@@ -674,7 +690,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       )) {
         setCurrentUser(updatedUser)
         if (runtimeCredentials) {
-          zaloServerClient.start(updatedUser, runtimeCredentials.username, runtimeCredentials.password)
+          startZaloRemoteClients(updatedUser, runtimeCredentials.username, runtimeCredentials.password)
         }
         syncZaloBackgroundForCurrentUser(`${reason}-entitlement-refresh`)
         notifyRendererUserUpdated(updatedUser)
@@ -727,7 +743,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     zaloRealtimeGroupManager?.stop()
     zaloRuntime.clearAll()
-    zaloServerClient.stop()
+    stopZaloRemoteClients()
   }
 
   const beginLocalZaloHandoff = (): number => {
@@ -979,7 +995,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         campaignScheduler.stop()
         await automationProcessor.stop()
         accountPollerController?.blockZaloRuntime()
-        zaloServerClient.stop()
+        stopZaloRemoteClients()
         zaloRealtimeGroupManager?.stop()
         await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
         await restartRequiredActivation?.catch(() => {})
@@ -1079,7 +1095,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         zaloRuntime.resetWarmSessionClaims()
         accountZaloOperations?.resetClaims()
         accountPollerController?.resetZaloClaims()
-        zaloServerClient.start(user, username, password)
+        startZaloRemoteClients(user, username, password)
         syncZaloBackgroundForCurrentUser('login')
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
         await automationProcessor.start()
@@ -1090,7 +1106,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         campaignScheduler.stop()
         await automationProcessor.stop().catch(() => {})
         accountPollerController?.blockZaloRuntime()
-        zaloServerClient.stop()
+        stopZaloRemoteClients()
         zaloRealtimeGroupManager?.stop()
         await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait()).catch(() => {})
         const cleanupIdle = await Promise.all([
@@ -1120,7 +1136,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       campaignScheduler.stop()
       await automationProcessor.stop()
       accountPollerController?.blockZaloRuntime()
-      zaloServerClient.stop()
+      stopZaloRemoteClients()
       zaloRealtimeGroupManager?.stop()
       await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
       await restartRequiredActivation?.catch(() => {})
@@ -1134,7 +1150,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!runtimeCredentials) return
       runtimeCredentials = { ...runtimeCredentials, password: newPassword }
       const user = getCurrentUser()
-      if (user) zaloServerClient.start(user, runtimeCredentials.username, newPassword)
+      if (user) startZaloRemoteClients(user, runtimeCredentials.username, newPassword)
     }
   })
   registerUpdateHandlers(mainWindow)
@@ -1202,7 +1218,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     emailRuntime,
     mainWindow,
     zaloRealtimeGroupManager || undefined,
-    zaloServerClient
+    zaloServerClient,
+    zaloChatApiClient
   )
   registerAccountContactHandlers(supabase, contactLoader, zaloServerClient)
   registerV2Handlers(mainWindow, pageRegistry)
