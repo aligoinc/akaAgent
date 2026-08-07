@@ -296,6 +296,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Migration RPC overwrite**: trước khi dùng `CREATE OR REPLACE FUNCTION`, phải lấy nội dung của đúng function signature đang chạy trong DB (ví dụ bằng `pg_get_functiondef`) và kiểm tra các patch trước đó; không copy body từ một migration cũ vì có thể làm mất những thay đổi được áp dụng sau migration đó.
 - **Error action-disable policy**: không hard-code thời gian nghỉ theo từng `error_code` trong scheduler. Thêm lỗi tương tự bằng row `auto_error` với `disable_action_codes` + `disable_action_mode`; bỏ mode sẽ fallback `fixed_minutes`, và `fixed_minutes` thiếu số phút sẽ khóa action vô thời hạn.
 - **App notification bar**: không tạo `auto_app_notifications`; chỉ dùng `auto_system_settings.app.notification`. Poll interval 60 phút không có nghĩa thay đổi DB luôn chờ 60 phút vì focus/visibility vẫn refresh ngay. Cảnh báo offline là state local ưu tiên cao hơn DB và phải tự khôi phục notification DB khi event `online` chạy.
 - **Loop iterations**: scheduler `logMilestonesV2` đọc `result.steps` từ engine. Engine v2 maintain `allSteps[]` (mỗi loop iteration 1 row riêng) thay vì snapshot `nodeStates`. Khi đọc per-iteration data, đọc `s.output` (block return value), KHÔNG `s.input` (chỉ là config + parents trực tiếp).
