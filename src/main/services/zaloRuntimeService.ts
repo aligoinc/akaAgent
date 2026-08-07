@@ -113,6 +113,7 @@ type ZaloRawForwardMessageApi = API & {
 }
 
 export type ZaloPhoneSearchReqSrc = 32 | 40
+type ZaloPhoneSearchLimitScope = 'hour' | 'day'
 
 export interface ZaloPhoneSearchAttempt {
   reqSrc: ZaloPhoneSearchReqSrc
@@ -382,8 +383,7 @@ const ZALO_LISTENER_REFRESH_AFTER_MS = 30 * 60 * 1000
 const ZALO_MESSAGE_SEND_TIMEOUT_MS = 90_000
 const ZALO_FILE_MESSAGE_SEND_TIMEOUT_MS = 180_000
 const ZALO_ATTACHMENT_EXTENSIONS_WITHOUT_UPLOAD_CALLBACK = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
-const ZALO_PHONE_SEARCH_LIMIT_CODES = new Set(['312', '313', '304', '221'])
-const ZALO_PHONE_SEARCH_DAILY_LIMIT_CODES = new Set(['313', '304'])
+const ZALO_PHONE_SEARCH_ACTION_CODE = 'zalo_find_phone_user'
 
 export class ZaloRuntimeService {
   private activeQrLogins = new Map<number, ActiveQrLogin>()
@@ -1274,12 +1274,17 @@ export class ZaloRuntimeService {
     const api = await this.ensureApi(accountId)
     const attempts: ZaloPhoneSearchAttempt[] = []
     let firstError: unknown = null
+    let firstLimitScope: ZaloPhoneSearchLimitScope | null = null
 
     try {
       const user = await this.findUserByPhoneWithReqSrc(api, phone, 32)
       return { user: normalizeFoundUser(user), attempts }
     } catch (err) {
-      if (!this.shouldFallbackZaloPhoneSearch(err)) throw err
+      const errorCode = this.getApiErrorCode(err)
+      if (errorCode) {
+        firstLimitScope = await this.resolveZaloPhoneSearchLimitScope(errorCode)
+        if (!firstLimitScope) throw err
+      }
       firstError = err
       attempts.push(this.buildZaloPhoneSearchErrorAttempt(32, err))
       console.warn('[ZaloRuntime] findUser reqSrc=32 failed, retrying with reqSrc=40', {
@@ -1295,7 +1300,16 @@ export class ZaloRuntimeService {
       return { user: normalizeFoundUser(user), attempts }
     } catch (fallbackError) {
       attempts.push(this.buildZaloPhoneSearchErrorAttempt(40, fallbackError))
-      const selectedError = this.selectZaloPhoneSearchError(firstError, fallbackError)
+      const fallbackErrorCode = this.getApiErrorCode(fallbackError)
+      const fallbackLimitScope = firstLimitScope && fallbackErrorCode
+        ? await this.resolveZaloPhoneSearchLimitScope(fallbackErrorCode)
+        : null
+      const selectedError = this.selectZaloPhoneSearchError(
+        firstError,
+        firstLimitScope,
+        fallbackError,
+        fallbackLimitScope
+      )
       throw this.attachZaloPhoneSearchAttempts(selectedError, attempts)
     }
   }
@@ -1339,27 +1353,38 @@ export class ZaloRuntimeService {
     return findUser({ phone, reqSrc })
   }
 
-  private shouldFallbackZaloPhoneSearch(error: unknown): boolean {
-    const errorCode = this.getApiErrorCode(error)
-    return !errorCode || ZALO_PHONE_SEARCH_LIMIT_CODES.has(errorCode)
+  private async resolveZaloPhoneSearchLimitScope(
+    errorCode: string
+  ): Promise<ZaloPhoneSearchLimitScope | null> {
+    try {
+      const policy = await this.supabase.getZaloErrorPolicyByCode(errorCode)
+      if (!policy?.disableActionCodes.includes(ZALO_PHONE_SEARCH_ACTION_CODE)) return null
+      if (policy.disableActionMode === 'end_of_day') return 'day'
+      if (
+        policy.disableActionMode === 'fixed_minutes'
+        && Number(policy.timeDisableActions) > 0
+      ) {
+        return 'hour'
+      }
+      return null
+    } catch (err) {
+      console.warn('[ZaloRuntime] Failed to resolve findUser limit policy', {
+        errorCode,
+        message: err instanceof Error ? err.message : String(err)
+      })
+      return null
+    }
   }
 
-  private isZaloPhoneSearchLimit(error: unknown): boolean {
-    return ZALO_PHONE_SEARCH_LIMIT_CODES.has(this.getApiErrorCode(error))
-  }
-
-  private isZaloPhoneSearchDailyLimit(error: unknown): boolean {
-    return ZALO_PHONE_SEARCH_DAILY_LIMIT_CODES.has(this.getApiErrorCode(error))
-  }
-
-  private selectZaloPhoneSearchError(firstError: unknown, fallbackError: unknown): unknown {
-    if (!this.isZaloPhoneSearchLimit(firstError)) return fallbackError
+  private selectZaloPhoneSearchError(
+    firstError: unknown,
+    firstLimitScope: ZaloPhoneSearchLimitScope | null,
+    fallbackError: unknown,
+    fallbackLimitScope: ZaloPhoneSearchLimitScope | null
+  ): unknown {
+    if (!firstLimitScope) return fallbackError
     if (!this.getApiErrorCode(fallbackError)) return firstError
-    if (
-      this.isZaloPhoneSearchLimit(fallbackError)
-      && this.isZaloPhoneSearchDailyLimit(fallbackError)
-      && !this.isZaloPhoneSearchDailyLimit(firstError)
-    ) {
+    if (firstLimitScope === 'hour' && fallbackLimitScope === 'day') {
       return firstError
     }
     return fallbackError
