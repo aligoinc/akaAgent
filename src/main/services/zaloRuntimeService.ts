@@ -112,6 +112,30 @@ type ZaloRawForwardMessageApi = API & {
   akaForwardMessageBatch?: (payload: ZaloRawForwardMessagePayload) => Promise<unknown>
 }
 
+export type ZaloPhoneSearchReqSrc = 32 | 40
+type ZaloPhoneSearchLimitScope = 'hour' | 'day'
+
+export interface ZaloPhoneSearchAttempt {
+  reqSrc: ZaloPhoneSearchReqSrc
+  outcome: 'success' | 'error'
+  errorCode?: string
+  errorMessage?: string
+}
+
+export interface ZaloPhoneSearchResult {
+  user: ZaloFoundUser | null
+  attempts: ZaloPhoneSearchAttempt[]
+}
+
+interface ZaloPhoneSearchRequest {
+  phone: string
+  reqSrc: ZaloPhoneSearchReqSrc
+}
+
+type ZaloPhoneSearchApi = API & {
+  akaFindUserByPhoneReqSrc?: (payload: ZaloPhoneSearchRequest) => Promise<UserBasic>
+}
+
 async function getZaloImageMetadata(filePath: string): Promise<ImageMetadataGetterResponse> {
   const data = await fs.readFile(filePath)
   const dimensions = getImageDimensions(data)
@@ -359,6 +383,7 @@ const ZALO_LISTENER_REFRESH_AFTER_MS = 30 * 60 * 1000
 const ZALO_MESSAGE_SEND_TIMEOUT_MS = 90_000
 const ZALO_FILE_MESSAGE_SEND_TIMEOUT_MS = 180_000
 const ZALO_ATTACHMENT_EXTENSIONS_WITHOUT_UPLOAD_CALLBACK = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
+const ZALO_PHONE_SEARCH_ACTION_CODE = 'zalo_find_phone_user'
 
 export class ZaloRuntimeService {
   private activeQrLogins = new Map<number, ActiveQrLogin>()
@@ -1245,10 +1270,151 @@ export class ZaloRuntimeService {
     }
   }
 
-  async findUserByPhone(accountId: number, phone: string): Promise<ZaloFoundUser | null> {
+  async findUserByPhone(accountId: number, phone: string): Promise<ZaloPhoneSearchResult> {
     const api = await this.ensureApi(accountId)
-    const user = await api.findUser(phone)
-    return normalizeFoundUser(user)
+    const attempts: ZaloPhoneSearchAttempt[] = []
+    let firstError: unknown = null
+    let firstLimitScope: ZaloPhoneSearchLimitScope | null = null
+
+    try {
+      const user = await this.findUserByPhoneWithReqSrc(api, phone, 32)
+      return { user: normalizeFoundUser(user), attempts }
+    } catch (err) {
+      const errorCode = this.getApiErrorCode(err)
+      if (errorCode) {
+        firstLimitScope = await this.resolveZaloPhoneSearchLimitScope(errorCode)
+        if (!firstLimitScope) throw err
+      }
+      firstError = err
+      attempts.push(this.buildZaloPhoneSearchErrorAttempt(32, err))
+      console.warn('[ZaloRuntime] findUser reqSrc=32 failed, retrying with reqSrc=40', {
+        phone,
+        errorCode: this.getApiErrorCode(err) || null,
+        message: err instanceof Error ? err.message : String(err)
+      })
+    }
+
+    try {
+      const user = await this.findUserByPhoneWithReqSrc(api, phone, 40)
+      attempts.push({ reqSrc: 40, outcome: 'success' })
+      return { user: normalizeFoundUser(user), attempts }
+    } catch (fallbackError) {
+      attempts.push(this.buildZaloPhoneSearchErrorAttempt(40, fallbackError))
+      const fallbackErrorCode = this.getApiErrorCode(fallbackError)
+      const fallbackLimitScope = firstLimitScope && fallbackErrorCode
+        ? await this.resolveZaloPhoneSearchLimitScope(fallbackErrorCode)
+        : null
+      const selectedError = this.selectZaloPhoneSearchError(
+        firstError,
+        firstLimitScope,
+        fallbackError,
+        fallbackLimitScope
+      )
+      throw this.attachZaloPhoneSearchAttempts(selectedError, attempts)
+    }
+  }
+
+  private async findUserByPhoneWithReqSrc(
+    api: API,
+    phone: string,
+    reqSrc: ZaloPhoneSearchReqSrc
+  ): Promise<UserBasic> {
+    const customApi = api as ZaloPhoneSearchApi
+    if (typeof customApi.akaFindUserByPhoneReqSrc !== 'function') {
+      api.custom<Promise<UserBasic>, ZaloPhoneSearchRequest>('akaFindUserByPhoneReqSrc', async ({ ctx, utils, props }) => {
+        let phoneNumber = String(props.phone || '').trim()
+        if (!phoneNumber) throw new ZaloApiError('Missing phoneNumber')
+        if (phoneNumber.startsWith('0') && ctx.language === 'vi') {
+          phoneNumber = `84${phoneNumber.slice(1)}`
+        }
+
+        const params = {
+          phone: phoneNumber,
+          avatar_size: 240,
+          language: ctx.language,
+          imei: ctx.imei,
+          reqSrc: props.reqSrc
+        }
+        const encryptedParams = utils.encodeAES(JSON.stringify(params))
+        if (!encryptedParams) throw new ZaloApiError('Failed to encrypt findUser params')
+        const serviceUrl = utils.makeURL(
+          `${api.zpwServiceMap.friend[0]}/api/friend/profile/get`,
+          { params: encryptedParams }
+        )
+        const response = await utils.request(serviceUrl)
+        return utils.resolve(response)
+      })
+    }
+
+    const findUser = customApi.akaFindUserByPhoneReqSrc
+    if (typeof findUser !== 'function') {
+      throw new Error('Không khởi tạo được API tìm tài khoản Zalo bằng SĐT')
+    }
+    return findUser({ phone, reqSrc })
+  }
+
+  private async resolveZaloPhoneSearchLimitScope(
+    errorCode: string
+  ): Promise<ZaloPhoneSearchLimitScope | null> {
+    try {
+      const policy = await this.supabase.getZaloErrorPolicyByCode(errorCode)
+      if (!policy?.disableActionCodes.includes(ZALO_PHONE_SEARCH_ACTION_CODE)) return null
+      if (policy.disableActionMode === 'end_of_day') return 'day'
+      if (
+        policy.disableActionMode === 'fixed_minutes'
+        && Number(policy.timeDisableActions) > 0
+      ) {
+        return 'hour'
+      }
+      return null
+    } catch (err) {
+      console.warn('[ZaloRuntime] Failed to resolve findUser limit policy', {
+        errorCode,
+        message: err instanceof Error ? err.message : String(err)
+      })
+      return null
+    }
+  }
+
+  private selectZaloPhoneSearchError(
+    firstError: unknown,
+    firstLimitScope: ZaloPhoneSearchLimitScope | null,
+    fallbackError: unknown,
+    fallbackLimitScope: ZaloPhoneSearchLimitScope | null
+  ): unknown {
+    if (!firstLimitScope) return fallbackError
+    if (!this.getApiErrorCode(fallbackError)) return firstError
+    if (firstLimitScope === 'hour' && fallbackLimitScope === 'day') {
+      return firstError
+    }
+    return fallbackError
+  }
+
+  private buildZaloPhoneSearchErrorAttempt(
+    reqSrc: ZaloPhoneSearchReqSrc,
+    error: unknown
+  ): ZaloPhoneSearchAttempt {
+    const errorCode = this.getApiErrorCode(error)
+    const errorMessage = error instanceof Error
+      ? String(error.message || '').trim()
+      : String((error as { message?: unknown } | null | undefined)?.message || error || '').trim()
+    return {
+      reqSrc,
+      outcome: 'error',
+      errorCode: errorCode || undefined,
+      errorMessage: errorMessage || undefined
+    }
+  }
+
+  private attachZaloPhoneSearchAttempts(
+    error: unknown,
+    attempts: ZaloPhoneSearchAttempt[]
+  ): Error {
+    const normalizedError = error instanceof Error
+      ? error
+      : new Error(String((error as { message?: unknown } | null | undefined)?.message || error || 'Zalo phone search failed'))
+    ;(normalizedError as Error & { searchPhoneAttempts?: ZaloPhoneSearchAttempt[] }).searchPhoneAttempts = attempts.map(attempt => ({ ...attempt }))
+    return normalizedError
   }
 
   async getUserProfile(accountId: number, uid: string): Promise<ZaloFoundUser | null> {

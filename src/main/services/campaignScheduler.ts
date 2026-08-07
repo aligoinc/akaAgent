@@ -11053,7 +11053,11 @@ export class CampaignScheduler {
     }
 
     try {
-      const user = await this.zaloRuntime.findUserByPhone(account.id, phone)
+      const searchResult = await this.zaloRuntime.findUserByPhone(account.id, phone)
+      const user = searchResult.user
+      const searchAttemptData = searchResult.attempts.length > 0
+        ? { searchPhoneAttempts: searchResult.attempts }
+        : {}
       this.throwIfZaloRuntimeStopping(campaign.id)
       if (!user) {
         const policy = await this.getZaloNotFoundPolicy()
@@ -11065,7 +11069,7 @@ export class CampaignScheduler {
           'zalo_find_phone_user',
           'Tìm SĐT',
           '216',
-          { phone }
+          { phone, ...searchAttemptData }
         )
         return { ok: true, zaloTarget: null, detail }
       }
@@ -11093,7 +11097,7 @@ export class CampaignScheduler {
           actionCode: 'zalo_find_phone_user',
           actionName: 'Tìm SĐT',
           log,
-          data: { phone, target }
+          data: { phone, target, ...searchAttemptData }
         })
       }
     } catch (err) {
