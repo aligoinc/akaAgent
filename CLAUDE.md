@@ -149,6 +149,7 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 
 ## Common pitfalls
 
+- **Migration RPC overwrite**: trước khi dùng `CREATE OR REPLACE FUNCTION`, phải lấy nội dung của đúng function signature đang chạy trong DB (ví dụ bằng `pg_get_functiondef`) và kiểm tra các patch trước đó; không copy body từ một migration cũ vì có thể làm mất những thay đổi được áp dụng sau migration đó.
 - **Loop iterations**: scheduler `logMilestonesV2` đọc `result.steps` từ engine. Engine v2 maintain `allSteps[]` (mỗi loop iteration 1 row riêng) thay vì snapshot `nodeStates`. Khi đọc per-iteration data, đọc `s.output` (block return value), KHÔNG `s.input` (chỉ là config + parents trực tiếp).
 - **Output cascade**: engine v2 KHÔNG có inputMapping — output của parent merge vào input của child theo edges, last-write-wins. Output `scrapedText` của block ở xa KHÔNG cascade qua chain — nếu cần dùng ở downstream chain dài, **mutate `vars`** thay vì rely on input merging.
 - **XPath union `|`**: timeline page và group page dùng selector khác nhau. Element store XPath với `|` để match cả hai. `document.evaluate` (XPath 1.0) hỗ trợ union, trả node đầu tiên match.
