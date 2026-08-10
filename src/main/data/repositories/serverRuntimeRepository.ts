@@ -173,8 +173,8 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
     : String(row.package_type).trim() || null
   const maxAccounts = normalizePositiveInteger(row.max_accounts)
   const configuredDailySendLimit = normalizePositiveInteger(row.max_sends_per_day)
-  // Discovery returns the limits resolved from the one newest effective Zalo
-  // product row and applies the demo fallback for that selected package.
+  // Discovery returns the limits merged across every active Zalo product row;
+  // demo fallback is already applied per row by the database resolver.
   const dailySendLimit = configuredDailySendLimit
   const entitlements = emptyAuthEntitlements()
   entitlements.zalo = true
@@ -369,8 +369,8 @@ export async function loadActiveZaloServerUser(
 }
 
 /**
- * Discover every active staff whose newest effective Zalo product grants the
- * additive Server capability. Web may be granted at the same time.
+ * Discover every active staff whose merged Zalo products grant the additive
+ * Server capability. Web may be granted at the same time.
  * This does not read passwords or bind/check a device.
  */
 export async function listActiveZaloServerUsers(): Promise<ZaloServerRuntimeUser[]> {

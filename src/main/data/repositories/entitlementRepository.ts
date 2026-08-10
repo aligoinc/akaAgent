@@ -239,7 +239,7 @@ function getFeatureAccountLimit(rows: OrganizationProductRow[]): number | null {
   return limits.length > 0 ? Math.max(...limits) : null
 }
 
-function getFacebookAccountLimit(rows: OrganizationProductRow[]): number | null {
+function getGroupedAccountLimit(rows: OrganizationProductRow[]): number | null {
   return getMaximumLimitWithUnlimited(
     rows
       .filter(row => isExpirationActive(row.expiration_date))
@@ -247,25 +247,15 @@ function getFacebookAccountLimit(rows: OrganizationProductRow[]): number | null 
   )
 }
 
-function getNewestZaloProductRow(
-  rows: OrganizationProductRow[],
-  activeOnly: boolean
-): OrganizationProductRow | null {
-  // Both entitlement queries order with the same database-side rule as the
-  // SQL resolver. Keep that exact order here instead of reparsing timestamptz
-  // or bigint values in JavaScript, which could lose sub-millisecond/64-bit
-  // precision and select a different winner.
-  return rows.find(row => (
-    ZALO_PRODUCT_IDS.includes(
-      Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
-    ) &&
-    (!activeOnly || isExpirationActive(row.expiration_date))
-  )) || null
-}
-
 function isFacebookProductRow(row: OrganizationProductRow): boolean {
   return AUTH_FACEBOOK_PRODUCT_IDS.includes(
     Number(row.product_id) as (typeof AUTH_FACEBOOK_PRODUCT_IDS)[number]
+  )
+}
+
+function isZaloProductRow(row: OrganizationProductRow): boolean {
+  return ZALO_PRODUCT_IDS.includes(
+    Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
   )
 }
 
@@ -301,19 +291,7 @@ function mapOrganizationProductRow(row: OrganizationProductRow): AuthAccountProd
   }
 }
 
-function getZaloDailySendLimit(rows: OrganizationProductRow[]): number | null {
-  const activeRows = rows.filter(row => isExpirationActive(row.expiration_date))
-  const configuredLimits = activeRows
-    .map(row => normalizePositiveInteger(row.max_sends_per_day))
-    .filter((limit): limit is number => limit !== null)
-  if (configuredLimits.length > 0) return Math.max(...configuredLimits)
-
-  const hasPaidPackage = activeRows.some(row => String(row.package_type || '').trim().toLowerCase() !== 'demo')
-  if (hasPaidPackage) return null
-  return activeRows.length > 0 ? DEFAULT_DEMO_DAILY_SEND_LIMIT : null
-}
-
-function getFacebookDailySendLimit(rows: OrganizationProductRow[]): number | null {
+function getGroupedDailySendLimit(rows: OrganizationProductRow[]): number | null {
   const resolvedLimits = rows
     .filter(row => isExpirationActive(row.expiration_date))
     .map(row => {
@@ -327,11 +305,13 @@ function getFacebookDailySendLimit(rows: OrganizationProductRow[]): number | nul
 }
 
 function resolveZaloAccountCapabilities(rows: OrganizationProductRow[]): ZaloAccountCapabilities {
-  const effectiveRow = getNewestZaloProductRow(rows, true)
+  const activeRows = rows.filter(row => (
+    isZaloProductRow(row) && isExpirationActive(row.expiration_date)
+  ))
   return {
-    qr: effectiveRow !== null,
-    web: effectiveRow?.is_zalo_show_web === true,
-    server: effectiveRow?.is_zalo_server === true
+    qr: activeRows.length > 0,
+    web: activeRows.some(row => row.is_zalo_show_web === true),
+    server: activeRows.some(row => row.is_zalo_server === true)
   }
 }
 
@@ -370,22 +350,16 @@ export async function loadOrganizationEntitlementAccess(
   const rows = (data || []) as unknown as OrganizationProductRow[]
   for (const [feature, productIds] of Object.entries(FEATURE_PRODUCT_IDS) as Array<[EntitlementFeature, readonly number[]]>) {
     const featureRows = rows.filter(row => productIds.includes(Number(row.product_id)))
-    const isFacebookFeature = feature === 'facebookCore' || feature === 'facebookFanpage'
-    const effectiveZaloRow = feature === 'zalo'
-      ? getNewestZaloProductRow(featureRows, true)
-      : null
-    const effectiveRows = feature === 'zalo'
-      ? (effectiveZaloRow ? [effectiveZaloRow] : [])
-      : featureRows
-    entitlements[feature] = effectiveRows.some(row => isExpirationActive(row.expiration_date))
-    entitlements.dailySendLimits[feature] = isFacebookFeature
-      ? getFacebookDailySendLimit(effectiveRows)
-      : feature === 'zalo'
-        ? getZaloDailySendLimit(effectiveRows)
-        : getFeatureDailySendLimitFromProducts(effectiveRows)
-    entitlements.accountLimits[feature] = isFacebookFeature
-      ? getFacebookAccountLimit(effectiveRows)
-      : getFeatureAccountLimit(effectiveRows)
+    const isGroupedFeature = feature === 'facebookCore'
+      || feature === 'facebookFanpage'
+      || feature === 'zalo'
+    entitlements[feature] = featureRows.some(row => isExpirationActive(row.expiration_date))
+    entitlements.dailySendLimits[feature] = isGroupedFeature
+      ? getGroupedDailySendLimit(featureRows)
+      : getFeatureDailySendLimitFromProducts(featureRows)
+    entitlements.accountLimits[feature] = isGroupedFeature
+      ? getGroupedAccountLimit(featureRows)
+      : getFeatureAccountLimit(featureRows)
   }
 
   return {
@@ -423,26 +397,39 @@ export async function loadOrganizationAccountProducts(organizationId: number): P
   const activeFacebookRows = rows.filter(row => (
     isFacebookProductRow(row) && isExpirationActive(row.expiration_date)
   ))
-  const effectiveZaloRow = getNewestZaloProductRow(rows, true)
-    || getNewestZaloProductRow(rows, false)
+  const activeZaloRows = rows.filter(row => (
+    isZaloProductRow(row) && isExpirationActive(row.expiration_date)
+  ))
+  const fallbackZaloRow = activeZaloRows.length === 0
+    ? rows.find(isZaloProductRow) || null
+    : null
   const effectiveRows = rows.filter(row => (
-    (!isFacebookProductRow(row) || !isExpirationActive(row.expiration_date)) && (
-      !ZALO_PRODUCT_IDS.includes(
-        Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
-      ) || row === effectiveZaloRow
-    )
+    (!isFacebookProductRow(row) || !isExpirationActive(row.expiration_date))
+      && (!isZaloProductRow(row) || row === fallbackZaloRow)
   ))
 
   const products = effectiveRows.map(mapOrganizationProductRow)
   const facebookDisplayRow = getFarthestExpiringRow(activeFacebookRows)
-  if (!facebookDisplayRow) return products
-
-  return [{
-    ...mapOrganizationProductRow(facebookDisplayRow),
-    displayName: 'Facebook',
-    displayOrder: 1,
-    maxAccounts: getFacebookAccountLimit(activeFacebookRows)
-  }, ...products]
+  const zaloDisplayRow = getFarthestExpiringRow(activeZaloRows)
+  return [
+    ...(facebookDisplayRow
+      ? [{
+          ...mapOrganizationProductRow(facebookDisplayRow),
+          displayName: 'Facebook',
+          displayOrder: 1,
+          maxAccounts: getGroupedAccountLimit(activeFacebookRows)
+        }]
+      : []),
+    ...(zaloDisplayRow
+      ? [{
+          ...mapOrganizationProductRow(zaloDisplayRow),
+          displayName: 'Zalo',
+          displayOrder: 3,
+          maxAccounts: getGroupedAccountLimit(activeZaloRows)
+        }]
+      : []),
+    ...products
+  ]
 }
 
 export async function ensureAkaAgentSubscriptionActive(organizationId: number): Promise<void> {
