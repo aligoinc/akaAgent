@@ -2326,7 +2326,7 @@ export interface ZaloRuntimeRestartRequiredPayload {
 }
 
 export interface AuthAccountProduct {
-  /** Source org_organization_product row used to resolve this effective product. */
+  /** Representative source row; grouped cards may merge limits from multiple active rows. */
   organizationProductId: number | null
   feature: AuthEntitlementFeature | null
   productId: number | null
@@ -2341,11 +2341,11 @@ export interface AuthAccountProduct {
 }
 
 export interface ZaloAccountCapabilities {
-  /** Zalo QR/zca-js accounts granted by the newest effective Zalo product row. */
+  /** Zalo QR/zca-js accounts granted when any Product 16/18 row is active. */
   qr: boolean
-  /** Optional Zalo Web accounts added when that selected row enables Show Web. */
+  /** Optional Zalo Web accounts granted when any active row enables Show Web. */
   web: boolean
-  /** Optional zca-js accounts executed by akaAgent Server. */
+  /** Optional Server accounts granted when any active row enables Server. */
   server: boolean
 }
 
