@@ -5,7 +5,13 @@ import {
   type CampaignMediaInput,
   type CampaignMediaSnapshot
 } from '../../../../shared/types'
-import { isImageMediaSource } from '../Media/mediaImage'
+import {
+  isImageMediaSource,
+  isImageOrVideoMediaSource,
+  isVideoMediaSource,
+  runtimeMediaSourceMatchesSelectionMode,
+  type MediaSelectionMode
+} from '../../../../shared/mediaTypes'
 
 const ZALO_TOGGLEABLE_MESSAGE_ACTION_IDS = new Set([
   'zalo_message_phone',
@@ -16,7 +22,7 @@ const ZALO_TOGGLEABLE_MESSAGE_ACTION_IDS = new Set([
 ])
 
 interface LocalCampaignMediaOptions {
-  onlyImages: boolean
+  mode: MediaSelectionMode
   maxSelect?: number
 }
 
@@ -37,7 +43,94 @@ export const isCampaignMediaImage = (item: CampaignMediaInput): boolean => {
   )
 }
 
+export const isCampaignMediaVideo = (item: CampaignMediaInput): boolean => {
+  if (typeof item === 'string') {
+    return isVideoMediaSource('', item)
+  }
+  return isVideoMediaSource(
+    item.mimeType,
+    item.localPath,
+    item.cloudUrl,
+    item.name
+  )
+}
+
+export const isCampaignMediaImageOrVideo = (item: CampaignMediaInput): boolean => {
+  if (typeof item === 'string') {
+    return isImageOrVideoMediaSource('', item)
+  }
+  return isImageOrVideoMediaSource(
+    item.mimeType,
+    item.localPath,
+    item.cloudUrl,
+    item.name
+  )
+}
+
+export const filterCampaignMediaBySelectionMode = (
+  items: CampaignMediaSnapshot[],
+  mode: MediaSelectionMode
+): CampaignMediaSnapshot[] => items.filter(item => campaignMediaMatchesRuntimeSelectionMode(item, mode))
+
 const isImageFile = (file: File): boolean => isImageMediaSource(file.type, file.name)
+
+const getRuntimeMediaName = (item: CampaignMediaInput): string => {
+  if (typeof item === 'string') return item.split(/[\\/]/).pop() || item
+  return String(item.name || '').trim() ||
+    String(item.localPath || '').split(/[\\/]/).pop() ||
+    String(item.cloudUrl || '').split('/').pop()?.split('?')[0] ||
+    ''
+}
+
+const isLocalMediaAvailable = (localPath: string): boolean => {
+  if (!localPath) return false
+  if (/^data:/i.test(localPath)) return true
+  try {
+    return window.electronAPI.fileExists(localPath)
+  } catch {
+    return false
+  }
+}
+
+export const campaignMediaMatchesRuntimeSelectionMode = (
+  item: CampaignMediaInput,
+  mode: MediaSelectionMode
+): boolean => {
+  if (mode === 'file') return true
+
+  if (typeof item === 'string') {
+    const value = item.trim()
+    if (!value) return false
+    if (/^https?:\/\//i.test(value)) {
+      return runtimeMediaSourceMatchesSelectionMode(mode, {
+        cloudUrl: value,
+        name: getRuntimeMediaName(item)
+      })
+    }
+    return runtimeMediaSourceMatchesSelectionMode(mode, {
+      localPath: value,
+      localPathAvailable: isLocalMediaAvailable(value),
+      name: getRuntimeMediaName(item)
+    })
+  }
+
+  const localPath = String(item.localPath || '').trim()
+  return runtimeMediaSourceMatchesSelectionMode(mode, {
+    localPath,
+    localPathAvailable: isLocalMediaAvailable(localPath),
+    cloudUrl: item.cloudUrl,
+    name: getRuntimeMediaName(item),
+    mimeType: item.mimeType
+  })
+}
+
+const fileMatchesMode = (file: File, localPath: string, mode: MediaSelectionMode): boolean =>
+  runtimeMediaSourceMatchesSelectionMode(mode, {
+    localPath,
+    localPathAvailable: true,
+    name: file.name,
+    mimeType: file.type
+  })
 
 const formatBytes = (value: number): string => {
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
@@ -61,18 +154,6 @@ export const selectLocalCampaignMedia = (
   const selectedPaths = new Set<string>()
 
   for (const file of rawFiles) {
-    const imageFile = isImageFile(file)
-    if (options.onlyImages && !imageFile) {
-      failures.push(`${file.name || 'File'}: Định dạng ảnh không được hỗ trợ.`)
-      continue
-    }
-
-    const sizeLimit = imageFile ? MEDIA_IMAGE_MAX_SIZE_BYTES : MEDIA_FILE_MAX_SIZE_BYTES
-    if (file.size > sizeLimit) {
-      failures.push(`${file.name || 'File'}: Vượt quá dung lượng tối đa ${formatBytes(sizeLimit)}.`)
-      continue
-    }
-
     let localPath = ''
     try {
       localPath = window.electronAPI.getPathForFile(file).trim()
@@ -84,6 +165,18 @@ export const selectLocalCampaignMedia = (
     }
     if (!window.electronAPI.fileExists(localPath)) {
       failures.push(`${file.name || 'File'}: File local không còn tồn tại.`)
+      continue
+    }
+    if (!fileMatchesMode(file, localPath, options.mode)) {
+      const expected = options.mode === 'image-video' ? 'ảnh hoặc video' : options.mode === 'video' ? 'video' : 'ảnh'
+      failures.push(`${file.name || 'File'}: Định dạng ${expected} không được runtime hỗ trợ.`)
+      continue
+    }
+
+    const imageFile = isImageFile(file)
+    const sizeLimit = imageFile ? MEDIA_IMAGE_MAX_SIZE_BYTES : MEDIA_FILE_MAX_SIZE_BYTES
+    if (file.size > sizeLimit) {
+      failures.push(`${file.name || 'File'}: Vượt quá dung lượng tối đa ${formatBytes(sizeLimit)}.`)
       continue
     }
 

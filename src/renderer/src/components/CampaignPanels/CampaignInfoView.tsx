@@ -196,8 +196,8 @@ const formatMonthDays = (value?: string) => {
 const getMediaDisplayName = (media: CampaignMediaInput, index: number): string => {
   if (typeof media === 'string') {
     const value = String(media || '').trim()
-    if (!value || value.startsWith('data:image/')) return `Ảnh ${index + 1}`
-    return value.split(/[\\/]/).pop() || `Ảnh ${index + 1}`
+    if (!value || value.startsWith('data:')) return `Media ${index + 1}`
+    return value.split(/[\\/]/).pop() || `Media ${index + 1}`
   }
   return media.name ||
     media.localPath?.split(/[\\/]/).pop() ||
@@ -220,9 +220,9 @@ const formatImageOption = (extra: CampaignExtraSettings, images?: CampaignMediaI
 }
 
 const formatCommentImageOption = (extra: CampaignExtraSettings) => {
-  if (extra.commentImageOption === 'random') return 'Ngẫu nhiên 1 ảnh'
-  if (extra.commentImageOption === 'all') return 'Gửi ảnh đã chọn'
-  return 'Không gửi ảnh'
+  if (extra.commentImageOption === 'random') return 'Ngẫu nhiên 1 ảnh/video'
+  if (extra.commentImageOption === 'all') return 'Gửi media đã chọn'
+  return 'Không gửi media'
 }
 
 const getDeclaredMedia = (images?: CampaignMediaInput[]): CampaignMediaInput[] => (
@@ -480,14 +480,14 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
       ? normalizedAdvancedMediaItems.map((item, index) => {
           const mediaItems = getDeclaredMedia(item.mediaItems)
           if (item.mediaOption === 'random' && mediaItems.length > 0) {
-            return `${index + 1}. Ngẫu nhiên 1 trong ${mediaItems.length} ảnh`
+            return `${index + 1}. Ngẫu nhiên 1 trong ${mediaItems.length} media`
           }
           if (item.mediaOption === 'all' && mediaItems.length > 0) {
             return mediaItems.length > 1
-              ? `${index + 1}. Gửi ảnh đầu tiên (1 trong ${mediaItems.length} ảnh)`
-              : `${index + 1}. Gửi ảnh đã chọn`
+              ? `${index + 1}. Gửi media đầu tiên (1 trong ${mediaItems.length} media)`
+              : `${index + 1}. Gửi media đã chọn`
           }
-          return `${index + 1}. Không gửi ảnh`
+          return `${index + 1}. Không gửi media`
         }).join('\n')
       : 'Không có nội dung nâng cao'
     : ''
@@ -571,13 +571,13 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
       hidden: !commentSettingsEnabled
     },
     {
-      label: usesAdvancedCommentMedia ? 'Ảnh comment theo nội dung nâng cao' : 'Cách gửi ảnh comment',
+      label: usesAdvancedCommentMedia ? 'Media comment theo nội dung nâng cao' : 'Cách gửi media comment',
       value: usesAdvancedCommentMedia ? advancedCommentMediaSummary : formatCommentImageOption(extra),
       fullWidth: usesAdvancedCommentMedia,
       hidden: !commentSettingsEnabled
     },
     {
-      label: 'Ảnh comment',
+      label: 'Media comment',
       value: formatImageSummary(extra.commentImages),
       hidden: usesAdvancedCommentMedia || !commentSettingsEnabled
     },
@@ -833,13 +833,13 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           },
           { label: 'Nội dung chính', value: textOrDash(displayCampaignContent), fullWidth: true },
           {
-            label: usesAdvancedMainMedia ? 'Media theo nội dung nâng cao' : 'Ảnh bài đăng',
+            label: usesAdvancedMainMedia ? 'Media theo nội dung nâng cao' : 'Media bài đăng',
             value: usesAdvancedMainMedia ? advancedMainMediaItemsSummary : formatImageSummary(campaign.images),
             fullWidth: usesAdvancedMainMedia,
             hidden: !actionUsesMainMedia
           },
           {
-            label: usesAdvancedMainMedia ? 'Cách dùng media theo nội dung' : 'Cách dùng ảnh',
+            label: usesAdvancedMainMedia ? 'Cách dùng media theo nội dung' : 'Cách dùng media',
             value: usesAdvancedMainMedia ? advancedMainMediaOptionSummary : formatImageOption(extra, campaign.images),
             fullWidth: usesAdvancedMainMedia,
             hidden: !actionUsesMainMedia

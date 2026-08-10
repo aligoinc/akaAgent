@@ -8,6 +8,12 @@ import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
+import {
+  getRuntimeMediaDownloadExtensionForMimeType,
+  isImageMediaSource,
+  isImageOrVideoMediaSource,
+  isVideoMediaSource
+} from '../../shared/mediaTypes'
 import { renderContentSpin, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
 import {
   isFormattedContentEmpty,
@@ -7764,9 +7770,25 @@ export class CampaignScheduler {
     const skipMainMediaForThisRun = !this.campaignUsesMainMedia(campaign) ||
       (this.campaignUsesMessageMedia(campaign) && skipMessageByLimit) ||
       (campaign.actionId === GROUP_POST_ACTION_ID && groupPostApproval?.skipPostByKnownApproval === true)
+    const postAsReels = campaign.actionId === 'facebook_timeline_post' && !postWithBackground && extra.postAsReels === true
     const validPostImages = skipMainMediaForThisRun || postWithBackground || useAdvancedCommentContent
       ? []
-      : await this.resolveCampaignMediaForIndex(campaign, detailIndex, postWithBackground, mediaTempPaths)
+      : await this.resolveCampaignMediaForIndex(
+          campaign,
+          detailIndex,
+          postWithBackground,
+          mediaTempPaths,
+          postAsReels ? 1 : undefined
+        )
+    if (postAsReels && (validPostImages.length !== 1 || !isVideoMediaSource('', validPostImages[0]))) {
+      throw new Error('Đăng Reels cần đúng 1 video hợp lệ cho mỗi lượt chạy')
+    }
+    if (campaign.actionId === PAGE_POST_ACTION_ID && pagePostMode === 'api' && validPostImages.some(media => !isImageMediaSource('', media))) {
+      throw new Error('Đăng fanpage bằng API hiện chỉ hỗ trợ ảnh; hãy chuyển sang chế độ UI để dùng video')
+    }
+    if (campaign.actionId.startsWith('facebook_') && validPostImages.some(media => !isImageOrVideoMediaSource('', media))) {
+      throw new Error('Media Facebook chỉ hỗ trợ ảnh hoặc video')
+    }
     const commentBatchCount = !usesCommentIterations
       ? 1
       : useAdvancedCommentContent && campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID
@@ -7803,6 +7825,11 @@ export class CampaignScheduler {
           : 'all'
       const shouldUseCommentImages = enableCommentIterations && commentImageOption !== 'none'
       const availableCommentImages = Array.isArray(extra.commentImages) ? extra.commentImages : []
+      if (shouldUseCommentImages && availableCommentImages.some(item => (
+        this.hasDeclaredMediaSource(item) && !this.isCampaignMediaImageOrVideo(item)
+      ))) {
+        throw new Error('Media comment Facebook chỉ hỗ trợ ảnh hoặc video')
+      }
       commentVariants = Array.from({ length: commentBatchCount }, (_, k) =>
         this.renderSpinContent(this.cycleVariant(rawCommentVariants, k))
       )
@@ -7899,7 +7926,7 @@ export class CampaignScheduler {
       includeSourceImages: postWithBackground ? false : (extra.includeSourceImages ?? false),
       rewriteSourceContentWithAI: postWithBackground ? false : extra.rewriteSourceContentWithAI === true,
       sourceContentAiPrompt: postWithBackground ? '' : (extra.sourceContentAiPrompt || ''),
-      postAsReels: postWithBackground ? false : (extra.postAsReels ?? false),
+      postAsReels,
       sourceLink: currentSourceLink,
       targetUrl: detail?.uid || currentSourceLink,
       videoPath: validPostImages[0] || '',
@@ -13786,7 +13813,8 @@ export class CampaignScheduler {
     campaign: Campaign,
     index: number,
     postWithBackground: boolean,
-    mediaTempPaths: string[] = []
+    mediaTempPaths: string[] = [],
+    randomMediaCountOverride?: number
   ): Promise<string[]> {
     if (postWithBackground) return []
 
@@ -13796,7 +13824,7 @@ export class CampaignScheduler {
       return this.resolveMediaSelection(
         advancedItem.mediaItems || [],
         advancedItem.mediaOption || 'none',
-        advancedItem.randomMediaCount || 3,
+        randomMediaCountOverride ?? (advancedItem.randomMediaCount || 3),
         mediaTempPaths
       )
     }
@@ -13805,7 +13833,7 @@ export class CampaignScheduler {
     return this.resolveMediaSelection(
       campaign.images || [],
       extra.imageOption || 'all',
-      extra.randomImageCount || 3,
+      randomMediaCountOverride ?? (extra.randomImageCount || 3),
       mediaTempPaths
     )
   }
@@ -13817,8 +13845,11 @@ export class CampaignScheduler {
     if (!item || item.mediaOption === 'none') return []
     const mediaItems = Array.isArray(item.mediaItems) ? item.mediaItems : []
     if (mediaItems.length === 0) return []
+    if (mediaItems.some(media => this.hasDeclaredMediaSource(media) && !this.isCampaignMediaImageOrVideo(media))) {
+      throw new Error('Media comment Facebook chỉ hỗ trợ ảnh hoặc video')
+    }
 
-    // Facebook comment supports one image. `random` chooses one from the
+    // Facebook comment supports one image or video. `random` chooses one from
     // item's snapshot; `all` deterministically uses its first snapshot media.
     return item.mediaOption === 'random'
       ? this.resolveMediaSelection(mediaItems, 'random', 1, mediaTempPaths)
@@ -14006,6 +14037,11 @@ export class CampaignScheduler {
     return Boolean(localPath || cloudUrl)
   }
 
+  private isCampaignMediaImageOrVideo(item: CampaignMediaInput): boolean {
+    if (typeof item === 'string') return isImageOrVideoMediaSource('', item)
+    return isImageOrVideoMediaSource(item.mimeType, item.localPath, item.cloudUrl, item.name)
+  }
+
   private async resolveCampaignMediaSource(item: CampaignMediaInput, mediaTempPaths: string[] = []): Promise<string> {
     const mediaName = this.getCampaignMediaName(item)
 
@@ -14072,17 +14108,7 @@ export class CampaignScheduler {
     const nameExt = extname(mediaName)
     if (nameExt) return nameExt
 
-    const normalizedType = contentType.split(';')[0].trim().toLowerCase()
-    switch (normalizedType) {
-      case 'image/jpeg': return '.jpg'
-      case 'image/png': return '.png'
-      case 'image/gif': return '.gif'
-      case 'image/webp': return '.webp'
-      case 'image/avif': return '.avif'
-      case 'application/pdf': return '.pdf'
-      case 'text/plain': return '.txt'
-      default: return '.bin'
-    }
+    return getRuntimeMediaDownloadExtensionForMimeType(contentType) || '.bin'
   }
 
   private getCampaignMediaName(item: CampaignMediaInput): string {

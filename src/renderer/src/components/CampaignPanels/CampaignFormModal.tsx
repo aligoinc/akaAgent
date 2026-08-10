@@ -36,6 +36,13 @@ import {
   ZaloLabelOption
 } from '../../../../shared/types'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
+import {
+  IMAGE_FILE_ACCEPT,
+  IMAGE_VIDEO_FILE_ACCEPT,
+  runtimeMediaSourceMatchesSelectionMode,
+  VIDEO_FILE_ACCEPT,
+  type MediaSelectionMode
+} from '../../../../shared/mediaTypes'
 import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 import { useUiStore } from '../../stores/uiStore'
@@ -47,8 +54,10 @@ import MediaLibraryModal from '../Media/MediaLibraryModal'
 import MediaPreviewHover from '../Media/MediaPreviewHover'
 import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
 import {
+  campaignMediaMatchesRuntimeSelectionMode,
+  filterCampaignMediaBySelectionMode,
   getUniqueCampaignMediaAdditions,
-  isCampaignMediaImage,
+  isCampaignMediaVideo,
   isLocalOnlyCampaignMedia,
   selectLocalCampaignMedia,
   summarizeLocalCampaignMediaFailures
@@ -2145,6 +2154,8 @@ export default function CampaignFormModal({
   const [mediaPickerTarget, setMediaPickerTarget] = useState<MainMediaPickerTarget | null>(null)
   const localMediaPickerTargetRef = useRef<MainMediaPickerTarget | null>(null)
   const localImageInputRef = useRef<HTMLInputElement>(null)
+  const localVideoInputRef = useRef<HTMLInputElement>(null)
+  const localImageVideoInputRef = useRef<HTMLInputElement>(null)
   const localFileInputRef = useRef<HTMLInputElement>(null)
   const [handleFoundUidData, setHandleFoundUidData] = useState(() =>
     draftRequiredTargetField === 'findUidTargetCampaignIds' || (campaign?.extraSettings?.findUidTargetCampaignIds || []).length > 0
@@ -2332,6 +2343,14 @@ export default function CampaignFormModal({
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
+  const isReelsMediaMode = formData.actionId === 'facebook_timeline_post' && formData.postAsReels
+  const mainMediaSelectionMode: MediaSelectionMode = isZaloMessageCampaign || isEmailCampaign
+    ? 'file'
+    : isReelsMediaMode
+      ? 'video'
+      : formData.actionId.startsWith('facebook_') && !(isPagePostCampaign && formData.pagePostMode === 'api')
+        ? 'image-video'
+        : 'image'
   const canUseRerunAfterCompletion = isFindDataCampaign || isCommentSeedingFeedCampaign || isNewsfeedInteractionCampaign
   const canUseSleepBetweenActions = formData.actionId !== 'facebook_timeline_post' && !isNewsfeedInteractionCampaign && !isFacebookGroupInviteCampaign
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
@@ -2489,9 +2508,10 @@ export default function CampaignFormModal({
     return buildContentTemplateGroupCandidate(
       contentTemplates,
       candidateContentTemplateGroup,
-      advancedContentTargetChannel
+      advancedContentTargetChannel,
+      mainMediaSelectionMode
     )
-  }, [advancedContentTargetChannel, candidateContentTemplateGroup, contentTemplates])
+  }, [advancedContentTargetChannel, candidateContentTemplateGroup, contentTemplates, mainMediaSelectionMode])
   const showSavedGroupSnapshotItems = isAdvancedGroupSource &&
     pendingContentTemplateGroupId === null &&
     savedAdvancedContentSource === 'group_snapshot' &&
@@ -2628,6 +2648,11 @@ export default function CampaignFormModal({
     const account = accounts.find(item => item.id === accountId)
     return account ? isZaloServerAccount(account) : false
   })
+  const getMediaSelectionMode = (target: MainMediaPickerTarget): MediaSelectionMode => {
+    const isCommentMedia = target === 'comment' || (typeof target === 'object' && isCommentSeedingCampaign)
+    if (isCommentMedia) return 'image-video'
+    return mainMediaSelectionMode
+  }
   const actionPlatformForAccountSelection = selectedActionPlatform || selectedActionPlatformFilter
   const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false
   const allowsSecondaryAccount = selectedCampaignAction?.allowSecondaryAccount === true
@@ -3288,11 +3313,11 @@ export default function CampaignFormModal({
               fields: isCommentSeedingPostCampaign
                 ? [
                   { key: 'commentContent', label: 'Nội dung comment' },
-                  { key: 'commentImages', label: 'Ảnh comment' }
+                  { key: 'commentImages', label: 'Media comment' }
                 ]
                 : [
                   { key: 'commentContent', label: 'Nội dung comment' },
-                  { key: 'commentImages', label: 'Ảnh comment' }
+                  { key: 'commentImages', label: 'Media comment' }
                 ]
             }
           }
@@ -4876,7 +4901,7 @@ export default function CampaignFormModal({
       }
       if (supportsSourceContent && formData.copyContentFromSource) notes.push('Bản xem trước chỉ hiển thị phần nội dung nhập trong form, chưa bao gồm nội dung copy từ nguồn.')
       if (supportsSourceSharePost && formData.sharePost) notes.push('Bản xem trước chưa hiển thị phần bài viết được chia sẻ từ nguồn.')
-      if (formData.postAsReels) notes.push('Bản xem trước chưa mô phỏng giao diện Reels.')
+      if (isReelsMediaMode) notes.push('Bản xem trước chưa mô phỏng giao diện Reels.')
       if (isPostBackgroundActive) notes.push('Bản xem trước chưa mô phỏng phông nền Facebook.')
     }
     if (target === 'commentContent' && formData.rewriteCommentContentEachRun) {
@@ -4999,8 +5024,13 @@ export default function CampaignFormModal({
     const shouldApplyTemplateMedia = channelName !== 'sms' && (
       target === 'content' || target === 'commentContent'
     )
+    const templateMediaMode: MediaSelectionMode = target === 'commentContent'
+      ? 'image-video'
+      : channelName === 'facebook_post' || channelName === 'facebook_message' || channelName === 'facebook_comment'
+        ? mainMediaSelectionMode
+        : 'image'
     const { snapshots: resolvedSnapshots, invalidCount } = shouldApplyTemplateMedia
-      ? contentTemplateImagesToSnapshots(resolved.imageUrls)
+      ? contentTemplateImagesToSnapshots(resolved.imageUrls, templateMediaMode)
       : { snapshots: [] as CampaignMediaSnapshot[], invalidCount: 0 }
     const snapshots = resolvedSnapshots
     const serializedContent = applyRich
@@ -5018,6 +5048,11 @@ export default function CampaignFormModal({
       } else if (target !== 'content') {
         setAiContentValue(target, serializeContentVariants(variants))
       } else {
+        const templateMediaOption: ImageOption = snapshots.length === 0
+          ? 'none'
+          : isReelsMediaMode && snapshots.length > 1
+            ? 'random'
+            : 'all'
         setPendingContentTemplateGroupId(null)
         setFormData(current => ({
           ...current,
@@ -5025,8 +5060,8 @@ export default function CampaignFormModal({
           advancedContentEnabled: false,
           advancedContentItems: [],
           images: snapshots,
-          imageOption: snapshots.length > 0 ? 'all' : 'none',
-          randomImageCount: 3,
+          imageOption: templateMediaOption,
+          randomImageCount: isReelsMediaMode ? 1 : 3,
           formattedContentEnabled: channelName !== 'email' && applyRich && supportsFormattedContent(current.actionId),
           rewriteContentEachRun: applyRich ? false : current.rewriteContentEachRun,
           postWithBackground: applyRich || snapshots.length > 0 ? false : current.postWithBackground,
@@ -5038,7 +5073,7 @@ export default function CampaignFormModal({
       setContentTemplatePicker(null)
       showAlert(
         invalidCount > 0
-          ? `Đã áp dụng mẫu và bỏ qua ${invalidCount} URL ảnh không hợp lệ.`
+          ? `Đã áp dụng mẫu và bỏ qua ${invalidCount} URL media không hợp lệ.`
           : 'Đã áp dụng mẫu nội dung.',
         invalidCount > 0 ? 'info' : 'success'
       )
@@ -5120,15 +5155,34 @@ export default function CampaignFormModal({
       return
     }
 
-    const getCloudImageUrls = (items: CampaignMediaInput[]): { urls: string[]; skipped: number } => {
+    const templateMediaMode: MediaSelectionMode = target === 'commentContent'
+      ? 'image-video'
+      : channelName === 'facebook_post' || channelName === 'facebook_message' || channelName === 'facebook_comment'
+        ? mainMediaSelectionMode
+        : 'image'
+    const getCloudMediaUrls = (items: CampaignMediaInput[]): { urls: string[]; skipped: number } => {
       let skipped = 0
       const urls = items.flatMap(item => {
-        if (!isCampaignMediaImage(item)) {
+        const cloudUrl = getCampaignMediaCloudUrl(item).trim()
+        if (!/^https?:\/\//i.test(cloudUrl)) {
           skipped += 1
           return []
         }
-        const cloudUrl = getCampaignMediaCloudUrl(item).trim()
-        if (!/^https?:\/\//i.test(cloudUrl)) {
+        const supported = runtimeMediaSourceMatchesSelectionMode(templateMediaMode, {
+          cloudUrl,
+          name: getCampaignMediaDisplayName(item),
+          mimeType: getCampaignMediaMimeType(item)
+        })
+        if (!supported) {
+          skipped += 1
+          return []
+        }
+        // Content templates persist only the URL. A video URL without a recognizable
+        // extension would round-trip back as an image because its MIME/name are lost.
+        if (
+          isCampaignMediaVideo(item) &&
+          contentTemplateImagesToSnapshots([cloudUrl], 'video').snapshots.length === 0
+        ) {
           skipped += 1
           return []
         }
@@ -5144,29 +5198,29 @@ export default function CampaignFormModal({
         const mediaSets = normalizedAdvancedContentItems.map(item => (
           item.mediaOption === 'none'
             ? { urls: [] as string[], skipped: 0 }
-            : getCloudImageUrls(item.mediaItems || [])
+            : getCloudMediaUrls(item.mediaItems || [])
         ))
         const firstKey = JSON.stringify(mediaSets[0]?.urls || [])
         const hasDifferentMedia = mediaSets.some(set => JSON.stringify(set.urls) !== firstKey)
         const skipped = mediaSets.reduce((sum, set) => sum + set.skipped, 0)
         if (hasDifferentMedia) {
-          mediaWarning = 'Các nội dung nâng cao đang dùng bộ media khác nhau. Mẫu chỉ lưu một bộ ảnh dùng chung nên lần lưu này sẽ chỉ lưu nội dung.'
+          mediaWarning = 'Các nội dung nâng cao đang dùng bộ media khác nhau. Mẫu chỉ lưu một bộ media dùng chung nên lần lưu này sẽ chỉ lưu nội dung.'
         } else {
           imageUrls = mediaSets[0]?.urls || []
-          if (skipped > 0) mediaWarning = `Có ${skipped} media không phải ảnh cloud nên sẽ không được lưu vào mẫu.`
+          if (skipped > 0) mediaWarning = `Có ${skipped} media không phù hợp hoặc chưa có URL cloud nên sẽ không được lưu vào mẫu.`
         }
       } else if (formData.imageOption !== 'none') {
-        const media = getCloudImageUrls(formData.images)
+        const media = getCloudMediaUrls(formData.images)
         imageUrls = media.urls
-        if (media.skipped > 0) mediaWarning = `Có ${media.skipped} media chưa có URL cloud hoặc không phải ảnh nên sẽ không được lưu vào mẫu.`
+        if (media.skipped > 0) mediaWarning = `Có ${media.skipped} media chưa có URL cloud hoặc không phù hợp nên sẽ không được lưu vào mẫu.`
       }
     } else if (target === 'commentContent' && formData.commentImageOption !== 'none') {
       const commentImagesForTemplate = formData.commentImageOption === 'random'
         ? formData.commentImages
         : formData.commentImages.slice(0, 1)
-      const media = getCloudImageUrls(commentImagesForTemplate)
+      const media = getCloudMediaUrls(commentImagesForTemplate)
       imageUrls = media.urls
-      if (media.skipped > 0) mediaWarning = 'Có ảnh comment chưa có URL cloud nên sẽ không được lưu vào mẫu.'
+      if (media.skipped > 0) mediaWarning = 'Có media comment chưa có URL cloud nên sẽ không được lưu vào mẫu.'
     }
 
     const channels: ContentTemplateChannels = {}
@@ -5275,10 +5329,10 @@ export default function CampaignFormModal({
 
       const hasAdvancedMedia = variants.some(item => item.mediaOption !== 'none' && (item.mediaItems || []).length > 0)
       if (hasAdvancedMedia) {
-        return 'Đăng bài với phông nền không thể gửi kèm ảnh. Vui lòng bỏ media trong nội dung nâng cao trước khi lưu.'
+        return 'Đăng bài với phông nền không thể gửi kèm media. Vui lòng bỏ media trong nội dung nâng cao trước khi lưu.'
       }
 
-      if (formData.copyContentFromSource || formData.sharePost || formData.postAsReels) {
+      if (formData.copyContentFromSource || formData.sharePost || isReelsMediaMode) {
         return 'Đăng bài với phông nền không hỗ trợ copy/chia sẻ nội dung từ nguồn hoặc đăng Reels.'
       }
 
@@ -5299,10 +5353,10 @@ export default function CampaignFormModal({
     }
 
     if (formData.imageOption !== 'none' && formData.images.length > 0) {
-      return 'Đăng bài với phông nền không thể gửi kèm ảnh. Vui lòng chọn Không gửi ảnh trước khi lưu.'
+      return 'Đăng bài với phông nền không thể gửi kèm media. Vui lòng chọn Không gửi media trước khi lưu.'
     }
 
-    if (formData.copyContentFromSource || formData.sharePost || formData.postAsReels) {
+    if (formData.copyContentFromSource || formData.sharePost || isReelsMediaMode) {
       return 'Đăng bài với phông nền không hỗ trợ copy/chia sẻ nội dung từ nguồn hoặc đăng Reels.'
     }
 
@@ -5405,8 +5459,23 @@ export default function CampaignFormModal({
     return isCampaignMediaLocalAvailable(trimmed)
   }
 
-  const validateSelectedImages = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
+  const validateSelectedImages = (
+    label: string,
+    option: string,
+    images: CampaignMediaInput[],
+    mode: MediaSelectionMode
+  ): boolean => {
     if (option === 'none' || images.length === 0) return true
+    const invalidTypeItems = mode === 'file'
+      ? []
+      : images.filter(item => !campaignMediaMatchesRuntimeSelectionMode(item, mode))
+    if (invalidTypeItems.length > 0) {
+      const expected = mode === 'image' ? 'ảnh' : mode === 'video' ? 'video' : 'ảnh/video'
+      const names = invalidTypeItems.slice(0, 3).map(getCampaignMediaDisplayName).join(', ')
+      const suffix = invalidTypeItems.length > 3 ? ` và ${invalidTypeItems.length - 3} file khác` : ''
+      showAlert(`${label} chỉ hỗ trợ ${expected}: ${names}${suffix}. Vui lòng xoá file không phù hợp hoặc chọn lại.`, 'error')
+      return false
+    }
     if (usesZaloServerAccount) {
       const localOnlyImages = images.filter(isLocalOnlyCampaignMedia)
       if (localOnlyImages.length > 0) {
@@ -5425,9 +5494,9 @@ export default function CampaignFormModal({
     return false
   }
 
-  const validateCommentImagePool = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
+  const validateCommentMediaPool = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
     if (option !== 'all' || images.length <= 1) return true
-    showAlert(`${label} ở chế độ "Gửi ảnh đã chọn" chỉ được chọn tối đa 1 ảnh. Vui lòng xoá bớt ảnh hoặc chuyển sang gửi ngẫu nhiên.`, 'error')
+    showAlert(`${label} ở chế độ "Gửi media đã chọn" chỉ được chọn tối đa 1 ảnh hoặc video. Vui lòng xoá bớt media hoặc chuyển sang gửi ngẫu nhiên.`, 'error')
     return false
   }
 
@@ -5474,20 +5543,67 @@ export default function CampaignFormModal({
   }
 
   const validateAdvancedContentMedia = (): boolean => {
-    if (!isAdvancedContentMode || isMobileManagedSmsCampaign || advancedContentSourceMode === 'group') return true
+    if (!isAdvancedContentMode || isMobileManagedSmsCampaign) return true
+    const itemsToValidate = isAdvancedGroupSource
+      ? advancedContentSaveValidationItems
+      : normalizedAdvancedContentItems
 
-    for (let index = 0; index < normalizedAdvancedContentItems.length; index += 1) {
-      const item = normalizedAdvancedContentItems[index]
-      if (isCommentSeedingCampaign && !validateCommentImagePool(
+    for (let index = 0; index < itemsToValidate.length; index += 1) {
+      const item = itemsToValidate[index]
+      if (isCommentSeedingCampaign && !validateCommentMediaPool(
         `Media nội dung nâng cao ${index + 1}`,
         item.mediaOption || 'none',
         item.mediaItems || []
       )) {
-        setManualAdvancedContentModalOpen(true)
+        if (!isAdvancedGroupSource) setManualAdvancedContentModalOpen(true)
         return false
       }
-      if (!validateSelectedImages(`Media nội dung nâng cao ${index + 1}`, item.mediaOption || 'none', item.mediaItems || [])) {
-        setManualAdvancedContentModalOpen(true)
+      if (!validateSelectedImages(
+        `Media nội dung nâng cao ${index + 1}`,
+        item.mediaOption || 'none',
+        item.mediaItems || [],
+        getMediaSelectionMode({ kind: 'advanced', itemId: item.id })
+      )) {
+        if (!isAdvancedGroupSource) setManualAdvancedContentModalOpen(true)
+        return false
+      }
+    }
+
+    return true
+  }
+
+  const validateReelsMedia = (): boolean => {
+    if (!isReelsMediaMode) return true
+
+    const items = isAdvancedContentMode
+      ? advancedContentSaveValidationItems
+      : [{
+          id: 'basic-reels-media',
+          content: formData.content,
+          mediaOption: formData.imageOption,
+          mediaItems: formData.images,
+          randomMediaCount: formData.randomImageCount
+        }]
+
+    if (items.length === 0) {
+      showAlert('Đăng Reels cần ít nhất một video.', 'error')
+      return false
+    }
+
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index]
+      const mediaItems = item.mediaOption === 'none' ? [] : (item.mediaItems || [])
+      const label = isAdvancedContentMode ? `Nội dung nâng cao ${index + 1}` : 'Reels'
+      if (mediaItems.length === 0) {
+        showAlert(`${label} cần chọn ít nhất một video để đăng Reels.`, 'error')
+        return false
+      }
+      if (mediaItems.some(media => !campaignMediaMatchesRuntimeSelectionMode(media, 'video'))) {
+        showAlert(`${label} chỉ được dùng video khi bật Đăng Reels. Vui lòng xoá ảnh hoặc file khác.`, 'error')
+        return false
+      }
+      if (item.mediaOption === 'all' && mediaItems.length !== 1) {
+        showAlert(`${label} ở chế độ "Đăng video đã chọn" chỉ được chọn đúng 1 video. Hãy xoá bớt hoặc chuyển sang ngẫu nhiên.`, 'error')
         return false
       }
     }
@@ -5617,7 +5733,8 @@ export default function CampaignFormModal({
       const candidate = buildContentTemplateGroupCandidate(
         latestTemplates,
         latestGroup,
-        advancedContentTargetChannel
+        advancedContentTargetChannel,
+        mainMediaSelectionMode
       )
       if (candidate.variantCount === 0) {
         showAlert(
@@ -5875,6 +5992,9 @@ export default function CampaignFormModal({
             randomMediaCount: 1
           }
         }
+        if (isReelsMediaMode) {
+          return { ...manualItem, content, randomMediaCount: 1 }
+        }
         return isMobileManagedSmsCampaign
           ? { ...manualItem, content, mediaOption: 'none', mediaItems: [] }
           : { ...manualItem, content }
@@ -5902,28 +6022,31 @@ export default function CampaignFormModal({
         ? preserveExistingGroupSnapshotItems
           ? (advancedContentOverride?.items ?? [])
           : (advancedContentOverride?.items ?? normalizedAdvancedContentItems).map(item => {
-          const itemWithLegacyEmailSubject = isEmailCampaign && !isSavingGroupSnapshot &&
-            (item.emailSubject === undefined || item.emailSubject === null)
-            ? { ...item, emailSubject: formData.emailSubject.trim() }
-            : item
-          const normalizedItem = formattedContentForSave || emailBodyIsHtmlForSave
-            ? { ...itemWithLegacyEmailSubject, content: sanitizeFormattedContent(itemWithLegacyEmailSubject.content) }
-            : itemWithLegacyEmailSubject
-          if (isCommentSeedingCampaign) {
-            const mediaItems = normalizedItem.mediaItems || []
-            return {
-              ...normalizedItem,
-              mediaOption: mediaItems.length > 0 && normalizedItem.mediaOption !== 'none'
-                ? normalizedItem.mediaOption || 'none'
-                : 'none',
-              mediaItems,
-              randomMediaCount: 1
-            }
-          }
-            return isMobileManagedSmsCampaign
-              ? { ...normalizedItem, mediaOption: 'none' as const, mediaItems: [] }
-              : normalizedItem
-          })
+              const itemWithLegacyEmailSubject = isEmailCampaign && !isSavingGroupSnapshot &&
+                (item.emailSubject === undefined || item.emailSubject === null)
+                ? { ...item, emailSubject: formData.emailSubject.trim() }
+                : item
+              const normalizedItem = formattedContentForSave || emailBodyIsHtmlForSave
+                ? { ...itemWithLegacyEmailSubject, content: sanitizeFormattedContent(itemWithLegacyEmailSubject.content) }
+                : itemWithLegacyEmailSubject
+              if (isCommentSeedingCampaign) {
+                const mediaItems = normalizedItem.mediaItems || []
+                return {
+                  ...normalizedItem,
+                  mediaOption: mediaItems.length > 0 && normalizedItem.mediaOption !== 'none'
+                    ? normalizedItem.mediaOption || 'none'
+                    : 'none',
+                  mediaItems,
+                  randomMediaCount: 1
+                }
+              }
+              if (isReelsMediaMode) {
+                return { ...normalizedItem, randomMediaCount: 1 }
+              }
+              return isMobileManagedSmsCampaign
+                ? { ...normalizedItem, mediaOption: 'none' as const, mediaItems: [] }
+                : normalizedItem
+            })
         : []
       const contentForSave = isSavingGroupSnapshot
         ? String(advancedContentItemsForSave[0]?.content || '')
@@ -5993,7 +6116,7 @@ export default function CampaignFormModal({
               byActionCode
             },
             imageOption: (isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
-            randomImageCount: formData.randomImageCount,
+            randomImageCount: isReelsMediaMode ? 1 : formData.randomImageCount,
             commentImageOption: formData.commentImages.length > 0 && formData.commentImageOption !== 'none'
               ? formData.commentImageOption
               : 'none',
@@ -6394,7 +6517,12 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập số lời mời cần huỷ lớn hơn 0.', 'error')
       return
     }
-    if (!isMobileManagedSmsCampaign && showContentSection && !isFacebookJoinGroupCampaign && !isAdvancedContentMode && !validateSelectedImages(isEmailCampaign ? 'Tệp đính kèm' : 'Media', formData.imageOption, formData.images)) {
+    if (!isMobileManagedSmsCampaign && showContentSection && !isFacebookJoinGroupCampaign && !isAdvancedContentMode && !validateSelectedImages(
+      isEmailCampaign ? 'Tệp đính kèm' : 'Media',
+      formData.imageOption,
+      formData.images,
+      getMediaSelectionMode('post')
+    )) {
       return
     }
     if (!validateAdvancedContentItems()) {
@@ -6403,12 +6531,15 @@ export default function CampaignFormModal({
     if (!validateAdvancedContentMedia()) {
       return
     }
+    if (!validateReelsMedia()) {
+      return
+    }
     const shouldValidateBasicCommentMedia =
       (isCommentSeedingCampaign && !isAdvancedContentMode) ||
       (isFacebookGroupPostCampaign && formData.enableComment)
     if (shouldValidateBasicCommentMedia) {
-      if (!validateCommentImagePool('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
-      if (!validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
+      if (!validateCommentMediaPool('Media comment', formData.commentImageOption, formData.commentImages)) return
+      if (!validateSelectedImages('Media comment', formData.commentImageOption, formData.commentImages, 'image-video')) return
     }
     if (isNewsfeedInteractionCampaign) {
       const timeMinutes = Math.floor(Number(formData.newsfeedTimeMinutes))
@@ -6464,8 +6595,8 @@ export default function CampaignFormModal({
         : isVoiceCallCampaign
           ? 'Vui lòng nhập nội dung cuộc gọi tự động.'
         : isMessageCampaign
-          ? `Vui lòng nhập nội dung tin nhắn hoặc chọn ít nhất một ${isZaloMessageCampaign ? 'file' : 'ảnh'}.`
-          : 'Vui lòng nhập nội dung chiến dịch hoặc chọn ít nhất một ảnh.',
+          ? `Vui lòng nhập nội dung tin nhắn hoặc chọn ít nhất một ${isZaloMessageCampaign ? 'file' : selectedActionPlatform === 'facebook' ? 'ảnh/video' : 'ảnh'}.`
+          : `Vui lòng nhập nội dung chiến dịch hoặc chọn ít nhất một ${selectedActionPlatform === 'facebook' ? 'ảnh/video' : 'ảnh'}.`,
         'error'
       )
       return
@@ -6745,7 +6876,7 @@ export default function CampaignFormModal({
     }
     const hasCommentImages = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
     if (isCommentSeedingCampaign && !isAdvancedContentMode && !formData.commentContent.trim() && !hasCommentImages) {
-      showAlert('Vui lòng nhập nội dung comment hoặc chọn ảnh comment.', 'error')
+      showAlert('Vui lòng nhập nội dung comment hoặc chọn media comment.', 'error')
       return
     }
     if (!isDataGroupSource && !isEditingSavedCampaign && isCommentSeedingCampaign && validDetails.length === 0 && !hasPendingDirectDataGroupSnapshots && !hasSelectedFindDataSourceCampaign) {
@@ -7956,17 +8087,17 @@ export default function CampaignFormModal({
 
   const usesSingleCommentMediaSelection = (target: MainMediaPickerTarget): boolean => {
     if (target === 'comment') return formData.commentImageOption === 'all'
-    if (typeof target !== 'object' || !isCommentSeedingCampaign) return false
-    return formData.advancedContentItems.find(item => item.id === target.itemId)?.mediaOption === 'all'
+    if (target === 'post') return isReelsMediaMode && formData.imageOption === 'all'
+    const mediaOption = formData.advancedContentItems.find(item => item.id === target.itemId)?.mediaOption
+    if (isCommentSeedingCampaign) return mediaOption === 'all'
+    return isReelsMediaMode && mediaOption === 'all'
   }
 
   const addCampaignMedia = (target: MainMediaPickerTarget, items: CampaignMediaSnapshot[]) => {
     if (items.length === 0) return
     const isAdvancedTarget = typeof target === 'object'
     const isCommentTarget = target === 'comment'
-    const acceptedItems = isCommentTarget || !(isZaloMessageCampaign || isEmailCampaign)
-      ? items.filter(isCampaignMediaImage)
-      : items
+    const acceptedItems = filterCampaignMediaBySelectionMode(items, getMediaSelectionMode(target))
     if (acceptedItems.length === 0) return
     setFormData(p => {
       if (isCommentTarget) {
@@ -7976,6 +8107,9 @@ export default function CampaignFormModal({
         const nextItems = getUniqueCampaignMediaAdditions(p.commentImages, acceptedItems)
         return { ...p, commentImages: [...p.commentImages, ...nextItems] }
       }
+      if (!isAdvancedTarget && isReelsMediaMode && p.imageOption === 'all') {
+        return { ...p, images: acceptedItems.slice(0, 1) }
+      }
       if (isAdvancedTarget) {
         return {
           ...p,
@@ -7984,7 +8118,7 @@ export default function CampaignFormModal({
             const current = item.mediaItems || []
             const nextItems = getUniqueCampaignMediaAdditions(current, acceptedItems)
             const mergedItems = [...current, ...nextItems]
-            const nextMediaItems = isCommentSeedingCampaign && item.mediaOption === 'all'
+            const nextMediaItems = (isCommentSeedingCampaign || isReelsMediaMode) && item.mediaOption === 'all'
               ? acceptedItems.slice(0, 1)
               : mergedItems
             return {
@@ -8012,8 +8146,14 @@ export default function CampaignFormModal({
       return
     }
     localMediaPickerTargetRef.current = target
-    const acceptsFiles = target !== 'comment' && (isZaloMessageCampaign || isEmailCampaign)
-    const input = acceptsFiles ? localFileInputRef.current : localImageInputRef.current
+    const mode = getMediaSelectionMode(target)
+    const input = mode === 'file'
+      ? localFileInputRef.current
+      : mode === 'video'
+        ? localVideoInputRef.current
+        : mode === 'image-video'
+          ? localImageVideoInputRef.current
+          : localImageInputRef.current
     if (!input) return
     input.multiple = !usesSingleCommentMediaSelection(target)
     input.click()
@@ -8026,9 +8166,9 @@ export default function CampaignFormModal({
     localMediaPickerTargetRef.current = null
     if (!target || rawFiles.length === 0) return
 
-    const onlyImages = target === 'comment' || !(isZaloMessageCampaign || isEmailCampaign)
+    const mode = getMediaSelectionMode(target)
     const maxSelect = usesSingleCommentMediaSelection(target) ? 1 : undefined
-    const { snapshots, failures } = selectLocalCampaignMedia(rawFiles, { onlyImages, maxSelect })
+    const { snapshots, failures } = selectLocalCampaignMedia(rawFiles, { mode, maxSelect })
     if (failures.length > 0) {
       showAlert(
         summarizeLocalCampaignMediaFailures(failures),
@@ -8477,6 +8617,9 @@ export default function CampaignFormModal({
     const isZaloMedia = isZaloMessageCampaign && !isComment
     const isEmailAttachment = isEmailCampaign && !isComment
     const isFileMedia = isZaloMedia || isEmailAttachment
+    const mediaSelectionMode = getMediaSelectionMode(target)
+    const isFacebookImageVideoMedia = mediaSelectionMode === 'image-video'
+    const isVideoOnlyMedia = mediaSelectionMode === 'video'
     const option = isComment ? formData.commentImageOption : formData.imageOption
     const randomCount = isComment ? 1 : formData.randomImageCount
     const images = isComment ? formData.commentImages : formData.images
@@ -8484,7 +8627,11 @@ export default function CampaignFormModal({
 
     const setOption = (value: ImageOption) => {
       if (isComment && value === 'all' && images.length > 1) {
-        showAlert('Chế độ "Gửi ảnh đã chọn" chỉ dùng tối đa 1 ảnh cho mỗi comment. Vui lòng xoá bớt còn 1 ảnh hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        showAlert('Chế độ "Gửi media đã chọn" chỉ dùng tối đa 1 ảnh hoặc video cho mỗi comment. Vui lòng xoá bớt còn 1 media hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        return
+      }
+      if (!isComment && isReelsMediaMode && value === 'all' && images.length > 1) {
+        showAlert('Chế độ "Đăng video đã chọn" chỉ dùng đúng 1 video cho mỗi lượt. Vui lòng xoá bớt còn 1 video hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
         return
       }
       setFormData(p => isComment
@@ -8510,7 +8657,7 @@ export default function CampaignFormModal({
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>{title}</div>
         {isComment && (
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: -8, marginBottom: 16 }}>
-            Facebook chỉ cho phép mỗi comment 1 ảnh. Chế độ gửi ảnh đã chọn dùng 1 ảnh; chế độ ngẫu nhiên chọn 1 ảnh từ kho.
+            Mỗi comment gửi tối đa 1 ảnh hoặc video. Chế độ gửi media đã chọn dùng 1 media; chế độ ngẫu nhiên chọn 1 media từ kho.
           </div>
         )}
         {!isComment && isPostBackgroundActive && (
@@ -8553,7 +8700,7 @@ export default function CampaignFormModal({
                   checked={option === 'none'}
                   onChange={() => setOption('none')}
                 />
-                <span>{isEmailAttachment ? 'Không đính kèm file' : isZaloMedia ? 'Không gửi file' : 'Không gửi ảnh'}</span>
+                <span>{isEmailAttachment ? 'Không đính kèm file' : isZaloMedia ? 'Không gửi file' : isVideoOnlyMedia ? 'Không đăng video' : isFacebookImageVideoMedia ? 'Không gửi ảnh/video' : 'Không gửi ảnh'}</span>
               </label>
               <label className="schedule-radio-label">
                 <input
@@ -8562,7 +8709,7 @@ export default function CampaignFormModal({
                   checked={option === 'all'}
                   onChange={() => setOption('all')}
                 />
-                <span>{isComment ? 'Gửi ảnh đã chọn' : isEmailAttachment ? 'Đính kèm file đã chọn' : isZaloMedia ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
+                <span>{isComment ? 'Gửi media đã chọn' : isEmailAttachment ? 'Đính kèm file đã chọn' : isZaloMedia ? 'Gửi file đã chọn' : isVideoOnlyMedia ? 'Đăng video đã chọn' : isFacebookImageVideoMedia ? 'Gửi ảnh/video đã chọn' : 'Gửi ảnh đã chọn'}</span>
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <label className="schedule-radio-label">
@@ -8572,17 +8719,17 @@ export default function CampaignFormModal({
                     checked={option === 'random'}
                     onChange={() => setOption('random')}
                   />
-                  <span>{isComment ? 'Gửi ngẫu nhiên 1 ảnh trong các ảnh đã chọn' : isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
+                  <span>{isComment ? 'Gửi ngẫu nhiên 1 ảnh/video trong các media đã chọn' : isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : isVideoOnlyMedia ? 'Đăng ngẫu nhiên 1 video trong các video đã chọn' : isFacebookImageVideoMedia ? 'Gửi ngẫu nhiên số media trong các media đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
                 </label>
                 <input
                   type="number"
                   min={1}
-                  max={isComment ? 1 : undefined}
-                  value={randomCount}
+                  max={isComment || isVideoOnlyMedia ? 1 : undefined}
+                  value={isVideoOnlyMedia ? 1 : randomCount}
                   onChange={e => setRandomCount(Number(e.target.value))}
                   className="stepper-input"
                   style={{ width: 60, padding: '4px 8px' }}
-                  disabled={isComment || option !== 'random'}
+                  disabled={isComment || isVideoOnlyMedia || option !== 'random'}
                 />
               </div>
             </div>
@@ -8590,7 +8737,7 @@ export default function CampaignFormModal({
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
-              {isComment ? 'Kho ảnh đã chọn' : isEmailAttachment ? 'Tệp đính kèm đã chọn' : isZaloMedia ? 'File đã chọn' : 'Ảnh đã chọn'}
+              {isComment ? 'Kho ảnh/video đã chọn' : isEmailAttachment ? 'Tệp đính kèm đã chọn' : isZaloMedia ? 'File đã chọn' : isVideoOnlyMedia ? 'Video đã chọn' : isFacebookImageVideoMedia ? 'Ảnh/video đã chọn' : 'Ảnh đã chọn'}
             </div>
             <div className="stepper-grid-container" style={{ margin: 0, maxHeight: 300, overflowY: 'auto' }}>
               <table className="campaign-grid">
@@ -8606,7 +8753,7 @@ export default function CampaignFormModal({
                   {images.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="text-center text-muted" style={{ padding: '24px 0' }}>
-                        {isFileMedia ? 'Chưa có file nào được chọn' : 'Chưa có ảnh nào được chọn'}
+                        {isFileMedia ? 'Chưa có file nào được chọn' : isVideoOnlyMedia ? 'Chưa có video nào được chọn' : isFacebookImageVideoMedia ? 'Chưa có ảnh/video nào được chọn' : 'Chưa có ảnh nào được chọn'}
                       </td>
                     </tr>
                   ) : (
@@ -10170,7 +10317,18 @@ export default function CampaignFormModal({
             <input
               type="checkbox"
               checked={formData.postAsReels}
-              onChange={e => setFormData(p => ({ ...p, postAsReels: e.target.checked }))}
+              onChange={e => {
+                const checked = e.target.checked
+                setFormData(p => ({
+                  ...p,
+                  postAsReels: checked,
+                  postWithBackground: checked ? false : p.postWithBackground,
+                  randomImageCount: checked ? 1 : p.randomImageCount,
+                  advancedContentItems: checked
+                    ? p.advancedContentItems.map(item => ({ ...item, randomMediaCount: 1 }))
+                    : p.advancedContentItems
+                }))
+              }}
             />
             <span>Đăng Reels <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Đăng video trên Reels)</em></span>
           </label>
@@ -12543,7 +12701,7 @@ export default function CampaignFormModal({
             </div>
           </div>
 
-          {renderImagePicker('comment', 'Ảnh comment')}
+          {renderImagePicker('comment', 'Media comment')}
         </div>
       )}
     </div>
@@ -12720,7 +12878,7 @@ export default function CampaignFormModal({
             disabled={isPostBackgroundDisabled}
             onChange={e => setPostBackgroundEnabled(e.target.checked)}
           />
-          <span>Đăng bài với phông nền <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(tối đa 130 ký tự, 3 dòng và KHÔNG đăng ảnh)</em></span>
+          <span>Đăng bài với phông nền <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(tối đa 130 ký tự, 3 dòng và KHÔNG gửi media)</em></span>
         </label>
         {isPostBackgroundApiModeDisabled && (
           <div className="schedule-hint" style={{ marginTop: 6 }}>
@@ -12838,7 +12996,15 @@ export default function CampaignFormModal({
       const currentItem = formData.advancedContentItems.find(item => item.id === itemId)
       const mediaItems = patch.mediaItems || currentItem?.mediaItems || []
       if (mediaItems.length > 1) {
-        showAlert('Chế độ "Gửi ảnh đã chọn" chỉ dùng tối đa 1 ảnh cho mỗi comment. Vui lòng xoá bớt còn 1 ảnh hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        showAlert('Chế độ "Gửi media đã chọn" chỉ dùng tối đa 1 ảnh hoặc video cho mỗi comment. Vui lòng xoá bớt còn 1 media hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        return
+      }
+    }
+    if (isReelsMediaMode && patch.mediaOption === 'all') {
+      const currentItem = formData.advancedContentItems.find(item => item.id === itemId)
+      const mediaItems = patch.mediaItems || currentItem?.mediaItems || []
+      if (mediaItems.length > 1) {
+        showAlert('Chế độ "Đăng video đã chọn" chỉ dùng đúng 1 video cho mỗi lượt. Vui lòng xoá bớt còn 1 video hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
         return
       }
     }
@@ -13047,7 +13213,7 @@ export default function CampaignFormModal({
                       <option value="">— Chọn một nhóm mẫu —</option>
                       {contentTemplateGroups.filter(group => !group.isDelete).map(group => {
                         const compatibleCount = channel
-                          ? buildContentTemplateGroupCandidate(contentTemplates, group, channel).compatibleTemplateCount
+                          ? buildContentTemplateGroupCandidate(contentTemplates, group, channel, mainMediaSelectionMode).compatibleTemplateCount
                           : 0
                         return (
                           <option key={group.id} value={group.id}>
@@ -13214,13 +13380,16 @@ export default function CampaignFormModal({
     const randomMediaCount = isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3)
     const radioName = `advanced-media-${item.id}`
     const isFileMedia = isZaloMessageCampaign || isEmailCampaign
-    const mediaTitle = isCommentSeedingCampaign ? 'Kho ảnh đã chọn' : isEmailCampaign ? 'Tệp đính kèm đã chọn' : isZaloMessageCampaign ? 'File đã chọn' : 'Ảnh đã chọn'
+    const mediaSelectionMode = getMediaSelectionMode({ kind: 'advanced', itemId: item.id })
+    const isFacebookImageVideoMedia = mediaSelectionMode === 'image-video'
+    const isVideoOnlyMedia = mediaSelectionMode === 'video'
+    const mediaTitle = isCommentSeedingCampaign ? 'Kho ảnh/video đã chọn' : isEmailCampaign ? 'Tệp đính kèm đã chọn' : isZaloMessageCampaign ? 'File đã chọn' : isVideoOnlyMedia ? 'Video đã chọn' : isFacebookImageVideoMedia ? 'Ảnh/video đã chọn' : 'Ảnh đã chọn'
     const mediaDisabled = isPostBackgroundActive
 
     return (
       <div className="campaign-advanced-media-panel">
         {isCommentSeedingCampaign && (
-          <div className="schedule-hint">Facebook chỉ cho phép mỗi comment 1 ảnh. Chế độ gửi ảnh đã chọn dùng 1 ảnh; chế độ ngẫu nhiên chọn 1 ảnh từ kho.</div>
+          <div className="schedule-hint">Mỗi comment gửi tối đa 1 ảnh hoặc video. Chế độ gửi media đã chọn dùng 1 media; chế độ ngẫu nhiên chọn 1 media từ kho.</div>
         )}
         {mediaDisabled && (
           <div className="schedule-hint">Đăng bài với phông nền không hỗ trợ gửi media.</div>
@@ -13255,7 +13424,7 @@ export default function CampaignFormModal({
                 checked={mediaOption === 'none'}
                 onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'none' })}
               />
-              <span>{isEmailCampaign ? 'Không đính kèm file' : isZaloMessageCampaign ? 'Không gửi file' : 'Không gửi ảnh'}</span>
+              <span>{isEmailCampaign ? 'Không đính kèm file' : isZaloMessageCampaign ? 'Không gửi file' : isVideoOnlyMedia ? 'Không đăng video' : isFacebookImageVideoMedia ? 'Không gửi ảnh/video' : 'Không gửi ảnh'}</span>
             </label>
             <label className="schedule-radio-label">
               <input
@@ -13265,7 +13434,7 @@ export default function CampaignFormModal({
                 onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'all' })}
                 disabled={mediaDisabled}
               />
-              <span>{isCommentSeedingCampaign ? 'Gửi ảnh đã chọn' : isEmailCampaign ? 'Đính kèm file đã chọn' : isZaloMessageCampaign ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
+              <span>{isCommentSeedingCampaign ? 'Gửi media đã chọn' : isEmailCampaign ? 'Đính kèm file đã chọn' : isZaloMessageCampaign ? 'Gửi file đã chọn' : isVideoOnlyMedia ? 'Đăng video đã chọn' : isFacebookImageVideoMedia ? 'Gửi ảnh/video đã chọn' : 'Gửi ảnh đã chọn'}</span>
             </label>
             <div className="campaign-advanced-random-media-row">
               <label className="schedule-radio-label">
@@ -13276,16 +13445,16 @@ export default function CampaignFormModal({
                   onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'random', randomMediaCount: 1 })}
                   disabled={mediaDisabled}
                 />
-                <span>{isCommentSeedingCampaign ? 'Gửi ngẫu nhiên 1 ảnh trong các ảnh đã chọn' : isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
+                <span>{isCommentSeedingCampaign ? 'Gửi ngẫu nhiên 1 ảnh/video trong các media đã chọn' : isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : isVideoOnlyMedia ? 'Đăng ngẫu nhiên 1 video trong các video đã chọn' : isFacebookImageVideoMedia ? 'Gửi ngẫu nhiên số media trong các media đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
               </label>
               <input
                 type="number"
                 min={1}
-                max={isCommentSeedingCampaign ? 1 : undefined}
-                value={randomMediaCount}
+                max={isCommentSeedingCampaign || isVideoOnlyMedia ? 1 : undefined}
+                value={isVideoOnlyMedia ? 1 : randomMediaCount}
                 onChange={event => setAdvancedContentItem(item.id, { randomMediaCount: Math.max(1, Number(event.target.value) || 1) })}
                 className="stepper-input"
-                disabled={isCommentSeedingCampaign || mediaOption !== 'random' || mediaDisabled}
+                disabled={isCommentSeedingCampaign || isVideoOnlyMedia || mediaOption !== 'random' || mediaDisabled}
               />
             </div>
           </div>
@@ -13305,7 +13474,7 @@ export default function CampaignFormModal({
                   {mediaItems.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="text-center text-muted">
-                        {isFileMedia ? 'Chưa có file nào được chọn' : 'Chưa có ảnh nào được chọn'}
+                        {isFileMedia ? 'Chưa có file nào được chọn' : isVideoOnlyMedia ? 'Chưa có video nào được chọn' : isFacebookImageVideoMedia ? 'Chưa có ảnh/video nào được chọn' : 'Chưa có ảnh nào được chọn'}
                       </td>
                     </tr>
                   ) : mediaItems.map((media, mediaIndex) => {
@@ -13582,7 +13751,7 @@ export default function CampaignFormModal({
         {renderRewriteCommentContentEachRunOption()}
       </div>
 
-      {renderImagePicker('comment', 'Ảnh comment')}
+      {renderImagePicker('comment', 'Media comment')}
 
     </div>
   )
@@ -13756,6 +13925,16 @@ export default function CampaignFormModal({
     if (!contentTemplatePicker) return null
     const query = contentTemplatePicker.searchQuery.trim().toLowerCase()
     const targetChannel = getContentTemplateTargetChannel(contentTemplatePicker.target)
+    const targetMediaMode: MediaSelectionMode = contentTemplatePicker.target === 'commentContent'
+      ? 'image-video'
+      : targetChannel === 'facebook_post' || targetChannel === 'facebook_message' || targetChannel === 'facebook_comment'
+        ? mainMediaSelectionMode
+        : 'image'
+    const filterTargetTemplateMediaUrls = (urls: string[]): string[] => (
+      contentTemplateImagesToSnapshots(urls, targetMediaMode).snapshots.flatMap(snapshot => (
+        snapshot.cloudUrl ? [snapshot.cloudUrl] : []
+      ))
+    )
     const compatibleTemplates = contentTemplates.flatMap(template => {
       const resolved = resolveContentTemplate(template, targetChannel)
       return !template.isDelete && resolved.variants.length > 0
@@ -13784,7 +13963,7 @@ export default function CampaignFormModal({
       ? []
       : contentTemplatePicker.target === 'postBumpContent'
         ? []
-        : selectedResolved.imageUrls
+        : filterTargetTemplateMediaUrls(selectedResolved.imageUrls)
     return (
       <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: Math.max(3100, (modalZIndex || 3000) + 100) }}>
         <div className="content-template-picker-modal">
@@ -13865,7 +14044,7 @@ export default function CampaignFormModal({
                     const selected = selectedTemplate?.id === template.id
                     const mediaCount = targetChannel === 'sms' || contentTemplatePicker.target === 'postBumpContent'
                       ? 0
-                      : resolved.imageUrls.length
+                      : filterTargetTemplateMediaUrls(resolved.imageUrls).length
                     return <button
                       key={template.id}
                       type="button"
@@ -13960,7 +14139,7 @@ export default function CampaignFormModal({
     const group = contentTemplateGroups.find(item => item.id === previewContentTemplateGroupId)
     const templates = contentTemplates.filter(template => template.groupId === previewContentTemplateGroupId && !template.isDelete)
     const groupCandidate = group && advancedContentTargetChannel
-      ? buildContentTemplateGroupCandidate(contentTemplates, group, advancedContentTargetChannel)
+      ? buildContentTemplateGroupCandidate(contentTemplates, group, advancedContentTargetChannel, mainMediaSelectionMode)
       : null
     const groupIsInactive = group?.isActive === false
     const groupHasNoCompatibleItems = !!groupCandidate && groupCandidate.variantCount === 0
@@ -13972,10 +14151,26 @@ export default function CampaignFormModal({
     const selectedTemplate = templates.find(template => template.id === previewContentTemplateId) || templates[0] || null
     const selectedChannel = previewContentTemplateChannel || getInitialContentTemplatePreviewChannel(selectedTemplate, advancedContentTargetChannel)
     const selectedChannelConfig = selectedTemplate?.channels[selectedChannel]
+    const selectedChannelMediaMode: MediaSelectionMode = selectedChannel === advancedContentTargetChannel
+      ? mainMediaSelectionMode
+      : selectedChannel === 'facebook_post' || selectedChannel === 'facebook_message' || selectedChannel === 'facebook_comment'
+        ? 'image-video'
+        : 'image'
+    const selectedChannelMediaUrls = selectedChannelConfig?.enabled && selectedChannel !== 'sms'
+      ? contentTemplateImagesToSnapshots(selectedChannelConfig.imageUrls, selectedChannelMediaMode).snapshots.flatMap(snapshot => (
+          snapshot.cloudUrl ? [snapshot.cloudUrl] : []
+        ))
+      : []
     const selectedTargetResolved = selectedTemplate && advancedContentTargetChannel
       ? resolveContentTemplate(selectedTemplate, advancedContentTargetChannel)
       : null
-    const selectedTemplateWillBeUsed = groupCanBeUsed && !!selectedTargetResolved && selectedTargetResolved.variants.length > 0
+    const selectedTargetCompatibleMediaCount = selectedTargetResolved
+      ? contentTemplateImagesToSnapshots(selectedTargetResolved.imageUrls, mainMediaSelectionMode).snapshots.length
+      : 0
+    const selectedTemplateWillBeUsed = groupCanBeUsed &&
+      !!selectedTargetResolved &&
+      selectedTargetResolved.variants.length > 0 &&
+      (mainMediaSelectionMode !== 'video' || selectedTargetCompatibleMediaCount > 0)
     const selectedChannelIsFacebook = FACEBOOK_CONTENT_TEMPLATE_CHANNELS.includes(selectedChannel)
     const selectedTemplateHasFacebook = FACEBOOK_CONTENT_TEMPLATE_CHANNELS.some(channel => selectedTemplate?.channels[channel]?.enabled)
     const preferredFacebookChannel = advancedContentTargetChannel && FACEBOOK_CONTENT_TEMPLATE_CHANNELS.includes(advancedContentTargetChannel)
@@ -14033,7 +14228,13 @@ export default function CampaignFormModal({
                 const targetResolved = advancedContentTargetChannel
                   ? resolveContentTemplate(template, advancedContentTargetChannel)
                   : null
-                const templateWillBeUsed = groupCanBeUsed && !!targetResolved && targetResolved.variants.length > 0
+                const compatibleTargetMediaCount = targetResolved
+                  ? contentTemplateImagesToSnapshots(targetResolved.imageUrls, mainMediaSelectionMode).snapshots.length
+                  : 0
+                const templateWillBeUsed = groupCanBeUsed &&
+                  !!targetResolved &&
+                  targetResolved.variants.length > 0 &&
+                  (mainMediaSelectionMode !== 'video' || compatibleTargetMediaCount > 0)
                 const templatePreviewChannel = getInitialContentTemplatePreviewChannel(template, advancedContentTargetChannel)
                 const templatePreviewConfig = template.channels[templatePreviewChannel]
                 const firstVariant = templatePreviewConfig?.variants[0]?.text || ''
@@ -14070,7 +14271,7 @@ export default function CampaignFormModal({
                     <p className="content-template-picker-item-excerpt">{excerpt}</p>
                     <div className="content-template-picker-item-footer">
                       <span>{targetResolved?.variants.length || 0} biến thể phù hợp</span>
-                      <span>{targetResolved?.imageUrls.length || 0} media</span>
+                      <span>{compatibleTargetMediaCount} media</span>
                     </div>
                   </button>
                 )
@@ -14131,7 +14332,7 @@ export default function CampaignFormModal({
                     <div className="campaign-group-preview-channel-meta">
                       <strong>{getContentTemplateChannelLabel(selectedChannel)}</strong>
                       <span>
-                        {selectedChannelConfig?.enabled ? 'Đang bật' : 'Đang tắt'} · {selectedChannelConfig?.variants.length || 0} biến thể · {selectedChannelConfig?.imageUrls.length || 0} media
+                        {selectedChannelConfig?.enabled ? 'Đang bật' : 'Đang tắt'} · {selectedChannelConfig?.variants.length || 0} biến thể · {selectedChannelMediaUrls.length} media
                       </span>
                     </div>
                     {selectedChannelConfig?.enabled ? (
@@ -14141,7 +14342,7 @@ export default function CampaignFormModal({
                         variants={selectedChannelConfig.variants.map(variant => variant.text)}
                         formatted={isRichContentTemplateChannel(selectedChannel, selectedChannelConfig)}
                         subject={selectedChannelConfig.subject}
-                        imageUrls={selectedChannelConfig.imageUrls}
+                        imageUrls={selectedChannelMediaUrls}
                       />
                     ) : (
                       <div className="campaign-group-preview-disabled-channel">
@@ -16198,7 +16399,23 @@ export default function CampaignFormModal({
       <input
         ref={localImageInputRef}
         type="file"
-        accept="image/*"
+        accept={IMAGE_FILE_ACCEPT}
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleLocalMediaChange}
+      />
+      <input
+        ref={localImageVideoInputRef}
+        type="file"
+        accept={IMAGE_VIDEO_FILE_ACCEPT}
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleLocalMediaChange}
+      />
+      <input
+        ref={localVideoInputRef}
+        type="file"
+        accept={VIDEO_FILE_ACCEPT}
         multiple
         style={{ display: 'none' }}
         onChange={handleLocalMediaChange}
@@ -16212,7 +16429,7 @@ export default function CampaignFormModal({
       />
       {mediaPickerTarget && (
         <MediaLibraryModal
-          pickerMode={mediaPickerTarget !== 'comment' && (isZaloMessageCampaign || isEmailCampaign) ? 'file' : 'image'}
+          pickerMode={getMediaSelectionMode(mediaPickerTarget)}
           maxSelect={usesSingleCommentMediaSelection(mediaPickerTarget) ? 1 : undefined}
           onConfirm={handleMediaPickerConfirm}
           onClose={() => setMediaPickerTarget(null)}

@@ -52,9 +52,29 @@ export function guessMediaMimeType(filePath: string): string {
     case '.tiff':
       return 'image/tiff'
     case '.mp4':
+    case '.m4v':
       return 'video/mp4'
     case '.mov':
       return 'video/quicktime'
+    case '.webm':
+      return 'video/webm'
+    case '.avi':
+      return 'video/x-msvideo'
+    case '.mpeg':
+    case '.mpg':
+      return 'video/mpeg'
+    case '.mkv':
+      return 'video/x-matroska'
+    case '.ogv':
+      return 'video/ogg'
+    case '.wmv':
+      return 'video/x-ms-wmv'
+    case '.3gp':
+      return 'video/3gpp'
+    case '.3g2':
+      return 'video/3gpp2'
+    case '.m2ts':
+      return 'video/mp2t'
     case '.pdf':
       return 'application/pdf'
     case '.txt':

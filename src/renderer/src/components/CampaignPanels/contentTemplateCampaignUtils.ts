@@ -11,6 +11,10 @@ import {
   plainTextToFormattedContent,
   sanitizeFormattedContent
 } from '../../../../shared/formattedContent'
+import {
+  runtimeMediaSourceMatchesSelectionMode,
+  type MediaSelectionMode
+} from '../../../../shared/mediaTypes'
 
 export interface ResolvedContentTemplate {
   variants: string[]
@@ -112,28 +116,41 @@ export const resolveContentTemplate = (
   }
 }
 
-const inferImageMimeType = (url: string): string => {
+const inferMediaMimeType = (url: string): string => {
   const clean = url.split(/[?#]/, 1)[0].toLowerCase()
+  if (/\.mp4$|\.m4v$/.test(clean)) return 'video/mp4'
+  if (/\.mov$/.test(clean)) return 'video/quicktime'
+  if (/\.webm$/.test(clean)) return 'video/webm'
+  if (/\.avi$/.test(clean)) return 'video/x-msvideo'
+  if (/\.mpe?g$|\.mpg$/.test(clean)) return 'video/mpeg'
+  if (/\.mkv$/.test(clean)) return 'video/x-matroska'
+  if (/\.ogv$/.test(clean)) return 'video/ogg'
+  if (/\.wmv$/.test(clean)) return 'video/x-ms-wmv'
+  if (/\.3gp$/.test(clean)) return 'video/3gpp'
+  if (/\.3g2$/.test(clean)) return 'video/3gpp2'
+  if (/\.m2ts$/.test(clean)) return 'video/mp2t'
   if (/\.png$/.test(clean)) return 'image/png'
   if (/\.gif$/.test(clean)) return 'image/gif'
   if (/\.webp$/.test(clean)) return 'image/webp'
   if (/\.avif$/.test(clean)) return 'image/avif'
   if (/\.svg$/.test(clean)) return 'image/svg+xml'
-  return 'image/jpeg'
+  if (/\.jpe?g$/.test(clean)) return 'image/jpeg'
+  return ''
 }
 
-const getImageName = (url: string, index: number): string => {
+const getMediaName = (url: string, index: number): string => {
   try {
     const pathname = new URL(url).pathname
     const name = decodeURIComponent(pathname.split('/').filter(Boolean).pop() || '')
-    return name || `Ảnh mẫu ${index + 1}`
+    return name || `Media mẫu ${index + 1}`
   } catch {
-    return `Ảnh mẫu ${index + 1}`
+    return `Media mẫu ${index + 1}`
   }
 }
 
 export const contentTemplateImagesToSnapshots = (
-  imageUrls: string[]
+  imageUrls: string[],
+  mode: MediaSelectionMode = 'image'
 ): { snapshots: CampaignMediaSnapshot[]; invalidCount: number } => {
   let invalidCount = 0
   const snapshots = Array.from(new Set(imageUrls.map(url => String(url || '').trim()).filter(Boolean)))
@@ -142,11 +159,21 @@ export const contentTemplateImagesToSnapshots = (
         invalidCount += 1
         return []
       }
+      const mimeType = inferMediaMimeType(url)
+      const name = getMediaName(url, index)
+      if (!runtimeMediaSourceMatchesSelectionMode(mode, {
+        cloudUrl: url,
+        name,
+        mimeType
+      })) {
+        invalidCount += 1
+        return []
+      }
       return [{
-        name: getImageName(url, index),
+        name,
         localPath: null,
         cloudUrl: url,
-        mimeType: inferImageMimeType(url),
+        mimeType,
         sizeBytes: null,
         provider: 'content-template'
       }]
@@ -162,7 +189,10 @@ const getChannelMediaLimit = (channelName: ContentTemplateChannelName): number =
 export const buildContentTemplateGroupCandidate = (
   templates: ContentTemplate[],
   group: Pick<ContentTemplateGroup, 'id' | 'name'>,
-  channelName: ContentTemplateChannelName
+  channelName: ContentTemplateChannelName,
+  mediaMode: MediaSelectionMode = channelName === 'facebook_post' || channelName === 'facebook_message' || channelName === 'facebook_comment'
+    ? 'image-video'
+    : 'image'
 ): ContentTemplateGroupCandidate => {
   const groupTemplates = templates.filter(template => template.groupId === group.id && !template.isDelete)
   const items: CampaignAdvancedContentItem[] = []
@@ -181,12 +211,16 @@ export const buildContentTemplateGroupCandidate = (
       continue
     }
 
-    compatibleTemplateCount += 1
     const media = mediaLimit > 0
-      ? contentTemplateImagesToSnapshots(resolved.imageUrls)
+      ? contentTemplateImagesToSnapshots(resolved.imageUrls, mediaMode)
       : { snapshots: [] as CampaignMediaSnapshot[], invalidCount: 0 }
     invalidMediaCount += media.invalidCount
     const snapshots = media.snapshots.slice(0, mediaLimit)
+    if (mediaMode === 'video' && snapshots.length === 0) {
+      skippedTemplateCount += 1
+      continue
+    }
+    compatibleTemplateCount += 1
 
     resolved.variants.forEach((content, variantIndex) => {
       const id = `template-${template.id}-variant-${variantIndex + 1}`
@@ -194,11 +228,11 @@ export const buildContentTemplateGroupCandidate = (
       items.push({
         id,
         content,
-        mediaOption: snapshots.length > 1 && channelName === 'facebook_comment'
+        mediaOption: snapshots.length > 1 && (channelName === 'facebook_comment' || mediaMode === 'video')
           ? 'random'
           : snapshots.length > 0 ? 'all' : 'none',
         mediaItems: snapshots,
-        randomMediaCount: channelName === 'facebook_comment' ? 1 : 3,
+        randomMediaCount: channelName === 'facebook_comment' || mediaMode === 'video' ? 1 : 3,
         ...(channelName === 'email' ? { emailSubject: resolved.subject || '' } : {}),
         sourceTemplateId: template.id,
         sourceTemplateName: template.name,
