@@ -1041,6 +1041,7 @@ export default function DataScanModal({
   const [zaloGroupMemberGroupId, setZaloGroupMemberGroupId] = useState('')
   const [zaloGroupMemberLink, setZaloGroupMemberLink] = useState('')
   const [zaloGroupOptions, setZaloGroupOptions] = useState<AutoAccountContact[]>([])
+  const [zaloGroupsLoading, setZaloGroupsLoading] = useState(false)
   const [zaloRemarketingActionIds, setZaloRemarketingActionIds] = useState<string[]>(() => [...DEFAULT_ZALO_REMARKETING_ACTION_IDS])
   const [zaloRemarketingActionDropdownOpen, setZaloRemarketingActionDropdownOpen] = useState(false)
   const [zaloRemarketingDateFrom, setZaloRemarketingDateFrom] = useState(() => getPageInboxDateRange('7_days').fromDate)
@@ -3113,6 +3114,32 @@ export default function DataScanModal({
     setZaloGroupMemberGroupId(groupId)
   }
 
+  const handleLoadZaloGroups = async () => {
+    if (!window.electronAPI || !accountId) {
+      showAlert('Vui lòng chọn tài khoản Zalo trước.', 'error')
+      return
+    }
+
+    setZaloGroupsLoading(true)
+    try {
+      const result = await window.electronAPI.loadGroups(accountId)
+      if (!mountedRef.current) return
+      if (!result.success) {
+        showAlert(result.error || 'Không tải được group từ Zalo.', 'error')
+        return
+      }
+      await loadZaloGroupOptions()
+      if (!mountedRef.current) return
+      showAlert(`Đã tải ${formatCount(result.count)} group.`, 'success')
+    } catch (err: any) {
+      if (!mountedRef.current) return
+      console.error('Failed to load Zalo groups from member picker:', err)
+      showAlert(err?.message || 'Không tải được group từ Zalo.', 'error')
+    } finally {
+      if (mountedRef.current) setZaloGroupsLoading(false)
+    }
+  }
+
   const handleLinkedZaloGroupChange = (groupId: string) => {
     clearHiddenScanDatasetSelection()
     setZaloGroupMemberGroupId(groupId)
@@ -3650,7 +3677,7 @@ export default function DataScanModal({
                       setContactDatasets([])
                       setAction(event.target.value as DataScanAction)
                     }}
-                    disabled={scanLoading || (lockAction && !canSwitchLockedAction)}
+                    disabled={scanLoading || zaloGroupsLoading || (lockAction && !canSwitchLockedAction)}
                   >
                     {availableActions.map(item => (
                       <option key={item.id} value={item.id}>{item.label}</option>
@@ -3669,7 +3696,7 @@ export default function DataScanModal({
                       setContactDatasets([])
                       setAccountId(event.target.value ? Number(event.target.value) : '')
                     }}
-                    disabled={scanLoading || lockAccount}
+                    disabled={scanLoading || zaloGroupsLoading || lockAccount}
                   >
                     <option value="">Chọn tài khoản</option>
                     {platformAccounts.map(account => (
@@ -3851,7 +3878,7 @@ export default function DataScanModal({
                       className="stepper-input"
                       value={zaloGroupMemberMode}
                       onChange={event => handleZaloGroupMemberModeChange(event.target.value as ZaloGroupMemberScanMode)}
-                      disabled={scanLoading}
+                      disabled={scanLoading || zaloGroupsLoading}
                     >
                       <option value="joined_group">Group đã tham gia</option>
                       <option value="group_link">Link group</option>
@@ -3860,12 +3887,24 @@ export default function DataScanModal({
 
                   {zaloGroupMemberMode === 'joined_group' ? (
                     <div className="stepper-form-group data-scan-zalo-member-group">
-                      <label>Group Zalo</label>
+                      <div className="data-scan-field-label-row">
+                        <label>Group Zalo</label>
+                        <button
+                          type="button"
+                          className="btn btn-ghost data-scan-inline-load-button"
+                          onClick={() => void handleLoadZaloGroups()}
+                          disabled={scanLoading || zaloGroupsLoading || loading || !accountId}
+                          title="Tải danh sách group Zalo"
+                        >
+                          <RefreshCw size={12} className={zaloGroupsLoading ? 'spin' : ''} />
+                          {zaloGroupsLoading ? 'Đang tải...' : 'Tải group'}
+                        </button>
+                      </div>
                       <select
                         className="stepper-input"
                         value={zaloGroupMemberGroupId}
                         onChange={event => handleJoinedZaloGroupChange(event.target.value)}
-                        disabled={scanLoading || joinedZaloGroupOptions.length === 0}
+                        disabled={scanLoading || zaloGroupsLoading || joinedZaloGroupOptions.length === 0}
                       >
                         {joinedZaloGroupOptions.length === 0 ? (
                           <option value="">Chưa có group Zalo đã tham gia</option>
@@ -3950,8 +3989,8 @@ export default function DataScanModal({
                   onClick={handleLoadData}
                   disabled={
                     loading
-                    ||
-                    !accountId
+                    || zaloGroupsLoading
+                    || !accountId
                     || (isPostCommentersAction && !postCommentersUrl.trim())
                     || (isPostLikesAction && !postLikesUrl.trim())
                     || (isProfileFriendsAction && !profileFriendsUrl.trim())
@@ -3962,7 +4001,7 @@ export default function DataScanModal({
                   }
                 >
                   <RefreshCw size={14} />
-                  {isDataGroupTargetMode ? 'Quét data' : 'Tải data'}
+                  {isZaloGroupMembersAction ? 'Tải thành viên' : isDataGroupTargetMode ? 'Quét data' : 'Tải data'}
                 </button>
               )}
             </div>}

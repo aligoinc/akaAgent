@@ -13890,6 +13890,26 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   min-width: 0;
 }
 
+.data-scan-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.stepper-form-group .data-scan-field-label-row > label {
+  margin-bottom: 0;
+}
+
+.data-scan-inline-load-button {
+  min-height: 22px;
+  margin: -3px 0;
+  padding: 2px 5px;
+  color: var(--accent-primary);
+  font-size: 12px;
+}
+
 .campaign-other-data-source {
   position: relative;
   display: inline-flex;
