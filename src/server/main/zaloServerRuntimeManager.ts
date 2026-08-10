@@ -27,7 +27,10 @@ import {
 import { WebviewRegistry } from '../../main/playwright/webviewController'
 import { CampaignScheduler } from '../../main/services/campaignScheduler'
 import { ContactLoader } from '../../main/services/contactLoader'
-import { DailyMaintenanceCoordinator } from '../../main/services/dailyMaintenanceCoordinator'
+import {
+  DailyMaintenanceCoordinator,
+  waitForDailyMaintenanceGate
+} from '../../main/services/dailyMaintenanceCoordinator'
 import { ProxyRuntimeService } from '../../main/services/proxyRuntimeService'
 import { SupabaseService } from '../../main/services/supabase'
 import { ZaloRealtimeGroupCampaignManager } from '../../main/services/zaloRealtimeGroupCampaignManager'
@@ -75,6 +78,8 @@ export interface ZaloServerRuntimeManagerOptions {
   connectedClientCount(): number
   listeningAt(): string
   ownershipStore: ServerRuntimeOwnershipStore
+  /** DB-backed old-day run barrier; must not wait on CampaignScheduler itself. */
+  beforeDailyMaintenance?: (staffId: number, dateKey: string, signal: AbortSignal) => Promise<unknown>
 }
 
 function mapZaloLabelToContact(accountId: number, label: ZaloLabelOption): Partial<AutoAccountContact> {
@@ -305,6 +310,10 @@ export class ZaloServerRuntimeManager {
           this.options.ownershipStore.has(normalizedStaffId)
         ) {
           await supabase.recoverServerZaloRunningState(normalizedStaffId)
+          const recoveredUnitLeases = await supabase.recoverCampaignRuntimeUnitLeasesV2('server')
+          if (!recoveredUnitLeases.ok) {
+            throw new Error(`Không thể phục hồi unit lease Zalo Server (${recoveredUnitLeases.reason}).`)
+          }
           this.options.ownershipStore.release(normalizedStaffId)
         }
 
@@ -849,7 +858,25 @@ export class ZaloServerRuntimeManager {
         }, {
           // runtimeClockRepository coalesces concurrent staff startup/ticks in
           // this App Server process into one in-flight clock RPC.
-          loadClock: () => supabase.getRuntimeClock()
+          loadClock: () => supabase.getRuntimeClock(),
+          beforeMaintenance: async (dateKey, signal) => {
+            if (this.options.beforeDailyMaintenance) {
+              await this.options.beforeDailyMaintenance(user.staffId, dateKey, signal)
+              return
+            }
+            await waitForDailyMaintenanceGate(
+              dateKey,
+              () => supabase.checkDailyMaintenanceBarrier('server', dateKey),
+              {
+                signal,
+                onWaiting: runningCampaignCount => {
+                  console.info(
+                    `[ZaloServerRuntimeManager] Staff ${user.staffId} is waiting for ${runningCampaignCount} old-day campaign(s) to settle before maintenance.`
+                  )
+                }
+              }
+            )
+          }
         })
         const scheduler = new CampaignScheduler(
           supabase,
@@ -915,6 +942,10 @@ export class ZaloServerRuntimeManager {
           expectedModeRevision: liveModeBeforeRecovery.revision,
           requireServerMode: true
         })
+        const recoveredUnitLeases = await supabase.recoverCampaignRuntimeUnitLeasesV2('server')
+        if (!recoveredUnitLeases.ok) {
+          throw new Error(`Không thể phục hồi unit lease Zalo Server (${recoveredUnitLeases.reason}).`)
+        }
         // The atomic recovery succeeded, so this runtime is now authorized to
         // settle subsequent server claims. Persist before maintenance/warmup;
         // if the process dies afterwards, only this VPS marker may recover.
@@ -1040,6 +1071,10 @@ export class ZaloServerRuntimeManager {
         // desktop-owned rows.
         if (runtime.supabase && runtime.ownsZaloRuntimeState) {
           await runtime.supabase.recoverServerZaloRunningState(staffId)
+          const recoveredUnitLeases = await runtime.supabase.recoverCampaignRuntimeUnitLeasesV2('server')
+          if (!recoveredUnitLeases.ok) {
+            throw new Error(`Không thể phục hồi unit lease Zalo Server (${recoveredUnitLeases.reason}).`)
+          }
           runtime.ownsZaloRuntimeState = false
           this.options.ownershipStore.release(staffId)
         }

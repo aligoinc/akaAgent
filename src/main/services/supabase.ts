@@ -1,4 +1,4 @@
-import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignDetail, CampaignDetailPageQuery, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, MoveDataGroupMembersRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest } from '../../shared/types'
+import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignDetail, CampaignDetailPageQuery, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, CampaignStatus, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, MoveDataGroupMembersRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -198,6 +198,97 @@ export class SupabaseService {
   appendCampaignLog(campaignId: number, logText: string) { return campaignRepo.appendCampaignLog(campaignId, logText) }
   claimCampaignRuntime(campaignId: number, accountId: number, runtimeTarget: campaignRepo.CampaignRuntimeTarget) {
     return campaignRepo.claimCampaignRuntime(campaignId, accountId, runtimeTarget)
+  }
+  claimCampaignRuntimeV2(
+    campaignId: number,
+    accountId: number,
+    runtimeTarget: campaignRepo.CampaignRuntimeTarget,
+    runtimeClaimToken: string
+  ) {
+    return campaignRepo.claimCampaignRuntimeV2(
+      campaignId,
+      accountId,
+      runtimeTarget,
+      runtimeClaimToken
+    )
+  }
+  claimCampaignRunUnitV2(
+    campaignId: number,
+    accountId: number,
+    runtimeTarget: campaignRepo.CampaignRuntimeTarget,
+    runtimeClaimToken: string,
+    runtimeClaimVietnamDateKey: string,
+    runtimeUnitToken: string,
+    inputDataIds: number[]
+  ) {
+    return campaignRepo.claimCampaignRunUnitV2(
+      campaignId,
+      accountId,
+      runtimeTarget,
+      runtimeClaimToken,
+      runtimeClaimVietnamDateKey,
+      runtimeUnitToken,
+      inputDataIds
+    )
+  }
+  settleCampaignRunUnitV2(
+    campaignId: number,
+    accountId: number,
+    runtimeTarget: campaignRepo.CampaignRuntimeTarget,
+    runtimeUnitToken: string,
+    requeueUnstarted: boolean
+  ) {
+    return campaignRepo.settleCampaignRunUnitV2(
+      campaignId,
+      accountId,
+      runtimeTarget,
+      runtimeUnitToken,
+      requeueUnstarted
+    )
+  }
+  recoverCampaignRuntimeUnitLeasesV2(
+    runtimeTarget: campaignRepo.CampaignRuntimeTarget,
+    platformScope: 'all' | 'zalo' = 'all'
+  ) {
+    return campaignRepo.recoverCampaignRuntimeUnitLeasesV2(runtimeTarget, platformScope)
+  }
+  setDesktopCampaignStatusV2(
+    campaignId: number,
+    accountId: number,
+    targetStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>
+  ) {
+    return campaignRepo.setDesktopCampaignStatusV2(campaignId, accountId, targetStatus)
+  }
+  checkCampaignDailyBoundary(
+    campaignId: number,
+    accountId: number,
+    runtimeTarget: campaignRepo.CampaignRuntimeTarget,
+    claimedVietnamDateKey: string
+  ) {
+    return campaignRepo.checkCampaignDailyBoundary(
+      campaignId,
+      accountId,
+      runtimeTarget,
+      claimedVietnamDateKey
+    )
+  }
+  yieldCampaignDailyBoundary(
+    campaignId: number,
+    accountId: number,
+    runtimeTarget: campaignRepo.CampaignRuntimeTarget,
+    runtimeClaimToken: string,
+    claimedVietnamDateKey: string
+  ) {
+    return campaignRepo.yieldCampaignDailyBoundary(
+      campaignId,
+      accountId,
+      runtimeTarget,
+      runtimeClaimToken,
+      claimedVietnamDateKey
+    )
+  }
+  checkDailyMaintenanceBarrier(runtimeTarget: campaignRepo.CampaignRuntimeTarget, vietnamDateKey: string) {
+    return campaignRepo.checkDailyMaintenanceBarrier(runtimeTarget, vietnamDateKey)
   }
   getPendingCampaigns(accountId: number, dbNow: string) { return campaignRepo.getPendingCampaigns(accountId, dbNow) }
   getDueMobileManagedCampaignsForLimitCheck(accountId: number, dbNow: string) {
