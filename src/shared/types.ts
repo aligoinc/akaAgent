@@ -68,6 +68,8 @@ export interface AutoAccount {
   loginStatus: string
   status: string
   isActive: boolean
+  /** True when at least one account action is currently restricted. */
+  hasDisabledActions?: boolean
   rateLimitMinutes?: number | null
   accountGroupId?: number | null
   accountGroupName?: string | null

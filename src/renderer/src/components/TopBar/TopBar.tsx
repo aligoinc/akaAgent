@@ -116,13 +116,6 @@ export default function TopBar({
         onClick: () => onPageChange('campaigns')
       },
       {
-        key: 'automations',
-        label: 'Tự động hóa',
-        icon: <Zap size={18} />,
-        active: activePage === 'automations',
-        onClick: () => onPageChange('automations')
-      },
-      {
         key: 'browsers',
         label: 'Trình duyệt',
         icon: <Globe size={18} />,
@@ -140,6 +133,13 @@ export default function TopBar({
         label: 'Nhóm data',
         icon: <FolderOpen size={18} />,
         onClick: onOpenDataGroups
+      },
+      {
+        key: 'automations',
+        label: 'Tự động hóa',
+        icon: <Zap size={18} />,
+        active: activePage === 'automations',
+        onClick: () => onPageChange('automations')
       },
       {
         key: 'content-templates',

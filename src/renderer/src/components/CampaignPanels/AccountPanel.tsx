@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { FolderCog, Loader2, Plus, ServerCog, X } from 'lucide-react'
+import { FolderCog, Loader2, Play, Plus, ServerCog, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { AutoAccount, ZaloLoginQrEvent, EmailAccountConfig } from '../../../../shared/types'
@@ -23,6 +23,19 @@ import type { ZaloServerOperationSnapshot } from '../../../../shared/zaloServerP
 interface AccountPanelProps {
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onFilterCampaigns?: (accountId: number | null) => void
+}
+
+type AccountVisualState = 'ready' | 'running' | 'blocked' | 'restricted' | 'disabled' | 'default'
+type AccountRunFilter = 'all' | 'ready' | 'running' | 'paused' | 'disabled'
+
+const getAccountVisualState = (account: AutoAccount): AccountVisualState => {
+  if (account.status === 'đang chạy') return 'running'
+  if (!account.isActive) return 'disabled'
+  if (account.loginStatus === 'checkpoint' || account.hasDisabledActions) return 'restricted'
+  if (account.status === 'tạm dừng') return 'blocked'
+  if (account.flatformType !== 'sms' && account.loginStatus !== 'đã đăng nhập') return 'blocked'
+  if (account.status === 'chờ xử lý') return 'ready'
+  return 'default'
 }
 
 const getErrorMessage = (err: unknown, fallback: string) => {
@@ -123,6 +136,7 @@ const mapServerQrOperation = (operation: ZaloServerOperationSnapshot): ZaloLogin
 export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
   const {
     accounts,
+    campaigns,
     accountGroups,
     proxies,
     loadAccounts,
@@ -183,6 +197,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const [emailConfig, setEmailConfig] = useState<EmailAccountConfig>({ ...EMPTY_EMAIL_CONFIG })
   const [originalEmailConfig, setOriginalEmailConfig] = useState<EmailAccountConfig | null>(null)
   const [verifyingEmail, setVerifyingEmail] = useState(false)
+  const [loginStatusFilter, setLoginStatusFilter] = useState('all')
+  const [runStatusFilter, setRunStatusFilter] = useState<AccountRunFilter>('all')
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -474,6 +490,43 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
   const availableZaloTypeCount = [showZaloQrOption, showZaloWebOption, showZaloServerOption]
     .filter(Boolean).length
   const canChangeAccountType = !editingAccount || (editingZaloAccount && availableZaloTypeCount > 1)
+
+  const loginStatusOptions = useMemo(() => Array.from(new Set(
+    accounts
+      .filter(account => account.flatformType !== 'sms')
+      .map(account => account.loginStatus.trim())
+      .filter(Boolean)
+  )).sort((left, right) => left.localeCompare(right, 'vi')), [accounts])
+
+  const filteredAccounts = useMemo(() => accounts.filter(account => {
+    if (loginStatusFilter !== 'all') {
+      if (account.flatformType === 'sms' || account.loginStatus !== loginStatusFilter) return false
+    }
+
+    switch (runStatusFilter) {
+      case 'ready':
+        return getAccountVisualState(account) === 'ready'
+      case 'running':
+        return account.isActive && account.status === 'đang chạy'
+      case 'paused':
+        return account.isActive && account.status === 'tạm dừng'
+      case 'disabled':
+        return !account.isActive
+      default:
+        return true
+    }
+  }), [accounts, loginStatusFilter, runStatusFilter])
+
+  const runningCampaignNamesByAccountId = useMemo(() => {
+    const namesByAccountId = new Map<number, string[]>()
+    campaigns.forEach(campaign => {
+      if (campaign.isDelete || campaign.status !== 'đang chạy') return
+      const names = namesByAccountId.get(campaign.accountId) || []
+      if (!names.includes(campaign.name)) names.push(campaign.name)
+      namesByAccountId.set(campaign.accountId, names)
+    })
+    return namesByAccountId
+  }, [campaigns])
 
   const handleAccountTypeChange = (value: string) => {
     const nextPlatform = value === 'zalo_qr' || value === 'zalo_web' || value === 'zalo_server'
@@ -941,18 +994,10 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     onFilterCampaigns?.(accountId)
   }
 
-  const getAccountStatusClass = (status: string) => {
-    switch (status) {
-      case 'chờ xử lý': return 'status-pending'
-      case 'đang chạy': return 'status-running'
-      case 'tạm dừng': return 'status-paused'
-      default: return 'status-unknown'
-    }
-  }
-
   const getLoginColor = (login: string) => {
     switch (login) {
       case 'đã đăng nhập': return 'var(--accent-success)'
+      case 'chưa đăng nhập':
       case 'checkpoint': return 'var(--accent-error)'
       default: return 'var(--text-tertiary)'
     }
@@ -1153,26 +1198,67 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
         </div>
       )}
 
+      {accounts.length > 0 && (
+        <div className="account-panel-filters" aria-label="Bộ lọc tài khoản">
+          <label>
+            <span>Đăng nhập</span>
+            <select value={loginStatusFilter} onChange={event => setLoginStatusFilter(event.target.value)}>
+              <option value="all">Tất cả</option>
+              {loginStatusOptions.map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Trạng thái chạy</span>
+            <select
+              value={runStatusFilter}
+              onChange={event => setRunStatusFilter(event.target.value as AccountRunFilter)}
+            >
+              <option value="all">Tất cả</option>
+              <option value="ready">Sẵn sàng chạy</option>
+              <option value="running">Đang chạy</option>
+              <option value="paused">Tạm dừng</option>
+              <option value="disabled">Vô hiệu hóa</option>
+            </select>
+          </label>
+        </div>
+      )}
+
       <div className="campaign-panel-content">
         {accounts.length === 0 ? (
           <div className="empty-state"><div className="empty-state-text">Chưa có tài khoản</div></div>
+        ) : filteredAccounts.length === 0 ? (
+          <div className="empty-state"><div className="empty-state-text">Không có tài khoản phù hợp bộ lọc</div></div>
         ) : (
-          accounts.map(account => {
+          filteredAccounts.map(account => {
             const isSmsAccount = account.flatformType === 'sms'
             const showSecondaryMeta = !isSmsAccount || account.accountGroupName || account.proxyName
+            const visualState = getAccountVisualState(account)
+            const visualClass = `status-${visualState}`
+            const runningCampaignNames = runningCampaignNamesByAccountId.get(account.id) || []
+            const runningCampaignLabel = runningCampaignNames.length > 1
+              ? `${runningCampaignNames[0]} +${runningCampaignNames.length - 1}`
+              : runningCampaignNames[0] || ''
 
             return (
               <div
                 key={account.id}
-                className={`account-card ${isSmsAccount ? '' : getAccountStatusClass(account.status)} ${!account.isActive ? 'disabled' : ''}`}
+                className={`account-card ${visualClass} ${!account.isActive ? 'disabled' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleViewInfo(account)}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  handleViewInfo(account)
+                }}
                 onContextMenu={(e) => handleContextMenu(e, account)}
-                title="Nhấn chuột phải để xem menu"
+                title="Click để xem thông tin; nhấn chuột phải để mở menu"
               >
                 <div className="account-card-info">
                   <div className="account-card-name">
-                    {!isSmsAccount && (
-                      <span className={`account-status-dot ${!account.isActive ? 'is-disabled' : getAccountStatusClass(account.status)}`} aria-hidden="true" />
-                    )}
+                    <span className="account-status-dot" aria-hidden="true" />
                     <span className="account-card-name-text" title={account.name}>{account.name}</span>
                   </div>
                   <div className="account-card-meta">
@@ -1180,12 +1266,28 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                       {isZaloServerAccount(account) ? 'Zalo (web)' : getAccountPlatformLabel(account)}
                     </span>
                     {!isSmsAccount && (
-                      <span style={{ color: getLoginColor(account.loginStatus), fontSize: '10px' }}>{account.loginStatus}</span>
+                      <span
+                        className="account-card-login-status"
+                        style={{
+                          color: visualState === 'disabled' || visualState === 'restricted'
+                            ? 'var(--account-card-accent)'
+                            : getLoginColor(account.loginStatus)
+                        }}
+                      >
+                        {account.loginStatus}
+                      </span>
                     )}
                   </div>
                   {showSecondaryMeta && (
                     <div className="account-card-meta">
-                      {!isSmsAccount && <span className="account-card-status">{account.status}</span>}
+                      {!isSmsAccount && (
+                        <span className="account-card-status">
+                          {account.isActive ? account.status : 'vô hiệu hóa'}
+                        </span>
+                      )}
+                      {account.hasDisabledActions && account.isActive && (
+                        <span className="account-restricted-tag">hạn chế hành động</span>
+                      )}
                       {account.accountGroupName && (
                         <span className="account-group-tag" title={account.accountGroupName}>{account.accountGroupName}</span>
                       )}
@@ -1194,6 +1296,15 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                           {account.proxyName}
                         </span>
                       )}
+                    </div>
+                  )}
+                  {runningCampaignNames.length > 0 && (
+                    <div
+                      className="account-card-running-campaign"
+                      title={`Đang chạy: ${runningCampaignNames.join(', ')}`}
+                    >
+                      <Play size={10} fill="currentColor" aria-hidden="true" />
+                      <strong>{runningCampaignLabel}</strong>
                     </div>
                   )}
                 </div>
