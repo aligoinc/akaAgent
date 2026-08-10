@@ -2,6 +2,10 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## Bắt buộc dùng skill cho RPC migration
+
+Mọi task tạo, sửa, review hoặc apply SQL có `CREATE OR REPLACE FUNCTION`, `DROP/ALTER FUNCTION` hay thay đổi RPC **bắt buộc** dùng skill [`safe-supabase-rpc-migration`](.agents/skills/safe-supabase-rpc-migration/SKILL.md) trước khi dựng body SQL. Không được lấy body từ migration cũ trước khi đã đọc đúng signature đang chạy bằng `pg_get_functiondef()` và thêm preflight checksum fail-closed.
+
 ## Commands
 
 ```bash
