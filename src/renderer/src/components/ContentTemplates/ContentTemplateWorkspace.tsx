@@ -82,8 +82,8 @@ const CHANNEL_META: Record<ContentTemplateChannelName, {
     description: 'Tin nhắn Facebook dạng văn bản thường.'
   },
   facebook_comment: {
-    label: 'Comment Facebook', shortLabel: 'Comment Facebook', mono: 'f', maxImages: 1, richCapable: false,
-    description: 'Comment Facebook dạng văn bản thường, tối đa một ảnh.'
+    label: 'Comment Facebook', shortLabel: 'Comment Facebook', mono: 'f', maxImages: 10, richCapable: false,
+    description: 'Chọn tối đa 10 ảnh; campaign sẽ chọn ngẫu nhiên một ảnh cho mỗi comment.'
   },
   email: {
     label: 'Email', shortLabel: 'Email', mono: '@', maxImages: 10, richCapable: true,

@@ -62,7 +62,6 @@ function normalizeOrder(value: unknown, fallback = 100): number {
 
 function maxImagesForChannel(channelName: ContentTemplateChannelName): number {
   if (channelName === 'sms') return 0
-  if (channelName === 'facebook_comment') return 1
   return 10
 }
 

@@ -19,6 +19,7 @@ import { canUsePlatform, getFirstAllowedPlatform } from '../../utils/entitlement
 import { getAccountPlatformLabel, isZaloServerAccount, isZaloWebAccount } from '../../utils/accountLabels'
 import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
 import type { ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
+import { campaignHasLocalOnlyMedia } from './localCampaignMedia'
 
 interface AccountPanelProps {
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
@@ -140,6 +141,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
     accountGroups,
     proxies,
     loadAccounts,
+    loadCampaigns,
     loadAccountGroups,
     loadProxies,
     createAccount,
@@ -607,6 +609,27 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
             isZaloWebAccount(editingAccount) !== payload.isZaloShowWeb ||
             isZaloServerAccount(editingAccount) !== payload.isZaloServer
           )
+        const switchesToZaloServer = editingAccount.flatformType === 'zalo'
+          && !isZaloServerAccount(editingAccount)
+          && payload.isZaloServer
+        if (switchesToZaloServer) {
+          await loadCampaigns({ silent: true })
+          const blockingCampaigns = useCampaignStore.getState().campaigns.filter(campaign => (
+            !campaign.isDelete &&
+            (campaign.accountId === editingAccount.id || campaign.secondaryAccountId === editingAccount.id) &&
+            (campaign.status === 'chờ xử lý' || campaign.status === 'tạm dừng') &&
+            campaignHasLocalOnlyMedia(campaign)
+          ))
+          if (blockingCampaigns.length > 0) {
+            const names = blockingCampaigns.slice(0, 3).map(campaign => campaign.name).join(', ')
+            const suffix = blockingCampaigns.length > 3 ? ` và ${blockingCampaigns.length - 3} chiến dịch khác` : ''
+            useUiStore.getState().showAlert(
+              `Không thể chuyển sang Zalo Server vì media local đang được dùng trong: ${names}${suffix}. Hãy thay bằng media đã upload lên cloud trước.`,
+              'error'
+            )
+            return
+          }
+        }
         const updated = await updateAccount(editingAccount.id, payload)
         accountId = editingAccount.id
         if (zaloSubtypeChanged) {

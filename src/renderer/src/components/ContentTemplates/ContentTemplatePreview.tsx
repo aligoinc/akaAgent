@@ -176,7 +176,12 @@ export default function ContentTemplatePreview({
               <span className="ctw-preview-avatar facebook">MA</span>
               <div className="ctw-preview-comment-bubble"><strong>Nguyễn Minh Anh</strong>{contentNode}</div>
             </div>
-            <ChannelImagePreview imageUrls={imageUrls} />
+            <ChannelImagePreview imageUrls={imageUrls.slice(0, 1)} />
+            {imageUrls.length > 1 && (
+              <div className="ctw-preview-comment-media-note">
+                Ngẫu nhiên 1 trong {imageUrls.length} ảnh
+              </div>
+            )}
           </div>
         )}
 

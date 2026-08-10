@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { FocusEvent, MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Eye, FileText, Image } from 'lucide-react'
+import { isImageMediaSource } from './mediaImage'
 
 interface MediaPreviewHoverProps {
   name: string
@@ -19,21 +20,16 @@ interface PreviewPosition {
   placement: PreviewPlacement
 }
 
-const IMAGE_EXTENSION_RE = /\.(apng|avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)(?:[?#].*)?$/i
 const POPOVER_WIDTH_FALLBACK = 308
 const POPOVER_HEIGHT_FALLBACK = 260
 const POPOVER_GAP = 8
 const VIEWPORT_PADDING = 12
 
-const isImageMime = (mimeType?: string | null): boolean =>
-  String(mimeType || '').toLowerCase().startsWith('image/')
-
 const isRemoteUrl = (path: string): boolean => /^https?:\/\//i.test(path)
-
 const isDataImage = (path: string): boolean => /^data:image\//i.test(path)
 
 const isPreviewableImage = (path: string, mimeType?: string | null): boolean =>
-  isImageMime(mimeType) || isDataImage(path) || IMAGE_EXTENSION_RE.test(path)
+  isImageMediaSource(mimeType, path)
 
 const formatBytes = (value?: number | null): string => {
   const size = Number(value || 0)
