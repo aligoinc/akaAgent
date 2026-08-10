@@ -7,6 +7,9 @@ import {
   ZaloAccountCapabilities
 } from '../../../shared/types'
 import {
+  AUTH_FACEBOOK_CORE_PRODUCT_ID,
+  AUTH_FACEBOOK_FANPAGE_PRODUCT_ID,
+  AUTH_FACEBOOK_PRODUCT_IDS,
   AUTH_PRODUCT_BY_FEATURE,
   AUTH_PRODUCT_IDS,
   AUTH_PRODUCTS_BY_FEATURE,
@@ -21,8 +24,8 @@ const client = () => getSupabaseClient()
 
 export type EntitlementFeature = AuthEntitlementFeature
 
-export const FACEBOOK_CORE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookCore.productId
-export const FACEBOOK_FANPAGE_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.facebookFanpage.productId
+export const FACEBOOK_CORE_PRODUCT_ID = AUTH_FACEBOOK_CORE_PRODUCT_ID
+export const FACEBOOK_FANPAGE_PRODUCT_ID = AUTH_FACEBOOK_FANPAGE_PRODUCT_ID
 export const EMAIL_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.email.productId
 export const ZALO_PRODUCT_IDS = AUTH_ZALO_PRODUCT_IDS
 export const SMS_PRODUCT_ID = AUTH_PRODUCT_BY_FEATURE.sms.productId
@@ -32,7 +35,7 @@ export const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
 
 export const ACCOUNT_EXPIRED_MESSAGE = 'Tài khoản của bạn đã hết hạn'
 export const FACEBOOK_CORE_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Facebook chưa được kích hoạt hoặc đã hết hạn.'
-export const FACEBOOK_FANPAGE_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Facebook Fanpage chưa được kích hoạt hoặc đã hết hạn.'
+export const FACEBOOK_FANPAGE_FEATURE_UNAVAILABLE_MESSAGE = FACEBOOK_CORE_FEATURE_UNAVAILABLE_MESSAGE
 export const EMAIL_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Email chưa được kích hoạt hoặc đã hết hạn.'
 export const ZALO_FEATURE_UNAVAILABLE_MESSAGE = 'Tính năng Zalo chưa được kích hoạt hoặc đã hết hạn.'
 export const ZALO_QR_FEATURE_UNAVAILABLE_MESSAGE = 'Gói hiện tại không hỗ trợ tài khoản Zalo (mã QR).'
@@ -142,19 +145,36 @@ export function emptyAuthEntitlements(): AuthEntitlements {
 
 function normalizeAuthEntitlements(entitlements?: Partial<AuthEntitlements> | null): AuthEntitlements {
   const empty = emptyAuthEntitlements()
+  const facebookEnabled = !!(entitlements?.facebookCore || entitlements?.facebookFanpage)
+  const facebookDailySendLimit = getMergedFacebookSnapshotLimit(
+    entitlements?.facebookCore,
+    entitlements?.dailySendLimits?.facebookCore,
+    entitlements?.facebookFanpage,
+    entitlements?.dailySendLimits?.facebookFanpage
+  )
+  const facebookAccountLimit = getMergedFacebookSnapshotLimit(
+    entitlements?.facebookCore,
+    entitlements?.accountLimits?.facebookCore,
+    entitlements?.facebookFanpage,
+    entitlements?.accountLimits?.facebookFanpage
+  )
   return {
-    facebookCore: !!entitlements?.facebookCore,
-    facebookFanpage: !!entitlements?.facebookFanpage,
+    facebookCore: facebookEnabled,
+    facebookFanpage: facebookEnabled,
     email: !!entitlements?.email,
     zalo: !!entitlements?.zalo,
     sms: !!entitlements?.sms,
     dailySendLimits: {
       ...empty.dailySendLimits,
-      ...(entitlements?.dailySendLimits || {})
+      ...(entitlements?.dailySendLimits || {}),
+      facebookCore: facebookEnabled ? facebookDailySendLimit : null,
+      facebookFanpage: facebookEnabled ? facebookDailySendLimit : null
     },
     accountLimits: {
       ...empty.accountLimits,
-      ...(entitlements?.accountLimits || {})
+      ...(entitlements?.accountLimits || {}),
+      facebookCore: facebookEnabled ? facebookAccountLimit : null,
+      facebookFanpage: facebookEnabled ? facebookAccountLimit : null
     }
   }
 }
@@ -171,6 +191,26 @@ function isExpirationActive(expirationDate?: string | null): boolean {
 function normalizePositiveInteger(value: unknown): number | null {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function getMaximumLimitWithUnlimited(values: unknown[]): number | null {
+  if (values.length === 0) return null
+  const normalizedValues = values
+    .map(normalizePositiveInteger)
+  if (normalizedValues.some(value => value === null)) return null
+  return Math.max(...normalizedValues as number[])
+}
+
+function getMergedFacebookSnapshotLimit(
+  facebookCoreEnabled: boolean | undefined,
+  facebookCoreValue: unknown,
+  facebookFanpageEnabled: boolean | undefined,
+  facebookFanpageValue: unknown
+): number | null {
+  const enabledValues: unknown[] = []
+  if (facebookCoreEnabled) enabledValues.push(facebookCoreValue)
+  if (facebookFanpageEnabled) enabledValues.push(facebookFanpageValue)
+  return getMaximumLimitWithUnlimited(enabledValues)
 }
 
 function getFeatureDailySendLimitFromProducts(rows: OrganizationProductRow[]): number | null {
@@ -199,6 +239,14 @@ function getFeatureAccountLimit(rows: OrganizationProductRow[]): number | null {
   return limits.length > 0 ? Math.max(...limits) : null
 }
 
+function getFacebookAccountLimit(rows: OrganizationProductRow[]): number | null {
+  return getMaximumLimitWithUnlimited(
+    rows
+      .filter(row => isExpirationActive(row.expiration_date))
+      .map(row => row.max_accounts)
+  )
+}
+
 function getNewestZaloProductRow(
   rows: OrganizationProductRow[],
   activeOnly: boolean
@@ -215,6 +263,44 @@ function getNewestZaloProductRow(
   )) || null
 }
 
+function isFacebookProductRow(row: OrganizationProductRow): boolean {
+  return AUTH_FACEBOOK_PRODUCT_IDS.includes(
+    Number(row.product_id) as (typeof AUTH_FACEBOOK_PRODUCT_IDS)[number]
+  )
+}
+
+function getFarthestExpiringRow(rows: OrganizationProductRow[]): OrganizationProductRow | null {
+  return rows.reduce<OrganizationProductRow | null>((selected, row) => {
+    if (!selected) return row
+    const selectedExpiration = Date.parse(selected.expiration_date || '')
+    const rowExpiration = Date.parse(row.expiration_date || '')
+    return rowExpiration > selectedExpiration ? row : selected
+  }, null)
+}
+
+function mapOrganizationProductRow(row: OrganizationProductRow): AuthAccountProduct {
+  const organizationProductId = Number(row.id)
+  const productId = Number(row.product_id)
+  const productCatalogItem = getAuthProductById(Number.isFinite(productId) ? productId : null)
+  const productName = String(row.product_name || '').trim()
+  const packageName = String(row.package_name || '').trim()
+  return {
+    organizationProductId: Number.isSafeInteger(organizationProductId) && organizationProductId > 0
+      ? organizationProductId
+      : null,
+    feature: productCatalogItem?.feature ?? null,
+    productId: Number.isFinite(productId) ? productId : null,
+    productName,
+    packageName,
+    packageType: row.package_type ? String(row.package_type).trim() : null,
+    displayName: productCatalogItem?.label || productName || packageName || 'Sản phẩm',
+    displayOrder: productCatalogItem?.order ?? 99,
+    expirationDate: row.expiration_date || null,
+    maxAccounts: normalizePositiveInteger(row.max_accounts),
+    isActive: isExpirationActive(row.expiration_date)
+  }
+}
+
 function getZaloDailySendLimit(rows: OrganizationProductRow[]): number | null {
   const activeRows = rows.filter(row => isExpirationActive(row.expiration_date))
   const configuredLimits = activeRows
@@ -225,6 +311,19 @@ function getZaloDailySendLimit(rows: OrganizationProductRow[]): number | null {
   const hasPaidPackage = activeRows.some(row => String(row.package_type || '').trim().toLowerCase() !== 'demo')
   if (hasPaidPackage) return null
   return activeRows.length > 0 ? DEFAULT_DEMO_DAILY_SEND_LIMIT : null
+}
+
+function getFacebookDailySendLimit(rows: OrganizationProductRow[]): number | null {
+  const resolvedLimits = rows
+    .filter(row => isExpirationActive(row.expiration_date))
+    .map(row => {
+      const configuredLimit = normalizePositiveInteger(row.max_sends_per_day)
+      if (configuredLimit !== null) return configuredLimit
+      return String(row.package_type || '').trim().toLowerCase() === 'demo'
+        ? DEFAULT_DEMO_DAILY_SEND_LIMIT
+        : null
+    })
+  return getMaximumLimitWithUnlimited(resolvedLimits)
 }
 
 function resolveZaloAccountCapabilities(rows: OrganizationProductRow[]): ZaloAccountCapabilities {
@@ -271,6 +370,7 @@ export async function loadOrganizationEntitlementAccess(
   const rows = (data || []) as unknown as OrganizationProductRow[]
   for (const [feature, productIds] of Object.entries(FEATURE_PRODUCT_IDS) as Array<[EntitlementFeature, readonly number[]]>) {
     const featureRows = rows.filter(row => productIds.includes(Number(row.product_id)))
+    const isFacebookFeature = feature === 'facebookCore' || feature === 'facebookFanpage'
     const effectiveZaloRow = feature === 'zalo'
       ? getNewestZaloProductRow(featureRows, true)
       : null
@@ -278,10 +378,14 @@ export async function loadOrganizationEntitlementAccess(
       ? (effectiveZaloRow ? [effectiveZaloRow] : [])
       : featureRows
     entitlements[feature] = effectiveRows.some(row => isExpirationActive(row.expiration_date))
-    entitlements.dailySendLimits[feature] = feature === 'zalo'
-      ? getZaloDailySendLimit(effectiveRows)
-      : getFeatureDailySendLimitFromProducts(effectiveRows)
-    entitlements.accountLimits[feature] = getFeatureAccountLimit(effectiveRows)
+    entitlements.dailySendLimits[feature] = isFacebookFeature
+      ? getFacebookDailySendLimit(effectiveRows)
+      : feature === 'zalo'
+        ? getZaloDailySendLimit(effectiveRows)
+        : getFeatureDailySendLimitFromProducts(effectiveRows)
+    entitlements.accountLimits[feature] = isFacebookFeature
+      ? getFacebookAccountLimit(effectiveRows)
+      : getFeatureAccountLimit(effectiveRows)
   }
 
   return {
@@ -316,36 +420,29 @@ export async function loadOrganizationAccountProducts(organizationId: number): P
   }
 
   const rows = (data || []) as unknown as OrganizationProductRow[]
+  const activeFacebookRows = rows.filter(row => (
+    isFacebookProductRow(row) && isExpirationActive(row.expiration_date)
+  ))
   const effectiveZaloRow = getNewestZaloProductRow(rows, true)
     || getNewestZaloProductRow(rows, false)
   const effectiveRows = rows.filter(row => (
-    !ZALO_PRODUCT_IDS.includes(
-      Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
-    ) || row === effectiveZaloRow
+    (!isFacebookProductRow(row) || !isExpirationActive(row.expiration_date)) && (
+      !ZALO_PRODUCT_IDS.includes(
+        Number(row.product_id) as (typeof ZALO_PRODUCT_IDS)[number]
+      ) || row === effectiveZaloRow
+    )
   ))
 
-  return effectiveRows.map(row => {
-    const organizationProductId = Number(row.id)
-    const productId = Number(row.product_id)
-    const productCatalogItem = getAuthProductById(Number.isFinite(productId) ? productId : null)
-    const productName = String(row.product_name || '').trim()
-    const packageName = String(row.package_name || '').trim()
-    return {
-      organizationProductId: Number.isSafeInteger(organizationProductId) && organizationProductId > 0
-        ? organizationProductId
-        : null,
-      feature: productCatalogItem?.feature ?? null,
-      productId: Number.isFinite(productId) ? productId : null,
-      productName,
-      packageName,
-      packageType: row.package_type ? String(row.package_type).trim() : null,
-      displayName: productCatalogItem?.label || productName || packageName || 'Sản phẩm',
-      displayOrder: productCatalogItem?.order ?? 99,
-      expirationDate: row.expiration_date || null,
-      maxAccounts: normalizePositiveInteger(row.max_accounts),
-      isActive: isExpirationActive(row.expiration_date)
-    }
-  })
+  const products = effectiveRows.map(mapOrganizationProductRow)
+  const facebookDisplayRow = getFarthestExpiringRow(activeFacebookRows)
+  if (!facebookDisplayRow) return products
+
+  return [{
+    ...mapOrganizationProductRow(facebookDisplayRow),
+    displayName: 'Facebook',
+    displayOrder: 1,
+    maxAccounts: getFacebookAccountLimit(activeFacebookRows)
+  }, ...products]
 }
 
 export async function ensureAkaAgentSubscriptionActive(organizationId: number): Promise<void> {
@@ -357,7 +454,7 @@ export function hasFeatureEntitlement(
   user: Pick<AuthUser, 'entitlements'> | null | undefined,
   feature: EntitlementFeature
 ): boolean {
-  return !!user?.entitlements?.[feature]
+  return normalizeAuthEntitlements(user?.entitlements)[feature]
 }
 
 export function hasEmailFeatureEntitlement(user?: Pick<AuthUser, 'entitlements'> | null): boolean {
@@ -507,23 +604,22 @@ export function getFeatureDailySendLimit(
   entitlements: Partial<AuthEntitlements> | null | undefined,
   feature: EntitlementFeature
 ): number | null {
-  return normalizePositiveInteger(entitlements?.dailySendLimits?.[feature])
+  return normalizePositiveInteger(normalizeAuthEntitlements(entitlements).dailySendLimits[feature])
 }
 
 export function getAccountPlatformLimit(
   flatformType: string | null | undefined,
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): number | null {
+  const normalized = normalizeAuthEntitlements(entitlements)
   const platform = String(flatformType || '').trim().toLowerCase()
-  if (platform === 'sms') return entitlements?.sms ? normalizePositiveInteger(entitlements?.accountLimits?.sms) : null
-  if (platform === 'email') return entitlements?.email ? normalizePositiveInteger(entitlements?.accountLimits?.email) : null
-  if (platform === 'zalo') return entitlements?.zalo ? normalizePositiveInteger(entitlements?.accountLimits?.zalo) : null
+  if (platform === 'sms') return normalized.sms ? normalizePositiveInteger(normalized.accountLimits.sms) : null
+  if (platform === 'email') return normalized.email ? normalizePositiveInteger(normalized.accountLimits.email) : null
+  if (platform === 'zalo') return normalized.zalo ? normalizePositiveInteger(normalized.accountLimits.zalo) : null
   if (platform === 'facebook') {
-    const limits: Array<number | null> = []
-    if (entitlements?.facebookCore) limits.push(normalizePositiveInteger(entitlements?.accountLimits?.facebookCore))
-    if (entitlements?.facebookFanpage) limits.push(normalizePositiveInteger(entitlements?.accountLimits?.facebookFanpage))
-    if (limits.length === 0 || limits.some(limit => limit === null)) return null
-    return Math.max(...limits.filter((limit): limit is number => limit !== null))
+    return normalized.facebookCore
+      ? normalizePositiveInteger(normalized.accountLimits.facebookCore)
+      : null
   }
   return null
 }
@@ -550,11 +646,12 @@ export function canUseAccountPlatformWithEntitlements(
   flatformType: string | null | undefined,
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): boolean {
+  const normalized = normalizeAuthEntitlements(entitlements)
   const platform = String(flatformType || '').trim().toLowerCase()
-  if (platform === 'sms') return !!entitlements?.sms
-  if (platform === 'email') return !!entitlements?.email
-  if (platform === 'zalo') return !!entitlements?.zalo
-  if (platform === 'facebook') return !!entitlements?.facebookCore || !!entitlements?.facebookFanpage
+  if (platform === 'sms') return normalized.sms
+  if (platform === 'email') return normalized.email
+  if (platform === 'zalo') return normalized.zalo
+  if (platform === 'facebook') return normalized.facebookCore
   return false
 }
 
@@ -591,7 +688,8 @@ export function canUseCampaignActionWithEntitlements(
   flatformType: string | null | undefined,
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): boolean {
-  return !!entitlements?.[getCampaignActionFeature(actionId, flatformType)]
+  const normalized = normalizeAuthEntitlements(entitlements)
+  return normalized[getCampaignActionFeature(actionId, flatformType)]
 }
 
 export function canUseAccountActionWithEntitlements(
@@ -599,5 +697,6 @@ export function canUseAccountActionWithEntitlements(
   flatformType: string | null | undefined,
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): boolean {
-  return !!entitlements?.[getAccountActionFeature(actionCode, flatformType)]
+  const normalized = normalizeAuthEntitlements(entitlements)
+  return normalized[getAccountActionFeature(actionCode, flatformType)]
 }

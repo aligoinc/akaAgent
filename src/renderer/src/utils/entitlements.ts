@@ -58,19 +58,36 @@ const SMS_SEND_ACTION_ID = 'sms_send'
 const VOICE_CALL_ACTION_ID = 'voice_call'
 
 export function normalizeEntitlements(entitlements?: Partial<AuthEntitlements> | null): AuthEntitlements {
+  const facebookEnabled = !!(entitlements?.facebookCore || entitlements?.facebookFanpage)
+  const facebookDailySendLimit = getMergedFacebookSnapshotLimit(
+    entitlements?.facebookCore,
+    entitlements?.dailySendLimits?.facebookCore,
+    entitlements?.facebookFanpage,
+    entitlements?.dailySendLimits?.facebookFanpage
+  )
+  const facebookAccountLimit = getMergedFacebookSnapshotLimit(
+    entitlements?.facebookCore,
+    entitlements?.accountLimits?.facebookCore,
+    entitlements?.facebookFanpage,
+    entitlements?.accountLimits?.facebookFanpage
+  )
   return {
-    facebookCore: !!entitlements?.facebookCore,
-    facebookFanpage: !!entitlements?.facebookFanpage,
+    facebookCore: facebookEnabled,
+    facebookFanpage: facebookEnabled,
     email: !!entitlements?.email,
     zalo: !!entitlements?.zalo,
     sms: !!entitlements?.sms,
     dailySendLimits: {
       ...DEFAULT_DAILY_SEND_LIMITS,
-      ...(entitlements?.dailySendLimits || {})
+      ...(entitlements?.dailySendLimits || {}),
+      facebookCore: facebookEnabled ? facebookDailySendLimit : null,
+      facebookFanpage: facebookEnabled ? facebookDailySendLimit : null
     },
     accountLimits: {
       ...DEFAULT_ACCOUNT_LIMITS,
-      ...(entitlements?.accountLimits || {})
+      ...(entitlements?.accountLimits || {}),
+      facebookCore: facebookEnabled ? facebookAccountLimit : null,
+      facebookFanpage: facebookEnabled ? facebookAccountLimit : null
     }
   }
 }
@@ -78,6 +95,26 @@ export function normalizeEntitlements(entitlements?: Partial<AuthEntitlements> |
 function normalizePositiveInteger(value: unknown): number | null {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function getMaximumLimitWithUnlimited(values: unknown[]): number | null {
+  if (values.length === 0) return null
+  const normalizedValues = values
+    .map(normalizePositiveInteger)
+  if (normalizedValues.some(value => value === null)) return null
+  return Math.max(...normalizedValues as number[])
+}
+
+function getMergedFacebookSnapshotLimit(
+  facebookCoreEnabled: boolean | undefined,
+  facebookCoreValue: unknown,
+  facebookFanpageEnabled: boolean | undefined,
+  facebookFanpageValue: unknown
+): number | null {
+  const enabledValues: unknown[] = []
+  if (facebookCoreEnabled) enabledValues.push(facebookCoreValue)
+  if (facebookFanpageEnabled) enabledValues.push(facebookFanpageValue)
+  return getMaximumLimitWithUnlimited(enabledValues)
 }
 
 export function canUsePlatform(
