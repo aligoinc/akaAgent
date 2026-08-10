@@ -6734,6 +6734,44 @@ td.report-account-col span {
   gap: 6px;
 }
 
+.account-panel-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.account-panel-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.account-panel-filters select {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 10px;
+}
+
+.account-panel-filters select:focus {
+  border-color: var(--accent-primary);
+}
+
 /* =========== ACCOUNT CARD (single-column table) =========== */
 .account-card {
   --account-card-accent: var(--border-default);
@@ -6750,6 +6788,7 @@ td.report-account-col span {
   margin-bottom: 6px;
   transition: all var(--transition-fast);
   background: var(--account-card-bg);
+  cursor: pointer;
 }
 
 .account-card:hover {
@@ -6759,11 +6798,16 @@ td.report-account-col span {
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.08);
 }
 
-.account-card.status-pending {
-  --account-card-accent: var(--accent-info);
-  --account-card-bg: rgba(56, 189, 248, 0.035);
-  --account-card-hover-bg: rgba(56, 189, 248, 0.08);
-  --account-card-status-bg: rgba(56, 189, 248, 0.12);
+.account-card:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.account-card.status-ready {
+  --account-card-accent: var(--accent-success);
+  --account-card-bg: rgba(34, 197, 94, 0.12);
+  --account-card-hover-bg: rgba(34, 197, 94, 0.18);
+  --account-card-status-bg: rgba(34, 197, 94, 0.13);
 }
 
 .account-card.status-running {
@@ -6773,11 +6817,25 @@ td.report-account-col span {
   --account-card-status-bg: rgba(251, 191, 36, 0.13);
 }
 
-.account-card.status-paused {
+.account-card.status-blocked {
   --account-card-accent: var(--accent-error);
-  --account-card-bg: rgba(244, 63, 94, 0.035);
-  --account-card-hover-bg: rgba(244, 63, 94, 0.08);
+  --account-card-bg: rgba(244, 63, 94, 0.22);
+  --account-card-hover-bg: rgba(244, 63, 94, 0.3);
   --account-card-status-bg: rgba(244, 63, 94, 0.12);
+}
+
+.account-card.status-restricted {
+  --account-card-accent: #a855f7;
+  --account-card-bg: rgba(168, 85, 247, 0.045);
+  --account-card-hover-bg: rgba(168, 85, 247, 0.09);
+  --account-card-status-bg: rgba(168, 85, 247, 0.14);
+}
+
+.account-card.status-disabled {
+  --account-card-accent: var(--text-tertiary);
+  --account-card-bg: rgba(107, 114, 128, 0.035);
+  --account-card-hover-bg: rgba(107, 114, 128, 0.07);
+  --account-card-status-bg: rgba(107, 114, 128, 0.13);
 }
 
 .account-card-info {
@@ -6822,6 +6880,19 @@ td.report-account-col span {
   background: var(--account-card-status-bg);
 }
 
+.account-card-login-status {
+  font-size: 10px;
+}
+
+.account-restricted-tag {
+  color: #c084fc;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(168, 85, 247, 0.14);
+}
+
 .account-group-tag {
   min-width: 0;
   max-width: 130px;
@@ -6845,6 +6916,36 @@ td.report-account-col span {
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   padding: 9px 11px;
+}
+
+.account-card-running-campaign {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 5px;
+  padding: 4px 6px;
+  overflow: hidden;
+  color: var(--accent-warning);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 5px;
+  background: rgba(251, 191, 36, 0.08);
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.account-card-running-campaign svg {
+  flex-shrink: 0;
+}
+
+.account-card-running-campaign strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-tag {
@@ -18639,11 +18740,12 @@ body.theme-light .account-card {
   --account-card-bg: #f7fafd;
   --account-card-hover-bg: #e8f0fa;
   border-color: #c7d5e4;
+  border-left-color: var(--account-card-accent);
 }
 
-body.theme-light .account-card.status-pending {
-  --account-card-bg: rgba(14, 165, 233, 0.075);
-  --account-card-hover-bg: rgba(14, 165, 233, 0.12);
+body.theme-light .account-card.status-ready {
+  --account-card-bg: rgba(34, 197, 94, 0.14);
+  --account-card-hover-bg: rgba(34, 197, 94, 0.2);
 }
 
 body.theme-light .account-card.status-running {
@@ -18651,9 +18753,19 @@ body.theme-light .account-card.status-running {
   --account-card-hover-bg: rgba(245, 158, 11, 0.14);
 }
 
-body.theme-light .account-card.status-paused {
-  --account-card-bg: rgba(239, 68, 68, 0.075);
-  --account-card-hover-bg: rgba(239, 68, 68, 0.12);
+body.theme-light .account-card.status-blocked {
+  --account-card-bg: rgba(239, 68, 68, 0.24);
+  --account-card-hover-bg: rgba(239, 68, 68, 0.32);
+}
+
+body.theme-light .account-card.status-restricted {
+  --account-card-bg: rgba(168, 85, 247, 0.075);
+  --account-card-hover-bg: rgba(168, 85, 247, 0.12);
+}
+
+body.theme-light .account-card.status-disabled {
+  --account-card-bg: rgba(107, 114, 128, 0.055);
+  --account-card-hover-bg: rgba(107, 114, 128, 0.09);
 }
 
 body.theme-light .detail-dock-resize-handle {
@@ -18663,12 +18775,12 @@ body.theme-light .detail-dock-resize-handle {
 
 /* =========== DISABLED ACCOUNT CARD =========== */
 .account-card.disabled {
-  opacity: 0.55;
-  border-style: dashed;
+  opacity: 1;
+  border-style: solid;
 }
 
 .account-card.disabled:hover {
-  opacity: 0.75;
+  opacity: 1;
 }
 
 /* =========== CAMPAIGN DATA TARGET SOURCE =========== */

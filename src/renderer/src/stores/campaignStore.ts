@@ -208,7 +208,10 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       const index = state.accounts.findIndex(item => item.id === account.id)
       if (index < 0) return { accounts: [account, ...state.accounts] }
       const accounts = state.accounts.slice()
-      accounts[index] = account
+      accounts[index] = {
+        ...account,
+        hasDisabledActions: account.hasDisabledActions ?? accounts[index].hasDisabledActions
+      }
       return { accounts }
     })
     return account

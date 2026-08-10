@@ -229,13 +229,40 @@ export async function listAccounts(): Promise<AutoAccount[]> {
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(`Failed to list accounts: ${error.message}`)
-  return (data || [])
+  const accounts = (data || [])
     .map(row => mapAccountFromDB(toDbRow(row)))
     .filter(account => canUseAccountWithEntitlementsAndCapabilities(
       account,
       entitlements,
       zaloAccountCapabilities
     ))
+
+  if (accounts.length === 0) return accounts
+
+  const { data: disabledActionRows, error: disabledActionError } = await client()
+    .from('auto_account_action_status')
+    .select('account_id, date_enable')
+    .in('account_id', accounts.map(account => account.id))
+    .eq('is_disable', true)
+
+  if (disabledActionError) {
+    throw new Error(`Failed to list restricted account actions: ${disabledActionError.message}`)
+  }
+
+  const nowMs = Date.now()
+  const restrictedAccountIds = new Set<number>()
+  for (const row of disabledActionRows || []) {
+    const dateEnable = row.date_enable as string | null
+    const dateEnableMs = dateEnable ? Date.parse(dateEnable) : Number.NaN
+    if (!dateEnable || !Number.isFinite(dateEnableMs) || dateEnableMs > nowMs) {
+      restrictedAccountIds.add(Number(row.account_id))
+    }
+  }
+
+  return accounts.map(account => ({
+    ...account,
+    hasDisabledActions: restrictedAccountIds.has(account.id)
+  }))
 }
 
 export async function createAccount(account: Partial<AutoAccount>): Promise<AutoAccount> {

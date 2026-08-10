@@ -7585,6 +7585,7 @@ export class CampaignScheduler {
         reason: message,
         dateEnable: await this.resolvePolicyActionDateEnable(policy)
       })
+      try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
     }
 
     await this.updateCampaignAndBroadcast(campaign.id, { status: campaignStatus, note: message })
@@ -11424,6 +11425,7 @@ export class CampaignScheduler {
         reason: message,
         dateEnable: await this.resolvePolicyActionDateEnable(policy)
       })
+      try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
       this.throwIfZaloRuntimeStopping(campaign.id)
       stopAfterTarget = true
     }
