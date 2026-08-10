@@ -9,6 +9,7 @@ import {
   transformFormattedContentTextNodes
 } from '../../../../shared/formattedContent'
 import { renderPreviewSampleTokens } from '../CampaignPanels/ContentPreviewModal'
+import { isVideoMediaSource } from '../Media/mediaImage'
 
 export type TemplatePreviewChannel = ContentTemplateChannelName
 
@@ -48,7 +49,9 @@ function ChannelImagePreview({ imageUrls }: { imageUrls: string[] }) {
     <div className={`ctw-preview-images count-${Math.min(visible.length, 4)}`}>
       {visible.map((url, index) => (
         <div className="ctw-preview-image" key={`${url}-${index}`}>
-          <img src={url} alt={`Ảnh ${index + 1}`} />
+          {isVideoMediaSource('', url)
+            ? <video src={url} aria-label={`Video ${index + 1}`} muted controls preload="metadata" />
+            : <img src={url} alt={`Ảnh ${index + 1}`} />}
           {index === 3 && imageUrls.length > 4 && <span>+{imageUrls.length - 4}</span>}
         </div>
       ))}
@@ -67,6 +70,10 @@ export default function ContentTemplatePreview({
   onActiveVariantChange
 }: ContentTemplatePreviewProps) {
   const normalizedVariants = variants.length > 0 ? variants : ['']
+  const supportsVideo = channel === 'facebook_post' || channel === 'facebook_message' || channel === 'facebook_comment'
+  const compatibleMediaUrls = supportsVideo
+    ? imageUrls
+    : imageUrls.filter(url => !isVideoMediaSource('', url))
   const [internalVariantIndex, setInternalVariantIndex] = useState(0)
   const resolvedVariantIndex = Math.max(
     0,
@@ -142,7 +149,7 @@ export default function ContentTemplatePreview({
             <div className="ctw-preview-chat-date">Hôm nay, 09:41</div>
             <div className="ctw-preview-message-row">
               <div className="ctw-preview-message-bubble">
-                {channel !== 'sms' && <ChannelImagePreview imageUrls={imageUrls} />}
+                {channel !== 'sms' && <ChannelImagePreview imageUrls={compatibleMediaUrls} />}
                 {contentNode}
               </div>
             </div>
@@ -161,7 +168,7 @@ export default function ContentTemplatePreview({
               <div><strong>Nguyễn Minh Anh</strong><span>Vừa xong · 🌐</span></div>
             </div>
             <div className="ctw-preview-facebook-content">{contentNode}</div>
-            <ChannelImagePreview imageUrls={imageUrls} />
+            <ChannelImagePreview imageUrls={compatibleMediaUrls} />
             <div className="ctw-preview-facebook-actions"><span>Thích</span><span>Bình luận</span><span>Chia sẻ</span></div>
           </div>
         )}
@@ -176,10 +183,10 @@ export default function ContentTemplatePreview({
               <span className="ctw-preview-avatar facebook">MA</span>
               <div className="ctw-preview-comment-bubble"><strong>Nguyễn Minh Anh</strong>{contentNode}</div>
             </div>
-            <ChannelImagePreview imageUrls={imageUrls.slice(0, 1)} />
-            {imageUrls.length > 1 && (
+            <ChannelImagePreview imageUrls={compatibleMediaUrls.slice(0, 1)} />
+            {compatibleMediaUrls.length > 1 && (
               <div className="ctw-preview-comment-media-note">
-                Ngẫu nhiên 1 trong {imageUrls.length} ảnh
+                Ngẫu nhiên 1 trong {compatibleMediaUrls.length} media
               </div>
             )}
           </div>
@@ -192,8 +199,8 @@ export default function ContentTemplatePreview({
             <div className="ctw-preview-email-meta"><span>Đến:</span><strong> Nguyễn Minh Anh</strong></div>
             <div className="ctw-preview-email-subject">{renderedSubject || 'Chưa có tiêu đề email'}</div>
             <div className="ctw-preview-email-body">{contentNode}</div>
-            {imageUrls.length > 0 && (
-              <div className="ctw-preview-attachments"><ImageIcon size={15} /> {imageUrls.length} ảnh đính kèm</div>
+            {compatibleMediaUrls.length > 0 && (
+              <div className="ctw-preview-attachments"><ImageIcon size={15} /> {compatibleMediaUrls.length} ảnh đính kèm</div>
             )}
           </div>
         )}

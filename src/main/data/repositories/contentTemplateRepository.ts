@@ -68,7 +68,7 @@ function maxImagesForChannel(channelName: ContentTemplateChannelName): number {
 function normalizeImageUrls(value: unknown, channelName: ContentTemplateChannelName): string[] {
   if (value === null || value === undefined) return []
   if (!Array.isArray(value)) {
-    throw new Error(`Danh sách ảnh của kênh ${channelName} không hợp lệ.`)
+    throw new Error(`Danh sách media của kênh ${channelName} không hợp lệ.`)
   }
 
   const urls: string[] = []
@@ -80,10 +80,10 @@ function normalizeImageUrls(value: unknown, channelName: ContentTemplateChannelN
     try {
       parsed = new URL(url)
     } catch {
-      throw new Error('Ảnh mẫu nội dung phải là URL hợp lệ.')
+      throw new Error('Media mẫu nội dung phải là URL hợp lệ.')
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new Error('Ảnh mẫu nội dung phải dùng URL http(s).')
+      throw new Error('Media mẫu nội dung phải dùng URL http(s).')
     }
     seen.add(url)
     urls.push(url)
@@ -91,8 +91,8 @@ function normalizeImageUrls(value: unknown, channelName: ContentTemplateChannelN
 
   const maximum = maxImagesForChannel(channelName)
   if (urls.length > maximum) {
-    if (maximum === 0) throw new Error('Kênh SMS không hỗ trợ ảnh.')
-    throw new Error(`Kênh ${channelName} chỉ được dùng tối đa ${maximum} ảnh.`)
+    if (maximum === 0) throw new Error('Kênh SMS không hỗ trợ media.')
+    throw new Error(`Kênh ${channelName} chỉ được dùng tối đa ${maximum} media.`)
   }
   return urls
 }

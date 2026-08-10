@@ -17,8 +17,15 @@ import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import MediaPreviewHover from './MediaPreviewHover'
 import { isImageMediaSource } from './mediaImage'
+import {
+  IMAGE_FILE_ACCEPT,
+  IMAGE_VIDEO_FILE_ACCEPT,
+  runtimeMediaSourceMatchesSelectionMode,
+  VIDEO_FILE_ACCEPT,
+  type MediaSelectionMode
+} from '../../../../shared/mediaTypes'
 
-type MediaPickerMode = 'image' | 'file'
+type MediaPickerMode = MediaSelectionMode
 const MEDIA_TABLE_PAGE_SIZE = 100
 const MEDIA_GROUP_MANAGE_PAGE_SIZE = 50
 
@@ -75,6 +82,40 @@ const isUploadImageFile = (file: File): boolean =>
 
 const isMediaFileImage = (file: MediaFile): boolean =>
   isImageMediaSource(file.mimeType, file.originalName, file.localPath, file.cloudUrl)
+
+const isMediaFileLocalAvailable = (localPath?: string | null): boolean => {
+  const value = String(localPath || '').trim()
+  if (!value) return false
+  if (/^data:/i.test(value)) return true
+  try {
+    return window.electronAPI.fileExists(value)
+  } catch {
+    return false
+  }
+}
+
+const mediaFileMatchesPickerMode = (file: MediaFile, pickerMode?: MediaPickerMode): boolean =>
+  !pickerMode || runtimeMediaSourceMatchesSelectionMode(pickerMode, {
+    localPath: file.localPath,
+    localPathAvailable: isMediaFileLocalAvailable(file.localPath),
+    cloudUrl: file.cloudUrl,
+    name: file.originalName,
+    mimeType: file.mimeType
+  })
+
+const getPickerMediaLabel = (pickerMode?: MediaPickerMode): string => {
+  if (pickerMode === 'image') return 'ảnh'
+  if (pickerMode === 'video') return 'video'
+  if (pickerMode === 'image-video') return 'ảnh/video'
+  return 'media'
+}
+
+const getPickerInputAccept = (pickerMode?: MediaPickerMode): string | undefined => {
+  if (pickerMode === 'image') return IMAGE_FILE_ACCEPT
+  if (pickerMode === 'video') return VIDEO_FILE_ACCEPT
+  if (pickerMode === 'image-video') return IMAGE_VIDEO_FILE_ACCEPT
+  return undefined
+}
 
 const getUploadFileSizeLimit = (file: File): number =>
   isUploadImageFile(file) ? MEDIA_IMAGE_MAX_SIZE_BYTES : MEDIA_FILE_MAX_SIZE_BYTES
@@ -162,7 +203,7 @@ export default function MediaLibraryModal({
   const pickerLimit = Math.max(1, maxSelect ?? Number.MAX_SAFE_INTEGER)
   const isPicker = !!onConfirm
   const isSingleSelectPicker = isPicker && pickerLimit === 1
-  const onlyImages = pickerMode === 'image'
+  const pickerMediaLabel = getPickerMediaLabel(pickerMode)
   const activeMediaCount = files.length
   const mediaLibraryMaxFiles = normalizeMediaLibraryMaxFiles(settings.maxFilesPerStaff)
   const selectedGroup = selectedGroupId ? groups.find(group => group.id === selectedGroupId) || null : null
@@ -259,7 +300,7 @@ export default function MediaLibraryModal({
     return selectedGroupId
       ? [...rows].sort((a, b) => (groupFileOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (groupFileOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.id - b.id)
       : rows
-  }, [files, groupFileIds, groupFileOrder, onlyImages, search, selectedGroupId])
+  }, [files, groupFileIds, groupFileOrder, search, selectedGroupId])
 
   const mediaPageCount = Math.max(1, Math.ceil(filteredFiles.length / MEDIA_TABLE_PAGE_SIZE))
   const resolvedMediaPage = Math.min(mediaPage, mediaPageCount)
@@ -297,10 +338,10 @@ export default function MediaLibraryModal({
     if (!selectedGroupId) return []
     return files
       .filter(file => groupFileIds.has(file.id))
-      .filter(file => !onlyImages || isMediaFileImage(file))
+      .filter(file => mediaFileMatchesPickerMode(file, pickerMode))
       .sort((a, b) => (groupFileOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (groupFileOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.id - b.id)
       .map(fileToSnapshot)
-  }, [files, groupFileIds, groupFileOrder, onlyImages, selectedGroupId])
+  }, [files, groupFileIds, groupFileOrder, pickerMode, selectedGroupId])
 
   const selectedSnapshots = useMemo(() => {
     const filesByKey = new Map(files.map(file => [getSnapshotKey(fileToSnapshot(file)), file]))
@@ -308,11 +349,11 @@ export default function MediaLibraryModal({
       .map(key => {
         const file = filesByKey.get(key)
         if (!file) return null
-        if (onlyImages && !isMediaFileImage(file)) return null
+        if (!mediaFileMatchesPickerMode(file, pickerMode)) return null
         return fileToSnapshot(file)
       })
       .filter((item): item is CampaignMediaSnapshot => !!item)
-  }, [files, onlyImages, selectedKeys])
+  }, [files, pickerMode, selectedKeys])
 
   const groupManageFiles = useMemo(() => {
     if (!selectedGroupId) return []
@@ -512,7 +553,7 @@ export default function MediaLibraryModal({
 
     if (isPicker) {
       setSelectedKeys(current => {
-        const eligibleUploaded = uploaded.filter(file => !onlyImages || isMediaFileImage(file))
+        const eligibleUploaded = uploaded.filter(file => mediaFileMatchesPickerMode(file, pickerMode))
         const next = pickerLimit === 1 && eligibleUploaded.length > 0
           ? new Set<string>()
           : new Set(current)
@@ -675,7 +716,7 @@ export default function MediaLibraryModal({
 
     document.addEventListener('paste', handleDocumentPaste)
     return () => document.removeEventListener('paste', handleDocumentPaste)
-  }, [activeMediaCount, groupMembershipLoading, isPicker, mediaLibraryMaxFiles, onlyImages, pickerLimit, selectedGroupId, settings.isConfigured, settingsLoading, uploading])
+  }, [activeMediaCount, groupMembershipLoading, isPicker, mediaLibraryMaxFiles, pickerLimit, pickerMode, selectedGroupId, settings.isConfigured, settingsLoading, uploading])
 
   const handleDelete = (file: MediaFile) => {
     if (deleting) return
@@ -765,7 +806,7 @@ export default function MediaLibraryModal({
 
   const toggleSelect = (file: MediaFile) => {
     if (!isPicker) return
-    if (onlyImages && !isMediaFileImage(file)) return
+    if (!mediaFileMatchesPickerMode(file, pickerMode)) return
     const key = getSnapshotKey(fileToSnapshot(file))
     setSelectedKeys(current => {
       const next = new Set(current)
@@ -789,7 +830,7 @@ export default function MediaLibraryModal({
   const handleConfirmGroup = () => {
     if (!onConfirm || !selectedGroupId || isSingleSelectPicker) return
     if (selectedGroupSnapshots.length === 0) {
-      showAlert(onlyImages ? 'Thư mục này không có ảnh hợp lệ.' : 'Thư mục này chưa có media hợp lệ.', 'error')
+      showAlert(`Thư mục này không có ${pickerMediaLabel} hợp lệ.`, 'error')
       return
     }
     if (selectedGroupSnapshots.length > pickerLimit) {
@@ -935,7 +976,7 @@ export default function MediaLibraryModal({
 
   const getEmptyMediaText = (): string => {
     if (filesLoading || (selectedGroupId && groupMembershipLoading)) return 'Đang tải...'
-    if (selectedGroupId) return onlyImages ? 'Thư mục này chưa có ảnh' : 'Thư mục này chưa có media'
+    if (selectedGroupId) return `Thư mục này chưa có ${pickerMediaLabel}`
     return 'Chưa có media'
   }
 
@@ -1113,7 +1154,7 @@ export default function MediaLibraryModal({
                       ref={uploadInputRef}
                       type="file"
                       multiple
-                      accept={onlyImages ? 'image/*' : undefined}
+                      accept={getPickerInputAccept(pickerMode)}
                       style={{ display: 'none' }}
                       onChange={handleUploadChange}
                     />
@@ -1219,7 +1260,7 @@ export default function MediaLibraryModal({
                       ) : pagedFiles.map((file, index) => {
                         const snapshot = fileToSnapshot(file)
                         const key = getSnapshotKey(snapshot)
-                        const selectable = !isPicker || !onlyImages || isMediaFileImage(file)
+                        const selectable = !isPicker || mediaFileMatchesPickerMode(file, pickerMode)
                         const pickerSelected = isPicker && selectable && selectedKeys.has(key)
                         const deleteSelected = canDeleteMedia && selectedDeleteIds.has(file.id)
                         const selected = pickerSelected || deleteSelected
@@ -1236,7 +1277,7 @@ export default function MediaLibraryModal({
                                   checked={pickerSelected}
                                   onChange={() => toggleSelect(file)}
                                   disabled={!selectable}
-                                  title={!selectable ? 'Chỉ chọn được ảnh trong mục này' : undefined}
+                                  title={!selectable ? `Chỉ chọn được ${pickerMediaLabel} trong mục này` : undefined}
                                 />
                               </td>
                             )}

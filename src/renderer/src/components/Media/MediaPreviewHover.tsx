@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FocusEvent, MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Eye, FileText, Image } from 'lucide-react'
-import { isImageMediaSource } from './mediaImage'
+import { Eye, FileText, Image, Video } from 'lucide-react'
+import { isImageMediaSource, isVideoMediaSource } from './mediaImage'
 
 interface MediaPreviewHoverProps {
   name: string
@@ -73,6 +73,7 @@ export default function MediaPreviewHover({ name, path, mimeType, sizeBytes }: M
 
   const cleanPath = String(path || '').trim()
   const canPreviewImage = Boolean(cleanPath && isPreviewableImage(cleanPath, mimeType))
+  const canPreviewVideo = Boolean(cleanPath && isVideoMediaSource(mimeType, cleanPath))
 
   useEffect(() => {
     setStatus('idle')
@@ -81,15 +82,19 @@ export default function MediaPreviewHover({ name, path, mimeType, sizeBytes }: M
   }, [cleanPath, mimeType])
 
   const ensurePreview = async () => {
-    if (!cleanPath || !canPreviewImage) {
+    if (!cleanPath || (!canPreviewImage && !canPreviewVideo)) {
       setStatus('file')
       return
     }
 
     if (status === 'ready' || status === 'loading') return
-    if (isDataImage(cleanPath) || isRemoteUrl(cleanPath)) {
+    if (isDataImage(cleanPath) || /^data:video\//i.test(cleanPath) || isRemoteUrl(cleanPath)) {
       setPreviewSrc(cleanPath)
       setStatus('ready')
+      return
+    }
+    if (canPreviewVideo) {
+      setStatus('file')
       return
     }
 
@@ -117,7 +122,7 @@ export default function MediaPreviewHover({ name, path, mimeType, sizeBytes }: M
 
   useLayoutEffect(() => {
     updatePopoverPosition()
-  }, [updatePopoverPosition, status, previewSrc, message, name, mimeType, sizeBytes, canPreviewImage])
+  }, [updatePopoverPosition, status, previewSrc, message, name, mimeType, sizeBytes, canPreviewImage, canPreviewVideo])
 
   useEffect(() => {
     if (!open) return undefined
@@ -160,25 +165,43 @@ export default function MediaPreviewHover({ name, path, mimeType, sizeBytes }: M
     >
       <div className="media-hover-preview-title" title={name}>{name}</div>
       {status === 'ready' && previewSrc ? (
-        <img
-          src={previewSrc}
-          alt={name}
-          onLoad={updatePopoverPosition}
-          onError={() => {
-            setPreviewSrc('')
-            setMessage('Không thể tải preview.')
-            setStatus('error')
-          }}
-        />
+        canPreviewVideo ? (
+          <video
+            src={previewSrc}
+            aria-label={name}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            onLoadedMetadata={updatePopoverPosition}
+            onError={() => {
+              setPreviewSrc('')
+              setMessage('Không thể tải preview.')
+              setStatus('error')
+            }}
+          />
+        ) : (
+          <img
+            src={previewSrc}
+            alt={name}
+            onLoad={updatePopoverPosition}
+            onError={() => {
+              setPreviewSrc('')
+              setMessage('Không thể tải preview.')
+              setStatus('error')
+            }}
+          />
+        )
       ) : (
         <div className="media-hover-preview-file">
-          {canPreviewImage && status !== 'file' ? <Image size={22} /> : <FileText size={22} />}
+          {canPreviewVideo ? <Video size={22} /> : canPreviewImage && status !== 'file' ? <Image size={22} /> : <FileText size={22} />}
           <span>
             {status === 'loading'
               ? 'Đang tải preview...'
               : status === 'error'
                 ? message || 'Không thể tải preview.'
-                : 'File không có preview ảnh.'}
+                : canPreviewVideo ? 'Video local không có preview.' : 'File không có preview ảnh.'}
           </span>
           {(mimeType || sizeBytes) && (
             <small>{[mimeType || '', formatBytes(sizeBytes)].filter(Boolean).join(' • ')}</small>

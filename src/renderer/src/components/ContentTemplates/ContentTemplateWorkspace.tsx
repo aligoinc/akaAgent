@@ -41,6 +41,7 @@ import {
 } from '../../../../shared/formattedContent'
 import { useUiStore } from '../../stores/uiStore'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
+import { isVideoMediaSource } from '../Media/mediaImage'
 import {
   FormattedContentEditor,
   type FormattedContentEditorHandle
@@ -83,7 +84,7 @@ const CHANNEL_META: Record<ContentTemplateChannelName, {
   },
   facebook_comment: {
     label: 'Comment Facebook', shortLabel: 'Comment Facebook', mono: 'f', maxImages: 10, richCapable: false,
-    description: 'Chọn tối đa 10 ảnh; campaign sẽ chọn ngẫu nhiên một ảnh cho mỗi comment.'
+    description: 'Chọn tối đa 10 ảnh/video; campaign sẽ chọn ngẫu nhiên một media cho mỗi comment.'
   },
   email: {
     label: 'Email', shortLabel: 'Email', mono: '@', maxImages: 10, richCapable: true,
@@ -450,32 +451,50 @@ function ChannelImagesEditor({
   const [pickerOpen, setPickerOpen] = useState(false)
   const maximum = CHANNEL_META[channelName].maxImages
   const remaining = Math.max(0, maximum - imageUrls.length)
+  const supportsVideo = channelName === 'facebook_post' || channelName === 'facebook_message' || channelName === 'facebook_comment'
+  const mediaLabel = supportsVideo ? 'media' : 'ảnh'
 
   if (maximum === 0) {
     return <div className="ctw-no-images-note"><Info size={15} /> SMS chỉ gửi văn bản nên không đính kèm ảnh.</div>
   }
 
   const handleConfirm = (items: CampaignMediaSnapshot[]) => {
-    const urls = items.map(item => item.cloudUrl || '').filter(Boolean)
+    const urls = items.flatMap(item => {
+      const cloudUrl = String(item.cloudUrl || '').trim()
+      if (!/^https?:\/\//i.test(cloudUrl)) return []
+
+      const isVideo = isVideoMediaSource(
+        item.mimeType,
+        item.name,
+        item.localPath,
+        cloudUrl
+      )
+      // Templates store URL strings only, so keep videos whose type remains
+      // recognizable after MIME/name metadata is discarded.
+      if (isVideo && !isVideoMediaSource('', cloudUrl)) return []
+      return [cloudUrl]
+    })
     const skipped = items.length - urls.length
     onChange(Array.from(new Set([...imageUrls, ...urls])).slice(0, maximum))
     setPickerOpen(false)
-    if (skipped > 0) showAlert('Chỉ ảnh đã upload lên cloud mới có thể lưu cùng mẫu.', 'info')
+    if (skipped > 0) showAlert(`Chỉ ${mediaLabel} đã upload lên cloud mới có thể lưu cùng mẫu.`, 'info')
   }
 
   return (
     <>
       <section className="ctw-images-section channel-scoped">
         <div className="ctw-section-heading horizontal">
-          <div><strong>Ảnh riêng cho {CHANNEL_META[channelName].label}</strong><span>Ảnh chỉ dùng cho loại nội dung này.</span></div>
-          <span className="ctw-image-limit">{imageUrls.length}/{maximum} ảnh</span>
+          <div><strong>{supportsVideo ? 'Media' : 'Ảnh'} riêng cho {CHANNEL_META[channelName].label}</strong><span>{supportsVideo ? 'Ảnh/video' : 'Ảnh'} chỉ dùng cho loại nội dung này.</span></div>
+          <span className="ctw-image-limit">{imageUrls.length}/{maximum} {mediaLabel}</span>
         </div>
         <div className="ctw-image-grid">
           {imageUrls.map((url, index) => (
             <div className="ctw-image-tile" key={`${url}-${index}`}>
-              <img src={url} alt={`Ảnh ${index + 1}`} />
+              {isVideoMediaSource('', url)
+                ? <video src={url} aria-label={`Video ${index + 1}`} muted controls preload="metadata" />
+                : <img src={url} alt={`Ảnh ${index + 1}`} />}
               <div className="ctw-image-tile-caption" title={getImageName(url)}>{getImageName(url)}</div>
-              <button type="button" title="Bỏ ảnh" onClick={() => onChange(imageUrls.filter((_, itemIndex) => itemIndex !== index))} disabled={disabled}><X size={14} /></button>
+              <button type="button" title="Bỏ media" onClick={() => onChange(imageUrls.filter((_, itemIndex) => itemIndex !== index))} disabled={disabled}><X size={14} /></button>
             </div>
           ))}
           {remaining > 0 && (
@@ -485,7 +504,7 @@ function ChannelImagesEditor({
           )}
         </div>
       </section>
-      {pickerOpen && <MediaLibraryModal pickerMode="image" maxSelect={Math.max(1, remaining)} onClose={() => setPickerOpen(false)} onConfirm={handleConfirm} />}
+      {pickerOpen && <MediaLibraryModal pickerMode={supportsVideo ? 'image-video' : 'image'} maxSelect={Math.max(1, remaining)} onClose={() => setPickerOpen(false)} onConfirm={handleConfirm} />}
     </>
   )
 }
@@ -1047,7 +1066,7 @@ export default function ContentTemplateWorkspace({
                   <div className="ctw-template-card-head"><div className="ctw-template-icon"><FileText size={18} /></div><div className="ctw-template-title"><h3 title={template.name}>{template.name}</h3><span>{template.groupName || 'Chưa phân nhóm'}</span></div><div className="ctw-row-actions"><button type="button" className="btn-icon" title="Sửa mẫu" onClick={() => startEdit(template)} disabled={busy}><Edit3 size={15} /></button><button type="button" className="btn-icon danger" title="Xoá mẫu" onClick={() => deleteTemplate(template)} disabled={busy}><Trash2 size={15} /></button></div></div>
                   <div className="ctw-channel-badges">{activeChannels.map(channelName => <span className={`ctw-channel-badge ${channelName}`} key={channelName}>{CHANNEL_META[channelName].shortLabel}</span>)}</div>
                   <p className="ctw-template-excerpt">{preview || 'Chưa có nội dung v2 cho các loại đang bật'}</p>
-                  <div className="ctw-template-card-foot"><span><MessageSquareText size={13} /> {variantCount} biến thể</span><span><ImageIcon size={13} /> {imageCount} ảnh</span><span>{template.updatedAt ? `Cập nhật ${new Date(template.updatedAt).toLocaleDateString('vi-VN')}` : ''}</span></div>
+                  <div className="ctw-template-card-foot"><span><MessageSquareText size={13} /> {variantCount} biến thể</span><span><ImageIcon size={13} /> {imageCount} media</span><span>{template.updatedAt ? `Cập nhật ${new Date(template.updatedAt).toLocaleDateString('vi-VN')}` : ''}</span></div>
                 </article>
               )
             })}
@@ -1073,7 +1092,7 @@ export default function ContentTemplateWorkspace({
               const active = editorChannel === type.name
               return (
                 <button type="button" className={`ctw-channel-rail-item ${type.name}${active ? ' active' : ''}${channel.enabled ? '' : ' disabled-channel'}`} onClick={() => setEditorChannel(type.name)} key={type.name}>
-                  <span className="ctw-channel-mono">{CHANNEL_META[type.name].mono}</span><span className="ctw-channel-rail-copy"><strong>{CHANNEL_META[type.name].label}</strong><small>{channel.enabled ? `${channel.variants.length} biến thể · ${channel.imageUrls.length} ảnh` : 'Đang tắt'}</small></span><span className={`ctw-channel-dot${channel.enabled ? ' on' : ''}`} />
+                  <span className="ctw-channel-mono">{CHANNEL_META[type.name].mono}</span><span className="ctw-channel-rail-copy"><strong>{CHANNEL_META[type.name].label}</strong><small>{channel.enabled ? `${channel.variants.length} biến thể · ${channel.imageUrls.length} media` : 'Đang tắt'}</small></span><span className={`ctw-channel-dot${channel.enabled ? ' on' : ''}`} />
                 </button>
               )
             })}

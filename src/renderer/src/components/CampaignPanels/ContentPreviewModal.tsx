@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { FileText, Image, Mail, MessageCircle, Paperclip, Send, Share2, ThumbsUp, X } from 'lucide-react'
+import { FileText, Image, Mail, MessageCircle, Paperclip, Send, Share2, ThumbsUp, Video, X } from 'lucide-react'
 import { renderContentSpin, renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
 import {
   formattedContentToZaloPreviewHtml,
@@ -8,7 +8,7 @@ import {
   splitFormattedContentVariants,
   transformFormattedContentTextNodes
 } from '../../../../shared/formattedContent'
-import { isImageMediaSource } from '../Media/mediaImage'
+import { isImageMediaSource, isVideoMediaSource } from '../Media/mediaImage'
 
 export type ContentPreviewKind = 'post' | 'comment' | 'message' | 'email' | 'answer' | 'friendRequest'
 export type ContentPreviewPlatform = 'facebook' | 'zalo' | 'email' | 'generic'
@@ -48,6 +48,7 @@ interface PreviewMediaState {
   path: string
   label: string
   dataUrl?: string
+  mediaType: 'image' | 'video' | 'file'
   status: 'loading' | 'ready' | 'file' | 'error'
   message?: string
 }
@@ -193,13 +194,16 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
     const initialItems: PreviewMediaState[] = selectedMedia.map((item, index) => {
       const label = item.label || getFileName(item.path, `Media ${index + 1}`)
       const isImage = isImageMediaSource(item.mimeType, item.path)
+      const isVideo = isVideoMediaSource(item.mimeType, item.path)
       const remoteImage = isRemoteUrl(item.path) && isImage
-      if (item.path.startsWith('data:image/')) {
+      const remoteVideo = isRemoteUrl(item.path) && isVideo
+      if (item.path.startsWith('data:image/') || item.path.startsWith('data:video/')) {
         return {
           key: mediaKey(item, index),
           path: item.path,
           label,
           dataUrl: item.path,
+          mediaType: isVideo ? 'video' : 'image',
           status: 'ready',
           message: getDataImageMimeType(item.path)
         }
@@ -210,6 +214,17 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
           path: item.path,
           label,
           dataUrl: item.path,
+          mediaType: 'image',
+          status: 'ready'
+        }
+      }
+      if (remoteVideo) {
+        return {
+          key: mediaKey(item, index),
+          path: item.path,
+          label,
+          dataUrl: item.path,
+          mediaType: 'video',
           status: 'ready'
         }
       }
@@ -218,6 +233,7 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
           key: mediaKey(item, index),
           path: item.path,
           label,
+          mediaType: isVideo ? 'video' : 'file',
           status: 'file'
         }
       }
@@ -225,6 +241,7 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
         key: mediaKey(item, index),
         path: item.path,
         label,
+        mediaType: 'image',
         status: 'loading'
       }
     })
@@ -261,14 +278,16 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
   }, [selectedMedia])
 
   const renderMediaTile = (item: PreviewMediaState) => {
-    const isImageReady = item.status === 'ready' && item.dataUrl
+    const isVisualReady = item.status === 'ready' && item.dataUrl
     return (
       <div key={item.key} className={`content-preview-media-tile ${item.status}`}>
-        {isImageReady ? (
-          <img src={item.dataUrl} alt={item.label} />
+        {isVisualReady ? (
+          item.mediaType === 'video'
+            ? <video src={item.dataUrl} aria-label={item.label} controls preload="metadata" />
+            : <img src={item.dataUrl} alt={item.label} />
         ) : (
           <div className="content-preview-file-chip">
-            {item.status === 'file' ? <FileText size={18} /> : <Image size={18} />}
+            {item.mediaType === 'video' ? <Video size={18} /> : item.status === 'file' ? <FileText size={18} /> : <Image size={18} />}
             <span>{item.status === 'loading' ? 'Đang tải...' : item.label}</span>
             {item.status === 'error' && <small>{item.message || 'Không thể tải ảnh'}</small>}
           </div>
