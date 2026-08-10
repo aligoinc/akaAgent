@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { existsSync, unlinkSync, writeFileSync } from 'fs'
 import { extname, join } from 'path'
 import { tmpdir } from 'os'
@@ -169,6 +169,32 @@ interface BlockScreenshotProgressLog {
   action: CampaignLogAction
 }
 
+interface CampaignRunBoundaryContext {
+  runtimeClaimToken: string
+  claimedVietnamDateKey: string
+  cutoffAtMs: number
+  cutoffLabel: string
+  kind: 'configured_stop' | 'end_of_day_drain'
+  boundaryLogged: boolean
+  maintenanceReconciledDateKey: string | null
+}
+
+interface CampaignRunBoundaryCheck {
+  reached: boolean
+  context: CampaignRunBoundaryContext
+  clock: {
+    dbNow: string
+    vietnamDateKey: string
+  } | null
+  clockUnavailable: boolean
+}
+
+interface CampaignRunUnitLease {
+  runtimeUnitToken: string
+  inputDataIds: number[]
+  requeueRemainingOnSettle: boolean
+}
+
 class CampaignMediaResolveError extends Error {
   constructor(
     public readonly mediaName: string,
@@ -176,6 +202,13 @@ class CampaignMediaResolveError extends Error {
   ) {
     super(`Không dùng được media "${mediaName}": ${reason}`)
     this.name = 'CampaignMediaResolveError'
+  }
+}
+
+class CampaignRunUnitOwnershipLostError extends Error {
+  constructor(campaignId: number) {
+    super(`Campaign ${campaignId} no longer owns its run-unit lease`)
+    this.name = 'CampaignRunUnitOwnershipLostError'
   }
 }
 
@@ -426,7 +459,10 @@ const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const FACEBOOK_GROUP_INVITE_ACTION_ID = 'facebook_group_invite'
 const FACEBOOK_GROUP_INVITE_ACTION_CODE = 'fb_group_invite'
-const FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE = 1000
+// A Facebook invite dialog is one durable DB unit. Keep the candidate set at
+// the same bound as the atomic unit-lease RPC so every row is reserved before
+// the external submit and unused candidates can be safely requeued.
+const FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE = 50
 const ZALO_MESSAGE_PHONE_ACTION_ID = 'zalo_message_phone'
 const ZALO_MESSAGE_FRIEND_ACTION_ID = 'zalo_message_friend'
 const ZALO_MESSAGE_BIRTHDAY_ACTION_ID = 'zalo_message_birthday'
@@ -574,6 +610,7 @@ export class CampaignScheduler {
   private startDelayTimeoutId: ReturnType<typeof setTimeout> | null = null
   private running = false
   private dispatching = false
+  private wakeRequested = false
   private activeAccountRuns = new Set<number>()
   private activeZaloAccountRuns = new Set<number>()
   private externalAccountRuns = new Set<number>()
@@ -607,6 +644,9 @@ export class CampaignScheduler {
   private logSink?: CampaignSchedulerLogSink
   private onRuntimeOwnershipLost?: () => void
   private runtimeOwnershipLossReported = false
+  private campaignRunBoundaries = new Map<number, CampaignRunBoundaryContext>()
+  private activeCampaignRunUnits = new Map<number, CampaignRunUnitLease>()
+  private boundaryStoppedAccountQueues = new Set<number>()
 
   constructor(
     supabase: SupabaseService,
@@ -698,6 +738,8 @@ export class CampaignScheduler {
   stop(): void {
     this.requestZaloRuntimeStop('shutdown')
     this.running = false
+    this.wakeRequested = false
+    this.maintenanceCoordinator?.cancelPending()
     this.schedulerConnectivityIssueActive = false
     if (this.startDelayTimeoutId) {
       clearTimeout(this.startDelayTimeoutId)
@@ -726,6 +768,8 @@ export class CampaignScheduler {
    */
   stopAcceptingNewZaloWork(): void {
     this.running = false
+    this.wakeRequested = false
+    this.maintenanceCoordinator?.cancelPending()
     this.schedulerConnectivityIssueActive = false
     if (this.startDelayTimeoutId) {
       clearTimeout(this.startDelayTimeoutId)
@@ -739,11 +783,22 @@ export class CampaignScheduler {
 
   private startPolling(): void {
     if (!this.running || this.intervalId) return
-    this.intervalId = setInterval(() => this.tick(), 30000)
+    this.intervalId = setInterval(() => this.wakeNow('interval'), 30000)
     if (this.runtimeTarget !== 'server') {
       this.sendLog('📋 Scheduler đã bắt đầu. Kiểm tra mỗi 30 giây.')
     }
-    this.tick()
+    this.wakeNow('start')
+  }
+
+  /**
+   * Coalesces external wakeups (resume/midnight/realtime) with the polling
+   * loop. If a tick is already dispatching, exactly one follow-up pass is kept
+   * pending instead of opening another discovery/maintenance pass in parallel.
+   */
+  wakeNow(_reason?: string): void {
+    if (!this.running) return
+    this.wakeRequested = true
+    void this.tick()
   }
 
   destroyBackgroundPage(accountId: number): void {
@@ -886,12 +941,31 @@ export class CampaignScheduler {
     }
 
     if (campaign.status === 'chờ xử lý') {
-      this.pauseRequests.delete(campaignId)
-      const note = campaign.dataTargetSourceMode === 'data_group'
-        && DATA_GROUP_WAITING_NOTES.has(String(campaign.note || '').trim())
-        ? campaign.note
-        : null
-      return await this.updateCampaignAndBroadcast(campaignId, { status: 'tạm dừng', note })
+      const transition = await this.supabase.setDesktopCampaignStatusV2(
+        campaign.id,
+        campaign.accountId,
+        'tạm dừng'
+      )
+      if (transition.ok || transition.reason === 'already_target') {
+        this.pauseRequests.delete(campaignId)
+        const updated = await this.supabase.getCampaign(campaignId)
+        if (!updated) throw new Error('Không tìm thấy chiến dịch sau khi tạm dừng.')
+        this.broadcastCampaignUpdate(updated)
+        return updated
+      }
+
+      // The scheduler may have claimed the campaign after the initial read.
+      // Convert that CAS conflict into the normal soft-pause latch; never
+      // overwrite the fresh runtime token with a stale pending->paused write.
+      if (transition.reason === 'runtime_busy' || transition.reason === 'unit_lease_busy') {
+        const latest = await this.supabase.getCampaign(campaignId)
+        if (latest?.status === 'đang chạy') {
+          this.pauseRequests.add(campaignId)
+          return await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
+        }
+        if (latest?.status === 'tạm dừng') return latest
+      }
+      throw new Error('Trạng thái chiến dịch đã thay đổi. Vui lòng thử lại.')
     }
 
     if (campaign.status === 'đang chạy') {
@@ -905,6 +979,37 @@ export class CampaignScheduler {
     }
 
     throw new Error('Chỉ có thể tạm dừng chiến dịch khi trạng thái là "chờ xử lý" hoặc "đang chạy".')
+  }
+
+  async requestResumeCampaign(campaignId: number): Promise<Campaign> {
+    if (this.runtimeTarget === 'server') {
+      throw new Error('Zalo Server phải dùng DB-first run control để tiếp tục chiến dịch.')
+    }
+    const campaign = await this.supabase.getCampaign(campaignId)
+    if (!campaign) throw new Error('Không tìm thấy chiến dịch.')
+
+    const transition = await this.supabase.setDesktopCampaignStatusV2(
+      campaign.id,
+      campaign.accountId,
+      'chờ xử lý'
+    )
+    if (!transition.ok) {
+      if (transition.reason === 'unit_lease_busy') {
+        throw new Error('Lượt hiện tại chưa ghi xong; vui lòng chờ chiến dịch tạm dừng hoàn tất rồi tiếp tục.')
+      }
+      if (transition.reason === 'runtime_busy' || transition.reason === 'account_running') {
+        throw new Error('Tài khoản hoặc chiến dịch đang được runtime khác xử lý. Vui lòng thử lại sau.')
+      }
+      if (transition.reason === 'not_found') throw new Error('Không tìm thấy chiến dịch.')
+      throw new Error('Trạng thái chiến dịch đã thay đổi. Vui lòng tải lại trước khi tiếp tục.')
+    }
+
+    this.pauseRequests.delete(campaignId)
+    const updated = await this.supabase.getCampaign(campaignId)
+    if (!updated) throw new Error('Không tìm thấy chiến dịch sau khi tiếp tục.')
+    this.broadcastCampaignUpdate(updated)
+    this.wakeNow('campaign-resumed')
+    return updated
   }
 
   private isCampaignPauseRequested(campaignId: number): boolean {
@@ -921,11 +1026,18 @@ export class CampaignScheduler {
     campaign: Campaign,
     seconds: number,
     account?: AutoAccount
-  ): Promise<'paused' | 'completed'> {
+  ): Promise<'paused' | 'boundary' | 'stopped' | 'completed'> {
     const endAt = Date.now() + seconds * 1000
     let nextServerControlCheckAt = 0
     while (Date.now() < endAt) {
+      if (!this.running) return 'stopped'
       if (this.isCampaignPauseRequested(campaign.id)) return 'paused'
+      const boundaryCheck = await this.checkCampaignRunBoundary(campaign.id)
+      if (boundaryCheck?.reached) {
+        if (!account || await this.yieldCampaignAtRunBoundary(account, campaign, boundaryCheck)) {
+          return 'boundary'
+        }
+      }
       if (account && this.isServerZaloCampaign(account, campaign) && Date.now() >= nextServerControlCheckAt) {
         nextServerControlCheckAt = Date.now() + 5000
         const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
@@ -942,7 +1054,14 @@ export class CampaignScheduler {
       if (this.getZaloRuntimeStopReason(campaign.id)) return 'completed'
       await new Promise(resolve => setTimeout(resolve, Math.min(500, Math.max(0, endAt - Date.now()))))
     }
+    if (!this.running) return 'stopped'
     if (this.isCampaignPauseRequested(campaign.id)) return 'paused'
+    const boundaryCheck = await this.checkCampaignRunBoundary(campaign.id)
+    if (boundaryCheck?.reached) {
+      if (!account || await this.yieldCampaignAtRunBoundary(account, campaign, boundaryCheck)) {
+        return 'boundary'
+      }
+    }
     if (account && this.isServerZaloCampaign(account, campaign)) {
       const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
       if (this.isServerZaloBoundaryRequested(
@@ -964,8 +1083,13 @@ export class CampaignScheduler {
   }
 
   private async tick(): Promise<void> {
-    if (!this.running || this.dispatching) return
+    if (!this.running) return
+    if (this.dispatching) {
+      this.wakeRequested = true
+      return
+    }
     this.dispatching = true
+    this.wakeRequested = false
 
     try {
       await this.getReadyRuntimeClock()
@@ -1047,6 +1171,7 @@ export class CampaignScheduler {
         this.sendLog(SCHEDULER_CONNECTIVITY_RECOVERED_LOG)
       }
     } catch (err) {
+      if (!this.running && err instanceof Error && err.name === 'AbortError') return
       console.error('Scheduler tick error:', err)
       if (isSchedulerConnectivityError(err)) {
         if (!this.schedulerConnectivityIssueActive) {
@@ -1058,6 +1183,12 @@ export class CampaignScheduler {
       this.sendLog(`❌ Lỗi scheduler: ${getErrorMessage(err) || 'Lỗi không xác định'}`)
     } finally {
       this.dispatching = false
+      if (this.running && this.wakeRequested) {
+        this.wakeRequested = false
+        queueMicrotask(() => {
+          if (this.running) void this.tick()
+        })
+      }
     }
   }
 
@@ -1074,6 +1205,7 @@ export class CampaignScheduler {
       })
       .finally(() => {
         this.activeAccountRuns.delete(account.id)
+        this.boundaryStoppedAccountQueues.delete(account.id)
         if (isZaloAccount) this.activeZaloAccountRuns.delete(account.id)
       })
   }
@@ -1095,12 +1227,13 @@ export class CampaignScheduler {
         currentCampaign.isDelete ||
         !currentCampaign.schedule ||
         new Date(currentCampaign.schedule).getTime() > businessNow.getTime() ||
-        this.isAfterDailyStopTime(businessNow, currentCampaign.dailyStopTime)
+        this.isAtOrAfterCampaignDispatchCutoff(businessNow, currentCampaign.dailyStopTime)
       ) {
         continue
       }
       if (!this.running) break
       await this.executeCampaign(account, currentCampaign)
+      if (this.boundaryStoppedAccountQueues.delete(account.id)) break
     }
   }
 
@@ -1435,7 +1568,7 @@ export class CampaignScheduler {
       return true
     }
 
-    if (this.isAfterDailyStopTime(nextSchedule, campaign.dailyStopTime)) {
+    if (this.isAtOrAfterCampaignDispatchCutoff(nextSchedule, campaign.dailyStopTime)) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
         await this.logCampaignProgress(
@@ -1546,15 +1679,30 @@ export class CampaignScheduler {
 
     const nextSchedule = new Date(now.getTime() + hours * 60 * 60 * 1000)
 
-    if (!this.isSameVietnamDay(nextSchedule, now)) {
+    // The rerun window belongs to the immutable Vietnam day assigned by the
+    // top-level runtime claim. A unit may legally start before midnight and
+    // finish after it; comparing only with the completion-time `now` would
+    // incorrectly reopen a weekly/monthly campaign on the new day before
+    // schedule maintenance can advance its recurrence. Keep the old `now`
+    // comparison for the legacy/no-context path and for an interval which
+    // itself crosses midnight.
+    const claimedVietnamDateKey = this.campaignRunBoundaries.get(campaign.id)?.claimedVietnamDateKey
+    const leavesClaimedVietnamDay = Boolean(
+      claimedVietnamDateKey &&
+      this.getVietnamDateKey(nextSchedule) !== claimedVietnamDateKey
+    )
+    if (leavesClaimedVietnamDay || !this.isSameVietnamDay(nextSchedule, now)) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+        await this.logCampaignProgress(
+          campaign.id,
+          `✅ Hoàn thành chiến dịch "${campaign.name}" (không hẹn chạy lại theo giờ qua ngày mới)`
+        )
       }
       return true
     }
 
-    if (this.isAfterDailyStopTime(nextSchedule, campaign.dailyStopTime)) {
+    if (this.isAtOrAfterCampaignDispatchCutoff(nextSchedule, campaign.dailyStopTime)) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
         await this.logCampaignProgress(
@@ -1758,30 +1906,438 @@ export class CampaignScheduler {
   }
 
   private isAfterDailyStopTime(date: Date, dailyStopTime?: string | null): boolean {
-    const match = String(dailyStopTime || '').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/)
-    if (!match) return false
-
-    const stopHour = Number(match[1])
-    const stopMinute = Number(match[2])
-    const stopSecond = Number(match[3] || 0)
-    if (
-      !Number.isInteger(stopHour) ||
-      !Number.isInteger(stopMinute) ||
-      !Number.isInteger(stopSecond) ||
-      stopHour < 0 ||
-      stopHour > 23 ||
-      stopMinute < 0 ||
-      stopMinute > 59 ||
-      stopSecond < 0 ||
-      stopSecond > 59
-    ) {
-      return false
-    }
+    const stop = this.parseDailyStopTime(dailyStopTime)
+    if (!stop) return false
 
     const parts = this.getVietnamDateTimeParts(date)
-    if (parts.hour !== stopHour) return parts.hour > stopHour
-    if (parts.minute !== stopMinute) return parts.minute > stopMinute
-    return parts.second > stopSecond
+    if (parts.hour !== stop.hour) return parts.hour > stop.hour
+    if (parts.minute !== stop.minute) return parts.minute > stop.minute
+    return parts.second >= stop.second
+  }
+
+  private parseDailyStopTime(
+    dailyStopTime?: string | null
+  ): { hour: number; minute: number; second: number } | null {
+    const match = String(dailyStopTime || '').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+    if (!match) return null
+
+    const hour = Number(match[1])
+    const minute = Number(match[2])
+    const second = Number(match[3] || 0)
+    if (
+      !Number.isInteger(hour) ||
+      !Number.isInteger(minute) ||
+      !Number.isInteger(second) ||
+      hour < 0 ||
+      hour > 23 ||
+      minute < 0 ||
+      minute > 59 ||
+      second < 0 ||
+      second > 59
+    ) {
+      return null
+    }
+    return { hour, minute, second }
+  }
+
+  /**
+   * Dispatch stops at the configured daily cutoff. Campaigns without one use
+   * 23:59 Vietnam time as a mandatory drain window before date maintenance.
+   */
+  private isAtOrAfterCampaignDispatchCutoff(date: Date, dailyStopTime?: string | null): boolean {
+    const configuredStop = this.parseDailyStopTime(dailyStopTime)
+    if (configuredStop) {
+      const configuredSeconds = configuredStop.hour * 3600 + configuredStop.minute * 60 + configuredStop.second
+      if (configuredSeconds > 23 * 3600 + 59 * 60) {
+        const parts = this.getVietnamDateTimeParts(date)
+        return parts.hour === 23 && parts.minute >= 59
+      }
+      return this.isAfterDailyStopTime(date, dailyStopTime)
+    }
+    const parts = this.getVietnamDateTimeParts(date)
+    return parts.hour === 23 && parts.minute >= 59
+  }
+
+  private createCampaignRunBoundary(
+    campaign: Campaign,
+    runtimeClaimToken: string,
+    claimedVietnamDateKey: string
+  ): CampaignRunBoundaryContext {
+    const configuredStop = this.parseDailyStopTime(campaign.dailyStopTime)
+    const configuredStopSeconds = configuredStop
+      ? configuredStop.hour * 3600 + configuredStop.minute * 60 + configuredStop.second
+      : Number.POSITIVE_INFINITY
+    const stop = configuredStop && configuredStopSeconds <= 23 * 3600 + 59 * 60
+      ? configuredStop
+      : { hour: 23, minute: 59, second: 0 }
+    const pad = (value: number) => String(value).padStart(2, '0')
+    const cutoffAt = new Date(
+      `${claimedVietnamDateKey}T${pad(stop.hour)}:${pad(stop.minute)}:${pad(stop.second)}+07:00`
+    )
+    if (!Number.isFinite(cutoffAt.getTime())) {
+      throw new Error('Không thể xác định mốc dừng chạy theo ngày Việt Nam')
+    }
+
+    return {
+      runtimeClaimToken,
+      claimedVietnamDateKey,
+      cutoffAtMs: cutoffAt.getTime(),
+      cutoffLabel: `${pad(stop.hour)}:${pad(stop.minute)}${stop.second > 0 ? `:${pad(stop.second)}` : ''}`,
+      kind: configuredStop ? 'configured_stop' : 'end_of_day_drain',
+      boundaryLogged: false,
+      maintenanceReconciledDateKey: null
+    }
+  }
+
+  private checkCampaignRunBoundaryWithClock(
+    context: CampaignRunBoundaryContext,
+    clock: NonNullable<CampaignRunBoundaryCheck['clock']>
+  ): CampaignRunBoundaryCheck {
+    const dbNowMs = new Date(clock.dbNow).getTime()
+    if (!Number.isFinite(dbNowMs)) throw new Error('DB runtime clock is invalid')
+    return {
+      reached:
+        clock.vietnamDateKey !== context.claimedVietnamDateKey ||
+        dbNowMs >= context.cutoffAtMs,
+      context,
+      clock,
+      clockUnavailable: false
+    }
+  }
+
+  private async checkCampaignRunBoundary(campaignId: number): Promise<CampaignRunBoundaryCheck | null> {
+    const context = this.campaignRunBoundaries.get(campaignId)
+    if (!context) return null
+    try {
+      const clock = await this.supabase.getRuntimeClock()
+      return this.checkCampaignRunBoundaryWithClock(context, clock)
+    } catch (error) {
+      // A run must not start a new external side effect when the authoritative
+      // clock cannot be verified. The already-running unit is never aborted;
+      // callers only reach this check at a safe unit boundary.
+      console.error(`Failed to verify run boundary for campaign ${campaignId}:`, error)
+      return {
+        reached: true,
+        context,
+        clock: null,
+        clockUnavailable: true
+      }
+    }
+  }
+
+  private async stopCampaignAtRunBoundaryIfNeeded(
+    account: AutoAccount,
+    campaign: Campaign,
+    knownCheck?: CampaignRunBoundaryCheck | null
+  ): Promise<boolean> {
+    const check = knownCheck || await this.checkCampaignRunBoundary(campaign.id)
+    if (!check?.reached) return false
+    return await this.yieldCampaignAtRunBoundary(account, campaign, check)
+  }
+
+  /**
+   * Advisory DB guard used before expensive batch preparation. Every external
+   * workflow still calls beginCampaignRunUnit at its true start point; that RPC
+   * is the final token-bound linearization point.
+   */
+  private async stopCampaignBeforeNewUnitIfNeeded(
+    account: AutoAccount,
+    campaign: Campaign
+  ): Promise<boolean> {
+    const context = this.campaignRunBoundaries.get(campaign.id)
+    if (!context) return false
+
+    try {
+      const result = await this.supabase.checkCampaignDailyBoundary(
+        campaign.id,
+        account.id,
+        this.runtimeTarget,
+        context.claimedVietnamDateKey
+      )
+      if (result.allowNewUnit) return false
+      const isDailyBoundaryDue =
+        result.reason === 'daily_stop_due' ||
+        result.reason === 'daily_drain_due' ||
+        result.reason === 'vietnam_day_changed' ||
+        result.reason === 'runtime_control_paused'
+      if (!isDailyBoundaryDue) {
+        this.boundaryStoppedAccountQueues.add(account.id)
+        if (
+          result.reason === 'account_logged_out' ||
+          result.reason === 'account_inactive' ||
+          result.reason === 'account_deleted'
+        ) {
+          const reason = result.reason === 'account_logged_out'
+            ? 'Tài khoản bị đăng xuất'
+            : result.reason === 'account_inactive'
+              ? 'Tài khoản đã ngừng hoạt động'
+              : 'Tài khoản đã bị xoá'
+          await this.stopCampaignForAccountCondition(account, campaign, reason)
+          await this.releaseRunningAccount(account.id)
+        } else if (result.reason === 'campaign_deleted' || result.reason === 'not_found') {
+          await this.releaseRunningAccount(account.id)
+        } else if (result.reason === 'runtime_not_owner' && account.flatformType === 'zalo') {
+          if (this.runtimeTarget === 'server') {
+            this.stopAcceptingNewZaloWork()
+            if (!this.runtimeOwnershipLossReported) {
+              this.runtimeOwnershipLossReported = true
+              this.onRuntimeOwnershipLost?.()
+            }
+          } else {
+            this.blockZaloRuntimeForRestart()
+          }
+        } else {
+          this.sendLog(`⚠️ Chiến dịch "${campaign.name}" đã dừng trước lượt mới (${result.reason}).`)
+        }
+        return true
+      }
+      return await this.yieldCampaignAtRunBoundary(account, campaign, {
+        reached: true,
+        context,
+        clock: {
+          dbNow: result.dbNow,
+          vietnamDateKey: result.vietnamDateKey
+        },
+        clockUnavailable: false
+      })
+    } catch (error) {
+      console.error(`Failed DB daily-boundary guard for campaign ${campaign.id}:`, error)
+      return await this.yieldCampaignAtRunBoundary(account, campaign, {
+        reached: true,
+        context,
+        clock: null,
+        clockUnavailable: true
+      })
+    }
+  }
+
+  /**
+   * Single soft-yield path for every executor. Status changes happen only
+   * after the current target/batch has settled. Migration v231 owns the
+   * atomic campaign/account transition, while pause requests are checked both
+   * before and after that RPC so a user pause remains the final visible state.
+   */
+  private async yieldCampaignAtRunBoundary(
+    account: AutoAccount,
+    campaign: Campaign,
+    check: CampaignRunBoundaryCheck
+  ): Promise<boolean> {
+    if (
+      this.isCampaignPauseRequested(campaign.id) ||
+      this.serverZaloPauseBoundaries.has(campaign.id)
+    ) {
+      this.boundaryStoppedAccountQueues.add(account.id)
+      await this.completePauseAtBoundary(account, campaign)
+      await this.reconcileMaintenanceAfterSettledRun(account, campaign, check.clock)
+      return true
+    }
+
+    // The boundary is observed only between external units. Settle the last
+    // durable unit lease first; the yield RPC deliberately refuses to move the
+    // campaign/account while such a lease is still active.
+    if (!await this.settleActiveCampaignRunUnit(account, campaign)) return true
+
+    let result: Awaited<ReturnType<SupabaseService['yieldCampaignDailyBoundary']>>
+    let yieldRetryLogged = false
+    let unsettledUnitRetryLogged = false
+    while (true) {
+      try {
+        result = await this.supabase.yieldCampaignDailyBoundary(
+          campaign.id,
+          account.id,
+          this.runtimeTarget,
+          check.context.runtimeClaimToken,
+          check.context.claimedVietnamDateKey
+        )
+        if (result.reason !== 'unit_still_running') break
+        this.boundaryStoppedAccountQueues.add(account.id)
+        if (!unsettledUnitRetryLogged) {
+          unsettledUnitRetryLogged = true
+          this.sendLog(`⚠️ Chiến dịch "${campaign.name}" đang chờ lượt hiện tại ghi xong trước khi dừng.`)
+        }
+        if (!this.running) return true
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      } catch (error) {
+        // Migration v231 is mandatory for the new scheduler. Never replace
+        // this CAS with a host-clock or non-atomic status fallback. Keep the
+        // account run reserved and retry after connectivity returns so neither
+        // a later target nor midnight maintenance can overtake this yield.
+        this.boundaryStoppedAccountQueues.add(account.id)
+        console.error(`Failed atomic daily-boundary yield for campaign ${campaign.id}:`, error)
+        if (!yieldRetryLogged) {
+          yieldRetryLogged = true
+          this.sendLog('⚠️ Chưa thể dừng chiến dịch tại mốc ngày vì DB chưa phản hồi; đang chờ để thử lại và không mở lượt mới.')
+        }
+        if (!this.running) return true
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+    }
+
+    const resultClock: NonNullable<CampaignRunBoundaryCheck['clock']> = {
+      dbNow: result.dbNow,
+      vietnamDateKey: result.vietnamDateKey
+    }
+    check = { ...check, clock: resultClock, clockUnavailable: false }
+
+    if (result.reason === 'boundary_not_due') return false
+
+    this.boundaryStoppedAccountQueues.add(account.id)
+
+    // A pause/control write which won the row lock is authoritative. The RPC
+    // intentionally did not update campaign/account in this branch.
+    if (result.reason === 'runtime_control_paused') {
+      if (this.isCampaignPauseRequested(campaign.id)) {
+        await this.completePauseAtBoundary(account, campaign)
+        await this.reconcileMaintenanceAfterSettledRun(account, campaign, resultClock)
+        return true
+      }
+      const currentCampaign = await this.supabase.getCampaign(campaign.id).catch(() => null)
+      if (currentCampaign) this.broadcastCampaignUpdate(currentCampaign)
+      if (result.campaignStatus === 'đang chạy' && result.accountStatus !== 'đang chạy') {
+        if (this.isServerZaloCampaign(account, campaign)) {
+          await this.completePauseAtBoundary(account, campaign)
+        } else {
+          await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: null })
+        }
+      }
+      await this.releaseRunningAccount(account.id)
+      if (currentCampaign?.status === 'tạm dừng') this.pauseRequests.delete(campaign.id)
+      await this.reconcileMaintenanceAfterSettledRun(account, campaign, resultClock)
+      return true
+    }
+
+    if (this.isCampaignPauseRequested(campaign.id)) {
+      // Desktop pause may have been requested while the atomic RPC was in
+      // flight. Complete it after a successful boundary yield so pause remains
+      // the final visible state.
+      await this.completePauseAtBoundary(account, campaign)
+      await this.reconcileMaintenanceAfterSettledRun(account, campaign, resultClock)
+      return true
+    }
+
+    const yieldedToPending = result.ok
+    if (result.ok) {
+      const updatedCampaign = await this.supabase.getCampaign(campaign.id).catch(() => null)
+      if (updatedCampaign) this.broadcastCampaignUpdate(updatedCampaign)
+      try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+    } else {
+      const currentCampaign = await this.supabase.getCampaign(campaign.id).catch(() => null)
+      if (currentCampaign) this.broadcastCampaignUpdate(currentCampaign)
+
+      if (
+        result.reason === 'account_logged_out' ||
+        result.reason === 'account_inactive' ||
+        result.reason === 'account_deleted'
+      ) {
+        const reason = result.reason === 'account_logged_out'
+          ? 'Tài khoản bị đăng xuất'
+          : result.reason === 'account_inactive'
+            ? 'Tài khoản đã ngừng hoạt động'
+            : 'Tài khoản đã bị xoá'
+        await this.stopCampaignForAccountCondition(account, campaign, reason)
+        await this.releaseRunningAccount(account.id)
+      } else if (result.reason === 'campaign_deleted' || result.reason === 'not_found') {
+        await this.releaseRunningAccount(account.id)
+      } else if (result.reason === 'runtime_not_owner') {
+        if (account.flatformType === 'zalo') {
+          if (this.runtimeTarget === 'server') {
+            this.stopAcceptingNewZaloWork()
+            if (!this.runtimeOwnershipLossReported) {
+              this.runtimeOwnershipLossReported = true
+              try {
+                this.onRuntimeOwnershipLost?.()
+              } catch (error) {
+                console.error('Failed to notify Zalo Server ownership loss:', error)
+              }
+            }
+          } else {
+            this.blockZaloRuntimeForRestart()
+          }
+        }
+      } else {
+        // Unknown/invalid ownership results remain untouched for normal stale
+        // run recovery. Never guess a replacement status outside the CAS RPC.
+        this.sendLog(`⚠️ Chiến dịch "${campaign.name}" đã dừng trước lượt mới (${result.reason}).`)
+      }
+    }
+
+    if (yieldedToPending && !check.context.boundaryLogged) {
+      check.context.boundaryLogged = true
+      const message = check.clockUnavailable
+        ? '⏹ Không xác minh được giờ DB; đã dừng an toàn trước lượt tiếp theo.'
+        : check.context.kind === 'configured_stop'
+          ? `⏹ Đã đến giờ dừng ${check.context.cutoffLabel}; đã hoàn tất lượt hiện tại và không mở lượt mới.`
+          : '⏹ Đã đến mốc dừng cuối ngày 23:59; đã hoàn tất lượt hiện tại và không mở lượt mới.'
+      await this.logCampaignProgress(campaign.id, message).catch(() => {})
+    }
+
+    await this.reconcileMaintenanceAfterSettledRun(account, campaign, resultClock)
+    return true
+  }
+
+  /**
+   * Maintenance is released only after the old-day unit lease has settled.
+   * A pass that began at 00:00 remains inside the DB gate while a 23:58 unit
+   * finishes at 00:02, then observes the campaign's final visible state.
+   */
+  private async reconcileMaintenanceAfterSettledRun(
+    account: AutoAccount,
+    campaign: Campaign,
+    knownClock?: CampaignRunBoundaryCheck['clock']
+  ): Promise<void> {
+    const context = this.campaignRunBoundaries.get(campaign.id)
+    if (!context) return
+
+    let clock = knownClock || null
+    if (!clock) {
+      try {
+        clock = await this.supabase.getRuntimeClock()
+      } catch (error) {
+        console.error(`Failed to reconcile maintenance clock for campaign ${campaign.id}:`, error)
+        return
+      }
+    }
+    if (
+      clock.vietnamDateKey === context.claimedVietnamDateKey ||
+      context.maintenanceReconciledDateKey === clock.vietnamDateKey
+    ) {
+      return
+    }
+
+    let currentCampaign: Campaign | null
+    let currentAccount: AutoAccount | null
+    try {
+      ;[currentCampaign, currentAccount] = await Promise.all([
+        this.supabase.getCampaign(campaign.id),
+        this.supabase.getAccount(account.id)
+      ])
+    } catch (error) {
+      console.error(`Failed to verify settled state before daily maintenance for campaign ${campaign.id}:`, error)
+      this.boundaryStoppedAccountQueues.add(account.id)
+      return
+    }
+    if (currentCampaign?.status === 'đang chạy' || currentAccount?.status === 'đang chạy') {
+      return
+    }
+
+    this.boundaryStoppedAccountQueues.add(account.id)
+    const coordinator = this.maintenanceCoordinator
+    if (!coordinator) return
+
+    try {
+      // The durable old-day unit lease kept the DB gate closed until the
+      // settlement immediately preceding this call. The in-flight maintenance
+      // pass therefore already includes this campaign; invalidating here would
+      // only execute the same idempotent maintenance twice.
+      await coordinator.ensureReady()
+      context.maintenanceReconciledDateKey = clock.vietnamDateKey
+    } catch (error) {
+      // Fail closed: this account queue is already stopped. The next scheduler
+      // wake enters getReadyRuntimeClock() and retries maintenance before any
+      // campaign discovery can continue.
+      console.error(`Failed to rerun daily maintenance after campaign ${campaign.id} settled:`, error)
+      this.sendLog('⚠️ Chưa cập nhật xong lịch chiến dịch ngày mới; scheduler sẽ tự thử lại trước khi chạy tiếp.')
+    }
   }
 
   private async deferCampaignUntilFutureInput(campaign: Campaign, scheduledAt: Date): Promise<void> {
@@ -1918,7 +2474,10 @@ export class CampaignScheduler {
     return limitResult.limitStatus
   }
 
-  private async executeCampaign(account: AutoAccount, campaign: Campaign): Promise<void> {
+  private async executeCampaign(
+    account: AutoAccount,
+    campaign: Campaign
+  ): Promise<void> {
     let runtimeClaimed = false
     const isZaloCampaign = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZaloCampaign) {
@@ -1940,19 +2499,97 @@ export class CampaignScheduler {
         return
       }
 
-      const claimed = await this.supabase.claimCampaignRuntime(
-        campaign.id,
-        account.id,
-        this.runtimeTarget
-      )
-      if (!claimed) return
+      const runtimeClaimToken = randomUUID()
+      let claimed: Awaited<ReturnType<SupabaseService['claimCampaignRuntimeV2']>>
+      let claimRetryLogged = false
+      while (true) {
+        if (!this.running) return
+        try {
+          claimed = await this.supabase.claimCampaignRuntimeV2(
+            campaign.id,
+            account.id,
+            this.runtimeTarget,
+            runtimeClaimToken
+          )
+        } catch (error) {
+          // The client-generated token makes a retry idempotent when PostgreSQL
+          // committed the claim but its response was lost. Never fall back to
+          // the legacy boolean RPC: without the token a late run cannot yield
+          // safely before maintenance.
+          console.error(`Failed v2 runtime claim for campaign ${campaign.id}:`, error)
+          if (!claimRetryLogged) {
+            claimRetryLogged = true
+            this.sendLog('⚠️ Chưa thể xác nhận quyền chạy chiến dịch từ DB; scheduler đang chờ và không mở lượt mới.')
+          }
+          await new Promise(resolve => setTimeout(resolve, 2_000))
+          continue
+        }
+
+        if (claimed.reason === 'daily_maintenance_required') {
+          // A campaign can be paused while the midnight pass runs and resumed
+          // later by Desktop, PWA or another process. Its old schedule must not
+          // bypass the coordinator's already-completed in-memory run key. Keep
+          // this account queue reserved, rerun maintenance, then retry the same
+          // no-write claim immediately.
+          this.boundaryStoppedAccountQueues.add(account.id)
+          const coordinator = this.maintenanceCoordinator
+          if (!coordinator) {
+            this.sendLog(`⚠️ Chiến dịch "${campaign.name}" đang chờ cập nhật lịch ngày mới.`)
+            return
+          }
+          coordinator.invalidate()
+          try {
+            await coordinator.ensureReady()
+          } catch (error) {
+            console.error(`Failed stale-schedule maintenance for campaign ${campaign.id}:`, error)
+            this.sendLog('⚠️ Chưa cập nhật xong lịch chiến dịch ngày mới; scheduler sẽ tự thử lại trước khi chạy tiếp.')
+            return
+          }
+          if (!this.running) return
+          continue
+        }
+
+        break
+      }
+      if (!claimed.ok) {
+        if (claimed.reason === 'daily_drain_due' || claimed.reason === 'vietnam_day_changed') {
+          this.boundaryStoppedAccountQueues.add(account.id)
+        }
+        return
+      }
+      if (
+        !claimed.runtimeClaimVietnamDateKey ||
+        claimed.runtimeClaimToken !== runtimeClaimToken
+      ) {
+        // Repository validation should make this unreachable. Do not attempt a
+        // tokenless cleanup if a mismatched server contract is ever deployed.
+        this.boundaryStoppedAccountQueues.add(account.id)
+        this.sendLog(`⚠️ Chiến dịch "${campaign.name}" đã dừng vì DB trả ownership token không hợp lệ.`)
+        return
+      }
       runtimeClaimed = true
       if (this.runtimeTarget === 'server' && isZaloCampaign) {
         this.claimedServerZaloCampaignIds.add(campaign.id)
         this.claimedServerZaloAccountIds.add(account.id)
       }
 
+      const claimedClock: NonNullable<CampaignRunBoundaryCheck['clock']> = {
+        dbNow: claimed.dbNow,
+        vietnamDateKey: claimed.vietnamDateKey
+      }
+      const runBoundary = this.createCampaignRunBoundary(
+        campaign,
+        runtimeClaimToken,
+        claimed.runtimeClaimVietnamDateKey
+      )
+      this.campaignRunBoundaries.set(campaign.id, runBoundary)
+
       await this.broadcastClaimedRuntimeState(campaign.id)
+
+      const initialBoundaryCheck = this.checkCampaignRunBoundaryWithClock(runBoundary, claimedClock)
+      if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign, initialBoundaryCheck)) {
+        return
+      }
 
       if (preclaimLimitStatus) {
         await this.releaseClaimedCampaignPreflight(
@@ -2048,11 +2685,16 @@ export class CampaignScheduler {
         return
       }
 
+      if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
+        return
+      }
+
       await this.logCampaignProgress(campaign.id, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
       await this.executeCampaignV2(account, campaign, workflowSelection.workflowId, executableActionDescriptors, quotaActionDescriptors)
     } catch (err) {
       if (!runtimeClaimed) throw err
+      if (err instanceof CampaignRunUnitOwnershipLostError) return
       const errMsg = err instanceof Error ? err.message : String(err)
       const runtimeStopReason = isZaloCampaign
         ? this.getZaloRuntimeStopReason(campaign.id)
@@ -2063,6 +2705,7 @@ export class CampaignScheduler {
           campaign.id,
           this.getZaloRuntimeUncertainNote(runtimeStopReason)
         )
+        if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
         await this.updateCampaignAndBroadcast(campaign.id, {
           status: 'chờ xử lý',
           note: this.getZaloRuntimeCampaignStopNote(runtimeStopReason)
@@ -2071,6 +2714,7 @@ export class CampaignScheduler {
         return
       }
       await this.recoverStuckCampaignInputData(campaign.id, errMsg)
+      if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
       if (this.isNewsfeedDailyCampaign(campaign)) {
         await this.completeNewsfeedDailyWithoutNextDay(campaign, errMsg)
       } else {
@@ -2082,6 +2726,17 @@ export class CampaignScheduler {
       await this.releaseRunningAccount(account.id)
       await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
     } finally {
+      const unitSettled = runtimeClaimed
+        ? await this.settleActiveCampaignRunUnit(account, campaign).catch(error => {
+          console.error(`Failed final unit settlement for campaign ${campaign.id}:`, error)
+          return false
+        })
+        : true
+      if (runtimeClaimed && unitSettled && this.running) {
+        await this.reconcileMaintenanceAfterSettledRun(account, campaign).catch(error => {
+          console.error(`Failed final maintenance reconciliation for campaign ${campaign.id}:`, error)
+        })
+      }
       if (isZaloCampaign) {
         this.activeZaloCampaignRuns.delete(campaign.id)
         this.activeZaloRunGenerations.delete(campaign.id)
@@ -2090,6 +2745,8 @@ export class CampaignScheduler {
         this.claimedServerZaloCampaignIds.delete(campaign.id)
         this.claimedServerZaloAccountIds.delete(account.id)
       }
+      if (unitSettled) this.activeCampaignRunUnits.delete(campaign.id)
+      this.campaignRunBoundaries.delete(campaign.id)
       this.clearZaloSmsPushKeysForCampaign(campaign.id)
     }
   }
@@ -2244,7 +2901,9 @@ export class CampaignScheduler {
     }
 
     if (this.shouldUseSuggestedFriends(campaign) && details.length === 0) {
-      details = await this.collectSuggestedFriendInputData(account, campaign, workflowId)
+      const suggestedDetails = await this.collectSuggestedFriendInputData(account, campaign, workflowId)
+      if (suggestedDetails === null) return
+      details = suggestedDetails
       if (this.isCampaignPauseRequested(campaign.id)) {
         await this.releaseRunningAccount(account.id)
         await this.completeCampaignPause(campaign)
@@ -2278,6 +2937,12 @@ export class CampaignScheduler {
         campaign.id,
         '⚠️ Nội dung có định dạng không hỗ trợ chế độ chia sẻ; chiến dịch sẽ gửi tin nhắn thường.'
       )
+    }
+
+    // Materialization, blocklist loading and content validation may take long
+    // enough to reach the cutoff. No ordinary target is reserved at this point.
+    if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
+      return
     }
 
     if (this.shouldUseZaloShareMessageBatch(campaign)) {
@@ -2360,6 +3025,10 @@ export class CampaignScheduler {
       // instead of issuing multiple queries for every previously handled row.
       if (detail && consumedGroupPostInputDataIds.has(detail.id)) continue
       if (detail && detail.status !== 'chờ xử lý') continue
+
+      if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
+        return
+      }
 
       const loopRuntimeStopReason = account.flatformType === 'zalo'
         ? this.getZaloRuntimeStopReason(campaign.id)
@@ -2565,37 +3234,43 @@ export class CampaignScheduler {
           this.throwIfZaloRuntimeStopping(campaign.id)
         }
 
-        // Quota/page preparation above can outlive the earlier boundary check.
-        // The synchronized clock advances locally, so this recheck is cheap and
-        // defines the last point before a new target becomes the current unit.
+        // Quota/page preparation above can outlive the earlier hard-end check;
+        // finalize that lifecycle before the atomic daily/unit claim below.
         if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
           await this.releaseRunningAccount(account.id)
           return
         }
 
-        // For Zalo Server this RPC is the linearization point with DB pause:
-        // campaign/account are still running and the whole unit is marked
-        // running in one transaction. Local runtimes keep the existing write.
-        if (this.isServerZaloCampaign(account, campaign)) {
-          const canStartUnit = await this.beginServerZaloRunUnit(
-            account,
-            campaign,
-            detail ? [detail.id] : []
-          )
-          if (!canStartUnit) return
-        } else if (detail) {
-          await this.supabase.updateCampaignInputData(detail.id, {
-            status: 'đang chạy',
-            dateAction: new Date().toISOString()
-          })
-        }
-        if (detail) {
-          const inputDataName = this.getInputDataDisplayName(campaign, detail)
-          await this.logCampaignProgress(campaign.id, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
-          if (groupPostApproval.skipPostByKnownApproval) {
-            const message = `Bỏ qua đăng bài vào "${inputDataName}" vì group đã biết cần duyệt bài`
-            await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+        // This DB transaction is the final start point for both Desktop and
+        // Server: it validates the parent token/cutoff and reserves the input
+        // before the workflow can produce an external side effect.
+        const runUnitInputDataIds = detail
+          ? [detail.id, ...groupPostShareTargets.map(target => target.id)]
+          : []
+        if (!await this.beginCampaignRunUnit(
+          account,
+          campaign,
+          runUnitInputDataIds,
+          { requeueRemainingOnSettle: groupPostShareTargets.length > 0 }
+        )) return
+        try {
+          if (detail) {
+            const inputDataName = this.getInputDataDisplayName(campaign, detail)
+            await this.logCampaignProgress(campaign.id, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
+            if (groupPostApproval.skipPostByKnownApproval) {
+              const message = `Bỏ qua đăng bài vào "${inputDataName}" vì group đã biết cần duyệt bài`
+              await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+            }
           }
+        } catch (error) {
+          // No side effect has started yet. Requeue the exact reservation before
+          // propagating a progress-log failure into the normal campaign policy.
+          if (!await this.settleActiveCampaignRunUnit(account, campaign, true)) return
+          throw error
+        }
+        if (this.isRunUnitStartCancelled(account, campaign)) {
+          await this.settleActiveCampaignRunUnit(account, campaign, true)
+          return
         }
 
         const abort = new AbortController()
@@ -2963,6 +3638,11 @@ export class CampaignScheduler {
         shouldStopAfterTarget = true
       }
 
+      // The target and every secondary group-share result are now fully
+      // recorded. Settle before pause/stop/sleep/finalization so unused leased
+      // candidates return to pending while the campaign is still running.
+      if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
+
       if (shouldCompletePauseAfterTarget) {
         await this.completePauseAtBoundary(account, campaign)
         return
@@ -2983,6 +3663,10 @@ export class CampaignScheduler {
             await this.completePauseAtBoundary(account, campaign)
             return
           }
+          if (sleepResult === 'boundary') {
+            return
+          }
+          if (sleepResult === 'stopped') return
         }
       }
     }
@@ -3093,6 +3777,10 @@ export class CampaignScheduler {
 
       if (pendingTargets.length === 0) break
 
+      if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
+        return
+      }
+
       const capacity = await this.getFacebookGroupInviteBatchCapacity(
         account,
         campaign,
@@ -3115,6 +3803,10 @@ export class CampaignScheduler {
       // handing any target to the batch workflow.
       if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
         await this.releaseRunningAccount(account.id)
+        return
+      }
+
+      if (await this.stopCampaignBeforeNewUnitIfNeeded(account, campaign)) {
         return
       }
 
@@ -3297,6 +3989,14 @@ export class CampaignScheduler {
           inputData: item.inputData
         }))
       }
+      if (!await this.beginCampaignRunUnit(
+        account,
+        campaign,
+        batch.map(item => item.inputDataId),
+        { requeueRemainingOnSettle: true }
+      )) {
+        return { stop: true }
+      }
       const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, null, page)
       const result = await this.engineV2.run(workflowId, variables, page, {
         organizationId: campaign.organizationId ?? account.organizationId ?? null,
@@ -3369,6 +4069,9 @@ export class CampaignScheduler {
         this.stopBackgroundPreview(account.id, campaign.id)
       }
       this.activeV2Aborts.delete(campaign.id)
+      if (!await this.settleActiveCampaignRunUnit(account, campaign)) {
+        throw new CampaignRunUnitOwnershipLostError(campaign.id)
+      }
       while (screenshotProgressLogs.length > 0) {
         const progressLog = screenshotProgressLogs.shift()
         if (!progressLog) continue
@@ -3701,6 +4404,9 @@ export class CampaignScheduler {
 
       while (index < details.length) {
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+        if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
+          return
+        }
         // Zalo forwarding is atomic per batch. A batch that already entered the
         // API may finish, but no new batch may be assembled after hard end.
         if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
@@ -3766,6 +4472,9 @@ export class CampaignScheduler {
 
         while (index < details.length && batch.length < capacity.capacity) {
           if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+          if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
+            return
+          }
           // Target resolution can take long enough to cross the boundary. Stop
           // building the batch before resolving or reserving another target.
           const targetBusinessNow = this.requiresDataGroupHardEndCheck(campaign)
@@ -3806,20 +4515,9 @@ export class CampaignScheduler {
 
           const target = this.createZaloShareMessageTarget(campaign, detail)
           if (!target) {
-            if (this.isServerZaloCampaign(account, campaign)) {
-              const canHandleInvalidTarget = await this.beginServerZaloRunUnit(
-                account,
-                campaign,
-                [detail.id]
-              )
-              if (!canHandleInvalidTarget) return
-            } else {
-              await this.supabase.updateCampaignInputData(detail.id, {
-                status: 'đang chạy',
-                dateAction: new Date().toISOString()
-              })
-            }
+            if (!await this.beginCampaignRunUnit(account, campaign, [detail.id])) return
             stopAfterInvalidTarget = await this.handleInvalidZaloShareMessageTarget(account, campaign, detail, actionDescriptor)
+            if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
             if (stopAfterInvalidTarget) break
             continue
           }
@@ -3883,29 +4581,16 @@ export class CampaignScheduler {
           return
         }
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
-
-        if (this.isServerZaloCampaign(account, campaign)) {
-          const canStartBatch = await this.beginServerZaloRunUnit(
-            account,
-            campaign,
-            batch.map(item => item.detail.id)
-          )
-          if (!canStartBatch) return
-        } else {
-          const batchStartedAt = new Date().toISOString()
-          for (const item of batch) {
-            await this.supabase.updateCampaignInputData(item.detail.id, {
-              status: 'đang chạy',
-              dateAction: batchStartedAt
-            })
-            const prepareStopReason = this.getZaloRuntimeStopReason(campaign.id)
-            if (prepareStopReason) {
-              if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
-              await this.settleZaloShareBatchRuntimeStop(batch, new Set(), prepareStopReason)
-              stoppedBeforeCompletion = true
-              break
-            }
-          }
+        if (!await this.beginCampaignRunUnit(
+          account,
+          campaign,
+          batch.map(item => item.detail.id)
+        )) return
+        const claimedBatchStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (claimedBatchStopReason) {
+          if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
+          await this.settleZaloShareBatchRuntimeStop(batch, new Set(), claimedBatchStopReason)
+          stoppedBeforeCompletion = true
         }
         if (stoppedBeforeCompletion) {
           const prepareStopReason = this.getZaloRuntimeStopReason(campaign.id)
@@ -3916,6 +4601,7 @@ export class CampaignScheduler {
               note: this.getZaloRuntimeCampaignStopNote(prepareStopReason)
             })
           }
+          if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
           break
         }
         let batchHardStopReason: string | null = null
@@ -3954,6 +4640,7 @@ export class CampaignScheduler {
         } finally {
           if (batchControlGuard) clearInterval(batchControlGuard)
         }
+        if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
         const postBatchControl = await this.getServerZaloBoundaryReason(account, campaign)
         if (postBatchControl.paused) {
           await this.completePauseAtBoundary(account, campaign)
@@ -3981,6 +4668,13 @@ export class CampaignScheduler {
           break
         }
 
+        if (
+          index < details.length &&
+          await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)
+        ) {
+          return
+        }
+
         // The current batch has been fully recorded. Check hard end before a
         // delay or the next batch so no later target starts past the boundary.
         if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
@@ -3996,6 +4690,10 @@ export class CampaignScheduler {
               await this.completePauseAtBoundary(account, campaign)
               return
             }
+            if (sleepResult === 'boundary') {
+              return
+            }
+            if (sleepResult === 'stopped') return
           }
         }
       }
@@ -4846,7 +5544,11 @@ export class CampaignScheduler {
     await this.supabase.createCampaignInputDataBatchWithRollback(rows, beforeChunk)
   }
 
-  private async collectSuggestedFriendInputData(account: AutoAccount, campaign: Campaign, workflowId: number): Promise<CampaignInputData[]> {
+  private async collectSuggestedFriendInputData(
+    account: AutoAccount,
+    campaign: Campaign,
+    workflowId: number
+  ): Promise<CampaignInputData[] | null> {
     const count = this.normalizeSuggestedFriendsCount(campaign.extraSettings?.suggestedFriendsCount)
 
     await this.logCampaignProgress(campaign.id, `ℹ️ Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
@@ -4862,6 +5564,10 @@ export class CampaignScheduler {
     }
 
     try {
+      // Suggested-friend collection is a standalone browser workflow which
+      // runs before ordinary input rows exist, so reserve an empty-ID unit at
+      // the final point immediately before its external side effects.
+      if (!await this.beginCampaignRunUnit(account, campaign, [])) return null
       const result = await this.engineV2.run(workflowId, {
         accountId: account.id,
         campaignId: campaign.id,
@@ -4907,6 +5613,9 @@ export class CampaignScheduler {
         this.stopBackgroundPreview(account.id, campaign.id)
       }
       this.activeV2Aborts.delete(campaign.id)
+      if (!await this.settleActiveCampaignRunUnit(account, campaign)) {
+        throw new CampaignRunUnitOwnershipLostError(campaign.id)
+      }
     }
   }
 
@@ -6195,35 +6904,135 @@ export class CampaignScheduler {
     }
   }
 
-  private async beginServerZaloRunUnit(
+  private async beginCampaignRunUnit(
     account: AutoAccount,
     campaign: Campaign,
-    inputDataIds: number[]
+    inputDataIds: number[],
+    options: { requeueRemainingOnSettle?: boolean } = {}
   ): Promise<boolean> {
-    if (!this.isServerZaloCampaign(account, campaign)) return true
+    const context = this.campaignRunBoundaries.get(campaign.id)
+    if (!context) {
+      this.boundaryStoppedAccountQueues.add(account.id)
+      this.sendLog(`⚠️ Chiến dịch "${campaign.name}" không có ownership token; đã dừng trước lượt mới.`)
+      return false
+    }
+
+    // Reaching another begin point proves the prior unit has finished all
+    // external work and result writes. Clear that durable lease before a new
+    // token can be created; maintenance remains closed while this retries.
+    if (!await this.settleActiveCampaignRunUnit(account, campaign)) return false
+
     // `stopAcceptingNewZaloWork()` flips `running` before waiting for the
     // already-claimed unit to settle. Keep that local drain boundary even if
     // the product capability is toggled off and back on while this runtime is
     // still stopping; only a reconciled runtime may claim the next unit.
-    if (!this.running) return false
+    if (this.isServerZaloCampaign(account, campaign) && !this.running) return false
 
-    const claim = await this.supabase.claimZaloServerRunUnit(
-      campaign.id,
-      account.id,
-      inputDataIds
-    )
+    const runtimeUnitToken = randomUUID()
+    let claim: Awaited<ReturnType<SupabaseService['claimCampaignRunUnitV2']>>
+    let retryLogged = false
+    while (true) {
+      if (!this.running) return false
+      try {
+        claim = await this.supabase.claimCampaignRunUnitV2(
+          campaign.id,
+          account.id,
+          this.runtimeTarget,
+          context.runtimeClaimToken,
+          context.claimedVietnamDateKey,
+          runtimeUnitToken,
+          inputDataIds
+        )
+        break
+      } catch (error) {
+        // An exact retry is idempotent when a previous response was lost. Keep
+        // the parent claim reserved and never start the external side effect
+        // until PostgreSQL confirms this unit and its cutoff atomically.
+        this.boundaryStoppedAccountQueues.add(account.id)
+        console.error(`Failed v2 unit claim for campaign ${campaign.id}:`, error)
+        if (!retryLogged) {
+          retryLogged = true
+          this.sendLog('⚠️ Chưa thể xác nhận lượt chạy từ DB; đang chờ để thử lại và không thực hiện hành động mới.')
+        }
+        await new Promise(resolve => setTimeout(resolve, 2_000))
+      }
+    }
+
     if (claim.ok) {
       if (claim.claimedCount !== inputDataIds.length) {
-        throw new Error('Zalo Server đã claim số lượng data không khớp với lượt chạy.')
+        throw new Error('DB đã claim số lượng data không khớp với lượt chạy.')
+      }
+      if (
+        claim.runtimeUnitToken !== runtimeUnitToken ||
+        claim.runtimeUnitVietnamDateKey !== context.claimedVietnamDateKey
+      ) {
+        throw new Error('DB trả unit lease không khớp với lượt chạy hiện tại.')
+      }
+      this.activeCampaignRunUnits.set(campaign.id, {
+        runtimeUnitToken,
+        inputDataIds: [...inputDataIds],
+        requeueRemainingOnSettle: options.requeueRemainingOnSettle === true
+      })
+
+      const parentStillOwned =
+        claim.runtimeClaimToken === context.runtimeClaimToken &&
+        claim.runtimeClaimVietnamDateKey === context.claimedVietnamDateKey
+      const visibleRuntimeStillRunning =
+        claim.campaignStatus === 'đang chạy' && claim.accountStatus === 'đang chạy'
+
+      // The only successful response allowed without the visible parent claim
+      // is an exact-token retry after the first response was lost. If pause or
+      // another control transition won meanwhile, no external effect has
+      // started in this caller: requeue its exact reservation and stop.
+      if (!parentStillOwned || !visibleRuntimeStillRunning) {
+        this.boundaryStoppedAccountQueues.add(account.id)
+        if (this.isServerZaloCampaign(account, campaign)) {
+          this.latchServerZaloPause(campaign.id, claim.campaignStatus, claim.accountStatus)
+        }
+        if (!await this.settleActiveCampaignRunUnit(account, campaign, true)) return false
+        if (
+          claim.campaignStatus === 'tạm dừng' ||
+          claim.accountStatus === 'tạm dừng' ||
+          this.isCampaignPauseRequested(campaign.id) ||
+          this.serverZaloPauseBoundaries.has(campaign.id)
+        ) {
+          await this.completePauseAtBoundary(account, campaign)
+        }
+        return false
+      }
+      if (this.isRunUnitStartCancelled(account, campaign)) {
+        this.boundaryStoppedAccountQueues.add(account.id)
+        await this.settleActiveCampaignRunUnit(account, campaign, true)
+        return false
       }
       return true
     }
 
-    if (claim.reason === 'runtime_control_paused') {
-      this.latchServerZaloPause(campaign.id, claim.campaignStatus, claim.accountStatus)
-      await this.completePauseAtBoundary(account, campaign)
+    if (
+      claim.reason === 'daily_stop_due' ||
+      claim.reason === 'daily_drain_due' ||
+      claim.reason === 'vietnam_day_changed' ||
+      claim.reason === 'runtime_control_paused'
+    ) {
+      if (
+        claim.reason === 'runtime_control_paused' &&
+        this.isServerZaloCampaign(account, campaign)
+      ) {
+        this.latchServerZaloPause(campaign.id, claim.campaignStatus, claim.accountStatus)
+      }
+      await this.yieldCampaignAtRunBoundary(account, campaign, {
+        reached: true,
+        context,
+        clock: {
+          dbNow: claim.dbNow,
+          vietnamDateKey: claim.vietnamDateKey
+        },
+        clockUnavailable: false
+      })
       return false
     }
+
+    this.boundaryStoppedAccountQueues.add(account.id)
 
     if (claim.reason === 'runtime_not_owner') {
       // Capability loss is a graceful ownership boundary. The current target
@@ -6233,25 +7042,38 @@ export class CampaignScheduler {
       // be restored before that poll, otherwise the already-claimed parent
       // campaign/account could remain running forever. Manager recovery is
       // scoped to Server-subtype rows and does not consume bad-target policy.
-      this.stopAcceptingNewZaloWork()
-      if (!this.runtimeOwnershipLossReported) {
-        this.runtimeOwnershipLossReported = true
-        try {
-          this.onRuntimeOwnershipLost?.()
-        } catch (error) {
-          console.error('Failed to notify Zalo Server ownership loss:', error)
+      if (this.runtimeTarget === 'server') {
+        this.stopAcceptingNewZaloWork()
+        if (!this.runtimeOwnershipLossReported) {
+          this.runtimeOwnershipLossReported = true
+          try {
+            this.onRuntimeOwnershipLost?.()
+          } catch (error) {
+            console.error('Failed to notify Zalo Server ownership loss:', error)
+          }
         }
+      } else if (account.flatformType === 'zalo') {
+        this.blockZaloRuntimeForRestart()
       }
       return false
     }
 
-    const control = await this.getServerZaloBoundaryReason(account, campaign)
-    if (control.paused) {
-      await this.completePauseAtBoundary(account, campaign)
+    if (
+      claim.reason === 'account_logged_out' ||
+      claim.reason === 'account_inactive' ||
+      claim.reason === 'account_deleted'
+    ) {
+      const reason = claim.reason === 'account_logged_out'
+        ? 'Tài khoản bị đăng xuất'
+        : claim.reason === 'account_inactive'
+          ? 'Tài khoản đã ngừng hoạt động'
+          : 'Tài khoản đã bị xoá'
+      await this.stopCampaignForAccountCondition(account, campaign, reason)
+      await this.releaseRunningAccount(account.id)
       return false
     }
-    if (control.hardStopReason) {
-      await this.stopCampaignForAccountCondition(account, campaign, control.hardStopReason)
+
+    if (claim.reason === 'campaign_deleted' || claim.reason === 'not_found') {
       await this.releaseRunningAccount(account.id)
       return false
     }
@@ -6268,10 +7090,78 @@ export class CampaignScheduler {
       return false
     }
 
-    throw new Error(`Không thể bắt đầu lượt Zalo Server (${claim.reason}).`)
+    // A stale executor must never repair or release rows belonging to a newer
+    // token. Unknown claim outcomes are likewise left to scoped stale-run
+    // recovery instead of entering the campaign-wide error policy.
+    this.sendLog(`⚠️ Chiến dịch "${campaign.name}" đã dừng trước lượt mới (${claim.reason}).`)
+    return false
+  }
+
+  /** No external side effect may begin after local shutdown/handoff won. */
+  private isRunUnitStartCancelled(account: AutoAccount, campaign: Campaign): boolean {
+    if (!this.running) return true
+    return account.flatformType === 'zalo' && this.getZaloRuntimeStopReason(campaign.id) !== null
+  }
+
+  /**
+   * Token-CAS settlement is the durable end of an external run unit. A lost
+   * response is safe to retry: no later unit is opened until PostgreSQL either
+   * clears this exact token or proves that it is already absent/stale.
+   */
+  private async settleActiveCampaignRunUnit(
+    account: AutoAccount,
+    campaign: Campaign,
+    requeueRemainingOverride?: boolean
+  ): Promise<boolean> {
+    const lease = this.activeCampaignRunUnits.get(campaign.id)
+    if (!lease) return true
+
+    if (account.flatformType === 'zalo' && this.isZaloRuntimeWriteBarrierActive(campaign.id)) {
+      // Ownership was explicitly abandoned only after the producer became
+      // idle. The succeeding owner/startup recovery clears this durable lease.
+      return false
+    }
+
+    const requeueRemaining = requeueRemainingOverride ?? lease.requeueRemainingOnSettle
+    let retryLogged = false
+    while (true) {
+      try {
+        const result = await this.supabase.settleCampaignRunUnitV2(
+          campaign.id,
+          account.id,
+          this.runtimeTarget,
+          lease.runtimeUnitToken,
+          requeueRemaining
+        )
+        if (
+          result.ok ||
+          result.reason === 'unit_lease_not_found'
+        ) {
+          this.activeCampaignRunUnits.delete(campaign.id)
+          return true
+        }
+        if (result.reason === 'unit_lease_mismatch' || result.reason === 'runtime_not_owner') {
+          this.activeCampaignRunUnits.delete(campaign.id)
+          this.boundaryStoppedAccountQueues.add(account.id)
+          this.sendLog(`⚠️ Chiến dịch "${campaign.name}" không còn sở hữu unit lease (${result.reason}).`)
+          return false
+        }
+        throw new Error(`Unit settlement rejected: ${result.reason}`)
+      } catch (error) {
+        console.error(`Failed to settle v2 unit lease for campaign ${campaign.id}:`, error)
+        this.boundaryStoppedAccountQueues.add(account.id)
+        if (!retryLogged) {
+          retryLogged = true
+          this.sendLog('⚠️ Lượt chạy đã xong nhưng DB chưa xác nhận settle; hệ thống đang giữ maintenance và không mở lượt mới.')
+        }
+        if (!this.running) return false
+        await new Promise(resolve => setTimeout(resolve, 2_000))
+      }
+    }
   }
 
   private async completePauseAtBoundary(account: AutoAccount, campaign: Campaign): Promise<void> {
+    if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
     if (!this.isServerZaloCampaign(account, campaign)) {
       await this.releaseRunningAccount(account.id)
       await this.completeCampaignPause(campaign)

@@ -6447,6 +6447,15 @@ export default function CampaignFormModal({
       }
       validatedMultiDailyTimeSlots = slots
     }
+    if (!isMobileManagedSmsCampaign) {
+      const latestRunTime = validatedMultiDailyTimeSlots
+        ? validatedMultiDailyTimeSlots[validatedMultiDailyTimeSlots.length - 1]
+        : getDateTimeLocalTime(formData.schedule)
+      if (getDailyTimeSlotMinutes(latestRunTime) === 23 * 60 + 59) {
+        showAlert('23:59 là thời gian hệ thống dừng nhận lượt mới để cập nhật lịch ngày mới. Vui lòng chọn giờ chạy sớm hơn.', 'error')
+        return
+      }
+    }
     if (!isMobileManagedSmsCampaign && formData.useDailyStopTime) {
       const stopTimeMinutes = getDailyTimeSlotMinutes(formData.dailyStopTime)
       if (stopTimeMinutes === null) {
@@ -14735,7 +14744,10 @@ export default function CampaignFormModal({
                           dailyStopTime: p.dailyStopTime || DEFAULT_DAILY_STOP_TIME
                         }))}
                       />
-                      <span>Giờ dừng chạy trong ngày</span>
+                      <span>
+                        Giờ dừng chạy trong ngày{' '}
+                        <span className="schedule-hint-inline">(Không bật: dừng nhận lượt mới lúc 23:59 để cập nhật lịch ngày mới)</span>
+                      </span>
                     </label>
                     <input
                       type="time"
@@ -14743,7 +14755,7 @@ export default function CampaignFormModal({
                       onChange={e => setFormData(p => ({ ...p, dailyStopTime: e.target.value }))}
                       className="stepper-input"
                       disabled={!formData.useDailyStopTime}
-                      title="Để trống nếu không giới hạn"
+                      title="Không bật thì chiến dịch vẫn dừng nhận lượt mới lúc 23:59 để cập nhật lịch ngày mới"
                     />
                   </div>}
 

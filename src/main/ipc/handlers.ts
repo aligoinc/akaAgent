@@ -12,7 +12,10 @@ import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { ZaloServerClient } from '../services/zaloServerClient'
 import { ZaloChatApiClient } from '../services/zaloChatApiClient'
 import { DesktopZaloHandoffStore } from '../services/desktopZaloHandoffStore'
-import { DailyMaintenanceCoordinator } from '../services/dailyMaintenanceCoordinator'
+import {
+  DailyMaintenanceCoordinator,
+  waitForDailyMaintenanceGate
+} from '../services/dailyMaintenanceCoordinator'
 import { AutomationProcessor } from '../services/automationProcessor'
 import { startAccountPoller, type AccountPollerController } from '../domain/accounts/accountPoller'
 
@@ -126,7 +129,15 @@ function authEntitlementsEqual(
     (left?.accountLimits?.sms ?? null) === (right?.accountLimits?.sms ?? null)
 }
 
-export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+export interface IpcHandlerRuntimeOptions {
+  /** DB-backed old-day run barrier; must not wait on CampaignScheduler itself. */
+  beforeDailyMaintenance?: (dateKey: string, signal: AbortSignal) => Promise<unknown>
+}
+
+export function registerIpcHandlers(
+  mainWindow: BrowserWindow,
+  options: IpcHandlerRuntimeOptions = {}
+): void {
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
@@ -189,6 +200,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   }, {
     loadClock: () => supabase.getRuntimeClock(),
+    beforeMaintenance: async (dateKey, signal) => {
+      if (options.beforeDailyMaintenance) {
+        await options.beforeDailyMaintenance(dateKey, signal)
+        return
+      }
+      await waitForDailyMaintenanceGate(
+        dateKey,
+        () => supabase.checkDailyMaintenanceBarrier('desktop', dateKey),
+        {
+          signal,
+          onWaiting: runningCampaignCount => {
+            console.info(
+              `[ScheduleMaintenance] waiting for ${runningCampaignCount} old-day campaign(s) to settle.`
+            )
+          }
+        }
+      )
+    },
     scopeKey: () => {
       const user = getCurrentUser()
       if (!user) return 'signed-out'
@@ -571,6 +600,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
           excludeZalo,
           zaloUncertainNoRetry
         )
+        const recoveredUnitLeases = await supabase.recoverCampaignRuntimeUnitLeasesV2('desktop')
+        if (!recoveredUnitLeases.ok) {
+          throw new Error(`Không thể phục hồi unit lease Desktop (${recoveredUnitLeases.reason}).`)
+        }
         try {
           await supabase.enableDueAccountActions()
         } catch (error) {
@@ -884,6 +917,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
           return false
         }
         await supabase.recoverDesktopZaloRunningState(user.staffId, modeSnapshot.revision)
+        const recoveredUnitLeases = await supabase.recoverCampaignRuntimeUnitLeasesV2('desktop', 'zalo')
+        if (!recoveredUnitLeases.ok) {
+          throw new Error(`Không thể phục hồi unit lease Zalo Desktop (${recoveredUnitLeases.reason}).`)
+        }
       } else if (
         response.ownership !== 'none' ||
         response.requiresDesktopRecovery ||
@@ -960,7 +997,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   powerMonitor.on('resume', () => {
     supabase.invalidateRuntimeClock()
     if (!getCurrentUser()) return
-    void runScheduleMaintenance('resume').catch(() => {})
+    void (async () => {
+      try {
+        await runScheduleMaintenance('resume')
+        // The normal polling interval may still be up to 30 seconds away.
+        // Reconcile campaigns and realtime subscriptions immediately after the
+        // Vietnam-day maintenance barrier has completed.
+        campaignScheduler.wakeNow('resume')
+        zaloRealtimeGroupManager?.refreshSoon('resume')
+      } catch {
+        // runScheduleMaintenance already records the failure. Do not wake
+        // dispatchers across a day whose maintenance is not ready yet.
+      }
+    })()
   })
 
   setInterval(() => {
@@ -1207,7 +1256,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (status === 'tạm dừng') {
         return campaignScheduler.requestPauseCampaign(campaignId)
       }
-      return supabase.updateCampaign(campaignId, { status: 'chờ xử lý' })
+      return campaignScheduler.requestResumeCampaign(campaignId)
     }
   }, zaloRealtimeGroupManager || undefined)
   accountZaloOperations = registerAccountHandlers(

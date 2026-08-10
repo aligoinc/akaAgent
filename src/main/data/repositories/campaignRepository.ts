@@ -10,6 +10,7 @@ import {
   CampaignInputDataPageQuery,
   CampaignInputDataPageResult,
   CampaignInputStatus,
+  CampaignStatus,
   CampaignDataGroupSourceStatus,
   CampaignDetail,
   CampaignDetailPageQuery,
@@ -154,6 +155,91 @@ const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
 type CampaignScheduleType = NonNullable<Campaign['scheduleType']>
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
 export type CampaignRuntimeTarget = 'desktop' | 'server'
+
+export interface CampaignRuntimeClaimV2Result {
+  ok: boolean
+  reason: string
+  campaignStatus: string | null
+  accountStatus: string | null
+  runtimeClaimToken: string | null
+  runtimeClaimVietnamDateKey: string | null
+  runtimeClaimedAt: string | null
+  dbNow: string
+  vietnamDateKey: string
+  effectiveStopTime: string | null
+  boundaryAt: string | null
+}
+
+export interface CampaignRunUnitClaimV2Result {
+  ok: boolean
+  reason: string
+  campaignStatus: string | null
+  accountStatus: string | null
+  claimedCount: number
+  runtimeClaimToken: string | null
+  runtimeClaimVietnamDateKey: string | null
+  runtimeUnitToken: string | null
+  runtimeUnitVietnamDateKey: string | null
+  runtimeUnitClaimedAt: string | null
+  runtimeUnitInputDataIds: number[]
+  dbNow: string
+  vietnamDateKey: string
+  effectiveStopTime: string | null
+  boundaryAt: string | null
+}
+
+export interface CampaignRunUnitSettlementV2Result {
+  ok: boolean
+  reason: string
+  campaignStatus: string | null
+  accountStatus: string | null
+  requeuedCount: number
+  dbNow: string
+  vietnamDateKey: string
+}
+
+export interface CampaignRuntimeUnitRecoveryV2Result {
+  ok: boolean
+  reason: string
+  recoveredLeaseCount: number
+  requeuedInputCount: number
+  dbNow: string
+  vietnamDateKey: string
+}
+
+export interface DesktopCampaignStatusV2Result {
+  ok: boolean
+  reason: string
+  campaignStatus: string | null
+  accountStatus: string | null
+  dbNow: string
+  vietnamDateKey: string
+}
+
+export interface CampaignDailyBoundaryCheckResult {
+  allowNewUnit: boolean
+  reason: string
+  campaignStatus: string | null
+  accountStatus: string | null
+  dbNow: string
+  vietnamDateKey: string
+  claimedVietnamDateKey: string
+  effectiveStopTime: string | null
+  boundaryAt: string | null
+  dayChanged: boolean
+}
+
+export interface CampaignDailyBoundaryYieldResult extends Omit<CampaignDailyBoundaryCheckResult, 'allowNewUnit'> {
+  ok: boolean
+  runningInputCount: number
+}
+
+export interface DailyMaintenanceBarrierCheckResult {
+  ready: boolean
+  runningCampaignCount: number
+  dbNow: string
+  vietnamDateKey: string
+}
 type CampaignInputDataProgress = {
   completed: number
   total: number
@@ -786,6 +872,10 @@ function startOfVietnamDateKey(dateKey: string): Date {
   }
   const date = new Date(`${normalized}T00:00:00${VIETNAM_UTC_OFFSET}`)
   if (!Number.isFinite(date.getTime())) throw new Error('DB Vietnam date key is invalid')
+  const parts = parseVietnamParts(date)
+  if (`${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}` !== normalized) {
+    throw new Error('DB Vietnam date key is invalid')
+  }
   return date
 }
 
@@ -814,6 +904,10 @@ function withVietnamTime(day: Date, time: Pick<VietnamDateTimeParts, 'hour' | 'm
 function formatVietnamTimeForQuery(date = new Date()): string {
   const parts = parseVietnamParts(date)
   return `${pad2(parts.hour)}:${pad2(parts.minute)}:${pad2(parts.second)}`
+}
+
+function isAtOrAfterDailyDrainTime(date: Date): boolean {
+  return formatVietnamTimeForQuery(date) >= '23:59:00'
 }
 
 function mapCampaignErrorStateFromDB(row: Record<string, unknown>): CampaignErrorState {
@@ -1043,6 +1137,7 @@ export async function claimZaloServerRunUnit(
   const normalizedCampaignId = Math.floor(Number(campaignId))
   const normalizedAccountId = Math.floor(Number(accountId))
   const normalizedInputDataIds = Array.from(new Set(inputDataIds.map(id => Number(id))))
+    .sort((left, right) => left - right)
   if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
     throw new Error('Campaign ID must be a positive integer for Zalo Server unit claim')
   }
@@ -2410,10 +2505,471 @@ export async function claimCampaignRuntime(
   return data === true
 }
 
+const RUNTIME_CLAIM_TOKEN_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function normalizeRuntimeClaimToken(runtimeClaimToken: string): string {
+  const normalized = String(runtimeClaimToken || '').trim().toLowerCase()
+  if (!RUNTIME_CLAIM_TOKEN_PATTERN.test(normalized)) {
+    throw new Error('Runtime claim token must be a valid UUID')
+  }
+  return normalized
+}
+
+function mapCampaignRuntimeClaimV2Row(row: Record<string, unknown>): CampaignRuntimeClaimV2Result {
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'claim_rejected'),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    runtimeClaimToken: row.runtime_claim_token == null ? null : String(row.runtime_claim_token),
+    runtimeClaimVietnamDateKey:
+      row.runtime_claim_vietnam_date == null ? null : String(row.runtime_claim_vietnam_date),
+    runtimeClaimedAt: row.runtime_claimed_at == null ? null : String(row.runtime_claimed_at),
+    dbNow: String(row.db_now || ''),
+    vietnamDateKey: String(row.vietnam_date_key || ''),
+    effectiveStopTime: row.effective_stop_time == null ? null : String(row.effective_stop_time),
+    boundaryAt: row.boundary_at == null ? null : String(row.boundary_at)
+  }
+}
+
+export async function claimCampaignRuntimeV2(
+  campaignId: number,
+  accountId: number,
+  runtimeTarget: CampaignRuntimeTarget,
+  runtimeClaimToken: string
+): Promise<CampaignRuntimeClaimV2Result> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  const normalizedAccountId = Math.floor(Number(accountId))
+  const normalizedRuntimeClaimToken = normalizeRuntimeClaimToken(runtimeClaimToken)
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for v2 runtime claim')
+  }
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for v2 runtime claim')
+  }
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Runtime target must be desktop or server for v2 runtime claim')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_claim_campaign_runtime_v2', {
+    p_campaign_id: normalizedCampaignId,
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: runtimeTarget,
+    p_runtime_claim_token: normalizedRuntimeClaimToken
+  })
+  if (error) {
+    throw new Error(
+      `Failed to claim campaign runtime v2 atomically: ${error.message}. ` +
+      'Ensure migration v231 is applied; no legacy fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Campaign runtime v2 claim returned no result')
+  const result = mapCampaignRuntimeClaimV2Row(row)
+  if (result.ok) {
+    if (result.runtimeClaimToken !== normalizedRuntimeClaimToken) {
+      throw new Error('Campaign runtime v2 claim returned an unexpected ownership token')
+    }
+    if (!result.runtimeClaimVietnamDateKey) {
+      throw new Error('Campaign runtime v2 claim returned no Vietnam claim date')
+    }
+    startOfVietnamDateKey(result.runtimeClaimVietnamDateKey)
+  }
+  return result
+}
+
+export async function claimCampaignRunUnitV2(
+  campaignId: number,
+  accountId: number,
+  runtimeTarget: CampaignRuntimeTarget,
+  runtimeClaimToken: string,
+  runtimeClaimVietnamDateKey: string,
+  runtimeUnitToken: string,
+  inputDataIds: number[]
+): Promise<CampaignRunUnitClaimV2Result> {
+  const args = normalizeCampaignDailyBoundaryArgs(
+    campaignId,
+    accountId,
+    runtimeTarget,
+    runtimeClaimVietnamDateKey
+  )
+  const normalizedRuntimeClaimToken = normalizeRuntimeClaimToken(runtimeClaimToken)
+  const normalizedRuntimeUnitToken = normalizeRuntimeClaimToken(runtimeUnitToken)
+  const normalizedInputDataIds = Array.from(new Set(inputDataIds.map(id => Number(id))))
+    .sort((left, right) => left - right)
+  if (
+    normalizedInputDataIds.length !== inputDataIds.length ||
+    normalizedInputDataIds.length > 50 ||
+    normalizedInputDataIds.some(id => !Number.isSafeInteger(id) || id <= 0)
+  ) {
+    throw new Error('Campaign run-unit input IDs must be unique positive integers with at most 50 rows')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_claim_campaign_run_unit_v2', {
+    p_campaign_id: args.campaignId,
+    p_account_id: args.accountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: args.runtimeTarget,
+    p_runtime_claim_token: normalizedRuntimeClaimToken,
+    p_runtime_claim_vietnam_date: args.claimedVietnamDateKey,
+    p_runtime_unit_token: normalizedRuntimeUnitToken,
+    p_input_data_ids: normalizedInputDataIds
+  })
+  if (error) {
+    throw new Error(
+      `Failed to claim campaign run unit v2 atomically: ${error.message}. ` +
+      'Ensure migration v231 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Campaign run-unit v2 claim returned no result')
+  const result: CampaignRunUnitClaimV2Result = {
+    ok: row.ok === true,
+    reason: String(row.reason || 'unit_claim_rejected'),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    claimedCount: Number(row.claimed_count || 0),
+    runtimeClaimToken: row.runtime_claim_token == null ? null : String(row.runtime_claim_token),
+    runtimeClaimVietnamDateKey:
+      row.runtime_claim_vietnam_date == null ? null : String(row.runtime_claim_vietnam_date),
+    runtimeUnitToken: row.runtime_unit_token == null ? null : String(row.runtime_unit_token),
+    runtimeUnitVietnamDateKey:
+      row.runtime_unit_vietnam_date == null ? null : String(row.runtime_unit_vietnam_date),
+    runtimeUnitClaimedAt: row.runtime_unit_claimed_at == null ? null : String(row.runtime_unit_claimed_at),
+    runtimeUnitInputDataIds: Array.isArray(row.runtime_unit_input_data_ids)
+      ? row.runtime_unit_input_data_ids.map(id => Number(id))
+      : [],
+    dbNow: String(row.db_now || ''),
+    vietnamDateKey: String(row.vietnam_date_key || ''),
+    effectiveStopTime: row.effective_stop_time == null ? null : String(row.effective_stop_time),
+    boundaryAt: row.boundary_at == null ? null : String(row.boundary_at)
+  }
+  if (result.ok) {
+    if (result.reason === 'claimed') {
+      if (result.runtimeClaimToken !== normalizedRuntimeClaimToken) {
+        throw new Error('Campaign run-unit v2 claim returned an unexpected ownership token')
+      }
+      if (result.runtimeClaimVietnamDateKey !== args.claimedVietnamDateKey) {
+        throw new Error('Campaign run-unit v2 claim returned an unexpected Vietnam claim date')
+      }
+    }
+    if (result.runtimeUnitToken !== normalizedRuntimeUnitToken) {
+      throw new Error('Campaign run-unit v2 claim returned an unexpected unit token')
+    }
+    if (result.runtimeUnitVietnamDateKey !== args.claimedVietnamDateKey) {
+      throw new Error('Campaign run-unit v2 claim returned an unexpected unit Vietnam date')
+    }
+    if (
+      result.runtimeUnitInputDataIds.length !== normalizedInputDataIds.length ||
+      result.runtimeUnitInputDataIds.some((id, index) => id !== normalizedInputDataIds[index])
+    ) {
+      throw new Error('Campaign run-unit v2 claim returned an unexpected input-data lease')
+    }
+  }
+  return result
+}
+
+export async function settleCampaignRunUnitV2(
+  campaignId: number,
+  accountId: number,
+  runtimeTarget: CampaignRuntimeTarget,
+  runtimeUnitToken: string,
+  requeueUnstarted: boolean
+): Promise<CampaignRunUnitSettlementV2Result> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  const normalizedAccountId = Math.floor(Number(accountId))
+  const normalizedRuntimeUnitToken = normalizeRuntimeClaimToken(runtimeUnitToken)
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for unit settlement')
+  }
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for unit settlement')
+  }
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Runtime target must be desktop or server for unit settlement')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_settle_campaign_run_unit_v2', {
+    p_campaign_id: normalizedCampaignId,
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: runtimeTarget,
+    p_runtime_unit_token: normalizedRuntimeUnitToken,
+    p_requeue_unstarted: requeueUnstarted === true
+  })
+  if (error) {
+    throw new Error(
+      `Failed to settle campaign run-unit v2 atomically: ${error.message}. ` +
+      'Ensure migration v231 is applied; the unit lease remains active.'
+    )
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Campaign run-unit v2 settlement returned no result')
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'unit_settlement_rejected'),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    requeuedCount: Number(row.requeued_count || 0),
+    dbNow: String(row.db_now || ''),
+    vietnamDateKey: String(row.vietnam_date_key || '')
+  }
+}
+
+export async function recoverCampaignRuntimeUnitLeasesV2(
+  runtimeTarget: CampaignRuntimeTarget,
+  platformScope: 'all' | 'zalo' = 'all'
+): Promise<CampaignRuntimeUnitRecoveryV2Result> {
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Runtime target must be desktop or server for unit-lease recovery')
+  }
+  if (platformScope !== 'all' && platformScope !== 'zalo') {
+    throw new Error('Platform scope must be all or zalo for unit-lease recovery')
+  }
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_recover_campaign_runtime_unit_leases', {
+    p_staff_id: u.staffId,
+    p_runtime_target: runtimeTarget,
+    p_platform_scope: platformScope
+  })
+  if (error) {
+    throw new Error(
+      `Failed to recover campaign runtime unit leases: ${error.message}. ` +
+      'Ensure migration v231 is applied; maintenance remains closed.'
+    )
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Campaign runtime unit-lease recovery returned no result')
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'unit_recovery_rejected'),
+    recoveredLeaseCount: Number(row.recovered_lease_count || 0),
+    requeuedInputCount: Number(row.requeued_input_count || 0),
+    dbNow: String(row.db_now || ''),
+    vietnamDateKey: String(row.vietnam_date_key || '')
+  }
+}
+
+export async function setDesktopCampaignStatusV2(
+  campaignId: number,
+  accountId: number,
+  targetStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>
+): Promise<DesktopCampaignStatusV2Result> {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  const normalizedAccountId = Math.floor(Number(accountId))
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for desktop status control')
+  }
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for desktop status control')
+  }
+  if (targetStatus !== 'chờ xử lý' && targetStatus !== 'tạm dừng') {
+    throw new Error('Desktop campaign target status is invalid')
+  }
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_set_desktop_campaign_status_v2', {
+    p_campaign_id: normalizedCampaignId,
+    p_account_id: normalizedAccountId,
+    p_staff_id: u.staffId,
+    p_target_status: targetStatus
+  })
+  if (error) {
+    throw new Error(
+      `Failed to update desktop campaign status atomically: ${error.message}. ` +
+      'Ensure migration v231 is applied; no unconditional status write was attempted.'
+    )
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Desktop campaign status v2 returned no result')
+  return {
+    ok: row.ok === true,
+    reason: String(row.reason || 'status_update_rejected'),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    dbNow: String(row.db_now || ''),
+    vietnamDateKey: String(row.vietnam_date_key || '')
+  }
+}
+
+function normalizeCampaignDailyBoundaryArgs(
+  campaignId: number,
+  accountId: number,
+  runtimeTarget: CampaignRuntimeTarget,
+  claimedVietnamDateKey: string
+): {
+  campaignId: number
+  accountId: number
+  runtimeTarget: CampaignRuntimeTarget
+  claimedVietnamDateKey: string
+} {
+  const normalizedCampaignId = Math.floor(Number(campaignId))
+  const normalizedAccountId = Math.floor(Number(accountId))
+  const normalizedDateKey = String(claimedVietnamDateKey || '').trim()
+  if (!Number.isSafeInteger(normalizedCampaignId) || normalizedCampaignId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for daily boundary')
+  }
+  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+    throw new Error('Account ID must be a positive integer for daily boundary')
+  }
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Runtime target must be desktop or server for daily boundary')
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDateKey)) {
+    throw new Error('Claimed Vietnam date key is invalid for daily boundary')
+  }
+  // Reuse the strict calendar-date parser instead of accepting values such as
+  // 2026-99-99 that merely match the shape above.
+  startOfVietnamDateKey(normalizedDateKey)
+  return {
+    campaignId: normalizedCampaignId,
+    accountId: normalizedAccountId,
+    runtimeTarget,
+    claimedVietnamDateKey: normalizedDateKey
+  }
+}
+
+function mapCampaignDailyBoundaryRow(row: Record<string, unknown>): CampaignDailyBoundaryCheckResult {
+  return {
+    allowNewUnit: row.allow_new_unit === true,
+    reason: String(row.reason || 'not_found'),
+    campaignStatus: row.campaign_status == null ? null : String(row.campaign_status),
+    accountStatus: row.account_status == null ? null : String(row.account_status),
+    dbNow: String(row.db_now || ''),
+    vietnamDateKey: String(row.vietnam_date_key || ''),
+    claimedVietnamDateKey: String(row.claimed_vietnam_date_key || ''),
+    effectiveStopTime: row.effective_stop_time == null ? null : String(row.effective_stop_time),
+    boundaryAt: row.boundary_at == null ? null : String(row.boundary_at),
+    dayChanged: row.day_changed === true
+  }
+}
+
+export async function checkCampaignDailyBoundary(
+  campaignId: number,
+  accountId: number,
+  runtimeTarget: CampaignRuntimeTarget,
+  claimedVietnamDateKey: string
+): Promise<CampaignDailyBoundaryCheckResult> {
+  const args = normalizeCampaignDailyBoundaryArgs(
+    campaignId,
+    accountId,
+    runtimeTarget,
+    claimedVietnamDateKey
+  )
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_check_campaign_daily_boundary', {
+    p_campaign_id: args.campaignId,
+    p_account_id: args.accountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: args.runtimeTarget,
+    p_claimed_vietnam_date: args.claimedVietnamDateKey
+  })
+  if (error) {
+    throw new Error(
+      `Failed to check campaign daily boundary: ${error.message}. ` +
+      'Ensure migration v231 is applied; no host-clock fallback was attempted.'
+    )
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Campaign daily boundary check returned no result')
+  return mapCampaignDailyBoundaryRow(row)
+}
+
+export async function yieldCampaignDailyBoundary(
+  campaignId: number,
+  accountId: number,
+  runtimeTarget: CampaignRuntimeTarget,
+  runtimeClaimToken: string,
+  claimedVietnamDateKey: string
+): Promise<CampaignDailyBoundaryYieldResult> {
+  const args = normalizeCampaignDailyBoundaryArgs(
+    campaignId,
+    accountId,
+    runtimeTarget,
+    claimedVietnamDateKey
+  )
+  const normalizedRuntimeClaimToken = normalizeRuntimeClaimToken(runtimeClaimToken)
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_yield_campaign_daily_boundary', {
+    p_campaign_id: args.campaignId,
+    p_account_id: args.accountId,
+    p_staff_id: u.staffId,
+    p_runtime_target: args.runtimeTarget,
+    p_runtime_claim_token: normalizedRuntimeClaimToken,
+    p_claimed_vietnam_date: args.claimedVietnamDateKey
+  })
+  if (error) {
+    throw new Error(
+      `Failed to yield campaign at daily boundary: ${error.message}. ` +
+      'Ensure migration v231 is applied; no non-atomic fallback was attempted.'
+    )
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Campaign daily boundary yield returned no result')
+  const boundary = mapCampaignDailyBoundaryRow({ ...row, allow_new_unit: false })
+  return {
+    ok: row.ok === true,
+    reason: boundary.reason,
+    campaignStatus: boundary.campaignStatus,
+    accountStatus: boundary.accountStatus,
+    dbNow: boundary.dbNow,
+    vietnamDateKey: boundary.vietnamDateKey,
+    claimedVietnamDateKey: boundary.claimedVietnamDateKey,
+    effectiveStopTime: boundary.effectiveStopTime,
+    boundaryAt: boundary.boundaryAt,
+    dayChanged: boundary.dayChanged,
+    runningInputCount: Number(row.running_input_count || 0)
+  }
+}
+
+export async function checkDailyMaintenanceBarrier(
+  runtimeTarget: CampaignRuntimeTarget,
+  vietnamDateKey: string
+): Promise<DailyMaintenanceBarrierCheckResult> {
+  const normalizedDateKey = String(vietnamDateKey || '').trim()
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
+    throw new Error('Runtime target must be desktop or server for daily maintenance barrier')
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDateKey)) {
+    throw new Error('Vietnam date key is invalid for daily maintenance barrier')
+  }
+  startOfVietnamDateKey(normalizedDateKey)
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_check_daily_maintenance_barrier', {
+    p_staff_id: u.staffId,
+    p_runtime_target: runtimeTarget,
+    p_vietnam_date_key: normalizedDateKey
+  })
+  if (error) {
+    throw new Error(
+      `Failed to check daily maintenance barrier: ${error.message}. ` +
+      'Ensure migration v231 is applied; maintenance remains closed.'
+    )
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row) throw new Error('Daily maintenance barrier check returned no result')
+  return {
+    ready: row.ready === true,
+    runningCampaignCount: Number(row.running_campaign_count || 0),
+    dbNow: String(row.db_now || ''),
+    vietnamDateKey: String(row.vietnam_date_key || '')
+  }
+}
+
 export async function getPendingCampaigns(accountId: number, dbNow: string): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const now = parseDatabaseNow(dbNow)
   const currentVietnamTime = formatVietnamTimeForQuery(now)
+  // 23:59 is the daily drain window when no earlier stop time is configured.
+  // Do not even offer a campaign to the scheduler during that final minute;
+  // an already-started execution unit is allowed to settle separately.
+  if (currentVietnamTime >= '23:59:00') return []
   const { data, error } = await client()
     .from('auto_campaigns')
     .select(CAMPAIGN_SELECT)
@@ -2424,7 +2980,7 @@ export async function getPendingCampaigns(accountId: number, dbNow: string): Pro
     .eq('provisioning_state', 'ready')
     .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
     .lte('schedule', now.toISOString())
-    .or(`daily_stop_time.is.null,daily_stop_time.gte.${currentVietnamTime}`)
+    .or(`daily_stop_time.is.null,daily_stop_time.gt.${currentVietnamTime}`)
     .order('schedule', { ascending: true })
     .order('created_at', { ascending: true })
     .order('id', { ascending: true })
@@ -2468,43 +3024,65 @@ export async function maintainCampaignSchedules(
   const todayStart = startOfVietnamDateKey(vietnamDateKey)
   const accountRelation =
     'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type, is_zalo_show_web, is_zalo_server, staff_id)'
-  let query = client()
-    .from('auto_campaigns')
-    .select(`*, auto_campaign_actions(name), ${accountRelation}`)
-    .eq('staff_id', u.staffId)
-    .eq('is_delete', false)
-    .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
-    .not('schedule', 'is', null)
-    .lt('schedule', todayStart.toISOString())
-    .in('status', ['chờ xử lý', 'hoàn thành'])
+  const staleCampaignRows: any[] = []
+  let afterCampaignId = 0
+  const pageSize = 500
 
-  if (platformScope === 'zalo') {
-    query = query.eq('primary_account.flatform_type', 'zalo')
-    if (runtimeContext.runtimeTarget === 'server') {
-      query = query
-        .eq('primary_account.is_zalo_show_web', false)
-        .eq('primary_account.is_zalo_server', true)
-        .eq('primary_account.staff_id', u.staffId)
-        .or(
-          `organization_id.is.null,organization_id.eq.${u.organizationId}`,
-          { referencedTable: 'primary_account' }
-        )
-    } else {
+  // PostgREST projects commonly cap a response at 1,000 rows. Keyset paging is
+  // required here because permanently completed/no-catch-up rows may remain
+  // stale and otherwise starve a later pending campaign that the v2 claim is
+  // correctly holding behind maintenance.
+  while (true) {
+    let query = client()
+      .from('auto_campaigns')
+      .select(`*, auto_campaign_actions(name), ${accountRelation}`)
+      .eq('staff_id', u.staffId)
+      .eq('is_delete', false)
+      .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
+      .not('schedule', 'is', null)
+      .lt('schedule', todayStart.toISOString())
+      .in('status', ['chờ xử lý', 'hoàn thành'])
+      .gt('id', afterCampaignId)
+
+    if (platformScope === 'zalo') {
+      query = query.eq('primary_account.flatform_type', 'zalo')
+      if (runtimeContext.runtimeTarget === 'server') {
+        query = query
+          .eq('primary_account.is_zalo_show_web', false)
+          .eq('primary_account.is_zalo_server', true)
+          .eq('primary_account.staff_id', u.staffId)
+          .or(
+            `organization_id.is.null,organization_id.eq.${u.organizationId}`,
+            { referencedTable: 'primary_account' }
+          )
+      } else {
+        query = query.eq('primary_account.is_zalo_server', false)
+      }
+    } else if (platformScope === 'non-zalo') {
+      query = query.neq('primary_account.flatform_type', 'zalo')
+    } else if (runtimeContext.runtimeTarget === 'desktop') {
       query = query.eq('primary_account.is_zalo_server', false)
     }
-  } else if (platformScope === 'non-zalo') {
-    query = query.neq('primary_account.flatform_type', 'zalo')
-  } else if (runtimeContext.runtimeTarget === 'desktop') {
-    query = query.eq('primary_account.is_zalo_server', false)
+
+    const { data, error } = await query
+      .order('id', { ascending: true })
+      .limit(pageSize)
+
+    if (error) throw new Error(`Failed to list stale campaign schedules: ${error.message}`)
+    const page = data || []
+    staleCampaignRows.push(...page)
+    if (page.length < pageSize) break
+
+    const nextAfterCampaignId = Number(page[page.length - 1]?.id)
+    if (!Number.isSafeInteger(nextAfterCampaignId) || nextAfterCampaignId <= afterCampaignId) {
+      throw new Error('Failed to advance stale campaign schedule pagination')
+    }
+    afterCampaignId = nextAfterCampaignId
   }
-
-  const { data, error } = await query
-
-  if (error) throw new Error(`Failed to list stale campaign schedules: ${error.message}`)
 
   const updatedCampaigns: Campaign[] = []
   const maintenanceErrors: Array<{ campaignId: number; message: string }> = []
-  const campaigns = (data || []).map(row => mapCampaignFromDB(row))
+  const campaigns = staleCampaignRows.map(row => mapCampaignFromDB(row))
   const finalizeForMaintenance = async (campaign: Campaign, note: string): Promise<void> => {
     if (campaign.dataTargetSourceMode === 'data_group') {
       await finalizeDataGroupCampaign(campaign.id, note, runtimeContext)
@@ -2533,7 +3111,20 @@ export async function maintainCampaignSchedules(
       if (isCompletedNonCatchUpDailyCampaign) continue
 
       const nextSchedule = resolveNextSchedule(campaign, todayStart)
-      if (!nextSchedule) continue
+      if (!nextSchedule) {
+        // A stale pending row must never survive a successful maintenance pass:
+        // the v2 atomic claim deliberately treats that state as not maintained.
+        // Isolate an invalid recurrence instead of making every campaign for the
+        // same staff loop forever at the maintenance barrier.
+        if (campaign.status === 'chờ xử lý') {
+          const updated = await updateCampaign(campaign.id, {
+            status: 'tạm dừng',
+            note: 'Lịch chạy không hợp lệ. Vui lòng kiểm tra lại ngày chạy trong tuần/tháng.'
+          })
+          updatedCampaigns.push(updated)
+        }
+        continue
+      }
 
       if (isPastScheduleEnd(campaign, nextSchedule)) {
         await finalizeForMaintenance(campaign, 'Chiến dịch đã hết ngày kết thúc')
@@ -2546,15 +3137,41 @@ export async function maintainCampaignSchedules(
         continue
       }
 
+      if (campaign.status === 'chờ xử lý' && isAtOrAfterDailyDrainTime(nextSchedule)) {
+        // 23:59 is reserved for draining the last already-claimed unit. Older
+        // app versions allowed recurring campaigns to use that exact slot; if
+        // maintenance kept rolling those rows forward they could be skipped
+        // forever. Pause instead of silently changing the user's run time.
+        const updated = await updateCampaign(campaign.id, {
+          status: 'tạm dừng',
+          note: '23:59 là thời gian hệ thống dừng nhận lượt mới để cập nhật lịch ngày mới. Vui lòng chọn giờ chạy sớm hơn.'
+        })
+        updatedCampaigns.push(updated)
+        continue
+      }
+
       if (scheduleType === 'daily') {
         if (campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) {
           await finalizeForMaintenance(
             campaign,
             'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày'
           )
-          const updated = await getCampaign(campaign.id)
+          let updated = await getCampaign(campaign.id)
           if (!updated) throw new Error('Không tìm thấy chiến dịch sinh nhật sau khi kiểm tra data.')
-          if (updated.status !== campaign.status || updated.note !== campaign.note) {
+          // A producer/finalizer race can legitimately leave fresh pending data.
+          // Keep it runnable today, but never leave the old-day schedule which
+          // the atomic top-level claim must reject.
+          if (
+            updated.status === 'chờ xử lý' &&
+            (!updated.schedule || new Date(updated.schedule).getTime() < todayStart.getTime())
+          ) {
+            updated = await updateCampaign(campaign.id, { schedule: todayStart.toISOString() })
+          }
+          if (
+            updated.status !== campaign.status ||
+            updated.note !== campaign.note ||
+            updated.schedule !== campaign.schedule
+          ) {
             updatedCampaigns.push(updated)
           }
           continue
@@ -2565,9 +3182,19 @@ export async function maintainCampaignSchedules(
             campaign,
             'Chiến dịch lướt newsfeed không chạy tiếp qua ngày'
           )
-          const updated = await getCampaign(campaign.id)
+          let updated = await getCampaign(campaign.id)
           if (!updated) throw new Error('Không tìm thấy chiến dịch newsfeed sau khi kiểm tra data.')
-          if (updated.status !== campaign.status || updated.note !== campaign.note) {
+          if (
+            updated.status === 'chờ xử lý' &&
+            (!updated.schedule || new Date(updated.schedule).getTime() < todayStart.getTime())
+          ) {
+            updated = await updateCampaign(campaign.id, { schedule: todayStart.toISOString() })
+          }
+          if (
+            updated.status !== campaign.status ||
+            updated.note !== campaign.note ||
+            updated.schedule !== campaign.schedule
+          ) {
             updatedCampaigns.push(updated)
           }
           continue
@@ -2576,11 +3203,20 @@ export async function maintainCampaignSchedules(
         if (campaign.status !== 'chờ xử lý') continue
 
         // continueNextDay controls timing, not whether stale daily data continues.
-        // true waits until today's original scheduled time; false keeps the stale
-        // schedule due so the scheduler can run it immediately when eligible.
+        // true waits until today's original scheduled time; false is anchored at
+        // today's midnight so it remains immediately due without leaving an
+        // old-day schedule behind. The v2 DB claim treats every stale pending
+        // schedule as maintenance-required, including a campaign resumed after
+        // it was paused across midnight.
         if (campaign.continueNextDay) {
           const updated = await updateCampaign(campaign.id, {
             schedule: nextSchedule.toISOString(),
+            note: null
+          })
+          updatedCampaigns.push(updated)
+        } else {
+          const updated = await updateCampaign(campaign.id, {
+            schedule: todayStart.toISOString(),
             note: null
           })
           updatedCampaigns.push(updated)
