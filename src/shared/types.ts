@@ -528,8 +528,8 @@ export interface CampaignExtraSettings {
   commentCount?: number          // số lượng comment tối đa (khi commentType = 'others' hoặc 'all')
   commentContent?: string        // nội dung comment
   rewriteCommentContentEachRun?: boolean // DB block viết lại nội dung comment bằng AI trước mỗi lượt comment seeding
-  commentImageOption?: 'none' | 'all'
-  commentImages?: CampaignMediaInput[]        // tối đa 1 ảnh cho mỗi comment
+  commentImageOption?: 'none' | 'all' | 'random'
+  commentImages?: CampaignMediaInput[]        // kho ảnh; runtime luôn chọn tối đa 1 ảnh cho mỗi comment
   enablePostLike?: boolean
   postsPerTarget?: number
   // Lướt newsfeed và tương tác

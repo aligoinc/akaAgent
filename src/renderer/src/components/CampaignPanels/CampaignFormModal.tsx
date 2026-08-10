@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useRef, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -46,6 +46,13 @@ import CampaignDataUploadModal from './CampaignDataUploadModal'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
 import MediaPreviewHover from '../Media/MediaPreviewHover'
 import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
+import {
+  getUniqueCampaignMediaAdditions,
+  isCampaignMediaImage,
+  isLocalOnlyCampaignMedia,
+  selectLocalCampaignMedia,
+  summarizeLocalCampaignMediaFailures
+} from './localCampaignMedia'
 import ContentPreviewModal, {
   type ContentPreviewMediaItem,
   type ContentPreviewModalData,
@@ -440,7 +447,7 @@ interface StepDef {
 
 type ActionLimitForm = Required<Pick<ActionLimitConfig, 'dailyLimit' | 'rateLimitCount' | 'rateLimitMinutes'>>
 type ImageOption = 'none' | 'all' | 'random'
-type CommentImageOption = 'none' | 'all'
+type CommentImageOption = ImageOption
 type MainMediaPickerTarget = 'post' | 'comment' | { kind: 'advanced'; itemId: string }
 type CommentGroupMode = 'all' | 'pending_only' | 'published_only'
 type CommentType = 'own' | 'others' | 'all'
@@ -1366,16 +1373,6 @@ const createAdvancedContentItem = (overrides: Partial<CampaignAdvancedContentIte
   ...(overrides.sourceVariantIndex !== undefined ? { sourceVariantIndex: overrides.sourceVariantIndex } : {})
 })
 
-const isCampaignMediaImage = (item: CampaignMediaInput): boolean => {
-  if (isCampaignMediaSnapshot(item)) {
-    const mimeType = String(item.mimeType || '').toLowerCase()
-    if (mimeType) return mimeType.startsWith('image/')
-    const candidate = item.localPath || item.cloudUrl || item.name || ''
-    return /\.(apng|avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(candidate)
-  }
-  return isDataImagePath(item) || /\.(apng|avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(item)
-}
-
 const getExcelCellText = (value: unknown): string => {
   if (value === null || value === undefined) return ''
   if (typeof value === 'number') {
@@ -1773,10 +1770,11 @@ export default function CampaignFormModal({
     return initEndDate()
   }
 
-  const savedCommentImages = (campaign?.extraSettings?.commentImages || []).slice(0, 1)
+  const savedCommentImages = campaign?.extraSettings?.commentImages || []
+  const rawSavedCommentImageOption = campaign?.extraSettings?.commentImageOption
   const savedCommentImageOption: CommentImageOption =
-    (campaign?.extraSettings?.commentImageOption && campaign.extraSettings.commentImageOption !== 'none' && savedCommentImages.length > 0)
-      ? 'all'
+    (savedCommentImages.length > 0 && (rawSavedCommentImageOption === 'all' || rawSavedCommentImageOption === 'random'))
+      ? rawSavedCommentImageOption
       : 'none'
   const savedDailyStopTime = normalizeTimeInput(campaign?.dailyStopTime)
   const rawInitialActionId = lockedActionId || campaign?.actionId || ''
@@ -1813,7 +1811,14 @@ export default function CampaignFormModal({
   const savedAdvancedGroupSnapshot = campaign?.extraSettings?.advancedContentGroupSnapshot
   const savedAdvancedContentSource = campaign?.extraSettings?.advancedContentSource
   const hasSavedAdvancedGroupSnapshot = savedAdvancedContentSource === 'group_snapshot' && !!savedAdvancedGroupSnapshot
-  const initialActiveAdvancedContentItems = normalizeAdvancedContentItems(campaign?.extraSettings?.advancedContentItems)
+  const normalizeInitialAdvancedMedia = (items: CampaignAdvancedContentItem[]): CampaignAdvancedContentItem[] => (
+    COMMENT_SEEDING_ACTIONS.has(initialActionId)
+      ? items.map(item => ({ ...item, randomMediaCount: 1 }))
+      : items
+  )
+  const initialActiveAdvancedContentItems = normalizeInitialAdvancedMedia(
+    normalizeAdvancedContentItems(campaign?.extraSettings?.advancedContentItems)
+  )
   const savedManualDraft = campaign?.extraSettings?.advancedContentManualDraft
   const initialManualDraft: AdvancedContentManualDraft = hasSavedAdvancedGroupSnapshot
     ? {
@@ -1821,7 +1826,7 @@ export default function CampaignFormModal({
           ? String(savedManualDraft.content || '')
           : formattedContentToPlainCampaignContent(campaign?.content || ''),
         advancedContentItems: savedManualDraft
-          ? normalizeAdvancedContentItems(savedManualDraft.advancedContentItems)
+          ? normalizeInitialAdvancedMedia(normalizeAdvancedContentItems(savedManualDraft.advancedContentItems))
           : [],
         formattedContentEnabled: savedManualDraft?.formattedContentEnabled === true,
         emailSubject: savedManualDraft ? String(savedManualDraft.emailSubject || '') : '',
@@ -2138,6 +2143,9 @@ export default function CampaignFormModal({
   const [expandedRateLimitMinuteActions, setExpandedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
   const [editedRateLimitMinuteActions, setEditedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
   const [mediaPickerTarget, setMediaPickerTarget] = useState<MainMediaPickerTarget | null>(null)
+  const localMediaPickerTargetRef = useRef<MainMediaPickerTarget | null>(null)
+  const localImageInputRef = useRef<HTMLInputElement>(null)
+  const localFileInputRef = useRef<HTMLInputElement>(null)
   const [handleFoundUidData, setHandleFoundUidData] = useState(() =>
     draftRequiredTargetField === 'findUidTargetCampaignIds' || (campaign?.extraSettings?.findUidTargetCampaignIds || []).length > 0
   )
@@ -2616,6 +2624,10 @@ export default function CampaignFormModal({
   )
   const selectedCampaignAction = availableCampaignActions.find(action => action.id === formData.actionId)
   const selectedActionPlatform = normalizeCampaignActionPlatform(selectedCampaignAction?.flatformType)
+  const usesZaloServerAccount = selectedActionPlatform === 'zalo' && formData.accountIds.some(accountId => {
+    const account = accounts.find(item => item.id === accountId)
+    return account ? isZaloServerAccount(account) : false
+  })
   const actionPlatformForAccountSelection = selectedActionPlatform || selectedActionPlatformFilter
   const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false
   const allowsSecondaryAccount = selectedCampaignAction?.allowSecondaryAccount === true
@@ -4765,15 +4777,19 @@ export default function CampaignFormModal({
     randomCount?: number
   } => {
     if (target === 'commentContent') {
+      const previewCommentImages = formData.commentImageOption === 'all'
+        ? formData.commentImages.slice(0, 1)
+        : formData.commentImages
       return {
         media: formData.commentImageOption === 'none'
           ? []
-          : formData.commentImages.slice(0, 1).map(item => ({
+          : previewCommentImages.map(item => ({
             path: getCampaignMediaPreviewPath(item),
             label: getCampaignMediaDisplayName(item),
             mimeType: getCampaignMediaMimeType(item)
           })),
-        mediaMode: formData.commentImageOption
+        mediaMode: formData.commentImageOption,
+        randomCount: formData.commentImageOption === 'random' ? 1 : undefined
       }
     }
 
@@ -4900,9 +4916,12 @@ export default function CampaignFormModal({
 
   const openAdvancedContentPreview = (item: CampaignAdvancedContentItem, itemIndex: number) => {
     const mediaMode = item.mediaOption || 'none'
+    const previewMediaItems = isCommentSeedingCampaign && mediaMode === 'all'
+      ? (item.mediaItems || []).slice(0, 1)
+      : (item.mediaItems || [])
     const media = mediaMode === 'none' || isPostBackgroundActive
       ? []
-      : (item.mediaItems || []).map(mediaItem => ({
+      : previewMediaItems.map(mediaItem => ({
         path: getCampaignMediaPreviewPath(mediaItem),
         label: getCampaignMediaDisplayName(mediaItem),
         mimeType: getCampaignMediaMimeType(mediaItem)
@@ -4927,7 +4946,7 @@ export default function CampaignFormModal({
       isHtml: isEmailCampaign && groupSnapshotRich,
       media,
       mediaMode,
-      randomCount: item.randomMediaCount || 3,
+      randomCount: isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3),
       zaloMessageSendMode: isZaloMessageCampaign ? formData.zaloMessageSendMode : undefined,
       notes: getContentPreviewNotes('content')
     })
@@ -4983,7 +5002,7 @@ export default function CampaignFormModal({
     const { snapshots: resolvedSnapshots, invalidCount } = shouldApplyTemplateMedia
       ? contentTemplateImagesToSnapshots(resolved.imageUrls)
       : { snapshots: [] as CampaignMediaSnapshot[], invalidCount: 0 }
-    const snapshots = channelName === 'facebook_comment' ? resolvedSnapshots.slice(0, 1) : resolvedSnapshots
+    const snapshots = resolvedSnapshots
     const serializedContent = applyRich
       ? serializeFormattedContentVariants(variants)
       : serializeContentVariants(variants)
@@ -4994,7 +5013,7 @@ export default function CampaignFormModal({
           ...current,
           commentContent: serializeContentVariants(variants),
           commentImages: snapshots,
-          commentImageOption: snapshots.length > 0 ? 'all' : 'none'
+          commentImageOption: snapshots.length > 1 ? 'random' : snapshots.length === 1 ? 'all' : 'none'
         }))
       } else if (target !== 'content') {
         setAiContentValue(target, serializeContentVariants(variants))
@@ -5142,20 +5161,19 @@ export default function CampaignFormModal({
         if (media.skipped > 0) mediaWarning = `Có ${media.skipped} media chưa có URL cloud hoặc không phải ảnh nên sẽ không được lưu vào mẫu.`
       }
     } else if (target === 'commentContent' && formData.commentImageOption !== 'none') {
-      const media = getCloudImageUrls(formData.commentImages.slice(0, 1))
-      imageUrls = media.urls.slice(0, 1)
-      if (media.skipped > 0) mediaWarning = 'Ảnh comment chưa có URL cloud nên sẽ không được lưu vào mẫu.'
+      const commentImagesForTemplate = formData.commentImageOption === 'random'
+        ? formData.commentImages
+        : formData.commentImages.slice(0, 1)
+      const media = getCloudImageUrls(commentImagesForTemplate)
+      imageUrls = media.urls
+      if (media.skipped > 0) mediaWarning = 'Có ảnh comment chưa có URL cloud nên sẽ không được lưu vào mẫu.'
     }
 
     const channels: ContentTemplateChannels = {}
     channels[channelName] = {
       enabled: true,
       variants: variants.map(text => ({ text: rich ? sanitizeFormattedContent(text) : text })),
-      imageUrls: channelName === 'sms'
-        ? []
-        : channelName === 'facebook_comment'
-          ? imageUrls.slice(0, 1)
-          : imageUrls,
+      imageUrls: channelName === 'sms' ? [] : imageUrls,
       ...(channelName === 'email' ? { subject: emailSubjects[0], isHtml: rich } : {}),
       ...((channelName === 'zalo_message' || channelName === 'facebook_post')
         ? { formattedContentEnabled: rich }
@@ -5389,12 +5407,27 @@ export default function CampaignFormModal({
 
   const validateSelectedImages = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
     if (option === 'none' || images.length === 0) return true
+    if (usesZaloServerAccount) {
+      const localOnlyImages = images.filter(isLocalOnlyCampaignMedia)
+      if (localOnlyImages.length > 0) {
+        const names = localOnlyImages.slice(0, 3).map(getCampaignMediaDisplayName).join(', ')
+        const suffix = localOnlyImages.length > 3 ? ` và ${localOnlyImages.length - 3} file khác` : ''
+        showAlert(`${label} có file chỉ nằm trên máy local: ${names}${suffix}. Zalo Server chỉ dùng được media đã upload lên cloud.`, 'error')
+        return false
+      }
+    }
     const missingImages = images.filter(item => !isUsableCampaignMedia(item))
     if (missingImages.length === 0) return true
 
     const names = missingImages.slice(0, 3).map(getCampaignMediaDisplayName).join(', ')
     const suffix = missingImages.length > 3 ? ` và ${missingImages.length - 3} file khác` : ''
     showAlert(`${label} có file không còn tồn tại và không có cloud URL fallback: ${names}${suffix}. Vui lòng xoá file lỗi hoặc chọn lại.`, 'error')
+    return false
+  }
+
+  const validateCommentImagePool = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
+    if (option !== 'all' || images.length <= 1) return true
+    showAlert(`${label} ở chế độ "Gửi ảnh đã chọn" chỉ được chọn tối đa 1 ảnh. Vui lòng xoá bớt ảnh hoặc chuyển sang gửi ngẫu nhiên.`, 'error')
     return false
   }
 
@@ -5445,6 +5478,14 @@ export default function CampaignFormModal({
 
     for (let index = 0; index < normalizedAdvancedContentItems.length; index += 1) {
       const item = normalizedAdvancedContentItems[index]
+      if (isCommentSeedingCampaign && !validateCommentImagePool(
+        `Media nội dung nâng cao ${index + 1}`,
+        item.mediaOption || 'none',
+        item.mediaItems || []
+      )) {
+        setManualAdvancedContentModalOpen(true)
+        return false
+      }
       if (!validateSelectedImages(`Media nội dung nâng cao ${index + 1}`, item.mediaOption || 'none', item.mediaItems || [])) {
         setManualAdvancedContentModalOpen(true)
         return false
@@ -5823,11 +5864,13 @@ export default function CampaignFormModal({
           ? sanitizeFormattedContent(manualItem.content)
           : manualItem.content
         if (isCommentSeedingCampaign) {
-          const mediaItems = (manualItem.mediaItems || []).slice(0, 1)
+          const mediaItems = manualItem.mediaItems || []
           return {
             ...manualItem,
             content,
-            mediaOption: mediaItems.length > 0 && manualItem.mediaOption !== 'none' ? 'all' : 'none',
+            mediaOption: mediaItems.length > 0 && manualItem.mediaOption !== 'none'
+              ? manualItem.mediaOption || 'none'
+              : 'none',
             mediaItems,
             randomMediaCount: 1
           }
@@ -5867,10 +5910,12 @@ export default function CampaignFormModal({
             ? { ...itemWithLegacyEmailSubject, content: sanitizeFormattedContent(itemWithLegacyEmailSubject.content) }
             : itemWithLegacyEmailSubject
           if (isCommentSeedingCampaign) {
-            const mediaItems = (normalizedItem.mediaItems || []).slice(0, 1)
+            const mediaItems = normalizedItem.mediaItems || []
             return {
               ...normalizedItem,
-              mediaOption: mediaItems.length > 0 && normalizedItem.mediaOption !== 'none' ? 'all' as const : 'none' as const,
+              mediaOption: mediaItems.length > 0 && normalizedItem.mediaOption !== 'none'
+                ? normalizedItem.mediaOption || 'none'
+                : 'none',
               mediaItems,
               randomMediaCount: 1
             }
@@ -5949,8 +5994,10 @@ export default function CampaignFormModal({
             },
             imageOption: (isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
             randomImageCount: formData.randomImageCount,
-            commentImageOption: formData.commentImageOption !== 'none' && formData.commentImages.length > 0 ? 'all' : 'none',
-            commentImages: formData.commentImages.slice(0, 1),
+            commentImageOption: formData.commentImages.length > 0 && formData.commentImageOption !== 'none'
+              ? formData.commentImageOption
+              : 'none',
+            commentImages: formData.commentImages,
             leaveGroupOnPendingApproval: formData.leaveGroupOnPendingApproval,
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
@@ -6356,8 +6403,12 @@ export default function CampaignFormModal({
     if (!validateAdvancedContentMedia()) {
       return
     }
-    if (!isMobileManagedSmsCampaign && !validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) {
-      return
+    const shouldValidateBasicCommentMedia =
+      (isCommentSeedingCampaign && !isAdvancedContentMode) ||
+      (isFacebookGroupPostCampaign && formData.enableComment)
+    if (shouldValidateBasicCommentMedia) {
+      if (!validateCommentImagePool('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
+      if (!validateSelectedImages('Ảnh comment', formData.commentImageOption, formData.commentImages)) return
     }
     if (isNewsfeedInteractionCampaign) {
       const timeMinutes = Math.floor(Number(formData.newsfeedTimeMinutes))
@@ -7903,39 +7954,88 @@ export default function CampaignFormModal({
     })
   }
 
-  const handleMediaPickerConfirm = (items: CampaignMediaSnapshot[]) => {
-    if (!mediaPickerTarget || items.length === 0) return
-    const isAdvancedTarget = typeof mediaPickerTarget === 'object'
-    const isCommentTarget = mediaPickerTarget === 'comment'
+  const usesSingleCommentMediaSelection = (target: MainMediaPickerTarget): boolean => {
+    if (target === 'comment') return formData.commentImageOption === 'all'
+    if (typeof target !== 'object' || !isCommentSeedingCampaign) return false
+    return formData.advancedContentItems.find(item => item.id === target.itemId)?.mediaOption === 'all'
+  }
+
+  const addCampaignMedia = (target: MainMediaPickerTarget, items: CampaignMediaSnapshot[]) => {
+    if (items.length === 0) return
+    const isAdvancedTarget = typeof target === 'object'
+    const isCommentTarget = target === 'comment'
     const acceptedItems = isCommentTarget || !(isZaloMessageCampaign || isEmailCampaign)
       ? items.filter(isCampaignMediaImage)
       : items
     if (acceptedItems.length === 0) return
     setFormData(p => {
       if (isCommentTarget) {
-        return { ...p, commentImages: acceptedItems.slice(0, 1), commentImageOption: 'all' }
+        if (p.commentImageOption === 'all') {
+          return { ...p, commentImages: acceptedItems.slice(0, 1) }
+        }
+        const nextItems = getUniqueCampaignMediaAdditions(p.commentImages, acceptedItems)
+        return { ...p, commentImages: [...p.commentImages, ...nextItems] }
       }
       if (isAdvancedTarget) {
         return {
           ...p,
           advancedContentItems: p.advancedContentItems.map(item => {
-            if (item.id !== mediaPickerTarget.itemId) return item
+            if (item.id !== target.itemId) return item
             const current = item.mediaItems || []
-            const currentKeys = new Set(current.map(getCampaignMediaStableKey))
-            const nextItems = acceptedItems.filter(media => !currentKeys.has(getCampaignMediaStableKey(media)))
+            const nextItems = getUniqueCampaignMediaAdditions(current, acceptedItems)
             const mergedItems = [...current, ...nextItems]
+            const nextMediaItems = isCommentSeedingCampaign && item.mediaOption === 'all'
+              ? acceptedItems.slice(0, 1)
+              : mergedItems
             return {
               ...item,
               mediaOption: item.mediaOption === 'none' ? 'all' : item.mediaOption,
-              mediaItems: isCommentSeedingCampaign ? mergedItems.slice(0, 1) : mergedItems
+              mediaItems: nextMediaItems,
+              randomMediaCount: isCommentSeedingCampaign ? 1 : item.randomMediaCount
             }
           })
         }
       }
-      const currentKeys = new Set(p.images.map(getCampaignMediaStableKey))
-      const nextItems = acceptedItems.filter(item => !currentKeys.has(getCampaignMediaStableKey(item)))
+      const nextItems = getUniqueCampaignMediaAdditions(p.images, acceptedItems)
       return { ...p, images: [...p.images, ...nextItems] }
     })
+  }
+
+  const handleMediaPickerConfirm = (items: CampaignMediaSnapshot[]) => {
+    if (!mediaPickerTarget) return
+    addCampaignMedia(mediaPickerTarget, items)
+  }
+
+  const openLocalMediaPicker = (target: MainMediaPickerTarget) => {
+    if (usesZaloServerAccount) {
+      showAlert('Tài khoản Zalo Server chỉ có thể dùng media đã upload lên cloud.', 'info')
+      return
+    }
+    localMediaPickerTargetRef.current = target
+    const acceptsFiles = target !== 'comment' && (isZaloMessageCampaign || isEmailCampaign)
+    const input = acceptsFiles ? localFileInputRef.current : localImageInputRef.current
+    if (!input) return
+    input.multiple = !usesSingleCommentMediaSelection(target)
+    input.click()
+  }
+
+  const handleLocalMediaChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const rawFiles = Array.from(event.target.files || [])
+    event.target.value = ''
+    const target = localMediaPickerTargetRef.current
+    localMediaPickerTargetRef.current = null
+    if (!target || rawFiles.length === 0) return
+
+    const onlyImages = target === 'comment' || !(isZaloMessageCampaign || isEmailCampaign)
+    const maxSelect = usesSingleCommentMediaSelection(target) ? 1 : undefined
+    const { snapshots, failures } = selectLocalCampaignMedia(rawFiles, { onlyImages, maxSelect })
+    if (failures.length > 0) {
+      showAlert(
+        summarizeLocalCampaignMediaFailures(failures),
+        snapshots.length > 0 ? 'info' : 'error'
+      )
+    }
+    addCampaignMedia(target, snapshots)
   }
 
   const renderNewsfeedInteractionSettings = () => (
@@ -8378,13 +8478,17 @@ export default function CampaignFormModal({
     const isEmailAttachment = isEmailCampaign && !isComment
     const isFileMedia = isZaloMedia || isEmailAttachment
     const option = isComment ? formData.commentImageOption : formData.imageOption
-    const randomCount = formData.randomImageCount
+    const randomCount = isComment ? 1 : formData.randomImageCount
     const images = isComment ? formData.commentImages : formData.images
     const radioName = isComment ? 'commentImageOption' : 'imageOption'
 
     const setOption = (value: ImageOption) => {
+      if (isComment && value === 'all' && images.length > 1) {
+        showAlert('Chế độ "Gửi ảnh đã chọn" chỉ dùng tối đa 1 ảnh cho mỗi comment. Vui lòng xoá bớt còn 1 ảnh hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        return
+      }
       setFormData(p => isComment
-        ? ({ ...p, commentImageOption: value === 'none' ? 'none' : 'all' })
+        ? ({ ...p, commentImageOption: value })
         : ({ ...p, imageOption: value })
       )
     }
@@ -8406,7 +8510,7 @@ export default function CampaignFormModal({
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>{title}</div>
         {isComment && (
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: -8, marginBottom: 16 }}>
-            Lưu ý: Facebook chỉ cho phép comment 1 ảnh.
+            Facebook chỉ cho phép mỗi comment 1 ảnh. Chế độ gửi ảnh đã chọn dùng 1 ảnh; chế độ ngẫu nhiên chọn 1 ảnh từ kho.
           </div>
         )}
         {!isComment && isPostBackgroundActive && (
@@ -8417,15 +8521,29 @@ export default function CampaignFormModal({
 
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           <div style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setMediaPickerTarget(target)}
-              style={{ width: 'fit-content', opacity: option === 'none' ? 0.6 : 1 }}
-              disabled={option === 'none'}
-            >
-              {isEmailAttachment ? 'Chọn tệp đính kèm' : isZaloMedia ? 'Chọn file' : 'Chọn ảnh'}
-            </button>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setMediaPickerTarget(target)}
+                style={{ width: 'fit-content', opacity: option === 'none' ? 0.6 : 1 }}
+                disabled={option === 'none'}
+              >
+                <Image size={14} />
+                <span>Chọn từ Media</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => openLocalMediaPicker(target)}
+                style={{ width: 'fit-content', opacity: option === 'none' ? 0.6 : 1 }}
+                disabled={option === 'none' || usesZaloServerAccount}
+                title={usesZaloServerAccount ? 'Zalo Server chỉ dùng được media đã upload lên cloud' : 'Chọn file trực tiếp từ máy'}
+              >
+                <FolderOpen size={14} />
+                <span>Chọn từ máy tính</span>
+              </button>
+            </div>
 
             <div className="schedule-radio-group" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
               <label className="schedule-radio-label">
@@ -8444,9 +8562,9 @@ export default function CampaignFormModal({
                   checked={option === 'all'}
                   onChange={() => setOption('all')}
                 />
-                <span>{isEmailAttachment ? 'Đính kèm file đã chọn' : isZaloMedia ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
+                <span>{isComment ? 'Gửi ảnh đã chọn' : isEmailAttachment ? 'Đính kèm file đã chọn' : isZaloMedia ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
               </label>
-              {!isComment && <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <label className="schedule-radio-label">
                   <input
                     type="radio"
@@ -8454,24 +8572,25 @@ export default function CampaignFormModal({
                     checked={option === 'random'}
                     onChange={() => setOption('random')}
                   />
-                  <span>{isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
+                  <span>{isComment ? 'Gửi ngẫu nhiên 1 ảnh trong các ảnh đã chọn' : isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
                 </label>
                 <input
                   type="number"
                   min={1}
+                  max={isComment ? 1 : undefined}
                   value={randomCount}
                   onChange={e => setRandomCount(Number(e.target.value))}
                   className="stepper-input"
                   style={{ width: 60, padding: '4px 8px' }}
-                  disabled={option !== 'random'}
+                  disabled={isComment || option !== 'random'}
                 />
-              </div>}
+              </div>
             </div>
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
-              {isEmailAttachment ? 'Tệp đính kèm đã chọn' : isZaloMedia ? 'File đã chọn' : 'Ảnh đã chọn'}
+              {isComment ? 'Kho ảnh đã chọn' : isEmailAttachment ? 'Tệp đính kèm đã chọn' : isZaloMedia ? 'File đã chọn' : 'Ảnh đã chọn'}
             </div>
             <div className="stepper-grid-container" style={{ margin: 0, maxHeight: 300, overflowY: 'auto' }}>
               <table className="campaign-grid">
@@ -12715,11 +12834,22 @@ export default function CampaignFormModal({
   )
 
   const setAdvancedContentItem = (itemId: string, patch: Partial<CampaignAdvancedContentItem>) => {
+    if (isCommentSeedingCampaign && patch.mediaOption === 'all') {
+      const currentItem = formData.advancedContentItems.find(item => item.id === itemId)
+      const mediaItems = patch.mediaItems || currentItem?.mediaItems || []
+      if (mediaItems.length > 1) {
+        showAlert('Chế độ "Gửi ảnh đã chọn" chỉ dùng tối đa 1 ảnh cho mỗi comment. Vui lòng xoá bớt còn 1 ảnh hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        return
+      }
+    }
+    const normalizedPatch = isCommentSeedingCampaign
+      ? { ...patch, randomMediaCount: 1 }
+      : patch
     setFormData(prev => ({
       ...prev,
       advancedContentItems: (() => {
         const nextItems = prev.advancedContentItems.map(item => (
-        item.id === itemId ? { ...item, ...patch } : item
+          item.id === itemId ? { ...item, ...normalizedPatch } : item
         ))
         manualAdvancedContentItemsRef.current = nextItems
         return nextItems
@@ -12735,7 +12865,10 @@ export default function CampaignFormModal({
     setFormData(prev => {
       const nextItems = [
         ...prev.advancedContentItems,
-        createAdvancedContentItem(isEmailCampaign ? { emailSubject: formData.emailSubject } : {})
+        createAdvancedContentItem({
+          ...(isEmailCampaign ? { emailSubject: formData.emailSubject } : {}),
+          ...(isCommentSeedingCampaign ? { randomMediaCount: 1 } : {})
+        })
       ]
       manualAdvancedContentItemsRef.current = nextItems
       return { ...prev, advancedContentItems: nextItems }
@@ -12754,7 +12887,7 @@ export default function CampaignFormModal({
           content: item.content,
           mediaOption: item.mediaOption || 'none',
           mediaItems: [...(item.mediaItems || [])],
-          randomMediaCount: item.randomMediaCount || 3,
+          randomMediaCount: isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3),
           emailSubject: item.emailSubject
         })
       ]
@@ -13078,28 +13211,43 @@ export default function CampaignFormModal({
 
     const mediaItems = item.mediaItems || []
     const mediaOption = item.mediaOption || 'none'
-    const randomMediaCount = item.randomMediaCount || 3
+    const randomMediaCount = isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3)
     const radioName = `advanced-media-${item.id}`
     const isFileMedia = isZaloMessageCampaign || isEmailCampaign
-    const mediaTitle = isEmailCampaign ? 'Tệp đính kèm đã chọn' : isZaloMessageCampaign ? 'File đã chọn' : 'Ảnh đã chọn'
+    const mediaTitle = isCommentSeedingCampaign ? 'Kho ảnh đã chọn' : isEmailCampaign ? 'Tệp đính kèm đã chọn' : isZaloMessageCampaign ? 'File đã chọn' : 'Ảnh đã chọn'
     const mediaDisabled = isPostBackgroundActive
 
     return (
       <div className="campaign-advanced-media-panel">
+        {isCommentSeedingCampaign && (
+          <div className="schedule-hint">Facebook chỉ cho phép mỗi comment 1 ảnh. Chế độ gửi ảnh đã chọn dùng 1 ảnh; chế độ ngẫu nhiên chọn 1 ảnh từ kho.</div>
+        )}
         {mediaDisabled && (
           <div className="schedule-hint">Đăng bài với phông nền không hỗ trợ gửi media.</div>
         )}
         <div className="campaign-advanced-media-layout">
           <div className="campaign-advanced-media-options">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setMediaPickerTarget({ kind: 'advanced', itemId: item.id })}
-              disabled={mediaOption === 'none' || mediaDisabled}
-            >
-              <Image size={14} />
-              <span>{isEmailCampaign ? 'Chọn tệp đính kèm' : isZaloMessageCampaign ? 'Chọn file' : 'Chọn ảnh'}</span>
-            </button>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setMediaPickerTarget({ kind: 'advanced', itemId: item.id })}
+                disabled={mediaOption === 'none' || mediaDisabled}
+              >
+                <Image size={14} />
+                <span>Chọn từ Media</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => openLocalMediaPicker({ kind: 'advanced', itemId: item.id })}
+                disabled={mediaOption === 'none' || mediaDisabled || usesZaloServerAccount}
+                title={usesZaloServerAccount ? 'Zalo Server chỉ dùng được media đã upload lên cloud' : 'Chọn file trực tiếp từ máy'}
+              >
+                <FolderOpen size={14} />
+                <span>Chọn từ máy tính</span>
+              </button>
+            </div>
             <label className="schedule-radio-label">
               <input
                 type="radio"
@@ -13117,7 +13265,7 @@ export default function CampaignFormModal({
                 onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'all' })}
                 disabled={mediaDisabled}
               />
-              <span>{isEmailCampaign ? 'Đính kèm file đã chọn' : isZaloMessageCampaign ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
+              <span>{isCommentSeedingCampaign ? 'Gửi ảnh đã chọn' : isEmailCampaign ? 'Đính kèm file đã chọn' : isZaloMessageCampaign ? 'Gửi file đã chọn' : 'Gửi ảnh đã chọn'}</span>
             </label>
             <div className="campaign-advanced-random-media-row">
               <label className="schedule-radio-label">
@@ -13125,18 +13273,19 @@ export default function CampaignFormModal({
                   type="radio"
                   name={radioName}
                   checked={mediaOption === 'random'}
-                  onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'random' })}
+                  onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'random', randomMediaCount: 1 })}
                   disabled={mediaDisabled}
                 />
-                <span>{isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
+                <span>{isCommentSeedingCampaign ? 'Gửi ngẫu nhiên 1 ảnh trong các ảnh đã chọn' : isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
               </label>
               <input
                 type="number"
                 min={1}
+                max={isCommentSeedingCampaign ? 1 : undefined}
                 value={randomMediaCount}
                 onChange={event => setAdvancedContentItem(item.id, { randomMediaCount: Math.max(1, Number(event.target.value) || 1) })}
                 className="stepper-input"
-                disabled={mediaOption !== 'random' || mediaDisabled}
+                disabled={isCommentSeedingCampaign || mediaOption !== 'random' || mediaDisabled}
               />
             </div>
           </div>
@@ -13635,9 +13784,7 @@ export default function CampaignFormModal({
       ? []
       : contentTemplatePicker.target === 'postBumpContent'
         ? []
-        : targetChannel === 'facebook_comment'
-          ? selectedResolved.imageUrls.slice(0, 1)
-          : selectedResolved.imageUrls
+        : selectedResolved.imageUrls
     return (
       <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: Math.max(3100, (modalZIndex || 3000) + 100) }}>
         <div className="content-template-picker-modal">
@@ -13718,9 +13865,7 @@ export default function CampaignFormModal({
                     const selected = selectedTemplate?.id === template.id
                     const mediaCount = targetChannel === 'sms' || contentTemplatePicker.target === 'postBumpContent'
                       ? 0
-                      : targetChannel === 'facebook_comment'
-                        ? Math.min(resolved.imageUrls.length, 1)
-                        : resolved.imageUrls.length
+                      : resolved.imageUrls.length
                     return <button
                       key={template.id}
                       type="button"
@@ -16050,10 +16195,25 @@ export default function CampaignFormModal({
           onClose={() => setContentPreviewModal(null)}
         />
       )}
+      <input
+        ref={localImageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleLocalMediaChange}
+      />
+      <input
+        ref={localFileInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleLocalMediaChange}
+      />
       {mediaPickerTarget && (
         <MediaLibraryModal
           pickerMode={mediaPickerTarget !== 'comment' && (isZaloMessageCampaign || isEmailCampaign) ? 'file' : 'image'}
-          maxSelect={mediaPickerTarget === 'comment' || (typeof mediaPickerTarget === 'object' && isCommentSeedingCampaign) ? 1 : undefined}
+          maxSelect={usesSingleCommentMediaSelection(mediaPickerTarget) ? 1 : undefined}
           onConfirm={handleMediaPickerConfirm}
           onClose={() => setMediaPickerTarget(null)}
         />

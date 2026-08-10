@@ -7723,15 +7723,23 @@ export class CampaignScheduler {
       campaign.actionId === GROUP_POST_ACTION_ID
     )
 
-    // Comment iterations
-    const enableComment = (extra.enableComment ?? false) && !isActionSkippedByLimit('fb_comment')
+    // Comment seeding/group-post workflows use the shared comment iteration +
+    // media contract. Newsfeed has its own comment flow but still consumes the
+    // legacy `enableComment` variable, so preserve that toggle without letting
+    // dormant comment media participate in its run.
+    const usesCommentIterations = this.campaignUsesCommentIterations(campaign)
+    const usesNewsfeedComment = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+    const enableComment = (usesCommentIterations || usesNewsfeedComment) &&
+      (extra.enableComment ?? false) &&
+      !isActionSkippedByLimit('fb_comment')
+    const enableCommentIterations = usesCommentIterations && enableComment
     const enablePostLike = (extra.enablePostLike ?? false) && !isActionSkippedByLimit('fb_like_post')
     const commentGroupMode = extra.commentGroupMode || 'all'
     const commentType = extra.commentType || 'own'
     const rawCommentCount = Math.floor(Number(extra.commentCount ?? 3))
     const commentCount = Number.isFinite(rawCommentCount) ? Math.max(1, rawCommentCount) : 3
     let commentIndices: number[] = []
-    if (enableComment) {
+    if (enableCommentIterations) {
       if (commentType === 'own') commentIndices = [1]
       else if (commentType === 'all') for (let i = 0; i < commentCount; i++) commentIndices.push(i + 1)
       else for (let i = 0; i < commentCount; i++) commentIndices.push(i + 2)
@@ -7753,15 +7761,20 @@ export class CampaignScheduler {
         : this.isBrowserlessCampaign(campaign)
           ? selectedRawPostContent
           : this.renderSpinContent(selectedRawPostContent)
-    const validPostImages = postWithBackground || useAdvancedCommentContent
+    const skipMainMediaForThisRun = !this.campaignUsesMainMedia(campaign) ||
+      (this.campaignUsesMessageMedia(campaign) && skipMessageByLimit) ||
+      (campaign.actionId === GROUP_POST_ACTION_ID && groupPostApproval?.skipPostByKnownApproval === true)
+    const validPostImages = skipMainMediaForThisRun || postWithBackground || useAdvancedCommentContent
       ? []
       : await this.resolveCampaignMediaForIndex(campaign, detailIndex, postWithBackground, mediaTempPaths)
-    const commentBatchCount = useAdvancedCommentContent && campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID
+    const commentBatchCount = !usesCommentIterations
       ? 1
-      : Math.max(commentIndices.length, Number(extra.postsPerTarget ?? commentCount), 1)
+      : useAdvancedCommentContent && campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID
+        ? 1
+        : Math.max(commentIndices.length, Number(extra.postsPerTarget ?? commentCount), 1)
     let commentVariants: string[]
     let commentImageBatches: string[][]
-    let commentImageOption: 'none' | 'all'
+    let commentImageOption: 'none' | 'all' | 'random'
 
     if (useAdvancedCommentContent) {
       // Keep rotation deterministic across both axes: all slots of target 0,
@@ -7783,18 +7796,35 @@ export class CampaignScheduler {
       commentImageOption = commentImageBatches.some(images => images.length > 0) ? 'all' : 'none'
     } else {
       const storedCommentImageOption = String(extra.commentImageOption || 'none')
-      commentImageOption = storedCommentImageOption === 'none' ? 'none' : 'all'
-      const shouldUseCommentImages = enableComment && commentImageOption === 'all'
-      const validCommentImages = shouldUseCommentImages
-        ? await this.resolveMediaSelection(extra.commentImages || [], 'all', 1, mediaTempPaths)
-        : []
-      const selectedCommentImages = shouldUseCommentImages ? validCommentImages : []
+      commentImageOption = storedCommentImageOption === 'random'
+        ? 'random'
+        : storedCommentImageOption === 'none'
+          ? 'none'
+          : 'all'
+      const shouldUseCommentImages = enableCommentIterations && commentImageOption !== 'none'
+      const availableCommentImages = Array.isArray(extra.commentImages) ? extra.commentImages : []
       commentVariants = Array.from({ length: commentBatchCount }, (_, k) =>
         this.renderSpinContent(this.cycleVariant(rawCommentVariants, k))
       )
-      commentImageBatches = Array.from({ length: commentBatchCount }, () =>
-        [...selectedCommentImages]
-      )
+      if (!shouldUseCommentImages) {
+        commentImageBatches = Array.from({ length: commentBatchCount }, () => [])
+      } else if (commentImageOption === 'random') {
+        commentImageBatches = []
+        for (let slotIndex = 0; slotIndex < commentBatchCount; slotIndex++) {
+          commentImageBatches.push(
+            await this.resolveMediaSelection(availableCommentImages, 'random', 1, mediaTempPaths)
+          )
+        }
+      } else {
+        const firstDeclaredCommentImage = availableCommentImages.find(item => this.hasDeclaredMediaSource(item))
+        const firstCommentImage = await this.resolveMediaSelection(
+          firstDeclaredCommentImage ? [firstDeclaredCommentImage] : [],
+          'all',
+          1,
+          mediaTempPaths
+        )
+        commentImageBatches = Array.from({ length: commentBatchCount }, () => [...firstCommentImage])
+      }
     }
     const commentIterations = commentIndices.map((position, k) => ({
       position,
@@ -7836,7 +7866,7 @@ export class CampaignScheduler {
       // the existing shared-image behavior.
       commentImages: useAdvancedCommentContent ? [] : (commentImageBatches[0] || []),
       commentImageBatches,
-      commentImageOption: enableComment ? commentImageOption : 'none',
+      commentImageOption: enableCommentIterations ? commentImageOption : 'none',
       enablePostLike,
       postsPerTarget: extra.postsPerTarget ?? commentCount,
       isFindPostByKeywords: canUsePostContentConditions ? (extra.isFindPostByKeywords ?? false) : false,
@@ -13643,6 +13673,33 @@ export class CampaignScheduler {
     )
   }
 
+  private campaignUsesCommentIterations(campaign: Campaign): boolean {
+    return campaign.actionId === GROUP_POST_ACTION_ID ||
+      campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID ||
+      campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID
+  }
+
+  private campaignUsesMainMedia(campaign: Campaign): boolean {
+    // SMS uses main text content but never media. All other exclusions and
+    // message toggles are shared with the main-content contract below.
+    return campaign.actionId !== SMS_SEND_ACTION_ID && this.campaignUsesMainContent(campaign)
+  }
+
+  private campaignUsesMessageMedia(campaign: Campaign): boolean {
+    return campaign.actionId === MESSAGE_FRIEND_ACTION_ID ||
+      campaign.actionId === MESSAGE_UID_ACTION_ID ||
+      campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID ||
+      campaign.actionId === EMAIL_SEND_ACTION_ID
+  }
+
   private campaignUsesMainContent(campaign: Campaign): boolean {
     const extra = campaign.extraSettings || {}
     if (
@@ -13652,6 +13709,8 @@ export class CampaignScheduler {
       campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID ||
       campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID ||
       campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID ||
+      campaign.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID ||
+      campaign.actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID ||
       campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID ||
       campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID ||
       campaign.actionId === VOICE_CALL_ACTION_ID
@@ -13763,7 +13822,12 @@ export class CampaignScheduler {
     // item's snapshot; `all` deterministically uses its first snapshot media.
     return item.mediaOption === 'random'
       ? this.resolveMediaSelection(mediaItems, 'random', 1, mediaTempPaths)
-      : this.resolveMediaSelection(mediaItems.slice(0, 1), 'all', 1, mediaTempPaths)
+      : this.resolveMediaSelection(
+          mediaItems.filter(media => this.hasDeclaredMediaSource(media)).slice(0, 1),
+          'all',
+          1,
+          mediaTempPaths
+        )
   }
 
   /**

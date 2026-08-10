@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import MediaPreviewHover from './MediaPreviewHover'
+import { isImageMediaSource } from './mediaImage'
 
 type MediaPickerMode = 'image' | 'file'
 const MEDIA_TABLE_PAGE_SIZE = 100
@@ -38,9 +39,6 @@ const EMPTY_SETTINGS: MediaStorageSettings = {
   keyPrefix: '',
   maxFilesPerStaff: MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF
 }
-
-const isImageMime = (mime?: string | null) => String(mime || '').toLowerCase().startsWith('image/')
-const IMAGE_FILE_EXTENSION_RE = /\.(apng|avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)(?:[?#].*)?$/i
 
 const getMediaName = (item: CampaignMediaInput): string => {
   if (typeof item === 'string') return item.split(/[\\/]/).pop() || item
@@ -73,7 +71,10 @@ const formatBytes = (value?: number | null): string => {
 }
 
 const isUploadImageFile = (file: File): boolean =>
-  isImageMime(file.type) || IMAGE_FILE_EXTENSION_RE.test(file.name)
+  isImageMediaSource(file.type, file.name)
+
+const isMediaFileImage = (file: MediaFile): boolean =>
+  isImageMediaSource(file.mimeType, file.originalName, file.localPath, file.cloudUrl)
 
 const getUploadFileSizeLimit = (file: File): number =>
   isUploadImageFile(file) ? MEDIA_IMAGE_MAX_SIZE_BYTES : MEDIA_FILE_MAX_SIZE_BYTES
@@ -296,7 +297,7 @@ export default function MediaLibraryModal({
     if (!selectedGroupId) return []
     return files
       .filter(file => groupFileIds.has(file.id))
-      .filter(file => !onlyImages || isImageMime(file.mimeType))
+      .filter(file => !onlyImages || isMediaFileImage(file))
       .sort((a, b) => (groupFileOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (groupFileOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.id - b.id)
       .map(fileToSnapshot)
   }, [files, groupFileIds, groupFileOrder, onlyImages, selectedGroupId])
@@ -307,7 +308,7 @@ export default function MediaLibraryModal({
       .map(key => {
         const file = filesByKey.get(key)
         if (!file) return null
-        if (onlyImages && !isImageMime(file.mimeType)) return null
+        if (onlyImages && !isMediaFileImage(file)) return null
         return fileToSnapshot(file)
       })
       .filter((item): item is CampaignMediaSnapshot => !!item)
@@ -511,7 +512,7 @@ export default function MediaLibraryModal({
 
     if (isPicker) {
       setSelectedKeys(current => {
-        const eligibleUploaded = uploaded.filter(file => !onlyImages || isImageMime(file.mimeType))
+        const eligibleUploaded = uploaded.filter(file => !onlyImages || isMediaFileImage(file))
         const next = pickerLimit === 1 && eligibleUploaded.length > 0
           ? new Set<string>()
           : new Set(current)
@@ -664,7 +665,7 @@ export default function MediaLibraryModal({
   useEffect(() => {
     const handleDocumentPaste = (event: ClipboardEvent) => {
       const imageFiles = Array.from(event.clipboardData?.items || [])
-        .filter(item => item.type.startsWith('image/'))
+        .filter(item => isImageMediaSource(item.type))
         .map(item => item.getAsFile())
         .filter((file): file is File => !!file)
       if (imageFiles.length === 0) return
@@ -764,7 +765,7 @@ export default function MediaLibraryModal({
 
   const toggleSelect = (file: MediaFile) => {
     if (!isPicker) return
-    if (onlyImages && !isImageMime(file.mimeType)) return
+    if (onlyImages && !isMediaFileImage(file)) return
     const key = getSnapshotKey(fileToSnapshot(file))
     setSelectedKeys(current => {
       const next = new Set(current)
@@ -1003,7 +1004,7 @@ export default function MediaLibraryModal({
                   sizeBytes={file.sizeBytes}
                 />
                 <span className="media-library-name-cell">
-                  {isImageMime(file.mimeType) ? <Image size={16} /> : <FileText size={16} />}
+                  {isMediaFileImage(file) ? <Image size={16} /> : <FileText size={16} />}
                   <span title={file.originalName}>{file.originalName}</span>
                 </span>
                 <span className="media-group-manage-meta">{formatBytes(file.sizeBytes)}</span>
@@ -1052,7 +1053,7 @@ export default function MediaLibraryModal({
                   sizeBytes={file.sizeBytes}
                 />
                 <span className="media-library-name-cell">
-                  {isImageMime(file.mimeType) ? <Image size={16} /> : <FileText size={16} />}
+                  {isMediaFileImage(file) ? <Image size={16} /> : <FileText size={16} />}
                   <span title={file.originalName}>{file.originalName}</span>
                 </span>
                 <span className="media-group-manage-meta">{formatBytes(file.sizeBytes)}</span>
@@ -1218,7 +1219,7 @@ export default function MediaLibraryModal({
                       ) : pagedFiles.map((file, index) => {
                         const snapshot = fileToSnapshot(file)
                         const key = getSnapshotKey(snapshot)
-                        const selectable = !isPicker || !onlyImages || isImageMime(file.mimeType)
+                        const selectable = !isPicker || !onlyImages || isMediaFileImage(file)
                         const pickerSelected = isPicker && selectable && selectedKeys.has(key)
                         const deleteSelected = canDeleteMedia && selectedDeleteIds.has(file.id)
                         const selected = pickerSelected || deleteSelected
@@ -1277,7 +1278,7 @@ export default function MediaLibraryModal({
                             </td>
                             <td className="media-library-file-name-cell">
                               <div className="media-library-name-cell">
-                                {isImageMime(file.mimeType) ? <Image size={16} /> : <FileText size={16} />}
+                                {isMediaFileImage(file) ? <Image size={16} /> : <FileText size={16} />}
                                 <span>{file.originalName}</span>
                               </div>
                             </td>

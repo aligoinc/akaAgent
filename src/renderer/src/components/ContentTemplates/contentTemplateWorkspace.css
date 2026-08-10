@@ -2356,6 +2356,17 @@ body.theme-light .ctw-workspace {
   border-radius: 9px;
 }
 
+.ctw-preview-comment-media-note {
+  width: fit-content;
+  margin: 8px 13px 0 52px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f0f2f5;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .ctw-channel-badge.zalo_message,
 .ctw-channel-rail-item.zalo_message .ctw-channel-mono,
 .ctw-channel-hero-icon.zalo_message {

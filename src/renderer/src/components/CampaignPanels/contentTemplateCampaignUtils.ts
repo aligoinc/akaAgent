@@ -156,7 +156,6 @@ export const contentTemplateImagesToSnapshots = (
 
 const getChannelMediaLimit = (channelName: ContentTemplateChannelName): number => {
   if (channelName === 'sms') return 0
-  if (channelName === 'facebook_comment') return 1
   return 10
 }
 
@@ -195,9 +194,11 @@ export const buildContentTemplateGroupCandidate = (
       items.push({
         id,
         content,
-        mediaOption: snapshots.length > 0 ? 'all' : 'none',
+        mediaOption: snapshots.length > 1 && channelName === 'facebook_comment'
+          ? 'random'
+          : snapshots.length > 0 ? 'all' : 'none',
         mediaItems: snapshots,
-        randomMediaCount: 3,
+        randomMediaCount: channelName === 'facebook_comment' ? 1 : 3,
         ...(channelName === 'email' ? { emailSubject: resolved.subject || '' } : {}),
         sourceTemplateId: template.id,
         sourceTemplateName: template.name,

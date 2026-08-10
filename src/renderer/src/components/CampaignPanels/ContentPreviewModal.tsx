@@ -8,6 +8,7 @@ import {
   splitFormattedContentVariants,
   transformFormattedContentTextNodes
 } from '../../../../shared/formattedContent'
+import { isImageMediaSource } from '../Media/mediaImage'
 
 export type ContentPreviewKind = 'post' | 'comment' | 'message' | 'email' | 'answer' | 'friendRequest'
 export type ContentPreviewPlatform = 'facebook' | 'zalo' | 'email' | 'generic'
@@ -66,26 +67,13 @@ const SAMPLE_TOKEN_VALUES: Record<string, string> = {
   UID: '100012345678901'
 }
 
-const IMAGE_EXTENSIONS = new Set(['.apng', '.avif', '.gif', '.jpg', '.jpeg', '.png', '.webp'])
-
 const getFileName = (path: string, fallback = 'File') => {
   if (!path) return fallback
   if (path.startsWith('data:image/')) return fallback
   return path.split(/[\\/]/).pop() || fallback
 }
 
-const isLikelyImagePath = (path: string) => {
-  if (path.startsWith('data:image/')) return true
-  const cleanPath = path.split('?')[0].split('#')[0]
-  const dotIndex = cleanPath.lastIndexOf('.')
-  if (dotIndex < 0) return false
-  return IMAGE_EXTENSIONS.has(cleanPath.slice(dotIndex).toLowerCase())
-}
-
 const isRemoteUrl = (path: string) => /^https?:\/\//i.test(path)
-
-const isImageMime = (mimeType?: string | null) =>
-  String(mimeType || '').toLowerCase().startsWith('image/')
 
 const getDataImageMimeType = (path: string) => {
   const match = path.match(/^data:([^;,]+)[;,]/i)
@@ -204,7 +192,8 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
     let disposed = false
     const initialItems: PreviewMediaState[] = selectedMedia.map((item, index) => {
       const label = item.label || getFileName(item.path, `Media ${index + 1}`)
-      const remoteImage = isRemoteUrl(item.path) && (isLikelyImagePath(item.path) || isImageMime(item.mimeType))
+      const isImage = isImageMediaSource(item.mimeType, item.path)
+      const remoteImage = isRemoteUrl(item.path) && isImage
       if (item.path.startsWith('data:image/')) {
         return {
           key: mediaKey(item, index),
@@ -224,7 +213,7 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
           status: 'ready'
         }
       }
-      if (!isLikelyImagePath(item.path)) {
+      if (!isImage) {
         return {
           key: mediaKey(item, index),
           path: item.path,

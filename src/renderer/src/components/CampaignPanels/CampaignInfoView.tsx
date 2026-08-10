@@ -5,6 +5,7 @@ import {
   splitFormattedContentVariants,
   supportsFormattedContent
 } from '../../../../shared/formattedContent'
+import { normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
 
 interface CampaignInfoViewProps {
   campaign: Campaign
@@ -98,6 +99,28 @@ const NEWSFEED_INTERACTION_ACTION_ID = 'facebook_newsfeed_interaction'
 const FACEBOOK_GROUP_INVITE_ACTION_ID = 'facebook_group_invite'
 const POST_ACTIONS_WITH_SOURCE = new Set(['facebook_timeline_post', 'facebook_page_post', 'facebook_group_post'])
 const COMMENT_ACTIONS = new Set(['facebook_group_post', 'facebook_comment_seeding', 'facebook_comment_seeding_post'])
+const COMMENT_SEEDING_ACTIONS = new Set(['facebook_comment_seeding', 'facebook_comment_seeding_post'])
+const ACTIONS_WITHOUT_MAIN_CONTENT = new Set([
+  'facebook_find_data_group',
+  'facebook_find_data_search',
+  'facebook_comment_seeding',
+  'facebook_comment_seeding_post',
+  NEWSFEED_INTERACTION_ACTION_ID,
+  'facebook_join_group',
+  FACEBOOK_GROUP_INVITE_ACTION_ID,
+  'zalo_add_group_member',
+  'zalo_join_group_link',
+  'zalo_cancel_sent_friend_request',
+  'voice_call'
+])
+const MESSAGE_ACTIONS_REQUIRING_ENABLE = new Set([
+  'facebook_message_uid',
+  'zalo_message_phone',
+  'zalo_message_group_member',
+  'zalo_message_group_realtime',
+  'zalo_message_remarketing_customer',
+  'zalo_message_friend_recommendation'
+])
 const MESSAGE_ACTIONS = new Set(['facebook_message_friend', 'facebook_message_uid', 'facebook_page_to_message'])
 const ZALO_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
@@ -195,6 +218,21 @@ const formatImageOption = (extra: CampaignExtraSettings, images?: CampaignMediaI
   if (extra.imageOption === 'all') return 'Dùng tất cả media'
   return 'Không dùng media'
 }
+
+const formatCommentImageOption = (extra: CampaignExtraSettings) => {
+  if (extra.commentImageOption === 'random') return 'Ngẫu nhiên 1 ảnh'
+  if (extra.commentImageOption === 'all') return 'Gửi ảnh đã chọn'
+  return 'Không gửi ảnh'
+}
+
+const getDeclaredMedia = (images?: CampaignMediaInput[]): CampaignMediaInput[] => (
+  Array.isArray(images)
+    ? images.filter(item => {
+        if (typeof item === 'string') return item.trim().length > 0
+        return Boolean(String(item?.localPath || '').trim() || String(item?.cloudUrl || '').trim())
+      })
+    : []
+)
 
 const formatCampaignRefs = (ids: unknown, campaigns: Campaign[]) => {
   const list = getNumberList(ids)
@@ -379,6 +417,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const isFormattedContent = supportsFormattedContent(actionId) && extra.formattedContentEnabled === true
   const isRichCampaignContent = isFormattedContent || (actionId === 'email_send' && extra.emailBodyIsHtml === true)
   const advancedContentItems = Array.isArray(extra.advancedContentItems) ? extra.advancedContentItems : []
+  const normalizedAdvancedMediaItems = normalizeAdvancedContentItems(extra.advancedContentItems)
   const displayCampaignContent = extra.advancedContentEnabled && advancedContentItems.length > 0
     ? advancedContentItems
       .map(item => isRichCampaignContent ? formattedContentToPlainText(item.content) : String(item.content || '').trim())
@@ -406,6 +445,52 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
       ))}`)
       .join('\n')
     : ''
+  const isFacebookGroupPostAction = actionId === 'facebook_group_post'
+  const isCommentSeedingAction = COMMENT_SEEDING_ACTIONS.has(actionId)
+  const actionUsesMainContent = !ACTIONS_WITHOUT_MAIN_CONTENT.has(actionId) && (
+    !MESSAGE_ACTIONS_REQUIRING_ENABLE.has(actionId) || extra.enableMessage === true
+  )
+  const actionUsesMainMedia = actionUsesMainContent && actionId !== 'sms_send'
+  const usesAdvancedMainMedia = extra.advancedContentEnabled === true &&
+    actionUsesMainMedia
+  const usesAdvancedCommentMedia = extra.advancedContentEnabled === true && isCommentSeedingAction
+  const advancedMainMediaItemsSummary = usesAdvancedMainMedia
+    ? normalizedAdvancedMediaItems.length > 0
+      ? normalizedAdvancedMediaItems.map((item, index) => {
+          const mediaItems = item.mediaOption === 'none' ? [] : getDeclaredMedia(item.mediaItems)
+          return `${index + 1}. ${mediaItems.length > 0 ? formatImageSummary(mediaItems) : 'Không có media được gửi'}`
+        }).join('\n')
+      : 'Không có nội dung nâng cao'
+    : ''
+  const advancedMainMediaOptionSummary = usesAdvancedMainMedia
+    ? normalizedAdvancedMediaItems.length > 0
+      ? normalizedAdvancedMediaItems.map((item, index) => {
+          const mediaItems = item.mediaOption === 'none' ? [] : getDeclaredMedia(item.mediaItems)
+          if (mediaItems.length === 0) return `${index + 1}. Không dùng media`
+          if (item.mediaOption === 'random') {
+            const selectedCount = Math.min(item.randomMediaCount || 3, mediaItems.length)
+            return `${index + 1}. Ngẫu nhiên ${selectedCount} trong ${mediaItems.length} media`
+          }
+          return `${index + 1}. Dùng tất cả ${mediaItems.length} media`
+        }).join('\n')
+      : 'Không có nội dung nâng cao'
+    : ''
+  const advancedCommentMediaSummary = usesAdvancedCommentMedia
+    ? normalizedAdvancedMediaItems.length > 0
+      ? normalizedAdvancedMediaItems.map((item, index) => {
+          const mediaItems = getDeclaredMedia(item.mediaItems)
+          if (item.mediaOption === 'random' && mediaItems.length > 0) {
+            return `${index + 1}. Ngẫu nhiên 1 trong ${mediaItems.length} ảnh`
+          }
+          if (item.mediaOption === 'all' && mediaItems.length > 0) {
+            return mediaItems.length > 1
+              ? `${index + 1}. Gửi ảnh đầu tiên (1 trong ${mediaItems.length} ảnh)`
+              : `${index + 1}. Gửi ảnh đã chọn`
+          }
+          return `${index + 1}. Không gửi ảnh`
+        }).join('\n')
+      : 'Không có nội dung nâng cao'
+    : ''
   const scheduleType = campaign.scheduleType || 'daily'
   const linkedSourceCampaigns = findLinkedSourceCampaigns(campaign, campaigns)
   const rawEnabledActionCodes = extra.actionLimits?.enabledActionCodes
@@ -424,13 +509,9 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     || !!extra.postWithBackground
     || !!extra.postAsReels
     || !!extra.pagePostMode
-  const hasCommentSettings = actionId !== NEWSFEED_INTERACTION_ACTION_ID && (
-    COMMENT_ACTIONS.has(actionId)
-    || !!extra.enableComment
-    || !!extra.commentContent
-    || !!extra.commentImages?.length
-    || !!extra.enablePostLike
-  )
+  const hasCommentSettings = COMMENT_ACTIONS.has(actionId)
+  const groupPostCommentEnabled = isFacebookGroupPostAction && extra.enableComment === true
+  const commentSettingsEnabled = isCommentSeedingAction || groupPostCommentEnabled
   const hasMessageSettings = MESSAGE_ACTIONS.has(actionId)
     || actionId === ZALO_FRIEND_RECOMMENDATION_ACTION_ID
     || actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID
@@ -475,17 +556,32 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   ]
 
   const commentRows: InfoRow[] = [
-    { label: 'Kiêm comment', value: onOff(actionId === 'facebook_comment_seeding' || actionId === 'facebook_comment_seeding_post' || extra.enableComment), hidden: actionId !== 'facebook_group_post' && !extra.enableComment },
-    { label: 'Group được comment', value: formatCommentGroupMode(extra.commentGroupMode), hidden: actionId !== 'facebook_group_post' && !extra.commentGroupMode },
-    { label: 'Post được comment', value: formatCommentType(extra.commentType), hidden: !hasCommentSettings },
-    { label: 'Số comment / bài tối đa', value: extra.commentCount ?? '-', hidden: !hasCommentSettings },
-    { label: 'Số bài mỗi mục tiêu', value: extra.postsPerTarget ?? '-', hidden: actionId !== 'facebook_comment_seeding' && extra.postsPerTarget === undefined },
-    { label: 'Like trước khi comment', value: onOff(extra.enablePostLike), hidden: actionId !== 'facebook_comment_seeding' && actionId !== 'facebook_comment_seeding_post' && !extra.enablePostLike },
+    { label: 'Kiêm comment', value: onOff(groupPostCommentEnabled), hidden: !isFacebookGroupPostAction },
+    { label: 'Group được comment', value: formatCommentGroupMode(extra.commentGroupMode), hidden: !groupPostCommentEnabled },
+    { label: 'Post được comment', value: formatCommentType(extra.commentType), hidden: !commentSettingsEnabled },
+    { label: 'Số comment / bài tối đa', value: extra.commentCount ?? '-', hidden: !commentSettingsEnabled },
+    { label: 'Số bài mỗi mục tiêu', value: extra.postsPerTarget ?? '-', hidden: !commentSettingsEnabled || (actionId !== 'facebook_comment_seeding' && extra.postsPerTarget === undefined) },
+    { label: 'Like trước khi comment', value: onOff(extra.enablePostLike), hidden: !isCommentSeedingAction },
     { label: 'Lọc từ khóa bài viết', value: extra.isFindPostByKeywords ? textOrDash(extra.postKeywords) : 'Tắt', fullWidth: true, hidden: actionId !== 'facebook_comment_seeding' || (!extra.isFindPostByKeywords && !extra.postKeywords) },
     { label: 'Lọc AI bài viết', value: extra.isFindPostByContentAI ? textOrDash(extra.postContentAI) : 'Tắt', fullWidth: true, hidden: actionId !== 'facebook_comment_seeding' || (!extra.isFindPostByContentAI && !extra.postContentAI) },
-    { label: 'Nội dung comment', value: textOrDash(extra.commentContent), fullWidth: true, hidden: !hasCommentSettings && !extra.commentContent },
-    { label: 'Ảnh comment', value: formatImageSummary(extra.commentImages), hidden: !hasCommentSettings && !extra.commentImages?.length },
-    { label: 'AI viết lại comment', value: onOff(extra.rewriteCommentContentEachRun), hidden: !hasCommentSettings && !extra.rewriteCommentContentEachRun }
+    {
+      label: 'Nội dung comment',
+      value: usesAdvancedCommentMedia ? 'Theo nội dung nâng cao ở phần Nội dung & nguồn' : textOrDash(extra.commentContent),
+      fullWidth: true,
+      hidden: !commentSettingsEnabled
+    },
+    {
+      label: usesAdvancedCommentMedia ? 'Ảnh comment theo nội dung nâng cao' : 'Cách gửi ảnh comment',
+      value: usesAdvancedCommentMedia ? advancedCommentMediaSummary : formatCommentImageOption(extra),
+      fullWidth: usesAdvancedCommentMedia,
+      hidden: !commentSettingsEnabled
+    },
+    {
+      label: 'Ảnh comment',
+      value: formatImageSummary(extra.commentImages),
+      hidden: usesAdvancedCommentMedia || !commentSettingsEnabled
+    },
+    { label: 'AI viết lại comment', value: onOff(extra.rewriteCommentContentEachRun), hidden: !commentSettingsEnabled }
   ]
 
   const groupPostRows: InfoRow[] = [
@@ -736,8 +832,18 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
             hidden: !extra.advancedContentEnabled || actionId !== 'email_send'
           },
           { label: 'Nội dung chính', value: textOrDash(displayCampaignContent), fullWidth: true },
-          { label: 'Ảnh bài đăng', value: formatImageSummary(campaign.images) },
-          { label: 'Cách dùng ảnh', value: formatImageOption(extra, campaign.images) },
+          {
+            label: usesAdvancedMainMedia ? 'Media theo nội dung nâng cao' : 'Ảnh bài đăng',
+            value: usesAdvancedMainMedia ? advancedMainMediaItemsSummary : formatImageSummary(campaign.images),
+            fullWidth: usesAdvancedMainMedia,
+            hidden: !actionUsesMainMedia
+          },
+          {
+            label: usesAdvancedMainMedia ? 'Cách dùng media theo nội dung' : 'Cách dùng ảnh',
+            value: usesAdvancedMainMedia ? advancedMainMediaOptionSummary : formatImageOption(extra, campaign.images),
+            fullWidth: usesAdvancedMainMedia,
+            hidden: !actionUsesMainMedia
+          },
           { label: 'AI viết lại nội dung', value: onOff(extra.rewriteContentEachRun), hidden: isFormattedContent || (actionId === 'email_send' && extra.emailBodyIsHtml === true) },
           ...emailRows.map(row => ({ ...row, hidden: row.hidden || !hasEmailSettings })),
           ...sourceRows.map(row => ({ ...row, hidden: row.hidden || !hasSourceSettings }))
