@@ -5,7 +5,7 @@ import { extname, join } from 'path'
 import { tmpdir } from 'os'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import { renderContentSpin, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
@@ -105,11 +105,7 @@ interface SchedulerStartOptions {
 
 export type CampaignSchedulerRuntimeTarget = 'desktop' | 'server'
 
-export interface CampaignSchedulerLogEntry {
-  timestamp: string
-  message: string
-  action?: CampaignLogAction
-}
+export interface CampaignSchedulerLogEntry extends CampaignLogEntry {}
 
 export type CampaignSchedulerLogSink = (entry: CampaignSchedulerLogEntry) => void | Promise<void>
 
@@ -11196,10 +11192,15 @@ export class CampaignScheduler {
     }
   }
 
-  private sendLog(message: string, action?: CampaignLogAction): void {
+  private sendLog(
+    message: string,
+    action?: CampaignLogAction,
+    context: Pick<CampaignLogEntry, 'accountId' | 'accountName' | 'campaignId' | 'campaignName'> = {}
+  ): void {
     const entry: CampaignSchedulerLogEntry = {
       timestamp: new Date().toISOString(),
       message,
+      ...context,
       ...(action ? { action } : {})
     }
 
@@ -11225,9 +11226,18 @@ export class CampaignScheduler {
     options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } = {}
   ): Promise<void> {
     let realtimeMessage = options.realtimeMessage ?? message
+    let realtimeContext: Pick<CampaignLogEntry, 'accountId' | 'accountName' | 'campaignId' | 'campaignName'> = {
+      campaignId
+    }
     try {
       const updated = await this.supabase.appendCampaignLog(campaignId, message)
       this.broadcastCampaignUpdate(updated)
+      realtimeContext = {
+        accountId: updated.accountId,
+        accountName: updated.accountName,
+        campaignId: updated.id,
+        campaignName: updated.name
+      }
       realtimeMessage = formatCampaignLogMessage(realtimeMessage, {
         accountName: updated.accountName,
         campaignName: updated.name
@@ -11236,7 +11246,7 @@ export class CampaignScheduler {
       console.error('Failed append campaign progress log:', err)
     }
     if (options.emitRealtime !== false) {
-      this.sendLog(realtimeMessage, options.realtimeAction)
+      this.sendLog(realtimeMessage, options.realtimeAction, realtimeContext)
     }
   }
 

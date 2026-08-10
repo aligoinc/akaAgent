@@ -1,0 +1,4 @@
+interface:
+  display_name: "Safe Supabase RPC Migration"
+  short_description: "Guard DB-first RPC function replacements"
+  default_prompt: "Use $safe-supabase-rpc-migration to update this Supabase RPC without overwriting live patches."
