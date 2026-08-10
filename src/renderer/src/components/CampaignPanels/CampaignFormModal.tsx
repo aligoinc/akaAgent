@@ -73,7 +73,8 @@ import {
   canUseCampaignAction,
   clampDailyLimitToEntitlement,
   getAccountActionDailySendLimit,
-  getCampaignActionDailySendLimit
+  getCampaignActionDailySendLimit,
+  normalizeEntitlements
 } from '../../utils/entitlements'
 import { getAccountPlatformLabel, isZaloServerAccount, isZaloWebAccount } from '../../utils/accountLabels'
 import { countSmsContentVariants, MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../../../shared/smsContent'
@@ -1718,7 +1719,7 @@ export default function CampaignFormModal({
   const canUseZaloQrAccount = authUser?.zaloAccountCapabilities?.qr === true
   const canUseEmailFeature = !!entitlements?.email
   const canUseInternalSmsFeature = !!entitlements?.sms
-  const canUseFanpageFeature = !!entitlements?.facebookFanpage
+  const canUseFanpageFeature = normalizeEntitlements(entitlements).facebookFanpage
   const canUseZaloFeature = canUseCampaignAction({ id: ZALO_MESSAGE_PHONE_ACTION_ID, flatformType: 'zalo' }, entitlements)
   const zaloEntitlementNote = 'Bạn chưa đăng ký gói Zalo, không thể sử dụng tính năng này'
 
@@ -7723,7 +7724,7 @@ export default function CampaignFormModal({
   const openPageInboxPhoneSource = () => {
     setIsOtherDataSourceOpen(false)
     if (!canUseFanpageFeature) {
-      showAlert('Bạn chưa đăng ký gói Fanpage, không thể sử dụng tính năng này', 'error')
+      showAlert('Bạn chưa đăng ký gói Facebook, không thể sử dụng tính năng này', 'error')
       return
     }
     setDataScanPicker({
