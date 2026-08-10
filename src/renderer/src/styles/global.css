@@ -7539,6 +7539,40 @@ button.btn-icon.campaign-control-button.assistant {
   color: var(--accent-primary);
 }
 
+.log-panel-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.log-panel-filter select {
+  min-width: 0;
+  width: 100%;
+  height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 12px;
+}
+
+.log-panel-filter select:hover {
+  border-color: var(--border-hover);
+}
+
+.log-panel-filter select:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+}
+
 .log-panel-content {
   flex: 1;
   overflow-y: auto;

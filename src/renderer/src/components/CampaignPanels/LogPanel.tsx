@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Sparkles, Trash2, X } from 'lucide-react'
+import { Activity, ListFilter, Sparkles, Trash2, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import CampaignAssistantTab from './CampaignAssistantTab'
 
@@ -10,8 +10,9 @@ interface LogPanelProps {
 type LogPanelTab = 'progress' | 'assistant'
 
 export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
-  const { logs, addLog, clearLogs, campaigns } = useCampaignStore()
+  const { logs, addLog, clearLogs, campaigns, accounts } = useCampaignStore()
   const [activeTab, setActiveTab] = useState<LogPanelTab>('progress')
+  const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const [assistantCampaignId, setAssistantCampaignId] = useState<number | null>(null)
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
   const [screenshotPreviewError, setScreenshotPreviewError] = useState<string | null>(null)
@@ -25,13 +26,6 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
     return () => unsubscribe()
   }, [addLog])
 
-  // Auto-scroll to bottom on new logs
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [logs])
-
   useEffect(() => {
     if (!assistantOpenRequest?.campaignId) return
     setAssistantCampaignId(assistantOpenRequest.campaignId)
@@ -44,6 +38,38 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
       : null,
     [assistantCampaignId, campaigns]
   )
+
+  const accountOptions = useMemo(() => {
+    const namesById = new Map<number, string>()
+    for (const account of accounts) {
+      namesById.set(account.id, account.name)
+    }
+    for (const log of logs) {
+      if (log.accountId && !namesById.has(log.accountId)) {
+        namesById.set(log.accountId, log.accountName || `Tài khoản #${log.accountId}`)
+      }
+    }
+    return Array.from(namesById, ([id, name]) => ({ id, name }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'vi'))
+  }, [accounts, logs])
+
+  const filteredLogs = useMemo(() => {
+    if (filterAccountId === null) return logs
+    return logs.filter(log => log.accountId === filterAccountId)
+  }, [filterAccountId, logs])
+
+  useEffect(() => {
+    if (filterAccountId !== null && !accountOptions.some(account => account.id === filterAccountId)) {
+      setFilterAccountId(null)
+    }
+  }, [accountOptions, filterAccountId])
+
+  // Auto-scroll to bottom on new logs or when changing the account filter.
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [filteredLogs])
 
   const handlePreviewScreenshot = async (filePath: string, title?: string) => {
     if (!filePath || !window.electronAPI?.readBlockScreenshotDataUrl) return
@@ -159,15 +185,36 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
         </button>
       </div>
 
+      {activeTab === 'progress' && (
+        <div className="log-panel-filter">
+          <ListFilter size={14} aria-hidden="true" />
+          <select
+            value={filterAccountId ?? ''}
+            onChange={event => setFilterAccountId(event.target.value ? Number(event.target.value) : null)}
+            aria-label="Lọc tiến trình theo tài khoản"
+            title="Lọc tiến trình theo tài khoản"
+          >
+            <option value="">Tất cả tài khoản</option>
+            {accountOptions.map(account => (
+              <option key={account.id} value={account.id}>{account.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {activeTab === 'progress' ? (
         <div className="log-panel-content" ref={scrollRef}>
           {screenshotPreviewError && (
             <div className="log-panel-error">{screenshotPreviewError}</div>
           )}
-          {logs.length === 0 ? (
-            <div className="empty-state"><div className="empty-state-text">Chưa có log nào</div></div>
+          {filteredLogs.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-text">
+                {logs.length === 0 ? 'Chưa có log nào' : 'Không có log của tài khoản này'}
+              </div>
+            </div>
           ) : (
-            logs.map((log, i) => {
+            filteredLogs.map((log, i) => {
               const action = log.action?.type === 'block_screenshot_preview' && log.action.filePath
                 ? log.action
                 : null

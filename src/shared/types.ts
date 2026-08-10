@@ -1162,6 +1162,10 @@ export interface CampaignLogEntry {
   timestamp: string
   message: string
   source?: 'local' | 'server'
+  accountId?: number
+  accountName?: string
+  campaignId?: number
+  campaignName?: string
   action?: CampaignLogAction
 }
 
