@@ -55,6 +55,7 @@ import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 interface CampaignPanelProps {
   isActive: boolean
   filterAccountId?: number | null
+  accountInfoOpenRequest?: { accountId: number; requestId: number } | null
   onClearFilter?: () => void
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
@@ -2467,7 +2468,7 @@ function AddDataToCurrentCampaignModal({
   )
 }
 
-export default function CampaignPanel({ isActive, filterAccountId, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
+export default function CampaignPanel({ isActive, filterAccountId, accountInfoOpenRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
     campaignInputData, campaignInputDataTotal, loadingCampaignInputData,
@@ -2502,6 +2503,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
   const [detailTab, setDetailTab] = useState<DetailTab>('info')
+  const [accountInfoAccountId, setAccountInfoAccountId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [selectedInputDataIds, setSelectedInputDataIds] = useState<Set<number>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
@@ -2609,6 +2611,13 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const campaignActionMenuAnchorRef = useRef<CampaignActionMenuAnchorRect | null>(null)
   const campaignActionMenuRef = useRef<HTMLDivElement | null>(null)
   const initialCampaignLoadSettledRef = useRef(false)
+
+  useEffect(() => {
+    if (!accountInfoOpenRequest) return
+    setAccountInfoAccountId(accountInfoOpenRequest.accountId)
+    setDetailTab('accountInfo')
+    setDetailDockOpen(true)
+  }, [accountInfoOpenRequest?.accountId, accountInfoOpenRequest?.requestId])
 
   useEffect(() => {
     loadCampaignActions()
@@ -3193,6 +3202,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
   const handleRowClick = (campaign: Campaign) => {
     const nextSelectedId = selectedCampaignId === campaign.id ? null : campaign.id
+    setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(nextSelectedId)
     if (nextSelectedId) setDetailTab('info')
     if (!detailDockOpen) setDetailDockOpen(true)
@@ -3756,6 +3766,9 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
   const selectedCampaignAccount = selectedCampaign?.accountId
     ? accounts.find(account => account.id === selectedCampaign.accountId) || null
+    : null
+  const accountInfoAccount = accountInfoAccountId !== null
+    ? accounts.find(account => account.id === accountInfoAccountId) || null
     : null
   const selectedCampaignAction = selectedCampaign
     ? campaignActions.find(action => action.id === selectedCampaign.actionId)
@@ -4879,11 +4892,13 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
   }
 
   const handleAskAssistant = (campaign: Campaign) => {
+    setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(campaign.id)
     onAskAssistant?.(campaign.id)
   }
 
   const openCampaignDetailTab = (campaign: Campaign, tab: DetailTab) => {
+    setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(campaign.id)
     setDetailTab(tab)
     setDetailDockOpen(true)
@@ -4910,6 +4925,7 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
     }
 
     setOpenCampaignActionMenuId(null)
+    setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(campaign.id)
     if (isZaloWebAccount(account)) {
       if (!onNavigateToBrowser) {
@@ -6169,7 +6185,13 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
           )}
           <div className="detail-dock-header" onClick={() => setDetailDockOpen(!detailDockOpen)}>
             <span className="detail-dock-title">
-              {selectedCampaign ? <>Chi tiết: <strong>{selectedCampaign.name || ''}</strong></> : 'Chi tiết chiến dịch'}
+              {detailTab === 'accountInfo'
+                ? accountInfoAccount
+                  ? <>Tài khoản: <strong>{accountInfoAccount.name}</strong></>
+                  : 'Tài khoản'
+                : selectedCampaign
+                  ? <>Chi tiết: <strong>{selectedCampaign.name || ''}</strong></>
+                  : 'Chi tiết chiến dịch'}
             </span>
             <button className="btn-icon">
               {detailDockOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -6178,18 +6200,28 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
 
           {detailDockOpen && (
             <div className="detail-dock-body">
-              {!selectedCampaign ? (
+              {!selectedCampaign && detailTab !== 'accountInfo' ? (
                 <div className="campaign-detail-empty-state">Chọn một chiến dịch để xem chi tiết.</div>
               ) : (
                 <>
               {/* Tabs */}
               <div className="detail-dock-tabs">
+                {selectedCampaign && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'info' ? 'active' : ''}`}
+                    onClick={() => setDetailTab('info')}
+                  >
+                    Thông tin
+                  </button>
+                )}
                 <button
-                  className={`detail-dock-tab ${detailTab === 'info' ? 'active' : ''}`}
-                  onClick={() => setDetailTab('info')}
+                  className={`detail-dock-tab ${detailTab === 'accountInfo' ? 'active' : ''}`}
+                  onClick={() => setDetailTab('accountInfo')}
                 >
-                  Thông tin
+                  Tài khoản
                 </button>
+                {selectedCampaign && (
+                  <>
                 <button
                   className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
                   onClick={() => setDetailTab('data')}
@@ -6283,12 +6315,8 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                     Log tìm bài ({postSearchLogRows.length})
                   </button>
                 )}
-                <button
-                  className={`detail-dock-tab ${detailTab === 'accountInfo' ? 'active' : ''}`}
-                  onClick={() => setDetailTab('accountInfo')}
-                >
-                  Thông tin tài khoản
-                </button>
+                  </>
+                )}
               </div>
 
               <div className={`detail-dock-tab-content ${detailTab === 'findDataLog' || detailTab === 'postSearchLog' ? 'find-data-log-tab-content' : ''}`}>
@@ -7328,13 +7356,13 @@ export default function CampaignPanel({ isActive, filterAccountId, onClearFilter
                 )
               )}
 
-              {/* Tab: Account info for the selected campaign */}
+              {/* Tab: Account info from the latest account or campaign focus */}
               {detailTab === 'accountInfo' && (
-                selectedCampaignAccount ? (
-                  <AccountInfoView account={selectedCampaignAccount} mode="dock" />
+                accountInfoAccount ? (
+                  <AccountInfoView key={accountInfoAccount.id} account={accountInfoAccount} mode="dock" />
                 ) : (
                   <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>
-                    Không tìm thấy tài khoản của chiến dịch này
+                    Không tìm thấy tài khoản
                   </div>
                 )
               )}
