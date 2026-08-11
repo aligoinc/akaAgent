@@ -24,6 +24,7 @@ import { campaignHasLocalOnlyMedia } from './localCampaignMedia'
 interface AccountPanelProps {
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onFilterCampaigns?: (accountId: number | null) => void
+  onOpenAccountInfo: (accountId: number) => void
 }
 
 type AccountVisualState = 'ready' | 'running' | 'blocked' | 'restricted' | 'disabled' | 'default'
@@ -134,7 +135,7 @@ const mapServerQrOperation = (operation: ZaloServerOperationSnapshot): ZaloLogin
   }
 }
 
-export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }: AccountPanelProps) {
+export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, onOpenAccountInfo }: AccountPanelProps) {
   const {
     accounts,
     campaigns,
@@ -1270,14 +1271,14 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns }:
                 className={`account-card ${visualClass} ${!account.isActive ? 'disabled' : ''}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => handleViewInfo(account)}
+                onClick={() => onOpenAccountInfo(account.id)}
                 onKeyDown={event => {
                   if (event.key !== 'Enter' && event.key !== ' ') return
                   event.preventDefault()
-                  handleViewInfo(account)
+                  onOpenAccountInfo(account.id)
                 }}
                 onContextMenu={(e) => handleContextMenu(e, account)}
-                title="Click để xem thông tin; nhấn chuột phải để mở menu"
+                title="Click để mở tab Tài khoản; nhấn chuột phải để mở menu"
               >
                 <div className="account-card-info">
                   <div className="account-card-name">

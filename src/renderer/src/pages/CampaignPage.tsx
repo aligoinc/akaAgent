@@ -15,6 +15,7 @@ interface CampaignPageProps {
 export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
+  const [accountInfoOpenRequest, setAccountInfoOpenRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const [assistantOpenRequest, setAssistantOpenRequest] = useState<{ campaignId: number; requestedAt: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef<{ index: number; startX: number; startWidths: number[] } | null>(null)
@@ -58,6 +59,13 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
     setFilterAccountId(accountId)
   }, [])
 
+  const handleOpenAccountInfo = useCallback((accountId: number) => {
+    setAccountInfoOpenRequest(previous => ({
+      accountId,
+      requestId: (previous?.requestId ?? 0) + 1
+    }))
+  }, [])
+
   const handleAskAssistant = useCallback((campaignId: number) => {
     setAssistantOpenRequest({ campaignId, requestedAt: Date.now() })
   }, [])
@@ -69,6 +77,7 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
         <AccountPanel
           onNavigateToBrowser={onNavigateToBrowser}
           onFilterCampaigns={handleFilterCampaigns}
+          onOpenAccountInfo={handleOpenAccountInfo}
         />
       </div>
 
@@ -88,6 +97,7 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
           onOpenGeneralSettings={onOpenGeneralSettings}
           onOpenContentTemplates={onOpenContentTemplates}
           onAskAssistant={handleAskAssistant}
+          accountInfoOpenRequest={accountInfoOpenRequest}
         />
       </div>
 
