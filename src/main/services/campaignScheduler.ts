@@ -2449,9 +2449,9 @@ export class CampaignScheduler {
 
   /**
    * Read the current action-limit state without creating/resetting/locking the
-   * quota row. A first-time block is claimed once below so its note can be
-   * persisted safely; subsequent ticks skip the claim while the DB values are
-   * still blocked.
+   * quota row. A first-time block persists its note with a pending/unclaimed
+   * CAS before any runtime claim; subsequent ticks skip all writes while the
+   * DB values are still blocked.
    */
   private async getCampaignPreclaimLimitStatus(
     account: AutoAccount,
@@ -2497,7 +2497,11 @@ export class CampaignScheduler {
       const preclaimLimitStatus = preclaimAction
         ? await this.getCampaignPreclaimLimitStatus(account, campaign, preclaimAction)
         : null
-      if (preclaimLimitStatus && this.isLimitNoteText(campaign.note)) {
+      if (preclaimLimitStatus) {
+        const preclaimLimitNote = await this.buildLimitPreflightNote(preclaimLimitStatus)
+        if (String(campaign.note || '').trim() === preclaimLimitNote.trim()) return
+
+        await this.updateUnclaimedCampaignPreflightNote(campaign, preclaimLimitNote)
         return
       }
 
@@ -2590,15 +2594,6 @@ export class CampaignScheduler {
 
       const initialBoundaryCheck = this.checkCampaignRunBoundaryWithClock(runBoundary, claimedClock)
       if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign, initialBoundaryCheck)) {
-        return
-      }
-
-      if (preclaimLimitStatus) {
-        await this.releaseClaimedCampaignPreflight(
-          account.id,
-          campaign,
-          await this.buildLimitPreflightNote(preclaimLimitStatus)
-        )
         return
       }
 
@@ -7291,6 +7286,23 @@ export class CampaignScheduler {
       if (currentCampaign?.status === 'chờ xử lý' && currentCampaign.note === message) return
     }
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+  }
+
+  private async updateUnclaimedCampaignPreflightNote(campaign: Campaign, note: string): Promise<void> {
+    const updated = await this.supabase.updatePendingUnclaimedCampaignNote(
+      campaign.id,
+      campaign.updatedAt || '',
+      note || 'Không đủ điều kiện chạy'
+    )
+    if (updated) {
+      this.broadcastCampaignUpdate(updated)
+      return
+    }
+
+    // Losing the CAS means a pause, edit or runtime claim won the race. Publish
+    // that authoritative row and never overwrite or release the newer owner.
+    const currentCampaign = await this.supabase.getCampaign(campaign.id)
+    if (currentCampaign) this.broadcastCampaignUpdate(currentCampaign)
   }
 
   private async releaseClaimedCampaignPreflight(

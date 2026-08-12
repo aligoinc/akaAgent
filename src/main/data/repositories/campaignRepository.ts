@@ -2140,6 +2140,50 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
 }
 
 /**
+ * Persist a preclaim note only while the scheduler snapshot is still current
+ * and no runtime owns the campaign. The updated_at equality is the compare
+ * part of the CAS: a concurrent edit, pause or claim makes this update affect
+ * zero rows instead of overwriting the newer state.
+ */
+export async function updatePendingUnclaimedCampaignNote(
+  id: number,
+  expectedUpdatedAt: string,
+  note: string
+): Promise<Campaign | null> {
+  const normalizedId = Math.floor(Number(id))
+  if (!Number.isSafeInteger(normalizedId) || normalizedId <= 0) {
+    throw new Error('Campaign ID must be a positive integer for preclaim note CAS')
+  }
+
+  const normalizedExpectedUpdatedAt = String(expectedUpdatedAt || '').trim()
+  const expectedUpdatedAtMs = Date.parse(normalizedExpectedUpdatedAt)
+  if (!normalizedExpectedUpdatedAt || !Number.isFinite(expectedUpdatedAtMs)) {
+    throw new Error('Campaign updated_at is required for preclaim note CAS')
+  }
+
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .update({
+      note: note || 'Không đủ điều kiện chạy',
+      // Advance from the stored DB value instead of trusting the app clock.
+      updated_at: new Date(expectedUpdatedAtMs + 1).toISOString()
+    })
+    .eq('id', normalizedId)
+    .eq('staff_id', u.staffId)
+    .eq('status', 'chờ xử lý')
+    .eq('updated_at', normalizedExpectedUpdatedAt)
+    .is('runtime_claim_token', null)
+    .is('runtime_unit_token', null)
+    .eq('is_delete', false)
+    .select(CAMPAIGN_SELECT)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to update pending campaign note with CAS: ${error.message}`)
+  return data ? mapCampaignFromDB(data) : null
+}
+
+/**
  * Server runtime writes after an atomic claim must never overwrite a newer
  * pause/resume written by a client. A missing update is a normal CAS conflict;
  * return the current row so realtime can publish the winning client state.

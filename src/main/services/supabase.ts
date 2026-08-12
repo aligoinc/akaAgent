@@ -197,6 +197,9 @@ export class SupabaseService {
   ) {
     return campaignRepo.finalizeCampaign(campaignId, note, expectedStatus)
   }
+  updatePendingUnclaimedCampaignNote(id: number, expectedUpdatedAt: string, note: string) {
+    return campaignRepo.updatePendingUnclaimedCampaignNote(id, expectedUpdatedAt, note)
+  }
   advanceZaloServerMultiDailySlot(campaignId: number, accountId: number, nextSchedule: string) {
     return campaignRepo.advanceZaloServerMultiDailySlot(campaignId, accountId, nextSchedule)
   }
