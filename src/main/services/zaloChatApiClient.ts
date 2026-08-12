@@ -23,6 +23,18 @@ interface DesktopSessionResponse {
   organizationId: string
 }
 
+export interface LocalRuntimeDesktopSession extends DesktopSessionResponse {
+  webSocketUrl: string
+}
+
+export interface LocalRuntimeBindingRegistration {
+  autoAccountId: string
+  chatZaloAccountId: string
+  chatZaloAccountOrganizationId: string
+  runtimeGeneration: string
+  zaloId: string
+}
+
 type QrOperationStatus =
   | 'requested'
   | 'qr_generated'
@@ -68,6 +80,21 @@ interface ActiveQrOperation {
   timer: ReturnType<typeof setTimeout> | null
 }
 
+export type ZaloChatBindingConflictCode =
+  | 'zalo_already_linked'
+  | 'account_already_has_another_zalo'
+
+export class ZaloChatApiRequestError extends Error {
+  public constructor(
+    message: string,
+    public readonly statusCode: number,
+    public readonly code: string | null
+  ) {
+    super(message)
+    this.name = 'ZaloChatApiRequestError'
+  }
+}
+
 function isTerminal(status: QrOperationStatus): boolean {
   return ['qr_expired', 'declined', 'succeeded', 'failed', 'cancelled'].includes(status)
 }
@@ -103,9 +130,17 @@ async function responseError(response: Response): Promise<Error> {
       : typeof body.error === 'string'
         ? body.error
         : `Chat API trả về HTTP ${response.status}`
-    return new Error(message)
+    return new ZaloChatApiRequestError(
+      message,
+      response.status,
+      typeof body.error === 'string' ? body.error : null
+    )
   } catch {
-    return new Error(`Chat API trả về HTTP ${response.status}`)
+    return new ZaloChatApiRequestError(
+      `Chat API trả về HTTP ${response.status}`,
+      response.status,
+      null
+    )
   }
 }
 
@@ -115,6 +150,8 @@ export class ZaloChatApiClient {
   private credentials: LoginCredentials | null = null
   private token: string | null = null
   private tokenExpiresAt = 0
+  private localRuntimeToken: string | null = null
+  private localRuntimeTokenExpiresAt = 0
   private generation = 0
   private activeQrByAccount = new Map<number, ActiveQrOperation>()
 
@@ -130,6 +167,12 @@ export class ZaloChatApiClient {
       this.user.zaloAccountCapabilities?.server === true
   }
 
+  public canUseLocalRuntime(): boolean {
+    return this.user?.organizationId === ZALO_CHAT_API_ORGANIZATION_ID &&
+      this.user.entitlements.zalo === true &&
+      this.user.zaloAccountCapabilities?.qr === true
+  }
+
   public start(user: AuthUser, username: string, password: string): void {
     const credentials = {
       username: String(username || '').trim(),
@@ -137,7 +180,8 @@ export class ZaloChatApiClient {
     }
     const enabled = user.organizationId === ZALO_CHAT_API_ORGANIZATION_ID &&
       user.entitlements.zalo === true &&
-      user.zaloAccountCapabilities?.server === true
+      (user.zaloAccountCapabilities?.server === true ||
+        user.zaloAccountCapabilities?.qr === true)
     const sameIdentity = this.user?.staffId === user.staffId &&
       this.user.organizationId === user.organizationId &&
       this.credentials?.username === credentials.username &&
@@ -162,6 +206,78 @@ export class ZaloChatApiClient {
     this.credentials = null
     this.token = null
     this.tokenExpiresAt = 0
+    this.localRuntimeToken = null
+    this.localRuntimeTokenExpiresAt = 0
+  }
+
+  public async getLocalRuntimeSession(): Promise<LocalRuntimeDesktopSession> {
+    this.requireLocalRuntimeEnabled()
+    if (
+      this.localRuntimeToken &&
+      this.localRuntimeTokenExpiresAt > Date.now() + TOKEN_REUSE_SAFETY_MS
+    ) {
+      return {
+        token: this.localRuntimeToken,
+        expiresAt: new Date(this.localRuntimeTokenExpiresAt).toISOString(),
+        staffId: String(this.user!.staffId),
+        organizationId: String(this.user!.organizationId),
+        webSocketUrl: this.localRuntimeWebSocketUrl()
+      }
+    }
+    const response = await this.fetchWithTimeout(
+      '/api/chat/desktop/local-runtime-session',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(this.credentials)
+      }
+    )
+    if (!response.ok) throw await responseError(response)
+    const session = await response.json() as DesktopSessionResponse
+    const expiresAt = Date.parse(String(session.expiresAt || ''))
+    if (
+      !session.token ||
+      !this.user ||
+      Number(session.staffId) !== this.user.staffId ||
+      Number(session.organizationId) !== this.user.organizationId ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= Date.now()
+    ) {
+      throw new Error('Chat API trả về phiên local runtime không hợp lệ.')
+    }
+    this.localRuntimeToken = session.token
+    this.localRuntimeTokenExpiresAt = expiresAt
+    return {
+      ...session,
+      webSocketUrl: this.localRuntimeWebSocketUrl()
+    }
+  }
+
+  public async registerLocalRuntimeAccount(
+    accountId: number,
+    expectedZaloId: string
+  ): Promise<LocalRuntimeBindingRegistration> {
+    return this.localRuntimeRequest<LocalRuntimeBindingRegistration>(
+      `/api/chat/zalo/local-runtime/accounts/${accountId}/register`,
+      { method: 'POST', body: { zaloId: expectedZaloId } }
+    )
+  }
+
+  public async validateLocalRuntimeCandidate(
+    accountId: number,
+    candidateZaloId: string
+  ): Promise<void> {
+    await this.localRuntimeRequest<{ allowed: true }>(
+      `/api/chat/zalo/local-runtime/accounts/${accountId}/validate-candidate`,
+      { method: 'POST', body: { zaloId: candidateZaloId } }
+    )
+  }
+
+  public async refreshLocalRuntimeOwner(accountId: number): Promise<void> {
+    await this.localRuntimeRequest<{ success: true }>(
+      `/api/chat/zalo/local-runtime/accounts/${accountId}/refresh-owner`,
+      { method: 'POST' }
+    )
   }
 
   public async startLoginQr(accountId: number): Promise<ZaloLoginQrStartResult> {
@@ -253,6 +369,42 @@ export class ZaloChatApiClient {
     if (!this.isEnabled() || !this.user || !this.credentials) {
       throw new Error('Chat API chỉ nhận đăng nhập Zalo Server của tổ chức 1.')
     }
+  }
+
+  private requireLocalRuntimeEnabled(): void {
+    if (!this.canUseLocalRuntime() || !this.user || !this.credentials) {
+      throw new Error('Đồng bộ Chat cho Zalo QR local chỉ áp dụng tổ chức 1.')
+    }
+  }
+
+  private localRuntimeWebSocketUrl(): string {
+    const url = new URL('/internal/runtime/local/socket', this.origin)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    return url.toString()
+  }
+
+  private async localRuntimeRequest<T>(
+    path: string,
+    options: { method?: 'GET' | 'POST'; body?: unknown } = {},
+    allowTokenRefresh = true
+  ): Promise<T> {
+    const session = await this.getLocalRuntimeSession()
+    const hasBody = options.body !== undefined
+    const response = await this.fetchWithTimeout(path, {
+      method: options.method ?? 'GET',
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        ...(hasBody ? { 'content-type': 'application/json' } : {})
+      },
+      ...(hasBody ? { body: JSON.stringify(options.body) } : {})
+    })
+    if (response.status === 401 && allowTokenRefresh) {
+      this.localRuntimeToken = null
+      this.localRuntimeTokenExpiresAt = 0
+      return this.localRuntimeRequest<T>(path, options, false)
+    }
+    if (!response.ok) throw await responseError(response)
+    return response.json() as Promise<T>
   }
 
   private publishOperation(operation: QrOperationSnapshot, active: ActiveQrOperation): void {

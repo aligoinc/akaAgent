@@ -24,6 +24,18 @@ interface ActiveQrLogin {
   completion?: Promise<void>
 }
 
+export type ZaloQrCandidateValidator = (
+  account: AutoAccount,
+  candidateZaloId: string
+) => Promise<void>
+
+class ZaloQrCandidateValidationError extends Error {
+  public constructor(message: string) {
+    super(message)
+    this.name = 'ZaloQrCandidateValidationError'
+  }
+}
+
 interface CachedZaloApi {
   accountId: number
   api: API
@@ -57,9 +69,17 @@ export interface ZaloListenerStatusEvent {
 }
 
 export interface ZaloRealtimeListenerHandlers {
+  typing?: (payload: unknown) => unknown
   groupEvent?: (event: GroupEvent) => unknown
   message?: (message: Message) => unknown
+  oldMessages?: (messages: unknown, type: unknown) => unknown
   reaction?: (reaction: Reaction) => unknown
+  oldReactions?: (reactions: unknown, isGroup: unknown) => unknown
+  undo?: (payload: unknown) => unknown
+  friendEvent?: (payload: unknown) => unknown
+  seenMessages?: (payload: unknown) => unknown
+  deliveredMessages?: (payload: unknown) => unknown
+  uploadAttachment?: (payload: unknown) => unknown
   status?: (event: ZaloListenerStatusEvent) => unknown
 }
 
@@ -344,6 +364,11 @@ export interface ZaloGroupMemberInfo {
 export interface ZaloGroupMembersResult {
   group: Record<string, unknown>
   members: ZaloGroupMemberInfo[]
+  /**
+   * True only when the joined-group scan finished every API step: getmg returned
+   * the member IDs and all member-profile batches completed successfully.
+   */
+  memberSnapshotComplete?: boolean
   usedProxy?: boolean
   joinOutcome?: ZaloJoinGroupLinkOutcome
 }
@@ -392,6 +417,7 @@ export class ZaloRuntimeService {
   private verifyInflight = new Map<number, Promise<void>>()
   private listenerStates = new Map<number, ZaloListenerState>()
   private realtimeListenerSubscribers = new Map<number, Set<ZaloRealtimeListenerHandlers>>()
+  private loginQrSubscribers = new Set<(event: ZaloLoginQrEvent) => unknown>()
   private accountCacheVersions = new Map<number, number>()
   private activeWarmSessionOperations = new Set<Promise<void>>()
   private warmSessionClaimsAbandoned = false
@@ -402,7 +428,8 @@ export class ZaloRuntimeService {
     private readonly supabase: SupabaseService,
     private readonly getProxyById: (id: number) => Promise<AutoProxy | null>,
     private readonly emitLoginQrEvent: (event: ZaloLoginQrEvent) => void,
-    private readonly emitAccountStatusUpdated?: (accountId: number) => void
+    private readonly emitAccountStatusUpdated?: (accountId: number) => void,
+    private readonly validateQrCandidate?: ZaloQrCandidateValidator
   ) {
     this.webRuntime = new ZaloWebRuntimeService(
       getZaloImageMetadata,
@@ -471,7 +498,7 @@ export class ZaloRuntimeService {
     if (!active) return
     active.cancelRequested = true
     try { active.abort?.() } catch {}
-    this.emitLoginQrEvent({
+    this.publishLoginQrEvent({
       accountId,
       status: 'cancelled',
       message: 'Đã huỷ đăng nhập Zalo'
@@ -493,6 +520,10 @@ export class ZaloRuntimeService {
   async waitForLoginQrIdle(accountId: number): Promise<void> {
     const active = this.activeQrLogins.get(accountId)
     await active?.completion?.catch(() => {})
+  }
+
+  isLoginQrActive(accountId: number): boolean {
+    return this.activeQrLogins.has(accountId)
   }
 
   async cancelAllLoginQrAndWait(): Promise<boolean> {
@@ -566,6 +597,39 @@ export class ZaloRuntimeService {
     return promise
   }
 
+  async getOwnProfileForChat(accountId: number): Promise<Record<string, unknown>> {
+    const api = await this.ensureApi(accountId)
+    const response = await api.fetchAccountInfo()
+    const profile = normalizeRecord((response as any)?.profile)
+    const zaloId = firstString(api.getOwnId(), profile.userId, profile.uid)
+    if (!zaloId) throw new Error('Không lấy được Zalo UID sau khi đăng nhập')
+    const value = (...candidates: unknown[]): string | undefined =>
+      firstString(...candidates) || undefined
+    const numberValue = (candidate: unknown): number | undefined => {
+      const parsed = Number(candidate)
+      return Number.isFinite(parsed) ? parsed : undefined
+    }
+    return {
+      zaloId,
+      ...(value(profile.globalId) ? { globalId: value(profile.globalId) } : {}),
+      ...(value(profile.username) ? { username: value(profile.username) } : {}),
+      ...(value(profile.displayName, profile.display_name)
+        ? { displayName: value(profile.displayName, profile.display_name) }
+        : {}),
+      ...(value(profile.zaloName, profile.zalo_name)
+        ? { zaloName: value(profile.zaloName, profile.zalo_name) }
+        : {}),
+      ...(value(profile.avatar) ? { avatarUrl: value(profile.avatar) } : {}),
+      ...(value(profile.bgavatar) ? { backgroundAvatarUrl: value(profile.bgavatar) } : {}),
+      ...(value(profile.cover) ? { coverUrl: value(profile.cover) } : {}),
+      ...(numberValue(profile.gender) !== undefined ? { gender: numberValue(profile.gender) } : {}),
+      ...(numberValue(profile.dob) !== undefined ? { dobRaw: numberValue(profile.dob) } : {}),
+      ...(value(profile.sdob) ? { sdob: value(profile.sdob) } : {}),
+      ...(value(profile.status) ? { statusText: value(profile.status) } : {}),
+      ...(value(profile.phoneNumber) ? { phoneNumber: value(profile.phoneNumber) } : {})
+    }
+  }
+
   subscribeRealtimeListener(accountId: number, handlers: ZaloRealtimeListenerHandlers): () => void {
     let subscribers = this.realtimeListenerSubscribers.get(accountId)
     if (!subscribers) {
@@ -580,6 +644,24 @@ export class ZaloRuntimeService {
       current.delete(handlers)
       if (current.size === 0) {
         this.realtimeListenerSubscribers.delete(accountId)
+      }
+    }
+  }
+
+  subscribeLoginQrEvents(handler: (event: ZaloLoginQrEvent) => unknown): () => void {
+    this.loginQrSubscribers.add(handler)
+    return () => this.loginQrSubscribers.delete(handler)
+  }
+
+  private publishLoginQrEvent(event: ZaloLoginQrEvent): void {
+    this.emitLoginQrEvent(event)
+    for (const subscriber of Array.from(this.loginQrSubscribers)) {
+      try {
+        void Promise.resolve(subscriber(event)).catch((err) => {
+          console.warn('[ZaloRuntime] QR event subscriber failed:', this.getErrorMessage(err))
+        })
+      } catch (err) {
+        console.warn('[ZaloRuntime] QR event subscriber failed:', this.getErrorMessage(err))
       }
     }
   }
@@ -660,18 +742,21 @@ export class ZaloRuntimeService {
           })
           continue
         }
-        const currentQrEntry = await this.supabase.getAccountZaloSession(entry.account.id).catch(() => null)
-        if (!currentQrEntry) continue
         const message = this.getErrorMessage(err)
         console.warn('[ZaloRuntime] Failed to warm stored session', {
           accountId: entry.account.id,
           message
         })
-        this.invalidateAccount(entry.account.id)
-        await this.supabase.markAccountZaloSessionCheck(entry.account.id, {
-          ok: false,
-          error: message
-        }, false).catch(() => {})
+        await this.settleExhaustedStoredSession(
+          entry.account,
+          entry.account.zaloSessionUpdatedAt,
+          err
+        ).catch(clearError => {
+          console.error('[ZaloRuntime] Failed to settle invalid stored session', {
+            accountId: entry.account.id,
+            message: this.getErrorMessage(clearError)
+          })
+        })
       } finally {
         if (!this.warmSessionClaimsAbandoned) {
           await this.supabase.releaseZaloAccountRuntimeOperation(
@@ -794,13 +879,28 @@ export class ZaloRuntimeService {
       const runtimeChanged = await this.getQrRuntimeChangedResult(accountId)
       if (runtimeChanged) return runtimeChanged
       const message = this.getErrorMessage(err)
-      this.invalidateAccount(accountId)
-      const account = await this.supabase.markAccountZaloSessionCheck(
-        accountId,
-        { ok: false, error: message },
-        false
+      const account = await this.settleExhaustedStoredSession(
+        entry.account,
+        entry.account.zaloSessionUpdatedAt,
+        err
       )
-      return { success: true, loggedIn: false, status: account.loginStatus, reason: message, account }
+      if (account) {
+        return {
+          success: true,
+          loggedIn: false,
+          status: account.loginStatus,
+          reason: message,
+          account
+        }
+      }
+      const latest = await this.supabase.getAccount(accountId)
+      return {
+        success: false,
+        loggedIn: latest?.loginStatus === 'đã đăng nhập',
+        status: latest?.loginStatus || 'chưa đăng nhập',
+        reason: 'Session Zalo vừa thay đổi trong lúc xác thực; vui lòng thử lại',
+        account: latest || undefined
+      }
     }
 
     try {
@@ -1059,7 +1159,7 @@ export class ZaloRuntimeService {
     ].map(normalizeZaloMemberId))
 
     if (memberIds.length === 0) {
-      return { group, members: [] }
+      return { group, members: [], memberSnapshotComplete: true }
     }
 
     const profiles: Record<string, Record<string, unknown>> = {}
@@ -1078,7 +1178,7 @@ export class ZaloRuntimeService {
       return this.mapZaloGroupMember(normalizedGroupId, group, profile, 'profile')
     })
 
-    return { group, members }
+    return { group, members, memberSnapshotComplete: true }
   }
 
   async getGroupMembersByLink(accountId: number, link: string): Promise<ZaloGroupMembersResult> {
@@ -2017,6 +2117,14 @@ export class ZaloRuntimeService {
 
       const profile = await this.loadOwnProfile(api)
       if (!isCurrentLogin()) return
+      if (this.validateQrCandidate) {
+        try {
+          await this.validateQrCandidate(account, profile.zaloUid)
+        } catch (error) {
+          throw new ZaloQrCandidateValidationError(this.getErrorMessage(error))
+        }
+      }
+      if (!isCurrentLogin()) return
       const zaloAccount = await this.supabase.upsertZaloAccount(profile)
       if (!isCurrentLogin()) return
       const updated = await this.supabase.updateAccountZaloSession(account.id, {
@@ -2028,7 +2136,7 @@ export class ZaloRuntimeService {
       if (!isCurrentLogin()) return
       this.cacheApi(updated, api)
 
-      this.emitLoginQrEvent({
+      this.publishLoginQrEvent({
         accountId: account.id,
         status: 'success',
         message: 'Đăng nhập Zalo thành công',
@@ -2041,12 +2149,17 @@ export class ZaloRuntimeService {
       if (!isCurrentLogin() || active.expired) return
       this.logLoginQrFailure(account.id, err)
       const message = this.getErrorMessage(err)
-      await this.supabase.markAccountZaloSessionCheck(
-        account.id,
-        { ok: false, error: message },
-        false
-      ).catch(() => {})
-      this.emitLoginQrEvent({
+      // Candidate validation happens after Zalo reveals the identity but before
+      // any session/identity write. A conflict or Chat API outage must not
+      // downgrade or overwrite the account's previously stored local session.
+      if (!(err instanceof ZaloQrCandidateValidationError)) {
+        await this.supabase.markAccountZaloSessionCheck(
+          account.id,
+          { ok: false, error: message },
+          false
+        ).catch(() => {})
+      }
+      this.publishLoginQrEvent({
         accountId: account.id,
         status: 'error',
         message
@@ -2079,7 +2192,7 @@ export class ZaloRuntimeService {
 
     switch (event.type) {
       case LoginQRCallbackEventType.QRCodeGenerated:
-        this.emitLoginQrEvent({
+        this.publishLoginQrEvent({
           accountId,
           status: 'qr',
           message: 'Quét mã QR bằng ứng dụng Zalo',
@@ -2089,7 +2202,7 @@ export class ZaloRuntimeService {
       case LoginQRCallbackEventType.QRCodeExpired:
         active.expired = true
         active.cancelRequested = true
-        this.emitLoginQrEvent({
+        this.publishLoginQrEvent({
           accountId,
           status: 'expired',
           message: 'Mã QR đã hết hạn. Vui lòng đăng nhập lại nếu cần.'
@@ -2097,7 +2210,7 @@ export class ZaloRuntimeService {
         try { event.actions.abort() } catch {}
         return null
       case LoginQRCallbackEventType.QRCodeScanned:
-        this.emitLoginQrEvent({
+        this.publishLoginQrEvent({
           accountId,
           status: 'scanned',
           message: 'Đã quét QR, vui lòng xác nhận trên điện thoại',
@@ -2107,7 +2220,7 @@ export class ZaloRuntimeService {
         return null
       case LoginQRCallbackEventType.QRCodeDeclined:
         active.cancelRequested = true
-        this.emitLoginQrEvent({
+        this.publishLoginQrEvent({
           accountId,
           status: 'declined',
           message: 'Bạn đã từ chối đăng nhập Zalo'
@@ -2342,15 +2455,71 @@ export class ZaloRuntimeService {
       if (current !== state) return
       this.notifyRealtimeSubscribers(accountId, handlers => handlers.groupEvent?.(event), 'group_event')
     })
+    api.listener.on('typing', (payload) => {
+      if (this.listenerStates.get(accountId) !== state) return
+      this.notifyRealtimeSubscribers(accountId, handlers => handlers.typing?.(payload), 'typing')
+    })
     api.listener.on('message', (message) => {
       const current = this.listenerStates.get(accountId)
       if (current !== state) return
       this.notifyRealtimeSubscribers(accountId, handlers => handlers.message?.(message), 'message')
     })
+    api.listener.on('old_messages', (messages, type) => {
+      if (this.listenerStates.get(accountId) !== state) return
+      this.notifyRealtimeSubscribers(
+        accountId,
+        handlers => handlers.oldMessages?.(messages, type),
+        'old_messages'
+      )
+    })
     api.listener.on('reaction', (reaction) => {
       const current = this.listenerStates.get(accountId)
       if (current !== state) return
       this.notifyRealtimeSubscribers(accountId, handlers => handlers.reaction?.(reaction), 'reaction')
+    })
+    api.listener.on('old_reactions', (reactions, isGroup) => {
+      if (this.listenerStates.get(accountId) !== state) return
+      this.notifyRealtimeSubscribers(
+        accountId,
+        handlers => handlers.oldReactions?.(reactions, isGroup),
+        'old_reactions'
+      )
+    })
+    api.listener.on('undo', (payload) => {
+      if (this.listenerStates.get(accountId) !== state) return
+      this.notifyRealtimeSubscribers(accountId, handlers => handlers.undo?.(payload), 'undo')
+    })
+    api.listener.on('friend_event', (payload) => {
+      if (this.listenerStates.get(accountId) !== state) return
+      this.notifyRealtimeSubscribers(
+        accountId,
+        handlers => handlers.friendEvent?.(payload),
+        'friend_event'
+      )
+    })
+    api.listener.on('seen_messages', (payload) => {
+      if (this.listenerStates.get(accountId) !== state) return
+      this.notifyRealtimeSubscribers(
+        accountId,
+        handlers => handlers.seenMessages?.(payload),
+        'seen_messages'
+      )
+    })
+    api.listener.on('delivered_messages', (payload) => {
+      if (this.listenerStates.get(accountId) !== state) return
+      this.notifyRealtimeSubscribers(
+        accountId,
+        handlers => handlers.deliveredMessages?.(payload),
+        'delivered_messages'
+      )
+    })
+    api.listener.on('upload_attachment', (payload) => {
+      if (this.listenerStates.get(accountId) !== state) return
+      this.notifyRealtimeSubscribers(
+        accountId,
+        handlers => handlers.uploadAttachment?.(payload),
+        'upload_attachment'
+      )
     })
   }
 
@@ -2473,6 +2642,91 @@ export class ZaloRuntimeService {
 
     this.verifyInflight.set(accountId, promise)
     return promise
+  }
+
+  private async settleExhaustedStoredSession(
+    account: AutoAccount,
+    expectedSessionUpdatedAt: string | null | undefined,
+    verificationError: unknown
+  ): Promise<AutoAccount | null> {
+    if (this.isLoginQrActive(account.id)) return null
+    const message = this.getErrorMessage(verificationError)
+
+    // This runtime service is shared by Desktop QR and the legacy Server
+    // process. Server credentials keep their previous retryable behavior. A
+    // local credential is deleted only for a definitive authentication error;
+    // network/Zalo outages must not force the user to scan QR again.
+    if (account.isZaloServer || !this.isDefinitivelyInvalidStoredSessionError(verificationError)) {
+      this.invalidateAccount(account.id)
+      const updated = await this.supabase.markAccountZaloSessionCheck(
+        account.id,
+        { ok: false, error: message },
+        false
+      )
+      console.warn('[ZaloRuntime] Stored Zalo session could not be verified and was retained', {
+        accountId: account.id,
+        runtimeTarget: account.isZaloServer ? 'server' : 'desktop',
+        message
+      })
+      return updated
+    }
+
+    const cleared = await this.supabase.clearInvalidLocalZaloSession(
+      account.id,
+      expectedSessionUpdatedAt ?? null,
+      message
+    )
+    if (!cleared) return null
+    this.invalidateAccount(account.id)
+    try { this.emitAccountStatusUpdated?.(account.id) } catch {}
+    console.warn('[ZaloRuntime] Stored local Zalo session failed all verification attempts and was cleared', {
+      accountId: account.id,
+      message
+    })
+    return cleared
+  }
+
+  private isDefinitivelyInvalidStoredSessionError(error: unknown): boolean {
+    const message = this.getErrorMessage(error).trim().toLowerCase()
+    if (!message) return false
+
+    const transientPatterns = [
+      'fetch failed',
+      'network',
+      'timeout',
+      'timed out',
+      'econn',
+      'enotfound',
+      'eai_again',
+      'socket hang up',
+      'failed to fetch login info',
+      'failed to fetch server info',
+      'request failed with status code 429'
+    ]
+    if (
+      transientPatterns.some(pattern => message.includes(pattern)) ||
+      /request failed with status code 5\d{2}\b/.test(message)
+    ) return false
+
+    return [
+      'missing required params',
+      'cookie is not available',
+      'user agent is not available',
+      'đăng nhập thất bại',
+      'khởi tạo ngữ cảnh thất bại',
+      'không xác thực được session zalo',
+      'invalid session',
+      'session expired',
+      'session is expired',
+      'cookie expired',
+      'not logged in',
+      'login required',
+      'unauthorized',
+      'forbidden',
+      'phiên đăng nhập không hợp lệ',
+      'phiên đăng nhập đã hết hạn',
+      'session zalo không còn hiệu lực'
+    ].some(pattern => message.includes(pattern))
   }
 
   private assertQrRuntimeGeneration(

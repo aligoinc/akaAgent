@@ -11,6 +11,7 @@ import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupC
 import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { ZaloServerClient } from '../services/zaloServerClient'
 import { ZaloChatApiClient } from '../services/zaloChatApiClient'
+import { ZaloLocalChatSyncService } from '../services/zaloLocalChatSyncService'
 import { DesktopZaloHandoffStore } from '../services/desktopZaloHandoffStore'
 import {
   DailyMaintenanceCoordinator,
@@ -162,17 +163,21 @@ export function registerIpcHandlers(
     }
   }
   const zaloChatApiClient = new ZaloChatApiClient(emitZaloLoginQrEvent)
+  let zaloLocalChatSync: ZaloLocalChatSyncService | null = null
   const startZaloRemoteClients = (user: AuthUser, username: string, password: string): void => {
     if (user.organizationId === 1) {
       zaloServerClient.stop()
       zaloChatApiClient.start(user, username, password)
+      zaloLocalChatSync?.start()
       return
     }
+    zaloLocalChatSync?.stop()
     zaloChatApiClient.stop()
     zaloServerClient.start(user, username, password)
   }
   const stopZaloRemoteClients = (): void => {
     zaloServerClient.stop()
+    zaloLocalChatSync?.stop()
     zaloChatApiClient.stop()
   }
   const zaloRuntime = new ZaloRuntimeService(
@@ -181,7 +186,20 @@ export function registerIpcHandlers(
     emitZaloLoginQrEvent,
     () => {
       try { mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+    },
+    async (account, candidateZaloId) => {
+      if (
+        account.organizationId !== 1 ||
+        account.isZaloServer ||
+        account.isZaloShowWeb
+      ) return
+      await zaloChatApiClient.validateLocalRuntimeCandidate(account.id, candidateZaloId)
     }
+  )
+  zaloLocalChatSync = new ZaloLocalChatSyncService(
+    supabase,
+    zaloChatApiClient,
+    zaloRuntime
   )
   const emailRuntime = new EmailRuntimeService(supabase)
   const dailyMaintenance = new DailyMaintenanceCoordinator(async (dateKey) => {
@@ -770,11 +788,13 @@ export function registerIpcHandlers(
       // Only QR accounts use stored zca-js sessions and realtime. Web accounts
       // remain attached independently through their visible browser tabs.
       warmZaloSessions()
+      zaloLocalChatSync?.start()
       zaloRealtimeGroupManager?.start()
       return
     }
 
     zaloRealtimeGroupManager?.stop()
+    zaloLocalChatSync?.stop()
     zaloRuntime.clearAll()
     stopZaloRemoteClients()
   }
@@ -1268,7 +1288,8 @@ export function registerIpcHandlers(
     mainWindow,
     zaloRealtimeGroupManager || undefined,
     zaloServerClient,
-    zaloChatApiClient
+    zaloChatApiClient,
+    zaloLocalChatSync || undefined
   )
   registerAccountContactHandlers(supabase, contactLoader, zaloServerClient)
   registerV2Handlers(mainWindow, pageRegistry)
