@@ -100,14 +100,16 @@ export async function listCampaignRunEventsByCampaign(
     query = query.in('event_type', Array.from(new Set(eventTypes)))
   }
 
+  const latest = options.latest === true
   const { data, error } = await query
-    .order('created_at', { ascending: true })
-    .order('sequence_no', { ascending: true })
-    .order('id', { ascending: true })
+    .order('created_at', { ascending: !latest })
+    .order('sequence_no', { ascending: !latest })
+    .order('id', { ascending: !latest })
     .limit(limit)
 
   if (error) throw new Error(`Failed to list campaign run events by campaign: ${error.message}`)
-  return (data || []).map(mapRunEventFromDB)
+  const events = (data || []).map(mapRunEventFromDB)
+  return latest ? events.reverse() : events
 }
 
 export async function listCampaignRunEventsByInputData(inputDataId: number, limit = 500): Promise<CampaignRunEvent[]> {

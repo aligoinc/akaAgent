@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { GroupEventType, ThreadType } from 'zca-js'
 import type { GroupEvent, Message, Reaction } from 'zca-js'
-import { Campaign, IPC_EVENTS } from '../../shared/types'
+import { Campaign, IPC_EVENTS, type CampaignSummaryRefreshSignal } from '../../shared/types'
 import type { CampaignRuntimeTarget } from '../data/repositories/campaignRepository'
 import { SupabaseService } from './supabase'
 import { ZaloRuntimeService, type ZaloListenerStatusEvent } from './zaloRuntimeService'
@@ -556,10 +556,23 @@ export class ZaloRealtimeGroupCampaignManager {
     return vietnamDateKey <= item.endDateKey
   }
 
-  private broadcastCampaign(campaign: Campaign): void {
+  private broadcastCampaign(
+    campaign: Pick<Campaign, 'id' | 'updatedAt' | 'status' | 'note'> & {
+      schedule?: string | null
+      lastRunAt?: string | null
+    }
+  ): void {
     try {
       if (!this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
+        const signal: CampaignSummaryRefreshSignal = {
+          id: campaign.id,
+          updatedAt: campaign.updatedAt,
+          status: campaign.status,
+          note: campaign.note
+        }
+        if ('schedule' in campaign) signal.schedule = campaign.schedule ?? null
+        if ('lastRunAt' in campaign) signal.lastRunAt = campaign.lastRunAt ?? null
+        this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, signal)
       }
     } catch {}
   }

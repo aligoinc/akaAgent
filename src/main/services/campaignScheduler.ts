@@ -5,7 +5,7 @@ import { extname, join } from 'path'
 import { tmpdir } from 'os'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import {
@@ -13954,13 +13954,31 @@ export class CampaignScheduler {
     } else {
       updated = await this.supabase.updateCampaign(id, updates)
     }
-    this.broadcastCampaignUpdate(updated)
+    this.broadcastCampaignUpdate(
+      updated,
+      updates.extraSettings !== undefined ? { invalidateConfig: true } : undefined
+    )
     return updated
   }
 
-  private broadcastCampaignUpdate(campaign: Campaign): void {
+  private broadcastCampaignUpdate(
+    campaign: Pick<Campaign, 'id' | 'updatedAt' | 'status' | 'note'> & {
+      schedule?: string | null
+      lastRunAt?: string | null
+    },
+    options?: { invalidateConfig?: true }
+  ): void {
     try {
-      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
+      const signal: CampaignSummaryRefreshSignal = {
+        id: campaign.id,
+        updatedAt: campaign.updatedAt,
+        status: campaign.status,
+        note: campaign.note,
+        ...(options?.invalidateConfig ? { invalidateConfig: true } : {})
+      }
+      if ('schedule' in campaign) signal.schedule = campaign.schedule ?? null
+      if ('lastRunAt' in campaign) signal.lastRunAt = campaign.lastRunAt ?? null
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, signal)
     } catch {
       // Window may be closed
     }

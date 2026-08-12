@@ -1,7 +1,7 @@
 import {
   MEDIA_FILE_MAX_SIZE_BYTES,
   MEDIA_IMAGE_MAX_SIZE_BYTES,
-  type Campaign,
+  type CampaignConfig,
   type CampaignMediaInput,
   type CampaignMediaSnapshot
 } from '../../../../shared/types'
@@ -248,7 +248,7 @@ export const getUniqueCampaignMediaAdditions = (
   })
 }
 
-export const campaignHasLocalOnlyMedia = (campaign: Campaign): boolean => {
+export const campaignHasLocalOnlyMedia = (campaign: CampaignConfig): boolean => {
   const extra = campaign.extraSettings || {}
   const hasLocalOnly = (items: CampaignMediaInput[] | undefined): boolean =>
     Array.isArray(items) && items.some(isLocalOnlyCampaignMedia)

@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom'
 import { Copy, FileText, FolderOpen, Image as ImageIcon, Plus, Save, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import type {
   ActionLimitConfig,
-  Campaign,
   CampaignAction,
   CampaignAdvancedContentItem,
+  CampaignConfig,
   CampaignExtraSettings,
   CampaignMediaInput,
   CampaignMediaSnapshot,
@@ -59,7 +59,7 @@ type CommentImageOption = ImageOption
 type QuickMediaPickerTarget = 'post' | 'comment' | { kind: 'advanced'; itemId: string }
 
 interface CampaignQuickEditModalProps {
-  campaign: Campaign
+  campaign: CampaignConfig
   action?: CampaignAction
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
   onClose: () => void
@@ -372,19 +372,19 @@ const isUsableCampaignMedia = (item: CampaignMediaInput): boolean => {
   return isCampaignMediaLocalAvailable(localPath)
 }
 
-const getCampaignPlatform = (campaign: Campaign, action?: CampaignAction): string =>
+const getCampaignPlatform = (campaign: CampaignConfig, action?: CampaignAction): string =>
   String(action?.flatformType || '').trim().toLowerCase() ||
   (campaign.actionId.startsWith('zalo_') ? 'zalo' :
     campaign.actionId === EMAIL_SEND_ACTION_ID ? 'email' :
       (campaign.actionId === SMS_SEND_ACTION_ID || campaign.actionId === VOICE_CALL_ACTION_ID) ? 'sms' : 'facebook')
 
-const getLimitActionCodes = (campaign: Campaign, action?: CampaignAction): string[] => {
+const getLimitActionCodes = (campaign: CampaignConfig, action?: CampaignAction): string[] => {
   const configuredCodes = action?.limitCheckActionCodes || []
   if (configuredCodes.length > 0) return configuredCodes
   return Object.keys(campaign.extraSettings?.actionLimits?.byActionCode || {})
 }
 
-const isLimitActionVisibleForCampaign = (campaign: Campaign, actionCode: string): boolean => {
+const isLimitActionVisibleForCampaign = (campaign: CampaignConfig, actionCode: string): boolean => {
   const extra = campaign.extraSettings || {}
   const actionId = campaign.actionId
   const enableMessage = extra.enableMessage !== false
@@ -428,7 +428,7 @@ const isLimitActionVisibleForCampaign = (campaign: Campaign, actionCode: string)
   return true
 }
 
-const getInitialLimitFormState = (campaign: Campaign): CampaignLimitFormState => {
+const getInitialLimitFormState = (campaign: CampaignConfig): CampaignLimitFormState => {
   const actionLimits = campaign.extraSettings?.actionLimits || {}
   const fallback: ActionLimitForm = {
     dailyLimit: actionLimits.dailyLimit ?? 30,
@@ -455,7 +455,7 @@ const getInitialLimitFormState = (campaign: Campaign): CampaignLimitFormState =>
   }
 }
 
-const getInitialContentFormState = (campaign: Campaign): CampaignContentFormState => {
+const getInitialContentFormState = (campaign: CampaignConfig): CampaignContentFormState => {
   const extra = campaign.extraSettings || {}
   const savedCommentImages = extra.commentImages || []
   const rawSavedCommentImageOption = extra.commentImageOption

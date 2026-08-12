@@ -18,7 +18,7 @@ interface AssistantState {
 }
 
 interface CampaignAssistantTabProps {
-  campaign: Campaign | null
+  campaign: Pick<Campaign, 'id' | 'name'> | null
 }
 
 const initialState: AssistantState = {
