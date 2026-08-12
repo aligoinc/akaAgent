@@ -3,6 +3,11 @@ import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, C
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   const flatformType = row.flatform_type as string
   const isSmsAccount = flatformType === 'sms'
+  const isZaloServerChatAccount = flatformType === 'zalo'
+    && Number(row.organization_id) === 1
+    && row.is_zalo_show_web !== true
+    && row.is_zalo_server === true
+  const loginStatus = row.login_status as string
 
   return {
     id: row.id as number,
@@ -16,7 +21,7 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
     mobileDeviceInfo: (row.mobile_device_info as Record<string, unknown> | null | undefined) ?? null,
     mobileDeviceRegisteredAt: (row.mobile_device_registered_at as string | null | undefined) ?? null,
     mobileDeviceLastSeenAt: (row.mobile_device_last_seen_at as string | null | undefined) ?? null,
-    loginStatus: row.login_status as string,
+    loginStatus,
     status: row.status as string,
     isActive: row.is_active as boolean,
     rateLimitMinutes: (row.rate_limit_minutes as number | null) ?? null,
@@ -33,7 +38,9 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
     zaloDisplayName: ((row as any).zalo_accounts?.display_name as string | null | undefined) ?? null,
     zaloPhone: ((row as any).zalo_accounts?.phone as string | null | undefined) ?? null,
     zaloAvatarUrl: ((row as any).zalo_accounts?.avatar_url as string | null | undefined) ?? null,
-    hasZaloSession: !!row.zalo_session_updated_at,
+    hasZaloSession: isZaloServerChatAccount
+      ? loginStatus === 'đã đăng nhập'
+      : !!row.zalo_session_updated_at,
     zaloSessionUpdatedAt: (row.zalo_session_updated_at as string | null | undefined) ?? null,
     zaloSessionLastVerifiedAt: (row.zalo_session_last_verified_at as string | null | undefined) ?? null,
     zaloSessionLastError: (row.zalo_session_last_error as string | null | undefined) ?? null,
