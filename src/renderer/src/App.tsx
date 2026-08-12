@@ -259,8 +259,8 @@ export default function App() {
   // Listen for realtime campaign status updates (scheduler → renderer)
   useEffect(() => {
     if (!window.electronAPI?.onCampaignStatusUpdated) return
-    const unsubscribe = window.electronAPI.onCampaignStatusUpdated((campaign) => {
-      upsertCampaign(campaign)
+    const unsubscribe = window.electronAPI.onCampaignStatusUpdated((signal) => {
+      upsertCampaign(signal)
     })
     return unsubscribe
   }, [upsertCampaign])

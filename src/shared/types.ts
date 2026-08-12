@@ -746,6 +746,103 @@ export interface Campaign {
   secondaryAccountName?: string
 }
 
+/**
+ * Full editable campaign configuration returned to the renderer on demand.
+ * The potentially large append-only log is deliberately loaded through
+ * `getCampaignLog` instead of travelling with the configuration payload.
+ */
+export type CampaignConfig = Omit<Campaign, 'log'>
+
+/** Mutable campaign fields exposed to runtime/UI callers; logs append atomically. */
+export type CampaignUpdate = Omit<Partial<Campaign>, 'log'>
+
+export type CampaignRelationSettings = Pick<CampaignExtraSettings,
+  'emailCheckLinkClicks' |
+  'isFindPhone' |
+  'isFindLinkGroupZalo' |
+  'isFindUid' |
+  'isFindPostLink' |
+  'isFindFacebookGroup' |
+  'isFindInPost' |
+  'isFindInComment' |
+  'isFindNewInteractors' |
+  'isFindInGroupMembers' |
+  'findUidTargetCampaignIds' |
+  'findPostLinkTargetCampaignIds' |
+  'findPhoneZaloMessagePhoneTargetCampaignIds' |
+  'findZaloGroupLinkJoinTargetCampaignIds' |
+  'findFacebookGroupPostTargetCampaignIds' |
+  'findFacebookGroupCommentTargetCampaignIds' |
+  'findFacebookGroupJoinTargetCampaignIds'
+>
+
+/**
+ * Lightweight projection used by the campaign table and its periodic refresh.
+ * Keep large campaign payloads (`log`, `content`, `images`, `extraSettings`)
+ * out of this contract; callers can load configuration/log data separately.
+ */
+export interface CampaignListItem {
+  id: number
+  name: string
+  actionId: string
+  accountId: number
+  secondaryAccountId?: number | null
+  status: string
+  schedule?: string
+  originalSchedule?: string | null
+  scheduleType?: Campaign['scheduleType']
+  scheduleEndDate?: string | null
+  dailyStopTime?: string | null
+  scheduleDays?: string
+  scheduleWeekDays?: string
+  continueNextDay?: boolean
+  refreshData?: boolean
+  note?: string | null
+  isDelete: boolean
+  createdAt?: string
+  updatedAt?: string
+  completedAt?: string | null
+  lastRunAt?: string | null
+  inputDataCompletedCount: number
+  inputDataTotalCount: number
+  dataTargetSourceMode?: CampaignDataTargetSourceMode
+  dataGroupId?: number | null
+  dataGroupName?: string | null
+  dataGroupIsDelete?: boolean
+  dataGroupSourceStatus?: CampaignDataGroupSourceStatus | null
+  dataGroupSourceGroupId?: number | null
+  dataGroupSourceStopReason?: string | null
+  dataGroupSourceUpdatedAt?: string | null
+  provisioningState?: Campaign['provisioningState']
+  /** Small JSON-path projection used to resolve Find Data campaign relations. */
+  relationSettings: CampaignRelationSettings
+  actionName?: string
+  accountName?: string
+  secondaryAccountName?: string
+}
+
+/** A separately fetched snapshot of the large campaign log field. */
+export interface CampaignLogSnapshot {
+  id: number
+  log: string
+  updatedAt?: string
+}
+
+/**
+ * Lightweight renderer invalidation sent by main-process campaign runtimes.
+ * An omitted id means the whole campaign summary list must be refreshed.
+ */
+export interface CampaignSummaryRefreshSignal {
+  id?: number
+  updatedAt?: string
+  status?: string
+  note?: string | null
+  schedule?: string | null
+  lastRunAt?: string | null
+  /** The persisted configuration changed and any lazy config snapshot is stale. */
+  invalidateConfig?: true
+}
+
 export const CAMPAIGN_STATUSES = ['chờ xử lý', 'đang chạy', 'tạm dừng', 'hoàn thành'] as const
 export type CampaignStatus = typeof CAMPAIGN_STATUSES[number]
 
@@ -1152,6 +1249,8 @@ export interface CampaignRunEventListOptions {
   userVisibleOnly?: boolean
   eventTypes?: string[]
   limit?: number
+  /** Return the newest limited window, restored to chronological order. */
+  latest?: boolean
 }
 
 export interface CampaignLogAction {
@@ -2639,7 +2738,9 @@ export const IPC_EVENTS = {
   DB_DELETE_CAMPAIGN_ACTION: 'db:delete-campaign-action',
 
   // Database Campaigns
-  DB_LIST_CAMPAIGNS: 'db:list-campaigns',
+  DB_LIST_CAMPAIGN_SUMMARIES: 'db:list-campaign-summaries',
+  DB_GET_CAMPAIGN_CONFIG: 'db:get-campaign-config',
+  DB_GET_CAMPAIGN_LOG: 'db:get-campaign-log',
   DB_CREATE_CAMPAIGN: 'db:create-campaign',
   DB_UPDATE_CAMPAIGN: 'db:update-campaign',
   DB_DELETE_CAMPAIGN: 'db:delete-campaign',

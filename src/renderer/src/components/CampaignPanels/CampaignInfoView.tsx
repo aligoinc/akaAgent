@@ -1,5 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { AutoAccount, Campaign, CampaignAction, CampaignExtraSettings, CampaignMediaInput, DataGroupLatestIngestStats } from '../../../../shared/types'
+import type {
+  AutoAccount,
+  Campaign,
+  CampaignAction,
+  CampaignConfig,
+  CampaignExtraSettings,
+  CampaignListItem,
+  CampaignMediaInput,
+  CampaignRelationSettings,
+  DataGroupLatestIngestStats
+} from '../../../../shared/types'
 import {
   formattedContentToPlainText,
   splitFormattedContentVariants,
@@ -8,10 +18,10 @@ import {
 import { normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
 
 interface CampaignInfoViewProps {
-  campaign: Campaign
+  campaign: CampaignConfig
   account: AutoAccount | null
   action?: CampaignAction
-  campaigns: Campaign[]
+  campaigns: CampaignListItem[]
   accounts: AutoAccount[]
 }
 
@@ -234,7 +244,7 @@ const getDeclaredMedia = (images?: CampaignMediaInput[]): CampaignMediaInput[] =
     : []
 )
 
-const formatCampaignRefs = (ids: unknown, campaigns: Campaign[]) => {
+const formatCampaignRefs = (ids: unknown, campaigns: CampaignListItem[]) => {
   const list = getNumberList(ids)
   if (list.length === 0) return '-'
   return (
@@ -315,8 +325,11 @@ const getFindDataSourceLabels = (extra: CampaignExtraSettings): string[] => {
   return labels
 }
 
-const findLinkedSourceCampaigns = (campaign: Campaign, campaigns: Campaign[]): Campaign[] => {
-  const targetFields = campaign.actionId === 'facebook_message_uid'
+const findLinkedSourceCampaigns = (
+  campaign: CampaignConfig,
+  campaigns: CampaignListItem[]
+): CampaignListItem[] => {
+  const targetFields: (keyof CampaignRelationSettings)[] = campaign.actionId === 'facebook_message_uid'
     ? ['findUidTargetCampaignIds']
     : campaign.actionId === 'facebook_comment_seeding_post'
       ? ['findPostLinkTargetCampaignIds']
@@ -333,11 +346,11 @@ const findLinkedSourceCampaigns = (campaign: Campaign, campaigns: Campaign[]): C
           : []
   if (targetFields.length === 0) return []
   return campaigns.filter(source => targetFields.some(field =>
-    getNumberList(source.extraSettings?.[field as keyof CampaignExtraSettings]).includes(campaign.id)
+    getNumberList(source.relationSettings[field]).includes(campaign.id)
   ))
 }
 
-const formatLinkedCampaigns = (items: Campaign[]) => {
+const formatLinkedCampaigns = (items: CampaignListItem[]) => {
   if (items.length === 0) return '-'
   return (
     <span className="campaign-info-chip-list">
@@ -371,6 +384,11 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
   const secondaryAccountName = campaign.secondaryAccountName
     || accounts.find(item => item.id === campaign.secondaryAccountId)?.name
     || (campaign.secondaryAccountId ? `#${campaign.secondaryAccountId}` : '')
+  const campaignSummary = campaigns.find(item => item.id === campaign.id)
+  const dataGroupNameHint = campaignSummary?.dataGroupName ?? campaign.dataGroupName ?? null
+  const dataGroupRefreshRevision = campaignSummary?.dataGroupSourceUpdatedAt
+    ?? campaign.dataGroupSourceUpdatedAt
+    ?? null
 
   useEffect(() => {
     let disposed = false
@@ -382,16 +400,18 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
 
     void Promise.all([
       window.electronAPI.getCampaignDataGroupSource(campaign.id),
-      (async () => {
-        let offset = 0
-        while (true) {
-          const page = await window.electronAPI.listDataGroups({ offset, limit: 200 })
-          const found = page.groups.find(group => group.id === campaign.dataGroupId)
-          if (found) return found.name
-          offset += page.groups.length
-          if (page.groups.length === 0 || offset >= page.total) return null
-        }
-      })(),
+      dataGroupNameHint
+        ? Promise.resolve(dataGroupNameHint)
+        : (async () => {
+          let offset = 0
+          while (true) {
+            const page = await window.electronAPI.listDataGroups({ offset, limit: 200 })
+            const found = page.groups.find(group => group.id === campaign.dataGroupId)
+            if (found) return found.name
+            offset += page.groups.length
+            if (page.groups.length === 0 || offset >= page.total) return null
+          }
+        })(),
       window.electronAPI.getDataGroupLatestIngestStats(campaign.dataGroupId).catch(() => null)
     ]).then(([source, groupName, stats]) => {
       if (disposed) return
@@ -411,7 +431,13 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     })
 
     return () => { disposed = true }
-  }, [campaign.dataGroupId, campaign.dataTargetSourceMode, campaign.id, campaign.updatedAt])
+  }, [
+    campaign.dataGroupId,
+    campaign.dataTargetSourceMode,
+    campaign.id,
+    dataGroupNameHint,
+    dataGroupRefreshRevision
+  ])
   const extra = campaign.extraSettings || {}
   const actionId = campaign.actionId
   const isFormattedContent = supportsFormattedContent(actionId) && extra.formattedContentEnabled === true

@@ -1,5 +1,5 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS, CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputDataWriteProgress, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus } from '../../../shared/types'
+import { CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS, CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputDataWriteProgress, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus, type CampaignUpdate } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
 interface CampaignStatusController {
@@ -110,8 +110,16 @@ export function registerCampaignHandlers(
   })
 
   // Campaigns
-  ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGNS, async () => {
-    return supabase.listCampaigns()
+  ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_SUMMARIES, async () => {
+    return supabase.listCampaignSummaries()
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_GET_CAMPAIGN_CONFIG, async (_, id: number) => {
+    return supabase.getCampaignConfig(id)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DB_GET_CAMPAIGN_LOG, async (_, id: number) => {
+    return supabase.getCampaignLog(id)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN, async (_, campaignData) => {
@@ -120,7 +128,7 @@ export function registerCampaignHandlers(
     return campaign
   })
 
-  ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: Partial<Campaign> | null | undefined) => {
+  ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: CampaignUpdate | null | undefined) => {
     const payload = updates || {}
     if (
       isStatusOnlyCampaignUpdate(payload)

@@ -207,9 +207,9 @@ export function registerIpcHandlers(
     const user = getCurrentUser()
     if (!user) return
     const updatedCampaigns = await supabase.maintainCampaignSchedules(dateKey)
-    for (const campaign of updatedCampaigns) {
+    if (updatedCampaigns.length > 0) {
       try {
-        mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
+        mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, {})
       } catch {
         // Window may be closed
       }

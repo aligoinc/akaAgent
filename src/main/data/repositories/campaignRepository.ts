@@ -3,6 +3,10 @@ import {
   ActionLimitConfig,
   AuthEntitlements,
   Campaign,
+  CampaignConfig,
+  CampaignListItem,
+  CampaignLogSnapshot,
+  CampaignUpdate,
   CampaignActionLimitSettings,
   CampaignInput,
   CampaignInputData,
@@ -37,7 +41,7 @@ import { getVietnamMobileCarrier, normalizeVietnamMobilePhone, type VietnamMobil
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS, renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
 import { getAdvancedContentItems } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
-import { mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB } from '../mappers'
+import { mapCampaignConfigFromDB, mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB, mapCampaignListItemFromDB } from '../mappers'
 import {
   getCurrentUserCredentials,
   requireCurrentUser,
@@ -68,6 +72,95 @@ const CAMPAIGN_PRIMARY_ACCOUNT_RELATION =
 const CAMPAIGN_RELATIONS =
   `auto_campaign_actions(name), ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`
 const CAMPAIGN_SELECT = `*, ${CAMPAIGN_RELATIONS}`
+const CAMPAIGN_LOG_APPEND_RESULT_SELECT = [
+  'id',
+  'name',
+  'account_id',
+  'status',
+  'note',
+  'schedule',
+  'last_run_at',
+  'updated_at',
+  CAMPAIGN_PRIMARY_ACCOUNT_RELATION
+].join(', ')
+const CAMPAIGN_CONFIG_SELECT = [
+  'id',
+  'name',
+  'action_id',
+  'account_id',
+  'secondary_account_id',
+  'status',
+  'schedule',
+  'original_schedule',
+  'schedule_type',
+  'schedule_end_date',
+  'daily_stop_time',
+  'schedule_days',
+  'schedule_week_days',
+  'continue_next_day',
+  'refresh_data',
+  'content',
+  'extra_settings',
+  'images',
+  'note',
+  'is_delete',
+  'staff_id',
+  'organization_id',
+  'created_at',
+  'updated_at',
+  'completed_at',
+  'last_run_at',
+  'data_target_source_mode',
+  'data_group_id',
+  'provisioning_state',
+  'creation_bundle_id',
+  'creation_bundle_child_index',
+  CAMPAIGN_RELATIONS
+].join(', ')
+const CAMPAIGN_LIST_ITEM_SELECT = [
+  'id',
+  'name',
+  'action_id',
+  'account_id',
+  'secondary_account_id',
+  'status',
+  'schedule',
+  'original_schedule',
+  'schedule_type',
+  'schedule_end_date',
+  'daily_stop_time',
+  'schedule_days',
+  'schedule_week_days',
+  'continue_next_day',
+  'refresh_data',
+  'note',
+  'is_delete',
+  'created_at',
+  'updated_at',
+  'completed_at',
+  'last_run_at',
+  'data_target_source_mode',
+  'data_group_id',
+  'provisioning_state',
+  'email_check_link_clicks:extra_settings->emailCheckLinkClicks',
+  'is_find_phone:extra_settings->isFindPhone',
+  'is_find_link_group_zalo:extra_settings->isFindLinkGroupZalo',
+  'is_find_uid:extra_settings->isFindUid',
+  'is_find_post_link:extra_settings->isFindPostLink',
+  'is_find_facebook_group:extra_settings->isFindFacebookGroup',
+  'is_find_in_post:extra_settings->isFindInPost',
+  'is_find_in_comment:extra_settings->isFindInComment',
+  'is_find_new_interactors:extra_settings->isFindNewInteractors',
+  'is_find_in_group_members:extra_settings->isFindInGroupMembers',
+  'find_uid_target_campaign_ids:extra_settings->findUidTargetCampaignIds',
+  'find_post_link_target_campaign_ids:extra_settings->findPostLinkTargetCampaignIds',
+  'find_phone_zalo_message_phone_target_campaign_ids:extra_settings->findPhoneZaloMessagePhoneTargetCampaignIds',
+  'find_zalo_group_link_join_target_campaign_ids:extra_settings->findZaloGroupLinkJoinTargetCampaignIds',
+  'find_facebook_group_post_target_campaign_ids:extra_settings->findFacebookGroupPostTargetCampaignIds',
+  'find_facebook_group_comment_target_campaign_ids:extra_settings->findFacebookGroupCommentTargetCampaignIds',
+  'find_facebook_group_join_target_campaign_ids:extra_settings->findFacebookGroupJoinTargetCampaignIds',
+  CAMPAIGN_RELATIONS
+].join(', ')
 const CAMPAIGN_ACTION_STATUS_SELECT =
   `*, auto_campaign_actions(name, is_active, is_delete), ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`
 const CAMPAIGN_ZALO_REALTIME_SELECT =
@@ -99,7 +192,6 @@ const ZALO_REMARKETING_DETAIL_FETCH_CHUNK = 1000
 const ZALO_REMARKETING_PAGE_DEFAULT_LIMIT = 100
 const ZALO_REMARKETING_PAGE_MAX_LIMIT = 20000
 const CAMPAIGN_INPUT_DATA_FETCH_CHUNK = 1000
-const CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK = 1000
 const CAMPAIGN_LIST_PROGRESS_ID_CHUNK = 100
 const CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_PAGE_LIMIT = 200
 const CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_PAGE_COUNT = 5
@@ -996,11 +1088,14 @@ function isPastScheduleEnd(campaign: Campaign, schedule: Date): boolean {
 
 // =========== CAMPAIGNS ===========
 
-async function attachCampaignSecondaryAccountNames(
-  campaigns: Campaign[],
+async function attachCampaignSecondaryAccountNames<T extends {
+  secondaryAccountId?: number | null
+  secondaryAccountName?: string
+}>(
+  campaigns: T[],
   staffId: number,
   organizationId: number
-): Promise<Campaign[]> {
+): Promise<T[]> {
   const secondaryAccountIds = Array.from(new Set(
     campaigns
       .map(campaign => campaign.secondaryAccountId)
@@ -1048,6 +1143,47 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
     u.organizationId
   )
   return campaign
+}
+
+export async function getCampaignConfig(id: number): Promise<CampaignConfig | null> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select(CAMPAIGN_CONFIG_SELECT)
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to load campaign configuration: ${error.message}`)
+  if (!data) return null
+
+  const [campaign] = await attachCampaignSecondaryAccountNames(
+    [mapCampaignConfigFromDB(data as unknown as Record<string, unknown>)],
+    u.staffId,
+    u.organizationId
+  )
+  const [campaignWithDataGroupSource] = await attachCampaignDataGroupSourceSummaries([campaign])
+  return campaignWithDataGroupSource
+}
+
+export async function getCampaignLog(id: number): Promise<CampaignLogSnapshot | null> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select('id, log, updated_at')
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('is_delete', false)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to load campaign log: ${error.message}`)
+  if (!data) return null
+  return {
+    id: Number(data.id),
+    log: typeof data.log === 'string' ? data.log : '',
+    updatedAt: typeof data.updated_at === 'string' ? data.updated_at : undefined
+  }
 }
 
 export async function setZaloServerCampaignStatus(
@@ -1353,42 +1489,37 @@ const chunkNumbers = (values: number[], chunkSize: number): number[][] => {
 
 async function loadCampaignInputDataProgress(campaignIds: number[]): Promise<Map<number, CampaignInputDataProgress>> {
   const progressByCampaign = new Map<number, CampaignInputDataProgress>()
-  const ids = Array.from(new Set(campaignIds.filter(id => Number.isFinite(id) && id > 0)))
+  const ids = Array.from(new Set(campaignIds
+    .map(id => Math.floor(Number(id)))
+    .filter(id => Number.isSafeInteger(id) && id > 0)))
   ids.forEach(id => progressByCampaign.set(id, { completed: 0, total: 0 }))
   if (ids.length === 0) return progressByCampaign
 
+  const user = requireCurrentUser()
+  const auth = requireCurrentUserCredentials()
   for (const idChunk of chunkNumbers(ids, CAMPAIGN_LIST_PROGRESS_ID_CHUNK)) {
-    let from = 0
+    const { data, error } = await client().rpc('aka_agent_control_campaign_progress', {
+      p_staff_id: user.staffId,
+      p_organization_id: user.organizationId,
+      p_campaign_ids: idChunk,
+      p_auth_username: auth.username,
+      p_auth_password: auth.password
+    })
+    if (error) throw new Error(`Failed to aggregate campaign input progress: ${error.message}`)
 
-    while (true) {
-      const { data, error } = await client()
-        .from('auto_campaign_input_data')
-        .select('campaign_id, status')
-        .in('campaign_id', idChunk)
-        .eq('is_delete', false)
-        .order('id', { ascending: true })
-        .range(from, from + CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK - 1)
-
-      if (error) throw new Error(`Failed to load campaign input progress: ${error.message}`)
-
-      const page = (data || []) as Array<{ campaign_id: number; status: string | null }>
-      for (const row of page) {
-        const campaignId = Number(row.campaign_id)
-        const progress = progressByCampaign.get(campaignId)
-        if (!progress) continue
-        progress.total += 1
-        if (row.status === 'hoàn thành') progress.completed += 1
-      }
-
-      if (page.length < CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK) break
-      from += CAMPAIGN_LIST_PROGRESS_FETCH_CHUNK
+    for (const row of Array.isArray(data) ? data as Array<Record<string, unknown>> : []) {
+      const campaignId = Math.floor(Number(row.campaign_id))
+      if (!progressByCampaign.has(campaignId)) continue
+      const total = Math.max(0, Math.floor(Number(row.input_total) || 0))
+      const completed = Math.min(total, Math.max(0, Math.floor(Number(row.input_completed) || 0)))
+      progressByCampaign.set(campaignId, { completed, total })
     }
   }
 
   return progressByCampaign
 }
 
-async function attachCampaignInputDataProgress(campaigns: Campaign[]): Promise<Campaign[]> {
+async function attachCampaignInputDataProgress<T extends { id: number }>(campaigns: T[]): Promise<T[]> {
   if (campaigns.length === 0) return campaigns
   const progressByCampaign = await loadCampaignInputDataProgress(campaigns.map(campaign => campaign.id))
   return campaigns.map(campaign => {
@@ -1474,7 +1605,7 @@ function asCampaignDataGroupSummary(row: Record<string, unknown>): CampaignDataG
 }
 
 async function loadLegacyCampaignDataGroupSourceSummaries(
-  campaigns: Campaign[]
+  campaigns: Array<Pick<Campaign, 'id' | 'dataGroupId'>>
 ): Promise<Map<number, CampaignDataGroupSourceSummary>> {
   const summaries = new Map<number, CampaignDataGroupSourceSummary>()
   const user = requireCurrentUser()
@@ -1531,7 +1662,7 @@ async function loadLegacyCampaignDataGroupSourceSummaries(
 }
 
 async function loadCampaignDataGroupSourceSummaries(
-  campaigns: Campaign[]
+  campaigns: Array<Pick<Campaign, 'id' | 'dataTargetSourceMode' | 'dataGroupId'>>
 ): Promise<Map<number, CampaignDataGroupSourceSummary>> {
   const dataGroupCampaigns = campaigns.filter(campaign =>
     campaign.dataTargetSourceMode === 'data_group'
@@ -1576,7 +1707,10 @@ async function loadCampaignDataGroupSourceSummaries(
   return summaries
 }
 
-async function attachCampaignDataGroupSourceSummaries(campaigns: Campaign[]): Promise<Campaign[]> {
+async function attachCampaignDataGroupSourceSummaries<T extends Pick<Campaign, 'id'> & Partial<Pick<Campaign,
+  'dataTargetSourceMode' | 'dataGroupId' | 'dataGroupName' | 'dataGroupIsDelete' |
+  'dataGroupSourceStatus' | 'dataGroupSourceGroupId' | 'dataGroupSourceStopReason' | 'dataGroupSourceUpdatedAt'
+>>>(campaigns: T[]): Promise<T[]> {
   const summaries = await loadCampaignDataGroupSourceSummaries(campaigns)
   return campaigns.map(campaign => {
     const summary = summaries.get(campaign.id)
@@ -1593,12 +1727,47 @@ async function attachCampaignDataGroupSourceSummaries(campaigns: Campaign[]): Pr
   })
 }
 
+export async function listCampaignSummaries(): Promise<CampaignListItem[]> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select(CAMPAIGN_LIST_ITEM_SELECT)
+    .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
+    .eq('is_delete', false)
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(`Failed to list campaign summaries: ${error.message}`)
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const zaloCapabilities = loadCurrentUserZaloAccountCapabilities()
+  const visibleRows = (data || []).filter(row => {
+    const account = (row as Record<string, any>).primary_account || {}
+    if (String(account.flatform_type || '').trim().toLowerCase() !== 'zalo') return true
+    if (account.is_zalo_show_web === true) return zaloCapabilities.web
+    return account.is_zalo_server === true ? zaloCapabilities.server : zaloCapabilities.qr
+  })
+  const campaigns = filterCampaignsByEntitlements(
+    visibleRows.map(row => mapCampaignListItemFromDB(row as unknown as Record<string, unknown>)),
+    entitlements
+  )
+  const campaignsWithSecondaryAccountNames = await attachCampaignSecondaryAccountNames(
+    campaigns,
+    u.staffId,
+    u.organizationId
+  )
+  const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(
+    campaignsWithSecondaryAccountNames
+  )
+  return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
+}
+
 export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
     .select(CAMPAIGN_SELECT)
     .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
@@ -1618,7 +1787,9 @@ export async function listCampaigns(): Promise<Campaign[]> {
     u.organizationId
   )
   const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(campaignsWithSecondaryAccountNames)
-  return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
+  // Scheduler/runtime callers do not display list progress and App Server
+  // contexts intentionally do not retain Desktop process credentials.
+  return campaignsWithDataGroupSources
 }
 
 export async function listZaloRealtimeGroupCampaignSnapshots(
@@ -2011,8 +2182,11 @@ function getMobileContentUpdateFailureMessage(actionId: string, paused: boolean)
     'Hãy mở Sửa chiến dịch, bấm Lưu lại, rồi tiếp tục chiến dịch.'
 }
 
-export async function updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
+export async function updateCampaign(id: number, updates: CampaignUpdate): Promise<Campaign> {
   const u = requireCurrentUser()
+  if ((updates as Record<string, unknown>).log !== undefined) {
+    throw new Error('Campaign log must be written through the bounded atomic append operation.')
+  }
   let currentCampaignForUpdate: Campaign | null | undefined
   const loadCurrentCampaignForUpdate = async (): Promise<Campaign> => {
     if (currentCampaignForUpdate === undefined) {
@@ -2097,7 +2271,6 @@ export async function updateCampaign(id: number, updates: Partial<Campaign>): Pr
     payload.extra_settings = extraSettings
   }
   if (updates.images !== undefined) payload.images = updates.images
-  if (updates.log !== undefined) payload.log = updates.log
   if (updates.note !== undefined) payload.note = updates.note
   if (updates.dataTargetSourceMode !== undefined) payload.data_target_source_mode = updates.dataTargetSourceMode
   if (updates.dataGroupId !== undefined) payload.data_group_id = updates.dataGroupId
@@ -2190,16 +2363,18 @@ export async function updatePendingUnclaimedCampaignNote(
  */
 export async function updateClaimedZaloServerCampaign(
   id: number,
-  updates: Partial<Campaign>
+  updates: CampaignUpdate
 ): Promise<Campaign> {
   const u = requireCurrentUser()
+  if ((updates as Record<string, unknown>).log !== undefined) {
+    throw new Error('Campaign log must be written through the bounded atomic append operation.')
+  }
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (updates.status !== undefined) payload.status = updates.status
   if (updates.schedule !== undefined) payload.schedule = updates.schedule
   if (updates.originalSchedule !== undefined) payload.original_schedule = updates.originalSchedule
   if (updates.completedAt !== undefined) payload.completed_at = updates.completedAt
   if (updates.extraSettings !== undefined) payload.extra_settings = updates.extraSettings
-  if (updates.log !== undefined) payload.log = updates.log
   if (updates.note !== undefined) payload.note = updates.note
 
   const { data, error } = await client()
@@ -2469,7 +2644,18 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
   return mapCampaignFromDB(newCamp)
 }
 
-export async function appendCampaignLog(campaignId: number, logText: string): Promise<Campaign> {
+export type CampaignLogAppendResult = Pick<
+  Campaign,
+  'id' | 'name' | 'accountId' | 'accountName' | 'status' | 'note' | 'updatedAt'
+> & {
+  schedule: string | null
+  lastRunAt: string | null
+}
+
+export async function appendCampaignLog(
+  campaignId: number,
+  logText: string
+): Promise<CampaignLogAppendResult> {
   const u = requireCurrentUser()
   const { data: current, error: currentError } = await client()
     .from('auto_campaigns')
@@ -2495,13 +2681,13 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
   if (appendError) {
     throw new Error(
       `Failed to append campaign log atomically: ${appendError.message}. ` +
-      'Ensure migration v171 is applied; the legacy read-modify-write fallback was intentionally not used.'
+      'Ensure migration v237 is applied; the legacy read-modify-write fallback was intentionally not used.'
     )
   }
 
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select(CAMPAIGN_SELECT)
+    .select(CAMPAIGN_LOG_APPEND_RESULT_SELECT)
     .eq('id', campaignId)
     .eq('staff_id', u.staffId)
     .single()
@@ -2511,7 +2697,21 @@ export async function appendCampaignLog(campaignId: number, logText: string): Pr
       `Campaign log was appended atomically, but the updated campaign could not be reloaded: ${error.message}`
     )
   }
-  return mapCampaignFromDB(data)
+
+  const primaryAccount = Array.isArray((data as any).primary_account)
+    ? (data as any).primary_account[0]
+    : (data as any).primary_account
+  return {
+    id: Number((data as any).id),
+    name: String((data as any).name || ''),
+    accountId: Number((data as any).account_id),
+    accountName: typeof primaryAccount?.name === 'string' ? primaryAccount.name : undefined,
+    status: String((data as any).status || ''),
+    note: typeof (data as any).note === 'string' ? (data as any).note : null,
+    schedule: typeof (data as any).schedule === 'string' ? (data as any).schedule : null,
+    lastRunAt: typeof (data as any).last_run_at === 'string' ? (data as any).last_run_at : null,
+    updatedAt: typeof (data as any).updated_at === 'string' ? (data as any).updated_at : undefined
+  }
 }
 
 export async function claimCampaignRuntime(

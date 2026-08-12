@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
-import { IPC_EVENTS, type AuthUser, type AutoAccountContact, type ZaloLabelOption } from '../../shared/types'
+import { IPC_EVENTS, type AuthUser, type AutoAccountContact, type CampaignSummaryRefreshSignal, type ZaloLabelOption } from '../../shared/types'
 import {
   ZALO_SERVER_IPC,
   ZALO_SERVER_OPERATION_UPDATED_CHANNEL,
@@ -853,7 +853,16 @@ export class ZaloServerRuntimeManager {
             dateKey
           )
           for (const campaign of updatedCampaigns) {
-            eventWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
+            const signal: CampaignSummaryRefreshSignal = {
+              id: campaign.id,
+              updatedAt: campaign.updatedAt,
+              status: campaign.status,
+              note: campaign.note,
+              schedule: campaign.schedule ?? null,
+              lastRunAt: campaign.lastRunAt ?? null,
+              invalidateConfig: true
+            }
+            eventWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, signal)
           }
         }, {
           // runtimeClockRepository coalesces concurrent staff startup/ticks in

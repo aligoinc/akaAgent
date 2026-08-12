@@ -1,4 +1,4 @@
-import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ContentTemplateChannelConfig, ContentTemplateChannelName, ContentTemplateChannels, ContentTemplateContentType, ContentTemplateGroup, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
+import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignConfig, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, CampaignListItem, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ContentTemplateChannelConfig, ContentTemplateChannelName, ContentTemplateChannels, ContentTemplateContentType, ContentTemplateGroup, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
 import { getCurrentUser } from './currentUser'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
@@ -225,6 +225,67 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
   }
 
   return campaign
+}
+
+export function mapCampaignConfigFromDB(row: Record<string, unknown>): CampaignConfig {
+  const { log: _omittedLog, ...config } = mapCampaignFromDB(row)
+  return config
+}
+
+export function mapCampaignListItemFromDB(row: Record<string, unknown>): CampaignListItem {
+  const primaryAccount = (row as any).primary_account || (row as any).auto_accounts
+  const idList = (value: unknown): number[] => Array.isArray(value)
+    ? value.map(Number).filter(id => Number.isSafeInteger(id) && id > 0)
+    : []
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    actionId: row.action_id as string,
+    accountId: row.account_id as number,
+    secondaryAccountId: (row.secondary_account_id as number | null | undefined) ?? null,
+    status: row.status as string,
+    schedule: row.schedule as string | undefined,
+    originalSchedule: (row.original_schedule as string | null | undefined) ?? null,
+    scheduleType: (row.schedule_type as CampaignListItem['scheduleType']) || 'daily',
+    scheduleEndDate: (row.schedule_end_date as string | null | undefined) ?? null,
+    dailyStopTime: (row.daily_stop_time as string | null | undefined) ?? null,
+    scheduleDays: row.schedule_days as string | undefined,
+    scheduleWeekDays: row.schedule_week_days as string | undefined,
+    continueNextDay: (row.continue_next_day as boolean | null | undefined) ?? false,
+    refreshData: (row.refresh_data as boolean | null | undefined) ?? false,
+    note: (row.note as string | null | undefined) ?? null,
+    isDelete: row.is_delete as boolean,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    completedAt: (row.completed_at as string | null | undefined) ?? null,
+    lastRunAt: (row.last_run_at as string | null | undefined) ?? null,
+    inputDataCompletedCount: 0,
+    inputDataTotalCount: 0,
+    dataTargetSourceMode: (row.data_target_source_mode as CampaignListItem['dataTargetSourceMode']) || 'direct',
+    dataGroupId: (row.data_group_id as number | null | undefined) ?? null,
+    provisioningState: (row.provisioning_state as CampaignListItem['provisioningState']) || 'ready',
+    relationSettings: {
+      emailCheckLinkClicks: row.email_check_link_clicks === true,
+      isFindPhone: row.is_find_phone === true,
+      isFindLinkGroupZalo: row.is_find_link_group_zalo === true,
+      isFindUid: row.is_find_uid === true,
+      isFindPostLink: row.is_find_post_link === true,
+      isFindFacebookGroup: row.is_find_facebook_group === true,
+      isFindInPost: row.is_find_in_post === true,
+      isFindInComment: row.is_find_in_comment === true,
+      isFindNewInteractors: row.is_find_new_interactors === true,
+      isFindInGroupMembers: row.is_find_in_group_members === true,
+      findUidTargetCampaignIds: idList(row.find_uid_target_campaign_ids),
+      findPostLinkTargetCampaignIds: idList(row.find_post_link_target_campaign_ids),
+      findPhoneZaloMessagePhoneTargetCampaignIds: idList(row.find_phone_zalo_message_phone_target_campaign_ids),
+      findZaloGroupLinkJoinTargetCampaignIds: idList(row.find_zalo_group_link_join_target_campaign_ids),
+      findFacebookGroupPostTargetCampaignIds: idList(row.find_facebook_group_post_target_campaign_ids),
+      findFacebookGroupCommentTargetCampaignIds: idList(row.find_facebook_group_comment_target_campaign_ids),
+      findFacebookGroupJoinTargetCampaignIds: idList(row.find_facebook_group_join_target_campaign_ids)
+    },
+    actionName: (row as any).auto_campaign_actions?.name as string | undefined,
+    accountName: primaryAccount?.name as string | undefined
+  }
 }
 
 export function mapCampaignInputFromDB(row: Record<string, unknown>): CampaignInput {

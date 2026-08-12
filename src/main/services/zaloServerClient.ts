@@ -16,7 +16,6 @@ import {
   type ZaloServerOperationStateSnapshot,
   type ZaloServerSessionResponse
 } from '../../shared/zaloServerProtocol'
-import { SupabaseService } from './supabase'
 
 const RECONNECT_MIN_DELAY_MS = 2_000
 const RECONNECT_MAX_DELAY_MS = 120_000
@@ -70,7 +69,6 @@ interface PendingOperation {
 
 export class ZaloServerClient {
   private readonly origin: string
-  private readonly supabase = new SupabaseService()
   private credentials: LoginCredentials | null = null
   private user: AuthUser | null = null
   private socket: WebSocket | null = null
@@ -648,12 +646,9 @@ export class ZaloServerClient {
   private async performDatabaseSnapshotRefresh(socket: WebSocket, generation: number): Promise<void> {
     if (!this.isCurrentSocket(socket, generation)) return
     try {
-      const campaigns = await this.supabase.listCampaigns()
       if (!this.isCurrentSocket(socket, generation) || this.mainWindow.isDestroyed()) return
       this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
-      for (const campaign of campaigns) {
-        this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, campaign)
-      }
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, {})
     } catch (error) {
       if (this.isCurrentSocket(socket, generation)) {
         console.warn('[ZaloServerClient] Failed to refresh DB snapshot:', error)

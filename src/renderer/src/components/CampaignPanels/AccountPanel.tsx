@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { FolderCog, Loader2, Play, Plus, ServerCog, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
-import { AutoAccount, ZaloLoginQrEvent, EmailAccountConfig } from '../../../../shared/types'
+import { AutoAccount, ZaloLoginQrEvent, EmailAccountConfig, type CampaignConfig } from '../../../../shared/types'
 
 const EMPTY_EMAIL_CONFIG: EmailAccountConfig = {
   brandName: '', host: 'smtp.gmail.com', port: 587, secure: false, user: '', pass: '', fromEmail: '', replyTo: '', cc: ''
@@ -142,7 +142,6 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
     accountGroups,
     proxies,
     loadAccounts,
-    loadCampaigns,
     loadAccountGroups,
     loadProxies,
     createAccount,
@@ -614,13 +613,32 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
           && !isZaloServerAccount(editingAccount)
           && payload.isZaloServer
         if (switchesToZaloServer) {
-          await loadCampaigns({ silent: true })
-          const blockingCampaigns = useCampaignStore.getState().campaigns.filter(campaign => (
+          const latestCampaigns = await window.electronAPI.listCampaignSummaries()
+          const candidateCampaigns = latestCampaigns.filter(campaign => (
             !campaign.isDelete &&
-            (campaign.accountId === editingAccount.id || campaign.secondaryAccountId === editingAccount.id) &&
             (campaign.status === 'chờ xử lý' || campaign.status === 'tạm dừng') &&
-            campaignHasLocalOnlyMedia(campaign)
+            (campaign.accountId === editingAccount.id || campaign.secondaryAccountId === editingAccount.id)
           ))
+          const blockingCampaigns: CampaignConfig[] = []
+          for (const campaign of candidateCampaigns) {
+            let config: CampaignConfig | null
+            try {
+              config = await window.electronAPI.getCampaignConfig(campaign.id)
+            } catch {
+              throw new Error('Không thể kiểm tra media của tất cả chiến dịch. Vui lòng thử lại trước khi chuyển sang Zalo Server.')
+            }
+            if (!config) {
+              throw new Error('Không thể kiểm tra media của tất cả chiến dịch. Vui lòng thử lại trước khi chuyển sang Zalo Server.')
+            }
+            const stillBelongsToAccount = config.accountId === editingAccount.id
+              || config.secondaryAccountId === editingAccount.id
+            const stillNeedsMediaGuard = !config.isDelete
+              && (config.status === 'chờ xử lý' || config.status === 'tạm dừng')
+              && stillBelongsToAccount
+            if (stillNeedsMediaGuard && campaignHasLocalOnlyMedia(config)) {
+              blockingCampaigns.push(config)
+            }
+          }
           if (blockingCampaigns.length > 0) {
             const names = blockingCampaigns.slice(0, 3).map(campaign => campaign.name).join(', ')
             const suffix = blockingCampaigns.length > 3 ? ` và ${blockingCampaigns.length - 3} chiến dịch khác` : ''

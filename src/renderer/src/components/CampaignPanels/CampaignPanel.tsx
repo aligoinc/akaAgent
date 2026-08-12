@@ -18,6 +18,7 @@ import {
   type AutomationOptions,
   type Campaign,
   type CampaignAction,
+  type CampaignConfig,
   type CampaignDataGroupSourceStatus,
   type CampaignAutomationExecutionRole,
   type CampaignImportPlatform,
@@ -25,6 +26,7 @@ import {
   type CampaignInputData,
   type CampaignInputOriginFilter,
   type CampaignInputStatus,
+  type CampaignListItem,
   type CampaignRelationSummary,
   type CampaignRunEvent,
   type ContentTemplateChannelName,
@@ -304,7 +306,7 @@ const CAMPAIGN_DETAIL_TARGET_COLUMN_DEFS: Record<CampaignDetailTargetColumnKey, 
   email: { key: 'email', label: 'Email', minWidth: 180, exportWidth: 30 }
 }
 
-const getCampaignDetailTargetColumns = (campaign?: Campaign | null): CampaignDetailTargetColumn[] => {
+const getCampaignDetailTargetColumns = (campaign?: Pick<CampaignListItem, 'actionId'> | null): CampaignDetailTargetColumn[] => {
   const requirement = getCampaignInputDataRequirement(campaign?.actionId)
   const keys: CampaignDetailTargetColumnKey[] = ['name']
 
@@ -1408,13 +1410,13 @@ const normalizeFilterText = (value: string | undefined | null) => (
     .trim()
 )
 
-const getCampaignListScheduleTypeLabel = (type: Campaign['scheduleType'] | undefined) => {
+const getCampaignListScheduleTypeLabel = (type: CampaignListItem['scheduleType'] | undefined) => {
   if (type === 'weekly') return 'Hàng tuần'
   if (type === 'monthly') return 'Hàng tháng'
   return '1 lần'
 }
 
-const getCampaignDataGroupReactivateBlockReason = (campaign: Campaign): string | null => {
+const getCampaignDataGroupReactivateBlockReason = (campaign: CampaignListItem): string | null => {
   if (campaign.dataGroupIsDelete) {
     return 'Nhóm data đã bị xoá nên không thể bật nhận data trở lại.'
   }
@@ -1435,7 +1437,7 @@ const getCampaignDataGroupReactivateBlockReason = (campaign: Campaign): string |
   return null
 }
 
-const getCampaignInputProgress = (campaign: Campaign) => {
+const getCampaignInputProgress = (campaign: CampaignListItem) => {
   const total = Math.max(0, Number(campaign.inputDataTotalCount ?? 0))
   const completed = Math.min(Math.max(0, Number(campaign.inputDataCompletedCount ?? 0)), total)
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0
@@ -1452,7 +1454,7 @@ const shouldSortCampaignByLastRun = (status: string) => (
   status === 'tạm dừng' || status === 'hoàn thành'
 )
 
-const getCampaignListSortTime = (campaign: Campaign) => {
+const getCampaignListSortTime = (campaign: CampaignListItem) => {
   if (shouldSortCampaignByLastRun(campaign.status)) {
     const lastRunTime = getCampaignTimeSortValue(campaign.lastRunAt)
     if (Number.isFinite(lastRunTime)) return lastRunTime
@@ -1461,7 +1463,7 @@ const getCampaignListSortTime = (campaign: Campaign) => {
   return getCampaignTimeSortValue(campaign.schedule)
 }
 
-const compareCampaignListOrder = (a: Campaign, b: Campaign) => {
+const compareCampaignListOrder = (a: CampaignListItem, b: CampaignListItem) => {
   const statusA = CAMPAIGN_STATUS_SORT_ORDER.get(a.status) ?? CAMPAIGN_STATUS_SORT_ORDER.size
   const statusB = CAMPAIGN_STATUS_SORT_ORDER.get(b.status) ?? CAMPAIGN_STATUS_SORT_ORDER.size
   if (statusA !== statusB) return statusA - statusB
@@ -1545,7 +1547,7 @@ interface AddInputDataModalSubmit {
 }
 
 interface AddInputDataToCampaignModalProps {
-  campaigns: Campaign[]
+  campaigns: CampaignListItem[]
   campaignActions: CampaignAction[]
   selectedCount: number
   onLoadCampaigns: () => Promise<void>
@@ -1820,7 +1822,7 @@ interface AddCampaignDataScanSource {
 }
 
 interface AddDataToCurrentCampaignModalProps {
-  campaign: Campaign
+  campaign: CampaignConfig
   campaignAction?: CampaignAction
   account?: AutoAccount | null
   onSubmit: (request: {
@@ -1837,20 +1839,20 @@ interface AddDataToCurrentCampaignModalProps {
   onClose: () => void
 }
 
-const isAddDataSupportedForCampaign = (campaign?: Campaign | null): boolean => (
+const isAddDataSupportedForCampaign = (campaign?: Pick<CampaignListItem, 'actionId'> | null): boolean => (
   !!campaign &&
   !!getCampaignInputDataRequirement(campaign.actionId) &&
   !ADD_DATA_UNSUPPORTED_ACTION_IDS.has(campaign.actionId)
 )
 
-const getAddDataImportPlatform = (campaign: Campaign, action?: CampaignAction): CampaignImportPlatform => {
+const getAddDataImportPlatform = (campaign: CampaignConfig, action?: CampaignAction): CampaignImportPlatform => {
   if (campaign.actionId === SMS_SEND_ACTION_ID || campaign.actionId === VOICE_CALL_ACTION_ID) return 'sms'
   if (campaign.actionId === EMAIL_SEND_ACTION_ID) return 'email'
   if (action?.flatformType === 'zalo') return 'zalo'
   return 'facebook'
 }
 
-const canImportDataForCampaign = (campaign: Campaign, action?: CampaignAction): boolean => {
+const canImportDataForCampaign = (campaign: CampaignConfig, action?: CampaignAction): boolean => {
   if (!isAddDataSupportedForCampaign(campaign)) return false
   if (campaign.actionId === FACEBOOK_PAGE_INBOX_MESSAGE_ACTION_ID) return false
   if ([
@@ -1864,7 +1866,7 @@ const canImportDataForCampaign = (campaign: Campaign, action?: CampaignAction): 
   return action?.flatformType !== 'zalo' || campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
 }
 
-const getAddDataScanSources = (campaign: Campaign): AddCampaignDataScanSource[] => {
+const getAddDataScanSources = (campaign: CampaignConfig): AddCampaignDataScanSource[] => {
   switch (campaign.actionId) {
     case FACEBOOK_GROUP_INVITE_ACTION_ID:
       return [{
@@ -2471,13 +2473,14 @@ function AddDataToCurrentCampaignModal({
 export default function CampaignPanel({ isActive, filterAccountId, accountInfoOpenRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
+    campaignConfigs, campaignLogs, loadingCampaignConfigIds, loadingCampaignLogIds,
     campaignInputData, campaignInputDataTotal, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
     campaignDetailPageItems, campaignDetailPageTotal, loadingCampaignDetailPage,
     emailCampaignLinkTrackings, emailCampaignLinkTrackingCampaignId, loadingEmailCampaignLinkTrackings,
     campaignRunEvents, loadingCampaignRunEvents,
     campaignRelationSummaries, loadingCampaignRelationSummaries,
-    loadCampaigns, loadCampaignActions, loadAccounts,
+    loadCampaigns, loadCampaignConfig, loadCampaignLog, loadCampaignActions, loadAccounts,
     updateCampaign, deleteCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign, addCampaignInputDataRows,
@@ -2493,10 +2496,10 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const [showForm, setShowForm] = useState(false)
   const [showActionManager, setShowActionManager] = useState(false)
   const [showAddInputDataModal, setShowAddInputDataModal] = useState(false)
-  const [addDataCampaign, setAddDataCampaign] = useState<Campaign | null>(null)
-  const [limitUpdateCampaign, setLimitUpdateCampaign] = useState<Campaign | null>(null)
-  const [contentMediaUpdateCampaign, setContentMediaUpdateCampaign] = useState<Campaign | null>(null)
-  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
+  const [addDataCampaign, setAddDataCampaign] = useState<CampaignConfig | null>(null)
+  const [limitUpdateCampaign, setLimitUpdateCampaign] = useState<CampaignConfig | null>(null)
+  const [contentMediaUpdateCampaign, setContentMediaUpdateCampaign] = useState<CampaignConfig | null>(null)
+  const [editingCampaign, setEditingCampaign] = useState<CampaignConfig | null>(null)
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [campaignFormInitialActionId, setCampaignFormInitialActionId] = useState<string | undefined>(undefined)
   const [campaignFormInitialDetails, setCampaignFormInitialDetails] = useState<Partial<CampaignInputData>[] | undefined>(undefined)
@@ -2611,6 +2614,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const campaignActionMenuAnchorRef = useRef<CampaignActionMenuAnchorRect | null>(null)
   const campaignActionMenuRef = useRef<HTMLDivElement | null>(null)
   const initialCampaignLoadSettledRef = useRef(false)
+  const selectedCampaignSummary = campaigns.find(campaign => campaign.id === selectedCampaignId)
+  const selectedCampaignConfig = selectedCampaignId ? campaignConfigs[selectedCampaignId] : undefined
+  const selectedCampaignLog = selectedCampaignId ? campaignLogs[selectedCampaignId] : undefined
 
   useEffect(() => {
     if (!accountInfoOpenRequest) return
@@ -2716,6 +2722,22 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     })
   }, [zaloLoginAccount?.id, loadAccounts, loadCampaigns, showAlert])
 
+  useEffect(() => {
+    if (!selectedCampaignId || detailTab !== 'info') return
+    if (selectedCampaignConfig) return
+    void loadCampaignConfig(selectedCampaignId).catch(err => {
+      console.error('Failed to load selected campaign config:', err)
+    })
+  }, [detailTab, loadCampaignConfig, selectedCampaignConfig, selectedCampaignId])
+
+  useEffect(() => {
+    if (!selectedCampaignId || detailTab !== 'runLog') return
+    if (selectedCampaignLog) return
+    void loadCampaignLog(selectedCampaignId).catch(err => {
+      console.error('Failed to load selected campaign log:', err)
+    })
+  }, [detailTab, loadCampaignLog, selectedCampaignId, selectedCampaignLog])
+
   // Load only the data needed by the active campaign detail tab.
   useEffect(() => {
     if (!selectedCampaignId) return
@@ -2765,7 +2787,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       loadCampaignRunEvents(selectedCampaignId, {
         userVisibleOnly: true,
         eventTypes: [BLOCK_SCREENSHOT_EVENT_TYPE],
-        limit: 500
+        limit: 500,
+        latest: true
       })
       return
     }
@@ -3136,19 +3159,40 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     inputDataOriginFilter
   ])
 
-  const handleEdit = (campaign: Campaign) => {
+  const requireCampaignConfig = async (
+    campaign: CampaignListItem,
+    fallbackMessage = 'Không thể tải cấu hình chiến dịch.'
+  ): Promise<CampaignConfig | null> => {
+    try {
+      const config = await loadCampaignConfig(campaign.id, { force: true })
+      if (!config) showAlert(fallbackMessage, 'error')
+      return config
+    } catch (err) {
+      showAlert(formatIpcErrorMessage(err, fallbackMessage), 'error')
+      return null
+    }
+  }
+
+  const handleEdit = async (campaign: CampaignListItem) => {
     if (!canEditCampaign(campaign.status)) {
       showAlert('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
       return
     }
+    const config = await requireCampaignConfig(campaign)
+    if (!config) return
+    if (!canEditCampaign(config.status)) {
+      showAlert('Trạng thái chiến dịch đã thay đổi. Chỉ có thể sửa khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
+      void loadCampaigns({ silent: true })
+      return
+    }
     setCampaignFormInitialActionId(undefined)
     setCampaignFormInitialDetails(undefined)
-    setEditingCampaign(campaign)
+    setEditingCampaign(config)
     setCloneFromId(undefined)
     setShowForm(true)
   }
 
-  const handleDelete = (campaign: Campaign) => {
+  const handleDelete = (campaign: CampaignListItem) => {
     if (!canDeleteCampaign(campaign.status)) {
       showAlert('Không thể xoá chiến dịch đang chạy.', 'info')
       return
@@ -3169,13 +3213,14 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     )
   }
 
-  const handleClone = (campaign: Campaign) => {
-    const cloneData: Campaign = {
-      ...campaign,
+  const handleClone = async (campaign: CampaignListItem) => {
+    const config = await requireCampaignConfig(campaign)
+    if (!config) return
+    const cloneData: CampaignConfig = {
+      ...config,
       id: 0,
-      name: campaign.name + ' (Copy)',
-      status: 'tạm dừng',
-      log: ''
+      name: config.name + ' (Copy)',
+      status: 'tạm dừng'
     }
     setCampaignFormInitialActionId(undefined)
     setCampaignFormInitialDetails(undefined)
@@ -3184,31 +3229,47 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     setShowForm(true)
   }
 
-  const handleOpenLimitUpdate = (campaign: Campaign) => {
+  const handleOpenLimitUpdate = async (campaign: CampaignListItem) => {
     if (!canEditCampaign(campaign.status)) {
       showAlert('Chỉ có thể cập nhật giới hạn gửi khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
       return
     }
-    setLimitUpdateCampaign(campaign)
+    const config = await requireCampaignConfig(campaign)
+    if (!config) return
+    if (!canEditCampaign(config.status)) {
+      showAlert('Trạng thái chiến dịch đã thay đổi. Chỉ có thể cập nhật giới hạn gửi khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
+      void loadCampaigns({ silent: true })
+      return
+    }
+    setLimitUpdateCampaign(config)
   }
 
-  const handleOpenContentMediaUpdate = (campaign: Campaign) => {
+  const handleOpenContentMediaUpdate = async (campaign: CampaignListItem) => {
     if (!canEditCampaign(campaign.status)) {
       showAlert('Chỉ có thể cập nhật nội dung + media khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
       return
     }
-    setContentMediaUpdateCampaign(campaign)
+    const config = await requireCampaignConfig(campaign)
+    if (!config) return
+    if (!canEditCampaign(config.status)) {
+      showAlert('Trạng thái chiến dịch đã thay đổi. Chỉ có thể cập nhật nội dung + media khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
+      void loadCampaigns({ silent: true })
+      return
+    }
+    setContentMediaUpdateCampaign(config)
   }
 
-  const handleRowClick = (campaign: Campaign) => {
+  const handleRowClick = (campaign: CampaignListItem) => {
     const nextSelectedId = selectedCampaignId === campaign.id ? null : campaign.id
     setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(nextSelectedId)
-    if (nextSelectedId) setDetailTab('info')
+    if (nextSelectedId) {
+      setDetailTab('info')
+    }
     if (!detailDockOpen) setDetailDockOpen(true)
   }
 
-  const handlePause = async (campaign: Campaign) => {
+  const handlePause = async (campaign: CampaignListItem) => {
     if (!canPauseCampaign(campaign.status)) {
       showAlert('Chỉ có thể tạm dừng chiến dịch khi trạng thái là "chờ xử lý" hoặc "đang chạy".', 'info')
       return
@@ -3220,7 +3281,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
   }
 
-  const handleResume = async (campaign: Campaign) => {
+  const handleResume = async (campaign: CampaignListItem) => {
     if (!canResumeCampaign(campaign.status)) {
       showAlert('Chỉ có thể tiếp tục chiến dịch khi trạng thái là "tạm dừng".', 'info')
       return
@@ -3464,7 +3525,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }
 
   const getCampaignDataGroupSourceStatus = (
-    campaign: Campaign
+    campaign: CampaignListItem
   ): CampaignDataGroupSourceStatus | 'loading' | 'error' => (
     dataGroupSourceStatuses[campaign.id]
     || campaign.dataGroupSourceStatus
@@ -3484,7 +3545,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }
 
   const handleToggleCampaignDataGroupSource = async (
-    campaign: Campaign,
+    campaign: CampaignListItem,
     event?: ReactMouseEvent<HTMLButtonElement>
   ) => {
     event?.stopPropagation()
@@ -3637,7 +3698,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     setShowAddInputDataModal(true)
   }
 
-  const handleOpenAddDataToCurrentCampaignModal = (campaign?: Campaign | null) => {
+  const handleOpenAddDataToCurrentCampaignModal = async (campaign?: CampaignListItem | null) => {
     if (!campaign) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
@@ -3662,7 +3723,23 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
     setOpenInputDataActionMenu(false)
     closeCampaignActionMenu()
-    setAddDataCampaign(campaign)
+    const config = await requireCampaignConfig(campaign)
+    if (!config) return
+    if (config.dataTargetSourceMode === 'data_group') {
+      showAlert('Chiến dịch này nhận data từ Nhóm data. Hãy thêm data trong Quản lý nhóm data.', 'info')
+      void loadCampaigns({ silent: true })
+      return
+    }
+    if (config.status === 'đang chạy') {
+      showAlert('Chiến dịch đang chạy, vui lòng tạm dừng trước khi thêm data.', 'error')
+      void loadCampaigns({ silent: true })
+      return
+    }
+    if (!isAddDataSupportedForCampaign(config)) {
+      showAlert('Loại chiến dịch này không hỗ trợ thêm data.', 'error')
+      return
+    }
+    setAddDataCampaign(config)
   }
 
   const handleAddDataToCurrentCampaignSubmit = async (request: Parameters<typeof addCampaignInputDataRows>[0]) => {
@@ -3763,15 +3840,15 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     return 'is-muted'
   }
 
-  const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
-  const selectedCampaignAccount = selectedCampaign?.accountId
-    ? accounts.find(account => account.id === selectedCampaign.accountId) || null
+  const selectedCampaign = selectedCampaignSummary
+  const selectedCampaignAccount = selectedCampaignSummary?.accountId
+    ? accounts.find(account => account.id === selectedCampaignSummary.accountId) || null
     : null
   const accountInfoAccount = accountInfoAccountId !== null
     ? accounts.find(account => account.id === accountInfoAccountId) || null
     : null
-  const selectedCampaignAction = selectedCampaign
-    ? campaignActions.find(action => action.id === selectedCampaign.actionId)
+  const selectedCampaignAction = selectedCampaignSummary
+    ? campaignActions.find(action => action.id === selectedCampaignSummary.actionId)
     : undefined
   const addDataCampaignAction = addDataCampaign
     ? campaignActions.find(action => action.id === addDataCampaign.actionId)
@@ -3779,13 +3856,13 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const addDataCampaignAccount = addDataCampaign?.accountId
     ? accounts.find(account => account.id === addDataCampaign.accountId) || null
     : null
-  const isSelectedFindDataCampaign = !!selectedCampaign && FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)
-  const isSelectedEmailCampaign = selectedCampaign?.actionId === EMAIL_SEND_ACTION_ID
-  const isSelectedSmsCampaign = selectedCampaign?.actionId === SMS_SEND_ACTION_ID
-  const isSelectedVoiceCallCampaign = selectedCampaign?.actionId === VOICE_CALL_ACTION_ID
+  const isSelectedFindDataCampaign = !!selectedCampaignSummary && FIND_DATA_ACTION_IDS.has(selectedCampaignSummary.actionId)
+  const isSelectedEmailCampaign = selectedCampaignSummary?.actionId === EMAIL_SEND_ACTION_ID
+  const isSelectedSmsCampaign = selectedCampaignSummary?.actionId === SMS_SEND_ACTION_ID
+  const isSelectedVoiceCallCampaign = selectedCampaignSummary?.actionId === VOICE_CALL_ACTION_ID
   const isSelectedMobileManagedSmsCampaign = isSelectedSmsCampaign || isSelectedVoiceCallCampaign
-  const isSelectedEmailClickTrackingCampaign = isSelectedEmailCampaign && selectedCampaign?.extraSettings?.emailCheckLinkClicks === true
-  const isSelectedCommentSeedingFeedCampaign = selectedCampaign?.actionId === COMMENT_SEEDING_FEED_ACTION_ID
+  const isSelectedEmailClickTrackingCampaign = isSelectedEmailCampaign && selectedCampaignSummary?.relationSettings.emailCheckLinkClicks === true
+  const isSelectedCommentSeedingFeedCampaign = selectedCampaignSummary?.actionId === COMMENT_SEEDING_FEED_ACTION_ID
   const relatedAutomationById = useMemo(
     () => new Map(relatedAutomations.map(automation => [automation.id, automation])),
     [relatedAutomations]
@@ -3836,8 +3913,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     : (actionDetailPage - 1) * CAMPAIGN_DETAIL_PAGE_SIZE + 1
   const actionDetailRangeEnd = Math.min(actionDetailPage * CAMPAIGN_DETAIL_PAGE_SIZE, campaignDetailPageTotal)
   const campaignDetailTargetColumns = useMemo(() => {
-    return getCampaignDetailTargetColumns(selectedCampaign)
-  }, [selectedCampaign?.actionId])
+    return getCampaignDetailTargetColumns(selectedCampaignSummary)
+  }, [selectedCampaignSummary?.actionId])
   const campaignDetailExportTargetColumns = useMemo(
     () => isSelectedMobileManagedSmsCampaign
       ? campaignDetailTargetColumns.filter(column => column.key !== 'phone')
@@ -3859,23 +3936,23 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     return Array.from(optionMap.values())
   }, [actionDetailFilters.status, campaignDetailPageItems])
   const linkedFindDataSourceCampaignIds = useMemo(() => {
-    if (!selectedCampaign) return []
+    if (!selectedCampaignSummary) return []
     return uniqueNumbers(
       campaigns
         .filter(source => FIND_DATA_ACTION_IDS.has(source.actionId))
         .filter(source => FIND_DATA_TARGET_FIELDS.some(field =>
-          toNumberList(source.extraSettings?.[field]).includes(selectedCampaign.id)
+          toNumberList(source.relationSettings?.[field]).includes(selectedCampaignSummary.id)
         ))
         .map(source => source.id)
     )
-  }, [campaigns, selectedCampaign])
+  }, [campaigns, selectedCampaignSummary])
   const linkedFindDataTargetCampaignIds = useMemo(() => {
     if (!selectedCampaign || !FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)) return []
-    return uniqueNumbers(FIND_DATA_TARGET_FIELDS.flatMap(field => toNumberList(selectedCampaign.extraSettings?.[field])))
+    return uniqueNumbers(FIND_DATA_TARGET_FIELDS.flatMap(field => toNumberList(selectedCampaign.relationSettings?.[field])))
   }, [selectedCampaign])
   const runLogEntries = useMemo(
-    () => parseCampaignRunLog(selectedCampaign?.log || ''),
-    [selectedCampaign?.log]
+    () => parseCampaignRunLog(selectedCampaignLog?.log || ''),
+    [selectedCampaignLog?.log]
   )
   const runLogScreenshotEvents = useMemo(
     () => detailTab === 'runLog'
@@ -4891,13 +4968,13 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
   }
 
-  const handleAskAssistant = (campaign: Campaign) => {
+  const handleAskAssistant = (campaign: CampaignListItem) => {
     setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(campaign.id)
     onAskAssistant?.(campaign.id)
   }
 
-  const openCampaignDetailTab = (campaign: Campaign, tab: DetailTab) => {
+  const openCampaignDetailTab = (campaign: CampaignListItem, tab: DetailTab) => {
     setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(campaign.id)
     setDetailTab(tab)
@@ -4905,16 +4982,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     if (tab === 'actions') {
       loadCampaignDetailPage(campaign.id, getCampaignDetailPageQuery(0, CAMPAIGN_DETAIL_PAGE_SIZE))
     }
-    if (
-      tab === 'emailLinks' &&
-      campaign.actionId === EMAIL_SEND_ACTION_ID &&
-      campaign.extraSettings?.emailCheckLinkClicks === true
-    ) {
-      loadEmailCampaignLinkTrackings(campaign.id)
-    }
   }
 
-  const handleZaloLogin = async (campaign: Campaign, account: AutoAccount | undefined) => {
+  const handleZaloLogin = async (campaign: CampaignListItem, account: AutoAccount | undefined) => {
     if (!account) {
       showAlert('Không tìm thấy tài khoản của chiến dịch.', 'error')
       return
@@ -6189,8 +6259,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                 ? accountInfoAccount
                   ? <>Tài khoản: <strong>{accountInfoAccount.name}</strong></>
                   : 'Tài khoản'
-                : selectedCampaign
-                  ? <>Chi tiết: <strong>{selectedCampaign.name || ''}</strong></>
+                : selectedCampaignSummary
+                  ? <>Chi tiết: <strong>{selectedCampaignSummary.name || ''}</strong></>
                   : 'Chi tiết chiến dịch'}
             </span>
             <button className="btn-icon">
@@ -6200,13 +6270,13 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
           {detailDockOpen && (
             <div className="detail-dock-body">
-              {!selectedCampaign && detailTab !== 'accountInfo' ? (
+              {!selectedCampaignSummary && detailTab !== 'accountInfo' ? (
                 <div className="campaign-detail-empty-state">Chọn một chiến dịch để xem chi tiết.</div>
               ) : (
                 <>
               {/* Tabs */}
               <div className="detail-dock-tabs">
-                {selectedCampaign && (
+                {selectedCampaignSummary && (
                   <button
                     className={`detail-dock-tab ${detailTab === 'info' ? 'active' : ''}`}
                     onClick={() => setDetailTab('info')}
@@ -6220,7 +6290,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                 >
                   Tài khoản
                 </button>
-                {selectedCampaign && (
+                {selectedCampaignSummary && (
                   <>
                 <button
                   className={`detail-dock-tab ${detailTab === 'data' ? 'active' : ''}`}
@@ -6297,7 +6367,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                   className={`detail-dock-tab ${detailTab === 'runLog' ? 'active' : ''}`}
                   onClick={() => setDetailTab('runLog')}
                 >
-                  Lịch sử chạy ({runLogEntries.length})
+                  Lịch sử gần đây{selectedCampaignLog ? ` (${runLogEntries.length})` : ''}
                 </button>
                 {isSelectedFindDataCampaign && (
                   <button
@@ -6321,14 +6391,22 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
               <div className={`detail-dock-tab-content ${detailTab === 'findDataLog' || detailTab === 'postSearchLog' ? 'find-data-log-tab-content' : ''}`}>
               {/* Tab: Campaign info */}
-              {detailTab === 'info' && selectedCampaign && (
-                <CampaignInfoView
-                  campaign={selectedCampaign}
-                  account={selectedCampaignAccount}
-                  action={selectedCampaignAction}
-                  campaigns={campaigns}
-                  accounts={accounts}
-                />
+              {detailTab === 'info' && (
+                selectedCampaignConfig ? (
+                  <CampaignInfoView
+                    campaign={selectedCampaignConfig}
+                    account={selectedCampaignAccount}
+                    action={selectedCampaignAction}
+                    campaigns={campaigns}
+                    accounts={accounts}
+                  />
+                ) : (
+                  <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>
+                    {selectedCampaignId && loadingCampaignConfigIds[selectedCampaignId]
+                      ? 'Đang tải cấu hình chiến dịch...'
+                      : 'Không thể tải cấu hình chiến dịch.'}
+                  </div>
+                )
               )}
 
               {/* Tab: Campaign Input Data */}
@@ -6427,8 +6505,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                             <button type="button" onClick={handleOpenAddInputDataModal}>
                               <Plus size={14} /> Thêm vào chiến dịch
                             </button>
-                            {selectedCampaign?.dataTargetSourceMode !== 'data_group' && (
-                              <button type="button" onClick={() => handleOpenAddDataToCurrentCampaignModal(selectedCampaign)}>
+                            {selectedCampaignSummary?.dataTargetSourceMode !== 'data_group' && (
+                              <button type="button" onClick={() => void handleOpenAddDataToCurrentCampaignModal(selectedCampaignSummary)}>
                                 <Plus size={14} /> Thêm data
                               </button>
                             )}
@@ -7307,7 +7385,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
               {/* Tab: Campaign run log from auto_campaigns.log */}
               {detailTab === 'runLog' && (
-                runLogEntries.length === 0 && !loadingCampaignRunEvents ? (
+                selectedCampaignId && loadingCampaignLogIds[selectedCampaignId] && !selectedCampaignLog ? (
+                  <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Đang tải lịch sử chạy...</div>
+                ) : runLogEntries.length === 0 && !loadingCampaignRunEvents ? (
                   <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có lịch sử chạy</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
