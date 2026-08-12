@@ -246,7 +246,7 @@ export default function App() {
     }
 
     refresh()
-    const timer = setInterval(refresh, 30_000)
+    const timer = setInterval(refresh, user?.organizationId === 1 ? 5_000 : 30_000)
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
@@ -254,7 +254,7 @@ export default function App() {
       window.removeEventListener('focus', refresh)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [activePage, hasZaloServerAccounts, loadAccounts])
+  }, [activePage, hasZaloServerAccounts, loadAccounts, user?.organizationId])
 
   // Listen for realtime campaign status updates (scheduler → renderer)
   useEffect(() => {
