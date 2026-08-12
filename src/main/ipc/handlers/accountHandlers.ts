@@ -81,7 +81,8 @@ export function registerAccountHandlers(
   mainWindow?: BrowserWindow,
   zaloRealtimeRefresh?: ZaloRealtimeRefreshController,
   zaloServerClient?: ZaloServerClient,
-  zaloChatApiClient?: ZaloChatApiClient
+  zaloChatApiClient?: ZaloChatApiClient,
+  zaloLocalChatSync?: ZaloRealtimeRefreshController
 ): AccountZaloOperationController {
   type PreviousZaloAccountStatus = 'chờ xử lý' | 'tạm dừng'
   const localQrClaims = new Map<number, PreviousZaloAccountStatus>()
@@ -246,6 +247,11 @@ export function registerAccountHandlers(
     const targetIsZaloServer = changesZaloType
       ? normalizedUpdates.isZaloServer ?? existing!.isZaloServer
       : existing?.isZaloServer ?? false
+    if (changesZaloType && !existing!.isZaloServer && targetIsZaloServer) {
+      // A local zca-js session never becomes a Server credential. Reset only
+      // the public account projection so the Server QR flow opens immediately.
+      normalizedUpdates.loginStatus = 'chưa đăng nhập'
+    }
     const crossesZaloWebBoundary = changesZaloType
       && targetIsZaloShowWeb !== existing!.isZaloShowWeb
     let zaloTypeChangePreviousStatus: PreviousZaloAccountStatus | undefined
@@ -323,7 +329,20 @@ export function registerAccountHandlers(
       if (!changesZaloType && normalizedUpdates.flatformType !== undefined && existing) {
         if (!shouldRouteZaloAccountCleanupToServer(existing)) zaloRuntime?.invalidateAccount(id)
       }
-      if (changesZaloType) sendAccountStatusUpdated(mainWindow)
+      if (changesZaloType) {
+        if (
+          existing!.isZaloServer &&
+          !targetIsZaloServer &&
+          !targetIsZaloShowWeb &&
+          zaloChatApiClient?.canUseLocalRuntime()
+        ) {
+          await zaloChatApiClient.refreshLocalRuntimeOwner(id).catch(error => {
+            console.warn('[ZaloLocalChatSync] Không refresh được Server runtime sau đổi loại:', error)
+          })
+        }
+        sendAccountStatusUpdated(mainWindow)
+        zaloLocalChatSync?.refreshSoon('zalo-account-type-changed')
+      }
       return account
     } catch (error) {
       if (

@@ -103,6 +103,13 @@ export class SupabaseService {
     return accountRepo.updateAccountZaloWebSession(id, input)
   }
   clearAccountZaloSession(id: number) { return accountRepo.clearAccountZaloSession(id) }
+  clearInvalidLocalZaloSession(id: number, expectedSessionUpdatedAt: string | null, verificationError: string) {
+    return accountRepo.clearInvalidLocalZaloSession(
+      id,
+      expectedSessionUpdatedAt,
+      verificationError
+    )
+  }
   claimZaloAccountRuntimeOperation(
     id: number,
     runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,

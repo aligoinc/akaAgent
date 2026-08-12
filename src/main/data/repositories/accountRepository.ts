@@ -713,6 +713,42 @@ export async function clearAccountZaloSession(id: number): Promise<AutoAccount> 
   return mapAccountFromDB(toDbRow(data))
 }
 
+export async function clearInvalidLocalZaloSession(
+  id: number,
+  expectedSessionUpdatedAt: string | null,
+  verificationError: string
+): Promise<AutoAccount | null> {
+  await ensureCurrentUserFeatureActive('zalo')
+  await requireCompatibleZaloAccount(id, false, false)
+  const u = requireCurrentUser()
+  const update = client()
+    .from('auto_accounts')
+    .update({
+      zalo_session: null,
+      zalo_session_updated_at: null,
+      zalo_session_last_verified_at: null,
+      zalo_session_last_error: normalizeNullableString(verificationError),
+      login_status: 'chưa đăng nhập',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('flatform_type', 'zalo')
+    .eq('is_zalo_server', false)
+    .eq('is_zalo_show_web', false)
+    .eq('is_delete', false)
+    .not('zalo_session', 'is', null)
+  const matchedSession = expectedSessionUpdatedAt
+    ? update.eq('zalo_session_updated_at', expectedSessionUpdatedAt)
+    : update.is('zalo_session_updated_at', null)
+  const { data, error } = await matchedSession
+    .select(ACCOUNT_SELECT)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to clear invalid local Zalo session: ${error.message}`)
+  return data ? mapAccountFromDB(toDbRow(data)) : null
+}
+
 export async function getAccountEmailSession(id: number): Promise<AccountEmailSession | null> {
   await ensureCurrentUserEmailFeatureActive()
   const u = requireCurrentUser()
