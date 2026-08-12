@@ -1,10 +1,14 @@
 import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ContentTemplateChannelConfig, ContentTemplateChannelName, ContentTemplateChannels, ContentTemplateContentType, ContentTemplateGroup, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
+import { getCurrentUser } from './currentUser'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   const flatformType = row.flatform_type as string
   const isSmsAccount = flatformType === 'sms'
+  const organizationId = Number(row.organization_id)
+  const currentUser = getCurrentUser()
   const isZaloServerChatAccount = flatformType === 'zalo'
-    && Number(row.organization_id) === 1
+    && currentUser?.organizationId === organizationId
+    && currentUser.isChatSync === true
     && row.is_zalo_show_web !== true
     && row.is_zalo_server === true
   const loginStatus = row.login_status as string

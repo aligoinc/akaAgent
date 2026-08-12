@@ -2340,6 +2340,17 @@ export interface AuthAccountProduct {
   isActive: boolean
 }
 
+export interface AuthChatSyncProduct {
+  organizationProductId: number
+  productId: number | null
+  productName: string
+  packageName: string
+  displayName: string
+  expirationDate: string | null
+  isActive: boolean
+  isChatSync: boolean
+}
+
 export interface ZaloAccountCapabilities {
   /** Zalo QR/zca-js accounts granted when any Product 16/18 row is active. */
   qr: boolean
@@ -2365,6 +2376,10 @@ export interface AuthUser {
   zaloAccountCapabilities: ZaloAccountCapabilities
   entitlements: AuthEntitlements
   accountProducts: AuthAccountProduct[]
+  /** Quyền đồng bộ Chat hiệu lực, gộp từ Product Zalo 16/18 còn hạn của tổ chức. */
+  isChatSync?: boolean
+  /** Danh sách sản phẩm dùng cho màn hình Cài đặt Đồng bộ Chat chỉ xem. */
+  chatSyncProducts?: AuthChatSyncProduct[]
   deviceLabel?: string | null
   devicePlatform?: string | null
   deviceBoundAt?: string | null

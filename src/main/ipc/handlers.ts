@@ -60,6 +60,7 @@ import {
   ACCOUNT_EXPIRED_MESSAGE,
   getUserZaloAccountCapabilities,
   loadOrganizationAccountProducts,
+  loadOrganizationChatSyncProducts,
   loadOrganizationEntitlementAccess
 } from '../data/repositories/entitlementRepository'
 import { readBlockScreenshotDataUrl } from '../services/blockScreenshotService'
@@ -165,7 +166,7 @@ export function registerIpcHandlers(
   const zaloChatApiClient = new ZaloChatApiClient(emitZaloLoginQrEvent)
   let zaloLocalChatSync: ZaloLocalChatSyncService | null = null
   const startZaloRemoteClients = (user: AuthUser, username: string, password: string): void => {
-    if (user.organizationId === 1) {
+    if (user.isChatSync === true) {
       zaloServerClient.stop()
       zaloChatApiClient.start(user, username, password)
       zaloLocalChatSync?.start()
@@ -189,7 +190,7 @@ export function registerIpcHandlers(
     },
     async (account, candidateZaloId) => {
       if (
-        account.organizationId !== 1 ||
+        !zaloChatApiClient.canUseLocalRuntime() ||
         account.isZaloServer ||
         account.isZaloShowWeb
       ) return
@@ -708,9 +709,10 @@ export function registerIpcHandlers(
 
     sessionExpiryCheckRunning = true
     try {
-      const [liveEntitlementAccess, liveAccountProducts] = await Promise.all([
+      const [liveEntitlementAccess, liveAccountProducts, liveChatSyncProducts] = await Promise.all([
         loadOrganizationEntitlementAccess(checkedUser.organizationId),
-        loadOrganizationAccountProducts(checkedUser.organizationId)
+        loadOrganizationAccountProducts(checkedUser.organizationId),
+        loadOrganizationChatSyncProducts(checkedUser.organizationId)
       ])
       const liveEntitlements = liveEntitlementAccess.entitlements
       const currentUser = getCurrentUser()
@@ -728,15 +730,20 @@ export function registerIpcHandlers(
         ...currentUser,
         entitlements: liveEntitlements,
         accountProducts: liveAccountProducts,
+        isChatSync: liveEntitlementAccess.chatSyncEnabled,
+        chatSyncProducts: liveChatSyncProducts,
         zaloAccountCapabilities: nextZaloAccountCapabilities
       }
       const entitlementsChanged = !authEntitlementsEqual(currentUser.entitlements, liveEntitlements)
       const accountProductsChanged = JSON.stringify(currentUser.accountProducts || []) !== JSON.stringify(liveAccountProducts)
+      const chatSyncChanged = currentUser.isChatSync !== liveEntitlementAccess.chatSyncEnabled ||
+        JSON.stringify(currentUser.chatSyncProducts || []) !== JSON.stringify(liveChatSyncProducts)
       const zaloCapabilitiesChanged = JSON.stringify(currentUser.zaloAccountCapabilities)
         !== JSON.stringify(nextZaloAccountCapabilities)
       if (reason !== 'login' && (
         entitlementsChanged ||
         accountProductsChanged ||
+        chatSyncChanged ||
         zaloCapabilitiesChanged
       )) {
         setCurrentUser(updatedUser)

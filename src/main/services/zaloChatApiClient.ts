@@ -5,7 +5,6 @@ import type {
   ZaloSessionCheckResult
 } from '../../shared/types'
 
-const ZALO_CHAT_API_ORGANIZATION_ID = 1
 const ZALO_CHAT_API_DEFAULT_ORIGIN = 'https://aka-agent-chat-api.fly.dev'
 const REQUEST_TIMEOUT_MS = 15_000
 const POLL_INTERVAL_MS = 700
@@ -162,13 +161,13 @@ export class ZaloChatApiClient {
   }
 
   public isEnabled(): boolean {
-    return this.user?.organizationId === ZALO_CHAT_API_ORGANIZATION_ID &&
+    return this.user?.isChatSync === true &&
       this.user.entitlements.zalo === true &&
       this.user.zaloAccountCapabilities?.server === true
   }
 
   public canUseLocalRuntime(): boolean {
-    return this.user?.organizationId === ZALO_CHAT_API_ORGANIZATION_ID &&
+    return this.user?.isChatSync === true &&
       this.user.entitlements.zalo === true &&
       this.user.zaloAccountCapabilities?.qr === true
   }
@@ -178,7 +177,7 @@ export class ZaloChatApiClient {
       username: String(username || '').trim(),
       password: String(password || '')
     }
-    const enabled = user.organizationId === ZALO_CHAT_API_ORGANIZATION_ID &&
+    const enabled = user.isChatSync === true &&
       user.entitlements.zalo === true &&
       (user.zaloAccountCapabilities?.server === true ||
         user.zaloAccountCapabilities?.qr === true)
@@ -229,7 +228,10 @@ export class ZaloChatApiClient {
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(this.credentials)
+        body: JSON.stringify({
+          ...this.credentials,
+          organizationId: this.user!.organizationId
+        })
       }
     )
     if (!response.ok) throw await responseError(response)
@@ -367,13 +369,13 @@ export class ZaloChatApiClient {
 
   private requireEnabled(): void {
     if (!this.isEnabled() || !this.user || !this.credentials) {
-      throw new Error('Chat API chỉ nhận đăng nhập Zalo Server của tổ chức 1.')
+      throw new Error('Tổ chức chưa được cấp quyền Đồng bộ Chat cho sản phẩm đang sử dụng.')
     }
   }
 
   private requireLocalRuntimeEnabled(): void {
     if (!this.canUseLocalRuntime() || !this.user || !this.credentials) {
-      throw new Error('Đồng bộ Chat cho Zalo QR local chỉ áp dụng tổ chức 1.')
+      throw new Error('Tổ chức chưa được cấp quyền Đồng bộ Chat cho sản phẩm đang sử dụng.')
     }
   }
 
@@ -467,7 +469,10 @@ export class ZaloChatApiClient {
     const response = await this.fetchWithTimeout('/api/chat/desktop/session', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(this.credentials)
+      body: JSON.stringify({
+        ...this.credentials,
+        organizationId: this.user!.organizationId
+      })
     })
     if (!response.ok) throw await responseError(response)
     const session = await response.json() as DesktopSessionResponse

@@ -10,9 +10,10 @@ import {
   EmailNotificationSettings
 } from '../../../../shared/types'
 import { useUiStore } from '../../stores/uiStore'
+import { useAuthStore } from '../../stores/authStore'
 import ZaloFriendBlocklistSettings from './ZaloFriendBlocklistSettings'
 
-export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists'
+export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync'
 
 interface GeneralSettingsModalProps {
   initialMenu?: GeneralSettingsMenu
@@ -96,6 +97,7 @@ function parseRecipientEmails(value: string): string[] {
 }
 
 export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }: GeneralSettingsModalProps) {
+  const user = useAuthStore(state => state.user)
   const showAlert = useUiStore(s => s.showAlert)
   const showConfirm = useUiStore(s => s.showConfirm)
   const [activeMenu, setActiveMenu] = useState<SettingsMenu>(initialMenu)
@@ -182,6 +184,48 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
 
   const resetAkaBizTagForm = () => {
     setAkaBizTagForm({ id: null, name: '' })
+  }
+
+  const renderChatSyncContent = () => {
+    const products = user?.chatSyncProducts || []
+    return (
+      <div className="chat-sync-settings">
+        <div className="chat-sync-settings-head">
+          <div>
+            <h3>Đồng bộ Chat</h3>
+            <p>Quyền được cấp theo từng sản phẩm Zalo (16/18) của tổ chức. Thông tin này chỉ xem.</p>
+          </div>
+          <span className={`chat-sync-effective-status ${user?.isChatSync ? 'is-enabled' : ''}`}>
+            {user?.isChatSync ? 'Đang bật' : 'Chưa bật'}
+          </span>
+        </div>
+        {products.length === 0 ? (
+          <div className="chat-sync-empty">Tổ chức chưa có sản phẩm để hiển thị.</div>
+        ) : (
+          <div className="chat-sync-product-list">
+            <div className="chat-sync-product-row chat-sync-product-header" aria-hidden="true">
+              <span>Tên sản phẩm</span>
+              <span>Đồng bộ Chat</span>
+            </div>
+            {products.map(product => (
+              <div className="chat-sync-product-row" key={product.organizationProductId}>
+                <div className="chat-sync-product-name">
+                  <strong>{product.displayName}</strong>
+                  {product.packageName && product.packageName !== product.displayName && (
+                    <span>{product.packageName}</span>
+                  )}
+                  {!product.isActive && <span className="chat-sync-product-expired">Đã hết hạn</span>}
+                </div>
+                <label className="chat-sync-readonly-check" title="Cài đặt do quản trị sản phẩm cấp">
+                  <input type="checkbox" checked={product.isChatSync} disabled readOnly />
+                  <span>{product.isChatSync ? 'Có' : 'Không'}</span>
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
   }
 
   const handleEditAkaBizTag = (tag: AkaBizContactTag) => {
@@ -547,6 +591,13 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
         <div className="general-settings-body">
           <aside className="general-settings-sidebar">
             <button
+              className={`general-settings-nav-item ${activeMenu === 'chatSync' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('chatSync')}
+            >
+              <MessageSquareText size={15} />
+              <span>Đồng bộ Chat</span>
+            </button>
+            <button
               className={`general-settings-nav-item ${activeMenu === 'akabiz' ? 'active' : ''}`}
               onClick={() => setActiveMenu('akabiz')}
             >
@@ -577,7 +628,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
           </aside>
 
           <section className={`general-settings-content ${activeMenu === 'zaloBlocklists' ? 'zalo-blocklist-content' : ''}`}>
-            {activeMenu === 'akabiz' ? (loading ? (
+            {activeMenu === 'chatSync' ? renderChatSyncContent() : activeMenu === 'akabiz' ? (loading ? (
               <div className="text-center text-secondary" style={{ padding: 24 }}>Đang tải...</div>
             ) : (
               <div className="akabiz-integration-grid">
