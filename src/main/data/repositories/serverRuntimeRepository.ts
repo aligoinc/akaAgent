@@ -1,10 +1,13 @@
-import type { AuthAccountProduct, AuthEntitlements, AuthUser } from '../../../shared/types'
+import type { AuthAccountProduct, AuthChatSyncProduct, AuthEntitlements, AuthUser } from '../../../shared/types'
 import { getAuthProductById } from '../../../shared/authProductCatalog'
+import { getVietnamDayStart } from '../../../shared/vietnamTime'
 import { getSupabaseClient } from '../supabaseClient'
 import {
   ZALO_PRODUCT_IDS,
   emptyAuthEntitlements,
   loadOrganizationAccountProducts,
+  loadOrganizationChatSyncProducts,
+  loadOrganizationEntitlementAccess,
   loadOrganizationEntitlements
 } from './entitlementRepository'
 import {
@@ -16,12 +19,6 @@ import {
 const client = () => getSupabaseClient()
 const PAGE_SIZE = 1000
 const ID_CHUNK_SIZE = 100
-const ZALO_CHAT_API_ORGANIZATION_ID = 1
-
-function isZaloChatApiOrganization(organizationId: number): boolean {
-  return organizationId === ZALO_CHAT_API_ORGANIZATION_ID
-}
-
 interface ServerStaffRow {
   id: number
   organization_id: number
@@ -80,6 +77,8 @@ interface ServerOrganizationContext {
   organizationName: string
   entitlements: AuthEntitlements
   accountProducts: AuthAccountProduct[]
+  isChatSync: boolean
+  chatSyncProducts: AuthChatSyncProduct[]
 }
 
 const DISCOVERY_STAFF_SELECT = [
@@ -132,6 +131,8 @@ async function buildServerAuthUser(
     },
     entitlements: context.entitlements,
     accountProducts: context.accountProducts,
+    isChatSync: context.isChatSync,
+    chatSyncProducts: context.chatSyncProducts,
     zaloRuntimeModeRevision: resolvedModeSnapshot.revision
   }
 }
@@ -219,6 +220,8 @@ function buildDiscoveredZaloServerUser(row: ZaloServerDiscoveryRow): ZaloServerR
     },
     entitlements,
     accountProducts: [accountProduct],
+    isChatSync: false,
+    chatSyncProducts: [],
     zaloRuntimeModeRevision: revision
   }
 }
@@ -245,16 +248,20 @@ async function loadOrganizationNameMap(organizationIds: number[]): Promise<Map<n
 }
 
 async function loadOrganizationContext(organizationId: number): Promise<ServerOrganizationContext | null> {
-  const [organizationNames, entitlements, accountProducts] = await Promise.all([
+  const [organizationNames, entitlementAccess, accountProducts, chatSyncProducts] = await Promise.all([
     loadOrganizationNameMap([organizationId]),
-    loadOrganizationEntitlements(organizationId),
-    loadOrganizationAccountProducts(organizationId)
+    loadOrganizationEntitlementAccess(organizationId),
+    loadOrganizationAccountProducts(organizationId),
+    loadOrganizationChatSyncProducts(organizationId)
   ])
+  const { entitlements, chatSyncEnabled } = entitlementAccess
   const context: ServerOrganizationContext = {
     organizationId,
     organizationName: organizationNames.get(organizationId) || '',
     entitlements,
-    accountProducts
+    accountProducts,
+    isChatSync: chatSyncEnabled,
+    chatSyncProducts
   }
   return entitlements.zalo ? context : null
 }
@@ -270,8 +277,46 @@ function toZaloOnlyOrganizationContext(context: ServerOrganizationContext): Serv
     entitlements,
     accountProducts: context.accountProducts
       .filter(product => product.feature === 'zalo' && product.isActive)
-      .slice(0, 1)
+      .slice(0, 1),
+    isChatSync: context.isChatSync,
+    chatSyncProducts: context.chatSyncProducts
   }
+}
+
+async function loadChatSyncEnabledOrganizationIds(
+  organizationIds: number[]
+): Promise<Set<number>> {
+  const enabled = new Set<number>()
+  const uniqueIds = Array.from(new Set(organizationIds.filter(id => (
+    Number.isSafeInteger(id) && id > 0
+  ))))
+  if (uniqueIds.length === 0) return enabled
+  const todayStart = getVietnamDayStart().getTime()
+
+  for (const idChunk of chunkValues(uniqueIds, ID_CHUNK_SIZE)) {
+    const { data, error } = await client()
+      .from('org_organization_product')
+      .select('organization_id, expiration_date')
+      .in('organization_id', idChunk)
+      .in('product_id', ZALO_PRODUCT_IDS)
+      .eq('is_deleted', false)
+      .eq('is_chat_sync', true)
+
+    if (error) throwServerRuntimeTechnicalError('load Chat sync organizations', error)
+    for (const row of data || []) {
+      const organizationId = Number(row.organization_id)
+      const expirationTime = row.expiration_date ? Date.parse(row.expiration_date) : NaN
+      if (
+        Number.isSafeInteger(organizationId) && organizationId > 0 &&
+        Number.isFinite(expirationTime) && expirationTime >= todayStart
+      ) enabled.add(organizationId)
+    }
+  }
+  return enabled
+}
+
+async function isChatSyncOrganization(organizationId: number): Promise<boolean> {
+  return (await loadChatSyncEnabledOrganizationIds([organizationId])).has(organizationId)
 }
 
 async function loadDiscoveryPage(
@@ -362,10 +407,8 @@ export async function loadActiveZaloServerUser(
   const normalizedStaffId = requirePositiveSafeInteger(staffId, 'staff_id')
   const page = await loadDiscoveryPage(normalizedStaffId - 1, 1)
   const user = page.users[0]
-  return user?.staffId === normalizedStaffId &&
-    !isZaloChatApiOrganization(user.organizationId)
-    ? user
-    : null
+  if (!user || user.staffId !== normalizedStaffId) return null
+  return await isChatSyncOrganization(user.organizationId) ? null : user
 }
 
 /**
@@ -377,9 +420,17 @@ export async function listActiveZaloServerUsers(): Promise<ZaloServerRuntimeUser
   const users: ZaloServerRuntimeUser[] = []
   const seenStaffIds = new Set<number>()
   let afterStaffId = 0
+  const chatSyncByOrganization = new Map<number, boolean>()
 
   while (true) {
     const page = await loadDiscoveryPage(afterStaffId, PAGE_SIZE)
+    const unknownOrganizationIds = Array.from(new Set(page.users
+      .map(user => user.organizationId)
+      .filter(organizationId => !chatSyncByOrganization.has(organizationId))))
+    const enabledChatOrganizations = await loadChatSyncEnabledOrganizationIds(unknownOrganizationIds)
+    for (const organizationId of unknownOrganizationIds) {
+      chatSyncByOrganization.set(organizationId, enabledChatOrganizations.has(organizationId))
+    }
     for (const user of page.users) {
       if (seenStaffIds.has(user.staffId)) {
         throwServerRuntimeTechnicalError(
@@ -388,7 +439,7 @@ export async function listActiveZaloServerUsers(): Promise<ZaloServerRuntimeUser
         )
       }
       seenStaffIds.add(user.staffId)
-      if (isZaloChatApiOrganization(user.organizationId)) continue
+      if (chatSyncByOrganization.get(user.organizationId) === true) continue
       users.push(user)
     }
 
@@ -465,7 +516,7 @@ export async function hasLiveZaloServerRealtimeCapability(
     !Number.isSafeInteger(normalizedStaffId) || normalizedStaffId <= 0 ||
     !Number.isSafeInteger(normalizedOrganizationId) || normalizedOrganizationId <= 0
   ) return false
-  if (isZaloChatApiOrganization(normalizedOrganizationId)) return false
+  if (await isChatSyncOrganization(normalizedOrganizationId)) return false
 
   const { data, error } = await client()
     .from('org_staff')
@@ -524,7 +575,7 @@ async function authenticateZaloRuntimeUser(
   }
 
   const context = await loadOrganizationContext(staff.organization_id)
-  if (!context) return null
+  if (!context || context.isChatSync) return null
   const modeSnapshot = await loadStaffZaloServerModeSnapshot(staff.id)
   return buildServerAuthUser(staff, toZaloOnlyOrganizationContext(context), modeSnapshot)
 }

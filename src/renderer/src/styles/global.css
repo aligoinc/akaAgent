@@ -2818,6 +2818,121 @@ button.btn-icon:not(.btn):disabled {
   overflow: hidden;
 }
 
+.chat-sync-settings {
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chat-sync-settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chat-sync-settings-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.chat-sync-settings-head p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-sync-effective-status {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chat-sync-effective-status.is-enabled {
+  color: var(--accent-success);
+  border-color: var(--accent-success);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.chat-sync-product-list,
+.chat-sync-empty {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.chat-sync-empty {
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-sync-product-row {
+  min-height: 58px;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.chat-sync-product-row:last-child {
+  border-bottom: 0;
+}
+
+.chat-sync-product-header {
+  min-height: 40px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chat-sync-product-name {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.chat-sync-product-name strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.chat-sync-product-name span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.chat-sync-product-name .chat-sync-product-expired {
+  color: var(--accent-error);
+}
+
+.chat-sync-readonly-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chat-sync-readonly-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+}
+
 .akabiz-integration-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

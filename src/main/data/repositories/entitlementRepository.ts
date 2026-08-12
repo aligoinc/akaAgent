@@ -1,5 +1,6 @@
 import {
   AuthAccountProduct,
+  AuthChatSyncProduct,
   AuthEntitlementFeature,
   AuthEntitlements,
   AuthUser,
@@ -107,12 +108,14 @@ interface OrganizationProductRow {
   max_accounts?: number | string | null
   is_zalo_show_web?: boolean | null
   is_zalo_server?: boolean | null
+  is_chat_sync?: boolean | null
   created_at?: string | null
 }
 
 export interface OrganizationEntitlementAccess {
   entitlements: AuthEntitlements
   zaloAccountCapabilities: ZaloAccountCapabilities
+  chatSyncEnabled: boolean
 }
 
 export function emptyZaloAccountCapabilities(): ZaloAccountCapabilities {
@@ -335,10 +338,9 @@ export async function loadOrganizationEntitlementAccess(
   const entitlements = emptyAuthEntitlements()
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('id, product_id, expiration_date, package_type, max_sends_per_day, max_accounts, is_zalo_show_web, is_zalo_server, created_at')
+    .select('id, product_id, expiration_date, package_type, max_sends_per_day, max_accounts, is_zalo_show_web, is_zalo_server, is_chat_sync, created_at')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
-    .in('product_id', AUTH_PRODUCT_IDS)
     .order('created_at', { ascending: false, nullsFirst: false })
     .order('id', { ascending: false })
 
@@ -364,8 +366,49 @@ export async function loadOrganizationEntitlementAccess(
 
   return {
     entitlements,
-    zaloAccountCapabilities: resolveZaloAccountCapabilities(rows)
+    zaloAccountCapabilities: resolveZaloAccountCapabilities(rows),
+    chatSyncEnabled: rows.some(row => (
+      isZaloProductRow(row) &&
+      row.is_chat_sync === true &&
+      isExpirationActive(row.expiration_date)
+    ))
   }
+}
+
+export async function loadOrganizationChatSyncProducts(
+  organizationId: number
+): Promise<AuthChatSyncProduct[]> {
+  const { data, error } = await client()
+    .from('org_organization_product')
+    .select('id, product_id, product_name, package_name, expiration_date, is_chat_sync, created_at')
+    .eq('organization_id', organizationId)
+    .eq('is_deleted', false)
+    .in('product_id', ZALO_PRODUCT_IDS)
+    .order('created_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
+
+  if (error) {
+    console.error('[entitlements] load organization Chat sync products:', error)
+    throw new Error('Không thể tải cài đặt Đồng bộ Chat. Vui lòng thử lại sau.')
+  }
+
+  return ((data || []) as unknown as OrganizationProductRow[]).map(row => {
+    const organizationProductId = Number(row.id)
+    const productId = Number(row.product_id)
+    const productCatalogItem = getAuthProductById(Number.isFinite(productId) ? productId : null)
+    const productName = String(row.product_name || '').trim()
+    const packageName = String(row.package_name || '').trim()
+    return {
+      organizationProductId,
+      productId: Number.isFinite(productId) ? productId : null,
+      productName,
+      packageName,
+      displayName: productName || productCatalogItem?.label || packageName || 'Sản phẩm',
+      expirationDate: row.expiration_date || null,
+      isActive: isExpirationActive(row.expiration_date),
+      isChatSync: row.is_chat_sync === true
+    }
+  }).filter(row => Number.isSafeInteger(row.organizationProductId) && row.organizationProductId > 0)
 }
 
 export async function loadOrganizationEntitlements(organizationId: number): Promise<AuthEntitlements> {
