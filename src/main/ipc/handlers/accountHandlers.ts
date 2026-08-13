@@ -252,6 +252,17 @@ export function registerAccountHandlers(
       // the public account projection so the Server QR flow opens immediately.
       normalizedUpdates.loginStatus = 'chưa đăng nhập'
     }
+    if (
+      changesZaloType &&
+      existing!.isZaloServer &&
+      !targetIsZaloServer &&
+      !targetIsZaloShowWeb
+    ) {
+      // Chat Server credentials live in chat_zalo_account_organization and are
+      // never copied to Desktop. A successful Server login also invalidates any
+      // older QR-local credential, so Server -> QR local always starts logged out.
+      normalizedUpdates.loginStatus = 'chưa đăng nhập'
+    }
     const crossesZaloWebBoundary = changesZaloType
       && targetIsZaloShowWeb !== existing!.isZaloShowWeb
     let zaloTypeChangePreviousStatus: PreviousZaloAccountStatus | undefined
