@@ -999,8 +999,8 @@ export class CampaignScheduler {
       if (transition.reason === 'unit_lease_busy') {
         throw new Error('Lượt hiện tại chưa ghi xong; vui lòng chờ chiến dịch tạm dừng hoàn tất rồi tiếp tục.')
       }
-      if (transition.reason === 'runtime_busy' || transition.reason === 'account_running') {
-        throw new Error('Tài khoản hoặc chiến dịch đang được runtime khác xử lý. Vui lòng thử lại sau.')
+      if (transition.reason === 'runtime_busy') {
+        throw new Error('Chiến dịch đang được runtime khác xử lý. Vui lòng thử lại sau.')
       }
       if (transition.reason === 'not_found') throw new Error('Không tìm thấy chiến dịch.')
       throw new Error('Trạng thái chiến dịch đã thay đổi. Vui lòng tải lại trước khi tiếp tục.')
