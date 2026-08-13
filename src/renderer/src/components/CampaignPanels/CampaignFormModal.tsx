@@ -7230,7 +7230,6 @@ export default function CampaignFormModal({
             if (materializedInputCount === 0) {
               const emptySnapshotNote = 'Các Nhóm data đã chọn không có data phù hợp với hành động và tài khoản của chiến dịch.'
               await updateCampaign(savedCampaign.id, {
-                status: 'tạm dừng',
                 note: emptySnapshotNote
               }, { refresh: false })
               emptySnapshotCampaigns.push({
