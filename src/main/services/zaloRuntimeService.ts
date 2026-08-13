@@ -638,6 +638,33 @@ export class ZaloRuntimeService {
     }
     subscribers.add(handlers)
 
+    // A Chat runtime connection can be recreated while the shared Zalo
+    // listener remains alive. Replay the listener's current lifecycle state to
+    // the new subscriber so it does not have to synthesize connecting/ready in
+    // its own attach flow. Future transitions still come from the listener
+    // events below.
+    const state = this.listenerStates.get(accountId)
+    if (state && state.status !== 'idle' && handlers.status) {
+      try {
+        void Promise.resolve(handlers.status({
+          accountId,
+          status: state.status,
+          ready: state.ready,
+          error: state.lastError
+        })).catch((err) => {
+          console.warn('[ZaloRuntime] Realtime listener subscriber failed (status snapshot)', {
+            accountId,
+            message: this.getErrorMessage(err)
+          })
+        })
+      } catch (err) {
+        console.warn('[ZaloRuntime] Realtime listener subscriber failed (status snapshot)', {
+          accountId,
+          message: this.getErrorMessage(err)
+        })
+      }
+    }
+
     return () => {
       const current = this.realtimeListenerSubscribers.get(accountId)
       if (!current) return
@@ -2335,6 +2362,7 @@ export class ZaloRuntimeService {
       state.status = 'starting'
       state.ready = false
       state.lastEventAt = Date.now()
+      this.emitZaloListenerStatus(state)
       try {
         api.listener.start({ retryOnClose: true })
       } catch (err) {
@@ -2346,6 +2374,7 @@ export class ZaloRuntimeService {
         state.ready = false
         state.lastError = this.getErrorMessage(err)
         state.lastEventAt = Date.now()
+        this.emitZaloListenerStatus(state)
         throw err
       }
 
@@ -2407,20 +2436,22 @@ export class ZaloRuntimeService {
     api.listener.on('connected', () => {
       const current = this.listenerStates.get(accountId)
       if (current !== state) return
+      const changed = state.status !== 'starting' || state.ready
       state.status = 'starting'
       state.ready = false
       state.lastEventAt = Date.now()
-      this.emitZaloListenerStatus(state)
+      if (changed) this.emitZaloListenerStatus(state)
     })
     api.listener.on('cipher_key', () => {
       const current = this.listenerStates.get(accountId)
       if (current !== state) return
+      const changed = state.status !== 'running' || !state.ready
       state.status = 'running'
       state.ready = true
       state.readyAt = Date.now()
       state.lastEventAt = state.readyAt
       state.lastError = null
-      this.emitZaloListenerStatus(state)
+      if (changed) this.emitZaloListenerStatus(state)
     })
     api.listener.on('disconnected', (code, reason) => {
       const current = this.listenerStates.get(accountId)

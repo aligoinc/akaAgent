@@ -163,7 +163,22 @@ export function registerIpcHandlers(
       // Window may be closed
     }
   }
-  const zaloChatApiClient = new ZaloChatApiClient(emitZaloLoginQrEvent)
+  const zaloChatApiClient = new ZaloChatApiClient(
+    emitZaloLoginQrEvent,
+    event => {
+      if (event.channel !== IPC_EVENTS.CAMPAIGN_LOG) return
+      try {
+        if (!mainWindow.isDestroyed()) {
+          const payload = event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)
+            ? { ...event.payload, source: 'server' }
+            : event.payload
+          mainWindow.webContents.send(event.channel, payload)
+        }
+      } catch {
+        // Renderer có thể đang đóng.
+      }
+    }
+  )
   let zaloLocalChatSync: ZaloLocalChatSyncService | null = null
   const startZaloRemoteClients = (user: AuthUser, username: string, password: string): void => {
     if (user.isChatSync === true) {

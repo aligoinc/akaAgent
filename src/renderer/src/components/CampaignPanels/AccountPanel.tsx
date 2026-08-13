@@ -653,11 +653,20 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
         accountId = editingAccount.id
         if (zaloSubtypeChanged) {
           const crossesWebBoundary = isZaloWebAccount(editingAccount) !== isZaloWebAccount(updated)
-          if (crossesWebBoundary || !updated.hasZaloSession) {
+          const switchesFromServerToQrLocal = isZaloServerAccount(editingAccount)
+            && !isZaloServerAccount(updated)
+            && !isZaloWebAccount(updated)
+          if (switchesFromServerToQrLocal) {
+            useUiStore.getState().showAlert(
+              `Đã chuyển "${updated.name}" sang QR local. Vui lòng quét QR để đăng nhập.`,
+              'info'
+            )
+            changedZaloAccount = updated
+          } else if (crossesWebBoundary || !updated.hasZaloSession) {
             changedZaloAccount = updated
           } else {
             useUiStore.getState().showAlert(
-              `Đã chuyển "${updated.name}" sang ${getAccountPlatformLabel(updated)} và giữ nguyên phiên đăng nhập Zalo.`,
+              `Đã chuyển "${updated.name}" sang ${getAccountPlatformLabel(updated)}.`,
               'success'
             )
           }

@@ -4,11 +4,16 @@ import type {
   ZaloLoginQrStartResult,
   ZaloSessionCheckResult
 } from '../../shared/types'
+import WebSocket from 'ws'
 
 const ZALO_CHAT_API_DEFAULT_ORIGIN = 'https://aka-agent-chat-api.fly.dev'
 const REQUEST_TIMEOUT_MS = 15_000
 const POLL_INTERVAL_MS = 700
 const TOKEN_REUSE_SAFETY_MS = 30_000
+const REALTIME_RECONNECT_MIN_MS = 2_000
+const REALTIME_RECONNECT_MAX_MS = 120_000
+const REALTIME_RECONNECT_STABLE_RESET_MS = 30_000
+const REALTIME_CONNECT_TIMEOUT_MS = 15_000
 
 interface LoginCredentials {
   username: string
@@ -77,6 +82,21 @@ interface ActiveQrOperation {
   generation: number
   lastFingerprint: string | null
   timer: ReturnType<typeof setTimeout> | null
+}
+
+interface ChatRealtimeEvent {
+  sequence: number
+  timestamp: string
+  staffId: number
+  organizationId: number
+  channel: string
+  payload: unknown
+}
+
+interface ChatRealtimeHello {
+  type: 'hello'
+  snapshot?: { startedAt?: unknown }
+  events?: unknown
 }
 
 export type ZaloChatBindingConflictCode =
@@ -153,8 +173,18 @@ export class ZaloChatApiClient {
   private localRuntimeTokenExpiresAt = 0
   private generation = 0
   private activeQrByAccount = new Map<number, ActiveQrOperation>()
+  private realtimeSocket: WebSocket | null = null
+  private realtimeReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private realtimeReconnectDelayMs = REALTIME_RECONNECT_MIN_MS
+  private realtimeConnecting = false
+  private realtimeStableConnectionTimer: ReturnType<typeof setTimeout> | null = null
+  private realtimeLastSequence = 0
+  private realtimeServerStartedAt: string | null = null
 
-  public constructor(private readonly emitLoginQrEvent: (event: ZaloLoginQrEvent) => void) {
+  public constructor(
+    private readonly emitLoginQrEvent: (event: ZaloLoginQrEvent) => void,
+    private readonly emitRealtimeEvent: (event: ChatRealtimeEvent) => void = () => undefined
+  ) {
     this.origin = String(
       process.env.AKA_AGENT_CHAT_API_URL || ZALO_CHAT_API_DEFAULT_ORIGIN
     ).replace(/\/+$/, '')
@@ -187,12 +217,14 @@ export class ZaloChatApiClient {
       this.credentials.password === credentials.password
     if (enabled && sameIdentity) {
       this.user = user
+      this.ensureRealtimeConnection()
       return
     }
     this.stop()
     if (!enabled || !credentials.username || !credentials.password) return
     this.user = user
     this.credentials = credentials
+    this.ensureRealtimeConnection()
   }
 
   public stop(): void {
@@ -207,6 +239,19 @@ export class ZaloChatApiClient {
     this.tokenExpiresAt = 0
     this.localRuntimeToken = null
     this.localRuntimeTokenExpiresAt = 0
+    if (this.realtimeReconnectTimer) clearTimeout(this.realtimeReconnectTimer)
+    if (this.realtimeStableConnectionTimer) clearTimeout(this.realtimeStableConnectionTimer)
+    this.realtimeReconnectTimer = null
+    this.realtimeStableConnectionTimer = null
+    this.realtimeConnecting = false
+    const socket = this.realtimeSocket
+    this.realtimeSocket = null
+    if (socket) {
+      try { socket.close(1000, 'Chat client stopped') } catch {}
+    }
+    this.realtimeReconnectDelayMs = REALTIME_RECONNECT_MIN_MS
+    this.realtimeLastSequence = 0
+    this.realtimeServerStartedAt = null
   }
 
   public async getLocalRuntimeSession(): Promise<LocalRuntimeDesktopSession> {
@@ -383,6 +428,158 @@ export class ZaloChatApiClient {
     const url = new URL('/internal/runtime/local/socket', this.origin)
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
     return url.toString()
+  }
+
+  private realtimeWebSocketUrl(): string {
+    const url = new URL('/ws', this.origin)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    return url.toString()
+  }
+
+  private ensureRealtimeConnection(): void {
+    if (!this.isEnabled() || !this.user || !this.credentials) return
+    if (
+      this.realtimeConnecting ||
+      this.realtimeSocket?.readyState === WebSocket.OPEN ||
+      this.realtimeSocket?.readyState === WebSocket.CONNECTING ||
+      this.realtimeReconnectTimer
+    ) return
+    const generation = this.generation
+    void this.connectRealtime(generation).catch(() => {
+      this.scheduleRealtimeReconnect(generation)
+    })
+  }
+
+  private async connectRealtime(generation: number): Promise<void> {
+    if (generation !== this.generation || !this.isEnabled()) return
+    this.realtimeConnecting = true
+    try {
+      const token = await this.ensureToken()
+      if (generation !== this.generation || !this.isEnabled()) return
+      const socket = new WebSocket(this.realtimeWebSocketUrl())
+      this.realtimeSocket = socket
+      const connectTimeout = setTimeout(() => {
+        if (this.realtimeSocket === socket) {
+          try { socket.terminate() } catch {}
+        }
+      }, REALTIME_CONNECT_TIMEOUT_MS)
+      socket.on('open', () => {
+        if (generation !== this.generation || this.realtimeSocket !== socket) return
+        socket.send(JSON.stringify({ type: 'authenticate', token }))
+      })
+      socket.on('message', raw => {
+        if (generation !== this.generation || this.realtimeSocket !== socket) return
+        const messageText = raw.toString()
+        try {
+          const message = JSON.parse(messageText) as { type?: unknown }
+          if (message?.type === 'hello') clearTimeout(connectTimeout)
+        } catch {}
+        this.handleRealtimeMessage(messageText)
+      })
+      socket.on('close', () => {
+        clearTimeout(connectTimeout)
+        if (this.realtimeStableConnectionTimer) clearTimeout(this.realtimeStableConnectionTimer)
+        this.realtimeStableConnectionTimer = null
+        if (this.realtimeSocket === socket) this.realtimeSocket = null
+        if (generation === this.generation && this.isEnabled()) {
+          this.scheduleRealtimeReconnect(generation)
+        }
+      })
+      socket.on('error', () => {
+        // close event lên lịch reconnect.
+      })
+    } finally {
+      this.realtimeConnecting = false
+    }
+  }
+
+  private handleRealtimeMessage(raw: string): void {
+    let message: Record<string, unknown>
+    try {
+      const value: unknown = JSON.parse(raw)
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return
+      message = value as Record<string, unknown>
+    } catch {
+      return
+    }
+    if (message.type === 'hello') {
+      // App Server cũng bắt đầu panel Tiến trình tại biên kết nối, không phát lại
+      // campaign:log cũ trong hello.
+      const hello = message as unknown as ChatRealtimeHello
+      const startedAt = typeof hello.snapshot?.startedAt === 'string'
+        ? hello.snapshot.startedAt
+        : null
+      if (
+        startedAt &&
+        this.realtimeServerStartedAt &&
+        startedAt !== this.realtimeServerStartedAt
+      ) {
+        this.realtimeLastSequence = 0
+      }
+      this.realtimeServerStartedAt = startedAt
+      const bufferedEvents = Array.isArray(hello.events) ? [...hello.events] : []
+      bufferedEvents.sort((left, right) => {
+        const leftSequence = left && typeof left === 'object' && !Array.isArray(left)
+          ? Number((left as { sequence?: unknown }).sequence)
+          : 0
+        const rightSequence = right && typeof right === 'object' && !Array.isArray(right)
+          ? Number((right as { sequence?: unknown }).sequence)
+          : 0
+        return leftSequence - rightSequence
+      })
+      for (const buffered of bufferedEvents) {
+        if (!buffered || typeof buffered !== 'object' || Array.isArray(buffered)) continue
+        const event = buffered as Partial<ChatRealtimeEvent>
+        if (event.channel === 'campaign:log') this.markRealtimeEventSeen(event)
+      }
+      if (this.realtimeStableConnectionTimer) clearTimeout(this.realtimeStableConnectionTimer)
+      this.realtimeStableConnectionTimer = setTimeout(() => {
+        this.realtimeStableConnectionTimer = null
+        this.realtimeReconnectDelayMs = REALTIME_RECONNECT_MIN_MS
+      }, REALTIME_RECONNECT_STABLE_RESET_MS)
+      return
+    }
+    if (message.type !== 'runtime-event') return
+    const value = message.event
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return
+    const event = value as Partial<ChatRealtimeEvent>
+    if (
+      event.channel !== 'campaign:log' ||
+      !this.user ||
+      event.staffId !== this.user.staffId ||
+      event.organizationId !== this.user.organizationId
+    ) return
+    if (!this.markRealtimeEventSeen(event)) return
+    this.emitRealtimeEvent(event as ChatRealtimeEvent)
+  }
+
+  private markRealtimeEventSeen(event: Partial<ChatRealtimeEvent>): boolean {
+    if (
+      !this.user ||
+      event.staffId !== this.user.staffId ||
+      event.organizationId !== this.user.organizationId
+    ) return false
+    const sequence = Number(event.sequence)
+    if (!Number.isSafeInteger(sequence) || sequence <= this.realtimeLastSequence) return false
+    this.realtimeLastSequence = sequence
+    return true
+  }
+
+  private scheduleRealtimeReconnect(generation: number): void {
+    if (
+      generation !== this.generation ||
+      !this.isEnabled() ||
+      this.realtimeReconnectTimer
+    ) return
+    const delay = this.realtimeReconnectDelayMs
+    this.realtimeReconnectDelayMs = Math.min(
+      REALTIME_RECONNECT_MAX_MS,
+      this.realtimeReconnectDelayMs * 2
+    )
+    this.realtimeReconnectTimer = setTimeout(() => {
+      this.realtimeReconnectTimer = null
+      this.ensureRealtimeConnection()
+    }, delay)
   }
 
   private async localRuntimeRequest<T>(

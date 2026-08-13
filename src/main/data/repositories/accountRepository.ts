@@ -386,6 +386,11 @@ export async function updateAccount(
   const crossesZaloWebBoundary = changesZaloRuntimeType && (
     targetIsZaloShowWeb !== current.isZaloShowWeb
   )
+  const switchesFromServerToQrLocal = changesZaloRuntimeType && (
+    current.isZaloServer &&
+    !targetIsZaloServer &&
+    !targetIsZaloShowWeb
+  )
   if (changesZaloRuntimeType) {
     const claimedPreviousStatus = options.zaloTypeChangePreviousStatus
     if (!claimedPreviousStatus || !options.zaloTypeChangeClaimToken) {
@@ -403,6 +408,14 @@ export async function updateAccount(
     if (crossesZaloWebBoundary) {
       Object.assign(payload, {
         zalo_account_id: null,
+        zalo_session: null,
+        zalo_session_updated_at: null,
+        zalo_session_last_verified_at: null,
+        zalo_session_last_error: null,
+        login_status: 'chưa đăng nhập'
+      })
+    } else if (switchesFromServerToQrLocal) {
+      Object.assign(payload, {
         zalo_session: null,
         zalo_session_updated_at: null,
         zalo_session_last_verified_at: null,

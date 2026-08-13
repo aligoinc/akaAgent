@@ -112,6 +112,7 @@ interface AttachedAccount extends LocalRuntimeBindingRegistration {
   unsubscribe: () => void
   initialSyncGeneration: string | null
   ready: boolean
+  listenerFailureVersion: number
 }
 
 interface BindingConflict {
@@ -530,15 +531,23 @@ export class ZaloLocalChatSyncService {
     let attached = this.attached.get(accountId)
     if (!attached) {
       const handlers = this.listenerHandlers(accountId)
-      const unsubscribe = this.zaloRuntime.subscribeRealtimeListener(accountId, handlers)
       attached = {
         ...binding,
         accountId,
-        unsubscribe,
+        unsubscribe: () => {},
         initialSyncGeneration: null,
-        ready: false
+        ready: false,
+        listenerFailureVersion: 0
       }
       this.attached.set(accountId, attached)
+      try {
+        // Register the attached row before subscribing because ZaloRuntimeService
+        // immediately replays an already-running listener snapshot.
+        attached.unsubscribe = this.zaloRuntime.subscribeRealtimeListener(accountId, handlers)
+      } catch (error) {
+        this.attached.delete(accountId)
+        throw error
+      }
     } else {
       Object.assign(attached, binding)
       if (generationChanged) {
@@ -546,11 +555,9 @@ export class ZaloLocalChatSyncService {
         this.knownGroupIdsByAccount.delete(accountId)
       }
     }
-    this.reportStatus(accountId, 'connecting')
+    const listenerFailureVersion = attached.listenerFailureVersion
     try {
       await this.zaloRuntime.ensureRealtimeListenerReady(accountId)
-      attached.ready = true
-      this.reportStatus(accountId, 'ready')
       if (attached.initialSyncGeneration !== binding.runtimeGeneration) {
         attached.initialSyncGeneration = binding.runtimeGeneration
         void this.initialSync(accountId, binding.runtimeGeneration)
@@ -558,7 +565,13 @@ export class ZaloLocalChatSyncService {
       }
     } catch (error) {
       attached.ready = false
-      this.reportStatus(accountId, 'error', error)
+      // Synchronous startup failures and listener errors are normally emitted
+      // by ZaloRuntimeService. A timeout/reset can still reject without a
+      // terminal listener event, so preserve the explicit error fallback only
+      // for that case.
+      if (attached.listenerFailureVersion === listenerFailureVersion) {
+        this.reportStatus(accountId, 'error', error)
+      }
       throw error
     }
   }
@@ -664,11 +677,12 @@ export class ZaloLocalChatSyncService {
     const attached = this.attached.get(event.accountId)
     if (!attached) return
     attached.ready = event.status === 'running' && event.ready
-    if (attached.ready) this.reportStatus(event.accountId, 'ready')
+    if (attached.ready && !event.error) this.reportStatus(event.accountId, 'ready')
     else if (event.status === 'starting') this.reportStatus(event.accountId, 'connecting')
     else if (event.status === 'disconnected') {
       this.reportStatus(event.accountId, 'reconnecting', event.error, event.code, event.reason)
     } else if (event.status === 'closed') {
+      attached.listenerFailureVersion += 1
       this.reportStatus(
         event.accountId,
         event.code === CloseReason.KickConnection ? 'kicked' : 'disconnected',
@@ -676,7 +690,10 @@ export class ZaloLocalChatSyncService {
         event.code,
         event.reason
       )
-    } else if (event.status === 'error') this.reportStatus(event.accountId, 'error', event.error)
+    } else if (event.status === 'error') {
+      attached.listenerFailureVersion += 1
+      this.reportStatus(event.accountId, 'error', event.error)
+    }
     else if (event.status === 'stopped') this.reportStatus(event.accountId, 'stopped')
   }
 
