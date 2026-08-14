@@ -806,7 +806,10 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   const isFacebookGroupInviteCampaign = actionId === FACEBOOK_GROUP_INVITE_ACTION_ID
   const isPagePostCampaign = actionId === PAGE_POST_ACTION_ID
   const pagePostMode = extra.pagePostMode || 'api'
-  const isReelsMediaMode = actionId === 'facebook_timeline_post' && extra.postAsReels === true
+  const isUsingSourceContent =
+    (actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
+    ((actionId === FACEBOOK_GROUP_POST_ACTION_ID || actionId === PAGE_POST_ACTION_ID) && extra.copyContentFromSource === true)
+  const isReelsMediaMode = actionId === 'facebook_timeline_post' && extra.postAsReels === true && !isUsingSourceContent
   const isZaloMessageCampaign = [
     ZALO_MESSAGE_PHONE_ACTION_ID,
     ZALO_MESSAGE_FRIEND_ACTION_ID,
@@ -830,11 +833,10 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   const isMessageCampaign = MESSAGE_CAMPAIGN_ACTION_IDS.has(actionId)
   const isToggleableMessageContentCampaign = MESSAGE_CONTENT_TOGGLE_ACTION_IDS.has(actionId)
   const hasMessageEnabled = extra.enableMessage !== false
-  const isUsingSourceContent = (actionId === 'facebook_timeline_post' || actionId === FACEBOOK_GROUP_POST_ACTION_ID || actionId === PAGE_POST_ACTION_ID) &&
-    extra.copyContentFromSource === true
   const isPostBumpCreateMode = (extra.postBumpMode || 'create') === 'create'
   const usesNewsfeedCommentAi = extra.newsfeedCommentUseAI === true
   const showMainContentSection =
+    !isUsingSourceContent &&
     !FIND_DATA_ACTION_IDS.has(actionId) &&
     !isNewsfeedInteractionCampaign &&
     !isFacebookJoinGroupCampaign &&

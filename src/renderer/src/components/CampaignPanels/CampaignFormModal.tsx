@@ -473,6 +473,7 @@ type AiContentTarget = 'content' | 'commentContent' | 'postBumpContent'
 type ContentPreviewTarget = AiContentTarget | 'friendRequestMessage' | 'newsfeedCommentContent'
 type AiContentAction = 'multi' | 'rewrite'
 type AdvancedContentSourceMode = 'manual' | 'group'
+type ContentSettingsTab = 'content' | 'source'
 type AdvancedContentSource = NonNullable<CampaignExtraSettings['advancedContentSource']>
 type AdvancedContentGroupSnapshot = NonNullable<CampaignExtraSettings['advancedContentGroupSnapshot']>
 type AdvancedContentManualDraft = NonNullable<CampaignExtraSettings['advancedContentManualDraft']>
@@ -1630,11 +1631,10 @@ const ACTION_OPTIONS_STEP: StepDef = {
   fields: [{ key: 'messageActions', label: 'Hành động' }]
 }
 
-const SOURCE_CONTENT_STEP: StepDef = {
-  id: 'sourceContent',
-  title: 'Nguồn nội dung',
-  fields: [{ key: 'sourceContent', label: 'Nguồn nội dung' }]
-}
+const withSourceContentField = (step: StepDef): StepDef => ({
+  ...step,
+  fields: [...step.fields, { key: 'sourceContent', label: 'Copy nguồn nội dung' }]
+})
 
 const PAGE_POST_METHOD_STEP: StepDef = {
   id: 'pagePostMethod',
@@ -1735,6 +1735,7 @@ export default function CampaignFormModal({
   const zaloAliasTemplateInputRef = useRef<HTMLInputElement>(null)
   const emailHtmlEditorRef = useRef<EmailHtmlEditorHandle | null>(null)
   const advancedContentEditorRefs = useRef<Record<string, EmailHtmlEditorHandle>>({})
+  const advancedContentTextareaRefs = useRef<Record<string, HTMLTextAreaElement>>({})
   const activeRichContentEditorRef = useRef<{ itemId: string | null; editor: EmailHtmlEditorHandle } | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [saveStarting, setSaveStarting] = useState(false)
@@ -2080,6 +2081,12 @@ export default function CampaignFormModal({
   const [advancedContentSourceMode, setAdvancedContentSourceMode] = useState<AdvancedContentSourceMode>(
     initialAdvancedContentSourceMode
   )
+  const [contentSettingsTab, setContentSettingsTab] = useState<ContentSettingsTab>(
+    campaign?.extraSettings?.copyContentFromSource === true ||
+    campaign?.extraSettings?.sharePost === true
+      ? 'source'
+      : 'content'
+  )
   const [manualAdvancedContentModalOpen, setManualAdvancedContentModalOpen] = useState(false)
   const manualAdvancedContentTriggerRef = useRef<HTMLButtonElement>(null)
   const manualAdvancedContentCloseRef = useRef<HTMLButtonElement>(null)
@@ -2341,6 +2348,8 @@ export default function CampaignFormModal({
   const isFacebookGroupInviteCampaign = formData.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID
   const isTimelinePostCampaign = TIMELINE_POST_ACTIONS.has(formData.actionId)
   const isPagePostCampaign = formData.actionId === PAGE_POST_ACTION_ID
+  const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
+  const isSourceContentMode = supportsSourceContent && contentSettingsTab === 'source'
   const isNewsfeedInteractionCampaign = formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)
@@ -2348,7 +2357,7 @@ export default function CampaignFormModal({
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
-  const isReelsMediaMode = formData.actionId === 'facebook_timeline_post' && formData.postAsReels
+  const isReelsMediaMode = formData.actionId === 'facebook_timeline_post' && formData.postAsReels && !isSourceContentMode
   const mainMediaSelectionMode: MediaSelectionMode = isZaloMessageCampaign || isEmailCampaign
     ? 'file'
     : isReelsMediaMode
@@ -2436,7 +2445,6 @@ export default function CampaignFormModal({
   // support for target drafts created there, but hide the reverse picker here.
   const showFindDataSourceSection = false
   const hasSelectedFindDataSourceCampaign = supportsFindDataSourceLink && isDraftTargetFromFindData
-  const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
   const supportsSourceSharePost = isTimelinePostCampaign && !isPagePostCampaign
   const supportsSourceReels = isTimelinePostCampaign && !isPagePostCampaign
   const isPostBackgroundCampaign = formData.actionId === 'facebook_timeline_post' || isPagePostCampaign || isFacebookGroupPostCampaign
@@ -2450,14 +2458,14 @@ export default function CampaignFormModal({
     isMultiDailyTimeSlotsCampaign &&
     formData.multiDailyTimeSlotsEnabled
   const isPostBackgroundApiModeDisabled = isPagePostCampaign && formData.pagePostMode === 'api'
-  const hasSourceContentSelection = supportsSourceContent && (formData.copyContentFromSource || (supportsSourceSharePost && formData.sharePost))
+  const hasSourceContentSelection = isSourceContentMode
   const isPostBackgroundSourceDisabled = isPostBackgroundCampaign && hasSourceContentSelection
   const isPostBackgroundDisabled = isPostBackgroundApiModeDisabled || isPostBackgroundSourceDisabled
   const canUsePostBackground = isPostBackgroundCampaign && !isPostBackgroundDisabled
   const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground && !isFormattedContentEnabled
   const requiresSourceLinks = hasSourceContentSelection
   const hasSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
-  const isUsingSourceContent = supportsSourceContent && formData.copyContentFromSource
+  const isUsingSourceContent = isSourceContentMode
   const usesSourceContentAiPrompt = isUsingSourceContent && formData.rewriteSourceContentWithAI
   const hasSourceContentAiPrompt = formData.sourceContentAiPrompt.trim().length > 0
   const requiresMainContentOrMedia =
@@ -2501,7 +2509,7 @@ export default function CampaignFormModal({
   const savedGroupSnapshotMatchesTargetChannel = savedAdvancedContentTargetChannel !== null &&
     savedAdvancedContentTargetChannel === advancedContentTargetChannel
   const canUseAdvancedContentMode = canShowContentSection && !isVoiceCallCampaign && advancedContentTargetChannel !== null
-  const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
+  const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled && !isSourceContentMode
   const isAdvancedGroupSource = isAdvancedContentMode && advancedContentSourceMode === 'group'
   const isManualAdvancedSource = isAdvancedContentMode && advancedContentSourceMode === 'manual'
   const candidateContentTemplateGroup = useMemo(
@@ -3280,14 +3288,14 @@ export default function CampaignFormModal({
       }
       const simpleSteps = ALL_STEPS.filter(s => s.id !== 'extra' && s.id !== 'details')
       return isTimelinePostCampaign
-        ? simpleSteps.flatMap(step => step.id === 'content' ? [SOURCE_CONTENT_STEP, step] : [step])
+        ? simpleSteps.map(step => step.id === 'content' ? withSourceContentField(step) : step)
         : simpleSteps
     }
     if (isPagePostCampaign) {
       return ALL_STEPS
         .filter(s => s.id !== 'extra')
         .flatMap(step => {
-          if (step.id === 'content') return [PAGE_POST_METHOD_STEP, SOURCE_CONTENT_STEP, step]
+          if (step.id === 'content') return [PAGE_POST_METHOD_STEP, withSourceContentField(step)]
           if (step.id === 'details') {
             return [{
               ...step,
@@ -3499,7 +3507,7 @@ export default function CampaignFormModal({
     }
     if (isFacebookGroupPostCampaign) {
       const steps = ALL_STEPS.flatMap(step => {
-        if (step.id === 'content') return [SOURCE_CONTENT_STEP, step, GROUP_POST_COMMENT_STEP, GROUP_POST_BUMP_STEP]
+        if (step.id === 'content') return [withSourceContentField(step), GROUP_POST_COMMENT_STEP, GROUP_POST_BUMP_STEP]
         if (step.id === 'extra') {
           return [{
             ...step,
@@ -4908,8 +4916,8 @@ export default function CampaignFormModal({
       if (formData.rewriteContentEachRun && !isRichContentEditorEnabled && !isAdvancedGroupSource) {
         notes.push('Bản xem trước chưa chạy AI viết lại; khi runtime chạy, nội dung có thể được AI viết lại.')
       }
-      if (supportsSourceContent && formData.copyContentFromSource) notes.push('Bản xem trước chỉ hiển thị phần nội dung nhập trong form, chưa bao gồm nội dung copy từ nguồn.')
-      if (supportsSourceSharePost && formData.sharePost) notes.push('Bản xem trước chưa hiển thị phần bài viết được chia sẻ từ nguồn.')
+      if (isSourceContentMode) notes.push('Bản xem trước chưa hiển thị nội dung được copy từ nguồn.')
+      if (isSourceContentMode && supportsSourceSharePost && formData.sharePost) notes.push('Bản xem trước chưa hiển thị phần bài viết được chia sẻ từ nguồn.')
       if (isReelsMediaMode) notes.push('Bản xem trước chưa mô phỏng giao diện Reels.')
       if (isPostBackgroundActive) notes.push('Bản xem trước chưa mô phỏng phông nền Facebook.')
     }
@@ -5341,7 +5349,7 @@ export default function CampaignFormModal({
         return 'Đăng bài với phông nền không thể gửi kèm media. Vui lòng bỏ media trong nội dung nâng cao trước khi lưu.'
       }
 
-      if (formData.copyContentFromSource || formData.sharePost || isReelsMediaMode) {
+      if (isSourceContentMode || isReelsMediaMode) {
         return 'Đăng bài với phông nền không hỗ trợ copy/chia sẻ nội dung từ nguồn hoặc đăng Reels.'
       }
 
@@ -5365,7 +5373,7 @@ export default function CampaignFormModal({
       return 'Đăng bài với phông nền không thể gửi kèm media. Vui lòng chọn Không gửi media trước khi lưu.'
     }
 
-    if (formData.copyContentFromSource || formData.sharePost || isReelsMediaMode) {
+    if (isSourceContentMode || isReelsMediaMode) {
       return 'Đăng bài với phông nền không hỗ trợ copy/chia sẻ nội dung từ nguồn hoặc đăng Reels.'
     }
 
@@ -5621,6 +5629,15 @@ export default function CampaignFormModal({
   }
 
   const prepareAdvancedContentForSave = async (): Promise<AdvancedContentSaveOverride | null> => {
+    if (isSourceContentMode) {
+      return {
+        items: [],
+        formattedContentEnabled: false,
+        emailBodyIsHtml: false,
+        emailSubject: ''
+      }
+    }
+
     const hasSavedGroupSnapshot = advancedContentSourceMode === 'group' &&
       savedAdvancedContentSource === 'group_snapshot' &&
       !!savedAdvancedGroupSnapshot
@@ -5976,7 +5993,7 @@ export default function CampaignFormModal({
           .filter(status => formData.externalSmsStatuses.includes(status))
         : []
       const isSavingGroupSnapshot = advancedContentOverride?.source === 'group_snapshot'
-      const canSaveAdvancedContent = showContentSection || isSavingGroupSnapshot
+      const canSaveAdvancedContent = !isSourceContentMode && (showContentSection || isSavingGroupSnapshot)
       const manualDraftFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
       const manualDraftEmailBodyIsHtml = isEmailCampaign && formData.emailBodyIsHtml
       const manualDraftUsesRichContent = isEmailCampaign
@@ -6020,8 +6037,9 @@ export default function CampaignFormModal({
           ? false
           : formData.rewriteContentEachRun
       }
-      const formattedContentForSave = advancedContentOverride?.formattedContentEnabled
-        ?? manualDraftFormattedContentEnabled
+      const formattedContentForSave = isSourceContentMode
+        ? false
+        : (advancedContentOverride?.formattedContentEnabled ?? manualDraftFormattedContentEnabled)
       const emailBodyIsHtmlForSave = isEmailCampaign
         ? (advancedContentOverride?.emailBodyIsHtml ?? manualDraftEmailBodyIsHtml)
         : false
@@ -6057,9 +6075,11 @@ export default function CampaignFormModal({
                 : normalizedItem
             })
         : []
-      const contentForSave = isSavingGroupSnapshot
-        ? String(advancedContentItemsForSave[0]?.content || '')
-        : manualDraftForSave.content
+      const contentForSave = isSourceContentMode
+        ? ''
+        : isSavingGroupSnapshot
+          ? String(advancedContentItemsForSave[0]?.content || '')
+          : manualDraftForSave.content
 
       return {
         campaignPayload: {
@@ -6085,13 +6105,15 @@ export default function CampaignFormModal({
             : (isMobileManagedSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
           content: contentForSave,
           extraSettings: {
-            sharePost: supportsSourceSharePost && !isPostBackgroundActive ? formData.sharePost : false,
+            sharePost: isSourceContentMode && supportsSourceSharePost ? formData.sharePost : false,
             postWithBackground: formattedContentForSave ? false : isPostBackgroundActive,
             rewriteContentEachRun: isSavingGroupSnapshot || isMobileManagedSmsCampaign || formattedContentForSave || emailBodyIsHtmlForSave
               ? false
               : manualDraftForSave.rewriteContentEachRun,
             formattedContentEnabled: formattedContentForSave,
-            advancedContentEnabled: isSavingGroupSnapshot
+            advancedContentEnabled: isSourceContentMode
+              ? false
+              : isSavingGroupSnapshot
               ? true
               : (canUseAdvancedContentMode ? formData.advancedContentEnabled : false),
             advancedContentItems: advancedContentItemsForSave,
@@ -6124,7 +6146,7 @@ export default function CampaignFormModal({
               continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
               byActionCode
             },
-            imageOption: (isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
+            imageOption: (isSourceContentMode || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
             randomImageCount: isReelsMediaMode ? 1 : formData.randomImageCount,
             commentImageOption: formData.commentImages.length > 0 && formData.commentImageOption !== 'none'
               ? formData.commentImageOption
@@ -6243,13 +6265,13 @@ export default function CampaignFormModal({
               : 0,
             pageInboxPageUid: isPageInboxMessageCampaign ? formData.pageInboxPageUid : '',
             pageInboxPageName: isPageInboxMessageCampaign ? formData.pageInboxPageName : '',
-            copyContentFromSource: isPostBackgroundActive ? false : formData.copyContentFromSource,
-            includeSourceImages: isPostBackgroundActive ? false : formData.includeSourceImages,
-            rewriteSourceContentWithAI: !isPostBackgroundActive && formData.copyContentFromSource ? formData.rewriteSourceContentWithAI : false,
-            sourceContentAiPrompt: !isPostBackgroundActive && formData.copyContentFromSource && formData.rewriteSourceContentWithAI
+            copyContentFromSource: isSourceContentMode,
+            includeSourceImages: isSourceContentMode ? formData.includeSourceImages : false,
+            rewriteSourceContentWithAI: isSourceContentMode ? formData.rewriteSourceContentWithAI : false,
+            sourceContentAiPrompt: isSourceContentMode && formData.rewriteSourceContentWithAI
               ? formData.sourceContentAiPrompt
               : '',
-            postAsReels: supportsSourceReels && !isPostBackgroundActive ? formData.postAsReels : false,
+            postAsReels: !isSourceContentMode && supportsSourceReels && !isPostBackgroundActive ? formData.postAsReels : false,
             sourceLinks: formData.sourceLinks,
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
             pagePostMode: formData.pagePostMode,
@@ -6321,7 +6343,7 @@ export default function CampaignFormModal({
               : [],
             findDataTargetDataGroups: saveFindDataTargetDataGroups
           } as CampaignExtraSettings,
-          images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images
+          images: isSourceContentMode || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images
         },
         details: (accountChunks[index] || []).map(detail => ({ ...detail })),
         dataGroupSnapshots: isDataGroupSource || !canUseDataGroupSource
@@ -6526,7 +6548,7 @@ export default function CampaignFormModal({
       showAlert('Vui lòng nhập số lời mời cần huỷ lớn hơn 0.', 'error')
       return
     }
-    if (!isMobileManagedSmsCampaign && showContentSection && !isFacebookJoinGroupCampaign && !isAdvancedContentMode && !validateSelectedImages(
+    if (!isSourceContentMode && !isMobileManagedSmsCampaign && showContentSection && !isFacebookJoinGroupCampaign && !isAdvancedContentMode && !validateSelectedImages(
       isEmailCampaign ? 'Tệp đính kèm' : 'Media',
       formData.imageOption,
       formData.images,
@@ -8344,6 +8366,35 @@ export default function CampaignFormModal({
     target: MessagePersonalizationTarget = 'content',
     preferredAdvancedItemId?: string
   ) => {
+    if (target === 'content' && isAdvancedContentMode && !isRichContentEditorEnabled) {
+      const item = preferredAdvancedItemId
+        ? formData.advancedContentItems.find(candidate => candidate.id === preferredAdvancedItemId)
+        : null
+      const textarea = preferredAdvancedItemId
+        ? advancedContentTextareaRefs.current[preferredAdvancedItemId]
+        : null
+      if (!item || !preferredAdvancedItemId) {
+        showAlert('Vui lòng chọn nội dung nâng cao cần chèn thông tin.', 'info')
+        return
+      }
+
+      const { nextValue, nextCursor } = getInsertedText(item.content, token, textarea)
+      setFormData(current => {
+        const advancedContentItems = current.advancedContentItems.map(candidate => (
+          candidate.id === preferredAdvancedItemId
+            ? { ...candidate, content: nextValue }
+            : candidate
+        ))
+        manualAdvancedContentItemsRef.current = advancedContentItems
+        return { ...current, advancedContentItems }
+      })
+      window.requestAnimationFrame(() => {
+        textarea?.focus()
+        textarea?.setSelectionRange(nextCursor, nextCursor)
+      })
+      return
+    }
+
     if (target === 'content' && isRichContentEditorEnabled) {
       if (isAdvancedContentMode) {
         const editor = preferredAdvancedItemId
@@ -8424,7 +8475,7 @@ export default function CampaignFormModal({
 
   function renderMessagePersonalizationDropdown(
     target: MessagePersonalizationTarget = 'content',
-    placement: 'toolbar' | 'field' = 'toolbar',
+    placement: 'toolbar' | 'field' | 'action' = 'toolbar',
     advancedItemId?: string
   ) {
     const dateOptions = MESSAGE_DATE_OPTIONS
@@ -8466,7 +8517,12 @@ export default function CampaignFormModal({
         ? 'single-token-section'
         : 'two-token-sections'
     const tokenAvailabilityClass = showExcelTokens ? 'has-excel-tokens' : 'no-excel-tokens'
-    const placementClass = placement === 'field' ? 'field-token-dropdown' : ''
+    const placementClass =
+      placement === 'field'
+        ? 'field-token-dropdown'
+        : placement === 'action'
+          ? 'action-token-dropdown'
+          : ''
     const dropdownClassName = [
       'message-personalization-dropdown',
       sectionLayoutClass,
@@ -10232,32 +10288,41 @@ export default function CampaignFormModal({
     </div>
   )
 
+  const renderPostAsReelsOption = () => supportsSourceReels ? (
+    <div style={{ marginBottom: 12 }}>
+      <label className="schedule-checkbox-label">
+        <input
+          type="checkbox"
+          checked={formData.postAsReels}
+          onChange={e => {
+            const checked = e.target.checked
+            setFormData(p => ({
+              ...p,
+              postAsReels: checked,
+              postWithBackground: checked ? false : p.postWithBackground,
+              randomImageCount: checked ? 1 : p.randomImageCount,
+              advancedContentItems: checked
+                ? p.advancedContentItems.map(item => ({ ...item, randomMediaCount: 1 }))
+                : p.advancedContentItems
+            }))
+          }}
+        />
+        <span>Đăng Reels <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Đăng video trên Reels)</em></span>
+      </label>
+    </div>
+  ) : null
+
   const renderSourceContentSettings = () => (
     <div>
+      <div className="schedule-hint" style={{ marginBottom: 12 }}>
+        Chế độ này chỉ dùng nội dung lấy từ nguồn. Nội dung và media ở các tab Cơ bản, Nâng cao hoặc Nhóm mẫu nội dung sẽ không được sử dụng.
+      </div>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 12 }}>
         <label className="schedule-checkbox-label">
           <input
             type="checkbox"
-            checked={formData.copyContentFromSource}
-            onChange={e => {
-              const checked = e.target.checked
-              setFormData(p => ({
-                ...p,
-                copyContentFromSource: checked,
-                postWithBackground: checked ? false : p.postWithBackground,
-                includeSourceImages: checked ? p.includeSourceImages : false,
-                rewriteSourceContentWithAI: checked ? p.rewriteSourceContentWithAI : false
-              }))
-            }}
-          />
-          <span>Copy nội dung từ nguồn</span>
-        </label>
-        <label className="schedule-checkbox-label" style={{ opacity: formData.copyContentFromSource ? 1 : 0.5 }}>
-          <input
-            type="checkbox"
             checked={formData.includeSourceImages}
             onChange={e => setFormData(p => ({ ...p, includeSourceImages: e.target.checked }))}
-            disabled={!formData.copyContentFromSource}
           />
           <span>Lấy kèm hình ảnh</span>
         </label>
@@ -10300,17 +10365,16 @@ export default function CampaignFormModal({
         </div>
       </div>
       <div style={{ marginTop: 12 }}>
-        <label className="schedule-checkbox-label" style={{ opacity: formData.copyContentFromSource ? 1 : 0.5 }}>
+        <label className="schedule-checkbox-label">
           <input
             type="checkbox"
-            checked={formData.copyContentFromSource && formData.rewriteSourceContentWithAI}
+            checked={formData.rewriteSourceContentWithAI}
             onChange={e => setFormData(p => ({ ...p, rewriteSourceContentWithAI: e.target.checked }))}
-            disabled={!formData.copyContentFromSource}
           />
           <span>Lời nhắc AI - Edit lại nội dung</span>
         </label>
       </div>
-      {formData.copyContentFromSource && formData.rewriteSourceContentWithAI && (
+      {formData.rewriteSourceContentWithAI && (
         <div className="stepper-form-group" style={{ marginTop: 12 }}>
           <label>Lời nhắc AI</label>
           <textarea
@@ -10320,30 +10384,6 @@ export default function CampaignFormModal({
             onChange={e => setFormData(p => ({ ...p, sourceContentAiPrompt: e.target.value }))}
             rows={4}
           />
-        </div>
-      )}
-
-      {supportsSourceReels && (
-        <div style={{ marginTop: 12 }}>
-          <label className="schedule-checkbox-label">
-            <input
-              type="checkbox"
-              checked={formData.postAsReels}
-              onChange={e => {
-                const checked = e.target.checked
-                setFormData(p => ({
-                  ...p,
-                  postAsReels: checked,
-                  postWithBackground: checked ? false : p.postWithBackground,
-                  randomImageCount: checked ? 1 : p.randomImageCount,
-                  advancedContentItems: checked
-                    ? p.advancedContentItems.map(item => ({ ...item, randomMediaCount: 1 }))
-                    : p.advancedContentItems
-                }))
-              }}
-            />
-            <span>Đăng Reels <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Đăng video trên Reels)</em></span>
-          </label>
         </div>
       )}
     </div>
@@ -13001,9 +13041,6 @@ export default function CampaignFormModal({
   }
 
   const getCampaignContentPlaceholder = (): string => {
-    if (supportsSourceContent && formData.copyContentFromSource) {
-      return 'Nội dung nhập ở đây sẽ được nối sau nội dung copy từ nguồn (ngăn bằng dòng mới)...'
-    }
     if (isEmailCampaign) {
       return 'Nhập nội dung email. Dùng dấu | để tách nhiều nội dung — nội dung 1 chạy ở email 1, nội dung 2 ở email 2...'
     }
@@ -13116,6 +13153,7 @@ export default function CampaignFormModal({
 
   const removeAdvancedContentItem = (itemId: string) => {
     delete advancedContentEditorRefs.current[itemId]
+    delete advancedContentTextareaRefs.current[itemId]
     if (activeRichContentEditorRef.current?.itemId === itemId) activeRichContentEditorRef.current = null
     setFormData(prev => {
       const nextItems = prev.advancedContentItems.filter(item => item.id !== itemId)
@@ -13144,6 +13182,7 @@ export default function CampaignFormModal({
 
   const switchToSimpleContentMode = () => {
     setManualAdvancedContentModalOpen(false)
+    setContentSettingsTab('content')
     setAdvancedContentSourceMode('manual')
     setPendingContentTemplateGroupId(null)
     setFormData(current => ({
@@ -13156,6 +13195,7 @@ export default function CampaignFormModal({
   }
 
   const switchToManualAdvancedContentMode = () => {
+    setContentSettingsTab('content')
     setPendingContentTemplateGroupId(null)
     setAdvancedContentSourceMode('manual')
     setFormData(prev => ({
@@ -13169,6 +13209,7 @@ export default function CampaignFormModal({
   const switchToDataGroupContentMode = () => {
     manualAdvancedContentItemsRef.current = normalizeAdvancedContentItems(formData.advancedContentItems)
     setManualAdvancedContentModalOpen(false)
+    setContentSettingsTab('content')
     setAdvancedContentSourceMode('group')
     const nextGroupId = candidateContentTemplateGroupId ?? savedAdvancedGroupSnapshot?.groupId ?? null
     setCandidateContentTemplateGroupId(nextGroupId)
@@ -13182,6 +13223,11 @@ export default function CampaignFormModal({
         : null
     )
     setFormData(prev => ({ ...prev, advancedContentEnabled: true }))
+  }
+
+  const switchToSourceContentTab = () => {
+    setManualAdvancedContentModalOpen(false)
+    setContentSettingsTab('source')
   }
 
   const closeContentTemplateGroupPreview = () => {
@@ -13378,18 +13424,20 @@ export default function CampaignFormModal({
   }
 
   const renderContentModeSegmented = () => {
-    if (!canUseAdvancedContentMode) return null
+    if (!canUseAdvancedContentMode && !supportsSourceContent) return null
 
-    const isBasicMode = !formData.advancedContentEnabled
-    const isManualAdvancedMode = formData.advancedContentEnabled && advancedContentSourceMode === 'manual'
-    const isDataGroupMode = formData.advancedContentEnabled && advancedContentSourceMode === 'group'
-    const note = isManualAdvancedMode
-      ? 'Tạo nhiều nội dung thủ công, mỗi nội dung là một biến thể hoàn chỉnh với media riêng.'
-      : isDataGroupMode
-        ? 'Dùng snapshot từ một nhóm mẫu có sẵn. Mỗi lượt chạy sẽ xoay vòng qua các nội dung phù hợp trong nhóm.'
-        : isRichContentEditorEnabled
-          ? 'Dùng dấu | để phân tách các nội dung có định dạng gửi luân phiên. Nhập \\| nếu muốn hiển thị dấu |.'
-          : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
+    const isBasicMode = !isSourceContentMode && !formData.advancedContentEnabled
+    const isManualAdvancedMode = !isSourceContentMode && formData.advancedContentEnabled && advancedContentSourceMode === 'manual'
+    const isDataGroupMode = !isSourceContentMode && formData.advancedContentEnabled && advancedContentSourceMode === 'group'
+    const note = isSourceContentMode
+      ? 'Chỉ dùng nội dung từ bài viết nguồn; có thể lấy kèm hình ảnh hoặc đăng bài bằng cách chia sẻ.'
+      : isManualAdvancedMode
+        ? 'Tạo nhiều nội dung thủ công, mỗi nội dung là một biến thể hoàn chỉnh với media riêng.'
+        : isDataGroupMode
+          ? 'Dùng snapshot từ một nhóm mẫu có sẵn. Mỗi lượt chạy sẽ xoay vòng qua các nội dung phù hợp trong nhóm.'
+          : isRichContentEditorEnabled
+            ? 'Dùng dấu | để phân tách các nội dung có định dạng gửi luân phiên. Nhập \\| nếu muốn hiển thị dấu |.'
+            : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
 
     return (
       <div className="campaign-content-mode-row">
@@ -13402,22 +13450,36 @@ export default function CampaignFormModal({
           >
             Cơ bản
           </button>
-          <button
-            type="button"
-            aria-pressed={isManualAdvancedMode}
-            className={isManualAdvancedMode ? 'active' : ''}
-            onClick={switchToManualAdvancedContentMode}
-          >
-            Nâng cao
-          </button>
-          <button
-            type="button"
-            aria-pressed={isDataGroupMode}
-            className={isDataGroupMode ? 'active' : ''}
-            onClick={switchToDataGroupContentMode}
-          >
-            Nhóm mẫu nội dung
-          </button>
+          {canUseAdvancedContentMode && (
+            <button
+              type="button"
+              aria-pressed={isManualAdvancedMode}
+              className={isManualAdvancedMode ? 'active' : ''}
+              onClick={switchToManualAdvancedContentMode}
+            >
+              Nâng cao
+            </button>
+          )}
+          {canUseAdvancedContentMode && (
+            <button
+              type="button"
+              aria-pressed={isDataGroupMode}
+              className={isDataGroupMode ? 'active' : ''}
+              onClick={switchToDataGroupContentMode}
+            >
+              Nhóm mẫu nội dung
+            </button>
+          )}
+          {supportsSourceContent && (
+            <button
+              type="button"
+              aria-pressed={isSourceContentMode}
+              className={isSourceContentMode ? 'active' : ''}
+              onClick={switchToSourceContentTab}
+            >
+              Copy nguồn nội dung
+            </button>
+          )}
         </div>
         <div className="campaign-content-mode-note">{note}</div>
       </div>
@@ -13652,8 +13714,8 @@ export default function CampaignFormModal({
                   >
                     <Eye size={14} />
                   </button>
-                  {isMessageCampaign && !isZaloShareMessageMode && isRichContentEditorEnabled && (
-                    renderMessagePersonalizationDropdown('content', 'field', item.id)
+                  {isMessageCampaign && !isZaloShareMessageMode && (
+                    renderMessagePersonalizationDropdown('content', 'action', item.id)
                   )}
                   <button
                     type="button"
@@ -13699,6 +13761,10 @@ export default function CampaignFormModal({
                 />
               ) : (
                 <textarea
+                  ref={textarea => {
+                    if (textarea) advancedContentTextareaRefs.current[item.id] = textarea
+                    else delete advancedContentTextareaRefs.current[item.id]
+                  }}
                   className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
                   placeholder="Nhập nội dung..."
                   value={item.content}
@@ -15320,30 +15386,6 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {supportsSourceContent && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['sourceContent'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('sourceContent')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('sourceContent')}</span>
-                    <span className="stepper-section-title">Nguồn nội dung</span>
-                  </div>
-                  {collapsedSections['sourceContent'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['sourceContent'] && (
-                  <div className="stepper-section-body">
-                    {renderSourceContentSettings()}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Section 4: Nội dung */}
             {showContentSection && <div
               className={`stepper-section${isMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}
@@ -15364,74 +15406,81 @@ export default function CampaignFormModal({
 
               {!collapsedSections['content'] && (
                 <div className="stepper-section-body">
-                  {renderPostBackgroundOption()}
-                  {isEmailCampaign && (
-                    <>
-                      {!isAdvancedContentMode && (
-                        <div className="stepper-form-group">
-                          <label>Tiêu đề email <span className="required">*</span></label>
-                          <input
-                            type="text"
-                            className="stepper-input"
-                            placeholder="Nhập tiêu đề email..."
-                            value={formData.emailSubject}
-                            onChange={e => setFormData(p => ({ ...p, emailSubject: e.target.value }))}
-                          />
-                        </div>
-                      )}
-                      {!isManualAdvancedSource && renderEmailBodyHtmlOption()}
-                      <div className="stepper-form-group">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={formData.emailCheckLinkClicks}
-                            onChange={e => setFormData(p => ({ ...p, emailCheckLinkClicks: e.target.checked }))}
-                          />
-                          <span>Kiểm tra click vào link</span>
-                        </label>
-                      </div>
-                    </>
-                  )}
                   {renderContentModeSegmented()}
-                  {isCommentSeedingCampaign ? (
-                    isAdvancedContentMode
-                      ? renderAdvancedContentEditor()
-                      : renderCommentSeedingSettings()
+                  {isSourceContentMode ? (
+                    renderSourceContentSettings()
                   ) : (
                     <>
-                      {!isManualAdvancedSource && renderFormattedContentOption()}
-                      {isAdvancedContentMode ? (
+                      {renderPostBackgroundOption()}
+                      {renderPostAsReelsOption()}
+                      {isEmailCampaign && (
                         <>
-                          {renderAdvancedContentEditor()}
-                          {renderSmsContentMeta(false)}
-                          {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
-                        </>
-                      ) : (
-                        <>
-                          {isMessageCampaign ? (
-                            <div className="campaign-message-content-layout">
-                              <div className="stepper-form-group campaign-message-content-tools">
-                                <label>{getCampaignContentLabel()}</label>
-                                {renderContentToolsRow('content')}
-                              </div>
-                              <div className="campaign-content-template-layout">
-                                <div className="stepper-form-group">
-                              {renderCampaignContentTextarea(false)}
-                                </div>
-                              </div>
-                              {renderSmsContentMeta()}
-                              {!isRichContentEditorEnabled && renderCampaignContentHint()}
-                              {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
-                            </div>
-                          ) : (
+                          {!isAdvancedContentMode && (
                             <div className="stepper-form-group">
-                              <label>{getCampaignContentLabel()}</label>
-                              {renderContentToolsRow('content')}
-                              {renderCampaignContentTextarea()}
+                              <label>Tiêu đề email <span className="required">*</span></label>
+                              <input
+                                type="text"
+                                className="stepper-input"
+                                placeholder="Nhập tiêu đề email..."
+                                value={formData.emailSubject}
+                                onChange={e => setFormData(p => ({ ...p, emailSubject: e.target.value }))}
+                              />
                             </div>
                           )}
+                          {!isManualAdvancedSource && renderEmailBodyHtmlOption()}
+                          <div className="stepper-form-group">
+                            <label className="schedule-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={formData.emailCheckLinkClicks}
+                                onChange={e => setFormData(p => ({ ...p, emailCheckLinkClicks: e.target.checked }))}
+                              />
+                              <span>Kiểm tra click vào link</span>
+                            </label>
+                          </div>
+                        </>
+                      )}
+                      {isCommentSeedingCampaign ? (
+                        isAdvancedContentMode
+                          ? renderAdvancedContentEditor()
+                          : renderCommentSeedingSettings()
+                      ) : (
+                        <>
+                          {!isManualAdvancedSource && renderFormattedContentOption()}
+                          {isAdvancedContentMode ? (
+                            <>
+                              {renderAdvancedContentEditor()}
+                              {renderSmsContentMeta(false)}
+                              {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+                            </>
+                          ) : (
+                            <>
+                              {isMessageCampaign ? (
+                                <div className="campaign-message-content-layout">
+                                  <div className="stepper-form-group campaign-message-content-tools">
+                                    <label>{getCampaignContentLabel()}</label>
+                                    {renderContentToolsRow('content')}
+                                  </div>
+                                  <div className="campaign-content-template-layout">
+                                    <div className="stepper-form-group">
+                                      {renderCampaignContentTextarea(false)}
+                                    </div>
+                                  </div>
+                                  {renderSmsContentMeta()}
+                                  {!isRichContentEditorEnabled && renderCampaignContentHint()}
+                                  {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+                                </div>
+                              ) : (
+                                <div className="stepper-form-group">
+                                  <label>{getCampaignContentLabel()}</label>
+                                  {renderContentToolsRow('content')}
+                                  {renderCampaignContentTextarea()}
+                                </div>
+                              )}
 
-                          {!isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
+                              {!isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
+                            </>
+                          )}
                         </>
                       )}
                     </>
