@@ -31,6 +31,7 @@ import {
   type CampaignRunEvent,
   type ContentTemplateChannelName,
   type DataGroup,
+  type DataGroupCampaignNavigationRequest,
   type EmailCampaignLinkTrackingSummary,
   type SnapshotDataGroupToCampaignRequest,
   type SnapshotDataGroupToCampaignResult,
@@ -63,6 +64,8 @@ interface CampaignPanelProps {
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
   onAskAssistant?: (campaignId: number) => void
+  dataGroupCampaignRequest?: DataGroupCampaignNavigationRequest | null
+  onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
 
 type DetailTab = 'info' | 'data' | 'actions' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
@@ -2470,7 +2473,7 @@ function AddDataToCurrentCampaignModal({
   )
 }
 
-export default function CampaignPanel({ isActive, filterAccountId, accountInfoOpenRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant }: CampaignPanelProps) {
+export default function CampaignPanel({ isActive, filterAccountId, accountInfoOpenRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions,
     campaignConfigs, campaignLogs, loadingCampaignConfigIds, loadingCampaignLogIds,
@@ -2503,7 +2506,11 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [campaignFormInitialActionId, setCampaignFormInitialActionId] = useState<string | undefined>(undefined)
   const [campaignFormInitialDetails, setCampaignFormInitialDetails] = useState<Partial<CampaignInputData>[] | undefined>(undefined)
+  const [campaignFormInitialDataGroup, setCampaignFormInitialDataGroup] = useState<DataGroup | undefined>(undefined)
+  const [campaignFormModalZIndex, setCampaignFormModalZIndex] = useState<number | undefined>(undefined)
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null)
+  const navigationLoadRequestedRef = useRef<number | null>(null)
+  const [navigationLoadCompletedRequestId, setNavigationLoadCompletedRequestId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
   const [detailTab, setDetailTab] = useState<DetailTab>('info')
   const [accountInfoAccountId, setAccountInfoAccountId] = useState<number | null>(null)
@@ -2614,9 +2621,95 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const campaignActionMenuAnchorRef = useRef<CampaignActionMenuAnchorRect | null>(null)
   const campaignActionMenuRef = useRef<HTMLDivElement | null>(null)
   const initialCampaignLoadSettledRef = useRef(false)
+  const handledNavigationRequestRef = useRef<number | null>(null)
   const selectedCampaignSummary = campaigns.find(campaign => campaign.id === selectedCampaignId)
   const selectedCampaignConfig = selectedCampaignId ? campaignConfigs[selectedCampaignId] : undefined
   const selectedCampaignLog = selectedCampaignId ? campaignLogs[selectedCampaignId] : undefined
+
+  useEffect(() => {
+    const request = dataGroupCampaignRequest
+    if (!request || handledNavigationRequestRef.current === request.requestId) return
+
+    if (request.mode === 'create' && request.group) {
+      handledNavigationRequestRef.current = request.requestId
+      setEditingCampaign(null)
+      setCloneFromId(undefined)
+      setCampaignFormInitialActionId(undefined)
+      setCampaignFormInitialDetails(undefined)
+      setCampaignFormInitialDataGroup(request.group)
+      setCampaignFormModalZIndex(3800)
+      setShowForm(true)
+      onDataGroupCampaignRequestHandled?.(request.requestId)
+      return
+    }
+
+    const campaign = campaigns.find(item => item.id === request.campaignId)
+    if (campaign) {
+      handledNavigationRequestRef.current = request.requestId
+      if (request.openFormIfEditable) {
+        if (!canEditCampaign(campaign.status)) {
+          showAlert('Chỉ có thể mở form chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
+          onDataGroupCampaignRequestHandled?.(request.requestId)
+          return
+        }
+        void loadCampaignConfig(campaign.id, { force: true })
+          .then(config => {
+            if (handledNavigationRequestRef.current !== request.requestId) return
+            if (!config) {
+              showAlert('Không thể tải cấu hình chiến dịch.', 'error')
+              return
+            }
+            if (!canEditCampaign(config.status)) {
+              showAlert('Trạng thái chiến dịch đã thay đổi. Chỉ có thể mở form khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
+              void loadCampaigns({ silent: true })
+              return
+            }
+            setCampaignFormInitialActionId(undefined)
+            setCampaignFormInitialDetails(undefined)
+            setCampaignFormInitialDataGroup(undefined)
+            setEditingCampaign(config)
+            setCloneFromId(undefined)
+            setCampaignFormModalZIndex(3800)
+            setShowForm(true)
+          })
+          .catch(err => {
+            showAlert(formatIpcErrorMessage(err, 'Không thể tải cấu hình chiến dịch.'), 'error')
+          })
+          .finally(() => {
+            onDataGroupCampaignRequestHandled?.(request.requestId)
+          })
+        return
+      }
+      setAccountInfoAccountId(campaign.accountId ?? null)
+      setSelectedCampaignId(campaign.id)
+      setDetailTab('info')
+      setDetailDockOpen(true)
+      onDataGroupCampaignRequestHandled?.(request.requestId)
+      return
+    }
+
+    if (navigationLoadCompletedRequestId === request.requestId) {
+      handledNavigationRequestRef.current = request.requestId
+      showAlert('Không tìm thấy chiến dịch liên kết hoặc chiến dịch đã bị xoá.', 'error')
+      onDataGroupCampaignRequestHandled?.(request.requestId)
+      return
+    }
+
+    if (navigationLoadRequestedRef.current !== request.requestId) {
+      navigationLoadRequestedRef.current = request.requestId
+      void Promise.resolve(loadCampaigns()).finally(() => {
+        setNavigationLoadCompletedRequestId(request.requestId)
+      })
+    }
+  }, [
+    campaigns,
+    dataGroupCampaignRequest,
+    loadCampaignConfig,
+    loadCampaigns,
+    navigationLoadCompletedRequestId,
+    onDataGroupCampaignRequestHandled,
+    showAlert
+  ])
 
   useEffect(() => {
     if (!accountInfoOpenRequest) return
@@ -5719,16 +5812,24 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             cloneFromId={cloneFromId}
             lockedActionId={campaignFormInitialActionId}
             initialDetails={campaignFormInitialDetails}
+            initialDataGroup={campaignFormInitialDataGroup}
+            modalZIndex={campaignFormModalZIndex}
             onOpenGeneralSettings={onOpenGeneralSettings}
             onOpenContentTemplates={onOpenContentTemplates}
             onClose={() => {
+              const openedFromDataGroup = campaignFormModalZIndex !== undefined
               setShowForm(false)
               setEditingCampaign(null)
               setCloneFromId(undefined)
               setCampaignFormInitialActionId(undefined)
               setCampaignFormInitialDetails(undefined)
+              setCampaignFormInitialDataGroup(undefined)
+              setCampaignFormModalZIndex(undefined)
               loadCampaigns()
               if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
+              if (openedFromDataGroup) {
+                window.dispatchEvent(new Event('aka-agent:data-group-campaign-form-closed'))
+              }
             }}
           />
         )}

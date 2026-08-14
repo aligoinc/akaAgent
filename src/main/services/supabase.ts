@@ -609,6 +609,12 @@ export class SupabaseService {
   getDataGroupLatestIngestStats(groupId: number) {
     return dataGroupRepo.getDataGroupLatestIngestStats(groupId)
   }
+  getDataGroupPanel(groupId: number) {
+    return dataGroupRepo.getDataGroupPanel(groupId)
+  }
+  updateDataGroupNote(groupId: number, note: string | null) {
+    return dataGroupRepo.updateDataGroupNote(groupId, note)
+  }
   exportDataGroupMembers(query: DataGroupMemberListQuery) {
     return dataGroupRepo.exportDataGroupMembers(query)
   }

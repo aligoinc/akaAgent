@@ -443,6 +443,7 @@ interface CampaignFormModalProps {
   initialAccountIds?: number[]
   initialDetails?: Partial<CampaignInputData>[]
   initialDataGroupSnapshots?: DirectDataGroupSnapshotIntent[]
+  initialDataGroup?: DataGroup
   draftPickerSourceType?: InternalCampaignPickerSourceType
   draftRequiredTargetField?: FindDataTargetCampaignField | null
   onSaveDraft?: (draft: InternalCampaignDraft) => void
@@ -1703,6 +1704,7 @@ export default function CampaignFormModal({
   initialAccountIds,
   initialDetails,
   initialDataGroupSnapshots,
+  initialDataGroup,
   draftPickerSourceType,
   draftRequiredTargetField,
   onSaveDraft,
@@ -1868,8 +1870,8 @@ export default function CampaignFormModal({
     actionId: initialActionId,
     accountIds: initialAccountIds?.length ? initialAccountIds : (campaign?.accountId ? [campaign.accountId] : [] as number[]),
     secondaryAccountId: campaign?.secondaryAccountId ?? null as number | null,
-    dataTargetSourceMode: (campaign?.dataTargetSourceMode || 'direct') as CampaignDataTargetSourceMode,
-    dataGroupId: campaign?.dataGroupId ?? null as number | null,
+    dataTargetSourceMode: (campaign?.dataTargetSourceMode || (initialDataGroup ? 'data_group' : 'direct')) as CampaignDataTargetSourceMode,
+    dataGroupId: campaign?.dataGroupId ?? initialDataGroup?.id ?? null as number | null,
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
     scheduleEndDate: initEndDate(),
@@ -2230,8 +2232,8 @@ export default function CampaignFormModal({
     }
     return Array.from(snapshotsByGroupId.values())
   })
-  const [selectedDataGroupName, setSelectedDataGroupName] = useState('')
-  const [selectedDataGroup, setSelectedDataGroup] = useState<DataGroup | null>(null)
+  const [selectedDataGroupName, setSelectedDataGroupName] = useState(initialDataGroup?.name || '')
+  const [selectedDataGroup, setSelectedDataGroup] = useState<DataGroup | null>(initialDataGroup || null)
   const [dataGroupTargetPreview, setDataGroupTargetPreview] = useState<DataGroupCampaignTargetPreview[]>([])
   const [dataGroupTargetPreviewStatus, setDataGroupTargetPreviewStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [campaignPickerRefreshing, setCampaignPickerRefreshing] = useState(false)
@@ -3727,12 +3729,16 @@ export default function CampaignFormModal({
   }, [formData.name])
 
   useEffect(() => {
+    // "Tạo chiến dịch từ nhóm" opens before an action is selected. Preserve
+    // that group until the user picks an action, then apply the normal support
+    // and semantic-compatibility guards below.
+    if (!formData.actionId) return
     if (canUseDataGroupSource) return
     setDirectDataGroupSnapshots([])
     setFormData(previous => previous.dataTargetSourceMode === 'direct' && previous.dataGroupId === null
       ? previous
       : { ...previous, dataTargetSourceMode: 'direct', dataGroupId: null })
-  }, [canUseDataGroupSource])
+  }, [canUseDataGroupSource, formData.actionId])
 
   useEffect(() => {
     const requestSeq = campaignNameAiRequestSeqRef.current + 1

@@ -285,6 +285,14 @@ export function registerAccountContactHandlers(
     return supabase.getDataGroupLatestIngestStats(groupId)
   })
 
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_GET_PANEL, async (_, groupId: number) => {
+    return supabase.getDataGroupPanel(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_UPDATE_NOTE, async (_, groupId: number, note: string | null) => {
+    return supabase.updateDataGroupNote(groupId, note)
+  })
+
   ipcMain.handle(IPC_EVENTS.DATA_GROUPS_EXPORT_MEMBERS, async (_, query: DataGroupMemberListQuery) => {
     return supabase.exportDataGroupMembers(query)
   })

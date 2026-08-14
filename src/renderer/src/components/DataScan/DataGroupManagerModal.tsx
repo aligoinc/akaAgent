@@ -6,11 +6,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent
 } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowRightLeft,
+  Activity,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -21,12 +23,20 @@ import {
   FileSpreadsheet,
   Folder,
   GripVertical,
+  History,
+  Info,
+  Link2,
   LoaderCircle,
   Palette,
   Pencil,
+  Phone,
   Plus,
+  Save,
   Search,
+  Tag,
   Trash2,
+  UserRound,
+  Users,
   Zap,
   X
 } from 'lucide-react'
@@ -42,6 +52,8 @@ import type {
   DataGroupMember,
   DataGroupMemberListQuery,
   DataGroupMemberStatusFilter,
+  DataGroupPanelCampaign,
+  DataGroupPanelData,
   DataProvenance
 } from '../../../../shared/types'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -135,6 +147,8 @@ export interface DataGroupManagerModalProps {
   onClose: () => void
   selectionMode?: boolean
   onSelectGroup?: (group: DataGroup) => void
+  onOpenCampaign?: (campaignId: number, options?: { openFormIfEditable?: boolean }) => void
+  onCreateCampaignFromGroup?: (group: DataGroup) => void
   compatibleActionId?: string | null
   compatibleDataTypeCategoryItemId?: number | null
   unrestrictedOnly?: boolean
@@ -194,6 +208,107 @@ type DataGroupCompatibilityQuery = Pick<DataGroupListQuery, 'search'> & {
 }
 
 const formatCount = (value: number) => new Intl.NumberFormat('vi-VN').format(value)
+
+const formatPanelDate = (value?: string | null, withTime = false) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return withTime
+    ? date.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+    : date.toLocaleDateString('vi-VN')
+}
+
+const getCampaignStatusTone = (status: string) => {
+  if (status === 'đang chạy') return 'is-running'
+  if (status === 'hoàn thành') return 'is-completed'
+  if (status === 'lỗi') return 'is-error'
+  if (status === 'tạm dừng') return 'is-paused'
+  return 'is-waiting'
+}
+
+const getCampaignProgress = (campaign: DataGroupPanelCampaign) => {
+  if (campaign.inputTotal <= 0) return 0
+  return Math.min(100, Math.round(((campaign.inputCompleted + campaign.inputFailed) / campaign.inputTotal) * 100))
+}
+
+const canOpenCampaignForm = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
+
+const formatCampaignStatus = (status: string) => {
+  const normalized = status.trim()
+  return normalized ? `${normalized.charAt(0).toLocaleUpperCase('vi-VN')}${normalized.slice(1)}` : '—'
+}
+
+const formatPanelCampaignSchedule = (campaign: DataGroupPanelCampaign) => {
+  const rawSchedule = campaign.schedule || campaign.originalSchedule
+  if (!rawSchedule) return 'Chạy ngay'
+  const date = new Date(rawSchedule)
+  if (Number.isNaN(date.getTime())) return rawSchedule
+  const time = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+  if (campaign.scheduleType === 'weekly') {
+    const weekdayLabels: Record<string, string> = {
+      '2': 'T2', '3': 'T3', '4': 'T4', '5': 'T5', '6': 'T6', '7': 'T7', '8': 'CN'
+    }
+    const days = (campaign.scheduleWeekDays || '')
+      .split(',')
+      .map(day => weekdayLabels[day.trim()])
+      .filter(Boolean)
+    return days.length > 0 ? `${time} ${days.join(', ')}` : `${time} hằng tuần`
+  }
+  if (campaign.scheduleType === 'monthly') {
+    const days = (campaign.scheduleDays || '').split(',').map(day => day.trim()).filter(Boolean)
+    return days.length > 0 ? `${time} ngày ${days.join(', ')}` : `${time} hằng tháng`
+  }
+  return `${time} hằng ngày`
+}
+
+const formatPanelRelativeDateTime = (value?: string | null) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const dayDifference = Math.round((startOfToday - startOfDate) / 86_400_000)
+  const time = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+  if (dayDifference === 0) return `Hôm nay ${time}`
+  if (dayDifference === 1) return `Hôm qua ${time}`
+  return date.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+const getCampaignDailyLimitUnit = (actionId?: string | null) => {
+  const action = actionId || ''
+  if (action.includes('post')) return 'bài'
+  if (action.includes('comment')) return 'comment'
+  if (action.includes('friend')) return 'lời mời'
+  if (action.includes('message')) return 'tin nhắn'
+  if (action.includes('email')) return 'email'
+  if (action.includes('sms')) return 'SMS'
+  return 'lượt'
+}
+
+const getCampaignSecondaryLabel = (status: string) => {
+  if (status === 'đang chạy' || status === 'chờ xử lý') return 'Tạm dừng'
+  if (status === 'tạm dừng') return 'Chạy tiếp'
+  return 'Đóng'
+}
+
+const getSourceKindLabel = (kind?: string | null) => ({
+  manual: 'Thêm thủ công',
+  upload: 'File tải lên',
+  scan: 'Dữ liệu quét',
+  automation: 'Tự động hóa',
+  api: 'API',
+  legacy: 'Dữ liệu cũ',
+  legacy_unknown: 'Chưa xác định'
+}[kind || ''] || kind || 'Chưa xác định')
+
+const getHistoryResultCount = (result: Record<string, unknown>) => {
+  const keys = ['inserted_membership_count', 'reactivated_membership_count', 'removed_membership_count', 'inserted_count']
+  return keys.reduce((sum, key) => {
+    const value = Number(result[key])
+    return sum + (Number.isFinite(value) ? value : 0)
+  }, 0)
+}
 
 const formatExportTimestamp = (date = new Date()) => {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -368,11 +483,13 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     onClose,
     selectionMode = false,
     onSelectGroup,
+    onOpenCampaign,
+    onCreateCampaignFromGroup,
     compatibleActionId,
     compatibleDataTypeCategoryItemId,
     unrestrictedOnly = false
   } = props
-  const { accounts, loadAccounts } = useCampaignStore()
+  const { accounts, loadAccounts, updateCampaign } = useCampaignStore()
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
 
@@ -381,6 +498,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const memberSelectionLoadSeqRef = useRef(0)
   const memberSelectionScopeRef = useRef('')
   const datasetLoadSeqRef = useRef(0)
+  const panelLoadSeqRef = useRef(0)
   const addMenuRef = useRef<HTMLDivElement | null>(null)
   const pageSelectionRef = useRef<HTMLInputElement | null>(null)
   const copyNoticeTimerRef = useRef<number | null>(null)
@@ -427,6 +545,14 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [draggedGroupId, setDraggedGroupId] = useState<number | null>(null)
   const [copyNotice, setCopyNotice] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [panelData, setPanelData] = useState<DataGroupPanelData | null>(null)
+  const [panelLoading, setPanelLoading] = useState(false)
+  const [panelError, setPanelError] = useState<string | null>(null)
+  const [panelRefreshRevision, setPanelRefreshRevision] = useState(0)
+  const [noteEditing, setNoteEditing] = useState(false)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [campaignStatusFilter, setCampaignStatusFilter] = useState<'all' | 'running' | 'paused' | 'error' | 'completed'>('all')
+  const [selectedPanelCampaign, setSelectedPanelCampaign] = useState<DataGroupPanelCampaign | null>(null)
 
   const [memberSearch, setMemberSearch] = useState('')
   const debouncedMemberSearch = useDebouncedValue(memberSearch)
@@ -471,6 +597,14 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }, [])
 
   useEffect(() => {
+    const handleCampaignFormClosed = () => {
+      setPanelRefreshRevision(revision => revision + 1)
+    }
+    window.addEventListener('aka-agent:data-group-campaign-form-closed', handleCampaignFormClosed)
+    return () => window.removeEventListener('aka-agent:data-group-campaign-form-closed', handleCampaignFormClosed)
+  }, [])
+
+  useEffect(() => {
     const catalogApi = getDataTypeCatalogApi()
     if (typeof catalogApi.listDataTypeCategoryItems !== 'function') return
     let cancelled = false
@@ -506,12 +640,52 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
 
   const notifyGroupsChanged = useCallback(async () => {
     await onGroupsChanged?.()
+    setPanelRefreshRevision(revision => revision + 1)
   }, [onGroupsChanged])
 
   const activeGroup = useMemo(
     () => groups.find(group => group.id === activeGroupId) || (activeGroupSnapshot?.id === activeGroupId ? activeGroupSnapshot : null),
     [activeGroupId, activeGroupSnapshot, groups]
   )
+  const loadPanel = useCallback(async () => {
+    if (!activeGroupId || selectionMode) {
+      panelLoadSeqRef.current += 1
+      setPanelData(null)
+      setPanelError(null)
+      setPanelLoading(false)
+      return
+    }
+    const api = getDataGroupApi()
+    if (!api?.getDataGroupPanel) {
+      setPanelError('Phiên bản ứng dụng chưa hỗ trợ panel thông tin nhóm.')
+      return
+    }
+    const loadSeq = ++panelLoadSeqRef.current
+    setPanelLoading(true)
+    setPanelError(null)
+    try {
+      const data = await api.getDataGroupPanel(activeGroupId)
+      if (loadSeq !== panelLoadSeqRef.current) return
+      setPanelData(data)
+      setNoteDraft(data.group.note || '')
+      setNoteEditing(false)
+      setSelectedPanelCampaign(previous => (
+        previous ? data.campaigns.find(campaign => campaign.id === previous.id) || null : null
+      ))
+    } catch (err: any) {
+      console.error('Failed to load Data Group information panel:', err)
+      if (loadSeq === panelLoadSeqRef.current) {
+        setPanelData(null)
+        setPanelError(err?.message || 'Không thể tải thông tin nhóm.')
+      }
+    } finally {
+      if (loadSeq === panelLoadSeqRef.current) setPanelLoading(false)
+    }
+  }, [activeGroupId, selectionMode])
+
+  useEffect(() => {
+    void loadPanel()
+  }, [loadPanel, panelRefreshRevision])
   const canReorderGroups = (
     !selectionMode
     && !debouncedGroupSearch.trim()
@@ -1012,6 +1186,19 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     } finally {
       setBusyAction(null)
     }
+  }
+
+  const requestDuplicateGroup = (group: DataGroup) => {
+    showConfirm(
+      `Nhân bản nhóm “${group.name}”?\n\nNhóm mới sẽ sao chép ${formatCount(group.activeMembershipCount)} data hiện có và được đặt tên “${group.name} - Bản sao”.`,
+      () => handleDuplicateGroup(group),
+      {
+        title: 'Nhân bản nhóm data',
+        confirmText: 'Nhân bản',
+        cancelText: 'Huỷ',
+        variant: 'primary'
+      }
+    )
   }
 
   const handleDeleteGroup = (group: DataGroup) => {
@@ -1522,6 +1709,96 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const importTarget = availableImportTargets.find(item => item.value === importTargetValue)
     || availableImportTargets[0]
     || IMPORT_TARGETS[0]
+  const visiblePanelCampaigns = useMemo(() => {
+    const campaigns = panelData?.campaigns || []
+    if (campaignStatusFilter === 'running') return campaigns.filter(campaign => campaign.status === 'đang chạy')
+    if (campaignStatusFilter === 'paused') return campaigns.filter(campaign => campaign.status === 'tạm dừng')
+    if (campaignStatusFilter === 'error') return campaigns.filter(campaign => campaign.status === 'lỗi')
+    if (campaignStatusFilter === 'completed') return campaigns.filter(campaign => campaign.status === 'hoàn thành')
+    return campaigns
+  }, [campaignStatusFilter, panelData?.campaigns])
+
+  const handleSaveNote = async () => {
+    if (!activeGroupId) return
+    const api = getDataGroupApi()
+    if (!api?.updateDataGroupNote) return
+    setBusyAction('save-note')
+    try {
+      const result = await api.updateDataGroupNote(activeGroupId, noteDraft.trim() || null)
+      setPanelData(previous => previous ? {
+        ...previous,
+        group: { ...previous.group, note: result.note, updatedAt: result.updatedAt }
+      } : previous)
+      setNoteDraft(result.note || '')
+      setNoteEditing(false)
+      showAlert('Đã lưu ghi chú nhóm data.', 'success')
+    } catch (err: any) {
+      console.error('Failed to update Data Group note:', err)
+      showAlert(err?.message || 'Không thể lưu ghi chú nhóm data.', 'error')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const openPanelCampaign = (campaign: DataGroupPanelCampaign) => {
+    if (!canOpenCampaignForm(campaign.status)) {
+      showAlert('Chỉ có thể mở form chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
+      return
+    }
+    if (onOpenCampaign) {
+      onOpenCampaign(campaign.id, { openFormIfEditable: true })
+      return
+    }
+    window.dispatchEvent(new CustomEvent('aka-agent:data-group-campaign-navigate', {
+      detail: { mode: 'open', campaignId: campaign.id, openFormIfEditable: true }
+    }))
+  }
+
+  const handlePanelCampaignSecondary = async (campaign: DataGroupPanelCampaign) => {
+    const nextStatus = campaign.status === 'tạm dừng'
+      ? 'chờ xử lý'
+      : campaign.status === 'đang chạy' || campaign.status === 'chờ xử lý'
+        ? 'tạm dừng'
+        : null
+    if (!nextStatus) {
+      setSelectedPanelCampaign(null)
+      return
+    }
+    const actionKey = `campaign-status:${campaign.id}`
+    if (busyAction === actionKey) return
+    setBusyAction(actionKey)
+    try {
+      await updateCampaign(campaign.id, { status: nextStatus })
+      await loadPanel()
+      showAlert(
+        nextStatus === 'tạm dừng'
+          ? `Đã tạm dừng chiến dịch “${campaign.name}”.`
+          : `Đã tiếp tục chiến dịch “${campaign.name}”.`,
+        'success'
+      )
+    } catch (err: any) {
+      console.error('Failed to update linked campaign status:', err)
+      showAlert(
+        err?.message || (nextStatus === 'tạm dừng'
+          ? `Không thể tạm dừng chiến dịch “${campaign.name}”.`
+          : `Không thể tiếp tục chiến dịch “${campaign.name}”.`),
+        'error'
+      )
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const createCampaignFromPanel = () => {
+    if (!activeGroup) return
+    if (onCreateCampaignFromGroup) {
+      onCreateCampaignFromGroup(activeGroup)
+      return
+    }
+    window.dispatchEvent(new CustomEvent('aka-agent:data-group-campaign-navigate', {
+      detail: { mode: 'create', group: activeGroup }
+    }))
+  }
 
   const modal = (
     <div className="data-group-manager-backdrop" onMouseDown={event => {
@@ -1779,7 +2056,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                           }} title="Đổi tên"><Pencil size={13} /></button>
                           <button type="button" className="btn-icon" onClick={event => {
                             event.stopPropagation()
-                            void handleDuplicateGroup(group)
+                            requestDuplicateGroup(group)
                           }} disabled={rowBusy} title="Nhân bản"><Copy size={13} /></button>
                           <button type="button" className="btn-icon data-group-manager-delete-action" onClick={event => {
                             event.stopPropagation()
@@ -2054,6 +2331,171 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               </div>
             </div>
           </main>
+
+          {!selectionMode && (
+            <aside className="data-group-info-panel" aria-label="Thông tin nhóm data">
+              <div className="data-group-info-header">
+                <div><strong>Thông tin nhóm</strong></div>
+                <div className="data-group-info-header-actions">
+                  <button type="button" className="btn-icon" onClick={() => activeGroup && void copyGroupId(activeGroup.id)} disabled={!activeGroup} title="Sao chép ID"><Copy size={14} /></button>
+                  <button type="button" className="btn-icon" onClick={() => activeGroup && requestDuplicateGroup(activeGroup)} disabled={!activeGroup || busyAction !== null} title="Nhân bản nhóm"><Copy size={14} /></button>
+                  <button type="button" className="btn-icon" onClick={() => void handleExport()} disabled={!activeGroup || busyAction !== null} title="Xuất Excel"><Download size={14} /></button>
+                  <button type="button" className="btn-icon is-primary" onClick={() => setAddMenuOpen(true)} disabled={!activeGroup} title="Thêm data"><Plus size={14} /></button>
+                </div>
+              </div>
+
+              <div className="data-group-info-scroll">
+                {!activeGroup ? (
+                  <div className="data-group-info-empty"><Database size={28} /><span>Chọn một nhóm để xem thông tin.</span></div>
+                ) : panelLoading && !panelData ? (
+                  <div className="data-group-info-empty"><LoaderCircle size={22} className="spin" /><span>Đang tổng hợp thông tin nhóm...</span></div>
+                ) : panelError ? (
+                  <div className="data-group-info-empty is-error"><Info size={24} /><span>{panelError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => void loadPanel()}>Thử lại</button></div>
+                ) : panelData && (
+                  <>
+                    <section className="data-group-info-overview">
+                      <div className="data-group-info-name-row">
+                        <span className="data-group-info-color" style={{ background: activeGroup.color }} />
+                        {editingGroupId === activeGroup.id ? (
+                          <div className="data-group-info-rename">
+                            <input
+                              className="stepper-input"
+                              value={editingGroupName}
+                              onChange={event => setEditingGroupName(event.target.value)}
+                              onKeyDown={event => {
+                                if (event.key === 'Enter') void submitRenameGroup(activeGroup)
+                                if (event.key === 'Escape') setEditingGroupId(null)
+                              }}
+                              autoFocus
+                            />
+                            <button type="button" className="btn-icon is-success" onClick={() => void submitRenameGroup(activeGroup)}><Check size={13} /></button>
+                          </div>
+                        ) : (
+                          <>
+                            <strong title={activeGroup.name}>{activeGroup.name}</strong>
+                            <button type="button" className="btn-icon" onClick={() => startRenameGroup(activeGroup)} title="Đổi tên"><Pencil size={13} /></button>
+                          </>
+                        )}
+                      </div>
+                      <div className="data-group-info-badges">
+                        <button type="button" onClick={() => void copyGroupId(activeGroup.id)}>ID {activeGroup.id}<Copy size={10} /></button>
+                        <span>{panelData.group.dataTypeName}</span>
+                        <span>Đang dùng ở {formatCount(panelData.summary.campaignCount)} chiến dịch</span>
+                      </div>
+                      <div className="data-group-info-metrics">
+                        <div><strong>{formatCount(panelData.summary.activeMembershipCount)}</strong><span>data hiện có</span></div>
+                        <div><strong>{formatCount(panelData.summary.runCount)}</strong><span>lần chạy chiến dịch</span></div>
+                      </div>
+                    </section>
+
+                    <section className="data-group-info-section">
+                      <h4>Chi tiết</h4>
+                      <dl className="data-group-info-details">
+                        <div><dt>Loại nhóm</dt><dd>{panelData.group.dataTypeName}</dd></div>
+                        <div><dt>Gắn với tài khoản</dt><dd>{panelData.accountBreakdown.length > 0 ? `${panelData.accountBreakdown[0].name}${panelData.accountBreakdown.length > 1 ? ` +${panelData.accountBreakdown.length - 1}` : ''}` : 'Chưa gắn tài khoản'}</dd></div>
+                        <div><dt>Nguồn data</dt><dd>{panelData.sourceBreakdown.length > 0 ? panelData.sourceBreakdown.slice(0, 3).map(item => `${getSourceKindLabel(item.kind)} ${formatCount(item.count)}`).join(' · ') : 'Chưa có nguồn'}</dd></div>
+                        <div><dt>Người tạo</dt><dd>{panelData.group.creatorName}</dd></div>
+                        <div><dt>Ngày tạo</dt><dd>{formatPanelDate(panelData.group.createdAt)}</dd></div>
+                        <div><dt>Data mới nhất</dt><dd>{formatPanelDate(panelData.group.latestDataAddedAt, true)}</dd></div>
+                      </dl>
+                    </section>
+
+                    <section className="data-group-info-section">
+                      <h4>Phân bổ data</h4>
+                      <div className="data-group-info-breakdown">
+                        {panelData.dataTypeBreakdown.length === 0 ? <small>Chưa có data để phân bổ.</small> : panelData.dataTypeBreakdown.slice(0, 5).map((item, index) => {
+                          const percent = panelData.summary.activeMembershipCount > 0 ? Math.round((item.count / panelData.summary.activeMembershipCount) * 100) : 0
+                          return (
+                            <div key={`${item.code || item.name}-${index}`}>
+                              <p><span>{item.name}</span><strong>{formatCount(item.count)}</strong></p>
+                              <span className="data-group-info-progress"><i style={{ width: `${percent}%` }} /></span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {panelData.accountBreakdown.length > 0 && (
+                        <div className="data-group-info-account-list">
+                          {panelData.accountBreakdown.slice(0, 4).map((item, index) => (
+                            <span key={`${item.accountId || 'none'}-${index}`}><UserRound size={11} /> {item.name}<strong>{formatCount(item.count)}</strong></span>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="data-group-info-section">
+                      <h4>Chất lượng data</h4>
+                      <div className="data-group-info-quality">
+                        <span><Link2 size={13} /><strong>{formatCount(panelData.quality.withLinkCount)}</strong><small>Có link</small></span>
+                        <span><Phone size={13} /><strong>{formatCount(panelData.quality.withPhoneCount)}</strong><small>Có SĐT</small></span>
+                        <span><Users size={13} /><strong>{formatCount(panelData.quality.duplicateCount)}</strong><small>Trùng mục tiêu</small></span>
+                      </div>
+                    </section>
+
+                    <section className="data-group-info-section">
+                      <h4><Tag size={13} /> Tag trong nhóm</h4>
+                      <div className="data-group-info-tags">
+                        {panelData.tags.length === 0 ? <small>Chưa có nhãn.</small> : panelData.tags.slice(0, 8).map(tag => (
+                          <span key={tag.id} style={{ '--tag-color': tag.color || 'var(--accent-primary)' } as CSSProperties}>{tag.name}<em>{formatCount(tag.count)}</em></span>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="data-group-info-section">
+                      <div className="data-group-info-section-heading"><h4>Ghi chú</h4>{!noteEditing && <button type="button" onClick={() => setNoteEditing(true)}><Pencil size={11} /> Sửa</button>}</div>
+                      {noteEditing ? (
+                        <div className="data-group-info-note-editor">
+                          <textarea value={noteDraft} maxLength={2000} onChange={event => setNoteDraft(event.target.value)} placeholder="Thêm ghi chú cho nhóm data..." autoFocus />
+                          <div><small>{noteDraft.length}/2000</small><button type="button" className="btn btn-ghost btn-sm" onClick={() => { setNoteDraft(panelData.group.note || ''); setNoteEditing(false) }}>Huỷ</button><button type="button" className="btn btn-primary btn-sm" onClick={() => void handleSaveNote()} disabled={busyAction === 'save-note'}>{busyAction === 'save-note' ? <LoaderCircle size={12} className="spin" /> : <Save size={12} />} Lưu</button></div>
+                        </div>
+                      ) : (
+                        <p className={`data-group-info-note${panelData.group.note ? '' : ' is-empty'}`}>{panelData.group.note || 'Chưa có ghi chú cho nhóm này.'}</p>
+                      )}
+                    </section>
+
+                    <section className="data-group-info-section">
+                      <h4><History size={13} /> Lịch sử thêm data</h4>
+                      <div className="data-group-info-history">
+                        {panelData.history.length === 0 ? <small>Chưa có lịch sử ingest.</small> : panelData.history.slice(0, 6).map(item => (
+                          <article key={item.id}>
+                            <span className="data-group-info-history-dot" />
+                            <div><strong>{getSourceKindLabel(item.kind)}</strong><p>{item.sourceName || (item.isTargetGroup ? 'Từ tự động hóa' : 'Không có tên nguồn')}</p><small>{formatPanelDate(item.createdAt, true)}{getHistoryResultCount(item.result) > 0 ? ` · ${formatCount(getHistoryResultCount(item.result))} data` : ''}</small></div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="data-group-info-section is-campaigns">
+                      <div className="data-group-info-section-heading"><h4><Activity size={13} /> Chiến dịch dùng nhóm này</h4><span className="data-group-manager-count-pill">{formatCount(panelData.campaigns.length)}</span></div>
+                      <div className="data-group-info-campaign-filters">
+                        {([
+                          ['all', 'Tất cả', panelData.campaigns.length],
+                          ['running', 'Đang chạy', panelData.campaigns.filter(item => item.status === 'đang chạy').length],
+                          ['paused', 'Tạm dừng', panelData.campaigns.filter(item => item.status === 'tạm dừng').length],
+                          ['error', 'Lỗi', panelData.campaigns.filter(item => item.status === 'lỗi').length],
+                          ['completed', 'Hoàn thành', panelData.campaigns.filter(item => item.status === 'hoàn thành').length]
+                        ] as const).map(([value, label, count]) => (
+                          <button type="button" key={value} className={campaignStatusFilter === value ? 'is-active' : ''} onClick={() => setCampaignStatusFilter(value)}>{label}{value !== 'all' ? ` ${count}` : ''}</button>
+                        ))}
+                      </div>
+                      <div className="data-group-info-campaigns">
+                        {visiblePanelCampaigns.length === 0 ? <small>Không có chiến dịch phù hợp.</small> : visiblePanelCampaigns.map(campaign => {
+                          const progress = getCampaignProgress(campaign)
+                          return (
+                            <button type="button" key={campaign.id} onClick={() => setSelectedPanelCampaign(campaign)}>
+                              <span className={`data-group-info-campaign-status ${getCampaignStatusTone(campaign.status)}`} />
+                              <div><span className="data-group-info-campaign-title"><strong>{campaign.name}</strong><em className={getCampaignStatusTone(campaign.status)}>{campaign.status}</em></span><p>{campaign.actionName} · {campaign.accountName}</p><span className="data-group-info-progress"><i style={{ width: `${progress}%` }} /></span><small>{formatCount(campaign.inputCompleted + campaign.inputFailed)}/{formatCount(campaign.inputTotal)} · {progress}%</small><small className="is-schedule">{campaign.schedule || campaign.originalSchedule ? `${formatPanelDate(campaign.schedule || campaign.originalSchedule, true)} · ` : ''}chạy gần nhất {formatPanelDate(campaign.lastRunAt, true)}</small></div>
+                              <ChevronRight size={14} />
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <button type="button" className="btn btn-primary data-group-info-create-campaign" onClick={createCampaignFromPanel}><Plus size={13} /> Tạo chiến dịch từ nhóm này</button>
+                    </section>
+                  </>
+                )}
+              </div>
+            </aside>
+          )}
         </div>
 
         {selectionMode && (
@@ -2226,6 +2668,61 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 {busyAction === `delete:${deleteGroupCandidate.id}` ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />}
                 Xoá nhóm
               </button>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {selectedPanelCampaign && (
+        <div className="data-group-submodal-backdrop data-group-campaign-detail-backdrop" onMouseDown={event => {
+          if (event.target === event.currentTarget) setSelectedPanelCampaign(null)
+        }}>
+          <section className={`data-group-campaign-detail-modal ${getCampaignStatusTone(selectedPanelCampaign.status)}`} role="dialog" aria-modal="true" aria-label="Tóm tắt chiến dịch liên kết">
+            <header>
+              <div>
+                <h3>{selectedPanelCampaign.name}</h3>
+                <div className="data-group-campaign-detail-subtitle">
+                  <span className={`data-group-campaign-detail-status ${getCampaignStatusTone(selectedPanelCampaign.status)}`}>{formatCampaignStatus(selectedPanelCampaign.status)}</span>
+                  <span>{selectedPanelCampaign.actionName} · {selectedPanelCampaign.accountName}</span>
+                </div>
+              </div>
+              <button type="button" className="btn-icon" onClick={() => setSelectedPanelCampaign(null)} title="Đóng"><X size={17} /></button>
+            </header>
+            <div className="data-group-campaign-detail-body">
+              <section className="data-group-campaign-detail-progress">
+                <div>
+                  <span>Tiến độ xử lý data</span>
+                  <strong>{formatCount(selectedPanelCampaign.inputCompleted + selectedPanelCampaign.inputFailed)}/{formatCount(selectedPanelCampaign.inputTotal)} data</strong>
+                </div>
+                <span className="data-group-info-progress"><i style={{ width: `${getCampaignProgress(selectedPanelCampaign)}%` }} /></span>
+              </section>
+              <div className="data-group-campaign-detail-results">
+                <span className="is-success"><strong>{formatCount(selectedPanelCampaign.successCount)}</strong><small>thành công</small></span>
+                <span className="is-failure"><strong>{formatCount(selectedPanelCampaign.failureCount)}</strong><small>thất bại</small></span>
+                <span className="is-error"><strong>{formatCount(selectedPanelCampaign.errorCount)}</strong><small>lỗi</small></span>
+              </div>
+              <dl className="data-group-campaign-detail-meta">
+                <div><dt>Lịch chạy</dt><dd>{formatPanelCampaignSchedule(selectedPanelCampaign)}</dd></div>
+                <div><dt>Chạy gần nhất</dt><dd>{formatPanelRelativeDateTime(selectedPanelCampaign.lastRunAt)}</dd></div>
+                <div><dt>Giới hạn / ngày</dt><dd>{selectedPanelCampaign.dailyLimit ? `${formatCount(selectedPanelCampaign.dailyLimit)} ${getCampaignDailyLimitUnit(selectedPanelCampaign.actionId)} / ngày` : 'Không giới hạn'}</dd></div>
+              </dl>
+            </div>
+            <footer>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => void handlePanelCampaignSecondary(selectedPanelCampaign)}
+                disabled={busyAction === `campaign-status:${selectedPanelCampaign.id}`}
+              >
+                {busyAction === `campaign-status:${selectedPanelCampaign.id}` ? <LoaderCircle size={13} className="spin" /> : null}
+                {getCampaignSecondaryLabel(selectedPanelCampaign.status)}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => openPanelCampaign(selectedPanelCampaign)}
+                disabled={busyAction === `campaign-status:${selectedPanelCampaign.id}`}
+              >Mở chiến dịch</button>
             </footer>
           </section>
         </div>

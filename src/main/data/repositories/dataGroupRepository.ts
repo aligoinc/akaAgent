@@ -20,6 +20,12 @@ import {
   DataGroupMemberListResult,
   DataGroupMemberMutationRequest,
   DataGroupMutationResult,
+  DataGroupNoteUpdateResult,
+  DataGroupPanelBreakdownItem,
+  DataGroupPanelCampaign,
+  DataGroupPanelData,
+  DataGroupPanelHistoryItem,
+  DataGroupPanelTag,
   DataProvenance,
   DataTypeCategoryItem,
   MoveDataGroupMembersRequest,
@@ -62,6 +68,14 @@ function unwrapRpcRow(data: unknown): DbRow {
 function unwrapRpcRows(data: unknown): DbRow[] {
   if (!Array.isArray(data)) return data ? [data as DbRow] : []
   return data as DbRow[]
+}
+
+function asObject(value: unknown): DbRow {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as DbRow : {}
+}
+
+function asObjectArray(value: unknown): DbRow[] {
+  return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') as DbRow[] : []
 }
 
 function mapDataGroup(row: DbRow): DataGroup {
@@ -639,6 +653,137 @@ export async function getDataGroupLatestIngestStats(groupId: number): Promise<Da
     stoppedSourceCount: asNumber(row.stopped_source_count),
     latestBatchCreatedAt: asNullableString(row.latest_batch_created_at),
     latestBatchUpdatedAt: asNullableString(row.latest_batch_updated_at)
+  }
+}
+
+function mapPanelBreakdown(row: DbRow): DataGroupPanelBreakdownItem {
+  return {
+    count: asNumber(row.count),
+    name: asString(row.name ?? row.kind, 'Chưa xác định'),
+    code: asNullableString(row.code),
+    kind: asNullableString(row.kind) as DataGroupPanelBreakdownItem['kind'],
+    dataTypeCategoryItemId: asNullableNumber(row.data_type_category_item_id),
+    accountId: asNullableNumber(row.account_id),
+    isDelete: row.is_delete === true
+  }
+}
+
+function mapPanelCampaign(row: DbRow): DataGroupPanelCampaign {
+  return {
+    id: asNumber(row.id),
+    name: asString(row.name, 'Chiến dịch'),
+    actionId: asNullableString(row.action_id),
+    actionName: asString(row.action_name, '—'),
+    accountId: asNullableNumber(row.account_id),
+    accountName: asString(row.account_name, '—'),
+    status: asString(row.status),
+    schedule: asNullableString(row.schedule),
+    originalSchedule: asNullableString(row.original_schedule),
+    scheduleType: asNullableString(row.schedule_type),
+    scheduleDays: asNullableString(row.schedule_days),
+    scheduleWeekDays: asNullableString(row.schedule_week_days),
+    lastRunAt: asNullableString(row.last_run_at),
+    completedAt: asNullableString(row.completed_at),
+    createdAt: asNullableString(row.created_at),
+    updatedAt: asNullableString(row.updated_at),
+    dailyLimit: asNullableNumber(row.daily_limit),
+    sourceStatus: asNullableString(row.source_status) as DataGroupPanelCampaign['sourceStatus'],
+    inputTotal: asNumber(row.input_total),
+    inputCompleted: asNumber(row.input_completed),
+    inputFailed: asNumber(row.input_failed),
+    successCount: asNumber(row.success_count),
+    failureCount: asNumber(row.failure_count),
+    errorCount: asNumber(row.error_count),
+    runCount: asNumber(row.run_count)
+  }
+}
+
+export async function getDataGroupPanel(groupId: number): Promise<DataGroupPanelData> {
+  const { data, error } = await client().rpc('aka_agent_get_data_group_panel', {
+    ...identityParams(),
+    p_group_id: groupId
+  })
+  if (error) throwRpcError('Failed to get Data Group panel', error)
+
+  const payload = unwrapRpcRow(data)
+  const group = asObject(payload.group)
+  const summary = asObject(payload.summary)
+  const quality = asObject(payload.quality)
+  const tags: DataGroupPanelTag[] = asObjectArray(payload.tags).map(row => ({
+    id: asNumber(row.id),
+    name: asString(row.name, 'Nhãn'),
+    color: asNullableString(row.color),
+    count: asNumber(row.count)
+  }))
+  const history: DataGroupPanelHistoryItem[] = asObjectArray(payload.history).map(row => ({
+    id: asNumber(row.id),
+    operation: asString(row.operation),
+    kind: asString(row.kind, 'legacy_unknown'),
+    sourceName: asNullableString(row.source_name),
+    status: asString(row.status),
+    result: asObject(row.result),
+    isTargetGroup: row.is_target_group === true,
+    createdAt: asNullableString(row.created_at),
+    updatedAt: asNullableString(row.updated_at)
+  }))
+
+  return {
+    group: {
+      id: asNumber(group.id, groupId),
+      name: asString(group.name),
+      color: asString(group.color, '#6366f1'),
+      note: asNullableString(group.note),
+      creatorName: asString(group.creator_name, '—'),
+      dataTypeCategoryItemId: asNullableNumber(group.data_type_category_item_id),
+      dataTypeCode: asNullableString(group.data_type_code) as DataGroupPanelData['group']['dataTypeCode'],
+      dataTypeName: asString(group.data_type_name, 'Mọi loại dữ liệu'),
+      datasetSyncMode: asString(group.dataset_sync_mode, 'manual') as DataGroupPanelData['group']['datasetSyncMode'],
+      revision: asNumber(group.revision),
+      createdAt: asNullableString(group.created_at),
+      updatedAt: asNullableString(group.updated_at),
+      latestDataAddedAt: asNullableString(group.latest_data_added_at)
+    },
+    summary: {
+      activeMembershipCount: asNumber(summary.active_membership_count),
+      uniqueTargetCount: asNumber(summary.unique_target_count),
+      duplicateCount: asNumber(summary.duplicate_count),
+      campaignInputCount: asNumber(summary.campaign_input_count),
+      campaignCount: asNumber(summary.campaign_count),
+      activeCampaignCount: asNumber(summary.active_campaign_count),
+      runCount: asNumber(summary.run_count)
+    },
+    quality: {
+      withLinkCount: asNumber(quality.with_link_count),
+      withPhoneCount: asNumber(quality.with_phone_count),
+      withUidCount: asNumber(quality.with_uid_count),
+      duplicateCount: asNumber(quality.duplicate_count)
+    },
+    sourceBreakdown: asObjectArray(payload.source_breakdown).map(mapPanelBreakdown),
+    dataTypeBreakdown: asObjectArray(payload.data_type_breakdown).map(mapPanelBreakdown),
+    accountBreakdown: asObjectArray(payload.account_breakdown).map(mapPanelBreakdown),
+    tags,
+    history,
+    campaigns: asObjectArray(payload.campaigns).map(mapPanelCampaign)
+  }
+}
+
+export async function updateDataGroupNote(groupId: number, note: string | null): Promise<DataGroupNoteUpdateResult> {
+  const credentials = requireCurrentUserCredentials()
+  const user = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_update_data_group_note', {
+    p_staff_id: user.staffId,
+    p_organization_id: user.organizationId,
+    p_group_id: groupId,
+    p_note: note,
+    p_auth_username: credentials.username,
+    p_auth_password: credentials.password
+  })
+  if (error) throwRpcError('Failed to update Data Group note', error)
+  const row = unwrapRpcRow(data)
+  return {
+    groupId: asNumber(row.group_id, groupId),
+    note: asNullableString(row.note),
+    updatedAt: asNullableString(row.updated_at)
   }
 }
 
