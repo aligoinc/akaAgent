@@ -1661,12 +1661,123 @@ export interface DataGroup {
   dataTypeCode?: DataTypeCategoryCode | null
   dataTypeName?: string | null
   datasetSyncMode?: 'manual' | 'dataset_auto'
+  note?: string | null
   activeMembershipCount: number
   isDelete: boolean
   staffId?: number
   organizationId?: number
   createdAt?: string
   updatedAt?: string
+}
+
+export interface DataGroupPanelBreakdownItem {
+  count: number
+  name: string
+  code?: string | null
+  kind?: DataProvenanceKind | null
+  dataTypeCategoryItemId?: number | null
+  accountId?: number | null
+  isDelete?: boolean
+}
+
+export interface DataGroupPanelTag {
+  id: number
+  name: string
+  color?: string | null
+  count: number
+}
+
+export interface DataGroupPanelHistoryItem {
+  id: number
+  operation: string
+  kind: DataProvenanceKind | string
+  sourceName?: string | null
+  status: string
+  result: Record<string, unknown>
+  isTargetGroup: boolean
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export interface DataGroupPanelCampaign {
+  id: number
+  name: string
+  actionId?: string | null
+  actionName: string
+  accountId?: number | null
+  accountName: string
+  status: CampaignStatus | string
+  schedule?: string | null
+  originalSchedule?: string | null
+  scheduleType?: string | null
+  scheduleDays?: string | null
+  scheduleWeekDays?: string | null
+  lastRunAt?: string | null
+  completedAt?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+  dailyLimit?: number | null
+  sourceStatus?: CampaignDataGroupSourceStatus | null
+  inputTotal: number
+  inputCompleted: number
+  inputFailed: number
+  successCount: number
+  failureCount: number
+  errorCount: number
+  runCount: number
+}
+
+export interface DataGroupPanelData {
+  group: {
+    id: number
+    name: string
+    color: string
+    note?: string | null
+    creatorName: string
+    dataTypeCategoryItemId?: number | null
+    dataTypeCode?: DataTypeCategoryCode | null
+    dataTypeName: string
+    datasetSyncMode: 'manual' | 'dataset_auto'
+    revision: number
+    createdAt?: string | null
+    updatedAt?: string | null
+    latestDataAddedAt?: string | null
+  }
+  summary: {
+    activeMembershipCount: number
+    uniqueTargetCount: number
+    duplicateCount: number
+    campaignInputCount: number
+    campaignCount: number
+    activeCampaignCount: number
+    runCount: number
+  }
+  quality: {
+    withLinkCount: number
+    withPhoneCount: number
+    withUidCount: number
+    duplicateCount: number
+  }
+  sourceBreakdown: DataGroupPanelBreakdownItem[]
+  dataTypeBreakdown: DataGroupPanelBreakdownItem[]
+  accountBreakdown: DataGroupPanelBreakdownItem[]
+  tags: DataGroupPanelTag[]
+  history: DataGroupPanelHistoryItem[]
+  campaigns: DataGroupPanelCampaign[]
+}
+
+export interface DataGroupNoteUpdateResult {
+  groupId: number
+  note: string | null
+  updatedAt?: string | null
+}
+
+export interface DataGroupCampaignNavigationRequest {
+  requestId: number
+  mode: 'open' | 'create'
+  campaignId?: number
+  group?: DataGroup
+  openFormIfEditable?: boolean
 }
 
 export interface DataProvenance {
@@ -2905,6 +3016,8 @@ export const IPC_EVENTS = {
   DATA_GROUPS_LIST_MEMBER_IDS: 'data-groups:list-member-ids',
   DATA_GROUPS_LIST_DATASETS: 'data-groups:list-datasets',
   DATA_GROUPS_GET_LATEST_INGEST_STATS: 'data-groups:get-latest-ingest-stats',
+  DATA_GROUPS_GET_PANEL: 'data-groups:get-panel',
+  DATA_GROUPS_UPDATE_NOTE: 'data-groups:update-note',
   DATA_GROUPS_INGEST: 'data-groups:ingest',
   DATA_GROUPS_REMOVE_MEMBERS: 'data-groups:remove-members',
   DATA_GROUPS_MOVE_MEMBERS: 'data-groups:move-members',

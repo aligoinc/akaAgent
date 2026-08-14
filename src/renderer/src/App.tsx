@@ -26,7 +26,7 @@ import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
 import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeedbackLauncher'
 import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
-import type { ContentTemplateChannelName } from '../../shared/types'
+import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
 
 type UpdatePromptSource = 'startup' | 'manual'
 
@@ -70,6 +70,8 @@ export default function App() {
   const [showContentTemplates, setShowContentTemplates] = useState(false)
   const [contentTemplateInitialChannel, setContentTemplateInitialChannel] = useState<ContentTemplateChannelName | undefined>()
   const [showDataGroups, setShowDataGroups] = useState(false)
+  const [dataGroupCampaignRequest, setDataGroupCampaignRequest] = useState<DataGroupCampaignNavigationRequest | null>(null)
+  const dataGroupCampaignRequestSeq = useRef(0)
   const [showGeneralSettings, setShowGeneralSettings] = useState(false)
   const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
   const [showChangePassword, setShowChangePassword] = useState(false)
@@ -83,6 +85,20 @@ export default function App() {
   const runtimePlatform = window.electronAPI?.platform || 'unknown'
   const platformClass = `platform-${runtimePlatform}`
   const hasZaloServerAccounts = accounts.some(account => account.isZaloServer)
+
+  useEffect(() => {
+    const handleDataGroupCampaignNavigation = (event: Event) => {
+      const detail = (event as CustomEvent<Pick<DataGroupCampaignNavigationRequest, 'mode' | 'campaignId' | 'group' | 'openFormIfEditable'>>).detail
+      if (!detail || (detail.mode === 'open' && !detail.campaignId) || (detail.mode === 'create' && !detail.group)) return
+      setActivePage('campaigns')
+      setDataGroupCampaignRequest({
+        ...detail,
+        requestId: ++dataGroupCampaignRequestSeq.current
+      })
+    }
+    window.addEventListener('aka-agent:data-group-campaign-navigate', handleDataGroupCampaignNavigation)
+    return () => window.removeEventListener('aka-agent:data-group-campaign-navigate', handleDataGroupCampaignNavigation)
+  }, [])
 
   const startAuthBootstrap = useCallback(() => {
     if (authBootstrapStarted.current) return
@@ -354,6 +370,10 @@ export default function App() {
           <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <CampaignPage
               isActive={activePage === 'campaigns'}
+              dataGroupCampaignRequest={dataGroupCampaignRequest}
+              onDataGroupCampaignRequestHandled={(requestId) => {
+                setDataGroupCampaignRequest(previous => previous?.requestId === requestId ? null : previous)
+              }}
               onNavigateToBrowser={requestOpenBrowser}
               onOpenGeneralSettings={openGeneralSettings}
               onOpenContentTemplates={(initialChannel) => {
@@ -426,7 +446,24 @@ export default function App() {
         />
       )}
       {showDataGroups && (
-        <DataGroupManagerModal onClose={() => setShowDataGroups(false)} />
+        <DataGroupManagerModal
+          onClose={() => setShowDataGroups(false)}
+          onOpenCampaign={(campaignId, options) => {
+            setDataGroupCampaignRequest({
+              requestId: ++dataGroupCampaignRequestSeq.current,
+              mode: 'open',
+              campaignId,
+              openFormIfEditable: options?.openFormIfEditable
+            })
+          }}
+          onCreateCampaignFromGroup={(group) => {
+            setDataGroupCampaignRequest({
+              requestId: ++dataGroupCampaignRequestSeq.current,
+              mode: 'create',
+              group
+            })
+          }}
+        />
       )}
       {showGeneralSettings && (
         <GeneralSettingsModal

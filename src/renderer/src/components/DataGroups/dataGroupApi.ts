@@ -13,6 +13,8 @@ import type {
   DataGroupMemberListResult,
   DataGroupMemberMutationRequest,
   DataGroupMutationResult,
+  DataGroupNoteUpdateResult,
+  DataGroupPanelData,
   MoveDataGroupMembersRequest,
   UpdateDataGroupRequest
 } from '../../../../shared/types'
@@ -38,6 +40,8 @@ export interface DataGroupElectronAPI {
   listDataGroupMemberIds: (query: DataGroupMemberListQuery) => Promise<DataGroupMemberIdListResult>
   listDataGroupDatasets: (groupId: number) => Promise<DataGroupDataset[]>
   getDataGroupLatestIngestStats: (groupId: number) => Promise<DataGroupLatestIngestStats>
+  getDataGroupPanel: (groupId: number) => Promise<DataGroupPanelData>
+  updateDataGroupNote: (groupId: number, note: string | null) => Promise<DataGroupNoteUpdateResult>
   ingestDataGroup: (request: DataGroupIngestRequest) => Promise<DataGroupIngestResult>
   removeDataGroupMembers: (request: DataGroupMemberMutationRequest) => Promise<DataGroupMutationResult>
   moveDataGroupMembers: (request: MoveDataGroupMembersRequest) => Promise<DataGroupMutationResult>

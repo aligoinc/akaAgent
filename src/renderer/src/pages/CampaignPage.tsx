@@ -3,16 +3,18 @@ import AccountPanel from '../components/CampaignPanels/AccountPanel'
 import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
 import type { GeneralSettingsMenu } from '../components/Settings/GeneralSettingsModal'
-import type { ContentTemplateChannelName } from '../../../shared/types'
+import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../../shared/types'
 
 interface CampaignPageProps {
   isActive: boolean
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
+  dataGroupCampaignRequest?: DataGroupCampaignNavigationRequest | null
+  onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
 
-export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates }: CampaignPageProps) {
+export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const [accountInfoOpenRequest, setAccountInfoOpenRequest] = useState<{ accountId: number; requestId: number } | null>(null)
@@ -98,6 +100,8 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
           onOpenContentTemplates={onOpenContentTemplates}
           onAskAssistant={handleAskAssistant}
           accountInfoOpenRequest={accountInfoOpenRequest}
+          dataGroupCampaignRequest={dataGroupCampaignRequest}
+          onDataGroupCampaignRequestHandled={onDataGroupCampaignRequestHandled}
         />
       </div>
 
