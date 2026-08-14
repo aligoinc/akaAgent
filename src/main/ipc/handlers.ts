@@ -11,6 +11,7 @@ import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupC
 import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { ZaloServerClient } from '../services/zaloServerClient'
 import { ZaloChatApiClient } from '../services/zaloChatApiClient'
+import { ZaloChatContactScanSource } from '../services/zaloChatContactScanSource'
 import { ZaloLocalChatSyncService } from '../services/zaloLocalChatSyncService'
 import { DesktopZaloHandoffStore } from '../services/desktopZaloHandoffStore'
 import {
@@ -179,6 +180,7 @@ export function registerIpcHandlers(
       }
     }
   )
+  let chatContactLoader: ContactLoader | null = null
   let zaloLocalChatSync: ZaloLocalChatSyncService | null = null
   const startZaloRemoteClients = (user: AuthUser, username: string, password: string): void => {
     if (user.isChatSync === true) {
@@ -187,11 +189,13 @@ export function registerIpcHandlers(
       zaloLocalChatSync?.start()
       return
     }
+    chatContactLoader?.stopAll()
     zaloLocalChatSync?.stop()
     zaloChatApiClient.stop()
     zaloServerClient.start(user, username, password)
   }
   const stopZaloRemoteClients = (): void => {
+    chatContactLoader?.stopAll()
     zaloServerClient.stop()
     zaloLocalChatSync?.stop()
     zaloChatApiClient.stop()
@@ -273,6 +277,14 @@ export function registerIpcHandlers(
   })
   campaignScheduler.setPageRegistry(pageRegistry)
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime, zaloRuntime)
+  chatContactLoader = new ContactLoader(
+    supabase,
+    webviewRegistry,
+    mainWindow,
+    proxyRuntime,
+    new ZaloChatContactScanSource(zaloChatApiClient, supabase),
+    { zaloRuntimeTarget: 'server' }
+  )
   zaloRealtimeGroupManager = new ZaloRealtimeGroupCampaignManager(supabase, zaloRuntime, mainWindow)
 
   let restartRequiredActivation: Promise<void> | null = null
@@ -470,15 +482,16 @@ export function registerIpcHandlers(
           // publishing a success or caching an API after the mode changed.
           zaloRuntime.clearAll({ preserveActiveQrLogins: !qrSettled })
 
-          const [schedulerIdle, contactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle] = await Promise.all([
+          const [schedulerIdle, contactLoaderIdle, chatContactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle] = await Promise.all([
             campaignScheduler.waitForZaloIdle(30_000),
             contactLoader.waitForIdle(30_000, 'zalo'),
+            chatContactLoader?.waitForIdle(30_000, 'zalo') ?? Promise.resolve(true),
             zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
             accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
             accountPollerController?.waitForZaloIdle(30_000) ?? Promise.resolve(true),
             zaloRuntime.waitForWarmSessionsIdle(30_000)
           ])
-          if (qrSettled && schedulerIdle && contactLoaderIdle && realtimeIdle && directOperationsIdle && accountPollerIdle && warmSessionsIdle) {
+          if (qrSettled && schedulerIdle && contactLoaderIdle && chatContactLoaderIdle && realtimeIdle && directOperationsIdle && accountPollerIdle && warmSessionsIdle) {
             break
           }
           console.warn('[RuntimeMode] Waiting for every desktop Zalo producer to settle before handoff.')
@@ -606,20 +619,22 @@ export function registerIpcHandlers(
       if (!user) return false
 
       try {
-        const [schedulerIdle, contactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle] = await Promise.all([
+        const [schedulerIdle, contactLoaderIdle, chatContactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle] = await Promise.all([
           campaignScheduler.waitForIdle(30_000),
           contactLoader.waitForIdle(30_000),
+          chatContactLoader?.waitForIdle(30_000) ?? Promise.resolve(true),
           zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
           accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
           accountPollerController?.waitForZaloIdle(30_000) ?? Promise.resolve(true),
           zaloRuntime.waitForWarmSessionsIdle(30_000)
         ])
-        if (!schedulerIdle || !contactLoaderIdle || !realtimeIdle || !directOperationsIdle || !accountPollerIdle || !warmSessionsIdle) {
+        if (!schedulerIdle || !contactLoaderIdle || !chatContactLoaderIdle || !realtimeIdle || !directOperationsIdle || !accountPollerIdle || !warmSessionsIdle) {
           throw new Error('Các tiến trình automation chưa dừng hoàn toàn; recovery đã được hoãn để tránh chạy trùng.')
         }
 
         campaignScheduler.abandonZaloRuntimeClaims()
         contactLoader.abandonZaloRuntimeClaims()
+        chatContactLoader?.abandonZaloRuntimeClaims()
         zaloRealtimeGroupManager?.abandonZaloRuntimeClaims()
         zaloRuntime.abandonWarmSessionClaims()
         accountZaloOperations?.abandonClaims()
@@ -1182,6 +1197,7 @@ export function registerIpcHandlers(
         if (!user) throw new Error(ACCOUNT_EXPIRED_MESSAGE)
         campaignScheduler.resetZaloRuntimeClaims()
         contactLoader.resetZaloRuntimeClaims()
+        chatContactLoader?.resetZaloRuntimeClaims()
         zaloRealtimeGroupManager?.resetZaloRuntimeClaims()
         zaloRuntime.resetWarmSessionClaims()
         accountZaloOperations?.resetClaims()
@@ -1203,6 +1219,7 @@ export function registerIpcHandlers(
         const cleanupIdle = await Promise.all([
           campaignScheduler.waitForIdle(30_000),
           contactLoader.waitForIdle(30_000),
+          chatContactLoader?.waitForIdle(30_000) ?? Promise.resolve(true),
           automationProcessor.waitForIdle(30_000),
           zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
           accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
@@ -1313,7 +1330,10 @@ export function registerIpcHandlers(
     zaloChatApiClient,
     zaloLocalChatSync || undefined
   )
-  registerAccountContactHandlers(supabase, contactLoader, zaloServerClient)
+  registerAccountContactHandlers(supabase, contactLoader, zaloServerClient, {
+    chatContactLoader,
+    isChatSync: () => getCurrentUser()?.isChatSync === true
+  })
   registerV2Handlers(mainWindow, pageRegistry)
 
   // Start account login poller
