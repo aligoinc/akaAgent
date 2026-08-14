@@ -10,7 +10,7 @@ import * as workflowV2Repo from '../data/repositories/workflowV2Repository'
 import * as localContactRepo from '../data/repositories/localAccountContactRepository'
 import type { ZaloGroupContactInput, ZaloGroupMemberContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
 import { ProxyRuntimeService } from './proxyRuntimeService'
-import { ZaloRuntimeService } from './zaloRuntimeService'
+import type { ZaloContactScanSource } from './zaloContactScanSource'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -149,7 +149,7 @@ export class ContactLoader {
     _webviewRegistry: WebviewRegistry,
     mainWindow: BrowserWindow,
     proxyRuntime?: ProxyRuntimeService,
-    private readonly zaloRuntime?: ZaloRuntimeService,
+    private readonly zaloRuntime?: ZaloContactScanSource,
     options: ContactLoaderOptions = {}
   ) {
     this.supabase = supabase
@@ -622,6 +622,14 @@ export class ContactLoader {
     const active = this.activeLoads.get(accountId)
     if (active) {
       active.variables.contactScanCancelled = true
+      if (active.runtimePlatform === 'zalo') {
+        void Promise.resolve(this.zaloRuntime?.cancelActiveQuery?.(accountId)).catch(error => {
+          console.warn('[ContactLoader] Failed to cancel active Zalo scan query:', {
+            accountId,
+            errorName: error instanceof Error ? error.name : 'UnknownError'
+          })
+        })
+      }
     }
   }
 
@@ -629,6 +637,9 @@ export class ContactLoader {
     for (const [accountId, active] of this.activeLoads.entries()) {
       active.variables.contactScanCancelled = true
       active.controller.abort()
+      if (active.runtimePlatform === 'zalo') {
+        void Promise.resolve(this.zaloRuntime?.cancelActiveQuery?.(accountId)).catch(() => undefined)
+      }
       this.stopBackgroundPreview(accountId)
     }
     this.stopAllBackgroundPreviews()
@@ -866,12 +877,17 @@ export class ContactLoader {
     if (!value || typeof value !== 'object') return false
 
     const error = value as {
+      code?: unknown
       message?: unknown
       status?: unknown
       response?: { status?: unknown }
       cause?: unknown
     }
-    if (Number(error.response?.status) === 429 || Number(error.status) === 429) return true
+    if (
+      Number(error.code) === 429 ||
+      Number(error.response?.status) === 429 ||
+      Number(error.status) === 429
+    ) return true
     if (typeof error.message === 'string' && this.isZalo429Error(error.message)) return true
     return error.cause !== value && this.isZalo429Error(error.cause)
   }

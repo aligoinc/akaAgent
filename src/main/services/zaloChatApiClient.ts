@@ -1,9 +1,15 @@
 import type {
   AuthUser,
+  ZaloLabelOption,
   ZaloLoginQrEvent,
   ZaloLoginQrStartResult,
   ZaloSessionCheckResult
 } from '../../shared/types'
+import type {
+  ZaloGroupInfoBatch,
+  ZaloGroupMembersResult
+} from './zaloRuntimeService'
+import { randomUUID } from 'node:crypto'
 import WebSocket from 'ws'
 
 const ZALO_CHAT_API_DEFAULT_ORIGIN = 'https://aka-agent-chat-api.fly.dev'
@@ -14,6 +20,9 @@ const REALTIME_RECONNECT_MIN_MS = 2_000
 const REALTIME_RECONNECT_MAX_MS = 120_000
 const REALTIME_RECONNECT_STABLE_RESET_MS = 30_000
 const REALTIME_CONNECT_TIMEOUT_MS = 15_000
+const DATA_SCAN_POLL_INTERVAL_MS = 500
+const DATA_SCAN_OPERATION_TIMEOUT_MS = 5 * 60_000
+const DATA_SCAN_MAX_REQUEST_FAILURES = 3
 
 interface LoginCredentials {
   username: string
@@ -84,6 +93,36 @@ interface ActiveQrOperation {
   timer: ReturnType<typeof setTimeout> | null
 }
 
+type DataScanQueryType =
+  | 'get_all_friends_page'
+  | 'list_labels'
+  | 'get_all_groups'
+  | 'get_group_info_batch'
+  | 'get_joined_group_members'
+  | 'get_group_members_by_link'
+
+type DataScanOperationStatus =
+  | 'accepted'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+
+interface DataScanOperationSnapshot {
+  requestId: string
+  autoAccountId: string
+  queryType: DataScanQueryType
+  status: DataScanOperationStatus
+  result?: unknown
+  errorCode?: string
+  errorMessage?: string
+}
+
+interface ActiveDataScanQuery {
+  requestId: string
+  generation: number
+}
+
 interface ChatRealtimeEvent {
   sequence: number
   timestamp: string
@@ -114,8 +153,33 @@ export class ZaloChatApiRequestError extends Error {
   }
 }
 
+class ZaloChatDataScanError extends Error {
+  public constructor(message: string, public readonly code: string | null) {
+    super(message)
+    this.name = 'ZaloChatDataScanError'
+  }
+}
+
 function isTerminal(status: QrOperationStatus): boolean {
   return ['qr_expired', 'declined', 'succeeded', 'failed', 'cancelled'].includes(status)
+}
+
+function isDataScanTerminal(status: DataScanOperationStatus): boolean {
+  return status === 'succeeded' || status === 'failed' || status === 'cancelled'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map(item => String(item || '').trim()).filter(Boolean)
+    : []
+}
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, delayMs)))
 }
 
 function operationEvent(operation: QrOperationSnapshot): ZaloLoginQrEvent {
@@ -171,8 +235,11 @@ export class ZaloChatApiClient {
   private tokenExpiresAt = 0
   private localRuntimeToken: string | null = null
   private localRuntimeTokenExpiresAt = 0
+  private dataScanToken: string | null = null
+  private dataScanTokenExpiresAt = 0
   private generation = 0
   private activeQrByAccount = new Map<number, ActiveQrOperation>()
+  private activeDataScanByAccount = new Map<number, ActiveDataScanQuery>()
   private realtimeSocket: WebSocket | null = null
   private realtimeReconnectTimer: ReturnType<typeof setTimeout> | null = null
   private realtimeReconnectDelayMs = REALTIME_RECONNECT_MIN_MS
@@ -228,6 +295,9 @@ export class ZaloChatApiClient {
   }
 
   public stop(): void {
+    for (const accountId of this.activeDataScanByAccount.keys()) {
+      void this.cancelActiveQuery(accountId).catch(() => undefined)
+    }
     this.generation += 1
     for (const operation of this.activeQrByAccount.values()) {
       if (operation.timer) clearTimeout(operation.timer)
@@ -239,6 +309,9 @@ export class ZaloChatApiClient {
     this.tokenExpiresAt = 0
     this.localRuntimeToken = null
     this.localRuntimeTokenExpiresAt = 0
+    this.dataScanToken = null
+    this.dataScanTokenExpiresAt = 0
+    this.activeDataScanByAccount.clear()
     if (this.realtimeReconnectTimer) clearTimeout(this.realtimeReconnectTimer)
     if (this.realtimeStableConnectionTimer) clearTimeout(this.realtimeStableConnectionTimer)
     this.realtimeReconnectTimer = null
@@ -395,6 +468,128 @@ export class ZaloChatApiClient {
     }
   }
 
+  public async getAllFriendsPage(
+    accountId: number,
+    count = 500,
+    page = 1
+  ): Promise<Record<string, unknown>[]> {
+    const result = await this.executeDataScanQuery<unknown>(
+      accountId,
+      'get_all_friends_page',
+      { count, page }
+    )
+    return Array.isArray(result)
+      ? result.filter(isRecord)
+      : []
+  }
+
+  public async listLabels(accountId: number): Promise<ZaloLabelOption[]> {
+    const result = await this.executeDataScanQuery<unknown>(accountId, 'list_labels', {})
+    if (!Array.isArray(result)) return []
+    return result.flatMap(value => {
+      if (!isRecord(value)) return []
+      const id = Number(value.id)
+      const text = String(value.text || '').trim()
+      if (!Number.isFinite(id) || id <= 0 || !text) return []
+      return [{
+        id,
+        text,
+        ...(typeof value.textKey === 'string' && value.textKey.trim()
+          ? { textKey: value.textKey.trim() }
+          : {}),
+        ...(typeof value.color === 'string' && value.color.trim()
+          ? { color: value.color.trim() }
+          : {}),
+        ...(typeof value.emoji === 'string' && value.emoji.trim()
+          ? { emoji: value.emoji.trim() }
+          : {}),
+        ...(Array.isArray(value.conversations)
+          ? {
+              conversations: Array.from(new Set(
+                value.conversations
+                  .map(item => String(item || '').trim())
+                  .filter(Boolean)
+              ))
+            }
+          : {})
+      }]
+    })
+  }
+
+  public async getAllGroups(accountId: number): Promise<Record<string, string>> {
+    const result = await this.executeDataScanQuery<unknown>(accountId, 'get_all_groups', {})
+    if (!isRecord(result)) return {}
+    return Object.fromEntries(
+      Object.entries(result)
+        .map(([groupId, version]) => [groupId.trim(), String(version || '').trim()] as const)
+        .filter(([groupId]) => Boolean(groupId))
+    )
+  }
+
+  public async getGroupInfoBatch(
+    accountId: number,
+    groupIds: string[]
+  ): Promise<ZaloGroupInfoBatch> {
+    const result = await this.executeDataScanQuery<unknown>(
+      accountId,
+      'get_group_info_batch',
+      { groupIds }
+    )
+    if (!isRecord(result)) {
+      return { gridInfoMap: {}, removedsGroup: [], unchangedsGroup: [] }
+    }
+    const rawMap = isRecord(result.gridInfoMap) ? result.gridInfoMap : {}
+    return {
+      gridInfoMap: Object.fromEntries(
+        Object.entries(rawMap).flatMap(([groupId, value]) => (
+          groupId.trim() && isRecord(value) ? [[groupId.trim(), value]] : []
+        ))
+      ),
+      removedsGroup: toStringArray(result.removedsGroup),
+      unchangedsGroup: toStringArray(result.unchangedsGroup)
+    }
+  }
+
+  public async getJoinedGroupMembers(
+    accountId: number,
+    groupId: string
+  ): Promise<ZaloGroupMembersResult> {
+    return this.requireGroupMembersResult(await this.executeDataScanQuery<unknown>(
+      accountId,
+      'get_joined_group_members',
+      { groupId }
+    ))
+  }
+
+  public async getGroupMembersByLink(
+    accountId: number,
+    link: string,
+    proxyUrl?: string
+  ): Promise<ZaloGroupMembersResult> {
+    return this.requireGroupMembersResult(await this.executeDataScanQuery<unknown>(
+      accountId,
+      'get_group_members_by_link',
+      { link, ...(proxyUrl ? { proxyUrl } : {}) }
+    ))
+  }
+
+  public async cancelActiveQuery(accountId: number): Promise<void> {
+    const active = this.activeDataScanByAccount.get(accountId)
+    if (!active || active.generation !== this.generation) return
+    await this.cancelDataScanRequest(accountId, active.requestId)
+  }
+
+  private async cancelDataScanRequest(accountId: number, requestId: string): Promise<void> {
+    try {
+      await this.dataScanRequest<DataScanOperationSnapshot>(
+        `/api/chat/zalo/data-scan-queries/${requestId}/cancel`,
+        { method: 'POST', body: { autoAccountId: String(accountId) } }
+      )
+    } catch (error) {
+      if (!(error instanceof ZaloChatApiRequestError) || error.statusCode !== 404) throw error
+    }
+  }
+
   public async logout(accountId: number): Promise<ZaloSessionCheckResult> {
     this.requireEnabled()
     const active = this.activeQrByAccount.get(accountId)
@@ -422,6 +617,104 @@ export class ZaloChatApiClient {
     if (!this.canUseLocalRuntime() || !this.user || !this.credentials) {
       throw new Error('Tổ chức chưa được cấp quyền Đồng bộ Chat cho sản phẩm đang sử dụng.')
     }
+  }
+
+  private async executeDataScanQuery<T>(
+    accountId: number,
+    queryType: DataScanQueryType,
+    payload: unknown
+  ): Promise<T> {
+    this.requireEnabled()
+    if (this.activeDataScanByAccount.has(accountId)) {
+      throw new Error('Tài khoản đang có một yêu cầu quét Zalo khác.')
+    }
+    const active: ActiveDataScanQuery = {
+      requestId: randomUUID(),
+      generation: this.generation
+    }
+    this.activeDataScanByAccount.set(accountId, active)
+    const deadline = Date.now() + DATA_SCAN_OPERATION_TIMEOUT_MS
+    let consecutiveFailures = 0
+    let terminalObserved = false
+    try {
+      let snapshot: DataScanOperationSnapshot | null = null
+      while (!snapshot && consecutiveFailures < DATA_SCAN_MAX_REQUEST_FAILURES) {
+        try {
+          snapshot = await this.dataScanRequest<DataScanOperationSnapshot>(
+            `/api/chat/zalo/accounts/${accountId}/data-scan-queries`,
+            {
+              method: 'POST',
+              body: { requestId: active.requestId, queryType, payload }
+            }
+          )
+          consecutiveFailures = 0
+        } catch (error) {
+          consecutiveFailures += 1
+          if (
+            error instanceof ZaloChatApiRequestError &&
+            error.statusCode < 500
+          ) throw error
+          if (consecutiveFailures >= DATA_SCAN_MAX_REQUEST_FAILURES) throw error
+          await wait(DATA_SCAN_POLL_INTERVAL_MS * consecutiveFailures)
+        }
+      }
+
+      while (Date.now() < deadline) {
+        if (
+          active.generation !== this.generation ||
+          this.activeDataScanByAccount.get(accountId) !== active
+        ) throw new Error('Yêu cầu quét Zalo đã bị dừng.')
+
+        if (!snapshot || !isDataScanTerminal(snapshot.status)) {
+          await wait(DATA_SCAN_POLL_INTERVAL_MS)
+          try {
+            snapshot = await this.dataScanRequest<DataScanOperationSnapshot>(
+              `/api/chat/zalo/data-scan-queries/${active.requestId}`
+            )
+            consecutiveFailures = 0
+          } catch (error) {
+            consecutiveFailures += 1
+            if (
+              error instanceof ZaloChatApiRequestError &&
+              error.statusCode < 500
+            ) throw error
+            if (consecutiveFailures >= DATA_SCAN_MAX_REQUEST_FAILURES) throw error
+            continue
+          }
+        }
+
+        if (snapshot.status === 'succeeded') {
+          terminalObserved = true
+          return snapshot.result as T
+        }
+        if (snapshot.status === 'failed') {
+          terminalObserved = true
+          throw new ZaloChatDataScanError(
+            snapshot.errorMessage || 'Chat API không thực hiện được yêu cầu quét Zalo.',
+            snapshot.errorCode || null
+          )
+        }
+        if (snapshot.status === 'cancelled') {
+          terminalObserved = true
+          throw new Error('Yêu cầu quét Zalo đã bị dừng.')
+        }
+      }
+      throw new Error('Yêu cầu quét Zalo quá thời gian 5 phút và đã được dừng.')
+    } finally {
+      if (this.activeDataScanByAccount.get(accountId) === active) {
+        if (!terminalObserved) {
+          void this.cancelDataScanRequest(accountId, active.requestId).catch(() => undefined)
+        }
+        this.activeDataScanByAccount.delete(accountId)
+      }
+    }
+  }
+
+  private requireGroupMembersResult(value: unknown): ZaloGroupMembersResult {
+    if (!isRecord(value) || !isRecord(value.group) || !Array.isArray(value.members)) {
+      throw new Error('Chat API trả về danh sách thành viên Zalo không hợp lệ.')
+    }
+    return value as unknown as ZaloGroupMembersResult
   }
 
   private localRuntimeWebSocketUrl(): string {
@@ -687,6 +980,61 @@ export class ZaloChatApiClient {
     this.token = session.token
     this.tokenExpiresAt = expiresAt
     return session.token
+  }
+
+  private async ensureDataScanToken(): Promise<string> {
+    this.requireEnabled()
+    if (
+      this.dataScanToken &&
+      this.dataScanTokenExpiresAt > Date.now() + TOKEN_REUSE_SAFETY_MS
+    ) return this.dataScanToken
+
+    const response = await this.fetchWithTimeout('/api/chat/desktop/data-scan-session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...this.credentials,
+        organizationId: this.user!.organizationId
+      })
+    })
+    if (!response.ok) throw await responseError(response)
+    const session = await response.json() as DesktopSessionResponse
+    const expiresAt = Date.parse(String(session.expiresAt || ''))
+    if (
+      !session.token ||
+      !this.user ||
+      Number(session.staffId) !== this.user.staffId ||
+      Number(session.organizationId) !== this.user.organizationId ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= Date.now()
+    ) throw new Error('Chat API trả về phiên Data Scan không hợp lệ.')
+    this.dataScanToken = session.token
+    this.dataScanTokenExpiresAt = expiresAt
+    return session.token
+  }
+
+  private async dataScanRequest<T>(
+    path: string,
+    options: { method?: 'GET' | 'POST'; body?: unknown } = {},
+    allowTokenRefresh = true
+  ): Promise<T> {
+    const token = await this.ensureDataScanToken()
+    const hasBody = options.body !== undefined
+    const response = await this.fetchWithTimeout(path, {
+      method: options.method ?? 'GET',
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(hasBody ? { 'content-type': 'application/json' } : {})
+      },
+      ...(hasBody ? { body: JSON.stringify(options.body) } : {})
+    })
+    if (response.status === 401 && allowTokenRefresh) {
+      this.dataScanToken = null
+      this.dataScanTokenExpiresAt = 0
+      return this.dataScanRequest<T>(path, options, false)
+    }
+    if (!response.ok) throw await responseError(response)
+    return response.json() as Promise<T>
   }
 
   private async request<T>(
