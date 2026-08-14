@@ -12934,6 +12934,18 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   transform: none;
 }
 
+.message-personalization-dropdown.action-token-dropdown::after {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.message-personalization-dropdown.action-token-dropdown .message-personalization-popover {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
 .message-personalization-dropdown:hover::after,
 .message-personalization-dropdown:focus-within::after {
   display: block;
