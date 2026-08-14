@@ -21,7 +21,16 @@ import type {
 const PROTOCOL_VERSION = 1
 const RECONCILE_INTERVAL_MS = 15_000
 const HEARTBEAT_INTERVAL_MS = 20_000
+const HEARTBEAT_ACK_TIMEOUT_MS = 45_000
+const WELCOME_TIMEOUT_MS = 15_000
 const MAX_PENDING_EVENTS = 500
+const MAX_CONTROL_RECONNECT_ATTEMPTS = 10
+const MAX_UNACKNOWLEDGED_EVENT_REPLAYS = 10
+const MAX_LOCAL_LISTENER_RESTART_ATTEMPTS = 10
+const LOCAL_LISTENER_STABILITY_MS = 60_000
+const LOCAL_LISTENER_RETRY_EXHAUSTED_MESSAGE =
+  `Listener Zalo local đã dừng tự kết nối lại sau ${MAX_LOCAL_LISTENER_RESTART_ATTEMPTS} ` +
+  'lần thử không thành công. Hãy thử lại thủ công.'
 
 type PreviousZaloAccountStatus = 'chờ xử lý' | 'tạm dừng'
 
@@ -80,6 +89,12 @@ interface RuntimeWelcome {
   connectedAt: string
 }
 
+interface RuntimeHeartbeatAck {
+  protocolVersion: 1
+  kind: 'runtime.heartbeat_ack'
+  receivedAt: string
+}
+
 interface ProtocolError {
   protocolVersion: 1
   kind: 'protocol.error'
@@ -90,7 +105,7 @@ interface ProtocolError {
 
 type IncomingMessage = RuntimeCommand | LocalQrCommand | LocalQrBindingResult |
   LocalRetryAttachCommand |
-  EventAck | RuntimeWelcome | ProtocolError
+  EventAck | RuntimeWelcome | RuntimeHeartbeatAck | ProtocolError
 
 interface RuntimeEventMessage {
   protocolVersion: 1
@@ -107,6 +122,16 @@ interface RuntimeEventMessage {
   payload: unknown
 }
 
+interface PendingRuntimeEvent {
+  eventId: string
+  autoAccountId: string
+  runtimeGeneration: string
+  eventType: string
+  wire: string
+  sent: boolean
+  replayAttempts: number
+}
+
 interface AttachedAccount extends LocalRuntimeBindingRegistration {
   accountId: number
   unsubscribe: () => void
@@ -114,11 +139,18 @@ interface AttachedAccount extends LocalRuntimeBindingRegistration {
   ready: boolean
   readyStatusVersion: number
   listenerFailureVersion: number
+  listenerClosedVersion: number
 }
 
 interface BindingConflict {
   code: ZaloChatBindingConflictCode
   message: string
+}
+
+interface LocalListenerRetryState {
+  runtimeGeneration: string
+  failedAttempts: number
+  exhausted: boolean
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -169,16 +201,19 @@ function threadType(value: unknown): ThreadType {
 export class ZaloLocalChatSyncService {
   private readonly runtimeId = `aka-agent-local-${randomUUID()}`
   private socket: WebSocket | null = null
+  private liveEventSocket: WebSocket | null = null
   private running = false
   private welcomed = false
   private reconnectAttempt = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconcileTimer: ReturnType<typeof setInterval> | null = null
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private heartbeatAckTimer: ReturnType<typeof setTimeout> | null = null
+  private welcomeTimer: ReturnType<typeof setTimeout> | null = null
   private readonly attached = new Map<number, AttachedAccount>()
   private readonly bindings = new Map<number, LocalRuntimeBindingRegistration>()
   private readonly sequenceByAccount = new Map<number, bigint>()
-  private readonly pendingEvents = new Map<string, RuntimeEventMessage>()
+  private readonly pendingEvents = new Map<string, PendingRuntimeEvent>()
   private readonly attachedOnConnection = new Set<number>()
   private readonly activeQrOperations = new Map<number, string>()
   private readonly qrLoginAccounts = new Set<number>()
@@ -187,6 +222,8 @@ export class ZaloLocalChatSyncService {
   private readonly commandQueues = new Map<number, Promise<void>>()
   private readonly knownGroupIdsByAccount = new Map<number, Set<string>>()
   private readonly bindingConflicts = new Map<number, BindingConflict>()
+  private readonly listenerRetryStates = new Map<number, LocalListenerRetryState>()
+  private readonly listenerStabilityTimers = new Map<number, ReturnType<typeof setTimeout>>()
   private eligibleAccountFingerprint = ''
   private reconcilePromise: Promise<void> | null = null
   private reconcileRequested = false
@@ -201,6 +238,7 @@ export class ZaloLocalChatSyncService {
   public start(): void {
     if (this.running || !this.chatApi.canUseLocalRuntime()) return
     this.running = true
+    this.reconnectAttempt = 0
     this.unsubscribeQr = this.zaloRuntime.subscribeLoginQrEvents(
       event => this.handleLocalQrEvent(event)
     )
@@ -212,14 +250,17 @@ export class ZaloLocalChatSyncService {
   }
 
   public stop(): void {
-    if (!this.running) return
     this.running = false
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     if (this.reconcileTimer) clearInterval(this.reconcileTimer)
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    if (this.heartbeatAckTimer) clearTimeout(this.heartbeatAckTimer)
+    if (this.welcomeTimer) clearTimeout(this.welcomeTimer)
     this.reconnectTimer = null
     this.reconcileTimer = null
     this.heartbeatTimer = null
+    this.heartbeatAckTimer = null
+    this.welcomeTimer = null
     this.unsubscribeQr?.()
     this.unsubscribeQr = null
     for (const accountId of this.activeQrOperations.keys()) {
@@ -237,10 +278,15 @@ export class ZaloLocalChatSyncService {
     this.commandQueues.clear()
     this.knownGroupIdsByAccount.clear()
     this.bindingConflicts.clear()
+    for (const timer of this.listenerStabilityTimers.values()) clearTimeout(timer)
+    this.listenerStabilityTimers.clear()
+    this.listenerRetryStates.clear()
     this.eligibleAccountFingerprint = ''
     this.welcomed = false
+    this.reconnectAttempt = 0
     const socket = this.socket
     this.socket = null
+    this.liveEventSocket = null
     try { socket?.close(1000, 'akaAgent stopped') } catch {}
   }
 
@@ -269,12 +315,12 @@ export class ZaloLocalChatSyncService {
       const session = await this.chatApi.getLocalRuntimeSession()
       if (!this.running) return
       const socket = new WebSocket(session.webSocketUrl, {
-        headers: { authorization: `Bearer ${session.token}` }
+        headers: { authorization: `Bearer ${session.token}` },
+        handshakeTimeout: WELCOME_TIMEOUT_MS
       })
       this.socket = socket
       socket.on('open', () => {
         if (this.socket !== socket || !this.running) return
-        this.reconnectAttempt = 0
         this.send({
           protocolVersion: PROTOCOL_VERSION,
           kind: 'runtime.hello',
@@ -288,13 +334,18 @@ export class ZaloLocalChatSyncService {
             'reaction_api', 'label_api', 'friend_api', 'group_api', 'qr_login'
           ]
         })
+        if (this.welcomeTimer) clearTimeout(this.welcomeTimer)
+        this.welcomeTimer = setTimeout(() => {
+          this.handleWelcomeTimeout(socket)
+        }, WELCOME_TIMEOUT_MS)
+        this.welcomeTimer.unref()
       })
       let incomingProcessing = Promise.resolve()
       let incomingFailed = false
       socket.on('message', raw => {
         if (incomingFailed) return
         incomingProcessing = incomingProcessing
-          .then(() => this.handleIncoming(String(raw)))
+          .then(() => this.handleIncoming(String(raw), socket))
           .catch(error => {
             incomingFailed = true
             this.logError('incoming message', error)
@@ -305,10 +356,15 @@ export class ZaloLocalChatSyncService {
       socket.on('close', () => {
         if (this.socket !== socket) return
         this.socket = null
+        this.liveEventSocket = null
         this.welcomed = false
         this.attachedOnConnection.clear()
         if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+        if (this.heartbeatAckTimer) clearTimeout(this.heartbeatAckTimer)
+        if (this.welcomeTimer) clearTimeout(this.welcomeTimer)
         this.heartbeatTimer = null
+        this.heartbeatAckTimer = null
+        this.welcomeTimer = null
         for (const account of this.attached.values()) account.ready = false
         for (const accountId of this.activeQrOperations.keys()) {
           void this.zaloRuntime.cancelLoginQrAndWait(accountId)
@@ -327,6 +383,10 @@ export class ZaloLocalChatSyncService {
 
   private scheduleReconnect(): void {
     if (!this.running || this.reconnectTimer) return
+    if (this.reconnectAttempt >= MAX_CONTROL_RECONNECT_ATTEMPTS) {
+      this.stopAfterReconnectExhaustion()
+      return
+    }
     const delay = Math.min(30_000, 1_000 * 2 ** Math.min(this.reconnectAttempt, 5))
     this.reconnectAttempt += 1
     this.reconnectTimer = setTimeout(() => {
@@ -335,23 +395,62 @@ export class ZaloLocalChatSyncService {
     }, delay)
   }
 
-  private async handleIncoming(raw: string): Promise<void> {
+  private handleWelcomeTimeout(socket: WebSocket): void {
+    if (this.socket !== socket || this.welcomed || !this.running) return
+    this.welcomeTimer = null
+    try { socket.close(1011, 'local Chat welcome timeout') } catch {}
+  }
+
+  private armHeartbeatAckTimeout(socket: WebSocket): void {
+    if (this.heartbeatAckTimer || this.socket !== socket || !this.running) return
+    this.heartbeatAckTimer = setTimeout(() => {
+      this.handleHeartbeatAckTimeout(socket)
+    }, HEARTBEAT_ACK_TIMEOUT_MS)
+    this.heartbeatAckTimer.unref()
+  }
+
+  private handleHeartbeatAckTimeout(socket: WebSocket): void {
+    if (this.socket !== socket || !this.welcomed || !this.running) return
+    this.heartbeatAckTimer = null
+    try { socket.close(1011, 'local Chat heartbeat ACK timeout') } catch {}
+  }
+
+  private async handleIncoming(raw: string, sourceSocket: WebSocket | null = this.socket): Promise<void> {
+    if (!sourceSocket || this.socket !== sourceSocket || !this.running) return
     const message = JSON.parse(raw) as IncomingMessage
     if (message.kind === 'runtime.welcome') {
+      if (this.welcomeTimer) clearTimeout(this.welcomeTimer)
+      this.welcomeTimer = null
       this.welcomed = true
+      this.liveEventSocket = null
+      await this.reconcile(sourceSocket)
+      if (this.socket !== sourceSocket || !this.welcomed || !this.running) return
+      for (const event of this.pendingEvents.values()) {
+        if (this.attachedOnConnection.has(Number(event.autoAccountId))) {
+          this.sendPendingEvent(event, sourceSocket)
+        }
+      }
+      this.liveEventSocket = sourceSocket
       this.heartbeatTimer = setInterval(() => {
+        if (this.socket !== sourceSocket || !this.welcomed || !this.running) return
         this.send({
           protocolVersion: PROTOCOL_VERSION,
           kind: 'runtime.heartbeat',
           runtimeId: this.runtimeId,
           sentAt: new Date().toISOString()
         })
+        this.armHeartbeatAckTimeout(sourceSocket)
       }, HEARTBEAT_INTERVAL_MS)
       this.heartbeatTimer.unref()
-      await this.reconcile()
-      for (const event of this.pendingEvents.values()) {
-        if (this.attachedOnConnection.has(Number(event.autoAccountId))) this.send(event)
-      }
+      return
+    }
+    if (message.kind === 'runtime.heartbeat_ack') {
+      // A heartbeat round-trip proves that the authenticated connection stayed
+      // healthy beyond bootstrap. Short welcome/close flaps keep consuming the
+      // same finite reconnect budget.
+      if (this.heartbeatAckTimer) clearTimeout(this.heartbeatAckTimer)
+      this.heartbeatAckTimer = null
+      if (this.welcomed) this.reconnectAttempt = 0
       return
     }
     if (message.kind === 'zalo.event.ack') {
@@ -379,9 +478,16 @@ export class ZaloLocalChatSyncService {
     }
   }
 
-  private async reconcile(): Promise<void> {
-    if (!this.running || !this.welcomed) return
+  private async reconcile(expectedSocket: WebSocket | null = this.socket): Promise<void> {
+    const isCurrentConnection = () => (
+      expectedSocket !== null &&
+      this.socket === expectedSocket &&
+      this.running &&
+      this.welcomed
+    )
+    if (!isCurrentConnection()) return
     const listedAccounts = await this.supabase.listAccounts()
+    if (!isCurrentConnection()) return
     const accounts = listedAccounts.filter(isEligibleLocalAccount)
     const eligibleIds = new Set(accounts.map(account => account.id))
     const nextFingerprint = listedAccounts
@@ -404,6 +510,7 @@ export class ZaloLocalChatSyncService {
     }
 
     const storedSessions = await this.supabase.listZaloAccountsWithSession('desktop')
+    if (!isCurrentConnection()) return
     const sessionsByAccount = new Map(
       storedSessions.map(entry => [entry.account.id, entry] as const)
     )
@@ -423,13 +530,16 @@ export class ZaloLocalChatSyncService {
         this.detachAccount(account.id, this.bindingConflicts.get(account.id)!.message)
         continue
       }
+      if (this.keepExhaustedListenerAttached(account.id)) continue
       try {
         const session = await this.zaloRuntime.checkSession(account.id)
+        if (!isCurrentConnection()) return
         if (!session.loggedIn) {
           this.detachAccount(account.id, session.reason || 'Session Zalo local không còn hiệu lực')
           continue
         }
         const profile = await this.zaloRuntime.getOwnProfileForChat(account.id)
+        if (!isCurrentConnection()) return
         const candidateZaloId = text(profile.zaloId)
         if (!candidateZaloId) {
           this.detachAccount(account.id, 'Không xác định được Zalo ID của session local')
@@ -439,9 +549,12 @@ export class ZaloLocalChatSyncService {
           account.id,
           candidateZaloId
         )
+        if (!isCurrentConnection()) return
         this.bindingConflicts.delete(account.id)
         await this.attachAccount(account.id, binding)
+        if (!isCurrentConnection()) return
       } catch (error) {
+        if (!isCurrentConnection()) return
         if (this.rememberBindingConflict(account.id, error)) {
           this.detachAccount(account.id, this.bindingConflicts.get(account.id)!.message)
           continue
@@ -449,6 +562,7 @@ export class ZaloLocalChatSyncService {
         this.logError(`register account ${account.id}`, error)
       }
     }
+    if (!isCurrentConnection()) return
     this.sendAvailability(accounts)
   }
 
@@ -481,6 +595,8 @@ export class ZaloLocalChatSyncService {
   }
 
   private detachAccount(accountId: number, reason: string): void {
+    this.clearListenerStabilityTimer(accountId)
+    this.listenerRetryStates.delete(accountId)
     const binding = this.bindings.get(accountId)
     const attached = this.attached.get(accountId)
     if (!binding && !attached) return
@@ -507,6 +623,14 @@ export class ZaloLocalChatSyncService {
     const previousBinding = this.bindings.get(accountId) ?? this.attached.get(accountId)
     const generationChanged = previousBinding !== undefined &&
       previousBinding.runtimeGeneration !== binding.runtimeGeneration
+    const retryState = this.listenerRetryStates.get(accountId)
+    if (generationChanged || (
+      retryState !== undefined &&
+      retryState.runtimeGeneration !== binding.runtimeGeneration
+    )) {
+      this.clearListenerStabilityTimer(accountId)
+      this.listenerRetryStates.delete(accountId)
+    }
 
     // Events are acknowledged against the generation that produced them. Once
     // a QR login rotates the binding generation, replaying older pending events
@@ -523,15 +647,19 @@ export class ZaloLocalChatSyncService {
     const attachmentSocket = this.socket
     if (!attachmentSocket || attachmentSocket.readyState !== WebSocket.OPEN) return
 
+    const alreadyAttachedToCurrentConnection = this.attachedOnConnection.has(accountId) &&
+      previousBinding?.runtimeGeneration === binding.runtimeGeneration
     this.bindings.set(accountId, binding)
-    attachmentSocket.send(JSON.stringify({
-      protocolVersion: PROTOCOL_VERSION,
-      kind: 'runtime.attach_account',
-      runtimeId: this.runtimeId,
-      autoAccountId: String(accountId),
-      runtimeGeneration: binding.runtimeGeneration
-    }))
-    this.attachedOnConnection.add(accountId)
+    if (!alreadyAttachedToCurrentConnection) {
+      attachmentSocket.send(JSON.stringify({
+        protocolVersion: PROTOCOL_VERSION,
+        kind: 'runtime.attach_account',
+        runtimeId: this.runtimeId,
+        autoAccountId: String(accountId),
+        runtimeGeneration: binding.runtimeGeneration
+      }))
+      this.attachedOnConnection.add(accountId)
+    }
     let attached = this.attached.get(accountId)
     const readyStatusVersion = attached?.readyStatusVersion ?? 0
     if (!attached) {
@@ -543,7 +671,8 @@ export class ZaloLocalChatSyncService {
         initialSyncGeneration: null,
         ready: false,
         readyStatusVersion: 0,
-        listenerFailureVersion: 0
+        listenerFailureVersion: 0,
+        listenerClosedVersion: 0
       }
       this.attached.set(accountId, attached)
       try {
@@ -561,7 +690,17 @@ export class ZaloLocalChatSyncService {
         this.knownGroupIdsByAccount.delete(accountId)
       }
     }
+    const currentRetryState = this.listenerRetryStates.get(accountId)
+    if (
+      currentRetryState?.exhausted &&
+      currentRetryState.runtimeGeneration === binding.runtimeGeneration
+    ) {
+      attached.ready = false
+      this.reportStatus(accountId, 'error', LOCAL_LISTENER_RETRY_EXHAUSTED_MESSAGE)
+      return
+    }
     const listenerFailureVersion = attached.listenerFailureVersion
+    const listenerClosedVersion = attached.listenerClosedVersion
     const isCurrentAttachmentAttempt = () => (
       this.socket === attachmentSocket &&
       attachmentSocket.readyState === WebSocket.OPEN &&
@@ -572,8 +711,13 @@ export class ZaloLocalChatSyncService {
     try {
       await this.zaloRuntime.ensureRealtimeListenerReady(accountId)
       if (!isCurrentAttachmentAttempt()) return
+      if (
+        attached.listenerClosedVersion !== listenerClosedVersion &&
+        !attached.ready
+      ) return
 
       attached.ready = true
+      this.scheduleListenerStabilityReset(accountId, binding.runtimeGeneration)
       if (attached.readyStatusVersion === readyStatusVersion) {
         this.reportStatus(accountId, 'ready')
       }
@@ -591,6 +735,9 @@ export class ZaloLocalChatSyncService {
       // for that case.
       if (attached.listenerFailureVersion === listenerFailureVersion) {
         this.reportStatus(accountId, 'error', error)
+      }
+      if (attached.listenerClosedVersion === listenerClosedVersion) {
+        this.recordListenerStartFailure(accountId, binding.runtimeGeneration)
       }
       throw error
     }
@@ -613,6 +760,9 @@ export class ZaloLocalChatSyncService {
         throw new Error('Tài khoản đang đăng nhập QR, chưa thể bật đồng bộ Chat.')
       }
 
+      this.clearListenerStabilityTimer(accountId)
+      this.listenerRetryStates.delete(accountId)
+      this.zaloRuntime.invalidateAccount(accountId)
       this.bindingConflicts.delete(accountId)
       const session = await this.zaloRuntime.checkSession(accountId)
       if (!session.loggedIn) {
@@ -698,14 +848,23 @@ export class ZaloLocalChatSyncService {
     if (!attached) return
     attached.ready = event.status === 'running' && event.ready
     if (attached.ready && !event.error) {
+      // A cipher key proves readiness, but a short ready/close flap must keep
+      // consuming the same finite budget until the socket is stable.
+      this.scheduleListenerStabilityReset(event.accountId, attached.runtimeGeneration)
       attached.readyStatusVersion += 1
       this.reportStatus(event.accountId, 'ready')
     }
-    else if (event.status === 'starting') this.reportStatus(event.accountId, 'connecting')
+    else if (event.status === 'starting') {
+      this.clearListenerStabilityTimer(event.accountId)
+      this.reportStatus(event.accountId, 'connecting')
+    }
     else if (event.status === 'disconnected') {
+      this.clearListenerStabilityTimer(event.accountId)
       this.reportStatus(event.accountId, 'reconnecting', event.error, event.code, event.reason)
     } else if (event.status === 'closed') {
+      this.clearListenerStabilityTimer(event.accountId)
       attached.listenerFailureVersion += 1
+      attached.listenerClosedVersion += 1
       this.reportStatus(
         event.accountId,
         event.code === CloseReason.KickConnection ? 'kicked' : 'disconnected',
@@ -713,14 +872,21 @@ export class ZaloLocalChatSyncService {
         event.code,
         event.reason
       )
+      this.recordListenerStartFailure(event.accountId, attached.runtimeGeneration)
     } else if (event.status === 'error') {
+      this.clearListenerStabilityTimer(event.accountId)
       attached.listenerFailureVersion += 1
       this.reportStatus(event.accountId, 'error', event.error)
     }
-    else if (event.status === 'stopped') this.reportStatus(event.accountId, 'stopped')
+    else if (event.status === 'stopped') {
+      this.clearListenerStabilityTimer(event.accountId)
+      this.reportStatus(event.accountId, 'stopped')
+    }
   }
 
   private markAccountQrLoginInProgress(accountId: number): void {
+    this.clearListenerStabilityTimer(accountId)
+    this.listenerRetryStates.delete(accountId)
     const attached = this.attached.get(accountId)
     if (!attached?.ready) return
 
@@ -735,6 +901,79 @@ export class ZaloLocalChatSyncService {
       undefined,
       'Đang đăng nhập lại Zalo QR local.'
     )
+  }
+
+  private keepExhaustedListenerAttached(accountId: number): boolean {
+    const retryState = this.listenerRetryStates.get(accountId)
+    if (!retryState?.exhausted) return false
+
+    const binding = this.bindings.get(accountId)
+    const attached = this.attached.get(accountId)
+    if (
+      !binding ||
+      !attached ||
+      binding.runtimeGeneration !== retryState.runtimeGeneration
+    ) {
+      // This state belongs to a lifecycle that no longer exists. Let the
+      // normal registration path create a fresh listener budget.
+      this.listenerRetryStates.delete(accountId)
+      return false
+    }
+
+    // On a new control connection we must register again before trusting the
+    // cached generation. attachAccount() will either observe a fresh generation
+    // (new budget) or attach the same exhausted generation without restarting
+    // its Zalo listener.
+    return this.attachedOnConnection.has(accountId)
+  }
+
+  private recordListenerStartFailure(accountId: number, runtimeGeneration: string): void {
+    let retryState = this.listenerRetryStates.get(accountId)
+    if (!retryState || retryState.runtimeGeneration !== runtimeGeneration) {
+      retryState = {
+        runtimeGeneration,
+        failedAttempts: 0,
+        exhausted: false
+      }
+      this.listenerRetryStates.set(accountId, retryState)
+    }
+    if (retryState.exhausted) return
+
+    retryState.failedAttempts += 1
+    if (retryState.failedAttempts < MAX_LOCAL_LISTENER_RESTART_ATTEMPTS) return
+
+    retryState.exhausted = true
+    console.warn(
+      `[LocalChatSync] listener auto-retry exhausted accountId=${accountId} ` +
+      `attempts=${retryState.failedAttempts}.`
+    )
+    this.reportStatus(accountId, 'error', LOCAL_LISTENER_RETRY_EXHAUSTED_MESSAGE)
+  }
+
+  private scheduleListenerStabilityReset(
+    accountId: number,
+    runtimeGeneration: string
+  ): void {
+    this.clearListenerStabilityTimer(accountId)
+    const timer = setTimeout(() => {
+      if (this.listenerStabilityTimers.get(accountId) !== timer) return
+      this.listenerStabilityTimers.delete(accountId)
+      const attached = this.attached.get(accountId)
+      if (
+        !attached?.ready ||
+        attached.runtimeGeneration !== runtimeGeneration ||
+        this.bindings.get(accountId)?.runtimeGeneration !== runtimeGeneration
+      ) return
+      this.listenerRetryStates.delete(accountId)
+    }, LOCAL_LISTENER_STABILITY_MS)
+    timer.unref()
+    this.listenerStabilityTimers.set(accountId, timer)
+  }
+
+  private clearListenerStabilityTimer(accountId: number): void {
+    const timer = this.listenerStabilityTimers.get(accountId)
+    if (timer) clearTimeout(timer)
+    this.listenerStabilityTimers.delete(accountId)
   }
 
   private reportStatus(
@@ -767,6 +1006,7 @@ export class ZaloLocalChatSyncService {
     payload: unknown,
     expectedRuntimeGeneration?: string
   ): void {
+    if (!this.running) return
     const binding = this.bindings.get(accountId)
     if (!binding) return
     if (
@@ -789,13 +1029,34 @@ export class ZaloLocalChatSyncService {
       adapterVersion: '1',
       payload
     }
-    this.pendingEvents.set(event.eventId, event)
+    let wire: string
+    try {
+      wire = JSON.stringify(event)
+    } catch {
+      this.logUnserializableEvent(accountId, eventType)
+      return
+    }
+    this.pendingEvents.set(event.eventId, {
+      eventId: event.eventId,
+      autoAccountId: event.autoAccountId,
+      runtimeGeneration: event.runtimeGeneration,
+      eventType,
+      wire,
+      sent: false,
+      replayAttempts: 0
+    })
     while (this.pendingEvents.size > MAX_PENDING_EVENTS) {
       const oldestId = this.pendingEvents.keys().next().value as string | undefined
       if (!oldestId) break
       this.pendingEvents.delete(oldestId)
     }
-    if (this.attachedOnConnection.has(accountId)) this.send(event)
+    if (
+      this.attachedOnConnection.has(accountId) &&
+      this.liveEventSocket === this.socket
+    ) {
+      const pending = this.pendingEvents.get(event.eventId)
+      if (pending) this.sendPendingEvent(pending)
+    }
   }
 
   private isCurrentGeneration(accountId: number, runtimeGeneration: string): boolean {
@@ -1431,6 +1692,82 @@ export class ZaloLocalChatSyncService {
     const socket = this.socket
     if (!socket || socket.readyState !== WebSocket.OPEN) return
     socket.send(JSON.stringify(message))
+  }
+
+  private sendPendingEvent(
+    event: PendingRuntimeEvent,
+    expectedSocket: WebSocket | null = this.socket
+  ): void {
+    const socket = this.socket
+    if (!socket || socket !== expectedSocket || socket.readyState !== WebSocket.OPEN) return
+    if (event.sent && event.replayAttempts >= MAX_UNACKNOWLEDGED_EVENT_REPLAYS) {
+      this.pendingEvents.delete(event.eventId)
+      this.logDroppedUnacknowledgedEvent(event)
+      return
+    }
+    socket.send(event.wire)
+    if (event.sent) event.replayAttempts += 1
+    else event.sent = true
+  }
+
+  private stopAfterReconnectExhaustion(): void {
+    if (!this.running) return
+    const pendingEventCount = this.pendingEvents.size
+    console.warn(
+      `[LocalChatSync] control websocket stopped after the initial connection and ` +
+      `${MAX_CONTROL_RECONNECT_ATTEMPTS} reconnect attempts failed; ` +
+      `pendingEvents=${pendingEventCount}.`
+    )
+
+    // Stop producing more raw events once transport recovery is exhausted. Keep
+    // the current pending map intact for diagnostics; an explicit stop/logout
+    // still owns the normal lifecycle cleanup.
+    this.running = false
+    this.welcomed = false
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer)
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    if (this.heartbeatAckTimer) clearTimeout(this.heartbeatAckTimer)
+    if (this.welcomeTimer) clearTimeout(this.welcomeTimer)
+    this.reconnectTimer = null
+    this.reconcileTimer = null
+    this.heartbeatTimer = null
+    this.heartbeatAckTimer = null
+    this.welcomeTimer = null
+    this.unsubscribeQr?.()
+    this.unsubscribeQr = null
+    for (const account of this.attached.values()) account.unsubscribe()
+    for (const timer of this.listenerStabilityTimers.values()) clearTimeout(timer)
+    this.listenerStabilityTimers.clear()
+    this.attached.clear()
+    this.bindings.clear()
+    this.attachedOnConnection.clear()
+    this.knownGroupIdsByAccount.clear()
+    const socket = this.socket
+    this.socket = null
+    this.liveEventSocket = null
+    try { socket?.close(1011, 'local Chat control retry exhausted') } catch {}
+  }
+
+  private logUnserializableEvent(accountId: number, eventType: string): void {
+    const safeEventType = String(eventType || 'unknown')
+      .replace(/[\u0000-\u001f\u007f]/g, '?')
+      .slice(0, 150) || 'unknown'
+    console.warn(
+      `[LocalChatSync] skipped unserializable event accountId=${accountId} ` +
+      `eventType=${safeEventType}.`
+    )
+  }
+
+  private logDroppedUnacknowledgedEvent(event: PendingRuntimeEvent): void {
+    const safeEventType = String(event.eventType || 'unknown')
+      .replace(/[\u0000-\u001f\u007f]/g, '?')
+      .slice(0, 150) || 'unknown'
+    console.warn(
+      `[LocalChatSync] dropped unacknowledged event after ` +
+      `${MAX_UNACKNOWLEDGED_EVENT_REPLAYS} replays accountId=${event.autoAccountId} ` +
+      `eventType=${safeEventType}.`
+    )
   }
 
   private logError(context: string, error: unknown): void {
