@@ -112,6 +112,7 @@ interface AttachedAccount extends LocalRuntimeBindingRegistration {
   unsubscribe: () => void
   initialSyncGeneration: string | null
   ready: boolean
+  readyStatusVersion: number
   listenerFailureVersion: number
 }
 
@@ -519,16 +520,20 @@ export class ZaloLocalChatSyncService {
       }
     }
 
+    const attachmentSocket = this.socket
+    if (!attachmentSocket || attachmentSocket.readyState !== WebSocket.OPEN) return
+
     this.bindings.set(accountId, binding)
-    this.send({
+    attachmentSocket.send(JSON.stringify({
       protocolVersion: PROTOCOL_VERSION,
       kind: 'runtime.attach_account',
       runtimeId: this.runtimeId,
       autoAccountId: String(accountId),
       runtimeGeneration: binding.runtimeGeneration
-    })
+    }))
     this.attachedOnConnection.add(accountId)
     let attached = this.attached.get(accountId)
+    const readyStatusVersion = attached?.readyStatusVersion ?? 0
     if (!attached) {
       const handlers = this.listenerHandlers(accountId)
       attached = {
@@ -537,6 +542,7 @@ export class ZaloLocalChatSyncService {
         unsubscribe: () => {},
         initialSyncGeneration: null,
         ready: false,
+        readyStatusVersion: 0,
         listenerFailureVersion: 0
       }
       this.attached.set(accountId, attached)
@@ -556,14 +562,28 @@ export class ZaloLocalChatSyncService {
       }
     }
     const listenerFailureVersion = attached.listenerFailureVersion
+    const isCurrentAttachmentAttempt = () => (
+      this.socket === attachmentSocket &&
+      attachmentSocket.readyState === WebSocket.OPEN &&
+      this.attached.get(accountId) === attached &&
+      this.bindings.get(accountId)?.runtimeGeneration === binding.runtimeGeneration &&
+      this.attachedOnConnection.has(accountId)
+    )
     try {
       await this.zaloRuntime.ensureRealtimeListenerReady(accountId)
+      if (!isCurrentAttachmentAttempt()) return
+
+      attached.ready = true
+      if (attached.readyStatusVersion === readyStatusVersion) {
+        this.reportStatus(accountId, 'ready')
+      }
       if (attached.initialSyncGeneration !== binding.runtimeGeneration) {
         attached.initialSyncGeneration = binding.runtimeGeneration
         void this.initialSync(accountId, binding.runtimeGeneration)
           .catch(error => this.logError(`initial sync ${accountId}`, error))
       }
     } catch (error) {
+      if (!isCurrentAttachmentAttempt()) return
       attached.ready = false
       // Synchronous startup failures and listener errors are normally emitted
       // by ZaloRuntimeService. A timeout/reset can still reject without a
@@ -677,7 +697,10 @@ export class ZaloLocalChatSyncService {
     const attached = this.attached.get(event.accountId)
     if (!attached) return
     attached.ready = event.status === 'running' && event.ready
-    if (attached.ready && !event.error) this.reportStatus(event.accountId, 'ready')
+    if (attached.ready && !event.error) {
+      attached.readyStatusVersion += 1
+      this.reportStatus(event.accountId, 'ready')
+    }
     else if (event.status === 'starting') this.reportStatus(event.accountId, 'connecting')
     else if (event.status === 'disconnected') {
       this.reportStatus(event.accountId, 'reconnecting', event.error, event.code, event.reason)
