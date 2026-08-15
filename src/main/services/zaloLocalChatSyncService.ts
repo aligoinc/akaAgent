@@ -215,6 +215,7 @@ export class ZaloLocalChatSyncService {
   private readonly sequenceByAccount = new Map<number, bigint>()
   private readonly pendingEvents = new Map<string, PendingRuntimeEvent>()
   private readonly attachedOnConnection = new Set<number>()
+  private readonly lastSentStatusFingerprintByAccount = new Map<number, string>()
   private readonly activeQrOperations = new Map<number, string>()
   private readonly qrLoginAccounts = new Set<number>()
   private readonly qrClaimPreviousStatus = new Map<number, PreviousZaloAccountStatus>()
@@ -275,6 +276,7 @@ export class ZaloLocalChatSyncService {
     this.bindings.clear()
     this.pendingEvents.clear()
     this.attachedOnConnection.clear()
+    this.lastSentStatusFingerprintByAccount.clear()
     this.commandQueues.clear()
     this.knownGroupIdsByAccount.clear()
     this.bindingConflicts.clear()
@@ -359,6 +361,7 @@ export class ZaloLocalChatSyncService {
         this.liveEventSocket = null
         this.welcomed = false
         this.attachedOnConnection.clear()
+        this.lastSentStatusFingerprintByAccount.clear()
         if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
         if (this.heartbeatAckTimer) clearTimeout(this.heartbeatAckTimer)
         if (this.welcomeTimer) clearTimeout(this.welcomeTimer)
@@ -597,6 +600,7 @@ export class ZaloLocalChatSyncService {
   private detachAccount(accountId: number, reason: string): void {
     this.clearListenerStabilityTimer(accountId)
     this.listenerRetryStates.delete(accountId)
+    this.lastSentStatusFingerprintByAccount.delete(accountId)
     const binding = this.bindings.get(accountId)
     const attached = this.attached.get(accountId)
     if (!binding && !attached) return
@@ -614,6 +618,7 @@ export class ZaloLocalChatSyncService {
     this.attached.delete(accountId)
     this.bindings.delete(accountId)
     this.attachedOnConnection.delete(accountId)
+    this.lastSentStatusFingerprintByAccount.delete(accountId)
   }
 
   private async attachAccount(
@@ -651,6 +656,10 @@ export class ZaloLocalChatSyncService {
       previousBinding?.runtimeGeneration === binding.runtimeGeneration
     this.bindings.set(accountId, binding)
     if (!alreadyAttachedToCurrentConnection) {
+      // Status idempotency is scoped to one control attachment. A new control
+      // connection or binding generation must be allowed to replay the current
+      // state even when its semantic value matches the previous connection.
+      this.lastSentStatusFingerprintByAccount.delete(accountId)
       attachmentSocket.send(JSON.stringify({
         protocolVersion: PROTOCOL_VERSION,
         kind: 'runtime.attach_account',
@@ -986,7 +995,16 @@ export class ZaloLocalChatSyncService {
     const binding = this.bindings.get(accountId)
     if (!binding || !this.attachedOnConnection.has(accountId)) return
     const errorMessage = error instanceof Error ? error.message : text(error)
-    this.send({
+    const fingerprint = JSON.stringify({
+      runtimeGeneration: binding.runtimeGeneration,
+      state,
+      ...(closeCode === undefined ? {} : { closeCode }),
+      ...(closeReason ? { closeReason } : {}),
+      ...(errorMessage ? { errorMessage } : {})
+    })
+    if (this.lastSentStatusFingerprintByAccount.get(accountId) === fingerprint) return
+
+    const sent = this.send({
       protocolVersion: PROTOCOL_VERSION,
       kind: 'runtime.account.status',
       runtimeId: this.runtimeId,
@@ -998,6 +1016,7 @@ export class ZaloLocalChatSyncService {
       ...(closeReason ? { closeReason } : {}),
       ...(errorMessage ? { errorMessage } : {})
     })
+    if (sent) this.lastSentStatusFingerprintByAccount.set(accountId, fingerprint)
   }
 
   private publishEvent(
@@ -1688,10 +1707,11 @@ export class ZaloLocalChatSyncService {
     })
   }
 
-  private send(message: unknown): void {
+  private send(message: unknown): boolean {
     const socket = this.socket
-    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false
     socket.send(JSON.stringify(message))
+    return true
   }
 
   private sendPendingEvent(
@@ -1742,6 +1762,7 @@ export class ZaloLocalChatSyncService {
     this.attached.clear()
     this.bindings.clear()
     this.attachedOnConnection.clear()
+    this.lastSentStatusFingerprintByAccount.clear()
     this.knownGroupIdsByAccount.clear()
     const socket = this.socket
     this.socket = null

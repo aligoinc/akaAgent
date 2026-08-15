@@ -31,6 +31,7 @@ type TestableSyncService = ZaloLocalChatSyncService & {
   heartbeatTimer: ReturnType<typeof setInterval> | null
   attached: Map<number, { ready: boolean }>
   attachedOnConnection: Set<number>
+  lastSentStatusFingerprintByAccount: Map<number, string>
   bindings: Map<number, LocalRuntimeBindingRegistration>
   listenerRetryStates: Map<number, {
     runtimeGeneration: string
@@ -140,6 +141,8 @@ function states(messages: Array<Record<string, unknown>>): string[] {
 async function testSingleAttachLifecycle(): Promise<void> {
   const harness = createHarness(async handlers => {
     handlers.status?.({ accountId, status: 'starting', ready: false })
+    handlers.status?.({ accountId, status: 'starting', ready: false })
+    handlers.status?.({ accountId, status: 'running', ready: true })
     handlers.status?.({ accountId, status: 'running', ready: true })
   })
   await harness.attach()
@@ -147,6 +150,54 @@ async function testSingleAttachLifecycle(): Promise<void> {
   const lifecycle = lifecycleMessages(harness.messages)
   assert.equal(lifecycle.filter(message => message.kind === 'runtime.attach_account').length, 1)
   assert.deepEqual(states(lifecycle), ['connecting', 'ready'])
+}
+
+async function testSameStateWithChangedDetailsRemainsVisible(): Promise<void> {
+  const harness = createHarness(async handlers => {
+    handlers.status?.({ accountId, status: 'running', ready: true })
+  })
+  await harness.attach()
+
+  harness.status({
+    accountId,
+    status: 'disconnected',
+    ready: false,
+    code: 1006,
+    reason: 'network path A'
+  })
+  harness.status({
+    accountId,
+    status: 'disconnected',
+    ready: false,
+    code: 1006,
+    reason: 'network path A'
+  })
+  harness.status({
+    accountId,
+    status: 'disconnected',
+    ready: false,
+    code: 1006,
+    reason: 'network path B'
+  })
+  harness.status({
+    accountId,
+    status: 'disconnected',
+    ready: false,
+    code: 1006,
+    reason: 'network path A'
+  })
+
+  const statusMessages = harness.messages.filter(message => (
+    message.kind === 'runtime.account.status'
+  ))
+  assert.deepEqual(
+    states(statusMessages),
+    ['ready', 'reconnecting', 'reconnecting', 'reconnecting']
+  )
+  assert.deepEqual(
+    statusMessages.slice(1).map(message => message.closeReason),
+    ['network path A', 'network path B', 'network path A']
+  )
 }
 
 async function testEnsureFailureFallback(): Promise<void> {
@@ -810,6 +861,7 @@ async function testLocalListenerRetryBudgetIsPerAccountAndManuallyResettable(): 
   })
   testable.detachAccount(accountId, 'test lifecycle cleanup')
   assert.equal(testable.listenerRetryStates.has(accountId), false)
+  assert.equal(testable.lastSentStatusFingerprintByAccount.has(accountId), false)
   service.stop()
 }
 
@@ -912,6 +964,7 @@ async function testControlReconnectStopsAfterTenAttemptsAndKeepsPending(): Promi
 
 async function main(): Promise<void> {
   await testSingleAttachLifecycle()
+  await testSameStateWithChangedDetailsRemainsVisible()
   await testEnsureFailureFallback()
   await testReconnectTransitionsRemainVisible()
   await testExistingReadyListenerIsNotLost()
