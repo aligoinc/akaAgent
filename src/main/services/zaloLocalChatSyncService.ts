@@ -28,6 +28,12 @@ const MAX_CONTROL_RECONNECT_ATTEMPTS = 10
 const MAX_UNACKNOWLEDGED_EVENT_REPLAYS = 10
 const MAX_LOCAL_LISTENER_RESTART_ATTEMPTS = 10
 const LOCAL_LISTENER_STABILITY_MS = 60_000
+const MAX_STICKER_DETAIL_CACHE_ENTRIES = 500
+const MAX_STICKER_DETAIL_LOOKUP_BATCH_SIZE = 10
+const MAX_STICKER_DETAIL_PENDING_IDS = 500
+const MAX_STICKER_DETAIL_PENDING_REFERENCES = 5_000
+const STICKER_DETAIL_LOOKUP_TIMEOUT_MS = 15_000
+const STICKER_DETAIL_NEGATIVE_CACHE_MS = 60_000
 const LOCAL_LISTENER_RETRY_EXHAUSTED_MESSAGE =
   `Listener Zalo local đã dừng tự kết nối lại sau ${MAX_LOCAL_LISTENER_RESTART_ATTEMPTS} ` +
   'lần thử không thành công. Hãy thử lại thủ công.'
@@ -127,6 +133,7 @@ interface PendingRuntimeEvent {
   autoAccountId: string
   runtimeGeneration: string
   eventType: string
+  priority: 'raw' | 'synthetic'
   wire: string
   sent: boolean
   replayAttempts: number
@@ -153,6 +160,64 @@ interface LocalListenerRetryState {
   exhausted: boolean
 }
 
+interface StickerReference {
+  conversationType: 'user' | 'group'
+  conversationZaloId: string
+  stickerId: number
+  rawCategoryZaloId: string | null
+  rawTypeCode: number | null
+}
+
+interface StickerDetailMetadata {
+  stickerZaloId: string
+  stickerCategoryZaloId: string | null
+  stickerTypeCode: number | null
+  stickerText: string | null
+  stickerUri: string | null
+  stickerFileKey: string | null
+  stickerStatusCode: number | null
+  stickerUrl: string
+  stickerSpriteUrl: string | null
+  stickerWebpUrl: string | null
+  stickerTotalFrames: number | null
+  stickerDurationMs: number | null
+  stickerEffectZaloId: string | null
+  stickerChecksum: string | null
+  stickerExtension: string | null
+  stickerSource: string | null
+  stickerVersion: string | null
+}
+
+interface StickerDetailProjectionItem extends StickerDetailMetadata {
+  conversationType: 'user' | 'group'
+  conversationZaloId: string
+}
+
+interface StickerDetailCacheEntry {
+  detail: StickerDetailMetadata | null
+  expiresAt: number | null
+}
+
+interface StickerEnrichmentFence {
+  runtimeGeneration: string
+}
+
+interface PendingStickerDetail {
+  accountId: number
+  runtimeGeneration: string
+  stickerId: number
+  references: Map<string, StickerReference>
+  inFlight: boolean
+}
+
+interface ActiveStickerDetailLookup {
+  epoch: number
+  token: number
+  accountId: number
+  runtimeGeneration: string
+  pendingKeys: string[]
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -171,6 +236,87 @@ function text(...values: unknown[]): string | undefined {
 function finiteNumber(value: unknown): number | undefined {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function nullableInteger(value: unknown): number | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : null
+}
+
+function nullableText(value: unknown): string | null {
+  return text(value) ?? null
+}
+
+function positiveSafeInteger(value: unknown): number | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function stickerReference(value: unknown): StickerReference | null {
+  const message = record(value)
+  const messageType = message.type === ThreadType.Group
+    ? 'group'
+    : message.type === ThreadType.User
+      ? 'user'
+      : null
+  if (!messageType) return null
+
+  const conversationZaloId = text(message.threadId)
+  const data = record(message.data)
+  if (!conversationZaloId || data.msgType !== 'chat.sticker') return null
+
+  const content = record(data.content)
+  const stickerId = positiveSafeInteger(content.id)
+  if (stickerId === null) return null
+
+  return {
+    conversationType: messageType,
+    conversationZaloId,
+    stickerId,
+    rawCategoryZaloId: nullableText(content.catId),
+    rawTypeCode: nullableInteger(content.type)
+  }
+}
+
+function stickerReferences(values: unknown[]): StickerReference[] {
+  const result = new Map<string, StickerReference>()
+  for (const value of values) {
+    const reference = stickerReference(value)
+    if (!reference) continue
+    const key = `${reference.conversationType}:${reference.conversationZaloId}:${reference.stickerId}`
+    if (!result.has(key)) result.set(key, reference)
+  }
+  return Array.from(result.values())
+}
+
+function stickerDetailMetadata(value: unknown): StickerDetailMetadata | null {
+  const detail = record(value)
+  const stickerId = positiveSafeInteger(detail.id)
+  const stickerUrl = text(detail.stickerUrl)
+  if (stickerId === null || !stickerUrl) return null
+  return {
+    stickerZaloId: String(stickerId),
+    stickerCategoryZaloId: nullableText(detail.cateId),
+    stickerTypeCode: nullableInteger(detail.type),
+    stickerText: nullableText(detail.text),
+    stickerUri: nullableText(detail.uri),
+    stickerFileKey: nullableText(detail.fkey),
+    stickerStatusCode: nullableInteger(detail.status),
+    stickerUrl,
+    stickerSpriteUrl: nullableText(detail.stickerSpriteUrl),
+    stickerWebpUrl: nullableText(detail.stickerWebpUrl),
+    stickerTotalFrames: nullableInteger(detail.totalFrames),
+    stickerDurationMs: nullableInteger(detail.duration),
+    stickerEffectZaloId: nullableText(detail.effectId),
+    stickerChecksum: nullableText(detail.checksum),
+    stickerExtension: nullableText(detail.ext),
+    stickerSource: nullableText(detail.source),
+    stickerVersion: nullableText(detail.version)
+  }
 }
 
 function stringArray(value: unknown): string[] {
@@ -225,6 +371,14 @@ export class ZaloLocalChatSyncService {
   private readonly bindingConflicts = new Map<number, BindingConflict>()
   private readonly listenerRetryStates = new Map<number, LocalListenerRetryState>()
   private readonly listenerStabilityTimers = new Map<number, ReturnType<typeof setTimeout>>()
+  private readonly stickerDetailCache = new Map<string, StickerDetailCacheEntry>()
+  private readonly pendingStickerDetails = new Map<string, PendingStickerDetail>()
+  private pendingStickerDetailReferenceCount = 0
+  private activeStickerDetailLookup: ActiveStickerDetailLookup | null = null
+  private stickerDetailLookupBlocker: Promise<void> | null = null
+  private stickerDetailLookupEpoch = 0
+  private stickerDetailLookupToken = 0
+  private stickerDetailLookupPausedEpoch: number | null = null
   private eligibleAccountFingerprint = ''
   private reconcilePromise: Promise<void> | null = null
   private reconcileRequested = false
@@ -280,6 +434,7 @@ export class ZaloLocalChatSyncService {
     this.commandQueues.clear()
     this.knownGroupIdsByAccount.clear()
     this.bindingConflicts.clear()
+    this.resetStickerDetails()
     for (const timer of this.listenerStabilityTimers.values()) clearTimeout(timer)
     this.listenerStabilityTimers.clear()
     this.listenerRetryStates.clear()
@@ -603,7 +758,10 @@ export class ZaloLocalChatSyncService {
     this.lastSentStatusFingerprintByAccount.delete(accountId)
     const binding = this.bindings.get(accountId)
     const attached = this.attached.get(accountId)
-    if (!binding && !attached) return
+    if (!binding && !attached) {
+      this.dropStickerDetailsForAccount(accountId)
+      return
+    }
     this.reportStatus(accountId, 'disconnected', undefined, undefined, reason)
     if (binding && this.attachedOnConnection.has(accountId)) {
       this.send({
@@ -619,6 +777,7 @@ export class ZaloLocalChatSyncService {
     this.bindings.delete(accountId)
     this.attachedOnConnection.delete(accountId)
     this.lastSentStatusFingerprintByAccount.delete(accountId)
+    this.dropStickerDetailsForAccount(accountId)
   }
 
   private async attachAccount(
@@ -635,6 +794,9 @@ export class ZaloLocalChatSyncService {
     )) {
       this.clearListenerStabilityTimer(accountId)
       this.listenerRetryStates.delete(accountId)
+    }
+    if (generationChanged) {
+      this.dropStickerDetailsForAccount(accountId, binding.runtimeGeneration)
     }
 
     // Events are acknowledged against the generation that produced them. Once
@@ -821,12 +983,17 @@ export class ZaloLocalChatSyncService {
   private listenerHandlers(accountId: number): ZaloRealtimeListenerHandlers {
     return {
       typing: payload => this.publishEvent(accountId, 'typing', payload),
-      message: payload => this.publishEvent(accountId, 'message', payload),
-      oldMessages: (messages, type) => this.publishEvent(
-        accountId,
-        'old_messages',
-        { messages, type }
-      ),
+      message: payload => {
+        if (!this.publishEvent(accountId, 'message', payload)) return
+        this.scheduleStickerDetails(accountId, stickerReferences([payload]))
+      },
+      oldMessages: (messages, type) => {
+        if (!this.publishEvent(accountId, 'old_messages', { messages, type })) return
+        this.scheduleStickerDetails(
+          accountId,
+          stickerReferences(Array.isArray(messages) ? messages : [])
+        )
+      },
       reaction: payload => this.publishEvent(accountId, 'reaction', payload),
       oldReactions: (reactions, isGroup) => this.publishEvent(
         accountId,
@@ -1024,14 +1191,18 @@ export class ZaloLocalChatSyncService {
     eventType: string,
     payload: unknown,
     expectedRuntimeGeneration?: string
-  ): void {
-    if (!this.running) return
+  ): boolean {
+    if (!this.running) return false
     const binding = this.bindings.get(accountId)
-    if (!binding) return
+    if (!binding) return false
     if (
       expectedRuntimeGeneration !== undefined &&
       binding.runtimeGeneration !== expectedRuntimeGeneration
-    ) return
+    ) return false
+    const priority = eventType === 'sticker_details' ? 'synthetic' : 'raw'
+    if (priority === 'synthetic' && this.pendingEvents.size >= MAX_PENDING_EVENTS) {
+      return false
+    }
     const next = (this.sequenceByAccount.get(accountId) ?? 0n) + 1n
     this.sequenceByAccount.set(accountId, next)
     const event: RuntimeEventMessage = {
@@ -1053,21 +1224,25 @@ export class ZaloLocalChatSyncService {
       wire = JSON.stringify(event)
     } catch {
       this.logUnserializableEvent(accountId, eventType)
-      return
+      return false
     }
     this.pendingEvents.set(event.eventId, {
       eventId: event.eventId,
       autoAccountId: event.autoAccountId,
       runtimeGeneration: event.runtimeGeneration,
       eventType,
+      priority,
       wire,
       sent: false,
       replayAttempts: 0
     })
     while (this.pendingEvents.size > MAX_PENDING_EVENTS) {
-      const oldestId = this.pendingEvents.keys().next().value as string | undefined
-      if (!oldestId) break
-      this.pendingEvents.delete(oldestId)
+      const oldestSyntheticId = Array.from(this.pendingEvents)
+        .find(([, pending]) => pending.priority === 'synthetic')?.[0]
+      const evictionId = oldestSyntheticId ??
+        this.pendingEvents.keys().next().value as string | undefined
+      if (!evictionId) break
+      this.pendingEvents.delete(evictionId)
     }
     if (
       this.attachedOnConnection.has(accountId) &&
@@ -1075,6 +1250,326 @@ export class ZaloLocalChatSyncService {
     ) {
       const pending = this.pendingEvents.get(event.eventId)
       if (pending) this.sendPendingEvent(pending)
+    }
+    return true
+  }
+
+  private scheduleStickerDetails(accountId: number, references: StickerReference[]): void {
+    if (references.length === 0) return
+    const binding = this.bindings.get(accountId)
+    if (!binding) return
+    const fence: StickerEnrichmentFence = {
+      runtimeGeneration: binding.runtimeGeneration
+    }
+
+    const cachedItems: StickerDetailProjectionItem[] = []
+    let droppedReferences = 0
+    for (const reference of references) {
+      const cached = this.readStickerDetailCache(accountId, fence.runtimeGeneration, reference.stickerId)
+      if (cached !== undefined) {
+        if (cached === null) continue
+        cachedItems.push(this.projectStickerDetail(reference, cached))
+        continue
+      }
+
+      const pendingKey = this.stickerDetailLookupKey(
+        accountId,
+        fence.runtimeGeneration,
+        reference.stickerId
+      )
+      let pending = this.pendingStickerDetails.get(pendingKey)
+      const referenceKey = `${reference.conversationType}:${reference.conversationZaloId}`
+      if (pending?.references.has(referenceKey)) continue
+      if (
+        (!pending && this.pendingStickerDetails.size >= MAX_STICKER_DETAIL_PENDING_IDS) ||
+        this.pendingStickerDetailReferenceCount >= MAX_STICKER_DETAIL_PENDING_REFERENCES
+      ) {
+        droppedReferences += 1
+        continue
+      }
+      if (!pending) {
+        pending = {
+          accountId,
+          runtimeGeneration: fence.runtimeGeneration,
+          stickerId: reference.stickerId,
+          references: new Map(),
+          inFlight: false
+        }
+        this.pendingStickerDetails.set(pendingKey, pending)
+      }
+      pending.references.set(referenceKey, reference)
+      this.pendingStickerDetailReferenceCount += 1
+    }
+    this.publishStickerDetailItems(accountId, cachedItems, fence)
+    if (droppedReferences > 0) {
+      console.warn(
+        `[LocalChatSync] sticker detail queue full accountId=${accountId} ` +
+        `skippedReferences=${droppedReferences}.`
+      )
+    }
+    this.drainStickerDetails()
+  }
+
+  private drainStickerDetails(): void {
+    if (
+      !this.running ||
+      this.activeStickerDetailLookup ||
+      this.stickerDetailLookupBlocker ||
+      this.stickerDetailLookupPausedEpoch === this.stickerDetailLookupEpoch
+    ) return
+
+    let first: PendingStickerDetail | null = null
+    for (const [key, pending] of this.pendingStickerDetails) {
+      if (this.bindings.get(pending.accountId)?.runtimeGeneration !== pending.runtimeGeneration) {
+        this.removePendingStickerDetail(key)
+        continue
+      }
+      if (!pending.inFlight) {
+        first = pending
+        break
+      }
+    }
+    if (!first) return
+
+    const pendingKeys: string[] = []
+    for (const [key, pending] of this.pendingStickerDetails) {
+      if (
+        !pending.inFlight &&
+        pending.accountId === first.accountId &&
+        pending.runtimeGeneration === first.runtimeGeneration
+      ) {
+        pending.inFlight = true
+        pendingKeys.push(key)
+        if (pendingKeys.length >= MAX_STICKER_DETAIL_LOOKUP_BATCH_SIZE) break
+      }
+    }
+    if (pendingKeys.length === 0) return
+
+    const lookup: ActiveStickerDetailLookup = {
+      epoch: this.stickerDetailLookupEpoch,
+      token: ++this.stickerDetailLookupToken,
+      accountId: first.accountId,
+      runtimeGeneration: first.runtimeGeneration,
+      pendingKeys
+    }
+    this.activeStickerDetailLookup = lookup
+    void this.executeStickerDetailLookup(lookup)
+  }
+
+  private async executeStickerDetailLookup(lookup: ActiveStickerDetailLookup): Promise<void> {
+    const stickerIds = lookup.pendingKeys
+      .map(key => this.pendingStickerDetails.get(key)?.stickerId)
+      .filter((stickerId): stickerId is number => stickerId !== undefined)
+    type LookupOutcome =
+      | { status: 'succeeded'; response: unknown[] }
+      | { status: 'failed' }
+      | { status: 'timed_out' }
+
+    const settledLookup: Promise<LookupOutcome> = Promise.resolve()
+      .then(() => this.zaloRuntime.getRealtimeStickerDetails(lookup.accountId, stickerIds))
+      .then(response => ({ status: 'succeeded' as const, response }))
+      .catch(() => ({ status: 'failed' as const }))
+    const lookupBlocker = settledLookup.then(() => undefined)
+    this.stickerDetailLookupBlocker = lookupBlocker
+    void lookupBlocker.then(() => {
+      if (this.stickerDetailLookupBlocker !== lookupBlocker) return
+      this.stickerDetailLookupBlocker = null
+      if (this.stickerDetailLookupPausedEpoch === lookup.epoch) {
+        this.stickerDetailLookupPausedEpoch = null
+      }
+      this.drainStickerDetails()
+    })
+
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    const outcome = await Promise.race<LookupOutcome>([
+      settledLookup,
+      new Promise<LookupOutcome>(resolve => {
+        timeout = setTimeout(() => resolve({ status: 'timed_out' }), STICKER_DETAIL_LOOKUP_TIMEOUT_MS)
+        timeout.unref()
+      })
+    ])
+    if (timeout) clearTimeout(timeout)
+    if (!this.isActiveStickerDetailLookup(lookup)) return
+
+    const details = new Map<number, StickerDetailMetadata>()
+    if (outcome.status === 'succeeded') {
+      for (const value of outcome.response) {
+        const detail = stickerDetailMetadata(value)
+        if (!detail) continue
+        const stickerId = positiveSafeInteger(detail.stickerZaloId)
+        if (stickerId !== null && stickerIds.includes(stickerId)) details.set(stickerId, detail)
+      }
+    }
+
+    const items: StickerDetailProjectionItem[] = []
+    for (const key of lookup.pendingKeys) {
+      const pending = this.pendingStickerDetails.get(key)
+      this.removePendingStickerDetail(key)
+      if (
+        !pending ||
+        this.bindings.get(pending.accountId)?.runtimeGeneration !== pending.runtimeGeneration
+      ) continue
+      const detail = details.get(pending.stickerId) ?? null
+      this.writeStickerDetailCache(
+        pending.accountId,
+        pending.runtimeGeneration,
+        pending.stickerId,
+        detail
+      )
+      if (detail) {
+        for (const reference of pending.references.values()) {
+          items.push(this.projectStickerDetail(reference, detail))
+        }
+      }
+    }
+
+    this.activeStickerDetailLookup = null
+    if (outcome.status === 'timed_out') {
+      if (this.stickerDetailLookupBlocker === lookupBlocker) {
+        this.stickerDetailLookupPausedEpoch = lookup.epoch
+      }
+      console.warn(`[LocalChatSync] sticker detail lookup timed out accountId=${lookup.accountId}.`)
+    } else if (outcome.status === 'failed') {
+      console.warn(`[LocalChatSync] sticker detail lookup failed accountId=${lookup.accountId}.`)
+    }
+    this.publishStickerDetailItems(
+      lookup.accountId,
+      items,
+      { runtimeGeneration: lookup.runtimeGeneration }
+    )
+    this.drainStickerDetails()
+  }
+
+  private isActiveStickerDetailLookup(lookup: ActiveStickerDetailLookup): boolean {
+    return this.stickerDetailLookupEpoch === lookup.epoch &&
+      this.activeStickerDetailLookup?.token === lookup.token
+  }
+
+  private removePendingStickerDetail(key: string): void {
+    const pending = this.pendingStickerDetails.get(key)
+    if (!pending) return
+    this.pendingStickerDetailReferenceCount -= pending.references.size
+    this.pendingStickerDetails.delete(key)
+  }
+
+  private resetStickerDetails(): void {
+    this.stickerDetailLookupEpoch += 1
+    this.activeStickerDetailLookup = null
+    this.stickerDetailLookupPausedEpoch = null
+    this.pendingStickerDetails.clear()
+    this.pendingStickerDetailReferenceCount = 0
+    this.stickerDetailCache.clear()
+  }
+
+  private dropStickerDetailsForAccount(
+    accountId: number,
+    keepRuntimeGeneration?: string
+  ): void {
+    for (const [key, pending] of this.pendingStickerDetails) {
+      if (
+        pending.accountId === accountId &&
+        pending.runtimeGeneration !== keepRuntimeGeneration
+      ) {
+        this.removePendingStickerDetail(key)
+      }
+    }
+    const accountPrefix = `${accountId}:`
+    const keepPrefix = keepRuntimeGeneration === undefined
+      ? null
+      : `${accountId}:${keepRuntimeGeneration}:`
+    for (const key of this.stickerDetailCache.keys()) {
+      if (key.startsWith(accountPrefix) && (!keepPrefix || !key.startsWith(keepPrefix))) {
+        this.stickerDetailCache.delete(key)
+      }
+    }
+    this.drainStickerDetails()
+  }
+
+  private projectStickerDetail(
+    reference: StickerReference,
+    detail: StickerDetailMetadata
+  ): StickerDetailProjectionItem {
+    return {
+      conversationType: reference.conversationType,
+      conversationZaloId: reference.conversationZaloId,
+      ...detail,
+      stickerZaloId: String(reference.stickerId),
+      stickerCategoryZaloId: detail.stickerCategoryZaloId ?? reference.rawCategoryZaloId,
+      stickerTypeCode: detail.stickerTypeCode ?? reference.rawTypeCode
+    }
+  }
+
+  private publishStickerDetailItems(
+    accountId: number,
+    items: StickerDetailProjectionItem[],
+    fence: StickerEnrichmentFence
+  ): void {
+    if (items.length === 0 || !this.isStickerEnrichmentFenceCurrent(accountId, fence)) return
+    const uniqueItems = new Map<string, StickerDetailProjectionItem>()
+    for (const item of items) {
+      const key = `${item.conversationType}:${item.conversationZaloId}:${item.stickerZaloId}`
+      if (!uniqueItems.has(key)) uniqueItems.set(key, item)
+    }
+    for (const batch of groupsOf(Array.from(uniqueItems.values()), 100)) {
+      if (!this.isStickerEnrichmentFenceCurrent(accountId, fence)) return
+      if (!this.publishEvent(
+        accountId,
+        'sticker_details',
+        { items: batch },
+        fence.runtimeGeneration
+      )) return
+    }
+  }
+
+  private isStickerEnrichmentFenceCurrent(
+    accountId: number,
+    fence: StickerEnrichmentFence
+  ): boolean {
+    return this.running &&
+      this.bindings.get(accountId)?.runtimeGeneration === fence.runtimeGeneration
+  }
+
+  private stickerDetailLookupKey(
+    accountId: number,
+    runtimeGeneration: string,
+    stickerId: number
+  ): string {
+    return `${accountId}:${runtimeGeneration}:${stickerId}`
+  }
+
+  private readStickerDetailCache(
+    accountId: number,
+    runtimeGeneration: string,
+    stickerId: number
+  ): StickerDetailMetadata | null | undefined {
+    const key = this.stickerDetailLookupKey(accountId, runtimeGeneration, stickerId)
+    const entry = this.stickerDetailCache.get(key)
+    if (!entry) return undefined
+    if (entry.expiresAt !== null && entry.expiresAt <= Date.now()) {
+      this.stickerDetailCache.delete(key)
+      return undefined
+    }
+    this.stickerDetailCache.delete(key)
+    this.stickerDetailCache.set(key, entry)
+    return entry.detail
+  }
+
+  private writeStickerDetailCache(
+    accountId: number,
+    runtimeGeneration: string,
+    stickerId: number,
+    detail: StickerDetailMetadata | null
+  ): void {
+    const key = this.stickerDetailLookupKey(accountId, runtimeGeneration, stickerId)
+    this.stickerDetailCache.delete(key)
+    this.stickerDetailCache.set(key, {
+      detail,
+      expiresAt: detail === null ? Date.now() + STICKER_DETAIL_NEGATIVE_CACHE_MS : null
+    })
+    while (this.stickerDetailCache.size > MAX_STICKER_DETAIL_CACHE_ENTRIES) {
+      const oldestKey = this.stickerDetailCache.keys().next().value as string | undefined
+      if (!oldestKey) break
+      this.stickerDetailCache.delete(oldestKey)
     }
   }
 
@@ -1764,6 +2259,7 @@ export class ZaloLocalChatSyncService {
     this.attachedOnConnection.clear()
     this.lastSentStatusFingerprintByAccount.clear()
     this.knownGroupIdsByAccount.clear()
+    this.resetStickerDetails()
     const socket = this.socket
     this.socket = null
     this.liveEventSocket = null
