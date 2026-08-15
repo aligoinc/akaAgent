@@ -680,6 +680,17 @@ export class ZaloRuntimeService {
     return () => this.loginQrSubscribers.delete(handler)
   }
 
+  async getRealtimeStickerDetails(
+    accountId: number,
+    stickerIds: number[]
+  ): Promise<Awaited<ReturnType<API['getStickersDetail']>>> {
+    const state = this.listenerStates.get(accountId)
+    if (!state || state.status !== 'running' || !state.ready) {
+      throw new Error('Listener Zalo local hiện tại chưa sẵn sàng lấy sticker.')
+    }
+    return state.api.getStickersDetail(stickerIds)
+  }
+
   private publishLoginQrEvent(event: ZaloLoginQrEvent): void {
     this.emitLoginQrEvent(event)
     for (const subscriber of Array.from(this.loginQrSubscribers)) {

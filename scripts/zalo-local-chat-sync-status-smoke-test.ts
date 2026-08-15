@@ -17,6 +17,8 @@ interface RuntimeHarness {
   service: ZaloLocalChatSyncService
   messages: Array<Record<string, unknown>>
   status(event: ZaloListenerStatusEvent): void
+  message(payload: unknown): void
+  oldMessages(messages: unknown, type: unknown): void
   attach(): Promise<void>
 }
 
@@ -38,11 +40,17 @@ type TestableSyncService = ZaloLocalChatSyncService & {
     failedAttempts: number
     exhausted: boolean
   }>
+  stickerDetailCache: Map<string, unknown>
+  pendingStickerDetails: Map<string, unknown>
+  activeStickerDetailLookup: unknown | null
+  stickerDetailLookupBlocker: Promise<void> | null
+  stickerDetailLookupEpoch: number
   pendingEvents: Map<string, {
     eventId: string
     autoAccountId: string
     runtimeGeneration: string
     eventType: string
+    priority: 'raw' | 'synthetic'
     wire: string
     sent: boolean
     replayAttempts: number
@@ -74,7 +82,8 @@ const binding: LocalRuntimeBindingRegistration = {
 
 function createHarness(
   ensure: (handlers: ZaloRealtimeListenerHandlers) => Promise<void>,
-  replay?: ZaloListenerStatusEvent
+  replay?: ZaloListenerStatusEvent,
+  getStickersDetail: (stickerIds: number[]) => Promise<unknown[]> = async () => []
 ): RuntimeHarness {
   let handlers: ZaloRealtimeListenerHandlers | null = null
   const runtime = {
@@ -94,6 +103,9 @@ function createHarness(
     getAllFriendsPage: async () => [],
     getAllGroups: async () => ({}),
     listLabels: async () => [],
+    getRealtimeStickerDetails: async (_accountId: number, stickerIds: number[]) => (
+      getStickersDetail(stickerIds)
+    ),
     ensureApi: async () => ({
       listener: {
         requestOldMessages: () => {},
@@ -121,8 +133,32 @@ function createHarness(
       assert.ok(handlers)
       handlers.status?.(event)
     },
+    message: payload => {
+      assert.ok(handlers)
+      handlers.message?.(payload as never)
+    },
+    oldMessages: (messages, type) => {
+      assert.ok(handlers)
+      handlers.oldMessages?.(messages, type)
+    },
     attach: () => testable.attachAccount(accountId, binding)
   }
+}
+
+async function waitFor(predicate: () => boolean, attempts = 50): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (predicate()) return
+    await new Promise<void>(resolve => setImmediate(resolve))
+  }
+  assert.fail('Timed out waiting for asynchronous smoke-test state.')
+}
+
+function runtimeEvents(messages: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return messages.filter(message => message.kind === 'zalo.event')
+}
+
+function stickerQueueIdle(service: TestableSyncService): boolean {
+  return service.activeStickerDetailLookup === null && service.pendingStickerDetails.size === 0
 }
 
 function lifecycleMessages(messages: Array<Record<string, unknown>>) {
@@ -923,6 +959,7 @@ async function testControlReconnectStopsAfterTenAttemptsAndKeepsPending(): Promi
     autoAccountId: String(accountId),
     runtimeGeneration: binding.runtimeGeneration,
     eventType: 'message',
+    priority: 'raw',
     wire: '{"kind":"zalo.event"}',
     sent: true,
     replayAttempts: 0
@@ -962,6 +999,499 @@ async function testControlReconnectStopsAfterTenAttemptsAndKeepsPending(): Promi
   assert.equal(testable.pendingEvents.size, 0)
 }
 
+function stickerMessage(
+  stickerId: number,
+  conversationZaloId: string,
+  type: 0 | 1 = 0
+): Record<string, unknown> {
+  return {
+    type,
+    threadId: conversationZaloId,
+    isSelf: false,
+    data: {
+      msgId: `message-${conversationZaloId}-${stickerId}`,
+      msgType: 'chat.sticker',
+      content: { id: stickerId, catId: 42, type: 7 }
+    }
+  }
+}
+
+function stickerDetail(stickerId: number): Record<string, unknown> {
+  return {
+    id: stickerId,
+    type: 7,
+    text: `sticker-${stickerId}`,
+    uri: `sticker-uri-${stickerId}`,
+    fkey: stickerId + 100,
+    status: 1,
+    stickerUrl: `https://cdn.example.invalid/stickers/${stickerId}.png`,
+    stickerSpriteUrl: `https://cdn.example.invalid/stickers/${stickerId}-sprite.png`,
+    stickerWebpUrl: `https://cdn.example.invalid/stickers/${stickerId}.webp`,
+    totalFrames: 4,
+    duration: 500,
+    effectId: stickerId + 200,
+    checksum: `checksum-${stickerId}`,
+    ext: 1,
+    source: 2,
+    version: 3
+  }
+}
+
+async function prepareStickerHarness(
+  getStickersDetail: (stickerIds: number[]) => Promise<unknown[]>
+): Promise<RuntimeHarness> {
+  const harness = createHarness(async () => {}, undefined, getStickersDetail)
+  const testable = harness.service as TestableSyncService
+  testable.running = true
+  testable.liveEventSocket = testable.socket
+  await harness.attach()
+  await new Promise<void>(resolve => setImmediate(resolve))
+  harness.messages.length = 0
+  testable.pendingEvents.clear()
+  return harness
+}
+
+async function testStickerDetailsPublishRawFirstAndReuseInflightCache(): Promise<void> {
+  const lookupCalls: number[][] = []
+  let finishLookup!: (details: unknown[]) => void
+  const lookup = new Promise<unknown[]>(resolve => { finishLookup = resolve })
+  const harness = await prepareStickerHarness(async stickerIds => {
+    lookupCalls.push(stickerIds)
+    return lookup
+  })
+
+  const first = stickerMessage(501, 'user-501')
+  const second = stickerMessage(501, 'user-502')
+  harness.message(first)
+  harness.message(second)
+  await waitFor(() => lookupCalls.length === 1)
+
+  let events = runtimeEvents(harness.messages)
+    .filter(event => ['message', 'sticker_details'].includes(String(event.eventType)))
+  assert.deepEqual(events.map(event => event.eventType), ['message', 'message'])
+  assert.deepEqual(lookupCalls, [[501]])
+  assert.deepEqual(
+    ((events[0].payload as Record<string, unknown>).data as Record<string, unknown>).content,
+    { id: 501, catId: 42, type: 7 }
+  )
+
+  finishLookup([stickerDetail(501)])
+  await waitFor(() => runtimeEvents(harness.messages)
+    .filter(event => event.eventType === 'sticker_details').length === 1)
+
+  events = runtimeEvents(harness.messages)
+    .filter(event => ['message', 'sticker_details'].includes(String(event.eventType)))
+  assert.deepEqual(
+    events.map(event => event.eventType),
+    ['message', 'message', 'sticker_details']
+  )
+  const firstDerived = events.find(event => event.eventType === 'sticker_details')
+  assert.ok(firstDerived)
+  const firstItems = (firstDerived.payload as { items: Array<Record<string, unknown>> }).items
+  assert.equal(firstItems.length, 2)
+  assert.deepEqual(firstItems[0], {
+    conversationType: 'user',
+    conversationZaloId: 'user-501',
+    stickerZaloId: '501',
+    stickerCategoryZaloId: '42',
+    stickerTypeCode: 7,
+    stickerText: 'sticker-501',
+    stickerUri: 'sticker-uri-501',
+    stickerFileKey: '601',
+    stickerStatusCode: 1,
+    stickerUrl: 'https://cdn.example.invalid/stickers/501.png',
+    stickerSpriteUrl: 'https://cdn.example.invalid/stickers/501-sprite.png',
+    stickerWebpUrl: 'https://cdn.example.invalid/stickers/501.webp',
+    stickerTotalFrames: 4,
+    stickerDurationMs: 500,
+    stickerEffectZaloId: '701',
+    stickerChecksum: 'checksum-501',
+    stickerExtension: '1',
+    stickerSource: '2',
+    stickerVersion: '3'
+  })
+  assert.equal(firstItems[1].conversationZaloId, 'user-502')
+
+  harness.message(stickerMessage(501, 'user-503'))
+  events = runtimeEvents(harness.messages)
+    .filter(event => ['message', 'sticker_details'].includes(String(event.eventType)))
+  assert.deepEqual(
+    events.slice(-2).map(event => event.eventType),
+    ['message', 'sticker_details']
+  )
+  assert.equal(lookupCalls.length, 1)
+  harness.service.stop()
+}
+
+async function testOldStickerDetailsDedupeLookupAndFanOutConversations(): Promise<void> {
+  const lookupCalls: number[][] = []
+  const harness = await prepareStickerHarness(async stickerIds => {
+    lookupCalls.push(stickerIds)
+    return stickerIds.map(stickerDetail)
+  })
+  const messages = [
+    stickerMessage(601, 'group-601', 1),
+    stickerMessage(601, 'group-601', 1),
+    stickerMessage(601, 'group-602', 1),
+    stickerMessage(602, 'group-602', 1),
+    {
+      type: 1,
+      threadId: 'group-602',
+      data: { msgType: 'webchat', content: 'not a sticker' }
+    }
+  ]
+
+  harness.oldMessages(messages, 1)
+  await waitFor(() => runtimeEvents(harness.messages)
+    .some(event => event.eventType === 'sticker_details'))
+
+  const events = runtimeEvents(harness.messages)
+    .filter(event => ['old_messages', 'sticker_details'].includes(String(event.eventType)))
+  assert.deepEqual(events.map(event => event.eventType), ['old_messages', 'sticker_details'])
+  assert.deepEqual(lookupCalls, [[601, 602]])
+  assert.deepEqual(
+    (events[0].payload as { messages: unknown[] }).messages,
+    messages
+  )
+  const items = (events[1].payload as { items: Array<Record<string, unknown>> }).items
+  assert.deepEqual(
+    items.map(item => [item.conversationType, item.conversationZaloId, item.stickerZaloId]),
+    [
+      ['group', 'group-601', '601'],
+      ['group', 'group-602', '601'],
+      ['group', 'group-602', '602']
+    ]
+  )
+  harness.service.stop()
+}
+
+async function testStickerDetailFailureIsNegativeCachedAndDoesNotChangeRuntimeState(): Promise<void> {
+  let lookupCount = 0
+  const warnings: string[] = []
+  const originalWarn = console.warn
+  const harness = await prepareStickerHarness(async () => {
+    lookupCount += 1
+    throw new Error('SECRET_STICKER_LOOKUP_PAYLOAD')
+  })
+  const testable = harness.service as TestableSyncService
+  testable.reconnectAttempt = 6
+  console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '))
+  try {
+    harness.message(stickerMessage(701, 'user-701'))
+    await waitFor(() => lookupCount === 1 && stickerQueueIdle(testable))
+    harness.message(stickerMessage(701, 'user-702'))
+    await new Promise<void>(resolve => setImmediate(resolve))
+  } finally {
+    console.warn = originalWarn
+  }
+
+  const events = runtimeEvents(harness.messages)
+    .filter(event => ['message', 'sticker_details'].includes(String(event.eventType)))
+  assert.deepEqual(events.map(event => event.eventType), ['message', 'message'])
+  assert.equal(lookupCount, 1)
+  assert.equal(testable.reconnectAttempt, 6)
+  assert.equal(warnings.length, 1)
+  assert.ok(warnings[0].includes(`accountId=${accountId}`))
+  assert.ok(!warnings[0].includes('SECRET_STICKER_LOOKUP_PAYLOAD'))
+  harness.service.stop()
+}
+
+async function testStickerDetailsQueueWhileControlSocketIsClosed(): Promise<void> {
+  const harness = await prepareStickerHarness(async stickerIds => stickerIds.map(stickerDetail))
+  const testable = harness.service as TestableSyncService
+  testable.socket = null as unknown as TestableSyncService['socket']
+  testable.liveEventSocket = null
+
+  harness.message(stickerMessage(801, 'user-801-closed'))
+  await waitFor(() => stickerQueueIdle(testable))
+
+  const pending = Array.from(testable.pendingEvents.values())
+    .map(event => JSON.parse(event.wire) as { eventType: string; sequence: string })
+    .filter(event => ['message', 'sticker_details'].includes(event.eventType))
+  assert.deepEqual(pending.map(event => event.eventType), ['message', 'sticker_details'])
+  assert.equal(BigInt(pending[1].sequence), BigInt(pending[0].sequence) + 1n)
+  assert.equal(harness.messages.length, 0)
+  harness.service.stop()
+}
+
+async function testStickerDetailsNeverEvictRawPendingEvents(): Promise<void> {
+  const harness = await prepareStickerHarness(async stickerIds => stickerIds.map(stickerDetail))
+  const testable = harness.service as TestableSyncService
+
+  harness.message(stickerMessage(811, 'user-811-cache'))
+  await waitFor(() => stickerQueueIdle(testable))
+  testable.pendingEvents.clear()
+  harness.messages.length = 0
+  testable.liveEventSocket = null
+
+  for (let index = 0; index < 499; index += 1) {
+    testable.publishEvent(accountId, 'message', { index })
+  }
+  harness.message(stickerMessage(811, 'user-811-cached-again'))
+
+  assert.equal(testable.pendingEvents.size, 500)
+  assert.ok(Array.from(testable.pendingEvents.values()).every(event => event.priority === 'raw'))
+  assert.equal(
+    Array.from(testable.pendingEvents.values())
+      .filter(event => event.eventType === 'sticker_details').length,
+    0
+  )
+
+  testable.pendingEvents.clear()
+  for (let index = 0; index < 499; index += 1) {
+    testable.publishEvent(accountId, 'message', { index: `raw-${index}` })
+  }
+  testable.publishEvent(accountId, 'sticker_details', { items: [{ marker: 'synthetic' }] })
+  assert.equal(testable.pendingEvents.size, 500)
+  assert.equal(
+    Array.from(testable.pendingEvents.values()).filter(event => event.priority === 'synthetic').length,
+    1
+  )
+
+  testable.publishEvent(accountId, 'message', { index: 'raw-new' })
+  const retained = Array.from(testable.pendingEvents.values())
+  assert.equal(retained.length, 500)
+  assert.ok(retained.every(event => event.priority === 'raw'))
+  assert.ok(retained.some(event => (
+    (JSON.parse(event.wire) as { payload?: { index?: string } }).payload?.index === 'raw-new'
+  )))
+  for (let index = 0; index < 499; index += 1) {
+    assert.ok(retained.some(event => (
+      (JSON.parse(event.wire) as { payload?: { index?: string } }).payload?.index === `raw-${index}`
+    )))
+  }
+  harness.service.stop()
+}
+
+async function testStickerDetailsSurviveControlReconnectWithinGeneration(): Promise<void> {
+  let finishLookup!: (details: unknown[]) => void
+  let lookupStarted = false
+  const harness = await prepareStickerHarness(async () => {
+    lookupStarted = true
+    return new Promise<unknown[]>(resolve => { finishLookup = resolve })
+  })
+  const testable = harness.service as TestableSyncService
+  harness.message(stickerMessage(802, 'user-802-reconnect'))
+  await waitFor(() => lookupStarted)
+
+  const replacementWires: string[] = []
+  const replacementSocket = {
+    readyState: 1,
+    send: (wire: string) => replacementWires.push(wire)
+  }
+  testable.socket = replacementSocket
+  testable.liveEventSocket = null
+  testable.welcomed = false
+  testable.attachedOnConnection.clear()
+  testable.reconcile = async () => {
+    testable.attachedOnConnection.add(accountId)
+  }
+
+  finishLookup([stickerDetail(802)])
+  await waitFor(() => stickerQueueIdle(testable))
+  assert.equal(replacementWires.length, 0)
+  await testable.handleIncoming(JSON.stringify({
+    protocolVersion: 1,
+    kind: 'runtime.welcome',
+    connectedAt: new Date().toISOString()
+  }), replacementSocket)
+
+  const replayedEvents = replacementWires
+    .map(wire => JSON.parse(wire) as Record<string, unknown>)
+    .filter(event => event.kind === 'zalo.event')
+  assert.deepEqual(
+    replayedEvents.map(event => event.eventType),
+    ['message', 'sticker_details']
+  )
+  assert.equal(
+    BigInt(String(replayedEvents[1].sequence)),
+    BigInt(String(replayedEvents[0].sequence)) + 1n
+  )
+  harness.service.stop()
+}
+
+async function testStickerDetailQueueDrainsSaturatedHistorySequentially(): Promise<void> {
+  const lookupCalls: number[][] = []
+  const lookupResolvers: Array<() => void> = []
+  let activeLookups = 0
+  let maxActiveLookups = 0
+  const harness = await prepareStickerHarness(async stickerIds => {
+    lookupCalls.push(stickerIds)
+    activeLookups += 1
+    maxActiveLookups = Math.max(maxActiveLookups, activeLookups)
+    return new Promise<unknown[]>(resolve => {
+      lookupResolvers.push(() => {
+        activeLookups -= 1
+        resolve(stickerIds.map(stickerDetail))
+      })
+    })
+  })
+  const testable = harness.service as TestableSyncService
+  const messages = Array.from({ length: 101 }, (_, index) => (
+    stickerMessage(1_000 + index, `group-${1_000 + index}`, 1)
+  ))
+
+  harness.oldMessages(messages, 1)
+  assert.equal(testable.pendingStickerDetails.size, 101)
+  let resolvedStickerCount = 0
+  for (let batchIndex = 0; resolvedStickerCount < messages.length; batchIndex += 1) {
+    await waitFor(() => lookupCalls.length > batchIndex)
+    assert.equal(activeLookups, 1)
+    assert.ok(lookupCalls[batchIndex].length <= 10)
+    resolvedStickerCount += lookupCalls[batchIndex].length
+    lookupResolvers[batchIndex]()
+  }
+  await waitFor(() => stickerQueueIdle(testable))
+
+  assert.equal(maxActiveLookups, 1)
+  assert.deepEqual(lookupCalls.map(call => call.length), [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1])
+  const events = runtimeEvents(harness.messages)
+    .filter(event => ['old_messages', 'sticker_details'].includes(String(event.eventType)))
+  assert.equal(events[0].eventType, 'old_messages')
+  const derivedPayloads = events
+    .filter(event => event.eventType === 'sticker_details')
+    .map(event => event.payload as { items: unknown[] })
+  assert.ok(derivedPayloads.every(payload => payload.items.length <= 100))
+  assert.equal(
+    derivedPayloads.reduce((total, payload) => total + payload.items.length, 0),
+    messages.length
+  )
+  harness.service.stop()
+}
+
+async function testHungStickerLookupCannotBlockOrCorruptRestartedService(): Promise<void> {
+  let lookupCount = 0
+  let finishHungLookup!: () => void
+  const harness = await prepareStickerHarness(async stickerIds => {
+    lookupCount += 1
+    if (lookupCount === 1) {
+      return new Promise<unknown[]>(resolve => {
+        finishHungLookup = () => resolve(stickerIds.map(stickerDetail))
+      })
+    }
+    return stickerIds.map(stickerDetail)
+  })
+  const testable = harness.service as TestableSyncService
+  const previousEpoch = testable.stickerDetailLookupEpoch
+
+  harness.message(stickerMessage(901, 'user-901-hung'))
+  await waitFor(() => (
+    lookupCount === 1 &&
+    testable.activeStickerDetailLookup !== null &&
+    testable.stickerDetailLookupBlocker !== null
+  ))
+  harness.service.stop()
+  assert.ok(testable.stickerDetailLookupEpoch > previousEpoch)
+  assert.equal(testable.activeStickerDetailLookup, null)
+  assert.equal(testable.pendingStickerDetails.size, 0)
+
+  const restartedWires: string[] = []
+  testable.running = true
+  testable.bindings.set(accountId, binding)
+  testable.socket = {
+    readyState: 1,
+    send: wire => restartedWires.push(wire)
+  }
+  testable.liveEventSocket = testable.socket
+  testable.attachedOnConnection.add(accountId)
+  harness.messages.length = 0
+  testable.pendingEvents.clear()
+
+  harness.message(stickerMessage(902, 'user-902-restarted'))
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.equal(lookupCount, 1)
+  assert.equal(testable.activeStickerDetailLookup, null)
+  assert.equal(testable.pendingStickerDetails.size, 1)
+  assert.ok(testable.stickerDetailLookupBlocker)
+
+  finishHungLookup()
+  await waitFor(() => lookupCount === 2 && stickerQueueIdle(testable))
+  assert.deepEqual(
+    restartedWires
+      .map(wire => JSON.parse(wire) as Record<string, unknown>)
+      .filter(event => event.kind === 'zalo.event')
+      .map(event => event.eventType),
+    ['message', 'sticker_details']
+  )
+  assert.equal(testable.activeStickerDetailLookup, null)
+  assert.equal(testable.stickerDetailLookupBlocker, null)
+  assert.equal(testable.pendingStickerDetails.size, 0)
+  assert.equal(lookupCount, 2)
+  harness.service.stop()
+}
+
+async function testGenerationChangeQueuesBehindExistingStickerLookup(): Promise<void> {
+  let lookupCount = 0
+  let finishOldLookup!: () => void
+  const harness = await prepareStickerHarness(async stickerIds => {
+    lookupCount += 1
+    if (lookupCount === 1) {
+      return new Promise<unknown[]>(resolve => {
+        finishOldLookup = () => resolve(stickerIds.map(stickerDetail))
+      })
+    }
+    return stickerIds.map(stickerDetail)
+  })
+  const testable = harness.service as TestableSyncService
+
+  harness.message(stickerMessage(911, 'user-911-old-generation'))
+  await waitFor(() => lookupCount === 1 && testable.stickerDetailLookupBlocker !== null)
+  testable.bindings.set(accountId, { ...binding, runtimeGeneration: '10' })
+  harness.message(stickerMessage(912, 'user-912-new-generation'))
+  await new Promise<void>(resolve => setImmediate(resolve))
+
+  assert.equal(lookupCount, 1)
+  assert.ok(testable.pendingStickerDetails.size >= 2)
+  finishOldLookup()
+  await waitFor(() => lookupCount === 2 && stickerQueueIdle(testable))
+
+  const relevantEvents = runtimeEvents(harness.messages)
+    .filter(event => ['message', 'sticker_details'].includes(String(event.eventType)))
+  assert.deepEqual(
+    relevantEvents.map(event => [event.eventType, event.runtimeGeneration]),
+    [
+      ['message', '9'],
+      ['message', '10'],
+      ['sticker_details', '10']
+    ]
+  )
+  const derivedItems = (relevantEvents[2].payload as { items: Array<Record<string, unknown>> }).items
+  assert.deepEqual(derivedItems.map(item => item.stickerZaloId), ['912'])
+  harness.service.stop()
+}
+
+async function testStickerDetailDerivedPublishStopsAtGenerationOrServiceBoundary(): Promise<void> {
+  for (const staleBy of ['generation', 'stop'] as const) {
+    let finishLookup!: (details: unknown[]) => void
+    let lookupStarted = false
+    const harness = await prepareStickerHarness(async () => {
+      lookupStarted = true
+      return new Promise<unknown[]>(resolve => { finishLookup = resolve })
+    })
+    const testable = harness.service as TestableSyncService
+    harness.message(stickerMessage(803, `user-803-${staleBy}`))
+    await waitFor(() => lookupStarted)
+
+    if (staleBy === 'generation') {
+      testable.bindings.set(accountId, { ...binding, runtimeGeneration: '10' })
+    } else {
+      harness.service.stop()
+    }
+
+    finishLookup([stickerDetail(803)])
+    if (staleBy === 'generation') {
+      await waitFor(() => stickerQueueIdle(testable))
+    } else {
+      await new Promise<void>(resolve => setImmediate(resolve))
+    }
+    const eventTypes = runtimeEvents(harness.messages)
+      .filter(event => ['message', 'sticker_details'].includes(String(event.eventType)))
+      .map(event => event.eventType)
+    assert.deepEqual(eventTypes, ['message'])
+    if (staleBy === 'generation') harness.service.stop()
+  }
+}
+
 async function main(): Promise<void> {
   await testSingleAttachLifecycle()
   await testSameStateWithChangedDetailsRemainsVisible()
@@ -981,6 +1511,16 @@ async function main(): Promise<void> {
   await testLocalListenerRetryBudgetIsPerAccountAndManuallyResettable()
   await testShortReadyFlapsStillExhaustTheLocalListenerBudget()
   await testControlReconnectStopsAfterTenAttemptsAndKeepsPending()
+  await testStickerDetailsPublishRawFirstAndReuseInflightCache()
+  await testOldStickerDetailsDedupeLookupAndFanOutConversations()
+  await testStickerDetailFailureIsNegativeCachedAndDoesNotChangeRuntimeState()
+  await testStickerDetailsQueueWhileControlSocketIsClosed()
+  await testStickerDetailsNeverEvictRawPendingEvents()
+  await testStickerDetailsSurviveControlReconnectWithinGeneration()
+  await testStickerDetailQueueDrainsSaturatedHistorySequentially()
+  await testHungStickerLookupCannotBlockOrCorruptRestartedService()
+  await testGenerationChangeQueuesBehindExistingStickerLookup()
+  await testStickerDetailDerivedPublishStopsAtGenerationOrServiceBoundary()
   console.log('Zalo local Chat sync status smoke test passed.')
 }
 
