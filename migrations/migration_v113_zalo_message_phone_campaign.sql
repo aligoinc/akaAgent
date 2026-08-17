@@ -81,7 +81,7 @@ INSERT INTO public.auto_error (
   update_login_status
 )
 VALUES
-  ('external zalo', 'Zalo không tồn tại', 'Không tìm thấy user Zalo hợp lệ từ SĐT/user id', 'err_zalo_user_not_found', NULL, 'Không tồn tại', 'Không tồn tại', NULL, NULL, '{}'::text[], NULL, NULL, ARRAY['216','214']::text[], 'không tồn tại', true, false, NULL),
+  ('external zalo', 'Zalo không tồn tại', 'Không tìm thấy user Zalo hợp lệ từ SĐT/user id', 'err_zalo_user_not_found', NULL, 'Không tồn tại', 'Không tồn tại', NULL, NULL, '{}'::text[], NULL, NULL, ARRAY['216','214','212']::text[], 'không tồn tại', true, false, NULL),
   ('external zalo', 'Tham số không hợp lệ', 'Zalo trả lỗi tham số không hợp lệ', 'err_zalo_invalid_param', NULL, 'Tham số không hợp lệ', 'Tham số không hợp lệ', NULL, NULL, '{}'::text[], NULL, NULL, ARRAY['114']::text[], 'thất bại', true, true, NULL),
   ('external zalo', 'Đạt giới hạn tìm SĐT', 'Zalo trả lỗi đạt giới hạn tìm kiếm số điện thoại', 'err_zalo_find_phone_limit', NULL, 'Đạt giới hạn tìm kiếm SĐT', 'Đạt giới hạn tìm kiếm SĐT, tạm nghỉ [x] phút', NULL, NULL, ARRAY['zalo_find_phone_user']::text[], 60, NULL, ARRAY['312','313','304','221']::text[], NULL, true, false, NULL),
   ('external zalo', 'Người nhận chặn tin nhắn người lạ', 'Người nhận không nhận tin nhắn từ người lạ', 'err_zalo_receiver_blocks_stranger_message', NULL, 'Người nhận chặn tin nhắn từ người lạ', 'Người nhận chặn tin nhắn từ người lạ', NULL, NULL, '{}'::text[], NULL, NULL, ARRAY['122']::text[], 'thất bại', true, false, NULL),
