@@ -8299,8 +8299,6 @@ export class CampaignScheduler {
           created.actionName || actionDetail.actionName,
           this.getCampaignDetailRootReason(created) || this.getCampaignDetailRootReason(actionDetail as Partial<CampaignDetail>)
         )
-      } else if (created.status === 'thành công') {
-        summary.hasSuccess = true
       }
 
       if (created.log) {
@@ -11535,6 +11533,22 @@ export class CampaignScheduler {
     }
   }
 
+  /**
+   * These actions enrich a target after the workflow's main outcome. Their
+   * result is still persisted, but it must not change the campaign's
+   * consecutive-bad-target safety counter in either direction.
+   */
+  private isAuxiliaryZaloTargetAction(actionCode: string): boolean {
+    return actionCode === 'zalo_tag_contact' || actionCode === 'zalo_change_alias'
+  }
+
+  private shouldCountZaloActionTowardBadTarget(
+    actionCode: string,
+    policy: AutoErrorPolicy | null
+  ): boolean {
+    return !this.isAuxiliaryZaloTargetAction(actionCode) && (policy?.countsTowardBadTarget ?? true)
+  }
+
   private getZaloTargetPayload(data: Record<string, unknown>): Record<string, unknown> {
     const target = data.target
     if (target && typeof target === 'object' && !Array.isArray(target)) {
@@ -11663,7 +11677,7 @@ export class CampaignScheduler {
       errorCode: policy?.errorCode || null,
       log,
       countsTowardLimit: policy?.countsTowardLimit ?? true,
-      countsTowardBadTarget: policy?.countsTowardBadTarget ?? true,
+      countsTowardBadTarget: this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
       resetInputToPending: !detailStatus,
       pendingNote: log,
       stopAfterTarget: sideEffects.stopAfterTarget,
@@ -11707,7 +11721,7 @@ export class CampaignScheduler {
       errorCode: policy?.errorCode || null,
       log,
       countsTowardLimit: policy?.countsTowardLimit ?? true,
-      countsTowardBadTarget: policy?.countsTowardBadTarget ?? true,
+      countsTowardBadTarget: this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
       resetInputToPending: !detailStatus,
       pendingNote: log,
       stopAfterTarget: sideEffects.stopAfterTarget,
@@ -11739,7 +11753,7 @@ export class CampaignScheduler {
       log: input.log,
       data: input.data || {},
       countsTowardLimit: input.countsTowardLimit ?? true,
-      countsTowardBadTarget: false
+      countsTowardBadTarget: !this.isAuxiliaryZaloTargetAction(input.actionCode)
     }
   }
 
