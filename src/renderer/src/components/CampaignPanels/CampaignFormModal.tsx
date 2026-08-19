@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3 } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -199,8 +199,23 @@ interface ContentTemplatePickerModalState {
   target: AiContentTarget
   title: string
   searchQuery: string
-  groupId: number | null
+  groupId: number | 'ungrouped' | null
+  groupSearchQuery: string
+  groupStatus: 'all' | 'active' | 'inactive'
+  view: 'card' | 'list' | 'detail'
+  sort: 'newest' | 'oldest' | 'name' | 'variants'
   selectedTemplateId: number | null
+}
+
+const contentTemplateGroupMatchesPickerFilters = (
+  group: ContentTemplateGroup,
+  status: ContentTemplatePickerModalState['groupStatus'],
+  normalizedQuery: string
+) => {
+  if (group.isDelete) return false
+  if (status === 'active' && !group.isActive) return false
+  if (status === 'inactive' && group.isActive) return false
+  return !normalizedQuery || `${group.name}\n${group.description || ''}`.toLocaleLowerCase('vi').includes(normalizedQuery)
 }
 
 interface ContentTemplateSaveModalState {
@@ -2252,6 +2267,8 @@ export default function CampaignFormModal({
   const [previewContentTemplateGroupId, setPreviewContentTemplateGroupId] = useState<number | null>(null)
   const [previewContentTemplateId, setPreviewContentTemplateId] = useState<number | null>(null)
   const [previewContentTemplateChannel, setPreviewContentTemplateChannel] = useState<ContentTemplateChannelName | null>(null)
+  const [contentTemplateGroupSearch, setContentTemplateGroupSearch] = useState('')
+  const [contentTemplateGroupStatus, setContentTemplateGroupStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [contentTemplateSaving, setContentTemplateSaving] = useState(false)
   const [contentPreviewModal, setContentPreviewModal] = useState<ContentPreviewModalData | null>(null)
   const [zaloLabels, setZaloLabels] = useState<ZaloLabelOption[]>([])
@@ -4777,6 +4794,10 @@ export default function CampaignFormModal({
       title: `Chọn mẫu cho ${CONTENT_TEMPLATE_TARGET_LABELS[target]}`,
       searchQuery: '',
       groupId: null,
+      groupSearchQuery: '',
+      groupStatus: 'all',
+      view: 'card',
+      sort: 'newest',
       selectedTemplateId: null
     })
     if (contentTemplates.length === 0) void loadContentTemplates()
@@ -13246,6 +13267,19 @@ export default function CampaignFormModal({
     setPreviewContentTemplateChannel(getInitialContentTemplatePreviewChannel(initialTemplate, advancedContentTargetChannel))
   }
 
+  const openContentTemplateGroupPicker = () => {
+    setContentTemplateGroupSearch('')
+    setContentTemplateGroupStatus('all')
+    const initialGroup = contentTemplateGroups.find(group => group.id === candidateContentTemplateGroupId && !group.isDelete)
+      || contentTemplateGroups.find(group => group.isActive && !group.isDelete)
+      || contentTemplateGroups.find(group => !group.isDelete)
+    if (initialGroup) {
+      openContentTemplateGroupPreview(initialGroup.id)
+      return
+    }
+    if (advancedContentTargetChannel) openContentTemplateManager(advancedContentTargetChannel)
+  }
+
   const clearCandidateContentTemplateGroup = () => {
     setCandidateContentTemplateGroupId(null)
     setPendingContentTemplateGroupId(null)
@@ -13297,29 +13331,15 @@ export default function CampaignFormModal({
                 <label>Chọn nhóm mẫu cho {channel ? getContentTemplateChannelLabel(channel) : 'hành động đã chọn'} <span className="required">*</span></label>
                 <div className="campaign-advanced-group-picker-row">
                   <div className="campaign-advanced-group-select-wrap">
-                    <select
+                    <button
+                      type="button"
                       className="campaign-advanced-group-select"
                       aria-label={`Chọn nhóm mẫu cho ${channel ? getContentTemplateChannelLabel(channel) : 'hành động đã chọn'}`}
-                      value={candidateContentTemplateGroupId ?? ''}
-                      onChange={event => {
-                        const groupId = event.target.value ? Number(event.target.value) : null
-                        setCandidateContentTemplateGroupId(groupId)
-                        setPendingContentTemplateGroupId(groupId)
-                      }}
+                      onClick={openContentTemplateGroupPicker}
                       disabled={contentTemplatesLoading}
                     >
-                      <option value="">— Chọn một nhóm mẫu —</option>
-                      {contentTemplateGroups.filter(group => !group.isDelete).map(group => {
-                        const compatibleCount = channel
-                          ? buildContentTemplateGroupCandidate(contentTemplates, group, channel, mainMediaSelectionMode).compatibleTemplateCount
-                          : 0
-                        return (
-                          <option key={group.id} value={group.id}>
-                            {group.name}{group.isActive === false ? ' (Ngừng hoạt động)' : ''} — {compatibleCount} mẫu {channel ? getContentTemplateChannelLabel(channel) : ''}
-                          </option>
-                        )
-                      })}
-                    </select>
+                      {candidate ? `${candidate.groupName} · ${candidate.compatibleTemplateCount} mẫu phù hợp` : '— Chọn một nhóm mẫu —'}
+                    </button>
                     <ChevronDown size={17} aria-hidden="true" />
                   </div>
                   <button
@@ -13335,10 +13355,10 @@ export default function CampaignFormModal({
                   <button
                     type="button"
                     className="btn btn-ghost campaign-advanced-group-row-action"
-                    onClick={() => candidate && openContentTemplateGroupPreview(candidate.groupId)}
-                    disabled={!candidate}
+                    onClick={openContentTemplateGroupPicker}
+                    disabled={contentTemplatesLoading || contentTemplateGroups.filter(group => !group.isDelete).length === 0}
                   >
-                    <Eye size={16} /> Xem
+                    <FolderOpen size={16} /> Chọn nhóm
                   </button>
                   <button
                     type="button"
@@ -13408,7 +13428,7 @@ export default function CampaignFormModal({
                   </div>
                 ) : (
                   <div className="campaign-advanced-group-empty">
-                    Chọn một nhóm mẫu để dùng. Nút <strong>Xem</strong> chỉ dùng khi bạn muốn kiểm tra nội dung.
+                    Chọn một nhóm trong thư viện để xem mức độ phù hợp trước khi áp dụng.
                   </div>
                 )}
               </div>
@@ -14042,6 +14062,7 @@ export default function CampaignFormModal({
   const renderContentTemplatePickerModal = () => {
     if (!contentTemplatePicker) return null
     const query = contentTemplatePicker.searchQuery.trim().toLowerCase()
+    const groupQuery = contentTemplatePicker.groupSearchQuery.trim().toLocaleLowerCase('vi')
     const targetChannel = getContentTemplateTargetChannel(contentTemplatePicker.target)
     const targetMediaMode: MediaSelectionMode = contentTemplatePicker.target === 'commentContent'
       ? 'image-video'
@@ -14059,13 +14080,27 @@ export default function CampaignFormModal({
         ? [{ template, resolved }]
         : []
     })
-    const filteredTemplates = compatibleTemplates.filter(({ template }) => (
-      (contentTemplatePicker.groupId === null || template.groupId === contentTemplatePicker.groupId) &&
-      (!query || getContentTemplateSearchText(template).includes(query))
-    ))
-    const selectedEntry = filteredTemplates.find(({ template }) => (
+    const filteredTemplates = compatibleTemplates.filter(({ template }) => {
+      const matchesGroup = contentTemplatePicker.groupId === null
+        ? true
+        : contentTemplatePicker.groupId === 'ungrouped'
+          ? template.groupId === null
+          : template.groupId === contentTemplatePicker.groupId
+      return matchesGroup && (!query || getContentTemplateSearchText(template).includes(query))
+    })
+    const dateValue = (template: ContentTemplate) => {
+      const value = new Date(template.updatedAt || template.createdAt || 0).getTime()
+      return Number.isNaN(value) ? 0 : value
+    }
+    const sortedTemplates = [...filteredTemplates].sort((left, right) => {
+      if (contentTemplatePicker.sort === 'oldest') return dateValue(left.template) - dateValue(right.template)
+      if (contentTemplatePicker.sort === 'name') return left.template.name.localeCompare(right.template.name, 'vi')
+      if (contentTemplatePicker.sort === 'variants') return right.resolved.variants.length - left.resolved.variants.length
+      return dateValue(right.template) - dateValue(left.template)
+    })
+    const selectedEntry = sortedTemplates.find(({ template }) => (
       template.id === contentTemplatePicker.selectedTemplateId
-    )) || filteredTemplates[0] || null
+    )) || sortedTemplates[0] || null
     const selectedTemplate = selectedEntry?.template || null
     const selectedResolved = selectedEntry?.resolved || null
     const targetSupportsRich = contentTemplatePicker.target === 'content' && (
@@ -14082,11 +14117,96 @@ export default function CampaignFormModal({
       : contentTemplatePicker.target === 'postBumpContent'
         ? []
         : filterTargetTemplateMediaUrls(selectedResolved.imageUrls)
+    const visibleGroups = contentTemplateGroups
+      .filter(group => contentTemplateGroupMatchesPickerFilters(group, contentTemplatePicker.groupStatus, groupQuery))
+      .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name, 'vi'))
+    const groupCompatibleCount = (groupId: number | 'ungrouped' | null) => compatibleTemplates.filter(({ template }) => (
+      groupId === null
+        ? true
+        : groupId === 'ungrouped'
+          ? template.groupId === null
+          : template.groupId === groupId
+    )).length
+    const selectGroup = (groupId: number | 'ungrouped' | null) => setContentTemplatePicker(previous => previous
+      ? { ...previous, groupId, selectedTemplateId: null }
+      : previous)
+    const updateGroupFilters = (
+      updates: Partial<Pick<ContentTemplatePickerModalState, 'groupSearchQuery' | 'groupStatus'>>
+    ) => setContentTemplatePicker(previous => {
+      if (!previous) return previous
+      const next = { ...previous, ...updates }
+      if (typeof next.groupId !== 'number') return next
+      const nextQuery = next.groupSearchQuery.trim().toLocaleLowerCase('vi')
+      const selectedGroupIsVisible = contentTemplateGroups.some(group => (
+        group.id === next.groupId && contentTemplateGroupMatchesPickerFilters(group, next.groupStatus, nextQuery)
+      ))
+      return selectedGroupIsVisible
+        ? next
+        : { ...next, groupId: null, selectedTemplateId: null }
+    })
+    const selectTemplate = (templateId: number) => setContentTemplatePicker(previous => previous
+      ? { ...previous, selectedTemplateId: templateId }
+      : previous)
+    const formatUpdatedAt = (template: ContentTemplate) => {
+      const value = template.updatedAt || template.createdAt
+      if (!value) return ''
+      const date = new Date(value)
+      return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('vi-VN')
+    }
+    const renderChannelBadges = (template: ContentTemplate) => (
+      CONTENT_TEMPLATE_PREVIEW_CHANNEL_ORDER.map(channelName => (
+        template.channels[channelName]?.enabled
+          ? <span className={`content-template-picker-channel-badge ${channelName}`} key={channelName}>{getContentTemplateChannelLabel(channelName)}</span>
+          : null
+      ))
+    )
+    const renderTemplateCard = ({ template, resolved }: typeof sortedTemplates[number]) => {
+      const excerpt = resolved.rich
+        ? formattedContentToPlainText(resolved.variants[0])
+        : resolved.variants[0]
+      const selected = selectedTemplate?.id === template.id
+      const mediaCount = targetChannel === 'sms' || contentTemplatePicker.target === 'postBumpContent'
+        ? 0
+        : filterTargetTemplateMediaUrls(resolved.imageUrls).length
+      return (
+        <button
+          key={template.id}
+          type="button"
+          className={`content-template-picker-v2-card${selected ? ' is-selected' : ''}`}
+          onClick={() => selectTemplate(template.id)}
+          aria-pressed={selected}
+        >
+          <div className="content-template-picker-v2-card-head">
+            <span className={`content-template-picker-v2-mark${selected ? ' is-selected' : ''}`}>
+              {selected && <Check size={11} />}
+            </span>
+            <span className="content-template-picker-v2-card-title">{template.name}</span>
+          </div>
+          <div className="content-template-picker-item-meta">
+            <span className="content-template-picker-group-badge">{template.groupName || 'Chưa phân nhóm'}</span>
+            {renderChannelBadges(template)}
+          </div>
+          <p className="content-template-picker-item-excerpt">{excerpt}</p>
+          <div className="content-template-picker-item-footer">
+            <span>{resolved.variants.length} biến thể</span>
+            <span>{mediaCount} media</span>
+            {formatUpdatedAt(template) && <span>Cập nhật {formatUpdatedAt(template)}</span>}
+          </div>
+        </button>
+      )
+    }
+
     return (
       <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: Math.max(3100, (modalZIndex || 3000) + 100) }}>
-        <div className="content-template-picker-modal">
-          <div className="modal-header">
-            <span className="modal-title">{contentTemplatePicker.title}</span>
+        <div className="content-template-picker-modal content-template-picker-v2" role="dialog" aria-modal="true" aria-label={contentTemplatePicker.title}>
+          <div className="modal-header content-template-picker-v2-header">
+            <div className="content-template-picker-v2-heading">
+              <span className="content-template-picker-v2-heading-icon"><FileText size={19} /></span>
+              <div>
+                <span className="modal-title">{contentTemplatePicker.title}</span>
+                <span>Chọn một mẫu, xem trước rồi áp dụng vào bước Nội dung.</span>
+              </div>
+            </div>
             <button
               type="button"
               className="btn-icon"
@@ -14097,110 +14217,170 @@ export default function CampaignFormModal({
               <X size={18} />
             </button>
           </div>
-          <div className="content-template-picker-body">
-            <div className="content-template-picker-toolbar">
-              <label className="content-template-picker-search">
-                <Search size={15} />
+          <div className="content-template-picker-body content-template-picker-v2-body">
+            <aside className="content-template-picker-v2-groups" aria-label="Nhóm nội dung">
+              <div className="content-template-picker-v2-panel-title">
+                <strong>NHÓM NỘI DUNG</strong>
+                <span>{visibleGroups.length}</span>
+              </div>
+              <label className="content-template-picker-v2-compact-search">
+                <Search size={14} />
                 <input
-                  value={contentTemplatePicker.searchQuery}
-                  onChange={event => setContentTemplatePicker(prev => prev ? {
-                    ...prev,
-                    searchQuery: event.target.value,
-                    selectedTemplateId: null
-                  } : prev)}
-                  placeholder="Tìm mẫu nội dung"
-                  aria-label="Tìm mẫu nội dung"
+                  value={contentTemplatePicker.groupSearchQuery}
+                  onChange={event => updateGroupFilters({ groupSearchQuery: event.target.value })}
+                  placeholder="Tìm nhóm..."
+                  aria-label="Tìm nhóm mẫu nội dung"
                 />
               </label>
-              <select
-                className="stepper-select content-template-picker-group-select"
-                value={contentTemplatePicker.groupId ?? ''}
-                onChange={event => setContentTemplatePicker(prev => prev
-                  ? {
-                      ...prev,
-                      groupId: event.target.value ? Number(event.target.value) : null,
-                      selectedTemplateId: null
-                    }
-                  : prev)}
-                aria-label="Lọc theo nhóm mẫu"
-              >
-                <option value="">Tất cả nhóm</option>
-                {contentTemplateGroups.map(group => (
-                  <option key={group.id} value={group.id}>{group.name}</option>
+              <div className="content-template-picker-v2-segments" role="group" aria-label="Trạng thái nhóm">
+                {([
+                  ['all', 'Tất cả'],
+                  ['active', 'Đang bật'],
+                  ['inactive', 'Đã tắt']
+                ] as const).map(([value, label]) => (
+                  <button
+                    type="button"
+                    key={value}
+                    className={contentTemplatePicker.groupStatus === value ? 'active' : ''}
+                    aria-pressed={contentTemplatePicker.groupStatus === value}
+                    onClick={() => updateGroupFilters({ groupStatus: value })}
+                  >
+                    {label}
+                  </button>
                 ))}
-              </select>
-              <button
-                type="button"
-                className="btn-icon content-template-picker-refresh"
-                onClick={() => void loadContentTemplates()}
-                disabled={contentTemplatesLoading}
-                title="Tải lại danh sách"
-                aria-label="Tải lại danh sách mẫu nội dung"
-              >
-                <RefreshCw size={15} className={contentTemplatesLoading ? 'spin' : ''} />
-              </button>
-            </div>
-            <div className="content-template-picker-layout">
-              <section className="content-template-picker-sidebar" aria-label="Danh sách mẫu phù hợp">
-                <div className="content-template-picker-pane-header">
-                  <strong>Danh sách mẫu</strong>
-                  <span>{filteredTemplates.length}</span>
+              </div>
+              <div className="content-template-picker-v2-match-chip"><Braces size={13} />{getContentTemplateChannelLabel(targetChannel)}</div>
+              <div className="content-template-picker-v2-group-list">
+                <button type="button" className={contentTemplatePicker.groupId === null ? 'active' : ''} aria-pressed={contentTemplatePicker.groupId === null} onClick={() => selectGroup(null)}>
+                  <FolderOpen size={15} />
+                  <span><strong>Tất cả mẫu</strong><small>Mẫu phù hợp chiến dịch</small></span>
+                  <em>{groupCompatibleCount(null)}</em>
+                </button>
+                <button type="button" className={contentTemplatePicker.groupId === 'ungrouped' ? 'active' : ''} aria-pressed={contentTemplatePicker.groupId === 'ungrouped'} onClick={() => selectGroup('ungrouped')}>
+                  <FileText size={15} />
+                  <span><strong>Chưa phân nhóm</strong><small>Mẫu chưa gắn nhóm</small></span>
+                  <em>{groupCompatibleCount('ungrouped')}</em>
+                </button>
+                {visibleGroups.map(group => (
+                  <button
+                    type="button"
+                    key={group.id}
+                    className={`${contentTemplatePicker.groupId === group.id ? 'active' : ''}${group.isActive ? '' : ' inactive'}`}
+                    aria-pressed={contentTemplatePicker.groupId === group.id}
+                    onClick={() => selectGroup(group.id)}
+                  >
+                    <FolderCog size={15} />
+                    <span><strong>{group.name}</strong><small>{group.isActive ? (group.description || 'Nhóm mẫu nội dung') : 'Ngừng hoạt động'}</small></span>
+                    <em>{groupCompatibleCount(group.id)}</em>
+                  </button>
+                ))}
+              </div>
+              <div className="content-template-picker-v2-groups-note">Chỉ hiển thị mẫu có nội dung phù hợp với hành động đang chọn.</div>
+            </aside>
+
+            <section className="content-template-picker-v2-library" aria-label="Danh sách mẫu phù hợp">
+              <div className="content-template-picker-v2-toolbar">
+                <label className="content-template-picker-search">
+                  <Search size={15} />
+                  <input
+                    value={contentTemplatePicker.searchQuery}
+                    onChange={event => setContentTemplatePicker(previous => previous ? {
+                      ...previous,
+                      searchQuery: event.target.value,
+                      selectedTemplateId: null
+                    } : previous)}
+                    placeholder="Tìm theo tên mẫu hoặc nội dung..."
+                    aria-label="Tìm mẫu nội dung"
+                  />
+                </label>
+                <div className="content-template-picker-v2-channel-filter"><Braces size={14} /><span>{getContentTemplateChannelLabel(targetChannel)}</span></div>
+                <button
+                  type="button"
+                  className="btn-icon content-template-picker-refresh"
+                  onClick={() => void loadContentTemplates()}
+                  disabled={contentTemplatesLoading}
+                  title="Tải lại danh sách"
+                  aria-label="Tải lại danh sách mẫu nội dung"
+                >
+                  <RefreshCw size={15} className={contentTemplatesLoading ? 'spin' : ''} />
+                </button>
+              </div>
+              <div className="content-template-picker-v2-listbar">
+                <div><strong>{sortedTemplates.length} mẫu nội dung</strong><span>Đã lọc theo {getContentTemplateChannelLabel(targetChannel)}</span></div>
+                <select
+                  value={contentTemplatePicker.sort}
+                  onChange={event => setContentTemplatePicker(previous => previous ? {
+                    ...previous,
+                    sort: event.target.value as ContentTemplatePickerModalState['sort']
+                  } : previous)}
+                  aria-label="Sắp xếp mẫu nội dung"
+                >
+                  <option value="newest">Mới cập nhật</option>
+                  <option value="oldest">Cũ nhất</option>
+                  <option value="name">Tên A → Z</option>
+                  <option value="variants">Nhiều biến thể nhất</option>
+                </select>
+                <div className="content-template-picker-v2-view-switch" role="group" aria-label="Kiểu hiển thị">
+                  <button type="button" className={contentTemplatePicker.view === 'card' ? 'active' : ''} aria-label="Xem dạng thẻ" aria-pressed={contentTemplatePicker.view === 'card'} onClick={() => setContentTemplatePicker(previous => previous ? { ...previous, view: 'card' } : previous)} title="Xem dạng thẻ"><LayoutGrid size={15} /></button>
+                  <button type="button" className={contentTemplatePicker.view === 'list' ? 'active' : ''} aria-label="Xem dạng danh sách" aria-pressed={contentTemplatePicker.view === 'list'} onClick={() => setContentTemplatePicker(previous => previous ? { ...previous, view: 'list' } : previous)} title="Xem dạng danh sách"><List size={15} /></button>
+                  <button type="button" className={contentTemplatePicker.view === 'detail' ? 'active' : ''} aria-label="Xem chi tiết biến thể" aria-pressed={contentTemplatePicker.view === 'detail'} onClick={() => setContentTemplatePicker(previous => previous ? { ...previous, view: 'detail' } : previous)} title="Xem chi tiết biến thể"><Rows3 size={15} /></button>
                 </div>
-                <div className="content-template-picker-list">
-                  {contentTemplatesLoading ? (
-                    <div className="content-template-picker-empty">Đang tải mẫu nội dung...</div>
-                  ) : filteredTemplates.length === 0 ? (
-                    <div className="content-template-picker-empty">
-                      {contentTemplates.length === 0
-                        ? 'Chưa có mẫu nội dung.'
-                        : 'Không có mẫu nội dung phù hợp với chiến dịch và bộ lọc hiện tại.'}
-                    </div>
-                  ) : filteredTemplates.map(({ template, resolved }) => {
-                    const excerpt = resolved.rich
-                      ? formattedContentToPlainText(resolved.variants[0])
-                      : resolved.variants[0]
-                    const selected = selectedTemplate?.id === template.id
-                    const mediaCount = targetChannel === 'sms' || contentTemplatePicker.target === 'postBumpContent'
-                      ? 0
-                      : filterTargetTemplateMediaUrls(resolved.imageUrls).length
-                    return <button
-                      key={template.id}
-                      type="button"
-                      className={`content-template-picker-item${selected ? ' is-selected' : ''}`}
-                      onClick={() => setContentTemplatePicker(prev => prev ? {
-                        ...prev,
-                        selectedTemplateId: template.id
-                      } : prev)}
-                      aria-pressed={selected}
-                    >
-                      <div className="content-template-picker-item-header">
-                        <span className="content-template-picker-item-title">{template.name}</span>
-                      </div>
-                      <div className="content-template-picker-item-meta">
-                        <span className="content-template-picker-group-badge">{template.groupName || 'Chưa phân nhóm'}</span>
-                        {Object.entries(template.channels).map(([channelName, config]) => (
-                          config?.enabled
-                            ? (
-                                <span
-                                  className={`content-template-picker-channel-badge ${channelName}`}
-                                  key={channelName}
-                                >
-                                  {getContentTemplateChannelLabel(channelName as ContentTemplateChannelName)}
-                                </span>
-                              )
-                            : null
-                        ))}
-                      </div>
-                      <p className="content-template-picker-item-excerpt">{excerpt}</p>
-                      <div className="content-template-picker-item-footer">
-                        <span>{resolved.variants.length} biến thể phù hợp</span>
-                        <span>{mediaCount} media</span>
-                      </div>
-                    </button>
-                  })}
-                </div>
-              </section>
-              <section className="content-template-picker-preview" aria-label="Xem trước mẫu nội dung">
+              </div>
+              <div className={`content-template-picker-v2-results ${contentTemplatePicker.view}`}>
+                {contentTemplatesLoading ? (
+                  <div className="content-template-picker-empty">Đang tải mẫu nội dung...</div>
+                ) : sortedTemplates.length === 0 ? (
+                  <div className="content-template-picker-empty">
+                    {contentTemplates.length === 0
+                      ? 'Chưa có mẫu nội dung.'
+                      : 'Không có mẫu nội dung phù hợp với chiến dịch và bộ lọc hiện tại.'}
+                  </div>
+                ) : contentTemplatePicker.view === 'card' ? (
+                  <div className="content-template-picker-v2-card-grid">{sortedTemplates.map(renderTemplateCard)}</div>
+                ) : contentTemplatePicker.view === 'list' ? (
+                  <div className="content-template-picker-v2-table">
+                    <div className="content-template-picker-v2-table-head"><span>Mẫu nội dung</span><span>Nhóm</span><span>Biến thể</span><span>Media</span></div>
+                    {sortedTemplates.map(({ template, resolved }) => {
+                      const selected = selectedTemplate?.id === template.id
+                      const mediaCount = targetChannel === 'sms' || contentTemplatePicker.target === 'postBumpContent'
+                        ? 0
+                        : filterTargetTemplateMediaUrls(resolved.imageUrls).length
+                      return (
+                        <button type="button" key={template.id} className={selected ? 'is-selected' : ''} aria-pressed={selected} onClick={() => selectTemplate(template.id)}>
+                          <span className="content-template-picker-v2-table-name"><span className={`content-template-picker-v2-mark${selected ? ' is-selected' : ''}`}>{selected && <Check size={11} />}</span><strong>{template.name}</strong></span>
+                          <span>{template.groupName || 'Chưa phân nhóm'}</span>
+                          <span>{resolved.variants.length}</span>
+                          <span>{mediaCount}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="content-template-picker-v2-detail-list">
+                    {sortedTemplates.map(({ template, resolved }) => {
+                      const selected = selectedTemplate?.id === template.id
+                      return (
+                        <button type="button" key={template.id} className={selected ? 'is-selected' : ''} aria-pressed={selected} onClick={() => selectTemplate(template.id)}>
+                          <div className="content-template-picker-v2-detail-head">
+                            <span className={`content-template-picker-v2-mark${selected ? ' is-selected' : ''}`}>{selected && <Check size={11} />}</span>
+                            <strong>{template.name}</strong>
+                            <span>{template.groupName || 'Chưa phân nhóm'}</span>
+                          </div>
+                          <div className="content-template-picker-v2-variant-lines">
+                            {resolved.variants.slice(0, 3).map((variant, index) => (
+                              <span key={index}><em>BT {index + 1}</em>{resolved.rich ? formattedContentToPlainText(variant) : variant}</span>
+                            ))}
+                            {resolved.variants.length > 3 && <small>+{resolved.variants.length - 3} biến thể khác</small>}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="content-template-picker-preview content-template-picker-v2-preview" aria-label="Xem trước mẫu nội dung">
                 {selectedTemplate && selectedResolved ? (
                   <>
                     <div className="content-template-picker-preview-header">
@@ -14209,6 +14389,7 @@ export default function CampaignFormModal({
                         <span>Mẫu này có nội dung phù hợp với chiến dịch</span>
                       </div>
                     </div>
+                    <div className="content-template-picker-v2-platform-chip"><span>{getContentTemplateChannelLabel(targetChannel)}</span><em>Mẫu phù hợp</em></div>
                     <div className="content-template-picker-preview-meta">
                       <strong>{getContentTemplateChannelLabel(targetChannel)}</strong>
                       <span>
@@ -14223,7 +14404,13 @@ export default function CampaignFormModal({
                         formatted={previewFormatted}
                         subject={selectedResolved.subject}
                         imageUrls={previewImageUrls}
+                        showSampleData
                       />
+                    </div>
+                    <div className="content-template-picker-v2-sample-data">
+                      <strong>DỮ LIỆU THAY THẾ KHI GỬI</strong>
+                      <span><code>{'#{FULL_NAME}'}</code> Nguyễn Thị Lan</span>
+                      <span><code>{'#{PHONE}'}</code> 0938 xxx 214</span>
                     </div>
                   </>
                 ) : (
@@ -14233,29 +14420,42 @@ export default function CampaignFormModal({
                     <span>Thay đổi bộ lọc hoặc tạo thêm mẫu phù hợp với chiến dịch.</span>
                   </div>
                 )}
-              </section>
-            </div>
+            </section>
           </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setContentTemplatePicker(null)}>Huỷ</button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => selectedTemplate && applyContentTemplate(selectedTemplate)}
-              disabled={!selectedTemplate || contentTemplatesLoading}
-            >
-              <Check size={14} /> Áp dụng mẫu
-            </button>
+          <div className="modal-footer content-template-picker-v2-footer">
+            <span>{selectedTemplate ? `Đã chọn: ${selectedTemplate.name}` : 'Chưa chọn mẫu nội dung'}</span>
+            <div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setContentTemplatePicker(null)}>Huỷ</button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => selectedTemplate && applyContentTemplate(selectedTemplate)}
+                disabled={!selectedTemplate || contentTemplatesLoading}
+              >
+                <Check size={14} /> Áp dụng mẫu
+              </button>
+            </div>
           </div>
         </div>
       </div>
     )
   }
 
-  const renderContentTemplateGroupPreviewModal = () => {
+  const renderContentTemplateGroupPickerModal = () => {
     if (previewContentTemplateGroupId === null) return null
-    const group = contentTemplateGroups.find(item => item.id === previewContentTemplateGroupId)
-    const templates = contentTemplates.filter(template => template.groupId === previewContentTemplateGroupId && !template.isDelete)
+
+    const query = contentTemplateGroupSearch.trim().toLocaleLowerCase('vi')
+    const visibleGroups = contentTemplateGroups
+      .filter(group => !group.isDelete)
+      .filter(group => contentTemplateGroupStatus === 'all' || (contentTemplateGroupStatus === 'active' ? group.isActive : !group.isActive))
+      .filter(group => !query || `${group.name}\n${group.description || ''}`.toLocaleLowerCase('vi').includes(query))
+      .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name, 'vi'))
+    const selectedGroup = contentTemplateGroups.find(item => item.id === previewContentTemplateGroupId && !item.isDelete) || null
+    const group = visibleGroups.find(item => item.id === previewContentTemplateGroupId) || null
+    const selectedGroupHiddenByFilter = !!selectedGroup && !group
+    const templates = group
+      ? contentTemplates.filter(template => template.groupId === group.id && !template.isDelete)
+      : []
     const groupCandidate = group && advancedContentTargetChannel
       ? buildContentTemplateGroupCandidate(contentTemplates, group, advancedContentTargetChannel, mainMediaSelectionMode)
       : null
@@ -14263,54 +14463,26 @@ export default function CampaignFormModal({
     const groupHasNoCompatibleItems = !!groupCandidate && groupCandidate.variantCount === 0
     const groupExceedsSmsSnapshotLimit = isSmsCampaign && !!groupCandidate && groupCandidate.variantCount > MAX_SMS_ADVANCED_CONTENT_ITEMS
     const groupCanBeUsed = !!groupCandidate && !groupIsInactive && !groupHasNoCompatibleItems && !groupExceedsSmsSnapshotLimit
-    const groupIsSelectedForSave = selectedContentTemplateGroupId === previewContentTemplateGroupId &&
-      !preserveSavedGroupSnapshotOnSave
-    const groupIsSaved = savedAdvancedContentSource === 'group_snapshot' && savedAdvancedGroupSnapshot?.groupId === previewContentTemplateGroupId
-    const selectedTemplate = templates.find(template => template.id === previewContentTemplateId) || templates[0] || null
-    const selectedChannel = previewContentTemplateChannel || getInitialContentTemplatePreviewChannel(selectedTemplate, advancedContentTargetChannel)
-    const selectedChannelConfig = selectedTemplate?.channels[selectedChannel]
-    const selectedChannelMediaMode: MediaSelectionMode = selectedChannel === advancedContentTargetChannel
-      ? mainMediaSelectionMode
-      : selectedChannel === 'facebook_post' || selectedChannel === 'facebook_message' || selectedChannel === 'facebook_comment'
-        ? 'image-video'
-        : 'image'
-    const selectedChannelMediaUrls = selectedChannelConfig?.enabled && selectedChannel !== 'sms'
-      ? contentTemplateImagesToSnapshots(selectedChannelConfig.imageUrls, selectedChannelMediaMode).snapshots.flatMap(snapshot => (
-          snapshot.cloudUrl ? [snapshot.cloudUrl] : []
-        ))
-      : []
-    const selectedTargetResolved = selectedTemplate && advancedContentTargetChannel
-      ? resolveContentTemplate(selectedTemplate, advancedContentTargetChannel)
-      : null
-    const selectedTargetCompatibleMediaCount = selectedTargetResolved
-      ? contentTemplateImagesToSnapshots(selectedTargetResolved.imageUrls, mainMediaSelectionMode).snapshots.length
-      : 0
-    const selectedTemplateWillBeUsed = groupCanBeUsed &&
-      !!selectedTargetResolved &&
-      selectedTargetResolved.variants.length > 0 &&
-      (mainMediaSelectionMode !== 'video' || selectedTargetCompatibleMediaCount > 0)
-    const selectedChannelIsFacebook = FACEBOOK_CONTENT_TEMPLATE_CHANNELS.includes(selectedChannel)
-    const selectedTemplateHasFacebook = FACEBOOK_CONTENT_TEMPLATE_CHANNELS.some(channel => selectedTemplate?.channels[channel]?.enabled)
-    const preferredFacebookChannel = advancedContentTargetChannel && FACEBOOK_CONTENT_TEMPLATE_CHANNELS.includes(advancedContentTargetChannel)
-      ? advancedContentTargetChannel
-      : FACEBOOK_CONTENT_TEMPLATE_CHANNELS.find(channel => selectedTemplate?.channels[channel]?.enabled) || 'facebook_post'
     const invalidGroupMessage = groupIsInactive
-      ? 'Nhóm này đã ngừng hoạt động nên không thể tạo hoặc cập nhật snapshot mới.'
+      ? 'Nhóm này đã ngừng hoạt động nên chưa thể dùng cho snapshot mới.'
       : groupHasNoCompatibleItems
-        ? (advancedContentTargetChannel
-            ? `Không thể dùng nhóm này cho chiến dịch ${getAdvancedContentCampaignLabel(advancedContentTargetChannel)} vì nhóm chưa có mẫu ${getContentTemplateChannelLabel(advancedContentTargetChannel)}.`
-            : 'Nhóm chưa có nội dung phù hợp với chiến dịch hiện tại.')
+        ? `Nhóm chưa có mẫu ${advancedContentTargetChannel ? getContentTemplateChannelLabel(advancedContentTargetChannel) : ''} phù hợp với chiến dịch.`
         : groupExceedsSmsSnapshotLimit
-          ? `Nhóm có ${groupCandidate?.variantCount || 0} nội dung SMS, vượt giới hạn ${MAX_SMS_ADVANCED_CONTENT_ITEMS} của chiến dịch SMS.`
+          ? `Nhóm có ${groupCandidate?.variantCount || 0} nội dung SMS, vượt giới hạn ${MAX_SMS_ADVANCED_CONTENT_ITEMS}.`
           : null
-    const previewTitleId = `campaign-group-preview-title-${previewContentTemplateGroupId}-${modalZIndex || 3000}`
+    const titleId = `campaign-group-picker-title-${modalZIndex || 3000}`
 
-    const choosePreviewTemplate = (template: ContentTemplate) => {
-      setPreviewContentTemplateId(template.id)
-      setPreviewContentTemplateChannel(getInitialContentTemplatePreviewChannel(template, advancedContentTargetChannel))
+    const selectGroup = (nextGroup: ContentTemplateGroup) => {
+      const groupTemplates = contentTemplates.filter(template => template.groupId === nextGroup.id && !template.isDelete)
+      const initialTemplate = advancedContentTargetChannel
+        ? groupTemplates.find(template => resolveContentTemplate(template, advancedContentTargetChannel).variants.length > 0) || groupTemplates[0] || null
+        : groupTemplates[0] || null
+      setPreviewContentTemplateGroupId(nextGroup.id)
+      setPreviewContentTemplateId(initialTemplate?.id ?? null)
+      setPreviewContentTemplateChannel(getInitialContentTemplatePreviewChannel(initialTemplate, advancedContentTargetChannel))
     }
 
-    const usePreviewGroup = () => {
+    const useSelectedGroup = () => {
       if (!groupCanBeUsed || !groupCandidate) return
       setCandidateContentTemplateGroupId(groupCandidate.groupId)
       setPendingContentTemplateGroupId(groupCandidate.groupId)
@@ -14319,209 +14491,123 @@ export default function CampaignFormModal({
 
     return (
       <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: Math.max(3150, (modalZIndex || 3000) + 150) }}>
-        <div className="campaign-group-preview-modal" role="dialog" aria-modal="true" aria-labelledby={previewTitleId}>
-          <div className="modal-header">
-            <div className="campaign-group-preview-title">
-              <span className="campaign-advanced-source-card-icon"><FolderOpen size={17} /></span>
+        <div className="campaign-group-picker-v2-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+          <div className="modal-header content-template-picker-v2-header">
+            <div className="content-template-picker-v2-heading">
+              <span className="content-template-picker-v2-heading-icon"><FolderOpen size={19} /></span>
               <div>
-                <span className="modal-title" id={previewTitleId}>{group?.name || `Nhóm #${previewContentTemplateGroupId}`}</span>
-                <span>{templates.length} mẫu · xem toàn bộ loại nội dung trong nhóm</span>
+                <span className="modal-title" id={titleId}>Chọn nhóm mẫu cho chiến dịch</span>
+                <span>Mỗi lượt chạy sẽ xoay vòng qua các mẫu phù hợp trong nhóm.</span>
               </div>
             </div>
-            <button type="button" className="btn-icon" onClick={closeContentTemplateGroupPreview} title="Đóng">
-              <X size={18} />
-            </button>
+            <button type="button" className="btn-icon" onClick={closeContentTemplateGroupPreview} title="Đóng" aria-label="Đóng hộp chọn nhóm mẫu"><X size={18} /></button>
           </div>
 
-          <div className="campaign-group-preview-body">
-            <aside className="campaign-group-preview-sidebar">
-              <div className="campaign-group-preview-sidebar-heading">
-                <strong>Danh sách mẫu</strong>
-                <span>{templates.length}</span>
-              </div>
-              <div className="campaign-group-preview-list">
-              {templates.length === 0 ? (
-                <div className="content-template-picker-empty">Nhóm chưa có mẫu nào.</div>
-              ) : templates.map(template => {
-                const targetResolved = advancedContentTargetChannel
-                  ? resolveContentTemplate(template, advancedContentTargetChannel)
-                  : null
-                const compatibleTargetMediaCount = targetResolved
-                  ? contentTemplateImagesToSnapshots(targetResolved.imageUrls, mainMediaSelectionMode).snapshots.length
-                  : 0
-                const templateWillBeUsed = groupCanBeUsed &&
-                  !!targetResolved &&
-                  targetResolved.variants.length > 0 &&
-                  (mainMediaSelectionMode !== 'video' || compatibleTargetMediaCount > 0)
-                const templatePreviewChannel = getInitialContentTemplatePreviewChannel(template, advancedContentTargetChannel)
-                const templatePreviewConfig = template.channels[templatePreviewChannel]
-                const firstVariant = templatePreviewConfig?.variants[0]?.text || ''
-                const excerpt = firstVariant
-                  ? (isRichContentTemplateChannel(templatePreviewChannel, templatePreviewConfig)
-                      ? formattedContentToPlainText(firstVariant)
-                      : firstVariant)
-                  : 'Mẫu chưa có nội dung.'
-                return (
-                  <button
-                    type="button"
-                    key={template.id}
-                    className={`campaign-group-preview-list-item${selectedTemplate?.id === template.id ? ' active' : ''}`}
-                    onClick={() => choosePreviewTemplate(template)}
-                  >
-                    <div className="content-template-picker-item-header">
-                      <span className="content-template-picker-item-title">{template.name}</span>
-                      <span
-                        className={`campaign-group-preview-status-icon ${templateWillBeUsed ? 'will-use' : 'skipped'}`}
-                        role="img"
-                        aria-label={templateWillBeUsed ? 'Mẫu sẽ được dùng' : 'Mẫu sẽ bị bỏ qua'}
-                        title={templateWillBeUsed ? 'Mẫu này sẽ được đưa vào snapshot chiến dịch' : 'Mẫu này không có nội dung phù hợp và sẽ bị bỏ qua'}
-                      >
-                        {templateWillBeUsed ? <Check size={15} aria-hidden="true" /> : <X size={15} aria-hidden="true" />}
-                      </span>
-                    </div>
-                    <div className="content-template-picker-item-meta">
-                      {CONTENT_TEMPLATE_PREVIEW_CHANNEL_ORDER.map(channelName => (
-                        template.channels[channelName]?.enabled
-                          ? <span className={`content-template-picker-channel-badge ${channelName}`} key={channelName}>{getContentTemplateChannelLabel(channelName)}</span>
-                          : null
-                      ))}
-                    </div>
-                    <p className="content-template-picker-item-excerpt">{excerpt}</p>
-                    <div className="content-template-picker-item-footer">
-                      <span>{targetResolved?.variants.length || 0} biến thể phù hợp</span>
-                      <span>{compatibleTargetMediaCount} media</span>
-                    </div>
+          <div className="campaign-group-picker-v2-body">
+            <aside className="content-template-picker-v2-groups campaign-group-picker-v2-groups">
+              <div className="content-template-picker-v2-panel-title"><strong>NHÓM MẪU</strong><span>{contentTemplateGroups.filter(item => !item.isDelete).length}</span></div>
+              <label className="content-template-picker-v2-compact-search">
+                <Search size={14} />
+                <input value={contentTemplateGroupSearch} onChange={event => setContentTemplateGroupSearch(event.target.value)} placeholder="Tìm nhóm..." aria-label="Tìm nhóm mẫu cho chiến dịch" />
+              </label>
+              <div className="content-template-picker-v2-segments" role="group" aria-label="Trạng thái nhóm mẫu">
+                {(['all', 'active', 'inactive'] as const).map(status => (
+                  <button type="button" key={status} className={contentTemplateGroupStatus === status ? 'active' : ''} aria-pressed={contentTemplateGroupStatus === status} onClick={() => setContentTemplateGroupStatus(status)}>
+                    {status === 'all' ? 'Tất cả' : status === 'active' ? 'Đang dùng' : 'Đã tắt'}
                   </button>
-                )
-              })}
+                ))}
               </div>
+              {advancedContentTargetChannel && (
+                <div className="content-template-picker-v2-match-chip"><Check size={13} /> Phù hợp: {getContentTemplateChannelLabel(advancedContentTargetChannel)}</div>
+              )}
+              <div className="content-template-picker-v2-group-list campaign-group-picker-v2-group-list" role="group" aria-label="Chọn nhóm mẫu cho chiến dịch">
+                {visibleGroups.map(item => {
+                  const candidate = advancedContentTargetChannel
+                    ? buildContentTemplateGroupCandidate(contentTemplates, item, advancedContentTargetChannel, mainMediaSelectionMode)
+                    : null
+                  const active = item.id === previewContentTemplateGroupId
+                  return (
+                    <button type="button" key={item.id} className={`${active ? 'active' : ''}${item.isActive ? '' : ' inactive'}`} aria-pressed={active} onClick={() => selectGroup(item)}>
+                      <span className={`campaign-group-picker-v2-radio${active ? ' active' : ''}`}>{active && <Check size={10} />}</span>
+                      <span><strong>{item.name}</strong><small>{item.isActive ? `${candidate?.compatibleTemplateCount || 0} mẫu phù hợp` : 'Ngừng hoạt động'}</small></span>
+                      <em>{candidate?.compatibleTemplateCount || 0}</em>
+                    </button>
+                  )
+                })}
+                {visibleGroups.length === 0 && <div className="campaign-group-picker-v2-no-groups">Không tìm thấy nhóm phù hợp.</div>}
+              </div>
+              <button type="button" className="campaign-group-picker-v2-manage" onClick={() => advancedContentTargetChannel && openContentTemplateManager(advancedContentTargetChannel)} disabled={!onOpenContentTemplates}><Plus size={14} /> Tạo / quản lý nhóm</button>
             </aside>
 
-            <section className="campaign-group-preview-main">
-              {selectedTemplate ? (
+            <main className="campaign-group-picker-v2-main">
+              {group && groupCandidate ? (
                 <>
-                  <div className="campaign-group-preview-main-header">
-                    <div className="campaign-group-preview-template-title">
-                      <div>
-                        <strong>{selectedTemplate.name}</strong>
-                        <span>{selectedTemplateWillBeUsed ? 'Mẫu này có nội dung phù hợp với chiến dịch' : 'Mẫu này sẽ không được đưa vào chiến dịch'}</span>
-                      </div>
-                      <span
-                        className={`campaign-group-preview-status-icon ${selectedTemplateWillBeUsed ? 'will-use' : 'skipped'}`}
-                        role="img"
-                        aria-label={selectedTemplateWillBeUsed ? 'Mẫu sẽ được dùng' : 'Mẫu sẽ bị bỏ qua'}
-                        title={selectedTemplateWillBeUsed ? 'Mẫu này sẽ được đưa vào snapshot chiến dịch' : 'Mẫu này không có nội dung phù hợp và sẽ bị bỏ qua'}
-                      >
-                        {selectedTemplateWillBeUsed ? <Check size={15} aria-hidden="true" /> : <X size={15} aria-hidden="true" />}
-                      </span>
-                    </div>
-
-                    <div className="campaign-group-preview-platform-tabs" role="tablist" aria-label="Nền tảng xem trước">
-                      <button type="button" role="tab" aria-selected={selectedChannel === 'sms'} className={`${selectedChannel === 'sms' ? 'active' : ''}${selectedTemplate.channels.sms?.enabled ? '' : ' unavailable'}`} onClick={() => setPreviewContentTemplateChannel('sms')}>SMS</button>
-                      <button type="button" role="tab" aria-selected={selectedChannel === 'zalo_message'} className={`${selectedChannel === 'zalo_message' ? 'active' : ''}${selectedTemplate.channels.zalo_message?.enabled ? '' : ' unavailable'}`} onClick={() => setPreviewContentTemplateChannel('zalo_message')}>Zalo</button>
-                      <button type="button" role="tab" aria-selected={selectedChannelIsFacebook} className={`${selectedChannelIsFacebook ? 'active' : ''}${selectedTemplateHasFacebook ? '' : ' unavailable'}`} onClick={() => setPreviewContentTemplateChannel(preferredFacebookChannel)}>Facebook</button>
-                      <button type="button" role="tab" aria-selected={selectedChannel === 'email'} className={`${selectedChannel === 'email' ? 'active' : ''}${selectedTemplate.channels.email?.enabled ? '' : ' unavailable'}`} onClick={() => setPreviewContentTemplateChannel('email')}>Email</button>
-                    </div>
-
-                    {selectedChannelIsFacebook && (
-                      <div className="campaign-group-preview-facebook-tabs" role="tablist" aria-label="Loại nội dung Facebook">
-                        {FACEBOOK_CONTENT_TEMPLATE_CHANNELS.map(channelName => (
-                          <button
-                            type="button"
-                            role="tab"
-                            aria-selected={selectedChannel === channelName}
-                            key={channelName}
-                            className={selectedChannel === channelName ? 'active' : ''}
-                            onClick={() => setPreviewContentTemplateChannel(channelName)}
-                          >
-                            {channelName === 'facebook_post'
-                              ? 'Đăng bài Facebook'
-                              : channelName === 'facebook_message'
-                                ? 'Tin nhắn Facebook'
-                                : 'Comment Facebook'}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                  <div className="campaign-group-picker-v2-hero">
+                    <span className="campaign-group-picker-v2-hero-icon"><FolderOpen size={23} /></span>
+                    <div><strong>{group.name}</strong><span>{group.description || 'Nhóm mẫu nội dung dùng lại cho chiến dịch.'}</span></div>
+                    <span className={`campaign-group-picker-v2-status${group.isActive ? ' active' : ''}`}>{group.isActive ? 'Đang dùng' : 'Đã tắt'}</span>
                   </div>
 
-                  <div className="campaign-group-preview-stage">
-                    {invalidGroupMessage && <div className="campaign-advanced-group-warning">{invalidGroupMessage}</div>}
-                    <div className="campaign-group-preview-channel-meta">
-                      <strong>{getContentTemplateChannelLabel(selectedChannel)}</strong>
-                      <span>
-                        {selectedChannelConfig?.enabled ? 'Đang bật' : 'Đang tắt'} · {selectedChannelConfig?.variants.length || 0} biến thể · {selectedChannelMediaUrls.length} media
-                      </span>
-                    </div>
-                    {selectedChannelConfig?.enabled ? (
-                      <ContentTemplatePreview
-                        key={`${selectedTemplate.id}-${selectedChannel}`}
-                        channel={selectedChannel}
-                        variants={selectedChannelConfig.variants.map(variant => variant.text)}
-                        formatted={isRichContentTemplateChannel(selectedChannel, selectedChannelConfig)}
-                        subject={selectedChannelConfig.subject}
-                        imageUrls={selectedChannelMediaUrls}
-                      />
-                    ) : (
-                      <div className="campaign-group-preview-disabled-channel">
-                        <Eye size={28} />
-                        <strong>Mẫu này chưa bật {getContentTemplateChannelLabel(selectedChannel)}</strong>
-                        <span>Chọn một loại nội dung khác để tiếp tục xem.</span>
-                      </div>
-                    )}
+                  <div className="campaign-group-picker-v2-stats">
+                    <article><strong>{groupCandidate.totalTemplateCount}</strong><span>Tổng số mẫu</span></article>
+                    <article className="success"><strong>{groupCandidate.compatibleTemplateCount}</strong><span>Sẽ sử dụng</span></article>
+                    <article className={groupCandidate.skippedTemplateCount > 0 ? 'warning' : ''}><strong>{groupCandidate.skippedTemplateCount}</strong><span>Sẽ bỏ qua</span></article>
+                    <article><strong>{groupCandidate.variantCount}</strong><span>Biến thể phù hợp</span></article>
                   </div>
+
+                  {invalidGroupMessage ? (
+                    <div className="campaign-group-picker-v2-warning"><X size={15} /><span>{invalidGroupMessage}</span></div>
+                  ) : (
+                    <div className="campaign-group-picker-v2-ready"><Check size={15} /><span>Nhóm sẵn sàng cho chiến dịch {advancedContentTargetChannel ? getAdvancedContentCampaignLabel(advancedContentTargetChannel) : 'hiện tại'}.</span></div>
+                  )}
+
+                  <section className="campaign-group-picker-v2-section">
+                    <div className="campaign-group-picker-v2-section-heading"><div><strong>MẪU TRONG NHÓM</strong><span>Chỉ mẫu có nội dung đúng kênh mới được đưa vào snapshot.</span></div><span>{templates.length} mẫu</span></div>
+                    <div className="campaign-group-picker-v2-template-list">
+                      {templates.map((template, index) => {
+                        const resolved = advancedContentTargetChannel
+                          ? resolveContentTemplate(template, advancedContentTargetChannel)
+                          : null
+                        const compatibleMediaCount = resolved
+                          ? contentTemplateImagesToSnapshots(resolved.imageUrls, mainMediaSelectionMode).snapshots.length
+                          : 0
+                        const willUse = !!resolved && resolved.variants.length > 0 && (mainMediaSelectionMode !== 'video' || compatibleMediaCount > 0)
+                        const firstVariant = resolved?.variants[0] || ''
+                        const excerpt = firstVariant
+                          ? (resolved?.rich ? formattedContentToPlainText(firstVariant) : firstVariant)
+                          : 'Không có nội dung phù hợp với chiến dịch.'
+                        return (
+                          <article key={template.id} className={willUse ? 'will-use' : 'skipped'}>
+                            <span className="campaign-group-picker-v2-order">{index + 1}</span>
+                            <div><strong>{template.name}</strong><p>{excerpt}</p><span>{resolved?.variants.length || 0} biến thể · {compatibleMediaCount} media</span></div>
+                            <span className="campaign-group-picker-v2-template-status">{willUse ? <><Check size={13} /> Sẽ dùng</> : <><X size={13} /> Bỏ qua</>}</span>
+                          </article>
+                        )
+                      })}
+                      {templates.length === 0 && <div className="campaign-group-picker-v2-empty"><FileText size={30} /><strong>Nhóm chưa có mẫu nội dung</strong><span>Mở kho mẫu để thêm nội dung vào nhóm này.</span></div>}
+                    </div>
+                  </section>
+
+                  <section className="campaign-group-picker-v2-rotation">
+                    <div><RefreshCw size={16} /><span><strong>Cách phân phối nội dung</strong><small>Xoay vòng tự động theo thứ tự mẫu và biến thể trong snapshot.</small></span></div>
+                    <span>Tuần tự</span>
+                  </section>
                 </>
               ) : (
-                <div className="campaign-group-preview-no-selection">
-                  <FileText size={32} />
-                  <strong>Nhóm chưa có mẫu nội dung</strong>
-                  <span>Mở kho mẫu để thêm nội dung vào nhóm này.</span>
+                <div className="campaign-group-picker-v2-empty">
+                  <FolderOpen size={34} />
+                  <strong>{selectedGroupHiddenByFilter ? 'Nhóm đang chọn bị ẩn bởi bộ lọc' : 'Chọn một nhóm mẫu'}</strong>
+                  <span>{selectedGroupHiddenByFilter ? 'Đổi bộ lọc hoặc chọn một nhóm đang hiển thị để tiếp tục.' : 'Thông tin phù hợp với chiến dịch sẽ hiển thị tại đây.'}</span>
                 </div>
               )}
-            </section>
+            </main>
           </div>
 
-          <div className="modal-footer">
-            <div className={`campaign-group-preview-footer-note${invalidGroupMessage ? ' error' : ''}`}>
-              {invalidGroupMessage || (groupCandidate
-                ? `Dùng ${groupCandidate.compatibleTemplateCount}/${groupCandidate.totalTemplateCount} mẫu · ${groupCandidate.variantCount} biến thể · bỏ qua ${groupCandidate.skippedTemplateCount} mẫu.`
-                : 'Nội dung trong modal chỉ để xem trước.')}
-            </div>
-            <div className="campaign-group-preview-footer-actions">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={closeContentTemplateGroupPreview}>Đóng</button>
-              {!groupCanBeUsed ? (
-                <>
-                  {groupHasNoCompatibleItems && (
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => advancedContentTargetChannel && openContentTemplateManager(advancedContentTargetChannel)}
-                      disabled={!onOpenContentTemplates}
-                    >
-                      <FileText size={14} /> Thêm mẫu {advancedContentTargetChannel ? getContentTemplateChannelLabel(advancedContentTargetChannel) : ''}
-                    </button>
-                  )}
-                  {(groupIsInactive || groupExceedsSmsSnapshotLimit) && (
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => advancedContentTargetChannel && openContentTemplateManager(advancedContentTargetChannel)}
-                      disabled={!onOpenContentTemplates}
-                    >
-                      <FileText size={14} /> Quản lý kho mẫu
-                    </button>
-                  )}
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={clearCandidateContentTemplateGroup}>Chọn nhóm khác</button>
-                </>
-              ) : (
-                <button type="button" className="btn btn-primary btn-sm" onClick={usePreviewGroup} disabled={groupIsSelectedForSave}>
-                  <Check size={14} /> {groupIsSelectedForSave
-                    ? 'Đã chọn'
-                    : groupIsSaved
-                      ? 'Cập nhật nội dung'
-                      : 'Chọn nhóm'}
-                </button>
-              )}
+          <div className="modal-footer content-template-picker-v2-footer campaign-group-picker-v2-footer">
+            <span>{groupCandidate ? `Sẽ dùng ${groupCandidate.compatibleTemplateCount}/${groupCandidate.totalTemplateCount} mẫu · ${groupCandidate.variantCount} biến thể` : selectedGroupHiddenByFilter ? 'Nhóm đang chọn không nằm trong bộ lọc hiện tại' : 'Chưa chọn nhóm mẫu'}</span>
+            <div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={closeContentTemplateGroupPreview}>Huỷ</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={useSelectedGroup} disabled={!groupCanBeUsed}><Check size={14} /> Dùng nhóm này</button>
             </div>
           </div>
         </div>
@@ -16489,7 +16575,7 @@ export default function CampaignFormModal({
       {renderSourceCampaignViewModal()}
       {renderManualAdvancedContentModal()}
       {renderContentTemplatePickerModal()}
-      {renderContentTemplateGroupPreviewModal()}
+      {renderContentTemplateGroupPickerModal()}
       {renderContentTemplateSaveModal()}
       {contentPreviewModal && (
         <ContentPreviewModal
