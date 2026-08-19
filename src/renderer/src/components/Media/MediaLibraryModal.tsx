@@ -380,8 +380,8 @@ export default function MediaLibraryModal({
   const [search, setSearch] = useState('')
   const [groupSearch, setGroupSearch] = useState('')
   const [category, setCategory] = useState<MediaCategory>(() => {
-    if (!pickerMode || pickerMode === 'file') return 'all'
     if (pickerMode === 'video') return 'video'
+    if (pickerMode === 'file') return 'document'
     return 'image'
   })
   const [view, setView] = useState<MediaView>('grid')
@@ -1837,18 +1837,32 @@ export default function MediaLibraryModal({
             <h2>{isPicker ? 'Chọn Media' : 'Quản lý Media'}</h2>
             <p>{isPicker ? `Chọn ${pickerMediaLabel} cho chiến dịch` : 'Tải lên và quản lý ảnh, video, file tài liệu theo nhóm'}</p>
           </div>
-          <div className="media-library-header-usage" title={`${formatBytes(usedStorageBytes)} đã lưu`}>
-            <div>
+          <div
+            className="media-library-header-usage"
+            title={`${activeMediaCount.toLocaleString('vi-VN')}/${mediaLibraryMaxFiles.toLocaleString('vi-VN')} file · ${formatBytes(usedStorageBytes)} đã lưu`}
+          >
+            <div className="media-library-usage-count">
               <span>Đã dùng</span>
-              <strong>{activeMediaCount}<small>/{mediaLibraryMaxFiles} file</small></strong>
+              <strong>
+                {activeMediaCount.toLocaleString('vi-VN')}
+                <small>/{mediaLibraryMaxFiles.toLocaleString('vi-VN')} file</small>
+              </strong>
             </div>
             <div className="media-library-usage-meter">
-              <span><i style={{ width: `${quotaPercent}%` }} /></span>
+              <span
+                role="progressbar"
+                aria-label="Mức sử dụng kho media"
+                aria-valuemin={0}
+                aria-valuemax={mediaLibraryMaxFiles}
+                aria-valuenow={Math.min(activeMediaCount, mediaLibraryMaxFiles)}
+              >
+                <i style={{ width: `${quotaPercent}%` }} />
+              </span>
               <small>{formatBytes(usedStorageBytes)} đã lưu</small>
             </div>
           </div>
           <button type="button" className="btn-icon media-library-close" onClick={onClose} title="Đóng">
-            <X size={18} />
+            <X size={17} />
           </button>
         </div>
         <div className="modal-body media-library-body">

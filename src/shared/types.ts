@@ -167,7 +167,7 @@ export interface CampaignAdvancedContentItem {
 export const MEDIA_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
 export const MEDIA_FILE_MAX_SIZE_BYTES = 25 * 1024 * 1024
 export const MEDIA_LIBRARY_MAX_FILES_SETTING_KEY = 'media.so_luong_file_toi_da'
-export const MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF = 10_000
+export const MEDIA_LIBRARY_DEFAULT_MAX_FILES_PER_STAFF = 1_000
 
 export interface MediaFile {
   id: number
